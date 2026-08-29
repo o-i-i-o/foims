@@ -57,6 +57,12 @@ pub struct CableLinkCreate {
     pub link_type: Option<String>,
     #[validate(length(max = 50, message = "server.cable_link.validation.cable_label_length"))]
     pub cable_label: Option<String>,
+    /// 长度范围：0..=10000 米（负数与离谱极值前置拦截，避免依赖 DB 兜底）
+    #[validate(range(
+        min = 0.0,
+        max = 10000.0,
+        message = "server.cable_link.validation.length_m_range"
+    ))]
     pub length_m: Option<f64>,
     pub tested: Option<bool>,
 }
@@ -71,6 +77,10 @@ pub struct CableLinkUpdate {
     ))]
     pub cable_label: Option<Option<String>>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_length_m_opt",
+        message = "server.cable_link.validation.length_m_range"
+    ))]
     pub length_m: Option<Option<f64>>,
     pub tested: Option<bool>,
     // 端点可选更新（编辑模态框复用新建表单时一并提交）
@@ -171,6 +181,44 @@ mod tests {
         let ok: CableLinkUpdate = serde_json::from_value(serde_json::json!({
             "cable_label": "L".repeat(50)
         }))?;
+        assert!(ok.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_cable_link_length_m_range() -> Result<(), serde_json::Error> {
+        // 创建路径的最小合法载荷（端点字段为必填项，缺省会反序列化失败）
+        let create_payload = |length_m: f64| {
+            serde_json::json!({
+                "a_endpoint_type": "net_outlet",
+                "a_endpoint_id": Uuid::new_v4(),
+                "b_endpoint_type": "patch_panel",
+                "b_endpoint_id": Uuid::new_v4(),
+                "length_m": length_m
+            })
+        };
+        // 0 与 10000 合法，负数与越上限拒绝
+        for ok_len in [0.0f64, 12.5, 10000.0] {
+            let req: CableLinkCreate = serde_json::from_value(create_payload(ok_len))?;
+            assert!(req.validate().is_ok(), "长度 {ok_len} 应合法");
+        }
+        for bad_len in [-0.1f64, -3.0, 10000.1, 1e9] {
+            let req: CableLinkCreate = serde_json::from_value(create_payload(bad_len))?;
+            let Err(errors) = req.validate() else {
+                panic!("长度 {bad_len} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("length_m"));
+        }
+
+        // 更新路径：双层 Option 经 custom 函数校验，null（清除）合法
+        let bad: CableLinkUpdate = serde_json::from_value(serde_json::json!({ "length_m": -1.0 }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("负长度应被拒绝");
+        };
+        assert!(errors.errors().contains_key("length_m"));
+
+        let ok: CableLinkUpdate =
+            serde_json::from_value(serde_json::json!({ "length_m": 10000.0 }))?;
         assert!(ok.validate().is_ok());
         Ok(())
     }

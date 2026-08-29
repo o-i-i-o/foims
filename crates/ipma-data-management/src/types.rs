@@ -93,14 +93,9 @@ impl From<validator::ValidationErrors> for DataError {
 
 pub type DataResult<T> = Result<T, DataError>;
 
-#[derive(Debug, Clone)]
-pub struct DatabaseConfig {
-    pub host: String,
-    pub port: u16,
-    pub database: String,
-    pub username: String,
-    pub password: String,
-}
+/// 数据库连接配置：直接复用 ipma-common 的唯一定义
+///（原先此处持有的 5 字段子集副本已删除，字段以 common 版为准）
+pub use ipma_common::config::DatabaseConfig;
 
 #[async_trait]
 pub trait DataProvider: Clone + Send + Sync + 'static {

@@ -117,20 +117,8 @@ export class TopologyDataManager {
   }
 
   async fetchDevicePorts(deviceId) {
-    try {
-      const result = await this.apiGet(
-        `/api/resources/devices/${deviceId}/interfaces?page_size=200`
-      );
-      if (result.success) {
-        // 后端分页响应形状固定为 items（paged_response）
-        return result.data?.items ?? [];
-      }
-      this._notifyLoadFailure(result.message, "获取设备端口");
-      return [];
-    } catch (error) {
-      this._notifyLoadFailure(error, "获取设备端口");
-      return [];
-    }
+    // 全量分页拉取：单页 page_size=200 会在设备端口超 200 时静默截断
+    return this._fetchAllPages(`/api/resources/devices/${deviceId}/interfaces`, "获取设备端口");
   }
 
   async fetchDeviceMacs(deviceId) {
@@ -161,25 +149,59 @@ export class TopologyDataManager {
     }
   }
 
-  async fetchAllDevices() {
-    try {
-      const result = await this.apiGet("/api/resources/devices?page_size=1000");
-      if (result.success) {
-        return result.data?.items ?? [];
+  /**
+   * 分页拉取全量列表：每页 1000 条，最多 5 页（5000 条）。
+   * 仍有后续页但已达上限时提示数据可能不完整（避免超 1000 条被静默截断）。
+   * @param {string} path 不含分页参数的接口路径
+   * @param {string} what 失败提示用途描述
+   * @returns {Promise<Array>} 拉取到的条目（失败时为已获取的部分或空数组）
+   */
+  async _fetchAllPages(path, what) {
+    const MAX_PAGES = 5;
+    const PAGE_SIZE = 1000;
+    const items = [];
+    const sep = path.includes("?") ? "&" : "?";
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      let result;
+      try {
+        result = await this.apiGet(`${path}${sep}page=${page}&page_size=${PAGE_SIZE}`);
+      } catch (error) {
+        this._notifyLoadFailure(error, what);
+        break;
       }
-      this._notifyLoadFailure(result.message, "获取设备列表");
-      return [];
-    } catch (error) {
-      this._notifyLoadFailure(error, "获取设备列表");
-      return [];
+      if (!result.success || !Array.isArray(result.data?.items)) {
+        if (!result.success) {
+          this._notifyLoadFailure(result.message, what);
+        }
+        break;
+      }
+
+      items.push(...result.data.items);
+
+      const totalPages = Number(result.data.total_pages) || 1;
+      if (page >= totalPages) {
+        break;
+      }
+      if (page === MAX_PAGES) {
+        // 还有后续页但已达拉取上限：提示数据可能不完整
+        this.showToast(t("viz.data_page_limit_exceeded"), "warning");
+      }
     }
+    return items;
+  }
+
+  async fetchAllDevices() {
+    return this._fetchAllPages("/api/resources/devices", "获取设备列表");
   }
 
   async autoDiscover() {
     try {
       const result = await this.apiPost("/api/resources/topology/auto-discover", {});
       if (result.success) {
-        return result.data || { added_nodes: 0, added_connections: 0 };
+        // 键名与展示层读取的 discovered_connections 对齐
+        //（此前回退分支的连线数恒显示 0）
+        return result.data || { added_nodes: 0, discovered_connections: 0 };
       }
       this.showToast(`${t("viz.auto_discover_failed")}: ${result.message}`, "error");
       return null;

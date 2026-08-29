@@ -34,7 +34,7 @@ async function loadNetworkRegions(select) {
   }
   await fillSelect(select, "/api/resources/options/network-regions", {
     placeholderKey: "network.select_region",
-    errorLabel: "网络区域"
+    errorLabelKey: "common.network_region"
   });
 }
 
@@ -49,7 +49,7 @@ async function loadNetworks(regionId, select, excludeIds = []) {
   await fillSelect(select, url, {
     placeholderKey: "network.select_segment",
     filter: (n) => !excludeIds.includes(n.id),
-    errorLabel: "网段"
+    errorLabelKey: "common.network"
   });
 }
 
@@ -71,13 +71,9 @@ class EventHandler {
     return handler;
   }
 
+  // WeakMap 不可枚举，无法遍历成对移除监听（原 entries() 遍历是永不执行的死代码）；
+  // 模态框关闭会移除对应 DOM，监听器随之释放，这里仅重置映射即可
   clear() {
-    for (const [element, handler] of this.handlers.entries()) {
-      if (element && handler) {
-        element.removeEventListener("click", handler);
-        element.removeEventListener("change", handler);
-      }
-    }
     this.handlers = new WeakMap();
   }
 }
@@ -337,11 +333,6 @@ class NetworkConfigManager {
 
     return { networkIds, hasEmpty };
   }
-
-  destroy() {
-    this.eventHandler.clear();
-    this.container = null;
-  }
 }
 
 // 全局房间网段配置管理器实例
@@ -360,18 +351,27 @@ export const roomNetworkConfigManager = new NetworkConfigManager({
 /** 当前房间所属组织下的员工（供工位管理人下拉选择；无组织时为空） */
 let roomOrgEmployees = [];
 
+// 员工列表加载序号:快速切换组织时旧响应晚到,序号不符即丢弃
+let roomOrgEmployeesSeq = 0;
+
 /** 按组织加载员工列表（组织为空时清空选项） */
 async function loadRoomOrgEmployees(orgId) {
+  const requestSeq = ++roomOrgEmployeesSeq;
   if (!orgId) {
     roomOrgEmployees = [];
     return;
   }
   try {
     const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(orgId)}`);
+    if (requestSeq !== roomOrgEmployeesSeq) {
+      return; // 已有更新的加载在途，丢弃过期结果
+    }
     roomOrgEmployees = result.success && Array.isArray(result.data) ? result.data : [];
   } catch (error) {
     console.error("加载组织员工失败:", error);
-    roomOrgEmployees = [];
+    if (requestSeq === roomOrgEmployeesSeq) {
+      roomOrgEmployees = [];
+    }
   }
 }
 
@@ -395,7 +395,9 @@ function collectManagerValue(item) {
     return { manager: null, manager_employee_id: null };
   }
   const value = control.value;
-  return value ? { manager: null, manager_employee_id: value } : { manager: null, manager_employee_id: null };
+  return value
+    ? { manager: null, manager_employee_id: value }
+    : { manager: null, manager_employee_id: null };
 }
 
 /** 组织切换后按新员工列表重建管理人下拉，仍有效的员工选择保持不变 */
@@ -663,7 +665,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
   }
 
   addLabel() {
-    return t("room.add_net_outlet") || t("net_outlet.add");
+    return t("room.add_net_outlet");
   }
 
   emptyHintText() {
@@ -744,7 +746,11 @@ const tableState = createSortState("name", "asc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let roomsRequestSeq = 0;
+
 export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder = null) {
+  const requestSeq = ++roomsRequestSeq;
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -754,8 +760,30 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
     const roomsData = await apiGet(
       `/api/resources/rooms?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
-    const data = roomsData.success ? roomsData.data : { items: [], total: 0 };
+    if (requestSeq !== roomsRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
+    // 接口失败时提示并中止，不再静默渲染空数据
+    if (!roomsData.success) {
+      showToast(`${t("common.load_failed")}: ${roomsData.message}`, "error");
+      return;
+    }
+    const data = roomsData.data || { items: [], total: 0 };
     const rooms = data.items || data;
+
+    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+    // 回退到最后一页重新加载，避免停留在空页无法翻回
+    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
+    if (
+      Array.isArray(rooms) &&
+      rooms.length === 0 &&
+      page > 1 &&
+      totalPages > 0 &&
+      page > totalPages
+    ) {
+      return loadRoomsData(totalPages);
+    }
+
     const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#rooms-table", {
@@ -779,7 +807,8 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
               telecom_closet: t("room.type_telecom_closet"),
               other: t("room.type_other")
             };
-            return typeMap[(v || "").toLowerCase()] || v || "-";
+            // 已知类型的映射值是受信文案可直接输出；未知原始值必须转义防注入
+            return typeMap[(v || "").toLowerCase()] ?? escapeHtml(v || "-");
           }
         },
         { field: "org_name", render: (v) => escapeHtml(v) || "-" },
@@ -891,17 +920,18 @@ export async function openRoomChildrenListModal(roomId) {
 
     if (!isCabinetList) {
       const workstations = room.workstations || [];
+      // openSimpleListModal 内部统一转义,此处传原始值即可
       await openSimpleListModal({
         title: `${room.name} - ${t("room.workstations")}`,
         columns: [{ label: t("common.name") }, { label: t("workstation.manager") }],
-        rows: workstations.map((ws) => [escapeHtml(ws.name || "-"), escapeHtml(ws.manager || "-")])
+        rows: workstations.map((ws) => [ws.name || "-", ws.manager || "-"])
       });
     } else {
       const cabinets = room.cabinets || [];
       await openSimpleListModal({
         title: `${room.name} - ${t("room.cabinets")}`,
         columns: [{ label: t("common.name") }, { label: t("cabinet.capacity") }],
-        rows: cabinets.map((cab) => [escapeHtml(cab.name || "-"), cab.capacity ?? "-"])
+        rows: cabinets.map((cab) => [cab.name || "-", cab.capacity ?? "-"])
       });
     }
   } catch (error) {
@@ -918,10 +948,11 @@ export async function openRoomNetOutletsListModal(roomId) {
     }
     const room = result.data;
     const netOutlets = room.net_outlets || [];
+    // openSimpleListModal 内部统一转义,此处传原始值即可
     await openSimpleListModal({
       title: `${room.name} - ${t("room.net_outlets")}`,
       columns: [{ label: t("common.name") }],
-      rows: netOutlets.map((no) => [escapeHtml(no.name || "-")])
+      rows: netOutlets.map((no) => [no.name || "-"])
     });
   } catch (error) {
     handleError(error, t("room.load_failed"));
@@ -1009,6 +1040,15 @@ export async function submitRoomForm() {
     description: description || null
   };
 
+  // 防重复提交：请求链涉及房间 + 子项 + 信息点多次写操作，
+  // 期间禁用保存按钮，结束后恢复（双击会重复提交产生重复数据）
+  const saveBtn = document.querySelector("#room-form button[type='submit']");
+  const originalText = saveBtn?.textContent;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = t("common.saving");
+  }
+
   try {
     let roomId = id;
     if (id) {
@@ -1056,6 +1096,11 @@ export async function submitRoomForm() {
     await loadRoomsData();
   } catch (error) {
     handleError(error, t("room.save_failed"));
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
   }
 }
 

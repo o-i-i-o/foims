@@ -103,6 +103,13 @@ mod tests {
                 database: "ipma_test".to_string(),
                 username: "u".to_string(),
                 password: "p".to_string(),
+                max_connections: 10,
+                min_connections: 5,
+                acquire_timeout_secs: 15,
+                idle_timeout_secs: 60,
+                max_lifetime_secs: 1800,
+                query_timeout_secs: 30,
+                health_check_interval_secs: 30,
             },
         }
     }

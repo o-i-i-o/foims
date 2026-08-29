@@ -105,9 +105,17 @@ pub struct PortSyncItem {
     pub interface_role: Option<String>,
     #[validate(length(max = 20, message = "server.device.validation.mac_length"))]
     pub mac_address: Option<String>,
+    /// 仅允许 1..=4094（IEEE 802.1Q），负数与 4095+ 拒绝入库
+    #[validate(custom(
+        function = "crate::models::validate_vlan_id_option",
+        message = "server.device.validation.vlan_id_range"
+    ))]
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
+    /// nested 显式开启：validator derive 不自动展开 Vec 元素，
+    /// 缺失时 IpSyncItem 的 IP 格式校验在同步路径不会执行
+    #[validate(nested)]
     #[serde(default)]
     pub ips: Vec<IpSyncItem>,
 }
@@ -124,12 +132,16 @@ pub struct NetworkCardSyncItem {
     pub card_type: Option<String>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
+    /// nested 显式开启：网卡→网口→IP 嵌套链的模型声明与校验点保持一致
+    #[validate(nested)]
     #[serde(default)]
     pub ports: Vec<PortSyncItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, Clone)]
 pub struct DeviceNetworkConfigSync {
+    /// nested 显式开启：网卡→网口→IP 嵌套链的模型声明与校验点保持一致
+    #[validate(nested)]
     #[serde(default)]
     pub cards: Vec<NetworkCardSyncItem>,
 }
@@ -154,11 +166,26 @@ pub struct IpManagerUpdate {
     // 挂 deserialize_some 后 JSON null → Some(None)：可通过 null 解绑接口
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub device_interface_id: Option<Option<Uuid>>,
+    /// 有值才校验：与 IpManagerCreate 同口径拒绝带掩码/非法地址
+    #[validate(custom(
+        function = "crate::models::validate_ip_address_option",
+        message = "server.ip.validation.ip_address_invalid"
+    ))]
     pub ip_address: Option<String>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
-    #[validate(length(max = 20, message = "server.ip.validation.status_length"))]
+    /// 取值白名单：active / inactive / reserved（与前端 formatter 展示口径一致；
+    /// DB 无 CHECK 约束，应用层前置拦截非法值）
+    #[validate(custom(
+        function = "crate::models::validate_ip_status_option",
+        message = "server.ip.validation.status_invalid"
+    ))]
     pub status: Option<String>,
+    /// 有值才校验：仅允许 4 / 6
+    #[validate(custom(
+        function = "crate::models::validate_ip_version_option",
+        message = "server.ip.validation.ip_version_invalid"
+    ))]
     pub ip_version: Option<i16>,
 }
 
@@ -305,6 +332,29 @@ mod tests {
     }
 
     #[test]
+    fn test_sync_chain_nested_validation() -> Result<(), serde_json::Error> {
+        // nested 链路生效：卡片→网口→IP 任一层非法均使容器校验失败
+        let bad_card: NetworkCardSyncItem = serde_json::from_value(serde_json::json!({
+            "name": "eth0",
+            "ports": [{ "name": "", "ips": [] }]
+        }))?;
+        assert!(bad_card.validate().is_err(), "空网口名应使网卡被拒绝");
+
+        let bad_port: NetworkCardSyncItem = serde_json::from_value(serde_json::json!({
+            "name": "eth0",
+            "ports": [{ "name": "eth0", "ips": [{ "ip_address": "10.0.0.999" }] }]
+        }))?;
+        assert!(bad_port.validate().is_err(), "非法 IP 应使网卡被拒绝");
+
+        let bad_ip: PortSyncItem = serde_json::from_value(serde_json::json!({
+            "name": "eth0",
+            "ips": [{ "ip_address": "not-an-ip" }]
+        }))?;
+        assert!(bad_ip.validate().is_err(), "非法 IP 应使网口被拒绝");
+        Ok(())
+    }
+
+    #[test]
     fn test_auto_assign_and_pull_requests() -> Result<(), serde_json::Error> {
         let assign: AutoAssignIpRequest = serde_json::from_value(serde_json::json!({
             "network_id": Uuid::new_v4(),
@@ -361,6 +411,85 @@ mod tests {
             panic!("超长状态应被拒绝");
         };
         assert!(errors.errors().contains_key("status"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_ip_manager_update_status_whitelist() -> Result<(), serde_json::Error> {
+        // 白名单：active / inactive / reserved 合法，其余拒绝
+        for ok_status in ["active", "inactive", "reserved"] {
+            let req: IpManagerUpdate =
+                serde_json::from_value(serde_json::json!({ "status": ok_status }))?;
+            assert!(req.validate().is_ok(), "状态 {ok_status} 应合法");
+        }
+        let bad: IpManagerUpdate =
+            serde_json::from_value(serde_json::json!({ "status": "enabled" }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("白名单外状态应被拒绝");
+        };
+        assert!(errors.errors().contains_key("status"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_ip_manager_update_ip_address_validation() -> Result<(), serde_json::Error> {
+        // 更新路径与创建路径同口径：带掩码 / 非法地址拒绝；合法地址通过
+        let bad: IpManagerUpdate = serde_json::from_value(serde_json::json!({
+            "ip_address": "10.0.0.1/24"
+        }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("带掩码地址应被拒绝");
+        };
+        assert!(errors.errors().contains_key("ip_address"));
+
+        let ok: IpManagerUpdate = serde_json::from_value(serde_json::json!({
+            "ip_address": "10.0.0.1"
+        }))?;
+        assert!(ok.validate().is_ok());
+
+        // 缺省（None）跳过校验
+        let missing: IpManagerUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert!(missing.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_ip_manager_update_ip_version_validation() -> Result<(), serde_json::Error> {
+        // ip_version 仅允许 4 / 6（有值才校验）
+        for bad_version in [0i16, 5, -1, 7] {
+            let req: IpManagerUpdate =
+                serde_json::from_value(serde_json::json!({ "ip_version": bad_version }))?;
+            let Err(errors) = req.validate() else {
+                panic!("ip_version={bad_version} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("ip_version"));
+        }
+        for ok_version in [4i16, 6] {
+            let req: IpManagerUpdate =
+                serde_json::from_value(serde_json::json!({ "ip_version": ok_version }))?;
+            assert!(req.validate().is_ok(), "ip_version={ok_version} 应合法");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_port_sync_item_vlan_id_range() -> Result<(), serde_json::Error> {
+        // VLAN ID 仅允许 1..=4094
+        for bad_vlan in [0i32, -1, 4095, 65535] {
+            let item: PortSyncItem = serde_json::from_value(serde_json::json!({
+                "name": "eth0",
+                "vlan_id": bad_vlan
+            }))?;
+            let Err(errors) = item.validate() else {
+                panic!("vlan_id={bad_vlan} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("vlan_id"));
+        }
+        let ok: PortSyncItem = serde_json::from_value(serde_json::json!({
+            "name": "eth0",
+            "vlan_id": 4094
+        }))?;
+        assert!(ok.validate().is_ok());
         Ok(())
     }
 

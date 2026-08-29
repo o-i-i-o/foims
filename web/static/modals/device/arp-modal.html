@@ -1,8 +1,8 @@
 <template id="arp-modal-template">
-<div id="arp-modal" class="modal" role="dialog" aria-modal="true">
+<div id="arp-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="arp-modal-title">
   <div class="modal-content modal-xl">
     <header class="modal-header">
-      <h3 class="modal-title"><span data-i18n="device.mac_table">MAC Table</span> <span id="arp-device-name"></span></h3>
+      <h3 class="modal-title" id="arp-modal-title"><span data-i18n="device.mac_table">MAC Table</span> <span id="arp-device-name"></span></h3>
       <button type="button" class="close" data-modal-id="arp-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body modal-body-scroll">
@@ -15,17 +15,17 @@
         <div class="tab-container">
           <div class="tab-toolbar">
             <div class="tab-buttons" role="tablist">
-              <button type="button" class="tab-btn active" data-tab="ipv4" role="tab" aria-selected="true">IPv4</button>
-              <button type="button" class="tab-btn" data-tab="ipv6" role="tab" aria-selected="false">IPv6</button>
+              <button type="button" class="tab-btn active" data-tab="ipv4" role="tab" aria-selected="true" aria-controls="ipv4-tab" id="arp-ipv4-tab-btn">IPv4</button>
+              <button type="button" class="tab-btn" data-tab="ipv6" role="tab" aria-selected="false" aria-controls="ipv6-tab" id="arp-ipv6-tab-btn">IPv6</button>
             </div>
             <button type="button" class="icon-btn btn-primary" id="sync-mac-btn" data-icon="refresh" data-tooltip="Sync from SNMP" data-i18n-tooltip="device.sync_from_snmp" aria-label="Sync from SNMP" data-i18n-aria-label="device.sync_from_snmp"></button>
           </div>
-          <div class="tab-content active" id="ipv4-tab">
-            <input type="text" id="ipv4-search" class="tab-search" data-i18n-placeholder="device.search_ip_mac" placeholder="Search IP/MAC">
+          <div class="tab-content active" id="ipv4-tab" role="tabpanel" aria-labelledby="arp-ipv4-tab-btn">
+            <input type="text" id="ipv4-search" class="tab-search" data-i18n-placeholder="device.search_ip_mac" placeholder="Search IP/MAC" aria-label="Search IP/MAC" data-i18n-aria-label="device.search_ip_mac">
             <div id="ipv4-table-container" class="tab-table-container"></div>
           </div>
-          <div class="tab-content" id="ipv6-tab">
-            <input type="text" id="ipv6-search" class="tab-search" data-i18n-placeholder="device.search_ip_mac" placeholder="Search IP/MAC">
+          <div class="tab-content" id="ipv6-tab" role="tabpanel" aria-labelledby="arp-ipv6-tab-btn">
+            <input type="text" id="ipv6-search" class="tab-search" data-i18n-placeholder="device.search_ip_mac" placeholder="Search IP/MAC" aria-label="Search IP/MAC" data-i18n-aria-label="device.search_ip_mac">
             <div id="ipv6-table-container" class="tab-table-container"></div>
           </div>
         </div>

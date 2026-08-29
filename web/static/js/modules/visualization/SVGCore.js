@@ -604,13 +604,6 @@ export class SVGCore {
     }
   }
 
-  setGridSize(size) {
-    this.gridSize = size;
-    this._createDefs();
-    this._createGridBackground();
-    this._renderGridRuler();
-  }
-
   /**
    * 机柜画布定型（虚拟横向滚动方案）。
    *
@@ -663,16 +656,5 @@ export class SVGCore {
   _applyCabinetScroll(scrollLeft) {
     const viewWidth = this.container.clientWidth || 800;
     this.setViewBox(scrollLeft, 0, viewWidth, this._cabinetViewHeight || 600);
-  }
-
-  toggleSnapToGrid(enabled) {
-    this.snapToGrid = enabled;
-  }
-
-  toggleAlignmentLines(enabled) {
-    this.showAlignmentLines = enabled;
-    if (!enabled) {
-      this._clearAlignmentLines();
-    }
   }
 }

@@ -19,6 +19,10 @@ use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{User, UserCreate, UserUpdate};
 
+/// 管理员删除路径的固定咨询锁键（ASCII "IPMAadm1" 的 int64 编码，
+/// 仅作为串行化标记，与其他锁键不冲突即可）
+const ADMIN_DELETE_ADVISORY_LOCK_KEY: i64 = 0x4950_4D41_6164_6D31;
+
 pub async fn get_users<P: AuthProvider>(
     _secadmin: crate::extractor::SecAdminUser,
     State(state): State<Arc<P>>,
@@ -127,7 +131,7 @@ pub async fn create_user<P: AuthProvider>(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    sqlx::query(
+    let insert_result = sqlx::query(
         "INSERT INTO users (id, username, password_hash, email, role, status, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
@@ -140,7 +144,27 @@ pub async fn create_user<P: AuthProvider>(
     .bind(now)
     .bind(now)
     .execute(&conn)
-    .await?;
+    .await;
+
+    if let Err(e) = insert_result {
+        // 并发同名/同邮箱的 TOCTOU 兜底：预检通过后仍可能撞唯一约束
+        //（23505），映射为 409 Conflict 而非 500
+        if let Some(db_err) = e.as_database_error()
+            && db_err.is_unique_violation()
+        {
+            let conflict_msg = if db_err
+                .constraint()
+                .map(|name| name.contains("email"))
+                .unwrap_or(false)
+            {
+                msg("server.user.email_exists")
+            } else {
+                msg("server.user.username_exists")
+            };
+            return Err(AppError::Conflict(conflict_msg));
+        }
+        return Err(e.into());
+    }
 
     // 等保密码策略：记录密码历史（供后续改密时的重复使用检查）
     crate::password_policy::record_history(&conn, id, &hashed_password).await;
@@ -240,10 +264,15 @@ pub async fn update_user<P: AuthProvider>(
 pub async fn delete_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    _secadmin: crate::extractor::SecAdminUser,
+    secadmin: crate::extractor::SecAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
+
+    // 禁止删除当前登录账户：误操作自删会立即把自己登出且无法恢复
+    if secadmin.sub == id.to_string() {
+        return Err(AppError::Conflict(msg("server.user.cannot_delete_self")));
+    }
 
     let existing_user = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
         .bind(id)
@@ -255,6 +284,36 @@ pub async fn delete_user<P: AuthProvider>(
     }
 
     let mut tx = conn.begin().await?;
+
+    // 管理员删除路径串行化：先取固定键的事务级咨询锁。仅靠目标行的
+    // FOR UPDATE 无法保护 COUNT——普通 MVCC 快照读看不到并发事务未提交
+    // 的删除，两个 secadmin 并发各删一个 admin 时双方计数均为 1，最终
+    // 管理员归零。咨询锁使并发的「检查+删除」整体串行执行
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(ADMIN_DELETE_ADVISORY_LOCK_KEY)
+        .execute(&mut *tx)
+        .await?;
+
+    // 末位管理员保护：目标为 admin/secadmin 且删除后管理员数量归零时拒绝。
+    // 统计与删除置于同一事务（统计行加锁语义由删除目标的 FOR UPDATE 保证），
+    // 防止并发删除两个管理员时双双通过检查
+    let (target_role,): (String,) =
+        sqlx::query_as("SELECT role FROM users WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+    if target_role == "admin" || target_role == "secadmin" {
+        let other_admins: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM users WHERE role IN ('admin', 'secadmin') AND id <> $1",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if other_admins == 0 {
+            return Err(AppError::Conflict(msg("server.user.last_admin_protected")));
+        }
+    }
 
     // operation_logs.user_id ON DELETE SET NULL — 保留日志，user_id 置 NULL
     // notifications/user_tokens ON DELETE CASCADE — 自动级联删除

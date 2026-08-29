@@ -16,7 +16,9 @@
   font-weight: 600;
   margin-bottom: var(--space-lg);
   padding-bottom: var(--space-sm);
-  border-bottom: 2px solid var(--color-primary-light);
+
+  /* 标题分隔线用实色主色：--color-primary-light 是 10% tint，2px 线条几乎不可见 */
+  border-bottom: 2px solid var(--color-primary);
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -41,7 +43,8 @@
 }
 
 .config-card:hover {
-  border-color: var(--color-primary-light);
+  /* hover 边框用实色主色，10% tint 边框视觉上消失 */
+  border-color: var(--color-primary);
   box-shadow: 0 4px 12px rgb(102 126 234 / 10%);
 }
 
@@ -367,7 +370,9 @@ dl.config-field,
   font-weight: 600;
   margin: 0 0 var(--space-xs);
   padding-bottom: var(--space-xs);
-  border-bottom: 2px solid var(--color-primary-light);
+
+  /* 分组分隔线用实色主色，10% tint 2px 线条几乎不可见 */
+  border-bottom: 2px solid var(--color-primary);
 }
 
 .open-source-items {

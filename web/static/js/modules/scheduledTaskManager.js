@@ -23,8 +23,12 @@ export async function initScheduledTaskManager() {
 }
 
 function setupEventListeners() {
+  // createBtn 位于常驻 DOM：每次切换到本子标签都会执行本函数，
+  // 必须用 dataset 标志做幂等守卫（与下方 taskTable 一致），否则监听器无界累积，
+  // 一次点击会触发 N 次 openCreateScheduledTaskModal 并重复提交
   const createBtn = document.getElementById("create-scheduled-task-btn");
-  if (createBtn) {
+  if (createBtn && !createBtn.dataset.handlerAttached) {
+    createBtn.dataset.handlerAttached = "true";
     createBtn.addEventListener("click", openCreateScheduledTaskModal);
   }
 
@@ -47,7 +51,7 @@ function setupEventListeners() {
           runScheduledTask(taskId);
           break;
         case "toggle-task":
-          toggleScheduledTask(taskId);
+          toggleScheduledTask(taskId, btn);
           break;
         case "edit-task":
           editScheduledTask(taskId);
@@ -93,7 +97,7 @@ function populateDeviceSelect() {
   return fillSelect("scheduled-task-device-id", "/api/resources/devices?page_size=1000", {
     placeholderKey: "scheduled_tasks.config_fields.select_device",
     itemToLabel: (dev) => dev.name || dev.hostname || dev.id,
-    errorLabel: "设备"
+    errorLabelKey: "common.device"
   });
 }
 
@@ -101,7 +105,7 @@ function populateNetworkSelect() {
   return fillSelect("scheduled-task-network-id", "/api/resources/networks", {
     placeholderKey: "scheduled_tasks.config_fields.select_network",
     itemToLabel: (net) => net.name || net.id,
-    errorLabel: "网段"
+    errorLabelKey: "common.network"
   });
 }
 
@@ -144,11 +148,14 @@ function renderScheduledTasks(tasks) {
 
   tbody.innerHTML = "";
   tasks.forEach((task, index) => {
+    // task_type 为动态翻译键：键缺失时 t() 原样返回键名，此时对原始枚举值转义后再输出
+    const typeKey = `scheduled_tasks.task_types.${task.task_type}`;
+    const typeText = t(typeKey) === typeKey ? escapeHtml(task.task_type || "") : t(typeKey);
     const row = document.createElement("tr");
     row.innerHTML = `
             <td class="index-column">${index + 1}</td>
             <td>${escapeHtml(task.name)}</td>
-            <td class="col-center">${t(`scheduled_tasks.task_types.${task.task_type}`) || escapeHtml(task.task_type)}</td>
+            <td class="col-center">${typeText}</td>
             <td><code>${escapeHtml(task.cron_expression)}</code></td>
             <td class="col-center">
                 <span class="status-badge ${task.enabled ? "status-active" : "status-inactive"}">
@@ -223,9 +230,43 @@ async function editScheduledTask(id) {
   }
 }
 
+// cron 单字段基础合法性：数字、范围（可带步进）、星号（可带步进），列表按逗号拆分逐段校验
+const CRON_FIELD_PATTERN = /^(\*|\d+|\d+-\d+)(\/\d+)?$/;
+
+function isValidCronField(field) {
+  if (field === "") {
+    return false;
+  }
+  return field.split(",").every((part) => CRON_FIELD_PATTERN.test(part));
+}
+
+// 前端基础校验：仅做结构性检查（5 段"分 时 日 月 周"或 6 段"含秒"），
+// 语义合法性（如 2 月 30 日）仍由后端判定
+function validateCronExpression(expr) {
+  const fields = expr.trim().split(/\s+/);
+  if (fields.length !== 5 && fields.length !== 6) {
+    return false;
+  }
+  return fields.every(isValidCronField);
+}
+
+// 提交在途标志：请求未返回前拦截重复提交（双击/回车），防止重复创建同名任务
+let submitInFlight = false;
+
 async function handleScheduledTaskSubmit(e) {
   e.preventDefault();
+  if (submitInFlight) {
+    return;
+  }
+  submitInFlight = true;
+  try {
+    await saveScheduledTask();
+  } finally {
+    submitInFlight = false;
+  }
+}
 
+async function saveScheduledTask() {
   const id = document.getElementById("scheduled-task-id").value;
   const name = document.getElementById("scheduled-task-name").value.trim();
   const taskType = document.getElementById("scheduled-task-type").value;
@@ -234,6 +275,12 @@ async function handleScheduledTaskSubmit(e) {
 
   if (!name || !taskType || !cronExpression) {
     showToast(t("scheduled_tasks.required_fields"), "warning");
+    return;
+  }
+
+  // cron 结构非法时提前拦截：后端对创建仅告警落库，任务会静默永不执行
+  if (!validateCronExpression(cronExpression)) {
+    showToast(t("scheduled_tasks.cron_invalid"), "warning");
     return;
   }
 
@@ -284,7 +331,11 @@ async function handleScheduledTaskSubmit(e) {
   }
 }
 
-async function toggleScheduledTask(id) {
+async function toggleScheduledTask(id, btn = null) {
+  // 处理期间禁用触发按钮防抖：连点会在请求返回前再次切换，最终状态被切回原样
+  if (btn) {
+    btn.disabled = true;
+  }
   try {
     const response = await apiPost(`/api/system/scheduled-tasks/${id}/toggle`);
     if (response.success) {
@@ -296,6 +347,11 @@ async function toggleScheduledTask(id) {
   } catch (error) {
     console.error("Failed to toggle task:", error);
     showToast(t("scheduled_tasks.toggle_failed"), "error");
+  } finally {
+    // 列表重载后按钮已是新 DOM，此处恢复仅覆盖请求失败等未重载的场景
+    if (btn) {
+      btn.disabled = false;
+    }
   }
 }
 
@@ -374,9 +430,9 @@ async function viewTaskLogs(taskName) {
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${escapeHtml(log.task_name)}</td>
-        <td><span class="status-badge ${statusClass}">${log.status}</span></td>
+        <td><span class="status-badge ${statusClass}">${escapeHtml(log.status)}</span></td>
         <td>${formatDateTime(log.start_time)}</td>
-        <td>${log.duration || 0}</td>
+        <td>${escapeHtml(String(log.duration ?? 0))}</td>
         <td>${escapeHtml(log.details?.message || log.details?.error || "-")}</td>
       `;
       fragment.appendChild(row);

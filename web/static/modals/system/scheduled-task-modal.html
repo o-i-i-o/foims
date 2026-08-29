@@ -10,11 +10,11 @@
         <input type="hidden" id="scheduled-task-id">
         <div class="form-group">
           <label for="scheduled-task-name"><span data-i18n="scheduled_tasks.name">Name</span><span class="required">*</span></label>
-          <input type="text" id="scheduled-task-name" required>
+          <input type="text" id="scheduled-task-name" name="scheduled_task_name" required>
         </div>
         <div class="form-group">
           <label for="scheduled-task-type"><span data-i18n="scheduled_tasks.type">Type</span><span class="required">*</span></label>
-          <select id="scheduled-task-type" required>
+          <select id="scheduled-task-type" name="scheduled_task_type" required>
             <option value="mac_sync" data-i18n="scheduled_tasks.task_types.mac_sync">MAC Address Sync</option>
             <option value="token_cleanup" data-i18n="scheduled_tasks.task_types.token_cleanup">Token Cleanup</option>
             <option value="backup" data-i18n="scheduled_tasks.task_types.backup">Database Backup</option>
@@ -23,14 +23,14 @@
         </div>
         <div class="form-group">
           <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
-          <input type="text" id="scheduled-task-cron" value="0 */6 * * *" required>
+          <input type="text" id="scheduled-task-cron" name="scheduled_task_cron" value="0 */6 * * *" required>
           <small class="hint-text" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
         </div>
         <div id="scheduled-task-config-section">
           <div class="form-row">
             <div class="form-group hidden" id="mac-sync-config">
               <label for="scheduled-task-device-id"><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></label>
-              <select id="scheduled-task-device-id">
+              <select id="scheduled-task-device-id" name="scheduled_task_device_id">
                 <option value="" data-i18n="scheduled_tasks.config_fields.select_device">Select Device</option>
               </select>
             </div>
@@ -38,7 +38,7 @@
           <div class="form-row">
             <div class="form-group hidden" id="mac-sync-network-config">
               <label for="scheduled-task-network-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span><span class="required">*</span></label>
-              <select id="scheduled-task-network-id">
+              <select id="scheduled-task-network-id" name="scheduled_task_network_id">
                 <option value="" data-i18n="scheduled_tasks.config_fields.select_network">Select Network</option>
               </select>
             </div>
@@ -46,14 +46,14 @@
           <div class="form-row">
             <div class="form-group hidden" id="log-cleanup-config">
               <label for="scheduled-task-keep-days"><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
-              <input type="number" id="scheduled-task-keep-days" value="30" min="0">
+              <input type="number" id="scheduled-task-keep-days" name="scheduled_task_keep_days" value="30" min="0">
               <small class="hint-text" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
             </div>
           </div>
         </div>
         <div class="form-group">
           <label class="checkbox-label">
-            <input type="checkbox" id="scheduled-task-enabled" checked>
+            <input type="checkbox" id="scheduled-task-enabled" name="enabled" checked>
             <span data-i18n="scheduled_tasks.enabled">Enabled</span>
           </label>
         </div>

@@ -1,29 +1,12 @@
-//! 证书读取与删除（带文件名校验，防路径穿越）。
+//! 证书删除（带文件名校验，防路径穿越）。
+//!
+//! 说明：历史遗留的 `read_certificate`（可读私钥内容）因全仓库无调用方
+//! 且属潜在误用面（私钥外发通道）已移除；私钥内容不提供任何读取接口。
 
 use ipma_common::msg;
 
 use crate::error::CertManagerError;
 use crate::listing::CertKind;
-
-/// 校验文件名：仅允许目录内的纯文件名（.pem / .key）
-fn validate_filename(filename: &str, extension: &str) -> Result<(), CertManagerError> {
-    let valid = !filename.is_empty()
-        && !filename.contains('/')
-        && !filename.contains('\\')
-        && !filename.contains("..")
-        && filename
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
-        && filename.ends_with(extension)
-        && filename.len() > extension.len();
-    if valid {
-        Ok(())
-    } else {
-        Err(CertManagerError::Validation(msg(
-            "server.certificate.filename_invalid",
-        )))
-    }
-}
 
 /// 校验文件基础名（不含扩展名，删除操作按 stem 删除 .pem 与 .key）
 fn validate_stem(stem: &str) -> Result<(), CertManagerError> {
@@ -42,32 +25,6 @@ fn validate_stem(stem: &str) -> Result<(), CertManagerError> {
             "server.certificate.filename_invalid",
         )))
     }
-}
-
-/// 读取证书/私钥文件内容，返回 (文件名, 字节)
-pub async fn read_certificate(
-    kind: CertKind,
-    filename: &str,
-) -> Result<(String, Vec<u8>), CertManagerError> {
-    let extension = if filename.ends_with(".key") {
-        ".key"
-    } else {
-        ".pem"
-    };
-    validate_filename(filename, extension)?;
-
-    let path = std::path::Path::new(kind.dir()).join(filename);
-    let content = tokio::fs::read(&path).await.map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            CertManagerError::NotFound(msg("server.certificate.not_found"))
-        } else {
-            CertManagerError::Internal(
-                msg("server.certificate.read_failed").with("error", e.to_string()),
-            )
-        }
-    })?;
-
-    Ok((filename.to_string(), content))
 }
 
 /// 删除证书对（{stem}.pem 与 {stem}.key），文件不存在视为未找到
@@ -106,56 +63,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn 文件名校验_合法文件名通过() {
-        assert!(validate_filename("cert.pem", ".pem").is_ok());
-        assert!(validate_filename("create_1761234567_cert.pem", ".pem").is_ok());
-        assert!(validate_filename("a_B-9.key", ".key").is_ok());
-        assert!(
-            validate_filename("import-1.cert.pem", ".pem").is_ok(),
-            "多段后缀允许"
-        );
-    }
-
-    #[test]
-    fn 文件名校验_空名与裸扩展名拒绝() {
-        assert!(validate_filename("", ".pem").is_err(), "空文件名");
-        assert!(validate_filename(".pem", ".pem").is_err(), "仅有扩展名");
-        assert!(validate_filename(".key", ".key").is_err(), "仅有扩展名");
-    }
-
-    #[test]
-    fn 文件名校验_路径穿越与分隔符拒绝() {
-        assert!(
-            validate_filename("../etc/passwd.pem", ".pem").is_err(),
-            "相对路径"
-        );
-        assert!(validate_filename("a/../b.pem", ".pem").is_err(), "中间 ..");
-        assert!(
-            validate_filename("/abs/path.pem", ".pem").is_err(),
-            "绝对路径"
-        );
-        assert!(
-            validate_filename("dir\\cert.pem", ".pem").is_err(),
-            "反斜杠"
-        );
-        assert!(validate_filename("dir/cert.pem", ".pem").is_err(), "正斜杠");
-    }
-
-    #[test]
-    fn 文件名校验_非法字符与扩展名不匹配拒绝() {
-        assert!(
-            validate_filename("cër.pem", ".pem").is_err(),
-            "非 ASCII 字符"
-        );
-        assert!(validate_filename("cert name.pem", ".pem").is_err(), "空格");
-        assert!(validate_filename("cert.txt", ".pem").is_err(), "扩展名不符");
-        assert!(
-            validate_filename("cert.pem", ".key").is_err(),
-            "扩展名不匹配"
-        );
-    }
-
-    #[test]
     fn stem校验_合法基础名通过() {
         assert!(validate_stem("create_1761234567_cert").is_ok());
         assert!(validate_stem("aB9-_x").is_ok());
@@ -184,16 +91,6 @@ mod tests {
             .build()
             .unwrap_or_else(|e| panic!("构造测试运行时失败: {e}"));
         rt.block_on(fut)
-    }
-
-    /// 读取证书前的文件名校验优先于文件系统访问，
-    /// 非法文件名不会触碰磁盘
-    #[test]
-    fn 读取证书_非法文件名返回校验错误() {
-        let err = with_runtime(read_certificate(CertKind::Generated, "../etc/passwd"))
-            .err()
-            .unwrap_or_else(|| panic!("非法文件名应被拒绝"));
-        assert!(matches!(err, CertManagerError::Validation(_)));
     }
 
     /// 删除前的 stem 校验优先于文件系统访问

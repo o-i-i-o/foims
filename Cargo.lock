@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.93"
+version = "0.15.96"
 dependencies = [
  "async-trait",
  "axum",
@@ -2195,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-init"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "bcrypt",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-models"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "ipma-common",
@@ -2244,7 +2244,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-resource"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-snmp",
  "axum",
@@ -2299,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-x509-manager"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "ipma-common",

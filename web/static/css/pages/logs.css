@@ -204,14 +204,6 @@ dl.log-detail-item {
   margin-bottom: 12px;
 }
 
-.log-detail-section > label {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: 500;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
 @media (width <= 576px) {
   .log-detail-grid {
     grid-template-columns: 1fr;

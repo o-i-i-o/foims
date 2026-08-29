@@ -40,7 +40,15 @@ pub async fn get_cabinets<P: DbProvider>(
         .unwrap_or_else(|| "asc".to_string());
 
     let search_pattern = ipma_common::net::escape_like(&search);
-    let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
+    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    let parsed_room_id = room_id
+        .as_ref()
+        .map(|id| {
+            Uuid::parse_str(id).map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", "room_id"))
+            })
+        })
+        .transpose()?;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY c.name DESC",
@@ -176,6 +184,19 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
         .and_then(|s| Uuid::parse_str(s).ok());
 
     let cabinets = if let Some(network_id) = network_id_filter {
+        // 归属校验：提供的网段必须属于路径中的区域，防止跨区域越权枚举
+        let network_in_region: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1 AND network_region_id = $2)",
+        )
+        .bind(network_id)
+        .bind(region_id)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+        if !network_in_region {
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", "network_id"),
+            ));
+        }
         sqlx::query_as::<_, Cabinet>(
             r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at, c.updated_at
                FROM cabinets c
@@ -212,11 +233,23 @@ pub async fn create_cabinet<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 重名预检、引用存在性校验与写入放同一事务，避免 TOCTOU 与残缺写入
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // room_id 引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
+    let room_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
+        .bind(req.room_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if !room_exists {
+        return Err(AppError::Validation(msg("server.room.not_found")));
+    }
+
     let existing_cabinet =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE name = $1 AND room_id = $2")
             .bind(&req.name)
             .bind(req.room_id)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
 
     if existing_cabinet.is_some() {
@@ -227,7 +260,7 @@ pub async fn create_cabinet<P: DbProvider>(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO cabinets (id, name, room_id, capacity, description, created_at, updated_at) 
+        "INSERT INTO cabinets (id, name, room_id, capacity, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
@@ -237,8 +270,19 @@ pub async fn create_cabinet<P: DbProvider>(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn())
-    .await?;
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_cabinets_room_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.cabinet.name_exists"));
+        }
+        AppError::from(e)
+    })?;
+
+    tx.commit().await?;
 
     let cabinet = Cabinet {
         id,
@@ -349,24 +393,52 @@ pub async fn update_cabinet<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
+    // 预检（存在性/重名/引用）与写入放同一事务，避免 TOCTOU
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
-    if existing_cabinet.is_none() {
-        return Err(AppError::NotFound(msg("server.cabinet.not_found")));
+    let current_room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| AppError::NotFound(msg("server.cabinet.not_found")))?;
+
+    // room_id 引用存在性校验（缺省沿用现值）
+    if let Some(room_id) = req.room_id {
+        let room_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
+                .bind(room_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !room_exists {
+            return Err(AppError::Validation(msg("server.room.not_found")));
+        }
+    }
+    let effective_room_id = req.room_id.unwrap_or(current_room_id);
+
+    // 重名预检：同房间内（UNIQUE(room_id, name)）名称冲突
+    if let Some(name) = &req.name {
+        let duplicate: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2 AND id != $3",
+        )
+        .bind(name)
+        .bind(effective_room_id)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if duplicate.is_some() {
+            return Err(AppError::Conflict(msg("server.cabinet.name_exists")));
+        }
     }
 
     let now = Utc::now();
 
     sqlx::query(
         "UPDATE cabinets SET
-         name = COALESCE($1, name), 
-         room_id = COALESCE($2, room_id), 
-         capacity = COALESCE($3, capacity), 
-         description = COALESCE($4, description), 
-         updated_at = $5 
+         name = COALESCE($1, name),
+         room_id = COALESCE($2, room_id),
+         capacity = COALESCE($3, capacity),
+         description = COALESCE($4, description),
+         updated_at = $5
          WHERE id = $6",
     )
     .bind(&req.name)
@@ -375,8 +447,19 @@ pub async fn update_cabinet<P: DbProvider>(
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(&state.pool()?.get_conn())
-    .await?;
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_cabinets_room_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.cabinet.name_exists"));
+        }
+        AppError::from(e)
+    })?;
+
+    tx.commit().await?;
 
     let cabinet = sqlx::query_as::<_, Cabinet>(
         "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
@@ -407,9 +490,13 @@ pub async fn delete_cabinet<P: DbProvider>(
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
+    // 计数检查与 DELETE 放同一事务，避免检查后被并发写入绕过、
+    // 触发 CASCADE 静默清空设备关联
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing_cabinet = sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE id = $1")
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?;
 
     if existing_cabinet.is_none() {
@@ -419,11 +506,25 @@ pub async fn delete_cabinet<P: DbProvider>(
     let position_count =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
 
     if position_count > 0 {
         return Err(AppError::Validation(msg("server.cabinet.has_positions")));
+    }
+
+    // 双保险：机位上仍挂着设备时拒绝删除（positions 级联删除会把
+    // devices.position_id 置空，静默清空设备归属）
+    let device_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM devices d \
+         JOIN positions p ON d.position_id = p.id \
+         WHERE p.cabinet_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if device_count > 0 {
+        return Err(AppError::Validation(msg("server.cabinet.position_in_use")));
     }
 
     // 配线架被线路引用时禁止删除（未引用的配线架随外键级联删除）
@@ -437,7 +538,7 @@ pub async fn delete_cabinet<P: DbProvider>(
          )",
     )
     .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
+    .fetch_one(&mut *tx)
     .await?;
     if linked_pp_count > 0 {
         return Err(AppError::Validation(msg(
@@ -447,8 +548,10 @@ pub async fn delete_cabinet<P: DbProvider>(
 
     sqlx::query("DELETE FROM cabinets WHERE id = $1")
         .bind(id)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "cabinet_id": id.to_string()
@@ -507,16 +610,19 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 机柜存在性检查放进同步事务内，避免事务外的快照读与后续写入
+    // 之间出现 TOCTOU（与 sync_room_children 同口径）
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let cabinet_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cabinets WHERE id = $1)")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
     if !cabinet_exists {
         return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
-    let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
 
     let items: &Vec<PositionSyncItem> = &req.positions;
@@ -561,8 +667,10 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
         }
 
         if let Some(item_id) = item.id {
-            sqlx::query(
-                "UPDATE positions SET name = $1, start_u = $2, end_u = $3, description = $4, cabinet_id = $5, updated_at = $6 WHERE id = $7",
+            // 归属校验：仅允许更新当前机柜下的机位，
+            // 携带其他机柜的 id 时按未找到处理，避免跨父资源静默搬移
+            let updated = sqlx::query(
+                "UPDATE positions SET name = $1, start_u = $2, end_u = $3, description = $4, cabinet_id = $5, updated_at = $6 WHERE id = $7 AND cabinet_id = $8",
             )
             .bind(&item.name)
             .bind(item.start_u)
@@ -571,8 +679,12 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             .bind(id)
             .bind(now)
             .bind(item_id)
+            .bind(id)
             .execute(&mut *tx)
             .await?;
+            if updated.rows_affected() == 0 {
+                return Err(AppError::NotFound(msg("server.cabinet.not_found")));
+            }
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(

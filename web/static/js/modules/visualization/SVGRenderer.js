@@ -1,6 +1,23 @@
 import { t } from "../../utils/i18n.js";
-import { DEFAULT_CABINET_CAPACITY } from "./SVGDataManager.js";
+import { DEFAULT_CABINET_CAPACITY, isValidLayoutPosition } from "./SVGDataManager.js";
 import { SVG_NS } from "./SVGCore.js";
+
+/**
+ * 生成 DOM 标识 id：crypto.randomUUID 仅在安全上下文（HTTPS / localhost）
+ * 存在，HTTP 内网 IP 部署下调用会抛 TypeError 中断渲染；
+ * 回退以 getRandomValues 拼 RFC 4122 v4 格式（无需安全上下文）。
+ */
+function generateDomId() {
+  if (typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export class SVGRenderer {
   constructor(core) {
@@ -13,11 +30,13 @@ export class SVGRenderer {
     group.className.baseVal = "workstation-element";
     group.dataset.id = workstation.id;
 
-    // 坐标 0 合法：仅 null/undefined 时回退；默认尺寸与自动布局（160×160）一致
-    const x = workstation.position.x ?? 100;
-    const y = workstation.position.y ?? 100;
-    const width = workstation.position.width ?? 160;
-    const height = workstation.position.height ?? 160;
+    // 坐标校验：异常值（NaN/负值/零宽高）丢弃该条目坐标并回退默认布局，
+    // 不让坏数据进画布与 setViewBox（回写对象保证调用方的边界计算同样取到合法值）
+    if (!isValidLayoutPosition(workstation.position)) {
+      console.warn("工位坐标异常，已回退默认布局:", workstation.id, workstation.position);
+      workstation.position = { x: 100, y: 100, width: 160, height: 160 };
+    }
+    const { x, y, width, height } = workstation.position;
 
     const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("x", x);
@@ -249,7 +268,7 @@ export class SVGRenderer {
     const group = document.createElementNS(SVG_NS, "g");
     group.className.baseVal = "door-element";
     group.dataset.elementType = "door";
-    group.dataset.id = id || crypto.randomUUID();
+    group.dataset.id = id || generateDomId();
 
     const x = 50;
     const y = 100;
@@ -288,9 +307,5 @@ export class SVGRenderer {
     this.elementsGroup.appendChild(group);
 
     return group;
-  }
-
-  clearElements() {
-    this.elementsGroup.innerHTML = "";
   }
 }

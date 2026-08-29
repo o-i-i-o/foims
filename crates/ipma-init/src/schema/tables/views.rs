@@ -69,7 +69,7 @@ const VIEWS: &[(&str, &str)] = &[
         FROM device_macs sm
         JOIN devices sdv ON sm.device_id = sdv.id
         LEFT JOIN ips i ON sm.ip_address = i.ip_address
-        LEFT JOIN device_interfaces di ON i.device_interface_id = di.id AND di.device_id != sm.device_id
+        LEFT JOIN device_interfaces di ON i.device_interface_id = di.id AND di.device_id = sm.device_id
     ",
     ),
     (

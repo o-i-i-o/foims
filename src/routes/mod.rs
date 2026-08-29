@@ -22,7 +22,6 @@ use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
 use crate::log::{get_login_logs, get_operation_logs};
-use crate::routes::static_files::AppJson;
 use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_notification_settings,
@@ -38,6 +37,7 @@ use crate::system::scheduled_task::{
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
 use ipma_common::AppError;
+use ipma_common::AppJson;
 
 async fn data_export_csv(
     _admin: ipma_auth::extractor::AdminUser,
@@ -60,6 +60,7 @@ async fn data_import_csv(
 }
 
 async fn data_download_template(
+    _admin: ipma_auth::extractor::AdminUser,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     ipma_data_management::download_template(type_param)
@@ -87,7 +88,7 @@ async fn data_clear_logs(
 }
 
 async fn data_get_logs_stats(
-    _admin: ipma_auth::extractor::AdminUser,
+    _viewer: ipma_auth::extractor::AdminOrAuditorUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
     ipma_data_management::get_logs_stats(state.as_ref().clone())
@@ -164,12 +165,33 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
 /// 供前端登录页判断：当 init_enabled=true 时跳转到初始化页 /init_index.html
 /// 仅返回 init_enabled 一个布尔字段，避免泄露系统是否已初始化等额外信息。
 pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
+    // 读共享槽最新快照（disable_init_mode 写盘成功后已刷新）
+    let config = state.config_snapshot();
     ipma_common::ok_json(
         serde_json::json!({
-            "init_enabled": state.config.init.enabled,
+            "init_enabled": config.init.enabled,
         }),
         "server.common.success",
     )
+}
+
+/// 已认证请求的用户维度限流补记钩子。
+///
+/// 必须挂在 auth_middleware 之后（route_layer 链中先注册）：预鉴权的
+/// 限流中间件无法安全取得用户身份（未验签 JWT 的 sub 可伪造），此处
+/// 从 auth_middleware 注入的已验证 JwtClaims 读取用户并对 user 桶计数，
+/// 超限返回 429。匿名请求只按 IP 计数，已认证请求 IP+用户双桶。
+async fn charge_user_rate_limit_middleware(
+    State(state): State<Arc<AppState>>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    if let Some(claims) = req.extensions().get::<ipma_auth::utils::JwtClaims>()
+        && let Err(e) = state.rate_limiter.charge_user(&claims.sub)
+    {
+        return e.into_response();
+    }
+    next.run(req).await
 }
 
 // 初始化相关路由将根据配置动态添加（在 main.rs 中）
@@ -204,7 +226,8 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route(
             "/api/auth/sso/callback",
-            get(ipma_auth::sso::sso_callback::<AppState>),
+            get(ipma_auth::sso::sso_callback::<AppState>)
+                .post(ipma_auth::sso::sso_callback_post::<AppState>),
         )
         .route(
             "/api/auth/methods",
@@ -250,6 +273,12 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/auth/change-password",
             post(ipma_auth::login::change_password::<AppState>),
         )
+        // 注册顺序即执行顺序的反序：auth_middleware 先行校验并注入 claims，
+        // 随后 admin_guard/限流补记依次运行
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            charge_user_rate_limit_middleware,
+        ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             ipma_auth::login::auth_middleware::<AppState>,
@@ -805,7 +834,13 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             post(ipma_auth::app_fail2ban::app_unban_ip::<AppState>),
         )
         // admin_guard_middleware 先注册（位于 auth_middleware 之内）：
-        // 请求先经 auth_middleware 校验令牌注入 claims，再由守卫做角色判定
+        // 请求先经 auth_middleware 校验令牌注入 claims，再由守卫做角色判定；
+        // charge_user_rate_limit_middleware 最后注册（链最内层），在 claims
+        // 就绪后对已认证请求补记用户维度限流桶
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            charge_user_rate_limit_middleware,
+        ))
         .route_layer(middleware::from_fn(admin_guard_middleware))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

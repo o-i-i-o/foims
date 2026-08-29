@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01359">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01359">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01359">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01359">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01359">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01359">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01359">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01359">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01359">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01359">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01359">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01359">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01359">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01362">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01362">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01362">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01362">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01362">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01362">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01362">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01362">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01362">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01362">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01362">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01362">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01362">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -97,7 +97,7 @@
       </nav>
 
       <footer class="sidebar-footer">
-        <div class="user-info" id="user-info" data-tooltip="Current user">
+        <div class="user-info" id="user-info" data-tooltip="Current user" data-i18n-tooltip="common.current_user">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
           <span id="current-user" class="nav-text" aria-live="polite"></span>
         </div>
@@ -133,14 +133,15 @@
               <div class="stat-value" id="total-network-regions">0</div>
             </div>
           </article>
-          <article class="stat-card clickable" data-nav="ip" data-tab="ip-manager">
+          <!-- ip 区无 tab 结构,data-tab 恒无效已移除,点击直接跳转 IP 查询页 -->
+          <article class="stat-card clickable" data-nav="ip">
             <div class="stat-icon">🔗</div>
             <div class="stat-content">
               <h3 data-i18n="dashboard.total_ip_addresses">Total IP Addresses</h3>
               <div class="stat-value" id="total-ip-addresses">0</div>
             </div>
           </article>
-          <article class="stat-card stat-success clickable" data-nav="ip" data-tab="ip-manager">
+          <article class="stat-card stat-success clickable" data-nav="ip">
             <div class="stat-icon">✅</div>
             <div class="stat-content">
               <h3 data-i18n="dashboard.active_ips">Active IPs</h3>
@@ -171,7 +172,8 @@
             </div>
           </article>
           
-          <article class="dashboard-card" data-nav="resources" data-tab="ip-manager">
+          <!-- 原 data-tab="ip-manager" 无对应 tab 且 resources 区无 IP 列表,修正为直接跳转 ip 区 -->
+          <article class="dashboard-card" data-nav="ip">
             <header class="dashboard-card-header">
               <h3><span class="card-icon">🔗</span><span data-i18n="dashboard.recent_ips">Recent IP Assignments</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
@@ -1134,7 +1136,7 @@
                         <input type="number" id="clear-log-days" value="30" min="0" max="365" placeholder="0=全部删除" data-i18n-placeholder="logs.clear_zero_hint">
                       </div>
                     </div>
-                    <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. Enter 0 or leave empty to delete all logs. This action cannot be undone.</p>
+                    <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. Enter 0 to delete all logs. This action cannot be undone.</p>
                     <button id="clear-logs-btn" class="btn btn-danger" data-i18n="logs.clear">Clear</button>
                   </div>
                 </section>
@@ -1377,6 +1379,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01359"></script>
+  <script type="module" src="/static/js/app.js?v=01362"></script>
 </body>
 </html>

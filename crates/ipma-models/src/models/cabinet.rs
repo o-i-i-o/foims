@@ -64,8 +64,13 @@ pub struct CabinetUpdate {
         message = "server.cabinet.validation.capacity_range"
     ))]
     pub capacity: Option<i32>,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_description_opt",
+        message = "server.common.validation.description_length"
+    ))]
+    pub description: Option<Option<String>>,
 }
 
 // ==================== 单元测试 ====================
@@ -131,6 +136,7 @@ mod tests {
         // 全缺省通过
         let empty: CabinetUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert!(empty.validate().is_ok());
+        assert_eq!(empty.description, None, "字段缺失表示不修改");
 
         // 容量越界拒绝
         let bad: CabinetUpdate = serde_json::from_value(serde_json::json!({ "capacity": 100 }))?;
@@ -138,6 +144,25 @@ mod tests {
             panic!("超界容量应被拒绝");
         };
         assert!(errors.errors().contains_key("capacity"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_cabinet_update_description_three_states() -> Result<(), serde_json::Error> {
+        // 双层 Option：null 清空描述、值设置新值且超长被拒绝
+        let cleared: CabinetUpdate = serde_json::from_value(serde_json::json!({
+            "description": null
+        }))?;
+        assert_eq!(cleared.description, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        let bad: CabinetUpdate = serde_json::from_value(serde_json::json!({
+            "description": "D".repeat(256)
+        }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("超长描述应被拒绝");
+        };
+        assert!(errors.errors().contains_key("description"));
         Ok(())
     }
 

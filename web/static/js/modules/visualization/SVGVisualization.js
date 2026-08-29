@@ -12,30 +12,43 @@ export class SVGVisualization {
     this.elementsGroup = this.core.elementsGroup;
     this.svg = this.core.svg;
     this.container = this.core.container;
-    this.gridSize = this.core.gridSize;
-    this.snapToGrid = this.core.snapToGrid;
-    this.showAlignmentLines = this.core.showAlignmentLines;
-    this.currentRoomId = null;
   }
 
-  async autoDrawWorkstations(roomId) {
+  /**
+   * 自动绘制工位（无已保存布局时按网格排布）。
+   * @param {string} roomId 房间 id
+   * @param {Object} [options]
+   * @param {boolean} [options.skipReload] 调用方已通过 loadSavedLayout 确认无布局时
+   *   传 true，跳过内部二次加载，避免布局/工位/IP 三类请求双发
+   */
+  async autoDrawWorkstations(roomId, { skipReload = false } = {}) {
     try {
-      const hasSavedLayout = await this.dataManager.loadSavedLayout(roomId);
+      if (!skipReload) {
+        const hasSavedLayout = await this.dataManager.loadSavedLayout(roomId);
 
-      if (hasSavedLayout) {
-        this.currentRoomId = roomId;
-        this.core.currentRoomId = roomId;
-        return;
+        if (hasSavedLayout === null || hasSavedLayout === "error") {
+          // null：已被更新的渲染取代；"error"：布局请求失败——
+          // 两者都不自动排布（失败时排布落库会覆盖已保存布局）
+          return;
+        }
+        if (hasSavedLayout) {
+          this.core.currentRoomId = roomId;
+          return;
+        }
       }
 
-      this.currentRoomId = roomId;
       this.core.currentRoomId = roomId;
-      this.core.elementsGroup.innerHTML = "";
+
+      // 自动排布纳入渲染代次管理：await 期间若有并发加载开启则放弃本次绘制
+      const token = this.dataManager.beginWorkstationRender();
 
       const [workstations, ipManagers] = await Promise.all([
         this.dataManager.fetchWorkstationsByRoom(roomId),
         this.dataManager.fetchIps()
       ]);
+      if (token !== this.dataManager.workstationRenderToken) {
+        return;
+      }
 
       const ipMap = new Map();
       if (Array.isArray(ipManagers)) {
@@ -89,16 +102,17 @@ export class SVGVisualization {
         this.renderer.drawWorkstation(workstation);
       });
 
+      // 归属集合与 loadSavedLayout 保持同型：保存布局时仅提交本次绘制的元素
+      this.dataManager.setLayoutOwnerIds(
+        [...this.core.elementsGroup.querySelectorAll("[data-id]")].map((el) => el.dataset.id)
+      );
+
       const totalWidth = startX + cols * (width + gap) + 50;
       const totalHeight = startY + rows * (height + gap) + 50;
       // viewBox 同时覆盖容器尺寸，网格背景铺满画布（与 loadSavedLayout 保持一致）
       const cw = this.container.clientWidth || 0;
       const ch = this.container.clientHeight || 0;
       this.core.setViewBox(0, 0, Math.max(1000, totalWidth, cw), Math.max(800, totalHeight, ch));
-
-      setTimeout(() => {
-        this.saveLayout();
-      }, 500);
     } catch (error) {
       console.error("自动绘制工位失败:", error);
       this.core.showToast(t("viz.auto_draw_workstation_failed"), "error");
@@ -110,19 +124,22 @@ export class SVGVisualization {
       return;
     }
 
-    this.currentRoomId = roomId;
     this.core.currentRoomId = roomId;
 
     try {
-      const cabinets = await this.dataManager.fetchCabinetsByRoom(roomId);
+      // 先清空画布并开启渲染代次，再做任何异步请求：
+      // 机柜为 0 时也已清空画布；快速切换房间时旧响应由代次校验丢弃
+      const token = this.dataManager.beginCabinetRender();
 
-      if (cabinets.length === 0) {
-        this.core.showToast(t("viz.no_cabinet_data"), "info");
-        return;
+      const cabinets = await this.dataManager.fetchCabinetsByRoom(roomId);
+      if (token !== this.dataManager.cabinetRenderToken) {
+        return; // 已有更新的渲染在途，丢弃过期结果
       }
 
-      const token = this.dataManager.beginCabinetRender();
-      if (token !== this.dataManager.cabinetRenderToken) {
+      if (cabinets.length === 0) {
+        // 无渲染跟进:恢复完成标志,避免 saveLayout 被永久拒绝
+        this.dataManager.cabinetRenderSettled = true;
+        this.core.showToast(t("viz.no_cabinet_data"), "info");
         return;
       }
 

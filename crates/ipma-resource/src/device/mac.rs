@@ -17,6 +17,7 @@ use ipma_models::{ArpEntry, DeviceMac};
 
 use super::snmp::{
     SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, get_device_snmp_config,
+    snmp_target, truncate_to_column_width,
 };
 
 fn parse_vlan_from_interface(iface: &str) -> Option<i32> {
@@ -90,21 +91,19 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
             continue;
         }
         let oid_parts = vb.oid.arcs();
-        if oid_parts.len() >= 13 {
-            let vlan_id = oid_parts[12] as i32;
-            let mac_parts = &oid_parts[13..];
-            if mac_parts.len() == 6 {
-                let mac = format!(
-                    "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                    mac_parts[0],
-                    mac_parts[1],
-                    mac_parts[2],
-                    mac_parts[3],
-                    mac_parts[4],
-                    mac_parts[5]
-                );
-                map.insert(mac, vlan_id);
-            }
+        // 前缀 1.3.6.1.2.1.17.7.1.2.2.1.2 共 13 弧（下标 0..=12），
+        // 实例索引从下标 13 开始：Q-BRIDGE-MIB 为 VLAN 编码（多数实现
+        // 为单弧）+ 6 字节 MAC。MAC 取末 6 弧以兼容变长 VLAN 编码
+        let n = oid_parts.len();
+        // 最小合法实例：13 前缀弧 + 1 VLAN 弧 + 6 MAC 弧 = 20
+        if n >= 20 {
+            let vlan_id = oid_parts[13] as i32;
+            let mac_parts = &oid_parts[n - 6..];
+            let mac = format!(
+                "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                mac_parts[0], mac_parts[1], mac_parts[2], mac_parts[3], mac_parts[4], mac_parts[5]
+            );
+            map.insert(mac, vlan_id);
         }
     }
 
@@ -112,8 +111,48 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
     map
 }
 
+/// 解析 ipNetToPhysicalPhysAddress（1.3.6.1.2.1.4.35.1.4）行 OID 的索引部分。
+///
+/// 该表索引为 (ifIndex, addrType, addr)（RFC 4293）：addr 是变长
+/// OCTET STRING，SNMP 实例标识按「类型弧 + 长度弧 + 地址字节」编码，
+/// 故完整布局为 `[base_len]=ifIndex`、`[base_len+1]=addrType`、
+/// `[base_len+2]=addr_len`、`[base_len+3..]` 为地址字节
+///（实测 snmpwalk 输出形如 `.ifIndex.2.16.<16 字节>`，总弧长 29）。
+/// IPv4（addr_len=4）与 IPv6（addr_len=16）行均解析，其余返回 None。
+fn parse_ipnet_to_physical_index(oid_parts: &[u32]) -> Option<(u32, String)> {
+    let base_len = 10;
+    if oid_parts.len() < base_len + 3 {
+        return None;
+    }
+    let if_index = oid_parts[base_len];
+    let addr_len = oid_parts[base_len + 2] as usize;
+    let addr_start = base_len + 3;
+    if oid_parts.len() < addr_start + addr_len {
+        return None;
+    }
+    let addr_bytes: Vec<u8> = oid_parts[addr_start..addr_start + addr_len]
+        .iter()
+        .map(|&b| b as u8)
+        .collect();
+    let ip_addr = match addr_len {
+        4 => format!(
+            "{}.{}.{}.{}",
+            addr_bytes[0], addr_bytes[1], addr_bytes[2], addr_bytes[3]
+        ),
+        16 => {
+            let parts: Vec<String> = (0..8)
+                .map(|i| format!("{:02x}{:02x}", addr_bytes[i * 2], addr_bytes[i * 2 + 1]))
+                .collect();
+            simplify_ipv6(&parts.join(":"))
+        }
+        _ => return None,
+    };
+    Some((if_index, ip_addr))
+}
+
 pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<ArpEntry>, SnmpError> {
-    let addr = format!("{}:{}", params.ip, params.port);
+    // 复用 snmp_target：IPv6 地址须包裹方括号，直接 ip:port 拼接必然解析失败
+    let addr = snmp_target(&params.ip, params.port);
     let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
@@ -207,48 +246,31 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
         }
 
         let oid_parts = vb.oid.arcs();
-        if oid_parts.len() >= 14 {
-            let base_len = 10;
-            let if_index = oid_parts[base_len];
-            let addr_len = oid_parts[base_len + 2] as usize;
+        // ipNetToPhysicalPhysAddress 行：ifIndex/addrLen/地址均取自索引弧
+        //（addrType 位于 ifIndex 与 addrLen 之间，仅作索引用途）
+        if let Some((if_index, ip_addr)) = parse_ipnet_to_physical_index(oid_parts)
+            && let Some(bytes) = vb.value.as_bytes()
+            && bytes.len() >= 6
+        {
+            let mac_addr = format!(
+                "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+            );
 
-            if addr_len == 16 && oid_parts.len() >= base_len + 3 + addr_len {
-                let addr_start = base_len + 3;
-                let addr_bytes: Vec<u8> = oid_parts[addr_start..addr_start + addr_len]
-                    .iter()
-                    .map(|&b| b as u8)
-                    .collect();
-
-                let parts: Vec<String> = (0..8)
-                    .map(|i| format!("{:02x}{:02x}", addr_bytes[i * 2], addr_bytes[i * 2 + 1]))
-                    .collect();
-                let ipv6 = parts.join(":");
-                let ip_addr = simplify_ipv6(&ipv6);
-
-                if let Some(bytes) = vb.value.as_bytes()
-                    && bytes.len() >= 6
-                {
-                    let mac_addr = format!(
-                        "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
-                    );
-
-                    if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
-                        seen_ips.insert(ip_addr.clone());
-                        let interface = if_name_map.get(&if_index).cloned();
-                        let vlan_id = vlan_map.get(&mac_addr).copied().or_else(|| {
-                            interface
-                                .as_ref()
-                                .and_then(|i| parse_vlan_from_interface(i))
-                        });
-                        entries.push(ArpEntry {
-                            ip_address: ip_addr,
-                            mac_address: mac_addr,
-                            interface,
-                            vlan_id,
-                        });
-                    }
-                }
+            if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
+                seen_ips.insert(ip_addr.clone());
+                let interface = if_name_map.get(&if_index).cloned();
+                let vlan_id = vlan_map.get(&mac_addr).copied().or_else(|| {
+                    interface
+                        .as_ref()
+                        .and_then(|i| parse_vlan_from_interface(i))
+                });
+                entries.push(ArpEntry {
+                    ip_address: ip_addr,
+                    mac_address: mac_addr,
+                    interface,
+                    vlan_id,
+                });
             }
         }
     }
@@ -262,6 +284,9 @@ fn simplify_ipv6(ip: &str) -> String {
         .map(|addr| addr.to_string())
         .unwrap_or_else(|_| ip.to_string())
 }
+
+/// device_macs.interface 列宽（VARCHAR(50)，与建表契约一致）
+const INTERFACE_MAX_CHARS: usize = 50;
 
 pub async fn get_device_mac_table<P: DbProvider>(
     State(state): State<Arc<P>>,
@@ -290,6 +315,15 @@ pub async fn get_device_mac_table<P: DbProvider>(
     for entry in &entries {
         let id = Uuid::new_v4();
         seen_ips.push(entry.ip_address.clone());
+        // interface 列宽 VARCHAR(50)：入库前按字符截断（超宽截断优于必败写入）
+        let interface = entry
+            .interface
+            .as_deref()
+            .map(|iface| truncate_to_column_width(iface, INTERFACE_MAX_CHARS));
+        // 逐行 SAVEPOINT：单行 upsert 失败仅回滚该行（ROLLBACK TO + RELEASE），
+        // 事务保持可用后继续处理后续行，恢复"sync_partial 部分成功"语义；
+        // 此前任一行失败会令 PostgreSQL 事务进入 aborted 状态，后续语句全部失败
+        let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
         let result = sqlx::query(
             r"INSERT INTO device_macs (id, device_id, ip_address, mac_address, interface, vlan_id, created_at, updated_at)
                VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $7)
@@ -303,18 +337,22 @@ pub async fn get_device_mac_table<P: DbProvider>(
         .bind(device_id)
         .bind(&entry.ip_address)
         .bind(&entry.mac_address)
-        .bind(&entry.interface)
+        .bind(&interface)
         .bind(entry.vlan_id)
         .bind(now)
-        .execute(&mut *tx)
+        .execute(&mut *sp)
         .await;
 
         match result {
-            Ok(r) if r.rows_affected() > 0 => {
-                upserted_count += 1;
+            Ok(r) => {
+                sp.commit().await?;
+                if r.rows_affected() > 0 {
+                    upserted_count += 1;
+                }
             }
-            Ok(_) => {}
             Err(e) => {
+                // 回滚到 SAVEPOINT，恢复本事务可用状态后计入失败并继续
+                sp.rollback().await?;
                 failed_count += 1;
                 log_error!(
                     "log.device.mac.record_write_failed",
@@ -387,4 +425,54 @@ pub async fn get_device_macs_from_db<P: DbProvider>(
     })?;
 
     Ok(ipma_common::ok_json(macs, "server.device.mac.fetched"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造 ipNetToPhysicalPhysAddress 行 OID：基弧(10) + ifIndex + addrType
+    /// + addrLen + 地址字节，与 RFC 4293 索引编码一致。
+    fn neighbor_oid(if_index: u32, addr_type: u32, addr: &[u8]) -> Vec<u32> {
+        let mut oid: Vec<u32> = vec![1, 3, 6, 1, 2, 1, 4, 35, 1, 4];
+        oid.push(if_index);
+        oid.push(addr_type);
+        oid.push(addr.len() as u32);
+        oid.extend(addr.iter().map(|&b| b as u32));
+        oid
+    }
+
+    #[test]
+    fn test_parse_neighbor_index_ipv6() {
+        // 29 弧长的真实 IPv6 邻居行：fe80::1（ifIndex=3, addrType=2, addrLen=16）
+        let addr = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        let oid = neighbor_oid(3, 2, &addr);
+        assert_eq!(oid.len(), 29, "IPv6 邻居行应为 29 弧长");
+        let (if_index, ip) = parse_ipnet_to_physical_index(&oid)
+            .unwrap_or_else(|| panic!("IPv6 邻居 OID 应解析成功"));
+        assert_eq!(if_index, 3);
+        assert_eq!(ip, "fe80::1");
+    }
+
+    #[test]
+    fn test_parse_neighbor_index_ipv4() {
+        // 同表也携带 IPv4 行（ifIndex=2, addrType=1, addrLen=4）
+        let oid = neighbor_oid(2, 1, &[10, 0, 0, 6]);
+        let (if_index, ip) = parse_ipnet_to_physical_index(&oid)
+            .unwrap_or_else(|| panic!("IPv4 邻居 OID 应解析成功"));
+        assert_eq!(if_index, 2);
+        assert_eq!(ip, "10.0.0.6");
+    }
+
+    #[test]
+    fn test_parse_neighbor_index_rejects_bad_shapes() {
+        // 不足基弧 + ifIndex + addrType + addrLen
+        assert!(parse_ipnet_to_physical_index(&[1, 3, 6, 1, 2, 1, 4, 35, 1, 4, 2, 2]).is_none());
+        // 地址字节被截断：声明 16 字节仅给 2 字节
+        let truncated: Vec<u32> = vec![1, 3, 6, 1, 2, 1, 4, 35, 1, 4, 2, 2, 16, 0xfe, 0x80];
+        assert!(parse_ipnet_to_physical_index(&truncated).is_none());
+        // 非法地址长度（如 6 字节）不解析
+        let odd = neighbor_oid(2, 2, &[1, 2, 3, 4, 5, 6]);
+        assert!(parse_ipnet_to_physical_index(&odd).is_none());
+    }
 }

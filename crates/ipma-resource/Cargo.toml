@@ -1,6 +1,6 @@
 [package]
 name = "ipma-resource"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA Resource - networks, rooms, cabinets, workstations, devices, IPs, cable links"

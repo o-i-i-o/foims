@@ -1,7 +1,6 @@
 //! 初始化辅助工具。
 
-use ipma_common::{AppMessage, msg};
-use std::path::PathBuf;
+use ipma_common::msg;
 
 pub fn url_encode_component(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
@@ -18,71 +17,17 @@ pub fn url_encode_component(s: &str) -> String {
     result
 }
 
-pub struct PgPassFile {
-    path: PathBuf,
-}
-
-impl PgPassFile {
-    pub fn create(
-        host: &str,
-        port: u16,
-        database: &str,
-        username: &str,
-        password: &str,
-    ) -> Result<Self, AppMessage> {
-        let pgpass_dir = std::env::temp_dir();
-        // 随机后缀避免并发冲突；用户名/库名仅作可读性前缀（转义路径分隔符）
-        let safe_user: String = username
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '_' })
-            .collect();
-        let safe_db: String = database
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '_' })
-            .collect();
-        let pgpass_path = pgpass_dir.join(format!(
-            ".pgpass_ipma_{}_{}_{}_{}",
-            safe_user,
-            safe_db,
-            std::process::id(),
-            uuid::Uuid::new_v4()
-        ));
-        let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
-        // 以 0600 原子创建（create_new）：避免「先写后 chmod」窗口期内
-        // 其他本地用户读取到明文口令（security-review I-6）
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = std::fs::OpenOptions::new()
-                .mode(0o600)
-                .write(true)
-                .create_new(true)
-                .open(&pgpass_path)
-                .map_err(|e| msg("server.init.db.pgpass_write_failed").with("error", e))?;
-            file.write_all(pgpass_content.as_bytes())
-                .map_err(|e| msg("server.init.db.pgpass_write_failed").with("error", e))?;
-        }
-        #[cfg(not(unix))]
-        {
-            std::fs::write(&pgpass_path, &pgpass_content)
-                .map_err(|e| msg("server.init.db.pgpass_write_failed").with("error", e))?;
-        }
-        Ok(Self { path: pgpass_path })
-    }
-
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
-    }
-}
-
-impl Drop for PgPassFile {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
+/// pgpass 临时文件：复用 ipma-common 的唯一定义
+pub use ipma_common::pgpass::PgPassFile;
 
 pub async fn hash_password(password: &str) -> Result<String, crate::error::InitError> {
+    // 防御性校验：bcrypt 仅处理前 72 字节，超长部分被静默截断；
+    // 入口（InitRequest）已拦截，此处兜底防止绕过校验的调用路径
+    if password.len() > crate::types::PASSWORD_MAX_BYTES {
+        return Err(crate::error::InitError::Validation(msg(
+            "server.init.validation.password_length",
+        )));
+    }
     let password = password.to_string();
     tokio::task::spawn_blocking(move || bcrypt::hash(&password, bcrypt::DEFAULT_COST))
         .await

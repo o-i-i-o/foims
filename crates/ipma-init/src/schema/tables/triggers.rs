@@ -6,7 +6,12 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         CREATE OR REPLACE FUNCTION update_updated_at_column()
         RETURNS TRIGGER AS $$
         BEGIN
-            NEW.updated_at = NOW();
+            -- 仅当语句未显式为 updated_at 指定与原值不同的值时自动刷新：
+            -- 显式 SET updated_at = <新值> 时 NEW 与 OLD 不同，保留语句给的值；
+            -- 未设置该列的正常 UPDATE 中 NEW 与 OLD 相同，刷新为 now()
+            IF NEW.updated_at IS NOT DISTINCT FROM OLD.updated_at THEN
+                NEW.updated_at = NOW();
+            END IF;
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
@@ -15,6 +20,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 清单覆盖所有带 updated_at 列的表（与 schema/tables/ 逐表核对），
+    // 遗漏会导致导入 upsert/业务更新后 updated_at 不刷新
     let tables_with_updated_at = [
         "users",
         "network_regions",
@@ -25,6 +32,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "cabinets",
         "positions",
         "workstations",
+        "element_layouts",
+        "org_templates",
+        "organizations",
+        "employees",
+        "encryption_keys",
         "device_templates",
         "net_outlets",
         "patch_panels",
@@ -35,6 +47,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "device_lldps",
         "cable_links",
         "ips",
+        "topology_nodes",
+        "topology_connections",
         "cabinet_layouts",
         "system_configs",
         "scheduled_tasks",

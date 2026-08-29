@@ -36,6 +36,45 @@ fn map_network_unique_violation(e: sqlx::Error, name: &str) -> AppError {
     AppError::from(e)
 }
 
+/// 校验新 CIDR 与既有同行网段不重叠（包含/被包含均视为冲突），
+/// IPv4/IPv6 分别处理；`exclude_id` 用于更新时排除自身。
+async fn ensure_cidr_not_overlapping(
+    conn: &mut sqlx::PgConnection,
+    ipv4: Option<&str>,
+    ipv6: Option<&str>,
+    exclude_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    if let Some(cidr) = ipv4 {
+        let overlap: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM network_cidrs \
+             WHERE ipv4_cidr && CAST($1 AS CIDR) \
+             AND ($2::uuid IS NULL OR id != $2) LIMIT 1",
+        )
+        .bind(cidr)
+        .bind(exclude_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+        if overlap.is_some() {
+            return Err(AppError::Validation(msg("server.network.ipv4_cidr_exists")));
+        }
+    }
+    if let Some(cidr) = ipv6 {
+        let overlap: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM network_cidrs \
+             WHERE ipv6_cidr && CAST($1 AS CIDR) \
+             AND ($2::uuid IS NULL OR id != $2) LIMIT 1",
+        )
+        .bind(cidr)
+        .bind(exclude_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+        if overlap.is_some() {
+            return Err(AppError::Validation(msg("server.network.ipv6_cidr_exists")));
+        }
+    }
+    Ok(())
+}
+
 pub async fn get_networks<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -44,9 +83,14 @@ pub async fn get_networks<P: DbProvider>(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let region_id = query
-        .get("region_id")
-        .and_then(|id| Uuid::parse_str(id).ok());
+    // 过滤参数非法 UUID 显式 422（与 options.rs/patch_panel.rs 口径一致），
+    // 不再静默忽略退化为全量列表；空串视为未提供
+    let region_id = match query.get("region_id") {
+        Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
+            AppError::Validation(msg("server.common.invalid_param").with("param", "region_id"))
+        })?),
+        _ => None,
+    };
 
     let name_filter = query.get("name").cloned().unwrap_or_default();
     let network_region_filter = query.get("network_region").cloned().unwrap_or_default();
@@ -287,13 +331,17 @@ pub async fn create_network<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 区域加载、重名/重复 CIDR/重叠校验与写入包进同一事务：
+    // 校验与 INSERT 原子生效，缩小并发创建重叠网段的窗口
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
                 (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
                 (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     ).bind(req.network_region_id)
-    .fetch_optional(&state.pool()?.get_conn()).await?
+    .fetch_optional(&mut *tx).await?
     .ok_or_else(|| AppError::NotFound(msg("server.network.region_not_found")))?;
 
     let full_network_name = req.name.clone();
@@ -303,7 +351,7 @@ pub async fn create_network<P: DbProvider>(
     )
     .bind(&full_network_name)
     .bind(req.network_region_id)
-    .fetch_optional(&state.pool()?.get_conn())
+    .fetch_optional(&mut *tx)
     .await?;
 
     if existing_network.is_some() {
@@ -383,7 +431,7 @@ pub async fn create_network<P: DbProvider>(
         let existing_ipv4: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM network_cidrs WHERE ipv4_cidr = CAST($1 AS CIDR)")
                 .bind(ipv4)
-                .fetch_optional(&state.pool()?.get_conn())
+                .fetch_optional(&mut *tx)
                 .await
                 .map_err(|e| {
                     log_error!("log.network.check_ipv4_duplicate_failed", error = e);
@@ -399,7 +447,7 @@ pub async fn create_network<P: DbProvider>(
         let existing_ipv6: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM network_cidrs WHERE ipv6_cidr = CAST($1 AS CIDR)")
                 .bind(ipv6)
-                .fetch_optional(&state.pool()?.get_conn())
+                .fetch_optional(&mut *tx)
                 .await
                 .map_err(|e| {
                     log_error!("log.network.check_ipv6_duplicate_failed", error = e);
@@ -410,6 +458,15 @@ pub async fn create_network<P: DbProvider>(
             return Err(AppError::Conflict(msg("server.network.ipv6_cidr_exists")));
         }
     }
+
+    // 重叠网段校验：与既有网段存在包含/被包含关系时拒绝（/25 vs /24 等）
+    ensure_cidr_not_overlapping(
+        &mut tx,
+        ipv4_cidr_val.as_deref(),
+        ipv6_cidr_val.as_deref(),
+        None,
+    )
+    .await?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -430,9 +487,11 @@ pub async fn create_network<P: DbProvider>(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn())
+    .execute(&mut *tx)
     .await
     .map_err(|e| map_network_unique_violation(e, &full_network_name))?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "name": full_network_name.clone(),
@@ -505,30 +564,18 @@ pub async fn update_network<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 存在性/区域/重名/重复 CIDR/重叠/越界校验与写入包进同一事务：
+    // 各项校验与 UPDATE 原子生效，缩小并发创建重叠网段的窗口
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing_network =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
             .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
 
     if existing_network.is_none() {
         return Err(AppError::NotFound(msg("server.network.not_found")));
-    }
-
-    if let Some(network_region_id) = &req.network_region_id {
-        let network_region = sqlx::query_as::<_, NetworkRegion>(
-            "SELECT id, name, description,
-                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
-                    (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
-                    created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
-        )
-        .bind(network_region_id)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?;
-
-        if network_region.is_none() {
-            return Err(AppError::NotFound(msg("server.network.region_not_found")));
-        }
     }
 
     let now = Utc::now();
@@ -542,7 +589,7 @@ pub async fn update_network<P: DbProvider>(
            JOIN network_regions nt ON n.network_region_id = nt.id
            WHERE n.id = $1"
     ).bind(id)
-    .fetch_one(&state.pool()?.get_conn()).await?;
+    .fetch_one(&mut *tx).await?;
     let current_network = parse_network_from_row(&row)?;
 
     let full_network_name = match &req.name {
@@ -550,21 +597,22 @@ pub async fn update_network<P: DbProvider>(
         None => current_network.name.clone(),
     };
 
-    let network_region_id = match &req.network_region_id {
-        Some(region_id) => region_id,
-        None => &current_network.network_region_id,
-    };
+    // 最终生效的区域：请求指定时为目标区域，否则沿用现值
+    let network_region_id: Uuid = req
+        .network_region_id
+        .unwrap_or(current_network.network_region_id);
 
-    // Get the target network region for CIDR validation
+    // 目标区域存在性与取值合并为一次查询（同时覆盖"仅改区域"的存在性校验）
     let target_network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
                 (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv4_cidrs) AS d) as ipv4_cidrs,
                 (SELECT COALESCE(json_agg(text(d)), '[]') FROM unnest(ipv6_cidrs) AS d) as ipv6_cidrs,
                 created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions WHERE id = $1"
     )
-    .bind(*network_region_id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    .bind(network_region_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| AppError::NotFound(msg("server.network.region_not_found")))?;
 
     let existing_network = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM network_cidrs WHERE name = $1 AND network_region_id = $2 AND id != $3",
@@ -572,15 +620,20 @@ pub async fn update_network<P: DbProvider>(
     .bind(&full_network_name)
     .bind(network_region_id)
     .bind(id)
-    .fetch_optional(&state.pool()?.get_conn())
+    .fetch_optional(&mut *tx)
     .await?;
 
     if existing_network.is_some() {
         return Err(AppError::Conflict(msg("server.network.name_exists")));
     }
 
-    // 校验 CIDR 格式并检查重复
-    if let Some(ref ipv4) = req.ipv4_cidr {
+    // 双层 Option 解引用：Some(Some(v)) 提交新值；Some(None) 表示清空；
+    // 外层 None 表示不修改（ipv4/ipv6 同口径）
+    let req_ipv4_cidr: Option<&str> = req.ipv4_cidr.as_ref().and_then(|o| o.as_deref());
+    let req_ipv6_cidr: Option<&str> = req.ipv6_cidr.as_ref().and_then(|o| o.as_deref());
+
+    // 提交新 IPv4 CIDR 时校验格式、重复与区域归属
+    if let Some(ipv4) = req_ipv4_cidr {
         if !ipma_common::net::validate_cidr(ipv4)
             || ipma_common::net::get_cidr_type(ipv4) != Some("ipv4")
         {
@@ -594,7 +647,7 @@ pub async fn update_network<P: DbProvider>(
         )
         .bind(ipv4)
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| {
             log_error!("log.network.check_ipv4_duplicate_failed", error = e);
@@ -619,7 +672,7 @@ pub async fn update_network<P: DbProvider>(
         }
     }
 
-    if let Some(ref ipv6) = req.ipv6_cidr {
+    if let Some(ref ipv6) = req_ipv6_cidr {
         if !ipma_common::net::validate_cidr(ipv6)
             || ipma_common::net::get_cidr_type(ipv6) != Some("ipv6")
         {
@@ -633,7 +686,7 @@ pub async fn update_network<P: DbProvider>(
         )
         .bind(ipv6)
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| {
             log_error!("log.network.check_ipv6_duplicate_failed", error = e);
@@ -658,80 +711,155 @@ pub async fn update_network<P: DbProvider>(
         }
     }
 
-    // 网关校验：以请求值（缺省回退库中现值）与最终生效的 CIDR 核对，
+    // 仅修改区域而未同时提交新 CIDR 时，存量 CIDR 也必须属于目标区域
+    //（v4/v6 分别校验），避免换区域后下辖网段悬空
+    if req.network_region_id.is_some() {
+        if req_ipv4_cidr.is_none()
+            && let Some(cidr) = current_network.ipv4_cidr.as_deref()
+            && !ipma_common::net::cidr_belongs_to_region(
+                cidr,
+                target_network_region
+                    .ipv4_cidrs
+                    .as_deref()
+                    .unwrap_or_default(),
+            )
+        {
+            return Err(AppError::Validation(msg(
+                "server.network.ipv4_not_in_region",
+            )));
+        }
+        if req_ipv6_cidr.is_none()
+            && let Some(cidr) = current_network.ipv6_cidr.as_deref()
+            && !ipma_common::net::cidr_belongs_to_region(
+                cidr,
+                target_network_region
+                    .ipv6_cidrs
+                    .as_deref()
+                    .unwrap_or_default(),
+            )
+        {
+            return Err(AppError::Validation(msg(
+                "server.network.ipv6_not_in_region",
+            )));
+        }
+    }
+
+    // 网关校验：以最终生效值（字段被提交时取提交值——含 Some(None) 清空，
+    // 否则取库中现值）与最终生效的 CIDR 核对，
     // 确保"只改 CIDR 不改网关"等部分更新后的数据仍保持一致
-    let effective_ipv4_cidr = req
-        .ipv4_cidr
-        .as_ref()
-        .or(current_network.ipv4_cidr.as_ref())
-        .map(String::as_str);
-    let effective_ipv4_gateway = req
-        .ipv4_gateway
-        .as_ref()
-        .or(current_network.ipv4_gateway.as_ref())
-        .map(String::as_str);
+    let effective_ipv4_cidr = match &req.ipv4_cidr {
+        Some(inner) => inner.as_deref(),
+        None => current_network.ipv4_cidr.as_deref(),
+    };
+    let effective_ipv4_gateway = match &req.ipv4_gateway {
+        Some(inner) => inner.as_deref(),
+        None => current_network.ipv4_gateway.as_deref(),
+    };
     ipma_common::net::validate_gateway_in_cidr(
         effective_ipv4_gateway,
         effective_ipv4_cidr,
         "ipv4",
     )?;
-    let effective_ipv6_cidr = req
-        .ipv6_cidr
-        .as_ref()
-        .or(current_network.ipv6_cidr.as_ref())
-        .map(String::as_str);
-    let effective_ipv6_gateway = req
-        .ipv6_gateway
-        .as_ref()
-        .or(current_network.ipv6_gateway.as_ref())
-        .map(String::as_str);
+    // ipv6 同口径：Some(inner) 取提交值（含 Some(None) 清空），None 取库中现值
+    let effective_ipv6_cidr = match &req.ipv6_cidr {
+        Some(inner) => inner.as_deref(),
+        None => current_network.ipv6_cidr.as_deref(),
+    };
+    let effective_ipv6_gateway = match &req.ipv6_gateway {
+        Some(inner) => inner.as_deref(),
+        None => current_network.ipv6_gateway.as_deref(),
+    };
     ipma_common::net::validate_gateway_in_cidr(
         effective_ipv6_gateway,
         effective_ipv6_cidr,
         "ipv6",
     )?;
 
+    // 重叠网段校验：新 CIDR 与既有同行网段存在包含/被包含关系时拒绝（排除自身）；
+    // 清空（Some(None)）与不修改（None）无需重叠复核
+    ensure_cidr_not_overlapping(&mut tx, req_ipv4_cidr, req_ipv6_cidr, Some(id)).await?;
+
+    // 修改 CIDR 后校验存量 IP 仍在新网段内：有越界 IP 时拒绝（422）并列出数量
+    if req.ipv4_cidr.is_some() || req.ipv6_cidr.is_some() {
+        let outside_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM ips \
+             WHERE network_id = $1 \
+             AND NOT ( \
+                 (CAST($2 AS CIDR) IS NOT NULL AND ip_address <<= CAST($2 AS CIDR)) \
+                 OR (CAST($3 AS CIDR) IS NOT NULL AND ip_address <<= CAST($3 AS CIDR)) \
+             )",
+        )
+        .bind(id)
+        .bind(effective_ipv4_cidr)
+        .bind(effective_ipv6_cidr)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            // 日志键区分于 IPv4 查重失败（复制粘贴遗留的正确键见 i18n 契约）
+            log_error!("log.network.check_ips_outside_cidr_failed", error = e);
+            AppError::Database(msg("server.network.check_ipv4_duplicate_failed"))
+        })?;
+        if outside_count > 0 {
+            tracing::warn!(
+                "网段 {} 的 CIDR 收缩后仍有 {} 个存量 IP 越界，拒绝更新",
+                id,
+                outside_count
+            );
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", "ipv4_cidr"),
+            ));
+        }
+    }
+
+    // 三态写入：ipv4_cidr/ipv4_gateway 为双层 Option——外层 Some 进 SET
+    //（Some(None) 置 NULL，Some(Some(v)) 设新值），None 保留旧值
     sqlx::query(
-        "UPDATE network_cidrs SET 
-         name = $1, 
+        "UPDATE network_cidrs SET
+         name = $1,
          network_region_id = COALESCE($2, network_region_id),
-         ipv4_cidr = COALESCE(CAST($3 AS CIDR), ipv4_cidr),
-         ipv6_cidr = COALESCE(CAST($4 AS CIDR), ipv6_cidr),
-         ipv4_gateway = COALESCE(CAST($5 AS INET), ipv4_gateway),
-         ipv6_gateway = COALESCE(CAST($6 AS INET), ipv6_gateway),
-         ipv4_dns = COALESCE($7::INET[], ipv4_dns),
-         ipv6_dns = COALESCE($8::INET[], ipv6_dns),
-         description = COALESCE($9, description), 
-         updated_at = $10 
-         WHERE id = $11",
+         ipv4_cidr = CASE WHEN $3::boolean THEN CAST($4 AS CIDR) ELSE ipv4_cidr END,
+         ipv6_cidr = CASE WHEN $5::boolean THEN CAST($6 AS CIDR) ELSE ipv6_cidr END,
+         ipv4_gateway = CASE WHEN $7::boolean THEN CAST($8 AS INET) ELSE ipv4_gateway END,
+         ipv6_gateway = CASE WHEN $9::boolean THEN CAST($10 AS INET) ELSE ipv6_gateway END,
+         ipv4_dns = COALESCE($11::INET[], ipv4_dns),
+         ipv6_dns = COALESCE($12::INET[], ipv6_dns),
+         description = COALESCE($13, description),
+         updated_at = $14
+         WHERE id = $15",
     )
     .bind(&full_network_name)
-    .bind(req.network_region_id.as_ref())
-    .bind(&req.ipv4_cidr)
-    .bind(&req.ipv6_cidr)
-    .bind(&req.ipv4_gateway)
-    .bind(&req.ipv6_gateway)
+    .bind(req.network_region_id)
+    .bind(req.ipv4_cidr.is_some())
+    .bind(req.ipv4_cidr.clone().flatten())
+    .bind(req.ipv6_cidr.is_some())
+    .bind(req.ipv6_cidr.clone().flatten())
+    .bind(req.ipv4_gateway.is_some())
+    .bind(req.ipv4_gateway.clone().flatten())
+    .bind(req.ipv6_gateway.is_some())
+    .bind(req.ipv6_gateway.clone().flatten())
     .bind(&req.ipv4_dns)
     .bind(&req.ipv6_dns)
     .bind(&req.description)
     .bind(now)
     .bind(id)
-    .execute(&state.pool()?.get_conn())
+    .execute(&mut *tx)
     .await
     .map_err(|e| map_network_unique_violation(e, &full_network_name))?;
 
     let row = sqlx::query(
-        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway), 
+        r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway),
            (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
            (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
-           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ 
-           FROM network_cidrs n 
-           JOIN network_regions nt ON n.network_region_id = nt.id 
+           n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
+           FROM network_cidrs n
+           JOIN network_regions nt ON n.network_region_id = nt.id
            WHERE n.id = $1"
     ).bind(id)
-    .fetch_one(&state.pool()?.get_conn()).await?;
+    .fetch_one(&mut *tx).await?;
 
     let network = parse_network_from_row(&row)?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "name": network.name,
@@ -758,10 +886,13 @@ pub async fn delete_network<P: DbProvider>(
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
+    // 计数检查与 DELETE 放同一事务，避免检查后被并发写入绕过
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing_network =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
             .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
 
     if existing_network.is_none() {
@@ -771,7 +902,7 @@ pub async fn delete_network<P: DbProvider>(
     let ip_count: i64 =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips WHERE network_id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
 
     if ip_count > 0 {
@@ -781,30 +912,23 @@ pub async fn delete_network<P: DbProvider>(
     let room_network_count: i64 =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_networks WHERE network_id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
 
     if room_network_count > 0 {
         return Err(AppError::Validation(msg("server.network.in_use_by_room")));
     }
 
-    let cabinet_network_count: i64 = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM cabinets c JOIN room_networks rn ON c.room_id = rn.room_id WHERE rn.network_id = $1"
-    )
-        .bind(id)
-        .fetch_one(&state.pool()?.get_conn())
-        .await?;
-
-    if cabinet_network_count > 0 {
-        return Err(AppError::Validation(msg(
-            "server.network.in_use_by_cabinet",
-        )));
-    }
+    // cabinet_network_count 检查已删除：cabinets 与 room_networks 仅经
+    // rooms.room_id 间接关联，无直接外键，删除网段不会级联影响机柜，
+    // 该分支为不可达死逻辑（room_network_count 已覆盖删除保护）
 
     sqlx::query("DELETE FROM network_cidrs WHERE id = $1")
         .bind(id)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "network_id": id.to_string()
@@ -893,17 +1017,49 @@ pub async fn get_network_regions<P: DbProvider>(
     ))
 }
 
+/// 区域 CIDR 数组入库前校验：逐条 [`ipma_common::net::validate_cidr`]
+/// 格式检查（非法直接 422，而非绑定后撞 PG 22P02 报 500），
+/// 并拒绝数组内重复条目（重复项对包含语义无增益，只会污染展示）。
+fn validate_region_cidr_array(
+    cidrs: Option<&Vec<String>>,
+    param: &'static str,
+) -> Result<(), AppError> {
+    let Some(list) = cidrs else {
+        return Ok(());
+    };
+    let mut seen = std::collections::HashSet::with_capacity(list.len());
+    for cidr in list {
+        if cidr.trim().is_empty() || !ipma_common::net::validate_cidr(cidr) {
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", param),
+            ));
+        }
+        if !seen.insert(cidr.trim()) {
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", param),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub async fn create_network_region<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetworkRegionCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+    // CIDR 数组前置校验：非法格式/数组内重复在绑定 CIDR[] 前拦截
+    validate_region_cidr_array(req.ipv4_cidrs.as_ref(), "ipv4_cidrs")?;
+    validate_region_cidr_array(req.ipv6_cidrs.as_ref(), "ipv6_cidrs")?;
+
+    // 重名预检与写入放同一事务，避免 TOCTOU
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE name = $1")
             .bind(&req.name)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
 
     if existing.is_some() {
@@ -914,7 +1070,7 @@ pub async fn create_network_region<P: DbProvider>(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO network_regions (id, name, description, ipv4_cidrs, ipv6_cidrs, created_at, updated_at) 
+        "INSERT INTO network_regions (id, name, description, ipv4_cidrs, ipv6_cidrs, created_at, updated_at)
          VALUES ($1, $2, $3, $4::CIDR[], $5::CIDR[], $6, $7)",
     )
     .bind(id)
@@ -924,8 +1080,19 @@ pub async fn create_network_region<P: DbProvider>(
     .bind(&req.ipv6_cidrs)
     .bind(now)
     .bind(now)
-    .execute(&state.pool()?.get_conn())
-    .await?;
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：network_regions.name 唯一冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.network.region_name_exists"));
+        }
+        AppError::from(e)
+    })?;
+
+    tx.commit().await?;
 
     let network_region = NetworkRegion {
         id,
@@ -983,11 +1150,18 @@ pub async fn update_network_region<P: DbProvider>(
     AppJson(req): AppJson<NetworkRegionUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+    // CIDR 数组前置校验（含数组内重复检查）：收缩区域等更新场景
+    // 在绑定 CIDR[] 前拦截非法值
+    validate_region_cidr_array(req.ipv4_cidrs.as_ref(), "ipv4_cidrs")?;
+    validate_region_cidr_array(req.ipv6_cidrs.as_ref(), "ipv6_cidrs")?;
+
+    // 预检、写入与更新后复查放同一事务，任一失败整体回滚
+    let mut tx = state.pool()?.get_conn().begin().await?;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
             .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
 
     if existing.is_none() {
@@ -1000,7 +1174,7 @@ pub async fn update_network_region<P: DbProvider>(
         )
         .bind(name)
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?;
 
         if duplicate.is_some() {
@@ -1025,8 +1199,54 @@ pub async fn update_network_region<P: DbProvider>(
     .bind(&req.ipv6_cidrs)
     .bind(now)
     .bind(id)
-    .execute(&state.pool()?.get_conn())
-    .await?;
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：network_regions.name 唯一冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.network.region_name_exists"));
+        }
+        AppError::from(e)
+    })?;
+
+    // 区域 CIDR 更新后复查：其下所有网段的 CIDR 仍须被新区域范围包含，
+    // 越界则整体回滚（422），避免收缩区域后下辖网段悬空
+    if req.ipv4_cidrs.is_some() || req.ipv6_cidrs.is_some() {
+        let rows: Vec<(Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT ipv4_cidr::TEXT, ipv6_cidr::TEXT FROM network_cidrs WHERE network_region_id = $1",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await?;
+        for (ipv4, ipv6) in &rows {
+            if let Some(cidr) = ipv4
+                && !ipma_common::net::cidr_belongs_to_region(
+                    cidr,
+                    req.ipv4_cidrs.as_deref().unwrap_or_default(),
+                )
+            {
+                tx.rollback().await.ok();
+                return Err(AppError::Validation(
+                    msg("server.common.invalid_param").with("param", "ipv4_cidrs"),
+                ));
+            }
+            if let Some(cidr) = ipv6
+                && !ipma_common::net::cidr_belongs_to_region(
+                    cidr,
+                    req.ipv6_cidrs.as_deref().unwrap_or_default(),
+                )
+            {
+                tx.rollback().await.ok();
+                return Err(AppError::Validation(
+                    msg("server.common.invalid_param").with("param", "ipv6_cidrs"),
+                ));
+            }
+        }
+    }
+
+    tx.commit().await?;
 
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
@@ -1061,10 +1281,14 @@ pub async fn delete_network_region<P: DbProvider>(
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
+    // 存在性/占用检查与 DELETE 包进同一事务，避免检查后被并发创建
+    // 的网段绕过（并发下以 FK 500 收场的 TOCTOU）
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
             .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
 
     if existing.is_none() {
@@ -1075,7 +1299,7 @@ pub async fn delete_network_region<P: DbProvider>(
         "SELECT COUNT(*) FROM network_cidrs WHERE network_region_id = $1",
     )
     .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
+    .fetch_one(&mut *tx)
     .await?;
 
     if network_count > 0 {
@@ -1084,8 +1308,10 @@ pub async fn delete_network_region<P: DbProvider>(
 
     sqlx::query("DELETE FROM network_regions WHERE id = $1")
         .bind(id)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "network_region_id": id.to_string()
@@ -1293,5 +1519,48 @@ mod tests {
         assert!(!cidr_belongs_to_region("10.1.0.0/16", &region_v6));
         // 超网（前缀更小）同样不属于区域
         assert!(!cidr_belongs_to_region("10.0.0.0/7", &region_v4));
+    }
+
+    // ==================== 区域 CIDR 数组前置校验 ====================
+
+    #[test]
+    fn test_validate_region_cidr_array_valid() {
+        // None（字段缺省）与合法数组均通过
+        assert!(super::validate_region_cidr_array(None, "ipv4_cidrs").is_ok());
+        let list = vec!["10.0.0.0/8".to_string(), "192.168.0.0/16".to_string()];
+        assert!(super::validate_region_cidr_array(Some(&list), "ipv4_cidrs").is_ok());
+        let v6 = vec!["2001:db8::/32".to_string()];
+        assert!(super::validate_region_cidr_array(Some(&v6), "ipv6_cidrs").is_ok());
+        // 空数组合法（清空区域范围）
+        assert!(super::validate_region_cidr_array(Some(&Vec::new()), "ipv4_cidrs").is_ok());
+    }
+
+    #[test]
+    fn test_validate_region_cidr_array_invalid_format() {
+        // 非法 CIDR（主机位非 0 / 前缀越界 / 非法文本 / 空串）在绑定前拦截为 422
+        for bad in ["192.168.1.1/24", "10.0.0.0/33", "abc", ""] {
+            let list = vec!["10.0.0.0/8".to_string(), bad.to_string()];
+            let err = super::validate_region_cidr_array(Some(&list), "ipv4_cidrs")
+                .err()
+                .unwrap_or_else(|| panic!("非法 CIDR {bad:?} 应被拒绝"));
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "应为 422 校验错误，实际 {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_region_cidr_array_duplicate_rejected() {
+        // 数组内重复条目拒绝（trim 后等价视为同一条）
+        let dup = vec![
+            "10.0.0.0/8".to_string(),
+            "172.16.0.0/12".to_string(),
+            "10.0.0.0/8".to_string(),
+        ];
+        assert!(super::validate_region_cidr_array(Some(&dup), "ipv4_cidrs").is_err());
+        // 带首尾空白的条目同样被拒绝（非法格式或 trim 后重复）
+        let spaced = vec!["2001:db8::/32".to_string(), " 2001:db8::/32 ".to_string()];
+        assert!(super::validate_region_cidr_array(Some(&spaced), "ipv6_cidrs").is_err());
     }
 }

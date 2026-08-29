@@ -25,10 +25,10 @@ use ipma_x509_manager::{
 };
 
 use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
 use crate::utils::{RequestMeta, log_op_best_effort};
 use ipma_auth::extractor::AdminUser;
 use ipma_common::AppError;
+use ipma_common::AppJson;
 
 pub async fn list(_admin: AdminUser) -> Result<Response, AppError> {
     let inventory = list_certificates().await?;
@@ -46,28 +46,41 @@ pub async fn generate(
 ) -> Result<Response, AppError> {
     // public_url 主机名自动加入 SAN
     let mut extra_sans = Vec::new();
-    let public_url = state.config.server.public_url.trim();
+    let config = state.config_snapshot();
+    let public_url = config.server.public_url.trim();
     if !public_url.is_empty() {
-        let host = public_url
+        // 取 URL 的 host 段（scheme 之后、路径之前）
+        let host_part = public_url
             .trim_start_matches("https://")
             .trim_start_matches("http://")
             .split('/')
             .next()
-            .unwrap_or(public_url)
-            .split(':')
-            .next()
-            .unwrap_or(public_url);
+            .unwrap_or_default();
+        // IPv6 字面量以 [] 包裹：取到 ] 之间的地址并校验合法后作为 IP SAN；
+        // 裸冒号形式（如 2001:db8::1:443）直接按 split(':') 会截断出非法 SAN
+        let host = if host_part.starts_with('[') {
+            let close = host_part.find(']').ok_or_else(|| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", "public_url"))
+            })?;
+            let ipv6 = &host_part[1..close];
+            ipv6.parse::<std::net::Ipv6Addr>().map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", "public_url"))
+            })?;
+            ipv6
+        } else {
+            host_part.split(':').next().unwrap_or_default()
+        };
         if !host.is_empty() {
             extra_sans.push(host.to_string());
         }
     }
 
     let common_name = req.common_name.clone();
-    let cert_path = generate_certificate(req, extra_sans).await?;
+    let cert = generate_certificate(req, extra_sans).await?;
 
     let details = serde_json::json!({
         "common_name": common_name,
-        "path": cert_path.to_string_lossy(),
+        "path": cert.cert_path.to_string_lossy(),
     });
     log_op_best_effort(
         &state.pool()?.get_conn(),
@@ -79,10 +92,13 @@ pub async fn generate(
     )
     .await;
 
-    Ok(ipma_common::ok_json(
-        (),
-        "server.certificate.generate_succeeded",
-    ))
+    // 有 SAN 条目被丢弃时用独立文案提示用户：请求的主机名可能不在证书中
+    let message_key = if cert.dropped_san_count > 0 {
+        "server.certificate.generate_succeeded_san_dropped"
+    } else {
+        "server.certificate.generate_succeeded"
+    };
+    Ok(ipma_common::ok_json((), message_key))
 }
 
 /// 生成站点根 CA（覆盖既有 CA；由 CA 签发的旧证书将不再被新链信任）

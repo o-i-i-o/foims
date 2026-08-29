@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::error;
 
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, Request};
+use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{HeaderValue, Method, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
@@ -32,7 +32,7 @@ use ipma::utils::rate_limit::{
 };
 use ipma_common::config::Config;
 use ipma_common::db::DbPool;
-use ipma_init::{DatabaseConfig as InitDatabaseConfig, InitContext};
+use ipma_init::InitContext;
 use ipma_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
 
 fn setup_panic_handler() {
@@ -63,7 +63,14 @@ fn setup_panic_handler() {
 
 async fn static_cache_control_middleware(req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
-    let has_version = req.uri().query().is_some_and(|q| q.contains("v="));
+    // 精确解析 query：参数名恰为 "v" 且值非空才算带版本号
+    // （此前用 contains("v=") 子串匹配，?dev=1 也会误命中一年 immutable 缓存）
+    let has_version = req.uri().query().is_some_and(|q| {
+        q.split('&').any(|pair| {
+            let mut kv = pair.splitn(2, '=');
+            kv.next() == Some("v") && kv.next().is_some_and(|v| !v.is_empty())
+        })
+    });
     let mut res = next.run(req).await;
 
     if path.starts_with("/static/") {
@@ -116,6 +123,33 @@ async fn security_headers_middleware(req: Request, next: Next) -> Response {
         HeaderValue::from_static("same-origin"),
     );
 
+    res
+}
+
+/// 数据库连接池请求指标接线：/api 请求经此写入 `DbPool::metrics`
+/// （总请求数/等待数/失败数/平均耗时），使系统信息展示的池指标与
+/// 「等待请求 > 0」告警不再是恒 0 的假数据
+async fn db_pool_metrics_middleware(
+    State(app_state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    // 初始化模式无连接池（或非 API 路径）：不计数直接放行
+    let Some(db_pool) = app_state.pool.as_ref() else {
+        return next.run(req).await;
+    };
+    if !req.uri().path().starts_with("/api") {
+        return next.run(req).await;
+    }
+
+    db_pool.metrics.record_request_start();
+    let start = std::time::Instant::now();
+    let res = next.run(req).await;
+    // 按响应状态码判定成败：5xx 计入失败请求
+    db_pool.metrics.record_request_complete(
+        u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+        !res.status().is_server_error(),
+    );
     res
 }
 
@@ -188,29 +222,43 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
         .allow_origin(allow_origin)
 }
 
+/// UDS 监听器创建失败原因
+enum UdsBindError {
+    /// socket 文件已被占用（含陈旧残留文件导致 bind 失败），
+    /// 由调用方连接探测后决定退出或清理重试
+    AddressInUse,
+    /// 其他 IO 错误
+    Io(std::io::Error),
+}
+
 /// 创建 UDS 监听器
 ///
 /// - 自动创建父目录
-/// - 清理已存在的 socket 文件，避免 "Address already in use"
+/// - 先直接 bind（内核保证独占），不再预删 socket 文件：原「检测存在→删除→
+///   bind」顺序在检测与删除之间存在 TOCTOU 窗口，可能偷删正在服务的 socket；
+///   bind 报 AddrInUse 时由调用方探测区分活跃实例与陈旧残留
 /// - 设置 socket 文件权限 0660 并将属组设为反代进程组（默认 www-data）：
 ///   仅允许属主（服务账户）与反代访问。此前为 0666，本机任意进程均可
 ///   直连并伪造 X-Real-IP 头，绕过初始化接口的 localhost 限制与限流/
 ///   fail2ban（见 security-review I-1/A-1）。非 root 运行无法改属组时
 ///   保持 0660 仅属主可用（fail-closed），记录告警由运维调整属组。
-fn create_uds_listener(path: &str, group: &str) -> std::io::Result<tokio::net::UnixListener> {
+fn create_uds_listener(path: &str, group: &str) -> Result<tokio::net::UnixListener, UdsBindError> {
     let socket_path = Path::new(path);
 
     // 确保父目录存在
     if let Some(parent) = socket_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(UdsBindError::Io)?;
     }
 
-    // 清理已存在的 socket 文件
-    if socket_path.exists() {
-        std::fs::remove_file(socket_path)?;
-    }
+    // 直接 bind：socket 文件已存在（含陈旧残留）时返回 AddrInUse
+    let listener = match tokio::net::UnixListener::bind(path) {
+        Ok(l) => l,
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            return Err(UdsBindError::AddressInUse);
+        }
+        Err(e) => return Err(UdsBindError::Io(e)),
+    };
 
-    let listener = tokio::net::UnixListener::bind(path)?;
     use std::os::unix::fs::PermissionsExt;
     // 尝试将属组设为反代进程组（需 root）；失败不阻断启动（保持仅属主可用）
     #[cfg(unix)]
@@ -231,7 +279,8 @@ fn create_uds_listener(path: &str, group: &str) -> std::io::Result<tokio::net::U
             }
         }
     }
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o660))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o660))
+        .map_err(UdsBindError::Io)?;
 
     Ok(listener)
 }
@@ -267,27 +316,15 @@ fn configure_app_services(
     init_enabled: bool,
     rate_limit_state: RateLimitState,
 ) -> Router {
-    let cors_layer = build_cors_layer(&app_state.config);
+    let config = app_state.config_snapshot();
+    let cors_layer = build_cors_layer(&config);
 
     let router = if init_enabled {
         // 创建 InitContext 用于初始化模块
         let init_context = Arc::new(InitContext::new(
-            InitDatabaseConfig {
-                host: app_state.config.database.host.clone(),
-                port: app_state.config.database.port,
-                database: app_state.config.database.database.clone(),
-                username: app_state.config.database.username.clone(),
-                password: app_state.config.database.password.clone(),
-                max_connections: app_state.config.database.max_connections,
-                min_connections: app_state.config.database.min_connections,
-                acquire_timeout_secs: app_state.config.database.acquire_timeout_secs,
-                idle_timeout_secs: app_state.config.database.idle_timeout_secs,
-                max_lifetime_secs: app_state.config.database.max_lifetime_secs,
-                query_timeout_secs: app_state.config.database.query_timeout_secs,
-                health_check_interval_secs: app_state.config.database.health_check_interval_secs,
-            },
+            config.database.clone(),
             ipma_common::config::get_config_file_path(),
-            app_state.config.init.enabled,
+            config.init.enabled,
             Arc::new(|| {
                 Box::pin(async move {
                     ipma::system::config::trigger_service_restart()
@@ -303,7 +340,9 @@ fn configure_app_services(
             .route("/api/init/db", post(ipma_init::init_db))
             .route("/api/init/db/clear", post(ipma_init::clear_database))
             .route("/api/init/db/create", post(ipma_init::create_database_api))
-            .route("/api/init/db/import", post(ipma_init::import_database_api))
+            // import（无文件）与 create 共用同一 handler：原 import_database_api
+            //             是 create 的逐行重复且无任何导入动作
+            .route("/api/init/db/import", post(ipma_init::create_database_api))
             .route(
                 "/api/init/db/import-file",
                 post(ipma_init::import_database_from_file)
@@ -380,6 +419,10 @@ fn configure_app_services(
             rate_limit_state,
             rate_limit_middleware,
         ))
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            db_pool_metrics_middleware,
+        ))
         .layer(middleware::from_fn(static_cache_control_middleware))
         .layer(middleware::from_fn(security_headers_middleware))
 }
@@ -408,6 +451,9 @@ async fn main() -> std::io::Result<()> {
 
     if let Err(e) = ipma_common::crypto::check_key_integrity() {
         ipma_common::log_error!("system.key_integrity_check_failed", error = e);
+        // 密钥不可用（加载/校验失败）时以错误退出：存量密文将无法解密，
+        // 带病运行只会产生不可恢复的数据错误
+        return Err(std::io::Error::other(e));
     }
 
     let shutdown = ShutdownSignal::new();
@@ -434,8 +480,11 @@ async fn main() -> std::io::Result<()> {
         ipma::log::forwarding::spawn_forward(pool, message);
     });
 
-    // 启动应用层 fail2ban 清理任务
-    ipma_auth::app_fail2ban::start_cleanup_task();
+    // 启动应用层 fail2ban 清理任务（新签名需连接池：先加载持久化配置）。
+    // 初始化模式无连接池，跳过启动
+    if let Some(db_pool) = pool.as_ref() {
+        ipma_auth::app_fail2ban::start_cleanup_task(db_pool.get_conn());
+    }
     ipma_common::log_info!("system.fail2ban_cleanup_started");
 
     let mut running_scheduler: Option<RunningScheduler> = None;
@@ -451,13 +500,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     if let Some(ref db_pool) = pool {
-        let scheduler_db_config = ipma_data_management::DatabaseConfig {
-            host: db_pool.db_config.host.clone(),
-            port: db_pool.db_config.port,
-            database: db_pool.db_config.database.clone(),
-            username: db_pool.db_config.username.clone(),
-            password: db_pool.db_config.password.clone(),
-        };
+        let scheduler_db_config = db_pool.db_config.clone();
 
         match SchedulerState::new(
             db_pool.get_conn(),
@@ -564,7 +607,8 @@ async fn main() -> std::io::Result<()> {
     let web_dir = get_web_dir();
     if serve_static && !Path::new(web_dir).exists() {
         ipma_common::log_info!("system.web_dir_created", path = web_dir);
-        fs::create_dir_all(web_dir)?;
+        // 同步文件系统操作移出 async 上下文，避免阻塞运行时工作线程
+        tokio::task::block_in_place(|| fs::create_dir_all(web_dir))?;
     }
 
     let init_enabled = config.init.enabled;
@@ -582,8 +626,14 @@ async fn main() -> std::io::Result<()> {
     );
 
     let app_state = Arc::new(
-        AppState::new(config.clone(), pool.clone(), task_registry.clone())
-            .map_err(std::io::Error::other)?,
+        AppState::new(
+            config.clone(),
+            pool.clone(),
+            task_registry.clone(),
+            shutdown.clone(),
+            rate_limiter.clone(),
+        )
+        .map_err(std::io::Error::other)?,
     );
 
     app_state
@@ -592,23 +642,45 @@ async fn main() -> std::io::Result<()> {
 
     let rate_limit_state = RateLimitState::new(rate_limiter.clone(), rate_limit_enabled);
 
-    // 单实例保护：若已有进程在监听该 UDS，则拒绝启动，避免 remove_file 偷删
-    // 正在服务的 socket 文件后出现「两个进程、孤儿 listener」的隐患。
-    if Path::new(&uds_path).exists() {
-        match tokio::net::UnixStream::connect(&uds_path).await {
-            Ok(_) => {
-                ipma_common::log_error!("system.uds_in_use", path = uds_path);
-                std::process::exit(1);
-            }
-            Err(_) => {
-                // 文件存在但无人监听（上次进程异常退出残留）→ 安全清理
-                ipma_common::log_info!("system.uds_stale_cleaned", path = uds_path);
+    // 单实例保护（bind-first，消除 TOCTOU）：
+    // 1) 先直接 bind，成功即内核级独占；
+    // 2) AddrInUse 时 connect 探测：连得上 → 有活跃实例，拒绝启动退出；
+    //    连不上 → 陈旧 socket 残留（上次异常退出），删除后重 bind 一次。
+    // 同步文件操作（/etc/group 读取、目录创建、chmod 等）经 block_in_place
+    // 移出 async 上下文，避免阻塞运行时工作线程
+    let uds_group = app_state.config_snapshot().server.listen.uds_group.clone();
+    let uds_listener = match tokio::task::block_in_place(|| {
+        create_uds_listener(&uds_path, &uds_group)
+    }) {
+        Ok(listener) => listener,
+        Err(UdsBindError::AddressInUse) => {
+            match tokio::net::UnixStream::connect(&uds_path).await {
+                Ok(_) => {
+                    ipma_common::log_error!("system.uds_in_use", path = uds_path);
+                    std::process::exit(1);
+                }
+                Err(_) => {
+                    // 文件存在但无人监听 → 安全清理后重试一次
+                    ipma_common::log_info!("system.uds_stale_cleaned", path = uds_path);
+                    tokio::fs::remove_file(&uds_path).await?;
+                    match tokio::task::block_in_place(|| create_uds_listener(&uds_path, &uds_group))
+                    {
+                        Ok(listener) => listener,
+                        // 重试仍被占用（清理与 bind 之间被并发抢占）或 IO 错误：直接失败
+                        Err(UdsBindError::AddressInUse) => {
+                            ipma_common::log_error!("system.uds_in_use", path = uds_path);
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::AddrInUse,
+                                format!("UDS {uds_path} 重试绑定仍被占用"),
+                            ));
+                        }
+                        Err(UdsBindError::Io(e)) => return Err(e),
+                    }
+                }
             }
         }
-    }
-
-    // 创建 UDS 监听器（0660 + 反代属组，见 create_uds_listener 注释）
-    let uds_listener = create_uds_listener(&uds_path, &app_state.config.server.listen.uds_group)?;
+        Err(UdsBindError::Io(e)) => return Err(e),
+    };
 
     // 构建应用
     let app = configure_app_services(
@@ -631,9 +703,14 @@ async fn main() -> std::io::Result<()> {
 
     // axum 0.8 启用 http2 feature 后，serve() 内部使用 auto::Builder 自动检测 HTTP/1 和 h2c
     let serve = axum::serve(uds_listener, app);
+    let shutdown_for_server = shutdown.clone();
     let server_task = tokio::spawn(async move {
         if let Err(e) = serve.with_graceful_shutdown(graceful_shutdown).await {
             ipma_common::log_error!("system.server_run_error", error = e);
+            // serve 失败时主动广播关闭信号：graceful_shutdown（持有 oneshot
+            // 发送端）随 serve 结束被丢弃也会唤醒主流程，此处显式触发保证
+            // 后台任务同样收到关闭通知，进程不空转
+            shutdown_for_server.request_shutdown();
         }
     });
 

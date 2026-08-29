@@ -106,6 +106,32 @@ pub async fn update_device_template<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // device_type 与 create 路径一致：走白名单校验（模型仅有长度校验）
+    super::validate_device_type(&req.device_type)?;
+
+    // brand/model/description 对齐 DB 列宽（50/100/TEXT 不限），超长拒绝
+    if let Some(brand) = &req.brand
+        && brand.chars().count() > 50
+    {
+        return Err(AppError::Validation(msg(
+            "server.device.validation.brand_length",
+        )));
+    }
+    if let Some(model) = &req.model
+        && model.chars().count() > 100
+    {
+        return Err(AppError::Validation(msg(
+            "server.device.validation.model_length",
+        )));
+    }
+    if let Some(description) = &req.description
+        && description.chars().count() > 255
+    {
+        return Err(AppError::Validation(msg(
+            "server.common.validation.description_length",
+        )));
+    }
+
     let existing: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM device_templates WHERE id = $1")
             .bind(id)

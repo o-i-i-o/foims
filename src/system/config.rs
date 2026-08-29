@@ -14,11 +14,11 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
 use ipma_auth::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
 use ipma_common::AppError;
+use ipma_common::AppJson;
 use ipma_common::config::{Config, I18nConfig, ServerConfig};
 use ipma_common::{log_error, log_info, log_warn, msg};
 
@@ -32,6 +32,61 @@ pub struct UpdateSystemConfigRequest {
     pub init: Option<ipma_common::config::InitConfig>,
     pub rate_limit: Option<ipma_common::config::RateLimitConfig>,
     pub snmp: Option<ipma_common::config::SnmpConfig>,
+}
+
+/// 配置落盘前的校验（对齐 `Config::load` 启动校验与各组件启动期约束）：
+/// 写入无法通过启动校验的配置会让服务重启后永久无法启动（持久化自伤）。
+fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
+    // 数据库：host 非空、端口合法、连接池参数可通过 DbPool 启动期校验
+    if config.database.host.trim().is_empty() {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "database.host"),
+        ));
+    }
+    if config.database.port == 0 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "database.port (1-65535)"),
+        ));
+    }
+    ipma_common::db::PoolConfig::from(&config.database)
+        .validate()
+        .map_err(|e| {
+            AppError::Validation(
+                msg("server.common.invalid_param").with("param", format!("database.pool: {e}")),
+            )
+        })?;
+
+    // JWT：密钥非空且 >= 32 字节（与 Config::load 的字节长度校验一致），过期时间必须可解析
+    if config.jwt.secret.trim().is_empty() || config.jwt.secret.len() < 32 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "jwt.secret (at least 32 characters)"),
+        ));
+    }
+    ipma_common::config::parse_duration(&config.jwt.access_token_expiry)
+        .and_then(|_| ipma_common::config::parse_duration(&config.jwt.refresh_token_expiry))
+        .map_err(|e| {
+            AppError::Validation(
+                msg("server.common.invalid_param").with("param", format!("jwt token expiry: {e}")),
+            )
+        })?;
+
+    // 限流：窗口为 0 会使限流静默失效，限额为 0 会全量 429
+    if config.rate_limit.window_secs == 0 || config.rate_limit.email_window_secs == 0 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "rate_limit.window_secs (at least 1)"),
+        ));
+    }
+    if config.rate_limit.ip_limit == 0
+        || config.rate_limit.user_limit == 0
+        || config.rate_limit.login_limit == 0
+        || config.rate_limit.email_limit == 0
+    {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "rate_limit limits (at least 1)"),
+        ));
+    }
+
+    Ok(())
 }
 
 pub fn record_start_time() {
@@ -77,11 +132,12 @@ pub async fn get_system_info(
         }
     };
 
+    // saturating_sub 防时钟回拨下溢（与 get_service_status 的 uptime 口径一致）
     let uptime = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-        - START_TIME.load(Ordering::SeqCst);
+        .saturating_sub(START_TIME.load(Ordering::SeqCst));
 
     let pool_metrics = state.pool()?.get_metrics();
     let system_time = chrono::Utc::now();
@@ -109,7 +165,8 @@ pub async fn get_system_config(
     State(state): State<Arc<AppState>>,
     _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
-    let mut config = state.config.clone();
+    // 读共享槽最新快照（写盘端点成功后已刷新），而非进程启动时快照
+    let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
     Ok(ipma_common::ok_json(
@@ -123,14 +180,29 @@ pub async fn update_system_config(
     _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSystemConfigRequest>,
 ) -> Result<Response, AppError> {
-    let mut new_config = state.config.clone();
+    req.validate()?;
+
+    // 配置写锁：与语言/会话超时/页面超时/恢复配置等「读-改-写盘」端点互斥，
+    // 防止并发写盘互相覆盖
+    let _write_guard = state.config_write_lock.lock().await;
+
+    // 以磁盘最新配置为基底（而非进程启动时的内存快照）：
+    // 先改语言/超时等子配置再改本端点时，避免旧快照整写回盘造成丢失更新
+    let mut new_config = tokio::task::spawn_blocking(Config::load)
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
 
     // req 各分支互斥且按值取出，避免逐子结构克隆
     if let Some(database) = req.database {
         // 防止脱敏值覆写真实密码
         let mut db_config = database;
         if db_config.password == "***" {
-            db_config.password = state.config.database.password.clone();
+            db_config.password = new_config.database.password.clone();
         }
         new_config.database = db_config;
     }
@@ -143,13 +215,13 @@ pub async fn update_system_config(
         // 防止脱敏值覆写真实密钥
         let mut jwt_config = jwt;
         if jwt_config.secret == "***" {
-            jwt_config.secret = state.config.jwt.secret.clone();
+            jwt_config.secret = new_config.jwt.secret.clone();
         }
         new_config.jwt = jwt_config;
     }
 
     if let Some(init) = req.init {
-        if init.enabled != state.config.init.enabled {
+        if init.enabled != new_config.init.enabled {
             return Err(AppError::Validation(msg(
                 "server.system.init_mode_api_forbidden",
             )));
@@ -165,6 +237,9 @@ pub async fn update_system_config(
         new_config.snmp = snmp;
     }
 
+    // 落盘前校验：拒绝写入启动校验无法通过的配置（防持久化自伤）
+    validate_config_for_save(&new_config)?;
+
     let config_path = ipma_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
 
@@ -172,6 +247,9 @@ pub async fn update_system_config(
         AppError::Internal(msg("server.system.config_save_failed").with("error", e))
     })?;
     log_info!("log.config.saved", path = config_path);
+
+    // 落盘成功后刷新共享配置槽，让本进程内后续读取立即生效
+    state.config.store(Arc::new(new_config.clone()));
 
     // 响应中脱敏数据库密码与 JWT 密钥（与 get_system_config 一致）：
     // 回传明文 JWT secret 等同于允许接收方伪造任意管理员令牌（A-3）
@@ -300,7 +378,9 @@ exec "$2"
     }
 
     let script_path_owned = script_path.clone();
-    // 脚本已 0700 可执行，直接 spawn；退出前清理
+    // 脚本已 0700 可执行，直接 spawn；退出前清理。
+    // spawn 失败意味着重启流程无法继续：保持服务运行并返回错误，
+    // 不再无条件 exit(0)（否则 standalone 模式服务直接下线）
     if let Err(e) = Command::new("nohup")
         .arg(&script_path)
         .arg(working_dir_str)
@@ -308,6 +388,9 @@ exec "$2"
         .spawn()
     {
         log_warn!("log.system.restart_script_spawn_failed", error = e);
+        return Err(AppError::Internal(
+            msg("server.system.restart_script_spawn_failed").with("error", e),
+        ));
     }
 
     tokio::spawn(async move {
@@ -328,8 +411,26 @@ pub async fn disable_init_mode(
 ) -> Result<Response, AppError> {
     log_info!("log.system.disable_init_requested");
 
-    let mut new_config = state.config.clone();
+    // 与其他「读-改-写盘」端点对齐：持配置写锁 + 以磁盘最新配置为基底 +
+    // 落盘前校验。若以启动内存快照为基底整写回盘，启动后的其他写盘变更
+    // （数据库密码、JWT 密钥、限流参数）会被旧快照覆写；与其他写盘端点
+    // 并发时也存在丢失更新竞态
+    let _write_guard = state.config_write_lock.lock().await;
+
+    let mut new_config = tokio::task::spawn_blocking(Config::load)
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
+
     new_config.init.enabled = false;
+
+    // 落盘前校验（与 update_system_config 同口径），拒绝写入启动校验
+    // 无法通过的配置
+    validate_config_for_save(&new_config)?;
 
     let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
@@ -342,6 +443,9 @@ pub async fn disable_init_mode(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
+    // 落盘成功后刷新共享配置槽
+    state.config.store(Arc::new(new_config));
+
     log_info!("log.system.init_disabled_restarting");
 
     trigger_service_restart().await
@@ -351,7 +455,7 @@ pub async fn backup_config(
     State(state): State<Arc<AppState>>,
     _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
-    let mut config = state.config.clone();
+    let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
     let config_json = serde_json::to_string_pretty(&config).map_err(|e| {
@@ -383,6 +487,9 @@ pub async fn restore_config(
     _admin: ipma_auth::extractor::AdminUser,
     AppJson(payload): AppJson<Config>,
 ) -> Result<Response, AppError> {
+    // 与其他「读-改-写盘」配置端点互斥，避免并发写盘互相覆盖
+    let _write_guard = state.config_write_lock.lock().await;
+
     let mut new_config = payload;
 
     if new_config.init.enabled {
@@ -391,13 +498,26 @@ pub async fn restore_config(
         )));
     }
 
-    // 防止脱敏值覆写真实密钥
+    // 防止脱敏值覆写真实密钥：以磁盘最新配置为脱敏值替换来源，
+    // 避免把进程启动时的旧密钥写回
+    let current_config = tokio::task::spawn_blocking(Config::load)
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
     if new_config.database.password == "***" {
-        new_config.database.password = state.config.database.password.clone();
+        new_config.database.password = current_config.database.password.clone();
     }
     if new_config.jwt.secret == "***" {
-        new_config.jwt.secret = state.config.jwt.secret.clone();
+        new_config.jwt.secret = current_config.jwt.secret.clone();
     }
+
+    // 落盘前校验（与 update_system_config 同口径）：备份文件可能缺校验字段
+    // 或被篡改，直接写入会导致重启后服务永久无法启动
+    validate_config_for_save(&new_config)?;
 
     let config_path = ipma_common::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
@@ -409,6 +529,9 @@ pub async fn restore_config(
         .map_err(|e| {
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
+
+    // 落盘成功后刷新共享配置槽
+    state.config.store(Arc::new(new_config));
 
     Ok(ipma_common::ok_json((), "server.system.config_restored"))
 }
@@ -432,19 +555,24 @@ pub struct UpdatePageTimeoutRequest {
 pub async fn get_session_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
+    // 读共享槽最新快照（写盘端点成功后已刷新）
+    let config = state.config_snapshot();
     Ok(ipma_common::ok_json(
         serde_json::json!({
-            "session_timeout": state.config.server.session_timeout
+            "session_timeout": config.server.session_timeout
         }),
         "server.system.session_timeout_retrieved",
     ))
 }
 
 pub async fn update_session_timeout_config(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
 ) -> Result<Response, AppError> {
+    // 配置写锁：与其他「读-改-写盘」端点互斥
+    let _write_guard = state.config_write_lock.lock().await;
+
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| {
@@ -466,6 +594,9 @@ pub async fn update_session_timeout_config(
         .map_err(|e| {
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
+
+    // 落盘成功后刷新共享配置槽
+    state.config.store(Arc::new(current_config));
 
     Ok(ipma_common::ok_json(
         (),
@@ -494,7 +625,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
 }
 
 pub async fn update_language_setting(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateLanguageRequest>,
 ) -> Result<Response, AppError> {
@@ -506,6 +637,9 @@ pub async fn update_language_setting(
             "server.system.language_unsupported",
         )));
     }
+
+    // 配置写锁：与其他「读-改-写盘」端点互斥
+    let _write_guard = state.config_write_lock.lock().await;
 
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
@@ -538,25 +672,33 @@ pub async fn update_language_setting(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
+    // 落盘成功后刷新共享配置槽
+    state.config.store(Arc::new(current_config));
+
     Ok(ipma_common::ok_json((), "server.system.language_updated"))
 }
 
 pub async fn get_page_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
+    // 读共享槽最新快照（写盘端点成功后已刷新）
+    let config = state.config_snapshot();
     Ok(ipma_common::ok_json(
         serde_json::json!({
-            "page_timeout": state.config.server.page_timeout
+            "page_timeout": config.server.page_timeout
         }),
         "server.system.page_timeout_retrieved",
     ))
 }
 
 pub async fn update_page_timeout_config(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdatePageTimeoutRequest>,
 ) -> Result<Response, AppError> {
+    // 配置写锁：与其他「读-改-写盘」端点互斥
+    let _write_guard = state.config_write_lock.lock().await;
+
     let mut current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| {
@@ -579,6 +721,9 @@ pub async fn update_page_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
+    // 落盘成功后刷新共享配置槽
+    state.config.store(Arc::new(current_config));
+
     Ok(ipma_common::ok_json(
         (),
         "server.system.page_timeout_updated",
@@ -592,22 +737,30 @@ pub struct NotificationSettings {
 
 pub async fn get_notification_settings(
     State(state): State<Arc<AppState>>,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
-    let recipients = match sqlx::query_scalar::<_, String>(
-        "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
-    )
-    .fetch_optional(&state.pool()?.get_conn())
-    .await
-    {
-        Ok(Some(value)) => serde_json::from_str(&value).map_err(|e| {
-            // 存量数据损坏时不能静默清空收件人，否则 MAC 变更通知会失效
-            ipma_common::log_error!("log.system.recipients_parse_failed", error = e);
-            AppError::Internal(
-                msg("server.notification.recipients_parse_failed").with("error", e),
-            )
-        })?,
-        _ => Vec::new(),
-    };
+    let recipients =
+        match sqlx::query_scalar::<_, String>(
+            "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
+        )
+        .fetch_optional(&state.pool()?.get_conn())
+        .await
+        {
+            Ok(Some(value)) => serde_json::from_str(&value).map_err(|e| {
+                // 存量数据损坏时不能静默清空收件人，否则 MAC 变更通知会失效
+                ipma_common::log_error!("log.system.recipients_parse_failed", error = e);
+                AppError::Internal(
+                    msg("server.notification.recipients_parse_failed").with("error", e),
+                )
+            })?,
+            // 查询失败必须向上传播：吞成空列表会把 DB 故障伪装成「无收件人」
+            Ok(None) => Vec::new(),
+            Err(e) => {
+                return Err(AppError::Database(
+                    msg("server.db.operation_failed").with("error", e),
+                ));
+            }
+        };
 
     Ok(ipma_common::ok_json(
         NotificationSettings {
@@ -894,6 +1047,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
 }
 
 pub async fn register_service(
+    State(state): State<Arc<AppState>>,
     _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
@@ -951,25 +1105,40 @@ WantedBy=multi-user.target
         log_warn!("log.system.service_enable_failed", error = e);
     }
 
-    let start_output = Command::new("systemctl")
-        .args(["start", "ipma.service"])
-        .output()
-        .await;
+    // 让位流程：单元文件带 Restart=always，而当前独立进程仍持有 UDS，
+    // 立即 systemctl start 会让新实例 bind 失败并进入崩溃重启循环。
+    // 因此注册完成后：
+    // 1. 由分离的 shell 延迟执行 systemctl start（分离进程不受本进程退出影响）；
+    // 2. 本进程随后经现有 shutdown 通道优雅退出并释放 UDS；
+    // 3. 新实例接管端口；即使首启与退出窗口重叠，Restart=always 兜底重试。
+    let start_spawn = tokio::process::Command::new("sh")
+        .arg("-c")
+        .arg("sleep 5 && systemctl start ipma.service")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 
-    match start_output {
-        Ok(output) if output.status.success() => {
-            Ok(ipma_common::ok_json((), "server.system.service_registered"))
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(AppError::Internal(
-                msg("server.system.service_start_failed").with("error", stderr.trim()),
-            ))
-        }
-        Err(e) => Err(AppError::Internal(
+    if let Err(e) = start_spawn {
+        log_warn!("log.system.service_start_schedule_failed", error = e);
+        return Err(AppError::Internal(
             msg("server.system.service_start_failed").with("error", e),
-        )),
+        ));
     }
+    log_info!("log.system.service_start_scheduled");
+
+    // 响应先行返回，随后触发本进程优雅退出（由 systemd Restart=always 拉起新实例）
+    let shutdown_for_handover = state.shutdown.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        log_info!("log.system.service_handover_shutdown");
+        shutdown_for_handover.request_shutdown();
+    });
+
+    Ok(ipma_common::ok_json(
+        serde_json::json!({ "handover": "systemd" }),
+        "server.system.service_registered",
+    ))
 }
 
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {

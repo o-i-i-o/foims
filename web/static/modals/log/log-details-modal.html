@@ -1,8 +1,8 @@
 <template id="log-details-modal-template">
-<div id="log-details-modal" class="modal modal-flex" role="dialog" aria-modal="true">
+<div id="log-details-modal" class="modal modal-flex" role="dialog" aria-modal="true" aria-labelledby="log-details-modal-title">
   <div class="modal-content modal-md">
     <header class="modal-header">
-      <h3 class="modal-title" data-i18n="logs.detail_title">Log Details</h3>
+      <h3 class="modal-title" data-i18n="logs.detail_title" id="log-details-modal-title">Log Details</h3>
       <button type="button" class="close" data-modal-id="log-details-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
@@ -38,7 +38,8 @@
         </dl>
       </div>
       <div class="log-detail-section">
-        <label data-i18n="logs.details">Details</label>
+        <!-- 纯标题（无关联表单控件）：改用标题元素，避免悬空 label -->
+        <h4 class="section-subtitle" data-i18n="logs.details">Details</h4>
         <div id="log-detail-details"></div>
       </div>
     </div>

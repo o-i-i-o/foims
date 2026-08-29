@@ -10,7 +10,6 @@ use ipma_common::msg;
 use sqlx::PgPool;
 
 use crate::check::{check_has_data, check_required_tables_exist};
-use crate::connection::ensure_database_and_schema;
 use crate::context::InitContext;
 use crate::error::InitError;
 
@@ -19,21 +18,90 @@ fn json_ok(value: serde_json::Value) -> Response {
 }
 
 pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    // 纯只读探测：GET 状态端点不携带建库/建 schema 副作用（与
+    // check_init_status 口径一致）。先连 postgres 库判断目标库是否存在，
+    // 目标库存在时再直连目标库做只读 schema 检查
+    let postgres_url = format!(
+        "postgres://{}:{}@{}:{}/postgres",
+        crate::utils::url_encode_component(&ctx.db_config.username),
+        crate::utils::url_encode_component(&ctx.db_config.password),
+        ctx.db_config.host,
+        ctx.db_config.port
+    );
+
+    let not_connected = || {
+        // 错误详情（含连接 host/user）只入日志，不回传客户端（I-7）
+        json_ok(serde_json::json!({
+            "success": true,
+            "data": {
+                "connected": false,
+                "has_tables": false,
+                "required_tables_exist": false,
+                "has_data": false,
+                "error": "server.init.db.connect_failed"
+            }
+        }))
+    };
+
+    let postgres_pool = match PgPool::connect(&postgres_url).await {
         Ok(p) => p,
         Err(e) => {
-            // 错误详情（含连接 host/user）只入日志，不回传客户端（I-7）
-            ipma_common::log_warn!("log.init.db.status_check_failed", error = e.log_string());
-            return Ok(json_ok(serde_json::json!({
-                "success": true,
-                "data": {
-                    "connected": false,
-                    "has_tables": false,
-                    "required_tables_exist": false,
-                    "has_data": false,
-                    "error": "server.init.db.connect_failed"
-                }
-            })));
+            ipma_common::log_warn!(
+                "log.init.db.status_check_failed",
+                error = msg("server.init.db.connect_failed")
+                    .with("error", e)
+                    .log_string()
+            );
+            return Ok(not_connected());
+        }
+    };
+
+    // 目标库存在性只读检查（pg_database 系统目录查询，无副作用）
+    let db_exists: bool =
+        match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+            .bind(&ctx.db_config.database)
+            .fetch_one(&postgres_pool)
+            .await
+        {
+            Ok(exists) => exists,
+            Err(e) => {
+                postgres_pool.close().await;
+                ipma_common::log_warn!(
+                    "log.init.db.status_check_failed",
+                    error = msg("server.init.db.check_failed")
+                        .with("error", e)
+                        .log_string()
+                );
+                return Ok(not_connected());
+            }
+        };
+
+    postgres_pool.close().await;
+
+    if !db_exists {
+        // 目标库尚不存在：返回未连接状态，由初始化页提示"将自动创建数据库"
+        return Ok(not_connected());
+    }
+
+    // 目标库存在：直连目标库做只读 schema 检查（连接串密码已 URL 编码）
+    let db_url = format!(
+        "postgres://{}:{}@{}:{}/{}",
+        crate::utils::url_encode_component(&ctx.db_config.username),
+        crate::utils::url_encode_component(&ctx.db_config.password),
+        ctx.db_config.host,
+        ctx.db_config.port,
+        crate::utils::url_encode_component(&ctx.db_config.database)
+    );
+    let pool = match PgPool::connect(&db_url).await {
+        Ok(p) => p,
+        Err(e) => {
+            ipma_common::log_warn!(
+                "log.init.db.status_check_failed",
+                error = msg("server.init.db.connect_failed")
+                    .with("error", e)
+                    .log_string()
+            );
+            return Ok(not_connected());
         }
     };
 
@@ -49,8 +117,9 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
 
     let required_tables_exist = check_required_tables_exist(&pool).await;
 
+    // 查询失败向上传播：状态探测不应把数据库故障误报成"无数据"
     let has_data = if required_tables_exist {
-        check_has_data(&pool).await
+        check_has_data(&pool).await?
     } else {
         false
     };
@@ -67,18 +136,29 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
 }
 
 pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
-    let Ok(pool) = ensure_database_and_schema(&ctx.db_config).await else {
+    // 只读探测：GET 状态端点不得携带建库/建 schema 的副作用，
+    // 因此不再调用 ensure_database_and_schema
+    if !ctx.init_enabled() {
         return Ok(json_ok(serde_json::json!({
             "initialized": false,
             "version": env!("CARGO_PKG_VERSION"),
         })));
-    };
+    }
 
-    let initialized = match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
-        .fetch_one(&pool)
-        .await
-    {
-        Ok(count) => count > 0,
+    // init 启用时目标库通常尚不存在：只做只读连接探测，
+    // 连接失败与 users 表缺失同样视为未初始化
+    let db_url = format!(
+        "postgres://{}:{}@{}:{}/{}",
+        crate::utils::url_encode_component(&ctx.db_config.username),
+        crate::utils::url_encode_component(&ctx.db_config.password),
+        ctx.db_config.host,
+        ctx.db_config.port,
+        crate::utils::url_encode_component(&ctx.db_config.database)
+    );
+
+    let initialized = match PgPool::connect(&db_url).await {
+        // 状态探测保持宽容语义：users 表查询失败视为未初始化
+        Ok(pool) => check_has_data(&pool).await.unwrap_or_default(),
         Err(_) => false,
     };
 
@@ -89,6 +169,10 @@ pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Re
 }
 
 pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
+    // init 关闭后重启属危险端点，与建库/删库等端点同口径拒绝
+    if !ctx.init_enabled() {
+        return Err(InitError::Forbidden(msg("server.init.disabled")));
+    }
     ipma_common::log_info!("log.init.restart_requested");
     (ctx.restart_fn)()
         .await

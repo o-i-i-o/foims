@@ -17,6 +17,25 @@ const CABINET_BATCH_SIZE = 16;
  */
 export const DEFAULT_CABINET_CAPACITY = 42;
 
+/**
+ * 布局坐标合法性校验：x/y 有限且非负、宽高有限且为正。
+ * 加载侧对异常坐标（NaN/负值/零宽高）按"无有效布局"处理并告警，
+ * 避免 NaN 进入 setViewBox 或负尺寸元素进入画布。
+ */
+export function isValidLayoutPosition(position) {
+  return Boolean(
+    position &&
+    Number.isFinite(position.x) &&
+    Number.isFinite(position.y) &&
+    Number.isFinite(position.width) &&
+    Number.isFinite(position.height) &&
+    position.x >= 0 &&
+    position.y >= 0 &&
+    position.width > 0 &&
+    position.height > 0
+  );
+}
+
 export class SVGDataManager {
   constructor(core, renderer) {
     this.core = core;
@@ -27,6 +46,13 @@ export class SVGDataManager {
     this.showToast = core.showToast;
     // 机柜渲染代次：并发 loadSavedLayout/autoDraw/resize 重排时作废旧渲染
     this.cabinetRenderToken = 0;
+    // 机柜分批渲染完成标志：渲染在途（画布为半成品）时 saveLayout 拒绝，
+    // 避免把只画了前几批的部分布局整表落库
+    this.cabinetRenderSettled = true;
+    // 工位渲染代次：与机柜分支同型，防止快速切换房间时两次加载交错绘制
+    this.workstationRenderToken = 0;
+    // 当前房间本次加载/绘制的合法元素 id 集合（保存布局时用于归属过滤）
+    this.layoutOwnerIds = new Set();
   }
 
   /** 数据获取失败时的统一提示（请求异常或响应形状异常） */
@@ -35,41 +61,54 @@ export class SVGDataManager {
     this.showToast(t("viz.data_load_failed"), "error");
   }
 
-  async fetchWorkstationsByRoom(roomId) {
-    try {
-      const result = await this.apiGet(
-        `/api/resources/workstations?room_id=${roomId}&page_size=1000`
-      );
-      if (result.success && Array.isArray(result.data?.items)) {
-        return result.data.items;
+  /**
+   * 分页拉取全量列表：每页 1000 条，最多 5 页（5000 条）。
+   * 仍有后续页但已达上限时提示数据可能不完整（避免超 1000 条被静默截断）。
+   * @param {string} path 不含分页参数的接口路径
+   * @param {string} what 失败提示用途描述
+   * @returns {Promise<Array>} 拉取到的条目（失败时为已获取的部分或空数组）
+   */
+  async _fetchAllPages(path, what) {
+    const MAX_PAGES = 5;
+    const PAGE_SIZE = 1000;
+    const items = [];
+    const sep = path.includes("?") ? "&" : "?";
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      let result;
+      try {
+        result = await this.apiGet(`${path}${sep}page=${page}&page_size=${PAGE_SIZE}`);
+      } catch (error) {
+        this._notifyLoadFailure(error, what);
+        break;
       }
-      if (result.success) {
-        return [];
+      if (!result.success || !Array.isArray(result.data?.items)) {
+        if (!result.success) {
+          this._notifyLoadFailure(result.message, what);
+        }
+        break;
       }
-      this._notifyLoadFailure(result.message, "获取工位数据");
-      return [];
-    } catch (error) {
-      this._notifyLoadFailure(error, "获取工位数据");
-      return [];
+
+      items.push(...result.data.items);
+
+      const totalPages = Number(result.data.total_pages) || 1;
+      if (page >= totalPages) {
+        break;
+      }
+      if (page === MAX_PAGES) {
+        // 还有后续页但已达拉取上限：提示数据可能不完整
+        this.showToast(t("viz.data_page_limit_exceeded"), "warning");
+      }
     }
+    return items;
+  }
+
+  async fetchWorkstationsByRoom(roomId) {
+    return this._fetchAllPages(`/api/resources/workstations?room_id=${roomId}`, "获取工位数据");
   }
 
   async fetchIps() {
-    try {
-      const result = await this.apiGet("/api/resources/ip?page_size=1000");
-      // 后端分页响应形状固定为 items（paged_response），不再做多分支兜底
-      if (result.success && Array.isArray(result.data?.items)) {
-        return result.data.items;
-      }
-      if (result.success) {
-        return [];
-      }
-      this._notifyLoadFailure(result.message, "获取IP");
-      return [];
-    } catch (error) {
-      this._notifyLoadFailure(error, "获取IP");
-      return [];
-    }
+    return this._fetchAllPages("/api/resources/ip", "获取IP");
   }
 
   async fetchCabinetsByRoom(roomId) {
@@ -90,15 +129,31 @@ export class SVGDataManager {
   async loadSavedLayout(id) {
     this.core.currentRoomId = id;
 
+    // 本次加载开启的渲染代次（失败处理据此判断本次加载是否已被取代）
+    let token = null;
+
     try {
       if (this.core.type === "workstation") {
-        this.core.elementsGroup.innerHTML = "";
+        token = this.beginWorkstationRender();
 
         const [layoutResult, workstations, ipManagers] = await Promise.all([
           this.apiGet(`/api/resources/layouts/workstation/${id}`),
           this.fetchWorkstationsByRoom(id),
           this.fetchIps()
         ]);
+        // await 后校验代次：已被更新的渲染取代时丢弃本次结果，不再写入画布。
+        // 返回 null（≠false"无布局"）：调用方据此放弃 autoDraw + saveLayout，
+        // 防止用过期 roomId 自动排布并落库覆盖新房间已保存的布局
+        if (token !== this.workstationRenderToken) {
+          return null;
+        }
+        // 布局请求失败（5xx/网络，apiClient 不抛异常）必须与"确认无布局"
+        // 区分：按无布局处理会触发 autoDraw + saveLayout 整表覆盖该房间
+        // 已保存的布局，一次瞬时故障即破坏数据
+        if (!layoutResult.success) {
+          this._notifyLoadFailure(layoutResult.message, "获取房间布局");
+          return "error";
+        }
 
         const ipMap = new Map();
         if (Array.isArray(ipManagers)) {
@@ -106,7 +161,11 @@ export class SVGDataManager {
             if (!ipManager.workstation_id) {
               return;
             }
-            ipMap.set(ipManager.workstation_id, ipManager);
+            // 同一工位多条 IP 时 active 优先（与 autoDrawWorkstations 取值策略一致）
+            const existing = ipMap.get(ipManager.workstation_id);
+            if (!existing || (existing.status !== "active" && ipManager.status === "active")) {
+              ipMap.set(ipManager.workstation_id, ipManager);
+            }
           });
         }
 
@@ -127,46 +186,9 @@ export class SVGDataManager {
         // 门布局存于 element_layouts，绘制时带上已保存记录的主键，保证可拖拽、可保存
         const doorElement = this.renderer.drawDoor(doorItem?.id);
 
-        let maxX = 0;
-        let maxY = 0;
-
-        if (doorItem && doorItem.position) {
-          const rect = doorElement.querySelector("rect");
-          if (rect) {
-            rect.setAttribute("x", doorItem.position.x);
-            rect.setAttribute("y", doorItem.position.y);
-            rect.setAttribute("width", doorItem.position.width);
-            rect.setAttribute("height", doorItem.position.height);
-          }
-
-          const text = doorElement.querySelector("text");
-          if (text) {
-            text.setAttribute("x", doorItem.position.x + doorItem.position.width / 2);
-            text.setAttribute("y", doorItem.position.y - 10);
-            text.dataset.relY = -10;
-          }
-
-          const circle = doorElement.querySelector("circle");
-          if (circle) {
-            circle.setAttribute("cx", doorItem.position.x + doorItem.position.width - 10);
-            circle.setAttribute("cy", doorItem.position.y + doorItem.position.height / 2);
-            circle.dataset.relCx = doorItem.position.width - 10;
-            circle.dataset.relCy = doorItem.position.height / 2;
-          }
-
-          maxX = Math.max(maxX, doorItem.position.x + doorItem.position.width);
-          maxY = Math.max(maxY, doorItem.position.y + doorItem.position.height);
-        } else {
-          const rect = doorElement.querySelector("rect");
-          if (rect) {
-            const x = parseFloat(rect.getAttribute("x"));
-            const y = parseFloat(rect.getAttribute("y"));
-            const width = parseFloat(rect.getAttribute("width"));
-            const height = parseFloat(rect.getAttribute("height"));
-            maxX = Math.max(maxX, x + width);
-            maxY = Math.max(maxY, y + height);
-          }
-        }
+        const doorBounds = this._positionDoorElement(doorElement, doorItem);
+        let maxX = doorBounds.maxX;
+        let maxY = doorBounds.maxY;
 
         if (hasSavedLayout) {
           // 布局项以小写 id 建 Map：工位多时避免每个工位全量 find（O(N×M)）
@@ -178,9 +200,17 @@ export class SVGDataManager {
           });
           workstations.forEach((workstation, index) => {
             const savedItem = layoutById.get(workstation.id.toLowerCase());
-            if (savedItem && savedItem.position) {
+            // 异常坐标（NaN/负值/零宽高）不进画布：告警后回退默认网格排布
+            if (savedItem && savedItem.position && !isValidLayoutPosition(savedItem.position)) {
+              console.warn(
+                "工位已保存坐标异常，已回退默认排布:",
+                workstation.id,
+                savedItem.position
+              );
+            } else if (savedItem && isValidLayoutPosition(savedItem.position)) {
               workstation.position = savedItem.position;
-            } else {
+            }
+            if (!workstation.position) {
               const gap = 20;
               const width = 160;
               const height = 160;
@@ -217,17 +247,29 @@ export class SVGDataManager {
           );
         }
 
+        // 记录本次绘制的合法元素 id（门 + 房间工位清单）：保存布局时用于归属过滤
+        this.setLayoutOwnerIds([doorElement.dataset.id, ...workstations.map((w) => w.id)]);
+
         return hasSavedLayout;
       }
       if (this.core.type === "cabinet") {
-        const token = this.beginCabinetRender();
+        token = this.beginCabinetRender();
 
         const [layoutResult, cabinets] = await Promise.all([
           this.apiGet(`/api/resources/layouts/positions/${id}`),
           this.fetchCabinetsByRoom(id)
         ]);
+        // 代次过期返回 null（同工位分支）：调用方放弃后续自动排布动作
         if (token !== this.cabinetRenderToken) {
-          return false;
+          return null;
+        }
+        // 与工位分支同口径：布局请求失败不得按"无布局"处理
+        //（机柜视图的自动排布同样会落库覆盖已保存布局）
+        if (!layoutResult.success) {
+          this._notifyLoadFailure(layoutResult.message, "获取机柜布局");
+          // 本次不会有渲染跟进:恢复完成标志,避免 saveLayout 被永久拒绝
+          this.cabinetRenderSettled = true;
+          return "error";
         }
 
         let layoutData = [];
@@ -247,6 +289,9 @@ export class SVGDataManager {
 
         if (hasSavedLayout && cabinets.length > 0) {
           await this.layoutAndRenderCabinets(cabinets, layoutData, token);
+        } else {
+          // 无渲染跟进（无布局/无柜）:恢复完成标志,避免 saveLayout 被永久拒绝
+          this.cabinetRenderSettled = true;
         }
 
         return hasSavedLayout;
@@ -254,9 +299,93 @@ export class SVGDataManager {
     } catch (error) {
       console.error("加载布局失败:", error);
       this.showToast(t("viz.layout_load_failed"), "error");
+      // 仅当本次加载仍是最新渲染时才清空画布：
+      // 过期加载的失败处理不清画布，避免抹掉并发开启的新渲染成果
+      const isLatestRender =
+        token !== null &&
+        (token === this.workstationRenderToken || token === this.cabinetRenderToken);
+      if (!isLatestRender) {
+        // 已被更新的渲染取代：放弃后续动作（null 语义同代次过期）
+        return null;
+      }
       this.core.elementsGroup.innerHTML = "";
-      return false;
+      // 机柜视图异常中断后不会再有渲染跟进：恢复完成标志，避免 saveLayout 被永久拒绝
+      if (this.core.type === "cabinet") {
+        this.cabinetRenderSettled = true;
+      }
+      // 加载失败与"无布局"区分，调用方不得自动排布落库
+      return "error";
     }
+  }
+
+  /**
+   * 开启一次工位渲染：清空画布并递增渲染代次。
+   * 返回代次 token，await 之后的 DOM 写入需校验 token，过期即中止，
+   * 避免快速切换房间时两次加载交错绘制（画布混入两个房间的工位）。
+   */
+  beginWorkstationRender() {
+    this.core.elementsGroup.innerHTML = "";
+    return ++this.workstationRenderToken;
+  }
+
+  /**
+   * 按已保存布局定位门元素（矩形/文字/把手同步平移），返回内容边界。
+   * 无已保存位置时按门元素默认坐标计入边界。
+   */
+  _positionDoorElement(doorElement, doorItem) {
+    let maxX = 0;
+    let maxY = 0;
+
+    // 异常坐标（NaN/负值/零宽高）按无已保存位置处理，回退门元素默认坐标
+    const doorPosition = isValidLayoutPosition(doorItem?.position) ? doorItem.position : null;
+    if (doorItem?.position && !doorPosition) {
+      console.warn("门的已保存坐标异常，已按默认坐标渲染:", doorItem.position);
+    }
+
+    if (doorPosition) {
+      const rect = doorElement.querySelector("rect");
+      if (rect) {
+        rect.setAttribute("x", doorPosition.x);
+        rect.setAttribute("y", doorPosition.y);
+        rect.setAttribute("width", doorPosition.width);
+        rect.setAttribute("height", doorPosition.height);
+      }
+
+      const text = doorElement.querySelector("text");
+      if (text) {
+        text.setAttribute("x", doorPosition.x + doorPosition.width / 2);
+        text.setAttribute("y", doorPosition.y - 10);
+        text.dataset.relY = -10;
+      }
+
+      const circle = doorElement.querySelector("circle");
+      if (circle) {
+        circle.setAttribute("cx", doorPosition.x + doorPosition.width - 10);
+        circle.setAttribute("cy", doorPosition.y + doorPosition.height / 2);
+        circle.dataset.relCx = doorPosition.width - 10;
+        circle.dataset.relCy = doorPosition.height / 2;
+      }
+
+      maxX = Math.max(maxX, doorPosition.x + doorPosition.width);
+      maxY = Math.max(maxY, doorPosition.y + doorPosition.height);
+    } else {
+      const rect = doorElement.querySelector("rect");
+      if (rect) {
+        const x = parseFloat(rect.getAttribute("x"));
+        const y = parseFloat(rect.getAttribute("y"));
+        const width = parseFloat(rect.getAttribute("width"));
+        const height = parseFloat(rect.getAttribute("height"));
+        maxX = Math.max(maxX, x + width);
+        maxY = Math.max(maxY, y + height);
+      }
+    }
+
+    return { maxX, maxY };
+  }
+
+  /** 记录当前房间本次加载/绘制的合法元素 id 集合（保存布局时用于归属过滤）。 */
+  setLayoutOwnerIds(ids) {
+    this.layoutOwnerIds = new Set(ids);
   }
 
   /**
@@ -266,6 +395,8 @@ export class SVGDataManager {
    */
   beginCabinetRender() {
     this.core.elementsGroup.innerHTML = "";
+    // 渲染开始:完成标志复位,由 renderCabinetBatches 全部批次完成时置回
+    this.cabinetRenderSettled = false;
     return ++this.cabinetRenderToken;
   }
 
@@ -308,7 +439,9 @@ export class SVGDataManager {
           ? savedItem.position.x
           : null;
       const x = savedX ?? padding + index * (CABINET_WIDTH + CABINET_GAP);
-      const width = (savedItem && savedItem.position?.width) || CABINET_WIDTH;
+      // 已保存宽度需为正的有限值，否则回退默认宽度（负/零/NaN 会使画布尺寸错乱）
+      const savedWidth = savedItem?.position?.width;
+      const width = Number.isFinite(savedWidth) && savedWidth > 0 ? savedWidth : CABINET_WIDTH;
 
       cabinet.position = {
         x,
@@ -359,6 +492,8 @@ export class SVGDataManager {
 
       batch.forEach((cabinet) => this.drawCabinetPositions(cabinet, ipMap));
     }
+    // 全部批次完成:画布为完整成品,恢复可保存
+    this.cabinetRenderSettled = true;
     return true;
   }
 
@@ -401,8 +536,19 @@ export class SVGDataManager {
    * @param {boolean} [options.silent] 静默模式：成功不弹提示（拖拽自动保存使用），失败仍提示
    */
   async saveLayout({ silent = false } = {}) {
+    // 机柜分批渲染期间画布是半成品:此时保存会把尚未渲染的机柜从布局中抹掉
+    //（整表 upsert 语义），提示稍后再试（工位视图一次性绘制完成,无此问题）
+    if (this.core.type === "cabinet" && !this.cabinetRenderSettled) {
+      this.showToast(t("viz.rendering_in_progress"), "warning");
+      return;
+    }
+
     const elements = this.core.elementsGroup.querySelectorAll("[data-id]");
     const layoutData = [];
+    // 归属过滤基准（仅工位视图）：本次 loadSavedLayout/autoDraw 加载的工位集合。
+    // 画布上不属于当前房间的元素（并发切换残留）直接忽略，与渲染代次一起
+    // 构成双保险，防止把其他房间的工位布局行改挂到当前房间
+    const ownerIds = this.core.type === "workstation" ? this.layoutOwnerIds : null;
 
     elements.forEach((el) => {
       if (this.core.type === "cabinet" && el.classList.contains("cabinet-position-element")) {
@@ -410,16 +556,39 @@ export class SVGDataManager {
       }
 
       const id = el.dataset.id;
+      if (ownerIds && !ownerIds.has(id)) {
+        return;
+      }
+
       const rect = el.querySelector("rect");
       if (!rect) {
         return;
       }
 
+      const x = parseFloat(rect.getAttribute("x"));
+      const y = parseFloat(rect.getAttribute("y"));
+      const width = parseFloat(rect.getAttribute("width"));
+      const height = parseFloat(rect.getAttribute("height"));
+
+      // 坐标校验与手工录入一致（min=0）：非有限值不入库，负坐标钳制为 0；
+      // 宽高必须为正数（0/负值元素无法点击与拖拽，入库即坏数据）
+      if (![x, y, width, height].every(Number.isFinite)) {
+        console.warn("布局元素坐标非有限值，跳过保存:", id);
+        return;
+      }
+      if (width <= 0 || height <= 0) {
+        console.warn("布局元素宽高非正，跳过保存:", id);
+        return;
+      }
+      if (x < 0 || y < 0) {
+        console.warn("布局元素坐标为负，已钳制为 0:", id);
+      }
+
       const position = {
-        x: parseFloat(rect.getAttribute("x")),
-        y: parseFloat(rect.getAttribute("y")),
-        width: parseFloat(rect.getAttribute("width")),
-        height: parseFloat(rect.getAttribute("height")),
+        x: Math.max(0, x),
+        y: Math.max(0, y),
+        width,
+        height,
         rotation: 0
       };
 
@@ -486,8 +655,8 @@ export class SVGDataManager {
           this.showToast(`${t("viz.layout_delete_failed")}: ${result.message}`, "error");
         }
       } catch (error) {
+        // 请求失败视为删除未发生：保留画布现场，与 success=false 分支行为一致
         console.error("删除布局失败:", error);
-        this.core.elementsGroup.innerHTML = "";
         this.showToast(t("viz.layout_delete_failed"), "error");
       }
     } else if (this.core.type === "cabinet") {
@@ -512,8 +681,8 @@ export class SVGDataManager {
           this.showToast(`${t("viz.layout_delete_failed")}: ${result.message}`, "error");
         }
       } catch (error) {
+        // 请求失败视为删除未发生：保留画布现场，与 success=false 分支行为一致
         console.error("删除布局失败:", error);
-        this.core.elementsGroup.innerHTML = "";
         this.showToast(t("viz.layout_delete_failed"), "error");
       }
     }

@@ -14,7 +14,10 @@
     "system": "System",
     "organization": "Organization",
     "collapse_sidebar": "Collapse Navigation",
-    "expand_sidebar": "Expand Navigation"
+    "expand_sidebar": "Expand Navigation",
+    "load_system_info": "Load system info",
+    "load_system_config": "Load system config",
+    "load_page": "Load page {{page}}"
   },
   "common": {
     "name": "Name",
@@ -70,7 +73,19 @@
     "page_size": "Rows per page",
     "goto": "Go to",
     "type": "Type",
-    "search": "Search"
+    "search": "Search",
+    "current_user": "Current user",
+    "option": "option",
+    "scope": "scope",
+    "cabinet": "cabinet",
+    "device": "device",
+    "network": "network",
+    "network_region": "network region",
+    "room": "room",
+    "workstation": "workstation",
+    "position": "position",
+    "organization": "organization",
+    "template": "template"
   },
   "status": {
     "active": "Active",
@@ -493,7 +508,8 @@
     "region_delete_success": "Network region deleted successfully",
     "region_save_success": "Network region saved successfully",
     "save_success": "Network saved successfully",
-    "select_segment": "Select network segment"
+    "select_segment": "Select network segment",
+    "capacity_note": "Capacity counts the whole CIDR minus network and broadcast addresses; /31 and /32 have no conventional usable addresses; the visualization shows only a subset (first /24 for large subnets)"
   },
   "organization": {
     "add": "Add Organization",
@@ -576,7 +592,8 @@
     "icon_workstation": "Workstation",
     "icon_cabinet": "Cabinet",
     "icon_cabinet_position": "Cabinet Position",
-    "icon_org": "Generic Node"
+    "icon_org": "Generic Node",
+    "type_duplicate": "Duplicate type name \"{{name}}\": type names must be unique within a template (including the root type)"
   },
   "workstation": {
     "name": "Workstation Name",
@@ -668,7 +685,11 @@
     "app_fail2ban_ip": "IP Address",
     "open_source_components": "Open Source Components",
     "open_source_intro": "This project is licensed under GPL-3.0-or-later and uses the following open source components (see the NOTICE file for details).",
-    "notification": "Notification"
+    "notification": "Notification",
+    "uptime_days": "{{count}}d",
+    "uptime_hours": "{{count}}h",
+    "uptime_minutes": "{{count}}m",
+    "uptime_seconds": "{{count}}s"
   },
   "security": {
     "status_unknown": "Unknown",
@@ -804,7 +825,7 @@
     "log_type": "Log Type",
     "keep_days": "Keep Days",
     "all_logs": "All Logs",
-    "clear_hint": "Delete logs older than specified days. Enter 0 or leave empty to delete all logs. This action cannot be undone.",
+    "clear_hint": "Delete logs older than the specified number of days. Enter 0 to delete all logs. This action cannot be undone.",
     "clear": "Clear",
     "clear_all_confirm": "Are you sure you want to delete all logs? This action cannot be undone.",
     "clear_days_confirm": "Are you sure you want to delete logs older than {{days}} days? This action cannot be undone.",
@@ -902,7 +923,8 @@
     "forwarding_host_placeholder": "e.g., 192.168.1.10",
     "forwarding_port": "Port",
     "forwarding_test": "Send Test",
-    "forwarding_hint": "Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164); forwarding failures do not affect local storage"
+    "forwarding_hint": "Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164); forwarding failures do not affect local storage",
+    "days_required": "Please enter a valid number of days to retain (0 deletes all)"
   },
   "notifications": {
     "all": "All Notifications",
@@ -1232,13 +1254,15 @@
     "view_logs": "View Logs",
     "execution_time": "Execution Time",
     "duration": "Duration(ms)",
-    "details": "Details"
+    "details": "Details",
+    "cron_invalid": "Invalid cron expression: expected 5 fields (minute hour day month weekday) or 6 fields (with seconds); each field only supports numbers, ranges, lists, steps and asterisk"
   },
   "viz": {
     "no_room_layout_data": "No room layout data in the database",
     "layout_load_failed": "Failed to load layout",
     "layout_save_success": "Layout saved successfully",
     "layout_save_failed": "Failed to save layout",
+    "rendering_in_progress": "Canvas is rendering, please retry later",
     "layout_delete_success": "Layout deleted successfully",
     "layout_delete_failed": "Failed to delete layout",
     "select_room_first": "Please select a room first",
@@ -1320,7 +1344,8 @@
     "zoom_in": "Zoom in",
     "zoom_out": "Zoom out",
     "zoom_level": "Canvas zoom level",
-    "zoom_fit": "Fit Canvas"
+    "zoom_fit": "Fit Canvas",
+    "data_page_limit_exceeded": "Large dataset: only the first 5000 records were loaded and results may be incomplete"
   },
   "import_export": {
     "backup_failed": "Failed to back up configuration",
@@ -1397,7 +1422,13 @@
     "select_init_method": "Select an initialization method.",
     "will_auto_create_db": "The system will try to create the database automatically.",
     "parse_empty": "Request failed (HTTP {{status}}) with an empty response body",
-    "parse_invalid_json": "Failed to parse response (HTTP {{status}}): the server did not return valid JSON"
+    "parse_invalid_json": "Failed to parse response (HTTP {{status}}): the server did not return valid JSON",
+    "checking_db_status": "Checking database status...",
+    "create_db_desc": "The system will create a fresh database schema, suitable for first deployment.",
+    "create_db_li_tables": "Automatically create all required tables",
+    "create_db_li_schema": "Establish correct schema and relations",
+    "create_db_li_backup": "Existing data will be backed up before rebuild",
+    "import_db_desc": "Restore database from a SQL backup file, suitable for migration or recovery."
   },
   "server": {
     "auth": {
@@ -1464,7 +1495,9 @@
       "password_too_short": "Password too short (minimum {{min_length}} characters)",
       "password_complexity": "Password complexity insufficient (missing: {{missing}})",
       "password_reused": "New password reuses a recent password",
-      "secadmin_required": "Security administrator privilege required"
+      "secadmin_required": "Security administrator privilege required",
+      "two_factor_required": "Two-factor authentication is enabled for this account; enter your verification code",
+      "admin_or_auditor_required": "Administrator or auditor privilege required"
     },
     "backup": {
       "dir_create_failed": "Failed to create backup directory",
@@ -1475,8 +1508,7 @@
       "pg_dump_exec_failed": "Failed to execute pg_dump",
       "pg_dump_failed": "pg_dump failed",
       "pg_dump_task_failed": "pg_dump task failed",
-      "pgpass_permission_failed": "Failed to set .pgpass permissions",
-      "pgpass_write_failed": "Failed to write .pgpass file"
+      "pgpass_permission_failed": "Failed to set .pgpass permissions"
     },
     "cabinet": {
       "created": "Cabinet created successfully",
@@ -1514,12 +1546,15 @@
       "self_connection_forbidden": "Self-connected links are not allowed",
       "updated": "Cable link updated successfully",
       "validation": {
-        "cable_label_length": "Cable label must not exceed 50 characters"
-      }
+        "cable_label_length": "Cable label must not exceed 50 characters",
+        "length_m_range": "Cable length must be between 0 and 10000 meters"
+      },
+      "endpoint_not_found": "Endpoint resource not found (type {type}, ID {id})"
     },
     "certificate": {
       "list_retrieved": "Certificate list retrieved",
       "generate_succeeded": "Certificate generated successfully",
+      "generate_succeeded_san_dropped": "Certificate generated, but some SAN entries could not be parsed and were skipped; verify the hostnames in the certificate",
       "generate_failed": "Certificate generation failed",
       "import_succeeded": "Certificate imported successfully",
       "delete_succeeded": "Certificate deleted successfully",
@@ -1539,7 +1574,12 @@
       "ca_not_found": "CA not configured; generate or import a CA first",
       "ca_key_required": "CA certificate or key file missing",
       "ca_invalid": "Invalid CA (BasicConstraints CA:TRUE and matching key required)",
-      "ca_key_missing": "The selected CA has no private key on this server and cannot issue certificates"
+      "ca_key_missing": "The selected CA has no private key on this server and cannot issue certificates",
+      "common_name_length": "Common name must be between 1 and 64 characters",
+      "organization_length": "Organization must not exceed 64 characters",
+      "san_invalid": "No valid SAN entries and the common name cannot serve as a SAN; cannot generate the certificate",
+      "ca_already_exists": "Site root CA already exists; regenerating would revoke all previously issued certificates. Delete it first if replacement is intended",
+      "ca_expired": "The issuing CA has expired or has less than one day of validity; cannot issue new certificates"
     },
     "common": {
       "cipher_init_failed": "Failed to create cipher",
@@ -1560,8 +1600,10 @@
       "validation": {
         "description_length": "Description must not exceed 255 characters",
         "email_format": "Invalid email format",
-        "uuid_invalid": "Invalid UUID parameter"
-      }
+        "uuid_invalid": "Invalid UUID parameter",
+        "ip_format": "Invalid IP address format"
+      },
+      "pgpass_write_failed": "Failed to write .pgpass temp file"
     },
     "db": {
       "check_violation": "Check constraint failed: {{message}}",
@@ -1602,13 +1644,15 @@
       "lldp": {
         "fetched": "LLDP neighbors retrieved successfully",
         "sync_changed": "Synced {{synced}} LLDP records, removed {{removed}} stale records",
-        "sync_unchanged": "No LLDP changes, removed {{removed}} stale records"
+        "sync_unchanged": "No LLDP changes, removed {{removed}} stale records",
+        "sync_partial": "LLDP neighbor sync partially succeeded"
       },
       "mac": {
         "fetched": "MAC table retrieved successfully",
         "sync_partial": "Synced {{synced}} MAC records, {{failed}} failed",
         "synced": "Synced {{count}} MAC records"
       },
+      "name_exists": "A device with the same name already exists in this room",
       "nic": {
         "card_type_invalid": "Card type must be one of pcie, onboard, usb, virtual, wwan, wifi, other",
         "fetched": "NIC configuration retrieved successfully",
@@ -1660,7 +1704,10 @@
         "snmp_version_invalid": "SNMP version must be v1, v2c or v3",
         "snmp_auth_protocol_length": "SNMP auth protocol must not exceed 10 characters",
         "snmp_priv_protocol_length": "SNMP privacy protocol must not exceed 10 characters",
-        "snmp_port_range": "SNMP port must be between 1 and 65535"
+        "snmp_port_range": "SNMP port must be between 1 and 65535",
+        "vlan_id_range": "VLAN ID must be between 1 and 4094",
+        "mac_format": "Invalid MAC address format",
+        "interface_length": "Interface name must be at most 50 characters"
       },
       "workstation_position_exclusive": "Workstation and cabinet position cannot both be specified"
     },
@@ -1691,7 +1738,8 @@
         "bantime_range": "Bantime must be between 60 and 604800 seconds",
         "findtime_range": "Findtime must be between 60 and 86400 seconds",
         "max_retry_range": "Max retry must be between 1 and 100"
-      }
+      },
+      "disabled_ban_rejected": "fail2ban is disabled; manual bans would not take effect. Enable it first"
     },
     "data-management": {
       "chunk_read_failed": "Failed to read file chunk",
@@ -1750,7 +1798,6 @@
         "pg_dump_exec_failed": "Failed to execute pg_dump",
         "pg_dump_task_failed": "pg_dump task failed",
         "pgpass_chmod_failed": "Failed to set .pgpass permissions",
-        "pgpass_write_failed": "Failed to write the .pgpass file",
         "pgsql_connect_failed": "Failed to connect to PostgreSQL",
         "psql_exec_failed": "Failed to execute psql",
         "psql_task_failed": "psql task failed",
@@ -1787,7 +1834,8 @@
         "invalid": "Invalid verification code",
         "lock_failed": "Unable to access the verification code",
         "missing": "Verification code is missing"
-      }
+      },
+      "pgsql_connect_failed": "Failed to connect to PostgreSQL"
     },
     "ip": {
       "already_assigned": "IP address already assigned, please retry",
@@ -1818,7 +1866,9 @@
       "no_physical_interface": "Device has no available physical interface; create one first or specify device_interface_id",
       "validation": {
         "ip_address_invalid": "Please enter a valid IP address",
-        "status_length": "Status must not exceed 20 characters"
+        "status_length": "Status must not exceed 20 characters",
+        "ip_version_invalid": "IP version must be 4 or 6",
+        "status_invalid": "Invalid IP status"
       }
     },
     "login_log": {
@@ -1906,6 +1956,7 @@
       "updated": "Network updated successfully",
       "validation": {
         "dns_count": "No more than 5 DNS servers",
+        "dns_invalid": "Invalid DNS server address: each entry in the IPv4/IPv6 list must be a valid address of that version",
         "name_length": "Network name must be 1 to 50 characters",
         "region_name_length": "Network region name must be 1 to 20 characters"
       }
@@ -1994,8 +2045,10 @@
         "type_path_out_of_range": "Type path \"{{path}}\" not found in template (index {{index}} out of range)",
         "type_path_required": "Type path is required",
         "type_path_root_anchor": "Invalid type path \"{{path}}\" (first segment must be 0)",
-        "type_path_length": "Type path must not exceed 50 characters"
-      }
+        "type_path_length": "Type path must not exceed 50 characters",
+        "name_separator": "Organization name must not contain \"/\""
+      },
+      "has_employees": "This node and its descendants still have {{count}} employees; transfer them before deleting"
     },
     "patch_panel": {
       "in_use": "Patch panel is referenced by cable links and cannot be deleted",
@@ -2019,7 +2072,8 @@
       "validation": {
         "end_u_range": "End U position must be between 1 and 48",
         "name_length": "Cabinet position name must be 1 to 50 characters",
-        "start_u_range": "Start U position must be between 1 and 48"
+        "start_u_range": "Start U position must be between 1 and 48",
+        "u_order_invalid": "Start U position cannot be greater than end U position"
       },
       "cabinet_required": "Position must belong to a cabinet, please specify the cabinet"
     },
@@ -2105,7 +2159,8 @@
       },
       "workdir_failed": "Failed to get working directory",
       "workdir_invalid": "Cannot convert working directory path to a string",
-      "password_policy_updated": "Password policy updated"
+      "password_policy_updated": "Password policy updated",
+      "restart_script_spawn_failed": "Failed to spawn restart script"
     },
     "task": {
       "backup_completed": "Backup completed",
@@ -2171,8 +2226,11 @@
         "password_length": "Password must be at least 8 characters",
         "role_invalid": "Role must be admin or user",
         "username_length": "Username must be 3 to 50 characters",
-        "email_length": "Email must not exceed 100 characters"
-      }
+        "email_length": "Email must not exceed 100 characters",
+        "password_max_length": "Password must not exceed 72 bytes"
+      },
+      "cannot_delete_self": "Cannot delete the currently signed-in account",
+      "last_admin_protected": "Cannot delete the last administrator account"
     },
     "visualization": {
       "auto_discover_completed": "Auto discovery completed",
@@ -2206,7 +2264,9 @@
       "connection_ports_invalid": "Selected ports do not exist or do not belong to the device",
       "member_port_conflict": "Member port already participates in another link aggregation",
       "logical_connection_exists": "A logical connection already exists between these devices",
-      "connection_duplicate": "An identical connection already exists"
+      "connection_duplicate": "An identical connection already exists",
+      "position_invalid": "Invalid layout coordinates",
+      "workstation_ids_invalid": "Contains workstations that do not belong to this room"
     },
     "workstation": {
       "created": "Workstation created successfully",
@@ -2268,7 +2328,8 @@
         "client_id_length": "Client ID is required (max 100 characters)",
         "secret_length": "Invalid client secret length",
         "redirect_uri_length": "Invalid redirect URI length"
-      }
+      },
+      "redirect_uri_not_configured": "SSO redirect URI is not configured; set it in the SSO settings and retry"
     },
     "employee": {
       "list_retrieved": "Employee list retrieved",
@@ -2284,6 +2345,36 @@
         "phone_length": "Phone number must not exceed 20 characters",
         "phone_invalid": "Phone number allows digits, +, - and spaces only"
       }
+    },
+    "import_export": {
+      "chunk_read_failed": "Failed to read chunked data",
+      "csv_build_failed": "Failed to build CSV",
+      "csv_parse_failed": "Failed to parse CSV",
+      "duplicate_key": "Duplicate business key",
+      "duplicate_table": "The same table appears multiple times",
+      "field_invalid": "Invalid field value",
+      "file_read_failed": "Failed to read uploaded file",
+      "file_too_large": "File exceeds size limit",
+      "header_mismatch": "Header does not match the template",
+      "invalid_file_type": "Unsupported file type",
+      "invalid_ref_format": "Invalid reference column format",
+      "invalid_zip_entry": "Invalid entry inside archive",
+      "ip_not_in_room_subnet": "IP is not within the subnet bound to the device room",
+      "name_contains_separator": "Name contains forbidden separator characters",
+      "name_resolve_failed": "Failed to resolve name",
+      "no_csv_files": "No CSV files found in the archive",
+      "no_data_rows": "No data rows to import",
+      "no_file_selected": "No file selected",
+      "ref_not_found": "Referenced record not found",
+      "required_field_missing": "Required field missing",
+      "spec_missing": "Import specification missing",
+      "unknown_endpoint_type": "Unknown endpoint type",
+      "unknown_export_type": "Unknown export type",
+      "unrecognized_header": "Unrecognized header",
+      "zip_create_failed": "Failed to create archive",
+      "zip_entry_read_failed": "Failed to read archive entry",
+      "zip_finish_failed": "Failed to finalize archive",
+      "zip_write_failed": "Failed to write archive"
     }
   },
   "ldap": {
@@ -2324,7 +2415,7 @@
     "secret_configured": "Configured (leave empty to keep)",
     "redirect_uri": "Redirect URI",
     "redirect_uri_placeholder": "https://ipma.example.com/api/auth/sso/callback",
-    "redirect_uri_desc": "Optional; derived from the request host when empty. Register the same URI in the IdP",
+    "redirect_uri_desc": "Required; register the same callback URL on your identity provider",
     "default_role": "Default Role for New Users",
     "test_connection": "Test Connection",
     "test_success": "SSO configuration verified",
@@ -2355,5 +2446,8 @@
     "load_failed": "Failed to load employee list",
     "name_required": "Employee name is required",
     "delete_confirm": "Delete employee {{name}}?"
+  },
+  "resource_tabs": {
+    "load_tab_data": "Load tab {{tab}} data"
   }
 }

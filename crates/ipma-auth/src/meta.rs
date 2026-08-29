@@ -174,6 +174,7 @@ mod tests {
             token_type: "access".to_string(),
             device_fingerprint: None,
             ip_address: None,
+            remember_me: None,
         }
     }
 

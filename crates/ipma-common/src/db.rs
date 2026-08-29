@@ -240,11 +240,18 @@ impl DbPool {
             return Err(sqlx::Error::Configuration(e.into()));
         }
 
+        // IPv6 字面量主机必须以 [] 包裹：URL 中裸冒号会被误当作分隔符解析，
+        // 导致纯 IPv6 地址的数据库无法连接（项目要求 IPv6 友好）
+        let host = if config.host.contains(':') && !config.host.starts_with('[') {
+            format!("[{}]", config.host)
+        } else {
+            config.host.clone()
+        };
         let url = format!(
             "postgres://{}:{}@{}:{}/{}",
             url_encode_component(&config.username),
             url_encode_component(&config.password),
-            config.host,
+            host,
             config.port,
             url_encode_component(&config.database)
         );
@@ -273,6 +280,7 @@ impl DbPool {
     }
 
     async fn create_pool(url: &str, config: &PoolConfig) -> Result<PgPool, sqlx::Error> {
+        let statement_timeout_secs = config.query_timeout_secs;
         sqlx::postgres::PgPoolOptions::new()
             .max_connections(config.max_connections)
             .min_connections(config.min_connections)
@@ -280,6 +288,21 @@ impl DbPool {
             .idle_timeout(Some(Duration::from_secs(config.idle_timeout_secs)))
             .max_lifetime(Some(Duration::from_secs(config.max_lifetime_secs)))
             .test_before_acquire(config.test_before_acquire)
+            // 每连接执行 SET statement_timeout，使「查询超时」配置真实生效
+            // （服务端中断超时语句，防止慢查询长期占用连接）。
+            // SET 语句不支持绑定参数；值为经 validate() 保证 > 0 的 u64，
+            // 乘 1000 转毫秒后纯数字插值，无注入面
+            .after_connect(move |conn, _meta| {
+                Box::pin(async move {
+                    sqlx::query(sqlx::AssertSqlSafe(format!(
+                        "SET statement_timeout = {}",
+                        statement_timeout_secs * 1000
+                    )))
+                    .execute(conn)
+                    .await?;
+                    Ok(())
+                })
+            })
             .connect(url)
             .await
     }

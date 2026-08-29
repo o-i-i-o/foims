@@ -20,7 +20,41 @@ pub async fn update_config_enabled(
         table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
     }
     let new_content = toml::to_string(&value)?;
-    tokio::fs::write(config_path, new_content).await?;
+
+    // 原子化写入：先写同目录临时文件再 rename 覆盖。config.toml 承载
+    // init.enabled 等安全开关，直接覆写时进程中途崩溃会留下截断的
+    // 配置文件，导致重启后无法解析
+    let tmp_path = format!("{config_path}.{}.tmp", uuid::Uuid::new_v4());
+    // 写入失败与 rename 失败同样清理临时文件，避免残留堆积；
+    // rename 前 fsync 确保内容落盘，掉电后 rename 出的配置文件不缺页
+    let write_result: std::io::Result<()> = async {
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::File::create(&tmp_path).await?;
+        file.write_all(new_content.as_bytes()).await?;
+        file.sync_all().await?;
+        Ok(())
+    }
+    .await;
+    if let Err(e) = write_result {
+        if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
+            ipma_common::log_warn!("log.init.config_tmp_remove_failed", error = remove_err);
+        }
+        return Err(e.into());
+    }
+
+    // 临时文件继承原文件权限（rename 替换后保留原有访问控制）
+    if let Ok(meta) = tokio::fs::metadata(config_path).await
+        && let Err(e) = tokio::fs::set_permissions(&tmp_path, meta.permissions()).await
+    {
+        ipma_common::log_warn!("log.init.config_tmp_chmod_failed", error = e);
+    }
+
+    if let Err(e) = tokio::fs::rename(&tmp_path, config_path).await {
+        if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
+            ipma_common::log_warn!("log.init.config_tmp_remove_failed", error = remove_err);
+        }
+        return Err(e.into());
+    }
     Ok(())
 }
 

@@ -545,7 +545,7 @@
 .network-group-header {
   background: #f5f5f5;
   padding: 8px 12px;
-  font-weight: bold;
+  font-weight: 700;
   border-left: 3px solid #4caf50;
   cursor: pointer;
   display: flex;
@@ -584,12 +584,14 @@
   margin-top: 10px;
 }
 
+/* 变量统一引用 variables.css 的 --color-* 令牌（原 --bg-secondary 等未定义变量
+   仅 fallback 生效，全局换色不跟随），fallback 保留原值 */
 .lldp-table thead tr {
-  background-color: var(--bg-secondary, #f0f2f5);
+  background-color: var(--color-bg-secondary, #f0f2f5);
 }
 
 .lldp-table th {
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--color-border-dark, #ddd);
   padding: 12px 10px;
   font-weight: 600;
 }
@@ -601,21 +603,21 @@
 
 /* 隔行底色：与原内联实现一致（首行主背景，偶数行次背景） */
 .lldp-table tbody tr:nth-child(odd) {
-  background-color: var(--bg-primary, #fff);
+  background-color: var(--color-bg-white, #fff);
 }
 
 .lldp-table tbody tr:nth-child(even) {
-  background-color: var(--bg-tertiary, #fafbfc);
+  background-color: var(--color-bg, #fafbfc);
 }
 
 .lldp-table td {
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--color-border-dark, #ddd);
   padding: 10px;
 }
 
 .lldp-table td.lldp-index {
   text-align: center;
-  color: var(--text-muted, #888);
+  color: var(--color-text-muted, #888);
   padding: 10px 8px;
 }
 
@@ -634,12 +636,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9em;
-  color: var(--text-secondary, #666);
+  color: var(--color-text-secondary, #666);
 }
 
 /* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
 .mac-lldp-text-error {
-  color: red;
+  color: #f00;
 }
 
 .mac-lldp-text-muted {

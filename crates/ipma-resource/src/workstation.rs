@@ -72,7 +72,14 @@ pub async fn get_workstations<P: DbProvider>(
         .unwrap_or_else(|| "asc".to_string());
 
     let search_pattern = (!search.is_empty()).then(|| ipma_common::net::escape_like(&search));
-    let parsed_room_id = room_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
+    // 过滤参数非法 UUID 显式 422（与 options.rs/patch_panel.rs 口径一致），
+    // 不再静默忽略退化为全量列表；空串视为未提供
+    let parsed_room_id = match room_id.as_deref() {
+        Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
+            AppError::Validation(msg("server.common.invalid_param").with("param", "room_id"))
+        })?),
+        _ => None,
+    };
 
     // ORDER BY 白名单，未匹配时回落默认序，避免注入
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
@@ -133,6 +140,15 @@ pub async fn create_workstation<P: DbProvider>(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
+    // room_id 引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
+    let room_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
+        .bind(req.room_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if !room_exists {
+        return Err(AppError::Validation(msg("server.room.not_found")));
+    }
+
     let existing_workstation: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM workstations WHERE name = $1 AND room_id = $2",
     )
@@ -147,10 +163,12 @@ pub async fn create_workstation<P: DbProvider>(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    // 指定员工时管理人以员工姓名为准（员工被删除时回退文本值）
-    sqlx::query(
+    // 指定员工时管理人以员工姓名为准（员工被删除时回退文本值）；
+    // RETURNING 取库中实际值，保证返回体与后续查询一致
+    let actual_manager: Option<String> = sqlx::query_scalar::<_, Option<String>>(
         "INSERT INTO workstations (id, name, room_id, manager, manager_employee_id, description, created_at, updated_at)
-         VALUES ($1, $2, $3, COALESCE((SELECT name FROM employees WHERE id = $4), $5), $4, $6, $7, $8)",
+         VALUES ($1, $2, $3, COALESCE((SELECT name FROM employees WHERE id = $4), $5), $4, $6, $7, $8)
+         RETURNING manager",
     )
     .bind(id)
     .bind(&req.name)
@@ -160,8 +178,17 @@ pub async fn create_workstation<P: DbProvider>(
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .execute(&mut *tx)
-    .await?;
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_workstations_room_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.workstation.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     tx.commit().await?;
 
@@ -170,7 +197,7 @@ pub async fn create_workstation<P: DbProvider>(
         name: req.name.clone(),
         room_id: req.room_id,
         room_name: None,
-        manager: req.manager.clone(),
+        manager: actual_manager,
         manager_employee_id: req.manager_employee_id,
         description: req.description.clone(),
         created_at: now,
@@ -259,8 +286,9 @@ pub async fn get_workstation<P: DbProvider>(
     ))
 }
 
-/// 更新工位（名称/房间/描述缺省保留旧值；管理人固定以员工 id 赋值，
-/// 组织人员是该字段唯一来源，`manager_employee_id = NULL` 表示清空）。
+/// 更新工位（名称/房间缺省保留旧值；管理人/描述为双层 Option 三态：
+/// 缺省不修改、`null` 清空、赋值设置。管理人设置时以员工 id 为准，
+/// 组织人员是该字段唯一来源，员工不存在时回退提交文本）。
 pub async fn update_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -280,25 +308,86 @@ pub async fn update_workstation<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.workstation.not_found")));
     }
 
-    sqlx::query(
-        "UPDATE workstations SET
-         name = COALESCE($1, name),
-         room_id = COALESCE($2, room_id),
-         manager = COALESCE((SELECT name FROM employees WHERE id = $3), $4),
-         manager_employee_id = $3,
-         description = COALESCE($5, description),
-         updated_at = $6
-         WHERE id = $7",
-    )
-    .bind(&req.name)
-    .bind(req.room_id)
-    .bind(req.manager_employee_id)
-    .bind(&req.manager)
-    .bind(&req.description)
-    .bind(Utc::now())
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
+    // room_id 引用存在性校验（缺省沿用现值）
+    if let Some(room_id) = req.room_id {
+        let room_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
+                .bind(room_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !room_exists {
+            return Err(AppError::Validation(msg("server.room.not_found")));
+        }
+    }
+
+    // 重名预检：以最终生效房间为口径（UNIQUE(room_id, name)）
+    if let Some(name) = &req.name {
+        let effective_room_id: Uuid = match req.room_id {
+            Some(room_id) => room_id,
+            None => {
+                sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?
+            }
+        };
+        let duplicate: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM workstations WHERE name = $1 AND room_id = $2 AND id != $3",
+        )
+        .bind(name)
+        .bind(effective_room_id)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if duplicate.is_some() {
+            return Err(AppError::Conflict(msg("server.workstation.name_exists")));
+        }
+    }
+
+    // 三态更新（QueryBuilder 动态拼接，None 不进 SET）：
+    // - name/room_id：单层 Option，缺省保留旧值（COALESCE 语义等价）
+    // - manager：双层 Option——外层 None 不修改；Some(None) 清空管理人
+    //   （manager 与 manager_employee_id 一并置 NULL）；Some(Some(v)) 设置，
+    //   管理人以员工 id 解析姓名优先、文本回退（与创建路径一致）；
+    //   manager_employee_id 是 manager 的唯一权威来源，仅随 Some(_) 分支参与
+    // - description：双层 Option，Some(None) SET NULL、Some(Some(v)) SET v
+    let mut builder = QueryBuilder::new("UPDATE workstations SET updated_at = ");
+    builder.push_bind(Utc::now());
+    if let Some(name) = &req.name {
+        builder.push(", name = ").push_bind(name);
+    }
+    if let Some(room_id) = req.room_id {
+        builder.push(", room_id = ").push_bind(room_id);
+    }
+    if let Some(manager) = &req.manager {
+        match manager {
+            None => {
+                builder.push(", manager = NULL, manager_employee_id = NULL");
+            }
+            Some(text) => {
+                builder.push(", manager = COALESCE((SELECT name FROM employees WHERE id = ");
+                builder.push_bind(req.manager_employee_id);
+                builder.push("), ");
+                builder.push_bind(text);
+                builder.push("), manager_employee_id = ");
+                builder.push_bind(req.manager_employee_id);
+            }
+        }
+    }
+    if let Some(description) = &req.description {
+        builder.push(", description = ").push_bind(description);
+    }
+    builder.push(" WHERE id = ").push_bind(id);
+
+    builder.build().execute(&mut *tx).await.map_err(|e| {
+        // 并发写入竞态兜底：uq_workstations_room_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.workstation.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     let mut result = fetch_workstation_base(&mut *tx, id)
         .await?
@@ -341,6 +430,19 @@ pub async fn delete_workstation<P: DbProvider>(
             .await?;
     if !exists {
         return Err(AppError::NotFound(msg("server.workstation.not_found")));
+    }
+
+    // 设备仍占用该工位时拒绝删除：FK ON DELETE SET NULL 会静默清空
+    // 设备归属，与同步路径（sync_workstation_children）的删除保护口径一致
+    let device_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE workstation_id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if device_count > 0 {
+        return Err(AppError::Validation(msg(
+            "server.workstation.in_use_by_device",
+        )));
     }
 
     sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")

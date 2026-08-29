@@ -5,7 +5,18 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use validator::Validate;
+use validator::{Validate, ValidationError};
+
+/// U 位区间合法性：start_u 不得大于 end_u（跨字段校验，供 schema 校验复用）。
+fn validate_u_order(start_u: i32, end_u: i32) -> Result<(), ValidationError> {
+    if start_u <= end_u {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.position.validation.u_order_invalid",
+        ))
+    }
+}
 
 // ==================== 机位模型 ====================
 
@@ -40,6 +51,7 @@ pub struct CabinetPositionWithDetails {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_position_create_u_order"))]
 pub struct CabinetPositionCreate {
     #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]
     pub name: String,
@@ -56,11 +68,19 @@ pub struct CabinetPositionCreate {
     pub description: Option<String>,
 }
 
+/// 跨字段校验：start_u <= end_u（倒挂机位拒绝入库）
+fn validate_position_create_u_order(req: &CabinetPositionCreate) -> Result<(), ValidationError> {
+    validate_u_order(req.start_u, req.end_u)
+}
+
 #[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_position_update_u_order"))]
 pub struct CabinetPositionUpdate {
     #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]
     pub name: Option<String>,
-    pub cabinet_id: Option<Uuid>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub cabinet_id: Option<Option<Uuid>>,
     #[validate(range(
         min = 1,
         max = 48,
@@ -71,6 +91,14 @@ pub struct CabinetPositionUpdate {
     pub end_u: Option<i32>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
+}
+
+/// 跨字段校验：两端同时提供时 start_u <= end_u；单端提供无法比对，交由 DB 侧约束
+fn validate_position_update_u_order(req: &CabinetPositionUpdate) -> Result<(), ValidationError> {
+    match (req.start_u, req.end_u) {
+        (Some(start_u), Some(end_u)) => validate_u_order(start_u, end_u),
+        _ => Ok(()),
+    }
 }
 
 // ==================== 单元测试 ====================
@@ -148,6 +176,55 @@ mod tests {
         // 全缺省通过
         let empty: CabinetPositionUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert!(empty.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_position_create_u_order_reversed() -> Result<(), serde_json::Error> {
+        // 跨字段校验：start_u > end_u 的倒挂机位拒绝
+        let req: CabinetPositionCreate = serde_json::from_value(serde_json::json!({
+            "name": "倒挂机位",
+            "start_u": 40,
+            "end_u": 2
+        }))?;
+        assert!(req.validate().is_err(), "倒挂机位应被拒绝");
+        Ok(())
+    }
+
+    #[test]
+    fn test_position_update_u_order_reversed() -> Result<(), serde_json::Error> {
+        // 更新路径两端同时提供且倒挂时拒绝；单端提供无法比对则放行
+        let bad: CabinetPositionUpdate = serde_json::from_value(serde_json::json!({
+            "start_u": 10,
+            "end_u": 3
+        }))?;
+        assert!(bad.validate().is_err());
+
+        let partial: CabinetPositionUpdate =
+            serde_json::from_value(serde_json::json!({ "start_u": 10 }))?;
+        assert!(partial.validate().is_ok(), "单端提供时跳过跨字段比对");
+        Ok(())
+    }
+
+    #[test]
+    fn test_position_update_cabinet_id_three_states() -> Result<(), serde_json::Error> {
+        use serde::de::Error as _;
+        // cabinet_id 双层 Option：缺失不修改、null 清除机柜绑定、值设置新机柜
+        let missing: CabinetPositionUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(missing.cabinet_id, None);
+
+        let cleared: CabinetPositionUpdate =
+            serde_json::from_value(serde_json::json!({ "cabinet_id": null }))?;
+        assert_eq!(cleared.cabinet_id, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        let expected = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")
+            .map_err(serde_json::Error::custom)?;
+        let set: CabinetPositionUpdate = serde_json::from_value(serde_json::json!({
+            "cabinet_id": "550e8400-e29b-41d4-a716-446655440000"
+        }))?;
+        assert_eq!(set.cabinet_id, Some(Some(expected)));
+        assert!(set.validate().is_ok());
         Ok(())
     }
 

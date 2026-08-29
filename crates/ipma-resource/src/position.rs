@@ -63,10 +63,17 @@ pub async fn get_positions<P: DbProvider>(
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let search = query.get("search").cloned().unwrap_or_default();
-    let cabinet_id = query
-        .get("cabinet_id")
-        .and_then(|id| Uuid::parse_str(id).ok());
-    let room_id = query.get("room_id").and_then(|id| Uuid::parse_str(id).ok());
+    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    let parse_uuid = |key: &str| -> Result<Option<Uuid>, AppError> {
+        match query.get(key) {
+            Some(v) if !v.is_empty() => Ok(Some(Uuid::parse_str(v).map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", key))
+            })?)),
+            _ => Ok(None),
+        }
+    };
+    let cabinet_id = parse_uuid("cabinet_id")?;
+    let room_id = parse_uuid("room_id")?;
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -191,7 +198,16 @@ pub async fn create_cabinet_position<P: DbProvider>(
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.position.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     tx.commit().await?;
 
@@ -304,25 +320,73 @@ pub async fn update_cabinet_position<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.position.not_found")));
     }
 
+    // cabinet_id 三态：缺省沿用现值；Some(Some(id)) 校验引用存在性；
+    // Some(None) 清空为 NULL（cabinet_id 可空），无需引用校验
+    if let Some(cabinet_id) = req.cabinet_id.flatten() {
+        let cabinet_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cabinets WHERE id = $1)")
+                .bind(cabinet_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !cabinet_exists {
+            return Err(AppError::NotFound(msg("server.cabinet.not_found")));
+        }
+    }
+
+    // 重名预检：以最终生效机柜为口径（UNIQUE(cabinet_id, name)，
+    // NULL 与任意值互不相同，用 IS NOT DISTINCT FROM 覆盖清空后的比对）
+    if let Some(name) = &req.name {
+        let effective_cabinet_id: Option<Uuid> = match req.cabinet_id {
+            Some(cabinet_id) => cabinet_id,
+            None => {
+                sqlx::query_scalar("SELECT cabinet_id FROM positions WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?
+            }
+        };
+        let duplicate: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM positions WHERE name = $1 AND cabinet_id IS NOT DISTINCT FROM $2 AND id != $3",
+        )
+        .bind(name)
+        .bind(effective_cabinet_id)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if duplicate.is_some() {
+            return Err(AppError::Conflict(msg("server.position.name_exists")));
+        }
+    }
+
     sqlx::query(
         "UPDATE positions SET
          name = COALESCE($1, name),
-         cabinet_id = COALESCE($2, cabinet_id),
-         start_u = COALESCE($3, start_u),
-         end_u = COALESCE($4, end_u),
-         description = COALESCE($5, description),
-         updated_at = $6
-         WHERE id = $7",
+         cabinet_id = CASE WHEN $2::boolean THEN $3::uuid ELSE cabinet_id END,
+         start_u = COALESCE($4, start_u),
+         end_u = COALESCE($5, end_u),
+         description = COALESCE($6, description),
+         updated_at = $7
+         WHERE id = $8",
     )
     .bind(&req.name)
-    .bind(req.cabinet_id)
+    .bind(req.cabinet_id.is_some())
+    .bind(req.cabinet_id.flatten())
     .bind(req.start_u)
     .bind(req.end_u)
     .bind(&req.description)
     .bind(Utc::now())
     .bind(id)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.position.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     let mut result = fetch_position_base(&mut *tx, id)
         .await?

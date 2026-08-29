@@ -77,13 +77,17 @@ pub async fn get_rooms<P: DbProvider>(
 
     let mut has_where = false;
     if !search.is_empty() {
+        // 搜索条件的 OR 组必须用括号包裹（对齐 workstation.rs/ip.rs 的写法），
+        // 否则 AND 优先级更高，与 org_id/room_type 组合时命名称/房型的
+        // 房间会绕过组织过滤
         for builder in [&mut count_builder, &mut list_builder] {
-            builder.push(" WHERE r.name ILIKE ");
+            builder.push(" WHERE (r.name ILIKE ");
             builder.push_bind(search_pattern.clone());
             builder.push(" OR r.room_type ILIKE ");
             builder.push_bind(search_pattern.clone());
             builder.push(" OR r.description ILIKE ");
             builder.push_bind(search_pattern.clone());
+            builder.push(")");
         }
         has_where = true;
     }
@@ -233,19 +237,54 @@ pub async fn create_room<P: DbProvider>(
     // 房间与其网络关联必须在同一事务内写入，避免中途失败导致网络关联残缺
     let mut tx = state.pool()?.get_conn().begin().await?;
 
+    // 引用存在性校验：org_id 与 network_ids 非法引用返回校验错误，
+    // 而非依赖 FK 约束的 500 兜底
+    if let Some(org_id) = req.org_id {
+        let org_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM organizations WHERE id = $1)")
+                .bind(org_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !org_exists {
+            return Err(AppError::Validation(msg("server.organization.not_found")));
+        }
+    }
+    for network_id in &req.network_ids {
+        let network_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
+                .bind(network_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !network_exists {
+            return Err(AppError::Validation(msg("server.network.not_found")));
+        }
+    }
+
+    // 入库值与返回值统一为大写房型（库内 CHECK/查询口径均为大写）
+    let room_type_upper = req.room_type.to_uppercase();
+
     sqlx::query(
         "INSERT INTO rooms (id, name, room_type, org_id, description, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
-    .bind(req.room_type.to_uppercase())
+    .bind(&room_type_upper)
     .bind(req.org_id)
     .bind(&req.description)
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_rooms_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.room.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     for network_id in &req.network_ids {
         sqlx::query(
@@ -266,7 +305,7 @@ pub async fn create_room<P: DbProvider>(
     let room = Room {
         id,
         name: req.name.clone(),
-        room_type: req.room_type.clone(),
+        room_type: room_type_upper,
         org_id: req.org_id,
         description: req.description.clone(),
         created_at: now,
@@ -522,19 +561,58 @@ pub async fn update_room<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 预检（存在性/重名/引用）与写入放同一事务，避免 TOCTOU
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?;
 
     if existing_room.is_none() {
         return Err(AppError::NotFound(msg("server.room.not_found")));
     }
 
-    let now = Utc::now();
+    // 重名预检：房间名全局唯一（uq_rooms_name）
+    if let Some(name) = &req.name {
+        let duplicate: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM rooms WHERE name = $1 AND id != $2")
+                .bind(name)
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if duplicate.is_some() {
+            return Err(AppError::Conflict(msg("server.room.name_exists")));
+        }
+    }
 
-    // 房间字段更新与网络关联的「删除+重建」必须在同一事务内，避免中途失败丢失全部网络关联
-    let mut tx = state.pool()?.get_conn().begin().await?;
+    // org_id 引用存在性校验（Some(None) 为清空，无需校验）
+    if let Some(Some(org_id)) = req.org_id {
+        let org_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM organizations WHERE id = $1)")
+                .bind(org_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !org_exists {
+            return Err(AppError::Validation(msg("server.organization.not_found")));
+        }
+    }
+
+    // network_ids 引用存在性校验
+    if let Some(network_ids) = &req.network_ids {
+        for network_id in network_ids {
+            let network_exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
+                    .bind(network_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if !network_exists {
+                return Err(AppError::Validation(msg("server.network.not_found")));
+            }
+        }
+    }
+
+    let now = Utc::now();
 
     sqlx::query(
         "UPDATE rooms SET
@@ -553,7 +631,16 @@ pub async fn update_room<P: DbProvider>(
     .bind(now)
     .bind(id)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发写入竞态兜底：uq_rooms_name 冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.room.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     if let Some(network_ids) = &req.network_ids {
         sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
@@ -606,9 +693,12 @@ pub async fn delete_room<P: DbProvider>(
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
+    // 计数检查与 DELETE 放同一事务，避免检查后被并发写入绕过触发级联
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?;
 
     if existing_room.is_none() {
@@ -618,7 +708,7 @@ pub async fn delete_room<P: DbProvider>(
     let cabinet_count: i64 =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cabinets WHERE room_id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
 
     if cabinet_count > 0 {
@@ -628,7 +718,7 @@ pub async fn delete_room<P: DbProvider>(
     let workstation_count: i64 =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM workstations WHERE room_id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
 
     if workstation_count > 0 {
@@ -638,7 +728,7 @@ pub async fn delete_room<P: DbProvider>(
     let net_outlet_count: i64 =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM net_outlets WHERE room_id = $1")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
 
     if net_outlet_count > 0 {
@@ -647,8 +737,10 @@ pub async fn delete_room<P: DbProvider>(
 
     sqlx::query("DELETE FROM rooms WHERE id = $1")
         .bind(id)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "room_id": id.to_string()
@@ -704,13 +796,16 @@ pub async fn sync_room_children<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 房间存在性与 room_type 读取放进同步事务内，避免事务外的
+    // 快照读与后续写入之间出现 TOCTOU
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let room_type: String = sqlx::query_scalar("SELECT room_type FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
 
-    let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
 
     // 按房型性质同步子项：办公类（办公室/大厅/前台）同步工位；
@@ -769,16 +864,19 @@ pub async fn sync_room_net_outlets<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 房间存在性检查放进同步事务内，避免事务外的快照读与后续写入
+    // 之间出现 TOCTOU（与 sync_room_children 同口径）
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let room_exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM rooms WHERE id = $1")
         .bind(id)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?;
     if room_exists.is_none() {
         return Err(AppError::NotFound(msg("server.room.not_found")));
     }
 
     let items = &req.net_outlets;
-    let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
 
     let existing_ids: Vec<Uuid> =
@@ -812,15 +910,21 @@ pub async fn sync_room_net_outlets<P: DbProvider>(
     for item in items {
         validate_net_outlet_name(&mut tx, &item.name, item.id).await?;
         if let Some(item_id) = item.id {
-            sqlx::query(
-                "UPDATE net_outlets SET name = $1, room_id = $2, updated_at = $3 WHERE id = $4",
+            // 归属校验：仅允许更新当前房间下的信息点，
+            // 携带其他房间的 id 时按未找到处理，避免跨父资源静默搬移
+            let updated = sqlx::query(
+                "UPDATE net_outlets SET name = $1, room_id = $2, updated_at = $3 WHERE id = $4 AND room_id = $5",
             )
             .bind(&item.name)
             .bind(id)
             .bind(now)
             .bind(item_id)
+            .bind(id)
             .execute(&mut *tx)
             .await?;
+            if updated.rows_affected() == 0 {
+                return Err(AppError::NotFound(msg("server.net_outlet.not_found")));
+            }
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
@@ -896,12 +1000,14 @@ async fn sync_workstation_children(
     for item in items {
         validate_workstation_name(tx, &item.name, room_id, item.id).await?;
         if let Some(item_id) = item.id {
-            sqlx::query(
+            // 归属校验：仅允许更新当前房间下的工位，
+            // 携带其他房间的 id 时按未找到处理，避免跨父资源静默搬移
+            let updated = sqlx::query(
                 "UPDATE workstations SET name = $1,
                     manager = COALESCE((SELECT name FROM employees WHERE id = $2), $3),
                     manager_employee_id = $2,
                     room_id = $4, updated_at = $5
-                 WHERE id = $6",
+                 WHERE id = $6 AND room_id = $7",
             )
             .bind(&item.name)
             .bind(item.manager_employee_id)
@@ -909,8 +1015,12 @@ async fn sync_workstation_children(
             .bind(room_id)
             .bind(now)
             .bind(item_id)
+            .bind(room_id)
             .execute(&mut *tx)
             .await?;
+            if updated.rows_affected() == 0 {
+                return Err(AppError::NotFound(msg("server.workstation.not_found")));
+            }
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
@@ -957,6 +1067,26 @@ async fn sync_cabinet_children(
                     "server.cabinet.in_use_by_positions",
                 )));
             }
+            // 机柜下配线架被线路引用时禁止删除：否则 DELETE 级联删除配线架
+            // 会触发 cable_links 防删触发器（自定义异常 → 500），
+            // 与独立删除路径（delete_cabinet）的预检口径一致
+            let linked_pp_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM patch_panels pp \
+                 WHERE pp.cabinet_id = $1 \
+                 AND EXISTS ( \
+                     SELECT 1 FROM cable_links cl \
+                     WHERE (cl.a_endpoint_type = 'patch_panel' AND cl.a_endpoint_id = pp.id) \
+                        OR (cl.b_endpoint_type = 'patch_panel' AND cl.b_endpoint_id = pp.id) \
+                 )",
+            )
+            .bind(existing_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            if linked_pp_count > 0 {
+                return Err(AppError::Validation(msg(
+                    "server.cabinet.patch_panel_linked",
+                )));
+            }
             sqlx::query("DELETE FROM cabinet_layouts WHERE cabinet_id = $1")
                 .bind(existing_id)
                 .execute(&mut *tx)
@@ -971,16 +1101,22 @@ async fn sync_cabinet_children(
     for item in items {
         validate_cabinet_name(tx, &item.name, room_id, item.id).await?;
         if let Some(item_id) = item.id {
-            sqlx::query(
-                "UPDATE cabinets SET name = $1, capacity = $2, room_id = $3, updated_at = $4 WHERE id = $5",
+            // 归属校验：仅允许更新当前房间下的机柜，
+            // 携带其他房间的 id 时按未找到处理，避免跨父资源静默搬移
+            let updated = sqlx::query(
+                "UPDATE cabinets SET name = $1, capacity = $2, room_id = $3, updated_at = $4 WHERE id = $5 AND room_id = $6",
             )
             .bind(&item.name)
             .bind(item.capacity)
             .bind(room_id)
             .bind(now)
             .bind(item_id)
+            .bind(room_id)
             .execute(&mut *tx)
             .await?;
+            if updated.rows_affected() == 0 {
+                return Err(AppError::NotFound(msg("server.cabinet.not_found")));
+            }
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(

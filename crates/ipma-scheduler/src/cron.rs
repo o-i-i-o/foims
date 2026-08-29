@@ -4,7 +4,16 @@ use crate::error::{SchedulerError, SchedulerResult};
 use chrono::{Datelike, Timelike, Utc};
 use ipma_common::msg;
 
-/// 根据 cron 表达式计算下次执行时间
+/// 计算循环的最大分钟步数（约 366 天）
+const MAX_MINUTE_STEPS: usize = 366 * 24 * 60;
+
+/// 根据 cron 表达式计算下次执行时间。
+///
+/// 语义与 tokio-cron-scheduler 的实际触发对齐：
+/// - 秒位按候选秒值逐一遍历（此前对齐到最小命中秒值后按分钟步进，
+///   会给出晚于真实触发时刻的 next_run_at）；
+/// - 日（day-of-month）与星期（day-of-week）同时受限（均非 `*`）时按
+///   OR 语义命中任一即触发（POSIX cron 惯例），此前误用 AND 语义。
 pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::DateTime<Utc>> {
     let parts: Vec<&str> = cron_expression.split_whitespace().collect();
 
@@ -21,40 +30,62 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
         vec!["0", parts[0], parts[1], parts[2], parts[3], parts[4]]
     };
 
-    let now = Utc::now();
-
-    // 按分钟步进不会改变秒数：若起始秒不在秒字段的命中集合内，
-    // 表达式将永远无法命中（5 字段表达式即秒位 0，除整分钟时刻调用外
-    // 全部遍历失败）。因此先把起始秒对齐到秒字段的最小命中值。
-    let target_sec = first_matching_value(cron_parts[0], 0, 59)?;
-    let mut next = now
-        .with_second(target_sec as u32)
-        .ok_or_else(|| SchedulerError::Validation(msg("server.task.cron_next_run_calc_failed")))?;
-    if next <= now {
-        next += chrono::Duration::minutes(1);
+    // 预展开秒字段命中集合（升序）
+    let mut matching_secs: Vec<i32> = Vec::new();
+    for sec in 0..=59 {
+        if matches_cron_field(cron_parts[0], sec, (0, 59))? {
+            matching_secs.push(sec);
+        }
+    }
+    if matching_secs.is_empty() {
+        return Err(SchedulerError::Validation(
+            msg("server.task.cron_field_invalid").with("field", cron_parts[0]),
+        ));
     }
 
-    for _ in 0..366 * 24 * 60 {
-        let (sec, min, hour, day, month, weekday) = (
-            next.second() as i32,
-            next.minute() as i32,
-            next.hour() as i32,
-            next.day() as i32,
-            next.month() as i32,
-            next.weekday().num_days_from_monday() as i32,
+    let now = Utc::now();
+
+    // 从当前分钟起逐分钟尝试：分钟级字段命中后，在该分钟内按候选秒值
+    // 升序取第一个晚于 now 的时刻——即真实的下一次执行时刻
+    let mut minute_base = now
+        .with_second(0)
+        .and_then(|t| t.with_nanosecond(0))
+        .ok_or_else(|| SchedulerError::Validation(msg("server.task.cron_next_run_calc_failed")))?;
+
+    for _ in 0..MAX_MINUTE_STEPS {
+        let (min, hour, day, month, weekday) = (
+            minute_base.minute() as i32,
+            minute_base.hour() as i32,
+            minute_base.day() as i32,
+            minute_base.month() as i32,
+            // 星期编号与实际触发库 croner 及 POSIX cron 对齐：周日=0
+            minute_base.weekday().num_days_from_sunday() as i32,
         );
 
-        if matches_cron_field(cron_parts[0], sec)?
-            && matches_cron_field(cron_parts[1], min)?
-            && matches_cron_field(cron_parts[2], hour)?
-            && matches_cron_field(cron_parts[3], day)?
-            && matches_cron_field(cron_parts[4], month)?
-            && matches_cron_field(cron_parts[5], weekday)?
+        if matches_cron_field(cron_parts[1], min, (0, 59))?
+            && matches_cron_field(cron_parts[2], hour, (0, 23))?
+            && matches_cron_field(cron_parts[4], month, (1, 12))?
+            && matches_day_and_weekday(
+                cron_parts[3],
+                &normalize_weekday_field(cron_parts[5]),
+                day,
+                weekday,
+            )?
         {
-            return Ok(next);
+            for &sec in &matching_secs {
+                let candidate = minute_base
+                    .with_second(sec as u32)
+                    .and_then(|t| t.with_nanosecond(0))
+                    .ok_or_else(|| {
+                        SchedulerError::Validation(msg("server.task.cron_next_run_calc_failed"))
+                    })?;
+                if candidate > now {
+                    return Ok(candidate);
+                }
+            }
         }
 
-        next += chrono::Duration::minutes(1);
+        minute_base += chrono::Duration::minutes(1);
     }
 
     Err(SchedulerError::Validation(msg(
@@ -62,26 +93,72 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
     )))
 }
 
-/// 求字段在 [min, max] 内的最小命中值（用于秒位对齐）
-fn first_matching_value(field: &str, min: i32, max: i32) -> SchedulerResult<i32> {
-    for value in min..=max {
-        if matches_cron_field(field, value)? {
-            return Ok(value);
-        }
+/// 日与星期字段的标准 cron 组合判定：
+/// 两者同时受限（均非 `*`）时按 AND 语义须同时命中——与实际触发库
+/// tokio-cron-scheduler（croner `dom_and_dow(true)`）一致，POSIX 的 OR
+/// 惯例仅适用于经典 vixie-cron；
+/// 仅一个受限时按该字段判定；两者均通配时恒命中。
+fn matches_day_and_weekday(
+    day_field: &str,
+    weekday_field: &str,
+    day: i32,
+    weekday: i32,
+) -> SchedulerResult<bool> {
+    let day_restricted = day_field != "*";
+    let weekday_restricted = weekday_field != "*";
+    match (day_restricted, weekday_restricted) {
+        (true, true) => Ok(matches_cron_field(day_field, day, (1, 31))?
+            && matches_cron_field(weekday_field, weekday, (0, 7))?),
+        (true, false) => matches_cron_field(day_field, day, (1, 31)),
+        (false, true) => matches_cron_field(weekday_field, weekday, (0, 7)),
+        (false, false) => Ok(true),
     }
-    Err(SchedulerError::Validation(
-        msg("server.task.cron_field_invalid").with("field", field),
-    ))
 }
 
-fn matches_cron_field(field: &str, value: i32) -> SchedulerResult<bool> {
+/// 星期字段归一化：值 7 为周日的传统别名（croner 将其归一为 0），
+/// 直接匹配会因实际 weekday 取值 0..=6 而永不命中。
+/// 支持 "7"、"a-7"、"7/s"、"a-7/s" 及逗号列表各段的等价改写。
+fn normalize_weekday_field(field: &str) -> String {
+    field
+        .split(',')
+        .map(|part| {
+            if let Some((base, step)) = part.split_once('/') {
+                return format!("{}/{}", normalize_weekday_base(base), step);
+            }
+            normalize_weekday_base(part)
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn normalize_weekday_base(base: &str) -> String {
+    if let Some((start, end)) = base.split_once('-') {
+        if end.trim() == "7" {
+            return format!("{start}-6");
+        }
+        return base.to_string();
+    }
+    if base.trim() == "7" {
+        return "0".to_string();
+    }
+    base.to_string()
+}
+
+/// 单个 cron 字段匹配。`bounds` 为该字段的合法取值区间
+/// （秒/分 0..=59、时 0..=23、日 1..=31、月 1..=12、星期 0..=7）：
+/// 值、范围端点、步进基点均按边界校验，非法值当场报错，
+/// 不再留到整年扫描后才以"永不命中"的形式暴露。
+/// 支持 `*`、`n`、`a-b`、`a-b/s`、`n/s`、`*/s`、逗号列表的组合。
+fn matches_cron_field(field: &str, value: i32, bounds: (i32, i32)) -> SchedulerResult<bool> {
+    let (lo, hi) = bounds;
+    let in_bounds = |v: i32| v >= lo && v <= hi;
     if field == "*" {
         return Ok(true);
     }
 
     if field.contains(',') {
         for part in field.split(',') {
-            if matches_cron_field(part, value)? {
+            if matches_cron_field(part, value, bounds)? {
                 return Ok(true);
             }
         }
@@ -108,14 +185,43 @@ fn matches_cron_field(field: &str, value: i32) -> SchedulerResult<bool> {
 
         if base_field == "*" {
             return Ok(value % step == 0);
-        } else {
-            let base: i32 = base_field.parse().map_err(|_| {
+        }
+        // 范围步进（a-b/s）：命中区间内自 a 起每隔 s 的取值（标准 cron 语法）
+        if base_field.contains('-') {
+            let range: Vec<&str> = base_field.split('-').collect();
+            if range.len() != 2 {
+                return Err(SchedulerError::Validation(
+                    msg("server.task.cron_field_invalid").with("field", field),
+                ));
+            }
+            let start: i32 = range[0].parse().map_err(|_| {
                 SchedulerError::Validation(
-                    msg("server.task.cron_base_invalid").with("value", base_field),
+                    msg("server.task.cron_range_start_invalid").with("value", range[0]),
                 )
             })?;
-            return Ok((value - base) % step == 0 && value >= base);
+            let end: i32 = range[1].parse().map_err(|_| {
+                SchedulerError::Validation(
+                    msg("server.task.cron_range_end_invalid").with("value", range[1]),
+                )
+            })?;
+            if !in_bounds(start) || !in_bounds(end) || start > end {
+                return Err(SchedulerError::Validation(
+                    msg("server.task.cron_field_invalid").with("field", field),
+                ));
+            }
+            return Ok(value >= start && value <= end && (value - start) % step == 0);
         }
+        let base: i32 = base_field.parse().map_err(|_| {
+            SchedulerError::Validation(
+                msg("server.task.cron_base_invalid").with("value", base_field),
+            )
+        })?;
+        if !in_bounds(base) {
+            return Err(SchedulerError::Validation(
+                msg("server.task.cron_base_invalid").with("value", base_field),
+            ));
+        }
+        return Ok((value - base) % step == 0 && value >= base);
     }
 
     if field.contains('-') {
@@ -135,12 +241,22 @@ fn matches_cron_field(field: &str, value: i32) -> SchedulerResult<bool> {
                 msg("server.task.cron_range_end_invalid").with("value", parts[1]),
             )
         })?;
+        if !in_bounds(start) || !in_bounds(end) || start > end {
+            return Err(SchedulerError::Validation(
+                msg("server.task.cron_field_invalid").with("field", field),
+            ));
+        }
         return Ok(value >= start && value <= end);
     }
 
     let field_value: i32 = field.parse().map_err(|_| {
         SchedulerError::Validation(msg("server.task.cron_field_value_invalid").with("field", field))
     })?;
+    if !in_bounds(field_value) {
+        return Err(SchedulerError::Validation(
+            msg("server.task.cron_field_value_invalid").with("field", field),
+        ));
+    }
     Ok(value == field_value)
 }
 
@@ -317,5 +433,56 @@ mod tests {
             .unwrap_or_else(|e| panic!("带非零秒位的表达式应解析成功: {e}"));
         assert_eq!(next.second(), 30);
         assert_eq!(next.minute() % 5, 0);
+    }
+
+    /// 秒位精确：步进秒字段的下一次命中不晚于一个步长窗口
+    ///（保证 next_run_at 不晚于调度器实际触发时刻）
+    #[test]
+    fn 秒位步进_下一次命中不晚于一个步长() {
+        let next =
+            calculate_next_run("*/15 * * * * *").unwrap_or_else(|e| panic!("应解析成功: {e}"));
+        let now = Utc::now();
+        assert!(next > now, "下次执行必须晚于当前时刻");
+        assert_eq!(
+            next.second() % 15,
+            0,
+            "秒位应命中步长集合: {}",
+            next.second()
+        );
+        assert!(
+            next - now <= chrono::Duration::seconds(15),
+            "下一次触发不应晚于 15 秒后: 差值 {:?}",
+            next - now
+        );
+    }
+
+    /// 日与星期同时受限按 AND 语义（与触发库 croner dom_and_dow(true) 一致）
+    #[test]
+    fn 日与星期同时受限_按且语义判定() {
+        // 1 日且周一：day=1/weekday=1（周日=0 体系）同时满足才命中
+        assert!(matches_day_and_weekday("1", "1", 1, 1).unwrap_or(false));
+        // day 命中但 weekday 不命中 → 不触发
+        assert!(!matches_day_and_weekday("1", "1", 1, 2).unwrap_or(true));
+        // 反之亦然
+        assert!(!matches_day_and_weekday("1", "1", 2, 1).unwrap_or(true));
+        // 仅一个受限时按该字段
+        assert!(matches_day_and_weekday("*", "1", 15, 1).unwrap_or(false));
+        assert!(matches_day_and_weekday("15", "*", 15, 3).unwrap_or(false));
+        // 均通配恒命中
+        assert!(matches_day_and_weekday("*", "*", 15, 3).unwrap_or(false));
+    }
+
+    /// 星期 7 归一为 0（周日别名，与 croner 一致）
+    #[test]
+    fn 星期字段_七归一为周日() {
+        assert_eq!(normalize_weekday_field("7"), "0");
+        assert_eq!(normalize_weekday_field("5-7"), "5-6");
+        assert_eq!(normalize_weekday_field("7/2"), "0/2");
+        assert_eq!(normalize_weekday_field("0,7"), "0,0");
+        assert_eq!(normalize_weekday_field("1-5"), "1-5");
+        // 0 0 0 * * 7 应能算出下一次（周日）
+        let next = calculate_next_run("0 0 0 * * 7")
+            .unwrap_or_else(|e| panic!("周日表达式应解析成功: {e}"));
+        assert_eq!(next.weekday().num_days_from_sunday(), 0);
     }
 }

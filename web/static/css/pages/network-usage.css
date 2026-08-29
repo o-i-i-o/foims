@@ -268,24 +268,6 @@
   border-bottom: none;
 }
 
-.usage-status-badge {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.usage-status-active {
-  background-color: var(--color-success-bg);
-  color: var(--color-success-text);
-}
-
-.usage-status-inactive {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning-text);
-}
-
 .ipv6-info-section {
   margin-bottom: 1.25rem;
 }
@@ -375,7 +357,7 @@
 
 .no-ipv6-hint {
   font-size: 0.75rem;
-  color: var(--color-border);
+  color: var(--color-text-muted);
 }
 
 .no-network-info {

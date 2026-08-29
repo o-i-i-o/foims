@@ -32,24 +32,28 @@ import { toggleSnmpConfig, testSnmpConnection, getDeviceInfoFromSnmp } from "./d
 import { manageUnifiedDevicePorts } from "./unifiedDevicePorts.js";
 import { viewArpTable, viewLldpNeighbors } from "./deviceMacLldp.js";
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let deviceRequestSeq = 0;
+
 const tableState = createSortState("name", "asc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
 
-const DEVICE_TYPE_LABELS = {
-  desktop: t("device_type.desktop"),
-  laptop: t("device_type.laptop"),
-  printer: t("device_type.printer"),
-  server: t("device_type.server"),
-  network_device: t("device_type.network_device"),
-  switch: t("device_type.switch"),
-  camera: t("device_type.camera"),
-  phone: t("device_type.phone"),
-  other: t("device_type.other")
-};
-
+// 设备类型标签在使用时求值（函数内调 t()）：
+// 模块加载期求值会导致 languagechange 免刷新切换后旧语言残留
 function getDeviceTypeName(type) {
-  return DEVICE_TYPE_LABELS[type] || type;
+  const labels = {
+    desktop: t("device_type.desktop"),
+    laptop: t("device_type.laptop"),
+    printer: t("device_type.printer"),
+    server: t("device_type.server"),
+    network_device: t("device_type.network_device"),
+    switch: t("device_type.switch"),
+    camera: t("device_type.camera"),
+    phone: t("device_type.phone"),
+    other: t("device_type.other")
+  };
+  return labels[type] || type;
 }
 
 const SNMP_FORM_FIELDS = [
@@ -75,6 +79,7 @@ function maskToNull(value) {
 let deviceTableClickHandler = null;
 
 export async function loadDevicesData(page = currentPage, sortBy = null, sortOrder = null) {
+  const requestSeq = ++deviceRequestSeq;
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -84,8 +89,25 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
     const result = await apiGet(
       `/api/resources/devices?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
+    if (requestSeq !== deviceRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
     const data = result.success ? result.data : { items: [], total: 0 };
     const devices = data.items || data;
+
+    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+    // 回退到最后一页重新加载，避免停留在空页无法翻回
+    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
+    if (
+      Array.isArray(devices) &&
+      devices.length === 0 &&
+      page > 1 &&
+      totalPages > 0 &&
+      page > totalPages
+    ) {
+      return loadDevicesData(totalPages);
+    }
+
     const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#devices-table", {
@@ -111,7 +133,9 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
               return `${t("device.workstation")}: ${escapeHtml(v)}`;
             }
             if (row.cabinet_name) {
-              const uRange = row.start_u ? ` ${row.start_u}-${row.end_u}U` : "";
+              // start_u 与 end_u 都存在才渲染区间，避免残缺数据显示 "12-undefinedU"
+              const uRange =
+                row.start_u != null && row.end_u != null ? ` ${row.start_u}-${row.end_u}U` : "";
               return `${t("device.position")}: ${escapeHtml(row.cabinet_name)}${uRange}`;
             }
             return "-";
@@ -344,7 +368,7 @@ async function loadDeviceTemplateList() {
         <div class="device-template-info">
           <span class="device-template-name">${escapeHtml(tmpl.name)}</span>
           <span class="device-template-meta">
-            <span class="device-template-type">${escapeHtml(DEVICE_TYPE_LABELS[tmpl.device_type] || tmpl.device_type)}</span>
+            <span class="device-template-type">${escapeHtml(getDeviceTypeName(tmpl.device_type))}</span>
             ${tmpl.brand ? `<span class="device-template-brand">${escapeHtml(tmpl.brand)}</span>` : ""}
             ${tmpl.model ? `<span class="device-template-model">${escapeHtml(tmpl.model)}</span>` : ""}
           </span>
@@ -727,35 +751,48 @@ async function fillDeviceFormForEdit(device, cardManager, roomDetailPromise) {
     // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列；
     // 工位/机柜/机位下拉与房间网段上下文仅依赖 room_id，五路并行
     const roomResult = await roomDetailPromise;
-    const room = roomResult?.success ? roomResult.data : null;
-    const orgId = room?.org_id || null;
-    const roomType = room?.room_type ? room.room_type.toLowerCase() : null;
-    if (orgId) {
-      elementCache.setValue("device-org-id", orgId);
-    }
-    if (roomType) {
-      elementCache.setValue("device-room-type", roomType);
-    }
+    const room = roomResult?.success && roomResult.data ? roomResult.data : null;
+    if (room) {
+      const orgId = room.org_id || null;
+      const roomType = room.room_type ? room.room_type.toLowerCase() : null;
+      if (orgId) {
+        elementCache.setValue("device-org-id", orgId);
+      }
+      if (roomType) {
+        elementCache.setValue("device-room-type", roomType);
+      }
 
-    // 机位下拉：优先按机柜过滤；历史数据机位未挂机柜时按房间回退；否则全量
-    let positionsLoad;
-    if (device.cabinet_id) {
-      positionsLoad = loadPositionsForSelect("device-position-id", device.cabinet_id);
-    } else if (device.position_id) {
-      positionsLoad = loadPositionsForSelect("device-position-id", null, device.room_id);
+      // 机位下拉：优先按机柜过滤；历史数据机位未挂机柜时按房间回退；否则全量
+      let positionsLoad;
+      if (device.cabinet_id) {
+        positionsLoad = loadPositionsForSelect("device-position-id", device.cabinet_id);
+      } else if (device.position_id) {
+        positionsLoad = loadPositionsForSelect("device-position-id", null, device.room_id);
+      } else {
+        positionsLoad = loadPositionsForSelect("device-position-id");
+      }
+
+      await Promise.all([
+        loadRoomsForSelect("device-room-id", { orgId, roomType }),
+        loadWorkstationsForSelect("device-workstation-id", device.room_id),
+        loadCabinetsForSelect("device-cabinet-id", device.room_id),
+        positionsLoad,
+        cardManager.setRoomContext(device.room_id)
+      ]);
+
+      elementCache.setValue("device-room-id", device.room_id);
     } else {
-      positionsLoad = loadPositionsForSelect("device-position-id");
+      // 房间详情加载失败：提示错误并联动清空房间/工位/机柜/机位选择，
+      // 避免回显出"有机位无房间"的不一致数据（用户可重新选择后保存）
+      showToast(t("common.load_failed"), "error");
+      elementCache.setValue("device-room-id", "");
+      elementCache.setValue("device-workstation-id", "");
+      elementCache.setValue("device-cabinet-id", "");
+      elementCache.setValue("device-position-id", "");
+      await cardManager.setRoomContext(null);
+      await cardManager.loadExisting(device.cards || []);
+      return;
     }
-
-    await Promise.all([
-      loadRoomsForSelect("device-room-id", { orgId, roomType }),
-      loadWorkstationsForSelect("device-workstation-id", device.room_id),
-      loadCabinetsForSelect("device-cabinet-id", device.room_id),
-      positionsLoad,
-      cardManager.setRoomContext(device.room_id)
-    ]);
-
-    elementCache.setValue("device-room-id", device.room_id);
   } else {
     await cardManager.setRoomContext(null);
   }

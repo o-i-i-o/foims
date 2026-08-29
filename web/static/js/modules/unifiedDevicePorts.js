@@ -655,7 +655,10 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite, skippedCount) {
   // 新增单个端口的公共流程：POST + 成功/失败计数（toAdd 循环与覆盖兜底分支共用）
   const createPort = async (p) => {
     try {
-      const r = await apiPost(`/api/resources/devices/${deviceId}/interfaces`, buildCreatePayload(p));
+      const r = await apiPost(
+        `/api/resources/devices/${deviceId}/interfaces`,
+        buildCreatePayload(p)
+      );
       if (r.success) {
         added++;
       } else {
@@ -709,7 +712,7 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite, skippedCount) {
     parts.push(`${t("device.sync_failed")} ${failed}`);
   }
 
-  showToast(`${t("device.sync_result")}: ${parts.join("，")}`, failed > 0 ? "warning" : "success");
+  showToast(`${t("device.sync_result")}: ${parts.join(", ")}`, failed > 0 ? "warning" : "success");
 
   await refreshModalView(deviceId);
 }

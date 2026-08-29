@@ -151,27 +151,6 @@ select.nc-input:not([multiple]) {
   margin-bottom: 0;
 }
 
-.form-row-container {
-  background: var(--color-bg);
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-sm);
-  border: 1px solid var(--color-border-light);
-  transition: all var(--transition-fast);
-}
-
-.form-row-container:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgb(102 126 234 / 10%);
-}
-
-.form-row-container .form-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-  margin-bottom: var(--space-md);
-}
-
 .form-actions {
   display: flex;
   gap: var(--space-md);
@@ -243,23 +222,6 @@ select.nc-input:not([multiple]) {
   margin: 0;
   accent-color: var(--color-primary);
   cursor: pointer;
-}
-
-.search-container {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.search-container input {
-  min-width: 200px;
-}
-
-.inline-select {
-  width: auto;
-  display: inline-block;
-  margin-right: var(--space-sm);
 }
 
 .form-inline-group {

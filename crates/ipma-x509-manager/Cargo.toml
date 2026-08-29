@@ -1,6 +1,6 @@
 [package]
 name = "ipma-x509-manager"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA X.509 证书管理：自签名证书生成、导入、清点与下载"

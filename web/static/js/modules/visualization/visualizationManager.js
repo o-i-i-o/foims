@@ -137,8 +137,16 @@ async function showWorkstationRoom(roomId) {
     return;
   }
   const hasLayout = await workstationVisualization.loadSavedLayout(roomId);
+  if (hasLayout === null || hasLayout === "error") {
+    // null：加载已被更新的渲染取代；"error"：布局请求失败——
+    // 两者都放弃自动排布与落库，防止过期/失败数据覆盖已保存布局
+    return;
+  }
   if (!hasLayout) {
-    await workstationVisualization.autoDrawWorkstations(roomId);
+    // 无布局已由 loadSavedLayout 确认：skipReload 跳过 autoDraw 内部二次加载
+    await workstationVisualization.autoDrawWorkstations(roomId, { skipReload: true });
+    // 自动排布后显式落库一次（autoDraw 内部的定时重复保存已移除）
+    await workstationVisualization.saveLayout();
   }
 }
 
@@ -303,23 +311,26 @@ function fillTopologyConnectionDeviceOptions(selectEl, excludeId) {
   });
 }
 
+// 端口下拉请求代次：快速切换设备时旧响应晚到会向新设备的选择框
+// 追加过期端口选项，提交出 port_id 与 device_id 不匹配的组合
+let topologyPortsRequestSeq = 0;
+
 async function loadTopologyConnectionPorts(selectEl, deviceId) {
+  const requestSeq = ++topologyPortsRequestSeq;
   selectEl.innerHTML = "";
   if (!deviceId) {
     return;
   }
   try {
     const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces?page_size=200`);
-    if (!result.success) {
+    if (!result.success || requestSeq !== topologyPortsRequestSeq) {
       return;
     }
     const ports = result.data?.items ?? [];
     ports.forEach((p) => {
       const option = document.createElement("option");
       option.value = p.id;
-      option.textContent = p.description
-        ? `${p.name} (${p.description})`
-        : p.name || p.id;
+      option.textContent = p.description ? `${p.name} (${p.description})` : p.name || p.id;
       selectEl.appendChild(option);
     });
   } catch (error) {
@@ -406,6 +417,16 @@ async function openTopologyConnectionModal() {
       }
     }
 
+    // 重复连线预检：同设备对已有连线（任意类型，含方向翻转）时拒绝
+    const existing = topologyVisualization.connections.some(
+      (c) =>
+        (c.source_device_id === sourceDeviceId && c.target_device_id === targetDeviceId) ||
+        (c.source_device_id === targetDeviceId && c.target_device_id === sourceDeviceId)
+    );
+    if (existing) {
+      showToast(t("server.visualization.connection_duplicate"), "warning");
+      return;
+    }
     const result = await topologyVisualization.dataManager.createConnection(body);
     if (result) {
       closeModal("topology-connection-modal");
@@ -436,14 +457,16 @@ async function applyDefaultWorkstationOrg() {
 }
 
 async function loadInitialData() {
-  // 三个组织下拉共享同一 tree 请求（apiClient 并发去重）；
-  // applyDefaultWorkstationOrg 需要解析 tree 结果，与下拉填充并行即可
+  // 三个组织下拉共享同一 tree 请求（apiClient 并发去重）。
+  // 默认组织定位必须等下拉填充完成后串行执行：并行时微任务次序不保证
+  // 谁先完成，setValue 会因选项尚未注入而静默失效，后续房间筛选
+  // 读到的组织值为空，默认定位整体失效
   await Promise.all([
     loadOrgsForSelect("viz-org-select"),
     loadOrgsForSelect("cabinet-viz-org-select"),
-    loadOrgsForSelect("topology-org-select"),
-    applyDefaultWorkstationOrg()
+    loadOrgsForSelect("topology-org-select")
   ]);
+  await applyDefaultWorkstationOrg();
   await Promise.all([
     refreshVisualizationRooms("workstation"),
     refreshVisualizationRooms("cabinet")

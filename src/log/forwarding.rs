@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 
 use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
 use ipma_common::AppError;
+use ipma_common::AppJson;
 
 /// local0(16) × 8 + informational(6)
 const SYSLOG_PRI_INFO: u32 = 16 * 8 + 6;
@@ -23,7 +23,7 @@ const SYSLOG_PRI_INFO: u32 = 16 * 8 + 6;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogForwardingConfig {
     pub enabled: bool,
-    /// udp 或 tcp（不区分大小写，非法值按 udp 处理）
+    /// udp 或 tcp（不区分大小写，保存前统一小写；空/非法值一律校验拒绝）
     pub protocol: String,
     pub host: String,
     pub port: u16,
@@ -40,17 +40,17 @@ impl Default for LogForwardingConfig {
     }
 }
 
-/// 读取外发配置（未配置时返回默认值：关闭）
-pub async fn load(pool: &PgPool) -> LogForwardingConfig {
-    let mut config = LogForwardingConfig::default();
-    let Ok(rows) =
+/// 读取外发配置（未配置的键回落默认值：关闭）。
+///
+/// DB 错误向上传播：吞成默认配置会把 DB 故障伪装成「外发已关闭」，
+/// 真实配置被静默掩盖。
+pub async fn load(pool: &PgPool) -> Result<LogForwardingConfig, AppError> {
+    let rows =
         sqlx::query("SELECT key, value FROM system_configs WHERE config_type = 'log_forwarding'")
             .fetch_all(pool)
-            .await
-    else {
-        return config;
-    };
+            .await?;
 
+    let mut config = LogForwardingConfig::default();
     for row in rows {
         let key: String = row.get("key");
         let value: Option<String> = row.get("value");
@@ -67,17 +67,20 @@ pub async fn load(pool: &PgPool) -> LogForwardingConfig {
             _ => {}
         }
     }
-    config
+    Ok(config)
 }
 
-/// 校验配置可用的必要字段
+/// 校验配置可用的必要字段。
+///
+/// protocol 只允许 udp/tcp：空串与非法值一律拒绝，避免「空串绕过校验
+/// 被持久化、发送时按 UDP 处理」的口径漏洞。
 fn validate(config: &LogForwardingConfig) -> Result<(), AppError> {
     if config.enabled && (config.host.trim().is_empty() || config.port == 0) {
         return Err(AppError::Validation(msg(
             "server.logs.forwarding_incomplete",
         )));
     }
-    if !config.protocol.is_empty() && !["udp", "tcp"].contains(&config.protocol.as_str()) {
+    if !["udp", "tcp"].contains(&config.protocol.as_str()) {
         return Err(AppError::Validation(msg(
             "server.logs.forwarding_protocol_invalid",
         )));
@@ -112,10 +115,19 @@ pub async fn save(pool: &PgPool, config: &LogForwardingConfig) -> Result<(), App
     Ok(())
 }
 
-/// 异步外发一条日志（fire-and-forget，不阻塞业务路径）
+/// 异步外发一条日志（fire-and-forget，不阻塞业务路径）。
+///
+/// 配置读取失败（DB 故障）时放弃本次外发并记录日志：
+/// 宁可漏发也不以错误的默认配置发送。
 pub fn spawn_forward(pool: PgPool, message: String) {
     tokio::spawn(async move {
-        let config = load(&pool).await;
+        let config = match load(&pool).await {
+            Ok(config) => config,
+            Err(e) => {
+                log_warn!("log.forwarding.load_failed", error = e);
+                return;
+            }
+        };
         if !config.enabled {
             return;
         }
@@ -125,8 +137,13 @@ pub fn spawn_forward(pool: PgPool, message: String) {
     });
 }
 
-/// 组装 RFC 3164 报文并发送
+/// 组装 RFC 3164 报文并发送。
+///
+/// 连接与写入共用同一 3 秒预算：服务端接受连接但不读取时，
+/// `write_all` 同样会超时返回，避免请求挂起与连接泄漏。
 async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String> {
+    const SEND_TIMEOUT_SECS: u64 = 3;
+
     let timestamp = chrono::Utc::now().format("%b %e %H:%M:%S");
     // 报文按 1KB 截断，匹配常见 syslog 采集端的报文上限
     let trimmed: String = if message.len() > 1024 {
@@ -140,27 +157,46 @@ async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String>
     };
     let packet = format!("<{SYSLOG_PRI_INFO}>{timestamp} ipma op: {trimmed}");
 
-    let addr = format!("{}:{}", config.host.trim(), config.port);
+    // 以 (host, port) 元组形式解析目标地址：裸 IPv6 字面量（如 2001:db8::1）
+    // 拼成 "host:port" 字符串会被误解析为非法地址，元组形式可正确处理
+    let host = config.host.trim();
     if config.protocol == "tcp" {
-        let mut stream = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            tokio::net::TcpStream::connect(&addr),
-        )
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
+        let connect = tokio::net::TcpStream::connect((host, config.port));
+        let mut stream =
+            tokio::time::timeout(std::time::Duration::from_secs(SEND_TIMEOUT_SECS), connect)
+                .await
+                .map_err(|_| "连接超时".to_string())?
+                .map_err(|e| e.to_string())?;
         use tokio::io::AsyncWriteExt;
-        stream
-            .write_all(packet.as_bytes())
+        let write = stream.write_all(packet.as_bytes());
+        tokio::time::timeout(std::time::Duration::from_secs(SEND_TIMEOUT_SECS), write)
             .await
+            .map_err(|_| "写入超时".to_string())?
             .map_err(|e| e.to_string())?;
     } else {
-        let socket = tokio::net::UdpSocket::bind(("::", 0))
+        // 先解析目标得到具体 SocketAddr，再按其地址族绑定对应通配地址：
+        // 固定绑定 IPv6 通配会在 bindv6only=1 主机上丢失所有 IPv4 目标
+        let mut addrs = tokio::net::lookup_host((host, config.port))
             .await
             .map_err(|e| e.to_string())?;
-        socket
-            .send_to(packet.as_bytes(), &addr)
+        let target = addrs
+            .next()
+            .ok_or_else(|| "目标地址解析结果为空".to_string())?;
+        let bind_addr: std::net::SocketAddr = match target {
+            std::net::SocketAddr::V4(_) => "0.0.0.0:0"
+                .parse::<std::net::SocketAddr>()
+                .map_err(|e| e.to_string())?,
+            std::net::SocketAddr::V6(_) => "[::]:0"
+                .parse::<std::net::SocketAddr>()
+                .map_err(|e| e.to_string())?,
+        };
+        let socket = tokio::net::UdpSocket::bind(bind_addr)
             .await
+            .map_err(|e| e.to_string())?;
+        let send = socket.send_to(packet.as_bytes(), target);
+        tokio::time::timeout(std::time::Duration::from_secs(SEND_TIMEOUT_SECS), send)
+            .await
+            .map_err(|_| "发送超时".to_string())?
             .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -172,7 +208,8 @@ pub async fn get_forwarding(
     State(state): State<Arc<AppState>>,
     _secadmin: ipma_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
-    let config = load(&state.pool()?.get_conn()).await;
+    // DB 错误透传，不再静默回退「关闭」默认配置
+    let config = load(&state.pool()?.get_conn()).await?;
     Ok(ipma_common::ok_json(
         config,
         "server.logs.forwarding_retrieved",
@@ -194,7 +231,7 @@ pub async fn test_forwarding(
     _secadmin: ipma_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
-    let config = load(&conn).await;
+    let config = load(&conn).await?;
     if !config.enabled {
         return Err(AppError::Validation(msg("server.logs.forwarding_disabled")));
     }

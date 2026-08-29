@@ -15,21 +15,14 @@ export class SessionManager {
   }
 
   static getUser() {
-    const storage = this.#getStorage();
-    const userJson = storage.getItem(this.#userKey);
+    // 严格按 rememberMe 标志读单一存储，不做 localStorage 回退：
+    // 回退会让"非记住登录"的标签读到其他会话写入 localStorage 的
+    // 用户副本，两个标签以不同 rememberMe 登录时读写漂移
+    const userJson = this.#getStorage().getItem(this.#userKey);
 
     if (userJson) {
       try {
         return JSON.parse(userJson);
-      } catch {
-        return null;
-      }
-    }
-
-    const localUserJson = localStorage.getItem(this.#userKey);
-    if (localUserJson) {
-      try {
-        return JSON.parse(localUserJson);
       } catch {
         return null;
       }

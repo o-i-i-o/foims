@@ -1,5 +1,6 @@
 /* 状态徽章：形状类 + 颜色类组合使用（如 class="status-badge status-active"）
-   颜色类为全局唯一定义，各页面徽章形状类（.item-status/.usage-status-badge 等）只负责形状 */
+   颜色类为全局唯一定义，各页面徽章形状类（.status-badge/.two-factor-badge 及
+   列表内联的 .item-status 等）只负责形状与布局 */
 
 .status-badge,
 .two-factor-badge {
@@ -24,6 +25,13 @@
   background: var(--color-danger-bg);
   color: var(--color-danger-text);
   border: 1px solid var(--color-danger-border);
+}
+
+/* 保留/预留状态：色调和的黄（仪表盘 IP 状态等场景与 active/inactive 并列展示） */
+.status-reserved {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-border);
 }
 
 .two-factor-enabled {

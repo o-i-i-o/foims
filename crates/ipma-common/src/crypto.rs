@@ -15,7 +15,34 @@ use crate::{log_error, log_info, log_warn};
 
 const NONCE_SIZE: usize = 12;
 
-static ENCRYPTION_KEY: OnceLock<Vec<u8>> = OnceLock::new();
+/// 加密密钥加载/保存失败原因。
+///
+/// 动态参数统一为 String（io::Error 不可克隆）：错误值需存入
+/// `OnceLock<Result<_, _>>` 供后续调用方映射，因此派生 Clone。
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum CryptoKeyError {
+    #[error("无法获取加密密钥目录的父目录: {0}")]
+    KeyDirInvalid(String),
+    #[error("创建加密密钥目录失败: {0}")]
+    KeyDirCreateFailed(String),
+    #[error("加密密钥文件长度不正确（期望32字节，实际{0}字节），请重新生成密钥")]
+    KeyLengthInvalid(usize),
+    #[error("读取加密密钥文件失败: {0}")]
+    KeyReadFailed(String),
+    #[error(
+        "备份密钥长度也不正确（期望32字节，实际{0}字节）。为避免生成新密钥覆盖唯一备份、导致存量密文永久不可解密，拒绝启动；请手工恢复 /etc/ipma/encryption.key 后重试"
+    )]
+    BackupKeyLengthInvalid(usize),
+    #[error(
+        "读取备份密钥也失败: {0}。为避免生成新密钥覆盖唯一备份、导致存量密文永久不可解密，拒绝启动；请手工恢复 /etc/ipma/encryption.key 后重试"
+    )]
+    BackupKeyReadFailed(String),
+    #[error("保存加密密钥失败: {0}")]
+    KeyWriteFailed(String),
+}
+
+/// 进程级加密密钥：`Result` 入锁，加载失败在使用处映射为错误而非 panic。
+static ENCRYPTION_KEY: OnceLock<Result<Vec<u8>, CryptoKeyError>> = OnceLock::new();
 
 /// 以 0600 权限原子写入密钥文件（覆盖已存在内容）。
 /// 直接用带 mode 的 OpenOptions 创建，消除「先写后 chmod」窗口期内
@@ -49,29 +76,30 @@ fn get_key_paths() -> (String, String) {
     (key_path, key_backup_path)
 }
 
-fn load_encryption_key() -> Vec<u8> {
+/// 加载（必要时生成）加密密钥。
+///
+/// 生产路径禁止 panic：所有失败分支均以 `CryptoKeyError` 返回，
+/// 由调用方决定退出或报错。
+fn load_encryption_key() -> Result<Vec<u8>, CryptoKeyError> {
     let (key_path, key_backup_path) = get_key_paths();
 
     let Some(key_dir) = Path::new(&key_path).parent() else {
-        panic!("无法获取加密密钥目录的父目录: {}", key_path);
+        return Err(CryptoKeyError::KeyDirInvalid(key_path.clone()));
     };
     if !key_dir.exists()
         && let Err(e) = fs::create_dir_all(key_dir)
     {
-        panic!("创建加密密钥目录失败: {}", e);
+        return Err(CryptoKeyError::KeyDirCreateFailed(e.to_string()));
     }
 
     if Path::new(&key_path).exists() {
         match fs::read(&key_path) {
             Ok(key) if key.len() == 32 => {
                 write_key_file_atomic(&key_backup_path, &key);
-                return key;
+                return Ok(key);
             }
             Ok(key) => {
-                panic!(
-                    "加密密钥文件长度不正确（期望32字节，实际{}字节），请重新生成密钥",
-                    key.len()
-                );
+                return Err(CryptoKeyError::KeyLengthInvalid(key.len()));
             }
             Err(e) => {
                 log_error!("log.crypto.key_read_failed", error = e);
@@ -81,17 +109,17 @@ fn load_encryption_key() -> Vec<u8> {
                         Ok(key) if key.len() == 32 => {
                             log_info!("log.crypto.key_restored");
                             write_key_file_atomic(&key_path, &key);
-                            return key;
+                            return Ok(key);
                         }
                         Ok(key) => {
-                            panic!("备份密钥长度也不正确（期望32字节，实际{}字节）", key.len());
+                            return Err(CryptoKeyError::BackupKeyLengthInvalid(key.len()));
                         }
                         Err(e) => {
-                            panic!("读取备份密钥也失败: {}", e);
+                            return Err(CryptoKeyError::BackupKeyReadFailed(e.to_string()));
                         }
                     }
                 }
-                panic!("读取加密密钥文件失败，请检查文件权限");
+                return Err(CryptoKeyError::KeyReadFailed(e.to_string()));
             }
         }
     }
@@ -102,13 +130,16 @@ fn load_encryption_key() -> Vec<u8> {
             Ok(key) if key.len() == 32 => {
                 log_info!("log.crypto.key_restored");
                 write_key_file_atomic(&key_path, &key);
-                return key;
+                return Ok(key);
             }
-            Ok(_) => {
-                log_warn!("log.crypto.backup_length_invalid");
+            // fail-closed：主密钥缺失且备份不可用（读取失败/长度非法）时
+            // 必须拒绝启动，绝不生成新密钥覆盖备份——旧密钥唯一残存副本被
+            // 销毁后，SMTP/SNMP 等存量 AES-GCM 密文将永久不可解密
+            Ok(key) => {
+                return Err(CryptoKeyError::BackupKeyLengthInvalid(key.len()));
             }
             Err(e) => {
-                log_warn!("log.crypto.backup_read_failed", error = e);
+                return Err(CryptoKeyError::BackupKeyReadFailed(e.to_string()));
             }
         }
     }
@@ -118,23 +149,24 @@ fn load_encryption_key() -> Vec<u8> {
     rand::rng().fill(&mut key);
 
     // 新密钥必须成功落盘：否则下次启动会再生成新密钥，历史密文全部无法解密
-    if let Err(e) = write_key_file(&key_path, &key) {
-        panic!("保存加密密钥失败: {}", e);
-    }
+    write_key_file(&key_path, &key).map_err(|e| CryptoKeyError::KeyWriteFailed(e.to_string()))?;
     write_key_file_atomic(&key_backup_path, &key);
 
     log_info!("log.crypto.key_generated", path = key_path);
-    key
+    Ok(key)
 }
 
-/// 返回进程级加密密钥的静态借用（OnceLock 初始化后永不改变），
-/// 避免每次加解密都复制 32 字节密钥
-pub fn get_encryption_key() -> &'static [u8] {
-    ENCRYPTION_KEY.get_or_init(load_encryption_key)
+/// 获取进程级加密密钥（首次调用时加载，之后复用缓存结果）。
+///
+/// 加载失败时返回错误：调用方（加解密/完整性检查）据此向上传递错误，
+/// 主程序启动路径据此以 Err 退出，不再 panic。
+pub fn ensure_encryption_key() -> Result<&'static [u8], CryptoKeyError> {
+    let initialized = ENCRYPTION_KEY.get_or_init(load_encryption_key);
+    initialized.as_deref().map_err(std::clone::Clone::clone)
 }
 
 pub fn check_key_integrity() -> Result<(), String> {
-    let key = get_encryption_key();
+    let key = ensure_encryption_key().map_err(|e| e.to_string())?;
     if key.len() != 32 {
         return Err(format!("密钥长度不正确: {}字节（期望32字节）", key.len()));
     }
@@ -166,7 +198,10 @@ pub fn check_key_integrity() -> Result<(), String> {
 }
 
 pub fn encrypt_password(password: &str) -> Result<String, AppError> {
-    let key = get_encryption_key();
+    let key = ensure_encryption_key().map_err(|e| {
+        log_error!("log.crypto.key_load_failed", error = e);
+        AppError::Internal(msg("server.common.cipher_init_failed").with("error", e))
+    })?;
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| {
         log_error!("log.crypto.cipher_init_failed", error = e);
         AppError::Internal(msg("server.common.cipher_init_failed").with("error", e))
@@ -188,7 +223,7 @@ pub fn encrypt_password(password: &str) -> Result<String, AppError> {
 }
 
 pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
-    let key = get_encryption_key();
+    let key = ensure_encryption_key().map_err(|e| format!("解密失败: 加密密钥加载失败: {e}"))?;
     let cipher =
         Aes256Gcm::new_from_slice(key).map_err(|e| format!("解密失败: 加密密钥长度不正确: {e}"))?;
 
@@ -384,8 +419,8 @@ mod tests {
     #[test]
     fn test_get_encryption_key_shape_and_stability() {
         // 密钥长度必须为 32 字节（AES-256），且 OnceLock 保证多次获取一致
-        let key1 = get_encryption_key();
-        let key2 = get_encryption_key();
+        let key1 = ensure_encryption_key().expect("密钥加载应成功");
+        let key2 = ensure_encryption_key().expect("密钥加载应成功");
         assert_eq!(key1.len(), 32, "加密密钥应为 32 字节");
         assert_eq!(key1, key2, "同一进程内密钥应保持稳定");
     }

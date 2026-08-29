@@ -74,11 +74,111 @@ pub fn validate_dns_count(dns_list: &[String]) -> Result<(), ValidationError> {
     Ok(())
 }
 
+/// IPv4 DNS 列表逐条格式校验：每条都必须是合法 IPv4 地址。
+/// 数量校验见 [`validate_dns_count`]，两者叠加使用。
+pub fn validate_ipv4_dns_entries(dns_list: &[String]) -> Result<(), ValidationError> {
+    if dns_list
+        .iter()
+        .all(|dns| dns.parse::<std::net::Ipv4Addr>().is_ok())
+    {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.network.validation.dns_invalid",
+        ))
+    }
+}
+
+/// IPv6 DNS 列表逐条格式校验：每条都必须是合法 IPv6 地址。
+/// 数量校验见 [`validate_dns_count`]，两者叠加使用。
+pub fn validate_ipv6_dns_entries(dns_list: &[String]) -> Result<(), ValidationError> {
+    if dns_list
+        .iter()
+        .all(|dns| dns.parse::<std::net::Ipv6Addr>().is_ok())
+    {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.network.validation.dns_invalid",
+        ))
+    }
+}
+
 pub fn validate_ip_address(ip: &str) -> Result<(), ValidationError> {
     if ip.parse::<std::net::IpAddr>().is_err() {
         return Err(ValidationError::new("invalid_ip_address"));
     }
     Ok(())
+}
+
+/// Option 字段版 IP 地址校验（有值才校验，None 跳过）
+pub fn validate_ip_address_option(ip: &&String) -> Result<(), ValidationError> {
+    validate_ip_address(ip)
+}
+
+/// IP 版本仅允许 4 或 6（INET 写入侧与 ip_version 语义对齐）。
+/// 数值字段（含 Option/双 Option 包裹）由 validator derive 按值传入
+pub fn validate_ip_version_option(version: i16) -> Result<(), ValidationError> {
+    if version == 4 || version == 6 {
+        Ok(())
+    } else {
+        Err(ValidationError::new("invalid_ip_version"))
+    }
+}
+
+/// IP 地址格式（IPv4/IPv6）校验：供 MAC/LLDP 记录等 INET 列字段使用
+pub fn validate_ip_address_string(value: &str) -> Result<(), ValidationError> {
+    if value.parse::<std::net::IpAddr>().is_ok() {
+        Ok(())
+    } else {
+        Err(ValidationError::new("server.common.validation.ip_format"))
+    }
+}
+
+/// MAC 地址格式校验：冒号/横线分隔的 6 组十六进制（如 aa:bb:cc:dd:ee:ff）
+pub fn validate_mac_address_string(value: &str) -> Result<(), ValidationError> {
+    let normalized = value.replace('-', ":");
+    let parts: Vec<&str> = normalized.split(':').collect();
+    let valid = parts.len() == 6
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.len() <= 2 && p.bytes().all(|b| b.is_ascii_hexdigit()));
+    if valid {
+        Ok(())
+    } else {
+        Err(ValidationError::new("server.device.validation.mac_format"))
+    }
+}
+
+/// Option 字段版 MAC 地址格式校验（有值才校验，None 跳过）：
+/// 供 DeviceInterfaceCreate.mac_address 等可空 MAC 字段使用
+pub fn validate_mac_address_option(value: &&String) -> Result<(), ValidationError> {
+    validate_mac_address_string(value)
+}
+
+/// VLAN ID / Trunk Native VLAN ID 取值范围（1..=4094，IEEE 802.1Q）。
+/// 数值字段（含 Option/双 Option 包裹）由 validator derive 按值传入
+pub fn validate_vlan_id_option(vlan_id: i32) -> Result<(), ValidationError> {
+    if (1..=4094).contains(&vlan_id) {
+        Ok(())
+    } else {
+        Err(ValidationError::new("vlan_id_range"))
+    }
+}
+
+/// 密码字节长度上限：bcrypt 仅使用前 72 字节，超长部分被静默截断——
+/// 前 72 字节相同的口令将得到等价哈希，必须在入库前拒绝（按字节计）。
+pub fn validate_password_max_bytes(password: &str) -> Result<(), ValidationError> {
+    if password.len() <= 72 {
+        Ok(())
+    } else {
+        Err(ValidationError::new("password_max_length"))
+    }
+}
+
+/// Option 字段版密码字节长度校验（有值才校验，None 跳过）
+pub fn validate_password_max_bytes_option(password: &&String) -> Result<(), ValidationError> {
+    validate_password_max_bytes(password)
 }
 
 // ==================== 双层 Option 长度校验 ====================
@@ -101,6 +201,123 @@ pub fn validate_iface_mac_opt(value: &&String) -> Result<(), ValidationError> {
 /// 通用描述字段（VARCHAR/TEXT 上限 255）
 pub fn validate_description_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 255, "server.common.validation.description_length")
+}
+
+/// WorkstationUpdate.manager（VARCHAR(50)）
+pub fn validate_manager_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 50, "server.workstation.validation.manager_length")
+}
+
+/// EmployeeUpdate.phone（VARCHAR(20)）
+pub fn validate_phone_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 20, "server.employee.validation.phone_length")
+}
+
+/// EmployeeUpdate.email：双层 Option 包裹时 custom 函数自动解包，
+/// Some(Some(v)) 才做格式校验（与 #[validate(email)] 单层口径一致）
+pub fn validate_email_opt(value: &&String) -> Result<(), ValidationError> {
+    use validator::ValidateEmail;
+    if value.validate_email() {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.common.validation.email_format",
+        ))
+    }
+}
+
+/// 员工邮箱校验（EmployeeCreate/EmployeeUpdate 共用）：trim 后为空串
+/// 先放行——handler 侧 blank_to_none 会把空白值规范化为 NULL 入库；
+/// 非空才做邮箱格式校验，避免空串先撞 #[validate(email)] 报格式错误。
+/// 单层与双层 Option 包裹的 custom 函数均按 &&String 传入。
+pub fn validate_email_blankable_opt(value: &&String) -> Result<(), ValidationError> {
+    use validator::ValidateEmail;
+    if value.trim().is_empty() || value.validate_email() {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.common.validation.email_format",
+        ))
+    }
+}
+
+/// CableLinkUpdate.length_m：0..=10000 米。
+/// 双层 Option 的数值字段由 derive 解包后按值传入（Some(None) 已被跳过）；
+/// NaN 不满足区间比较即拒绝。
+pub fn validate_length_m_opt(len: f64) -> Result<(), ValidationError> {
+    if (0.0..=10000.0).contains(&len) {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.cable_link.validation.length_m_range",
+        ))
+    }
+}
+
+/// IP 状态取值白名单：active（使用中）/ inactive（停用）/ reserved（保留）。
+/// ips.status 为 VARCHAR(20) 且 DB 无 CHECK 约束，应用层前置拦截非法值；
+/// 合法值集合与前端 formatter 的状态文案键保持一致。
+pub fn validate_ip_status_string(status: &str) -> Result<(), ValidationError> {
+    match status {
+        "active" | "inactive" | "reserved" => Ok(()),
+        _ => Err(ValidationError::new("server.ip.validation.status_invalid")),
+    }
+}
+
+/// Option 字段版 IP 状态白名单（有值才校验，None 跳过）
+pub fn validate_ip_status_option(status: &&String) -> Result<(), ValidationError> {
+    validate_ip_status_string(status)
+}
+
+/// DeviceUpdate.hostname（VARCHAR(100)）
+pub fn validate_hostname_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 100, "server.device.validation.hostname_length")
+}
+
+/// DeviceUpdate.snmp_community（VARCHAR(100)）
+pub fn validate_snmp_community_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 100, "server.device.validation.snmp_community_length")
+}
+
+/// DeviceUpdate.snmp_username（VARCHAR(50)）
+pub fn validate_snmp_username_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 50, "server.device.validation.snmp_username_length")
+}
+
+/// DeviceUpdate.snmp_auth_protocol（VARCHAR(10)）
+pub fn validate_snmp_auth_protocol_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(
+        value,
+        10,
+        "server.device.validation.snmp_auth_protocol_length",
+    )
+}
+
+/// DeviceUpdate.snmp_auth_password（VARCHAR(100)）
+pub fn validate_snmp_auth_password_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(
+        value,
+        100,
+        "server.device.validation.snmp_auth_password_length",
+    )
+}
+
+/// DeviceUpdate.snmp_priv_protocol（VARCHAR(10)）
+pub fn validate_snmp_priv_protocol_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(
+        value,
+        10,
+        "server.device.validation.snmp_priv_protocol_length",
+    )
+}
+
+/// DeviceUpdate.snmp_priv_password（VARCHAR(100)）
+pub fn validate_snmp_priv_password_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(
+        value,
+        100,
+        "server.device.validation.snmp_priv_password_length",
+    )
 }
 
 /// 设备接口速率（VARCHAR(20)）
@@ -407,6 +624,102 @@ mod tests {
                 .err()
                 .unwrap_or_else(|| panic!("地址 {invalid} 应被拒绝"));
             assert_eq!(err.code, "invalid_ip_address");
+        }
+    }
+
+    // ---------- VLAN / IP 版本 / 密码字节上限校验 ----------
+
+    #[test]
+    fn test_validate_vlan_id_option_range() {
+        // 1..=4094 合法，越界拒绝（数值字段按值传入）
+        for ok_vlan in [1i32, 100, 4094] {
+            assert!(
+                validate_vlan_id_option(ok_vlan).is_ok(),
+                "VLAN {ok_vlan} 应合法"
+            );
+        }
+        for bad_vlan in [0i32, -1, 4095, 65535] {
+            assert!(
+                validate_vlan_id_option(bad_vlan).is_err(),
+                "VLAN {bad_vlan} 应被拒绝"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_ip_version_option() {
+        // 仅 4 / 6 合法（数值字段按值传入）
+        assert!(validate_ip_version_option(4i16).is_ok());
+        assert!(validate_ip_version_option(6i16).is_ok());
+        for bad in [0i16, 5, -1, 7] {
+            assert!(
+                validate_ip_version_option(bad).is_err(),
+                "版本 {bad} 应被拒绝"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_ip_address_option_delegates() {
+        let ok_value = String::from("192.168.1.1");
+        let ok_ref: &String = &ok_value;
+        assert!(validate_ip_address_option(&ok_ref).is_ok());
+
+        let bad_value = String::from("10.0.0.1/24");
+        let bad_ref: &String = &bad_value;
+        assert!(validate_ip_address_option(&bad_ref).is_err());
+    }
+
+    #[test]
+    fn test_validate_password_max_bytes() {
+        // 恰 72 字节合法（bcrypt 输入上限），73 字节拒绝
+        assert!(validate_password_max_bytes(&"a".repeat(72)).is_ok());
+        assert!(validate_password_max_bytes(&"a".repeat(73)).is_err());
+        // 多字节字符按字节计
+        assert!(
+            validate_password_max_bytes(&"密".repeat(24)).is_ok(),
+            "72 字节汉字应合法"
+        );
+        assert!(
+            validate_password_max_bytes(&"密".repeat(25)).is_err(),
+            "75 字节汉字应拒绝"
+        );
+    }
+
+    // ---------- 新增双层 Option / 白名单校验函数 ----------
+
+    #[test]
+    fn test_validate_length_m_opt_range() {
+        // 双层 Option 数值字段按值传入：0 与 10000 合法，负数/越上限/NaN 拒绝
+        assert!(validate_length_m_opt(0.0).is_ok());
+        assert!(validate_length_m_opt(12.5).is_ok());
+        assert!(validate_length_m_opt(10000.0).is_ok());
+        assert!(validate_length_m_opt(-0.1).is_err());
+        assert!(validate_length_m_opt(10000.1).is_err());
+        assert!(validate_length_m_opt(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn test_validate_email_opt() {
+        // Some(Some(v)) 解包后按引用传入：合法与非法邮箱各一
+        assert!(validate_email_opt(&&"a@b.com".to_string()).is_ok());
+        assert!(validate_email_opt(&&"not-an-email".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_validate_ip_status_option_whitelist() {
+        // 白名单：active / inactive / reserved
+        for ok_status in ["active", "inactive", "reserved"] {
+            assert!(
+                validate_ip_status_option(&&ok_status.to_string()).is_ok(),
+                "状态 {ok_status} 应合法"
+            );
+        }
+        for bad_status in ["", "enabled", "ACTIVE"] {
+            assert!(
+                validate_ip_status_option(&&bad_status.to_string()).is_err(),
+                "状态 {bad_status} 应被拒绝"
+            );
         }
     }
 

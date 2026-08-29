@@ -13,6 +13,8 @@ use ipma_models::LoginLog;
 
 pub async fn get_login_logs(
     State(state): State<Arc<AppState>>,
+    // 与 admin_guard_middleware 的 /api/logs/** 角色矩阵一致：admin 或 auditor
+    _viewer: ipma_auth::extractor::AdminOrAuditorUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);

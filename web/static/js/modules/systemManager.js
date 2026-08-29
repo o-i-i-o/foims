@@ -227,7 +227,7 @@ async function openOpenSourceModal() {
   openModal("open-source-modal");
 }
 
-// 格式化系统运行时间（秒 -> X天X小时X分钟X秒）
+// 格式化系统运行时间（秒 -> X天X小时X分钟X秒，各时间单位文案走 i18n 动态键）
 function formatUptime(seconds) {
   const days = Math.floor(seconds / (24 * 60 * 60));
   seconds %= 24 * 60 * 60;
@@ -238,23 +238,29 @@ function formatUptime(seconds) {
 
   let result = "";
   if (days > 0) {
-    result += `${days}天`;
+    result += t("system.uptime_days", { count: days });
   }
   if (hours > 0) {
-    result += `${hours}小时`;
+    result += t("system.uptime_hours", { count: hours });
   }
   if (minutes > 0) {
-    result += `${minutes}分钟`;
+    result += t("system.uptime_minutes", { count: minutes });
   }
-  result += `${seconds}秒`;
+  result += t("system.uptime_seconds", { count: seconds });
 
   return result;
 }
 
 // 保存系统配置
 let currentServerConfig = null;
+// 在途标志：保存请求期间重复提交直接忽略（防双击重复写入）
+let systemConfigSaving = false;
 
 async function saveSystemConfig() {
+  if (systemConfigSaving) {
+    return;
+  }
+  systemConfigSaving = true;
   try {
     const serverConfig = {
       ...currentServerConfig,
@@ -277,13 +283,17 @@ async function saveSystemConfig() {
   } catch (error) {
     console.error("保存系统配置失败:", error);
     showToast(`${t("system.config_save_failed")}: ${error.message}`, "error");
+  } finally {
+    systemConfigSaving = false;
   }
 }
 
 // 检查并显示配置更新后的重启提示
 function checkConfigUpdateRestartPrompt() {
-  // 检查是否有配置更新标记
-  if (sessionStorage.getItem("configUpdated") === "true") {
+  // 读后立即清除标记：否则标记残留会导致每次进系统页加载配置都重复弹提示
+  const configUpdated = sessionStorage.getItem("configUpdated");
+  sessionStorage.removeItem("configUpdated");
+  if (configUpdated === "true") {
     // 显示重启提示
     showToast(t("system.config_saved_restart_needed"), "warning");
   }
@@ -356,8 +366,14 @@ async function loadSmtpConfig() {
   }
 }
 
-// 保存SMTP配置
+// 保存SMTP配置（在途标志防重复提交）
+let smtpConfigSaving = false;
+
 async function saveSmtpConfig() {
+  if (smtpConfigSaving) {
+    return;
+  }
+  smtpConfigSaving = true;
   try {
     const secureType = elementCache.getValue("smtp-secure-type");
     const smtpConfig = {
@@ -378,6 +394,8 @@ async function saveSmtpConfig() {
   } catch (error) {
     console.error("保存SMTP配置失败:", error);
     showToast(`${t("smtp.save_failed")}: ${error.message}`, "error");
+  } finally {
+    smtpConfigSaving = false;
   }
 }
 
@@ -394,11 +412,6 @@ export async function testSmtpConnection() {
     console.error("测试SMTP连接失败:", error);
     showToast(`${t("smtp.test_error")}: ${error.message}`, "error");
   }
-}
-
-// 初始化SMTP相关功能
-export function initSmtpFunctions() {
-  // 注意：test-smtp-btn 已在 eventManager.js 中绑定，此处不再重复绑定
 }
 
 // ==================== LDAP / SSO 认证配置 ====================
@@ -433,8 +446,14 @@ export async function loadLdapConfig() {
   }
 }
 
-// 保存LDAP配置（密码留空表示沿用已保存值）
+// 保存LDAP配置（密码留空表示沿用已保存值；在途标志防重复提交）
+let ldapConfigSaving = false;
+
 export async function saveLdapConfig() {
+  if (ldapConfigSaving) {
+    return;
+  }
+  ldapConfigSaving = true;
   try {
     const config = {
       enabled: elementCache.get("ldap-enabled")?.checked || false,
@@ -455,6 +474,8 @@ export async function saveLdapConfig() {
   } catch (error) {
     console.error("保存LDAP配置失败:", error);
     showToast(`${t("ldap.save_failed")}: ${error.message}`, "error");
+  } finally {
+    ldapConfigSaving = false;
   }
 }
 
@@ -502,8 +523,14 @@ export async function loadSsoConfig() {
   }
 }
 
-// 保存SSO（OIDC）配置（密钥留空表示沿用已保存值）
+// 保存SSO（OIDC）配置（密钥留空表示沿用已保存值；在途标志防重复提交）
+let ssoConfigSaving = false;
+
 export async function saveSsoConfig() {
+  if (ssoConfigSaving) {
+    return;
+  }
+  ssoConfigSaving = true;
   try {
     const config = {
       enabled: elementCache.get("sso-enabled")?.checked || false,
@@ -523,6 +550,8 @@ export async function saveSsoConfig() {
   } catch (error) {
     console.error("保存SSO配置失败:", error);
     showToast(`${t("sso.save_failed")}: ${error.message}`, "error");
+  } finally {
+    ssoConfigSaving = false;
   }
 }
 
@@ -607,8 +636,14 @@ export async function loadNotificationSettings() {
   }
 }
 
-// 保存通知设置
+// 保存通知设置（在途标志防重复提交）
+let notificationSettingsSaving = false;
+
 export async function saveNotificationSettings() {
+  if (notificationSettingsSaving) {
+    return;
+  }
+  notificationSettingsSaving = true;
   try {
     const checkboxes = document.querySelectorAll(
       "#notification-users-list input[type='checkbox']:checked"
@@ -627,6 +662,16 @@ export async function saveNotificationSettings() {
   } catch (error) {
     console.error("保存通知设置失败:", error);
     showToast(`${t("notification.save_error")}: ${error.message}`, "error");
+  } finally {
+    notificationSettingsSaving = false;
+  }
+}
+
+// 空值安全的文本写入（元素缺失时不抛错，静默跳过）
+function setTextById(id, text) {
+  const el = elementCache.get(id);
+  if (el) {
+    el.textContent = text;
   }
 }
 
@@ -637,8 +682,8 @@ export async function loadSystemInfo() {
     if (result.success) {
       const systemInfo = result.data;
 
-      elementCache.get("system-name").textContent = systemInfo.name || "IPMA";
-      elementCache.get("system-version").textContent = systemInfo.version || "-";
+      setTextById("system-name", systemInfo.name || "IPMA");
+      setTextById("system-version", systemInfo.version || "-");
       const dbStatus = systemInfo.database_status || "-";
       let dbStatusText;
       if (dbStatus === "connected") {
@@ -648,11 +693,14 @@ export async function loadSystemInfo() {
       } else {
         dbStatusText = dbStatus;
       }
-      elementCache.get("database-status").textContent = dbStatusText;
-      elementCache.get("system-time").textContent = systemInfo.timestamp
-        ? new Date(systemInfo.timestamp).toLocaleString()
-        : new Date().toLocaleString();
-      elementCache.get("system-uptime").textContent = formatUptime(systemInfo.uptime_seconds || 0);
+      setTextById("database-status", dbStatusText);
+      setTextById(
+        "system-time",
+        systemInfo.timestamp
+          ? new Date(systemInfo.timestamp).toLocaleString()
+          : new Date().toLocaleString()
+      );
+      setTextById("system-uptime", formatUptime(systemInfo.uptime_seconds || 0));
     }
   } catch (error) {
     console.error("加载系统信息失败:", error);
@@ -885,17 +933,21 @@ export async function loadLogsStats() {
     if (result.success && result.data) {
       const stats = result.data;
 
-      elementCache.get("operation-logs-count").textContent = stats.operation_logs?.count || 0;
-      elementCache.get("login-logs-count").textContent = stats.login_logs?.count || 0;
-      elementCache.get("notifications-count").textContent = stats.notifications?.count || 0;
+      setTextById("operation-logs-count", stats.operation_logs?.count || 0);
+      setTextById("login-logs-count", stats.login_logs?.count || 0);
+      setTextById("notifications-count", stats.notifications?.count || 0);
 
       if (stats.operation_logs?.oldest) {
-        elementCache.get("operation-logs-oldest").textContent =
-          `${t("logs.earliest_label")}: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`;
+        setTextById(
+          "operation-logs-oldest",
+          `${t("logs.earliest_label")}: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`
+        );
       }
       if (stats.login_logs?.oldest) {
-        elementCache.get("login-logs-oldest").textContent =
-          `${t("logs.earliest_label")}: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`;
+        setTextById(
+          "login-logs-oldest",
+          `${t("logs.earliest_label")}: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`
+        );
       }
     }
   } catch (error) {
@@ -906,8 +958,18 @@ export async function loadLogsStats() {
 // 清理日志
 export async function clearLogs() {
   const logType = elementCache.getValue("clear-log-type");
-  const daysInput = elementCache.getValue("clear-log-days");
-  const days = daysInput ? parseInt(daysInput) : 0;
+  const daysInput = (elementCache.getValue("clear-log-days") || "").trim();
+  const parsedDays = parseInt(daysInput, 10);
+
+  // 空或非数字视为未填写：直接提示，不按 0（清空全部）处理，
+  // 避免误触不可逆的全量清理，也避免确认文案与请求体出现 NaN/null
+  if (daysInput === "" || isNaN(parsedDays)) {
+    showToast(t("logs.days_required"), "warning");
+    return;
+  }
+
+  // 数值钳制到合法范围：负数归 0（0 表示删除全部），上限 36500 天（约百年）
+  const days = Math.min(Math.max(parsedDays, 0), 36500);
 
   let confirmMsg;
   if (days === 0) {
@@ -972,8 +1034,14 @@ async function loadLogForwarding() {
   }
 }
 
-// 保存外发配置
+// 保存日志外发配置（在途标志防重复提交）
+let logForwardingSaving = false;
+
 async function saveLogForwarding() {
+  if (logForwardingSaving) {
+    return;
+  }
+  logForwardingSaving = true;
   const body = {
     enabled: elementCache.getValue("log-forwarding-enabled") === "true",
     protocol: elementCache.getValue("log-forwarding-protocol") || "udp",
@@ -990,6 +1058,8 @@ async function saveLogForwarding() {
   } catch (error) {
     console.error("保存日志外发配置失败:", error);
     showToast(t("common.operation_failed"), "error");
+  } finally {
+    logForwardingSaving = false;
   }
 }
 
@@ -1036,8 +1106,14 @@ async function loadPasswordPolicy() {
   }
 }
 
-// 保存密码策略（安全管理员权限）
+// 保存密码策略（安全管理员权限；在途标志防重复提交）
+let passwordPolicySaving = false;
+
 async function savePasswordPolicy() {
+  if (passwordPolicySaving) {
+    return;
+  }
+  passwordPolicySaving = true;
   const body = {
     min_length: parseInt(elementCache.getValue("password-policy-min-length"), 10) || 8,
     expiry_days: parseInt(elementCache.getValue("password-policy-expiry"), 10) || 0,
@@ -1057,6 +1133,8 @@ async function savePasswordPolicy() {
   } catch (error) {
     console.error("保存密码策略失败:", error);
     showToast(t("common.operation_failed"), "error");
+  } finally {
+    passwordPolicySaving = false;
   }
 }
 
@@ -1095,6 +1173,8 @@ function certDaysText(days) {
 }
 
 function certDaysClass(days) {
+  // 刻意双判 null 与 undefined：后端 days_remaining 可能缺省（undefined）或显式为 null，
+  // 两种情况都表示"无剩余天数数据"，不加任何样式类
   if (days == null) {
     return "";
   }
@@ -1220,6 +1300,9 @@ function downloadCa() {
   window.open("/api/certificate/ca/download", "_blank");
 }
 
+// 证书四个表单的在途标志：请求期间重复提交直接忽略（防双击重复签发/导入）
+let caGenerateSaving = false;
+
 async function openCaGenerateModal() {
   const modal = await loadModal("ca-generate-modal");
   if (!modal) {
@@ -1235,34 +1318,44 @@ async function openCaGenerateModal() {
   const form = elementCache.get("ca-generate-form");
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const fd = new FormData(form);
-    const body = {
-      common_name: String(fd.get("common_name") || "").trim(),
-      organization: certOptionalField(fd.get("organization")),
-      organizational_unit: certOptionalField(fd.get("organizational_unit")),
-      country: certOptionalField(fd.get("country")),
-      state: certOptionalField(fd.get("state")),
-      locality: certOptionalField(fd.get("locality")),
-      validity_days: parseInt(fd.get("validity_days"), 10) || null
-    };
-    if (!body.common_name) {
-      showToast(t("cert.common_name_required"), "warning");
+    if (caGenerateSaving) {
       return;
     }
+    caGenerateSaving = true;
+    try {
+      const fd = new FormData(form);
+      const body = {
+        common_name: String(fd.get("common_name") || "").trim(),
+        organization: certOptionalField(fd.get("organization")),
+        organizational_unit: certOptionalField(fd.get("organizational_unit")),
+        country: certOptionalField(fd.get("country")),
+        state: certOptionalField(fd.get("state")),
+        locality: certOptionalField(fd.get("locality")),
+        validity_days: parseInt(fd.get("validity_days"), 10) || null
+      };
+      if (!body.common_name) {
+        showToast(t("cert.common_name_required"), "warning");
+        return;
+      }
 
-    const result = await apiPost("/api/system/certificate/ca/generate", body);
-    if (result.success) {
-      showToast(result.message, "success");
-      closeModal("ca-generate-modal");
-      form.reset();
-      loadCertificateInventory();
-    } else {
-      showToast(result.message, "error");
+      const result = await apiPost("/api/system/certificate/ca/generate", body);
+      if (result.success) {
+        showToast(result.message, "success");
+        closeModal("ca-generate-modal");
+        form.reset();
+        loadCertificateInventory();
+      } else {
+        showToast(result.message, "error");
+      }
+    } finally {
+      caGenerateSaving = false;
     }
   };
 
   openModal("ca-generate-modal");
 }
+
+let caImportSaving = false;
 
 async function openCaImportModal() {
   const modal = await loadModal("ca-import-modal");
@@ -1273,18 +1366,22 @@ async function openCaImportModal() {
   const form = elementCache.get("ca-import-form");
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const caFile = elementCache.get("ca-file")?.files[0];
-    const caKeyFile = elementCache.get("ca-key-file")?.files[0];
-    if (!caFile || !caKeyFile) {
-      showToast(t("cert.file_required"), "warning");
+    if (caImportSaving) {
       return;
     }
-
-    const fd = new FormData();
-    fd.append("cert", caFile);
-    fd.append("key", caKeyFile);
-
+    caImportSaving = true;
     try {
+      const caFile = elementCache.get("ca-file")?.files[0];
+      const caKeyFile = elementCache.get("ca-key-file")?.files[0];
+      if (!caFile || !caKeyFile) {
+        showToast(t("cert.file_required"), "warning");
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append("cert", caFile);
+      fd.append("key", caKeyFile);
+
       const result = await apiRequest("/api/system/certificate/ca/import", {
         method: "POST",
         body: fd
@@ -1300,6 +1397,8 @@ async function openCaImportModal() {
     } catch (error) {
       console.error("导入CA失败:", error);
       showToast(t("cert.import_failed"), "error");
+    } finally {
+      caImportSaving = false;
     }
   };
 
@@ -1330,6 +1429,8 @@ function fillCertCaSelect(select) {
   }
 }
 
+let certGenerateSaving = false;
+
 async function openCertGenerateModal() {
   const modal = await loadModal("cert-generate-modal");
   if (!modal) {
@@ -1346,47 +1447,57 @@ async function openCertGenerateModal() {
   const form = elementCache.get("cert-generate-form");
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const fd = new FormData(form);
-    const sans = String(fd.get("subject_alt_names") || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const caId = String(fd.get("ca_id") || "").trim();
-    if (!caId) {
-      showToast(t("cert.ca_required"), "warning");
+    if (certGenerateSaving) {
       return;
     }
+    certGenerateSaving = true;
+    try {
+      const fd = new FormData(form);
+      const sans = String(fd.get("subject_alt_names") || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
 
-    const body = {
-      common_name: String(fd.get("common_name") || "").trim(),
-      organization: certOptionalField(fd.get("organization")),
-      organizational_unit: certOptionalField(fd.get("organizational_unit")),
-      country: certOptionalField(fd.get("country")),
-      state: certOptionalField(fd.get("state")),
-      locality: certOptionalField(fd.get("locality")),
-      validity_days: parseInt(fd.get("validity_days"), 10) || null,
-      subject_alt_names: sans.length > 0 ? sans : null,
-      ca_id: caId
-    };
-    if (!body.common_name) {
-      showToast(t("cert.common_name_required"), "warning");
-      return;
-    }
+      const caId = String(fd.get("ca_id") || "").trim();
+      if (!caId) {
+        showToast(t("cert.ca_required"), "warning");
+        return;
+      }
 
-    const result = await apiPost("/api/system/certificate/generate", body);
-    if (result.success) {
-      showToast(result.message, "success");
-      closeModal("cert-generate-modal");
-      form.reset();
-      loadCertificateInventory();
-    } else {
-      showToast(result.message, "error");
+      const body = {
+        common_name: String(fd.get("common_name") || "").trim(),
+        organization: certOptionalField(fd.get("organization")),
+        organizational_unit: certOptionalField(fd.get("organizational_unit")),
+        country: certOptionalField(fd.get("country")),
+        state: certOptionalField(fd.get("state")),
+        locality: certOptionalField(fd.get("locality")),
+        validity_days: parseInt(fd.get("validity_days"), 10) || null,
+        subject_alt_names: sans.length > 0 ? sans : null,
+        ca_id: caId
+      };
+      if (!body.common_name) {
+        showToast(t("cert.common_name_required"), "warning");
+        return;
+      }
+
+      const result = await apiPost("/api/system/certificate/generate", body);
+      if (result.success) {
+        showToast(result.message, "success");
+        closeModal("cert-generate-modal");
+        form.reset();
+        loadCertificateInventory();
+      } else {
+        showToast(result.message, "error");
+      }
+    } finally {
+      certGenerateSaving = false;
     }
   };
 
   openModal("cert-generate-modal");
 }
+
+let certImportSaving = false;
 
 async function openCertImportModal() {
   const modal = await loadModal("cert-import-modal");
@@ -1397,23 +1508,27 @@ async function openCertImportModal() {
   const form = elementCache.get("cert-import-form");
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const certFile = elementCache.get("cert-file")?.files[0];
-    const keyFile = elementCache.get("key-file")?.files[0];
-    if (!certFile || !keyFile) {
-      showToast(t("cert.file_required"), "warning");
+    if (certImportSaving) {
       return;
     }
-
-    const fd = new FormData();
-    fd.append("cert", certFile);
-    fd.append("key", keyFile);
-    // 附带的 CA（可选）仅供终端导出信任，不参与证书/私钥校验
-    const caFile = elementCache.get("cert-ca-file")?.files[0];
-    if (caFile) {
-      fd.append("ca", caFile);
-    }
-
+    certImportSaving = true;
     try {
+      const certFile = elementCache.get("cert-file")?.files[0];
+      const keyFile = elementCache.get("key-file")?.files[0];
+      if (!certFile || !keyFile) {
+        showToast(t("cert.file_required"), "warning");
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append("cert", certFile);
+      fd.append("key", keyFile);
+      // 附带的 CA（可选）仅供终端导出信任，不参与证书/私钥校验
+      const caFile = elementCache.get("cert-ca-file")?.files[0];
+      if (caFile) {
+        fd.append("ca", caFile);
+      }
+
       const result = await apiRequest("/api/system/certificate/import", {
         method: "POST",
         body: fd
@@ -1429,6 +1544,8 @@ async function openCertImportModal() {
     } catch (error) {
       console.error("导入证书失败:", error);
       showToast(t("cert.import_failed"), "error");
+    } finally {
+      certImportSaving = false;
     }
   };
 

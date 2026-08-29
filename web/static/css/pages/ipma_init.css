@@ -225,9 +225,11 @@
   border-color: #fde68a;
 }
 
-.status-success,
-.status-error,
-.status-warning {
+/* 状态图标字号/间距：限定为容器直接子代。JS 会给容器本身加同名状态类
+   （仅用于背景配色），选择器不得命中容器，否则整块文字被放大到 24px */
+.status-container > .status-success,
+.status-container > .status-error,
+.status-container > .status-warning {
   font-size: 24px;
   margin-bottom: 16px;
 }
@@ -530,6 +532,11 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+}
+
+/* display:flex 会覆盖 UA 样式表的 [hidden]，须显式恢复 hidden 属性的隐藏能力 */
+.loading[hidden] {
+  display: none;
 }
 
 /* 输入框与按钮的行内横排（原内联 flex 布局收编为类） */

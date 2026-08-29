@@ -9,8 +9,13 @@ import { openModal, closeModal } from "../utils/modalLoader.js";
 
 // IPv4/IPv6 标签页互斥切换：激活当前按钮与其对应内容面板
 function activateTabPane(modal, btn) {
-  modal.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+  // 同步 aria-selected（与 active 类一致，参考 login.js 的 Tab 切换写法）
+  modal.querySelectorAll(".tab-btn").forEach((b) => {
+    b.classList.remove("active");
+    b.setAttribute("aria-selected", "false");
+  });
   btn.classList.add("active");
+  btn.setAttribute("aria-selected", "true");
   modal.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
   const targetTab = modal.querySelector(`#${btn.dataset.tab}-tab`);
   if (targetTab) {
@@ -178,22 +183,18 @@ function renderMacTable(entries, type) {
   }
 
   const groups = groupByNetwork(entries, type);
-  const defaultCollapsed = true;
 
   let html = "";
   let groupIndex = 0;
   for (const [network, items] of Object.entries(groups)) {
     const groupId = `${type}-group-${groupIndex}`;
-    const displayStyle = defaultCollapsed ? "none" : "block";
-    // 初始折叠态由模板内联给出，折叠切换时由 bindCollapseEvents 改写内联 transform
-    const iconRotate = defaultCollapsed ? "rotate(-90deg)" : "rotate(0deg)";
-
+    // 初始折叠（内联 display:none），展开/折叠由点击处理切换同一内联样式
     html += `<div class="mac-network-group">
       <div class="network-group-header" data-target="${groupId}">
         <span>${escapeHtml(network)} (${items.length} ${t("common.records")})</span>
-        <span class="collapse-icon mac-collapse-icon" style="transform: ${iconRotate};">▼</span>
+        <span class="collapse-icon mac-collapse-icon" style="transform: rotate(-90deg);">▼</span>
       </div>
-      <div id="${groupId}" class="network-group-content" style="display: ${displayStyle};">
+      <div id="${groupId}" class="network-group-content" style="display: none;">
         <table class="mac-group-table">
           <tr><th>${t("device.ip_address")}</th><th>${t("device.mac_address")}</th></tr>`;
     items.forEach((entry) => {
@@ -212,9 +213,14 @@ function bindCollapseEvents(container) {
       const targetId = header.dataset.target;
       const content = container.querySelector(`#${targetId}`);
       const icon = header.querySelector(".collapse-icon");
-
-      const collapsed = content.classList.toggle("hidden");
-      icon.style.transform = collapsed ? "rotate(-90deg)" : "rotate(0deg)";
+      if (!content || !icon) {
+        return;
+      }
+      // 与初始态同一机制（内联 display）：初始 display:none 为折叠，
+      // toggle hidden 类不会改变内联样式，明细永远不可见
+      const collapsed = content.style.display === "none";
+      content.style.display = collapsed ? "block" : "none";
+      icon.style.transform = collapsed ? "rotate(0deg)" : "rotate(-90deg)";
     });
   });
 }

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 // ==================== 网络区域模型 ====================
 
@@ -81,6 +81,7 @@ pub struct NetworkInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_network_create"))]
 pub struct NetworkCreate {
     #[validate(length(min = 1, max = 50, message = "server.network.validation.name_length"))]
     pub name: String,
@@ -93,10 +94,18 @@ pub struct NetworkCreate {
         function = "crate::models::validate_dns_count",
         message = "server.network.validation.dns_count"
     ))]
+    #[validate(custom(
+        function = "crate::models::validate_ipv4_dns_entries",
+        message = "server.network.validation.dns_invalid"
+    ))]
     pub ipv4_dns: Option<Vec<String>>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
         message = "server.network.validation.dns_count"
+    ))]
+    #[validate(custom(
+        function = "crate::models::validate_ipv6_dns_entries",
+        message = "server.network.validation.dns_invalid"
     ))]
     pub ipv6_dns: Option<Vec<String>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -104,22 +113,37 @@ pub struct NetworkCreate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_network_update"))]
 pub struct NetworkUpdate {
     #[validate(length(min = 1, max = 50, message = "server.network.validation.name_length"))]
     pub name: Option<String>,
     pub network_region_id: Option<Uuid>,
-    pub ipv4_cidr: Option<String>,
-    pub ipv6_cidr: Option<String>,
-    pub ipv4_gateway: Option<String>,
-    pub ipv6_gateway: Option<String>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub ipv4_cidr: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub ipv6_cidr: Option<Option<String>>,
+    /// 双层 Option：null 清空网关
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub ipv4_gateway: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub ipv6_gateway: Option<Option<String>>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
         message = "server.network.validation.dns_count"
+    ))]
+    #[validate(custom(
+        function = "crate::models::validate_ipv4_dns_entries",
+        message = "server.network.validation.dns_invalid"
     ))]
     pub ipv4_dns: Option<Vec<String>>,
     #[validate(custom(
         function = "crate::models::validate_dns_count",
         message = "server.network.validation.dns_count"
+    ))]
+    #[validate(custom(
+        function = "crate::models::validate_ipv6_dns_entries",
+        message = "server.network.validation.dns_invalid"
     ))]
     pub ipv6_dns: Option<Vec<String>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -128,10 +152,70 @@ pub struct NetworkUpdate {
 
 // ==================== 单元测试 ====================
 
+/// CIDR 格式校验（复用 ipma-common 的 net 辅助，与 handler 同口径）：
+/// 模型层防御纵深
+fn validate_cidr_fields(
+    ipv4_cidr: Option<&str>,
+    ipv6_cidr: Option<&str>,
+    ipv4_gateway: Option<&str>,
+    ipv6_gateway: Option<&str>,
+) -> Result<(), ValidationError> {
+    let check_cidr = |v: Option<&str>, want: &str| -> Result<(), ValidationError> {
+        match v {
+            Some(cidr)
+                if ipma_common::net::validate_cidr(cidr)
+                    && ipma_common::net::get_cidr_type(cidr) == Some(want) =>
+            {
+                Ok(())
+            }
+            Some(_) => Err(ValidationError::new(
+                "server.network.validation.cidr_format",
+            )),
+            None => Ok(()),
+        }
+    };
+    let check_ip = |v: Option<&str>, is_v4: bool| -> Result<(), ValidationError> {
+        match v.map(|ip| ip.parse::<std::net::IpAddr>()) {
+            Some(Ok(addr)) if addr.is_ipv4() == is_v4 => Ok(()),
+            Some(_) => Err(ValidationError::new(
+                "server.network.validation.gateway_format",
+            )),
+            None => Ok(()),
+        }
+    };
+    check_cidr(ipv4_cidr, "ipv4")?;
+    check_cidr(ipv6_cidr, "ipv6")?;
+    check_ip(ipv4_gateway, true)?;
+    check_ip(ipv6_gateway, false)?;
+    Ok(())
+}
+
+fn validate_network_create(req: &NetworkCreate) -> Result<(), ValidationError> {
+    validate_cidr_fields(
+        req.ipv4_cidr.as_deref(),
+        req.ipv6_cidr.as_deref(),
+        req.ipv4_gateway.as_deref(),
+        req.ipv6_gateway.as_deref(),
+    )
+}
+
+fn validate_network_update(req: &NetworkUpdate) -> Result<(), ValidationError> {
+    // 双层 Option：仅对 Some(Some(v)) 的显式新值校验
+    fn inner(v: &Option<Option<String>>) -> Option<&str> {
+        v.as_ref().and_then(|i| i.as_deref())
+    }
+    validate_cidr_fields(
+        inner(&req.ipv4_cidr),
+        inner(&req.ipv6_cidr),
+        inner(&req.ipv4_gateway),
+        inner(&req.ipv6_gateway),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use validator::Validate;
+    use validator::{Validate, ValidationError};
 
     #[test]
     fn test_region_create_valid() -> Result<(), serde_json::Error> {
@@ -272,6 +356,55 @@ mod tests {
     }
 
     #[test]
+    fn test_network_create_ipv4_dns_entry_invalid() -> Result<(), serde_json::Error> {
+        // IPv4 DNS 列表含非法条目（非 IPv4 地址，含 IPv6 混入）应被拒绝
+        for bad in ["not-an-ip", "256.1.1.1", "2400:3200::9", ""] {
+            let req: NetworkCreate = serde_json::from_value(serde_json::json!({
+                "name": "办公网",
+                "network_region_id": Uuid::new_v4(),
+                "ipv4_dns": ["223.5.5.5", bad]
+            }))?;
+            let Err(errors) = req.validate() else {
+                panic!("IPv4 DNS 条目 {bad:?} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("ipv4_dns"), "条目 {bad:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_network_create_ipv6_dns_entry_invalid() -> Result<(), serde_json::Error> {
+        // IPv6 DNS 列表含非法条目（非 IPv6 地址，含 IPv4 混入）应被拒绝
+        for bad in ["not-an-ip", "2001:db8:::1", "223.5.5.5", ""] {
+            let req: NetworkCreate = serde_json::from_value(serde_json::json!({
+                "name": "办公网",
+                "network_region_id": Uuid::new_v4(),
+                "ipv6_dns": ["2400:3200::9", bad]
+            }))?;
+            let Err(errors) = req.validate() else {
+                panic!("IPv6 DNS 条目 {bad:?} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("ipv6_dns"), "条目 {bad:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_network_update_dns_entry_invalid() -> Result<(), serde_json::Error> {
+        // 更新路径同样逐条校验 DNS 格式
+        let req: NetworkUpdate = serde_json::from_value(serde_json::json!({
+            "ipv4_dns": ["1.1.1.1", "abc"],
+            "ipv6_dns": ["2400:3200::9", "1.1.1.1"]
+        }))?;
+        let Err(errors) = req.validate() else {
+            panic!("非法 DNS 更新应被拒绝");
+        };
+        assert!(errors.errors().contains_key("ipv4_dns"));
+        assert!(errors.errors().contains_key("ipv6_dns"));
+        Ok(())
+    }
+
+    #[test]
     fn test_network_create_name_length() -> Result<(), serde_json::Error> {
         let req: NetworkCreate = serde_json::from_value(serde_json::json!({
             "name": "",
@@ -291,6 +424,31 @@ mod tests {
             "ipv4_dns": ["1.1.1.1"]
         }))?;
         assert!(req.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_network_update_cidr_gateway_three_states() -> Result<(), serde_json::Error> {
+        // ipv4_cidr / ipv4_gateway 双层 Option：缺失不修改、null 清空、值设置新值
+        let missing: NetworkUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(missing.ipv4_cidr, None);
+        assert_eq!(missing.ipv4_gateway, None);
+
+        let cleared: NetworkUpdate = serde_json::from_value(serde_json::json!({
+            "ipv4_cidr": null,
+            "ipv4_gateway": null
+        }))?;
+        assert_eq!(cleared.ipv4_cidr, Some(None));
+        assert_eq!(cleared.ipv4_gateway, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        let set: NetworkUpdate = serde_json::from_value(serde_json::json!({
+            "ipv4_cidr": "10.2.0.0/24",
+            "ipv4_gateway": "10.2.0.254"
+        }))?;
+        assert_eq!(set.ipv4_cidr, Some(Some("10.2.0.0/24".to_string())));
+        assert_eq!(set.ipv4_gateway, Some(Some("10.2.0.254".to_string())));
+        assert!(set.validate().is_ok());
         Ok(())
     }
 

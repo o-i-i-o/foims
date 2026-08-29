@@ -17,6 +17,21 @@ import { goToStep, showError, showLoading, hideLoading } from "./ui.js";
 // 各检查步骤共用的兜底错误文案键
 const T_KEY_UNKNOWN_ERROR = "init.unknown_error";
 
+/**
+ * 翻译服务端返回的 error 字段（后端约定为 i18n key）。
+ * 键在字典中缺失时 t() 原样返回 key，此时回退到通用未知错误文案，
+ * 避免向用户展示裸键名。
+ * @param {string} errorKey 服务端 error 字段（i18n key）
+ * @returns {string} 翻译后的错误文案
+ */
+const translateErrorField = (errorKey) => {
+  if (!errorKey) {
+    return t(T_KEY_UNKNOWN_ERROR);
+  }
+  const translated = t(errorKey);
+  return translated === errorKey ? t(T_KEY_UNKNOWN_ERROR) : translated;
+};
+
 // 安全解析 JSON 响应：后端返回空 body / 非 JSON / 网络中断时给出可读错误，
 // 而不是抛 "Unexpected end of JSON input" 这类让用户困惑的消息。
 // 解析成功后统一翻译 message（后端返回 i18n key + message_params），
@@ -64,13 +79,15 @@ export const checkPostgreSQL = async () => {
                 <h3>${t("init.pg_running")}</h3>
                 <p>${escapeHtml(result.message || t("init.pg_connected"))}</p>
             `;
+      // 状态类互斥：设置前先清掉旧状态类，避免反复检测后多类叠加
+      pgStatusElement.classList.remove("status-success", "status-error", "status-loading");
       pgStatusElement.classList.add("status-success");
       nextButton.disabled = false;
     } else {
       pgStatusElement.innerHTML = `
                 <div class="status-error">✗</div>
                 <h3>${t("init.pg_check_failed")}</h3>
-                <p>${escapeHtml(result.error || t(T_KEY_UNKNOWN_ERROR))}</p>
+                <p>${escapeHtml(translateErrorField(result.error))}</p>
                 <div class="error-guide">
                     <h4>${t("init.pg_suggestion")}</h4>
                     <ul>
@@ -81,6 +98,8 @@ export const checkPostgreSQL = async () => {
                     </ul>
                 </div>
             `;
+      // 状态类互斥：设置前先清掉旧状态类，避免反复检测后多类叠加
+      pgStatusElement.classList.remove("status-success", "status-error", "status-loading");
       pgStatusElement.classList.add("status-error");
       nextButton.disabled = true;
     }
@@ -103,7 +122,8 @@ export const checkDatabaseStatus = async () => {
     const result = await parseJsonResponse(response);
     hideLoading();
 
-    if (result.success) {
+    // success 但 data 为 null 视同失败：进入 else 分支按失败提示，不读取空对象
+    if (result.success && result.data) {
       const dbStatus = result.data;
       state.dbStatus = dbStatus;
       const dbStatusElement = document.getElementById("db-status");
@@ -142,7 +162,7 @@ export const checkDatabaseStatus = async () => {
         dbStatusElement.innerHTML = `
                     <div class="status-error">✗</div>
                     <h3>${t("init.db_connect_failed")}</h3>
-                    <p>${t("init.db_connect_error")}: ${escapeHtml(dbStatus.error || t(T_KEY_UNKNOWN_ERROR))}</p>
+                    <p>${t("init.db_connect_error")}: ${escapeHtml(translateErrorField(dbStatus.error))}</p>
                     <p>${t("init.will_auto_create_db")}</p>
                 `;
         dbStatusElement.classList.add("status-error");
@@ -241,32 +261,39 @@ export const handleInitModeSubmit = async (e) => {
   }
 };
 
+// 管理员账户提交在途标志：请求期间重复提交直接忽略（防双击重复创建）
+let adminAccountSubmitting = false;
+
 /** 第三步表单提交：创建管理员账户并触发系统重启。 */
 export const handleAdminAccountSubmit = async (e) => {
   e.preventDefault();
-
-  const form = e.target;
-  const formData = new FormData(form);
-
-  const password = formData.get("password");
-  const confirmPassword = formData.get("confirm_password");
-
-  if (password !== confirmPassword) {
-    showError(t("init.password_mismatch"));
+  if (adminAccountSubmitting) {
     return;
   }
-
-  const initConfig = {
-    username: formData.get("username"),
-    password,
-    email: formData.get("email"),
-    role: "admin",
-    verification: formData.get("verification")
-  };
-
-  showLoading();
+  adminAccountSubmitting = true;
 
   try {
+    const form = e.target;
+    const formData = new FormData(form);
+
+    const password = formData.get("password");
+    const confirmPassword = formData.get("confirm_password");
+
+    if (password !== confirmPassword) {
+      showError(t("init.password_mismatch"));
+      return;
+    }
+
+    const initConfig = {
+      username: formData.get("username"),
+      password,
+      email: formData.get("email"),
+      role: "admin",
+      verification: formData.get("verification")
+    };
+
+    showLoading();
+
     const response = await fetch("/api/init", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -298,11 +325,18 @@ export const handleAdminAccountSubmit = async (e) => {
   } catch (error) {
     hideLoading();
     showError(`${t("init.network_error")}: ${error.message}`);
+  } finally {
+    adminAccountSubmitting = false;
   }
 };
 
-/** 获取并展示服务器控制台验证码。由 HTML inline onclick 调用。 */
+/** 获取并展示服务器控制台验证码。由 index.js 的 .get-captcha-btn 点击监听调用。 */
 export const getVerificationCode = async () => {
+  // 请求期间禁用全部验证码按钮，防止连点重复请求；finally 恢复
+  const captchaButtons = document.querySelectorAll(".get-captcha-btn");
+  captchaButtons.forEach((btn) => {
+    btn.disabled = true;
+  });
   showLoading();
 
   try {
@@ -322,5 +356,9 @@ export const getVerificationCode = async () => {
   } catch (error) {
     hideLoading();
     showError(`${t("init.network_error")}: ${error.message}`);
+  } finally {
+    captchaButtons.forEach((btn) => {
+      btn.disabled = false;
+    });
   }
 };

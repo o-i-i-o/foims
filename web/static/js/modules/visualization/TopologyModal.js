@@ -14,21 +14,35 @@ export class TopologyModal {
     this.activePanel = "ports";
     this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.onRemoveDevice = null;
+    // 打开代次：连续 open/close 交错时作废在途的渲染与面板加载
+    this.openToken = 0;
     // 设备坐标保存回调（可视化层注入：移动节点并持久化）
     this.onSavePosition = null;
   }
 
   open(deviceId, deviceName, position = null) {
+    // 立即清掉上一个浮窗并递增代次：连续两次 open 的 _render 在
+    // await 模板期间交错时，旧实例的 _removeDom 会在新实例 append 前
+    // 执行，造成双浮窗叠加与"移除"按钮引用错设备
+    this._removeDom();
+    this.openToken += 1;
+    const token = this.openToken;
     this.currentDeviceId = deviceId;
     this.currentDeviceName = deviceName || deviceId;
     this.currentPosition = position;
     this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.activePanel = "ports";
     // 先完成模板渲染再拉取面板数据，保证 _loadPanelData 能拿到容器节点
-    this._render().then(() => this._loadData());
+    this._render(token).then(() => {
+      if (token !== this.openToken) {
+        return; // 已被新一次 open/close 取代
+      }
+      this._loadData();
+    });
   }
 
   close() {
+    this.openToken += 1;
     this._removeDom();
     this.currentDeviceId = null;
   }
@@ -50,12 +64,15 @@ export class TopologyModal {
   }
 
   // 模态框结构位于 modals/visualization/topology-detail-modal.html
-  async _render() {
+  async _render(token = this.openToken) {
     this._removeDom();
 
     const html = await fetchModalHtml("topology-detail-modal");
     if (!html) {
       return;
+    }
+    if (token !== this.openToken) {
+      return; // 模板加载期间已被新的 open/close 取代
     }
 
     this.overlay = document.createElement("div");
@@ -93,7 +110,16 @@ export class TopologyModal {
       savePosBtn?.addEventListener("click", () => {
         const x = Number(xInput.value);
         const y = Number(yInput.value);
-        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+        // Number("") === 0 会被下方校验放行：空串先显式拒绝，
+        // 防止清空输入后节点被静默移到原点
+        if (
+          xInput.value.trim() === "" ||
+          yInput.value.trim() === "" ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          x < 0 ||
+          y < 0
+        ) {
           showToast(t("common.check_input"), "warning");
           return;
         }

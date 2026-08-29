@@ -32,6 +32,11 @@ pub struct JwtClaims {
     pub token_type: String,                 // 令牌类型："access" 或 "refresh"
     pub device_fingerprint: Option<String>, // 设备指纹
     pub ip_address: Option<String>,         // IP 地址
+    /// 保持登录标志（refresh 续期时沿用原会话时长，不再以 token 时长反推）。
+    /// Option 包装以区分「存量令牌未携带该 claim」：None 时回退旧的
+    /// `token_duration >= 86400` 启发式，保证旧会话续期行为不中断
+    #[serde(default)]
+    pub remember_me: Option<bool>,
 }
 
 // JWT 配置结构体
@@ -66,7 +71,7 @@ impl JwtUtils {
 
         let algorithm = Algorithm::HS256;
 
-        let secret = Self::get_jwt_secret(&config.jwt.secret);
+        let secret = Self::get_jwt_secret(&config.jwt.secret)?;
 
         Self::validate_secret_strength(&secret).map_err(|e| {
             log_error!("log.auth.jwt_secret_invalid", detail = e);
@@ -89,24 +94,22 @@ impl JwtUtils {
         })
     }
 
-    // 从环境变量或配置文件获取JWT密钥
-    fn get_jwt_secret(config_secret: &str) -> String {
+    // 从环境变量或配置文件获取JWT密钥；两者均缺失时返回错误使启动失败，
+    // 绝不生成临时密钥继续运行（临时密钥会导致重启后全部会话静默失效）
+    fn get_jwt_secret(config_secret: &str) -> Result<String, String> {
         // 优先从环境变量读取
         if let Ok(env_secret) = std::env::var("IPMA_JWT_SECRET")
             && !env_secret.is_empty()
         {
             log_info!("log.auth.jwt_secret_from_env");
-            return env_secret;
+            return Ok(env_secret);
         }
 
-        // 如果环境变量未设置，使用配置文件中的密钥
+        // 如果环境变量未设置，使用配置文件中的密钥；未配置则拒绝启动
         if config_secret.is_empty() {
-            // 如果配置文件中也没有密钥，生成一个临时密钥（仅用于开发）
-            let temp_secret = Self::generate_secure_secret();
-            log_error!("log.auth.jwt_secret_missing_temp");
-            temp_secret
+            Err("JWT 密钥未配置：请设置环境变量 IPMA_JWT_SECRET，或在配置文件 jwt.secret 中提供长度不少于 32 字符的密钥".to_string())
         } else {
-            config_secret.to_string()
+            Ok(config_secret.to_string())
         }
     }
 
@@ -167,6 +170,8 @@ impl JwtUtils {
             token_type: "access".to_string(),
             device_fingerprint: device_fingerprint.map(std::string::ToString::to_string),
             ip_address: ip_address.map(std::string::ToString::to_string),
+            // access 令牌不参与续期时长判定，保持登录标志仅写入 refresh 令牌
+            remember_me: None,
         };
 
         encode(
@@ -212,6 +217,8 @@ impl JwtUtils {
             token_type: "refresh".to_string(),
             device_fingerprint: device_fingerprint.map(std::string::ToString::to_string),
             ip_address: ip_address.map(std::string::ToString::to_string),
+            // 显式记录保持登录意图：续期时直接读 claim，替代旧的时长启发式
+            remember_me: Some(remember_me),
         };
 
         encode(
@@ -449,6 +456,7 @@ mod tests {
             token_type: "access".to_string(),
             device_fingerprint: None,
             ip_address: None,
+            remember_me: None,
         }
     }
 
@@ -648,6 +656,7 @@ mod tests {
             token_type: "refresh".to_string(),
             device_fingerprint: Some("指纹".to_string()),
             ip_address: Some("2001:db8::1".to_string()),
+            remember_me: Some(true),
         };
         let json = serde_json::to_string(&claims).unwrap_or_else(|e| panic!("序列化失败: {e}"));
         let parsed: JwtClaims =
@@ -657,6 +666,44 @@ mod tests {
         assert_eq!(parsed.device_fingerprint, claims.device_fingerprint);
         assert_eq!(parsed.ip_address, claims.ip_address);
         assert_eq!(parsed.token_type, claims.token_type);
+        assert_eq!(parsed.remember_me, claims.remember_me);
+    }
+
+    // ==================== remember_me claim ====================
+
+    #[test]
+    fn test_refresh_token_carries_remember_me_claim() {
+        let utils = make_jwt_utils();
+        let user_id = Uuid::new_v4();
+        // 勾选保持登录：claim 显式为 Some(true)
+        let remembered = utils
+            .generate_refresh_token(&user_id, "bob", "admin", None, None, true)
+            .and_then(|token| utils.validate_token(&token))
+            .unwrap_or_else(|e| panic!("刷新令牌签发/验签失败: {e}"));
+        assert_eq!(remembered.remember_me, Some(true));
+        // 未勾选：claim 显式为 Some(false)（与「claim 缺失」可区分）
+        let not_remembered = utils
+            .generate_refresh_token(&user_id, "bob", "admin", None, None, false)
+            .and_then(|token| utils.validate_token(&token))
+            .unwrap_or_else(|e| panic!("刷新令牌签发/验签失败: {e}"));
+        assert_eq!(not_remembered.remember_me, Some(false));
+    }
+
+    #[test]
+    fn test_legacy_token_without_remember_me_claim_deserializes_to_none() {
+        // 存量令牌负载不含 remember_me：serde(default) 反序列化为 None，
+        // 续期逻辑据此回退旧的时长启发式
+        let now = Utc::now().timestamp() as usize;
+        let payload = format!(
+            r#"{{"sub":"{}","username":"bob","role":"admin","exp":{},"iat":{},"iss":"ipma-server","jti":"{}","aud":"ipma-client","token_type":"refresh","device_fingerprint":null,"ip_address":null}}"#,
+            Uuid::new_v4(),
+            now + 600,
+            now,
+            Uuid::new_v4()
+        );
+        let claims: JwtClaims =
+            serde_json::from_str(&payload).unwrap_or_else(|e| panic!("存量负载解析失败: {e}"));
+        assert_eq!(claims.remember_me, None);
     }
 
     // ==================== 设备指纹 ====================

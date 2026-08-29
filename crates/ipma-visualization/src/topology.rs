@@ -14,25 +14,57 @@ use ipma_common::msg;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx::PgPool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use validator::{Validate, ValidationError};
 
 use crate::layout::{VisualizationError, ok_json};
 
 // ==================== 请求/响应模型 ====================
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct TopologyNodeItem {
     pub device_id: Uuid,
+    /// 坐标 0..=100000，尺寸 1..=10000（极值/负值直写库前拦截）
+    #[validate(range(
+        min = 0,
+        max = 100000,
+        message = "server.visualization.position_invalid"
+    ))]
     pub x: i32,
+    #[validate(range(
+        min = 0,
+        max = 100000,
+        message = "server.visualization.position_invalid"
+    ))]
     pub y: i32,
+    #[validate(range(
+        min = 1,
+        max = 10000,
+        message = "server.visualization.position_invalid"
+    ))]
     pub width: i32,
+    #[validate(range(
+        min = 1,
+        max = 10000,
+        message = "server.visualization.position_invalid"
+    ))]
     pub height: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_topology_nodes_coords"))]
 pub struct TopologyNodesRequest {
     pub nodes: Vec<TopologyNodeItem>,
+}
+
+/// 节点坐标逐项校验（Vec 嵌套不由 derive 自动展开，显式迭代）
+fn validate_topology_nodes_coords(req: &TopologyNodesRequest) -> Result<(), ValidationError> {
+    for node in &req.nodes {
+        node.validate()
+            .map_err(|_| ValidationError::new("server.visualization.position_invalid"))?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -170,7 +202,15 @@ pub async fn save_topology_nodes(
 
     let mut tx = pool.begin().await?;
 
-    let device_ids: Vec<Uuid> = req.nodes.iter().map(|n| n.device_id).collect();
+    // 去重后再比对存在数：请求携带重复 device_id 时 COUNT≠原始长度
+    // 会把合法 id 误报为不存在
+    let device_ids: Vec<Uuid> = req
+        .nodes
+        .iter()
+        .map(|n| n.device_id)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
     let existing_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices WHERE id = ANY($1)")
         .bind(&device_ids)
         .fetch_one(&mut *tx)
@@ -465,10 +505,18 @@ async fn stored_connections(
                         port_id: member.port_id,
                         port_number: member.port_number,
                     };
-                    if member.side == "source" {
-                        source_members.push(entry);
-                    } else {
-                        target_members.push(entry);
+                    match member.side.as_str() {
+                        "source" => source_members.push(entry),
+                        "target" => target_members.push(entry),
+                        // 未知 side 属存储层数据损坏：静默归 target 会让连线
+                        // 两端指向错误端口，显式跳过并告警
+                        other => {
+                            ipma_common::log_warn!(
+                                "log.visualization.connection_member_side_invalid",
+                                side = other,
+                                connection = row.id
+                            );
+                        }
                     }
                 }
             }
@@ -617,7 +665,8 @@ pub async fn create_topology_connection(
             )));
         }
 
-        // 同一对设备仅允许一条逻辑连接
+        // 同一对设备仅允许一条逻辑连接（预检给出精确业务文案；
+        // 并发窗口下的唯一索引冲突 23505 经 From<sqlx::Error> 映射为 409 冲突）
         let existing: i64 = sqlx::query_scalar(
             r"SELECT COUNT(*) FROM topology_connections
                WHERE connection_type = 'logical'
@@ -682,7 +731,8 @@ pub async fn create_topology_connection(
             }
         }
 
-        // 去重：同设备对同端口组合（含 NULL 端口）已存在则拒绝
+        // 去重：同设备对同端口组合（含 NULL 端口）已存在则拒绝（预检给出
+        // 精确业务文案；并发窗口下的唯一索引冲突 23505 映射为 409 冲突）
         let existing: i64 = sqlx::query_scalar(
             r"SELECT COUNT(*) FROM topology_connections
                WHERE connection_type = 'physical'
@@ -888,6 +938,32 @@ mod tests {
         assert_eq!(req.nodes.len(), 2);
         assert_eq!(req.nodes[1].device_id, uuid(2));
         assert_eq!((req.nodes[1].x, req.nodes[1].y), (5, 6));
+    }
+
+    /// 节点坐标校验：合法范围通过，负坐标/极值/非正尺寸拒绝
+    #[test]
+    fn 拓扑节点保存请求_坐标校验() {
+        let node_json = |x: i32, y: i32, w: i32, h: i32| {
+            format!(
+                r#"{{"nodes": [{{"device_id": "00000000-0000-0000-0000-000000000001",
+                     "x": {x}, "y": {y}, "width": {w}, "height": {h}}}]}}"#
+            )
+        };
+
+        let ok: TopologyNodesRequest = serde_json::from_str(&node_json(0, 100000, 1, 10000))
+            .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+        assert!(ok.validate().is_ok(), "边界坐标应合法");
+
+        for (x, y, w, h) in [
+            (-1, 0, 200, 100),
+            (0, 100001, 200, 100),
+            (0, 0, 0, 100),
+            (0, 0, 200, 10001),
+        ] {
+            let req: TopologyNodesRequest = serde_json::from_str(&node_json(x, y, w, h))
+                .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+            assert!(req.validate().is_err(), "({x},{y},{w},{h}) 应被拒绝");
+        }
     }
 
     #[test]

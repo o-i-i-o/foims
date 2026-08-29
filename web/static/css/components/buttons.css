@@ -54,6 +54,18 @@
   box-shadow: 0 4px 12px rgb(108 117 125 / 30%);
 }
 
+/* 常规信息按钮：与 btn-primary 同结构（背景 + 白字 + hover 换色加深阴影）。
+   图标按钮形态的 btn-info（透明底、info 色）见下方 .icon-btn 分组 */
+.btn-info {
+  background: var(--color-info);
+  color: var(--color-bg-white);
+}
+
+.btn-info:hover {
+  background: var(--color-info-hover);
+  box-shadow: 0 2px 8px rgb(23 162 184 / 30%);
+}
+
 .btn-edit {
   background: var(--color-info);
   color: var(--color-bg-white);
@@ -220,23 +232,8 @@
   color: #d39e00;
 }
 
-.button-group {
-  display: flex;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-}
-
 .action-buttons {
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
-}
-
-.btn-nowrap {
-  white-space: nowrap;
-}
-
-.btn-full-width {
-  width: 100%;
-  margin-top: var(--space-sm);
 }

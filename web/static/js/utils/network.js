@@ -24,7 +24,9 @@ export function isValidIPv4(ip) {
     if (isNaN(num) || num < 0 || num > 255) {
       return false;
     }
-    if (part.length > 1 && part.startsWith("0") && num !== 0) {
+    // 前导零一律拒绝（"01" 与 "00" 同口径）：
+    // 点分十进制中前导零有八进制歧义（部分解析器把 010 当 8）
+    if (part.length > 1 && part.startsWith("0")) {
       return false;
     }
   }

@@ -298,6 +298,25 @@ pub fn snmp_target(ip: &str, port: i32) -> String {
     }
 }
 
+/// 按字符数把文本截断到列宽以内，超宽时输出 warn 日志。
+///
+/// SNMP 采集的 ifName/local_port 可能超过库列宽（interface/local_port
+/// 均为 VARCHAR(50)）：截断入库比整条拒绝更贴合采集场景
+///（整条拒绝会让该行计入失败并丢失其余有效字段）。
+#[must_use]
+pub fn truncate_to_column_width(value: &str, max_chars: usize) -> String {
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_string();
+    }
+    tracing::warn!(
+        "SNMP 采集文本超列宽已截断: 原长度 {} 字符，保留前 {} 字符",
+        char_count,
+        max_chars
+    );
+    value.chars().take(max_chars).collect()
+}
+
 pub async fn test_snmp(params: &SnmpParamsLegacy, timeout_secs: u64) -> Result<String, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(timeout_secs);

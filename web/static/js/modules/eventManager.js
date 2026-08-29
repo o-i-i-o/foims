@@ -98,6 +98,38 @@ const RESOURCE_FORM_CALLBACK_MAP = {
   "device-form": "submitDeviceForm"
 };
 
+// ==========================================
+// 表单提交防重入
+// 所有主表单提交回调在 await 期间均无 in-flight 防护，快速双击/回车连击会
+// 触发两次完整提交流程，新建场景产生重复记录。此处以 form id 为键统一防重入：
+// 上一次提交未完成前忽略同表单的再次触发。提交回调均为异步函数
+// （app.js createCallback），await 其返回值即可感知提交结束。
+// ==========================================
+
+/** 进行中的表单提交（form id 集合） */
+const inFlightForms = new Set();
+
+/**
+ * 同一表单的提交回调防重入执行：进行中则直接忽略本次触发
+ * @param {string} formId 表单 id
+ * @param {Function} callback 提交回调（异步）
+ */
+async function invokeFormCallbackOnce(formId, callback) {
+  if (inFlightForms.has(formId)) {
+    return;
+  }
+  inFlightForms.add(formId);
+  try {
+    await callback();
+  } catch (error) {
+    // 回调拒绝若无捕获会成为 unhandled rejection，用户得不到任何提示
+    console.error(`表单 ${formId} 回调执行失败:`, error);
+    showToast(t("common.operation_failed"), "error");
+  } finally {
+    inFlightForms.delete(formId);
+  }
+}
+
 /**
  * 初始化资源按钮与表单的委托监听
  * @param {Object} callbacks 懒加载回调集合（见 app.js getResourceCallbacks）
@@ -109,7 +141,9 @@ export function initModals(callbacks = {}) {
       return;
     }
 
-    const callbackName = RESOURCE_BUTTON_CALLBACK_MAP[e.target.id];
+    // 图标按钮内含 SVG 子元素，点击目标可能是 svg/path，需向上查找带 id 的宿主按钮
+    const buttonHost = e.target.closest("[id]");
+    const callbackName = buttonHost ? RESOURCE_BUTTON_CALLBACK_MAP[buttonHost.id] : undefined;
     if (callbackName && callbacks[callbackName]) {
       e.preventDefault();
       callbacks[callbackName]();
@@ -117,11 +151,14 @@ export function initModals(callbacks = {}) {
     }
 
     // 页脚按钮通过 form 属性关联表单时，拦截 submit 类型按钮的点击
-    if (e.target.type === "submit" && e.target.hasAttribute("form")) {
-      const formCallbackName = RESOURCE_FORM_CALLBACK_MAP[e.target.getAttribute("form")];
+    // （button 与 input[type=submit] 均可携带 form 属性，用属性选择器统一匹配）
+    const submitButton = e.target.closest('[type="submit"][form]');
+    if (submitButton) {
+      const formId = submitButton.getAttribute("form");
+      const formCallbackName = RESOURCE_FORM_CALLBACK_MAP[formId];
       if (formCallbackName && callbacks[formCallbackName]) {
         e.preventDefault();
-        callbacks[formCallbackName]();
+        invokeFormCallbackOnce(formId, callbacks[formCallbackName]);
       }
     }
   });
@@ -130,7 +167,7 @@ export function initModals(callbacks = {}) {
     const callbackName = RESOURCE_FORM_CALLBACK_MAP[e.target.id];
     if (callbackName && callbacks[callbackName]) {
       e.preventDefault();
-      callbacks[callbackName]();
+      invokeFormCallbackOnce(e.target.id, callbacks[callbackName]);
     }
   });
 }

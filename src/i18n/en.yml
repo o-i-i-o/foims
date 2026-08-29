@@ -2,6 +2,8 @@
 # API 消息不在此文件：后端只返回 key，由前端翻译
 
 log:
+  visualization:
+    connection_member_side_invalid: "Skipped connection member with invalid side: {{side}} (connection {{connection}})"
   auth:
     external_user_created: "External auth user created: {{username}} ({{provider}})"
     external_email_conflict: "External auth email conflict, using placeholder: {{username}} -> {{email}}"
@@ -30,6 +32,7 @@ log:
     toml_length: "Configuration TOML serialized, length: {{count}}"
     verify_read: "Verification read succeeded, length: {{count}}"
   crypto:
+    key_load_failed: "Failed to load the encryption key: {{{error}}}"
     backup_create_failed: "Failed to create key backup: {{error}}, does not affect operation"
     backup_integrity_passed: "Backup key integrity check passed (matches main key)"
     backup_key_path: "Backup key path: {{path}}"
@@ -85,6 +88,8 @@ log:
     auth_log_open_failed: "Failed to open auth log file {{path}}: {{error}}"
     auth_log_write_failed: "Failed to write auth log: {{error}}"
     ip_banned: "IP {{ip}} failed login {{count}} times, banned for {{seconds}} seconds"
+    config_load_failed: "Failed to load the fail2ban config, using defaults: {{{error}}}"
+    config_persist_failed: "Failed to persist the fail2ban config: {{{error}}}"
   i18n_config_error: "i18n logging config error, falling back to English-only logs: {{reason}}"
   import:
     cabinet_network_query_failed: "Failed to query cabinet network: {{error}}"
@@ -101,9 +106,13 @@ log:
   import_export:
     export_ref_missing: "Failed to resolve name for reference {{id}} during export; cell left empty/placeholder"
   init:
+    config_tmp_chmod_failed: "Failed to set permissions on the config temp file: {{{error}}}"
+    config_tmp_remove_failed: "Failed to remove the config temp file: {{{error}}}"
+    pgsql_connect_failed: "Failed to connect to PostgreSQL: {{{error}}}"
     admin_create_failed: "Failed to create the admin user"
     creating_admin: "Creating admin user"
     db:
+      status_check_failed: "Database status check failed: {{{error}}}"
       backup_created: "Database backup created"
       backup_done_dropping: "Backup completed, dropping the old database"
       cleared: "Database cleared via API"
@@ -151,6 +160,7 @@ log:
     mac_sync_failed: "MAC sync failed: {{error}}"
     mac_written: "MAC address written: interface={{interface}}, MAC={{mac}}"
   login:
+    email_code_success: "Email login code sent to user: {{{username}}}"
     2fa_success: "User {{username}} logged in with 2FA"
     record_failed: "Failed to record login log: {{error}}"
     success: "User {{username}} logged in successfully"
@@ -209,6 +219,7 @@ log:
     systemctl_exit_fallback: "systemctl did not terminate the process, restarting via exit"
     systemctl_restart: "Running systemctl restart {{service}}"
   task:
+    overlap_skipped: "Previous task run has not finished; skipping this tick: {{{name}}}"
     backup_completed: "Backup completed: {{path}} ({{size_mb}} MB)"
     completed: "Task {{name}} completed: {{result}}"
     failed: "Task {{name}} failed: {{error}}"

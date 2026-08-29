@@ -40,31 +40,42 @@ export function initNavigation() {
 }
 
 /**
- * 等保三权分立：按角色隐藏无权访问的导航入口。
+ * 等保三权分立：按角色计算不可访问的分区列表。
  * 后端始终强制校验（403），此处仅为界面整洁：
  * - auditor（审计管理员）：仅仪表盘与日志
  * - secadmin（安全管理员）：用户/系统安全/日志，不涉资源运维
+ * @returns {string[]} 当前角色无权访问的分区 ID 列表（未受限角色为空数组）
  */
-export function applyRoleVisibility() {
+function getHiddenSections() {
   const user = SessionManager.getUser();
   const role = user?.role || "user";
-  if (!["auditor", "secadmin"].includes(role)) {
+  if (role === "auditor") {
+    return ["organization", "resources", "ip", "visualization", "system"];
+  }
+  if (role === "secadmin") {
+    return ["organization", "resources", "visualization"];
+  }
+  return [];
+}
+
+export function applyRoleVisibility() {
+  const hiddenSections = getHiddenSections();
+  if (hiddenSections.length === 0) {
     return;
   }
-
-  const hiddenSections =
-    role === "auditor"
-      ? ["organization", "resources", "ip", "visualization", "system"]
-      : ["organization", "resources", "visualization"];
 
   for (const section of hiddenSections) {
     const link = document.querySelector(`.nav-link[href="#${section}"]`);
     link?.closest("li")?.classList.add("hidden");
   }
 
-  // 当前落在被隐藏分区时回到仪表盘
-  if (hiddenSections.includes(window.location.hash.slice(1))) {
-    window.location.hash = "#dashboard";
+  // 当前落在被隐藏分区时回到仪表盘；已是默认页时不再赋值，
+  // 避免等值赋值之外的多余 hashchange（配合下方初始化去重，杜绝仪表盘双载）
+  if (
+    hiddenSections.includes(window.location.hash.slice(1)) &&
+    window.location.hash !== `#${DEFAULT_PAGE}`
+  ) {
+    window.location.hash = `#${DEFAULT_PAGE}`;
   }
 }
 
@@ -167,9 +178,8 @@ async function loadSystemPage() {
   systemModule.initSystemTabs();
 
   whenVisible("#system", async () => {
-    await safeAsync(() => systemModule.loadSystemInfo(), "加载系统信息");
-    await safeAsync(() => systemModule.loadSystemConfig(), "加载系统配置");
-    systemModule.initSmtpFunctions();
+    await safeAsync(() => systemModule.loadSystemInfo(), t("nav.load_system_info"));
+    await safeAsync(() => systemModule.loadSystemConfig(), t("nav.load_system_config"));
   });
 }
 
@@ -211,12 +221,39 @@ function bindNavClickHandlers(navLinks) {
 }
 
 /**
+ * 初始化期间已加载的分区：程序化修改 hash 会再触发一次 hashchange，
+ * 目标与初始加载相同时跳过，保证初始 loadPageContent 只执行一次
+ */
+let initialLoadedPageId = null;
+
+/**
  * 绑定哈希变化事件
  */
 function bindHashChangeHandler() {
   window.addEventListener("hashchange", () => {
     const hash = window.location.hash;
     const targetId = hash ? hash.substring(1) : DEFAULT_PAGE;
+
+    // 角色无权访问的分区（hash 直达绕过菜单隐藏）重定向回仪表盘：
+    // 设置 hash 会再次触发本监听，按仪表盘正常加载
+    if (getHiddenSections().includes(targetId)) {
+      window.location.hash = `#${DEFAULT_PAGE}`;
+      return;
+    }
+
+    // 初始化时程序化设置 hash 引发的首次 hashchange：初始加载已按最终
+    // hash 执行过，同一目标直接跳过（否则初始页会被加载两次）
+    if (initialLoadedPageId === targetId) {
+      initialLoadedPageId = null;
+      return;
+    }
+    initialLoadedPageId = null;
+
+    // 未知 hash 兜底：回落默认页重定向加载，避免主内容区空白
+    if (!PAGE_LOADERS[targetId]) {
+      window.location.hash = `#${DEFAULT_PAGE}`;
+      return;
+    }
 
     // 如果哈希为空，不要重新加载默认页面，除非当前没有激活的页面
     if (!hash && document.querySelector(".content-section.active")) {
@@ -234,7 +271,16 @@ function loadInitialPage() {
   const hash = window.location.hash;
   const targetId = hash ? hash.substring(1) : DEFAULT_PAGE;
 
-  loadPageContent(targetId);
+  // 未知分区（书签/手输错值）回落默认页：纠正地址栏 hash 并同步加载默认页；
+  // 由此触发的 hashchange 由 initialLoadedPageId 去重，不会二次加载。
+  // 空 hash 本就解析为默认页，不额外赋值
+  const known = Boolean(PAGE_LOADERS[targetId]);
+  const effectiveId = known ? targetId : DEFAULT_PAGE;
+  if (!known && hash !== `#${DEFAULT_PAGE}`) {
+    window.location.hash = `#${DEFAULT_PAGE}`;
+  }
+  initialLoadedPageId = effectiveId;
+  loadPageContent(effectiveId);
 }
 
 /**
@@ -290,6 +336,6 @@ async function executePageLoader(targetId) {
   const loader = PAGE_LOADERS[targetId];
 
   if (loader) {
-    await safeAsync(loader, `加载页面 ${targetId}`);
+    await safeAsync(loader, t("nav.load_page", { page: targetId }));
   }
 }

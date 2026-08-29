@@ -15,7 +15,7 @@ use crate::context::InitContext;
 use crate::error::{InitError, ok_json};
 use crate::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::schema::create_tables;
-use crate::types::{CreateDatabaseRequest, CreateDatabaseResponse, ImportDatabaseRequest};
+use crate::types::{CreateDatabaseRequest, CreateDatabaseResponse};
 use crate::utils::{PgPassFile, url_encode_component};
 use crate::verification::verify_code;
 
@@ -30,7 +30,8 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
         }
     };
 
-    let has_data = check_has_data(&pool).await;
+    // fail-fast：查询异常必须中止而非当作"无数据"跳过备份直接删库
+    let has_data = check_has_data(&pool).await?;
 
     if has_data {
         ipma_common::log_info!("log.init.db.not_empty_backing_up");
@@ -145,34 +146,20 @@ pub async fn create_database_api(
     ))
 }
 
-pub async fn import_database_api(
-    State(ctx): State<Arc<InitContext>>,
-    Json(req): Json<ImportDatabaseRequest>,
-) -> Result<Response, InitError> {
-    if !ctx.init_enabled() {
-        return Err(InitError::Forbidden(msg("server.init.disabled")));
+/// 上传 SQL 临时文件的清理守卫：无论处理成败（含提前返回错误），
+/// 作用域结束时删除落盘文件，避免 /tmp/ipma_import 无限累积
+struct TempSqlFile {
+    path: PathBuf,
+}
+
+impl Drop for TempSqlFile {
+    fn drop(&mut self) {
+        if let Err(e) = std::fs::remove_file(&self.path)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            ipma_common::log_warn!("log.init.db.temp_file_remove_failed", error = e);
+        }
     }
-
-    if let Err(e) = verify_code(&req.verification) {
-        return Err(InitError::Validation(e));
-    }
-
-    let backup_file = backup_and_drop_for_rebuild(&ctx).await?;
-
-    let pool = recreate_database_with_tables(&ctx).await?;
-
-    if let Err(e) = validate_table_columns(&pool).await {
-        return Err(InitError::Validation(e));
-    }
-
-    ipma_common::log_info!("log.init.db.imported");
-    Ok(ok_json(
-        CreateDatabaseResponse {
-            backup_file,
-            message: "server.init.db.imported".to_string(),
-        },
-        "server.init.db.imported",
-    ))
 }
 
 pub async fn import_database_from_file(
@@ -184,7 +171,8 @@ pub async fn import_database_from_file(
     }
 
     let mut verification_code: Option<String> = None;
-    let mut sql_file_path: Option<PathBuf> = None;
+    // 守卫先占位：任何提前返回（校验失败/字段缺失）都不遗留临时文件
+    let mut temp_file: Option<TempSqlFile> = None;
 
     tokio::fs::create_dir_all("/tmp/ipma_import")
         .await
@@ -225,18 +213,18 @@ pub async fn import_database_from_file(
             // 落盘路径使用随机文件名 + create_new 原子创建（0600）：
             // 用户可控的可预测路径可能被本地低权用户以符号链接预置劫持（I-5）
             let filepath = PathBuf::from(format!("/tmp/ipma_import/import_{}.sql", Uuid::new_v4()));
-            {
-                let mut opts = tokio::fs::OpenOptions::new();
-                opts.mode(0o600).write(true).create_new(true);
-                let mut file = opts.open(&filepath).await.map_err(|e| {
-                    InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
-                })?;
-                use tokio::io::AsyncWriteExt;
-                file.write_all(&data).await.map_err(|e| {
-                    InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
-                })?;
-            }
-            sql_file_path = Some(filepath);
+            let mut opts = tokio::fs::OpenOptions::new();
+            opts.mode(0o600).write(true).create_new(true);
+            let mut file = opts.open(&filepath).await.map_err(|e| {
+                InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
+            })?;
+            // 文件一旦创建立即交由守卫接管后续清理：write_all 失败的
+            // 提前返回路径同样会删除残留的半成品文件
+            temp_file = Some(TempSqlFile { path: filepath });
+            use tokio::io::AsyncWriteExt;
+            file.write_all(&data).await.map_err(|e| {
+                InitError::Internal(msg("server.init.db.write_file_failed").with("error", e))
+            })?;
         }
     }
 
@@ -246,11 +234,12 @@ pub async fn import_database_from_file(
         )));
     };
 
-    let Some(sql_path) = sql_file_path else {
+    let Some(temp) = temp_file else {
         return Err(InitError::Validation(msg(
             "server.init.db.sql_file_missing",
         )));
     };
+    let sql_path = temp.path.clone();
 
     if let Err(e) = verify_code(&verification) {
         return Err(InitError::Validation(e));
@@ -283,6 +272,12 @@ pub async fn import_database_from_file(
             .arg(&db_config.username)
             .arg("-d")
             .arg(&db_config.database)
+            // 语句级失败立即中止并以非零码退出（psql 默认遇错继续且退出码为 0，
+            // 半成品恢复会被误报成功）；--single-transaction 将整个脚本包在
+            // 单个事务内，任一语句失败整体回滚，避免删库后留下残缺结构
+            .arg("-v")
+            .arg("ON_ERROR_STOP=1")
+            .arg("--single-transaction")
             .arg("-f")
             .arg(&sql_path_clone)
             .env("PGPASSFILE", pgpass.path())
@@ -312,9 +307,8 @@ pub async fn import_database_from_file(
         return Err(InitError::Validation(e));
     }
 
-    if let Err(e) = tokio::fs::remove_file(&sql_path).await {
-        ipma_common::log_warn!("log.init.db.temp_file_remove_failed", error = e);
-    }
+    // 临时 SQL 文件由 TempSqlFile 守卫在本函数返回时删除（成功路径同样覆盖）
+    drop(temp);
 
     ipma_common::log_info!("log.init.db.imported_from_file");
     Ok(ok_json(
@@ -349,6 +343,18 @@ pub async fn clear_database(
             return Err(InitError::Internal(e));
         }
     };
+
+    // 与其他重建路径（backup_and_drop_for_rebuild）口径一致：
+    // 已有业务数据时先自动备份再清空，且查询失败必须中止而非当作
+    // "无数据"跳过备份；备份失败同样中止，保留可恢复手段
+    let has_data = check_has_data(&pool).await?;
+    if has_data {
+        ipma_common::log_info!("log.init.db.not_empty_backing_up");
+        if let Err(e) = backup_database(&ctx.db_config).await {
+            return Err(InitError::Internal(e));
+        }
+        ipma_common::log_info!("log.init.db.backup_done_dropping");
+    }
 
     ipma_common::log_info!("log.init.db.clearing");
     if let Err(e) = drop_all_tables(&pool).await {

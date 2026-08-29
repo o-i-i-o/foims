@@ -11,7 +11,6 @@
   --color-primary: #667eea;
   --color-primary-hover: #5568d3;
   --color-primary-light: rgb(102 126 234 / 10%);
-  --color-primary-shadow: rgb(102 126 234 / 30%);
   --color-gradient-end: #764ba2;
   --color-secondary: #6c757d;
   --color-secondary-hover: #5a6268;
@@ -39,7 +38,6 @@
   --color-text-light: #495057;
   --color-bg: #f8f9fa;
   --color-bg-white: #fff;
-  --color-bg-card: #fff;
   --color-border: #ced4da;
   --color-border-light: #e9ecef;
   --color-border-dark: #dee2e6;
@@ -61,7 +59,6 @@
   --btn-padding-x: 1.1rem;
   --shadow-sm: 0 2px 4px rgb(0 0 0 / 10%);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 15%);
-  --shadow-lg: 0 10px 30px rgb(0 0 0 / 20%);
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -80,27 +77,20 @@
   /* 侧边栏收起/展开动画：宽度、外边距、内边距等共用同一时序保证同步 */
   --sidebar-anim-duration: 0.3s;
   --sidebar-anim-easing: cubic-bezier(0.4, 0, 0.2, 1);
-  --header-height: 80px;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
 
   /* 等宽字体：密码输入框 / IPv6 地址 / CIDR 标签等共用 */
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
-  --z-dropdown: 1000;
-  --z-sticky: 1020;
-  --z-fixed: 1030;
-  --z-modal-backdrop: 1040;
   --z-modal: 1050;
-  --z-modal-secondary: 1100;
   --z-popover: 1060;
-  --z-tooltip: 1070;
+
+  /* tooltip 高于任意层级的模态（模态内联 z-index 基准 1050、每层 +50），仅低于 toast */
+  --z-tooltip: 3000;
   --z-toast: 9999;
   --color-bg-hover: #f0f0f0;
   --color-bg-secondary: #f0f0f0;
-  --color-active-bg: #e3f2fd;
 
   /* 图表配色（仪表盘图表与可视化共用，不在 JS 中硬编码色值） */
   --chart-color-1: #667eea;
@@ -120,8 +110,5 @@
   --port-down-bg: #fff5f5;
   --port-admin-down-border: #ecc94b;
   --port-admin-down-bg: #fffff0;
-  --room-office: #17a2b8;
-  --room-data-center: #fd7e14;
-  --room-telecom-closet: #6f42c1;
   --shadow-xl: 0 20px 40px rgb(0 0 0 / 25%);
 }

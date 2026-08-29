@@ -33,7 +33,9 @@
 .dashboard-card:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
-  border-color: var(--color-primary-light);
+
+  /* hover 边框用实色主色：--color-primary-light 是 10% tint，作边框几乎不可见 */
+  border-color: var(--color-primary);
 }
 
 .dashboard-card-header {

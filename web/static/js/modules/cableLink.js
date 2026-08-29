@@ -20,6 +20,9 @@ import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { fillSelect } from "../utils/resources.js";
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let cableLinkRequestSeq = 0;
+
 const tableState = createSortState("updated_at", "desc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
@@ -27,11 +30,26 @@ let currentPageSize = DEFAULT_PAGE_SIZE;
 // 最近一次加载的线路数据（行内打印按钮直接取两端编号，避免二次请求）
 let lastLoadedItems = [];
 
-const ENDPOINT_TYPE_LABELS = {
-  net_outlet: t("cable_link.endpoint_net_outlet") || t("net_outlet.name"),
-  device_interface: t("cable_link.endpoint_device_interface"),
-  patch_panel: t("cable_link.endpoint_patch_panel")
-};
+// 端点/链路类型标签在使用时求值（函数内调 t()）：
+// 模块加载期求值会导致 languagechange 免刷新切换后旧语言残留；
+// 未知类型的原始字符串经 escapeHtml 后再进 innerHTML（纵深防御）
+function getEndpointTypeLabel(type) {
+  const labels = {
+    net_outlet: t("cable_link.endpoint_net_outlet"),
+    device_interface: t("cable_link.endpoint_device_interface"),
+    patch_panel: t("cable_link.endpoint_patch_panel")
+  };
+  return labels[type] || escapeHtml(type);
+}
+
+function getLinkTypeLabel(type) {
+  const labels = {
+    ethernet: t("cable_link.link_type_ethernet"),
+    fiber: t("cable_link.link_type_fiber"),
+    console: t("cable_link.link_type_console")
+  };
+  return labels[type] || escapeHtml(type);
+}
 
 // 各端点类型对应的级联「范围」选择器配置
 // 信息点：房间 → 信息点；配线架：机柜 → 配线架；
@@ -47,21 +65,8 @@ const MERGED_TYPE_PREFIX = {
   device_interface: "device_interface:"
 };
 
-const LINK_TYPE_LABELS = {
-  ethernet: t("cable_link.link_type_ethernet"),
-  fiber: t("cable_link.link_type_fiber"),
-  console: t("cable_link.link_type_console")
-};
-
-function getEndpointTypeLabel(type) {
-  return ENDPOINT_TYPE_LABELS[type] || type;
-}
-
-function getLinkTypeLabel(type) {
-  return LINK_TYPE_LABELS[type] || type;
-}
-
 export async function loadCableLinksData(page = currentPage, sortBy = null, sortOrder = null) {
+  const requestSeq = ++cableLinkRequestSeq;
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -71,9 +76,20 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
     const result = await apiGet(
       `/api/resources/cable-links?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
+    if (requestSeq !== cableLinkRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
     const data = result.success ? result.data : { items: [], total: 0 };
     const items = data.items || data;
     lastLoadedItems = Array.isArray(items) ? items : [];
+
+    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+    // 回退到最后一页重新加载，避免停留在空页无法翻回
+    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
+    if (lastLoadedItems.length === 0 && page > 1 && totalPages > 0 && page > totalPages) {
+      return loadCableLinksData(totalPages);
+    }
+
     const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#cable-links-table", {
@@ -192,6 +208,15 @@ export async function openCableLabelPrintModal() {
   }
 
   const tbody = modal.querySelector("#cable-label-print-table tbody");
+  const countEl = modal.querySelector("#cable-label-print-count");
+  const allCheck = modal.querySelector("#cable-label-print-all");
+  const form = modal.querySelector("#cable-label-print-form");
+  // 模板结构不完整（缺 tbody/全选框/表单/计数）时中止，避免空引用
+  if (!tbody || !countEl || !allCheck || !form) {
+    console.warn("标签打印模态框结构不完整，已中止打开");
+    return;
+  }
+
   tbody.innerHTML = lastLoadedItems
     .map(
       (item, index) => `
@@ -203,13 +228,11 @@ export async function openCableLabelPrintModal() {
     )
     .join("");
 
-  const countEl = modal.querySelector("#cable-label-print-count");
   const updateCount = () => {
     const checked = modal.querySelectorAll(".cable-label-print-check:checked").length;
     countEl.textContent = t("cable_link.print_count", { cables: checked, labels: checked * 2 });
   };
 
-  const allCheck = modal.querySelector("#cable-label-print-all");
   allCheck.checked = true;
   allCheck.onchange = () => {
     modal.querySelectorAll(".cable-label-print-check").forEach((check) => {
@@ -224,7 +247,6 @@ export async function openCableLabelPrintModal() {
   };
   updateCount();
 
-  const form = modal.querySelector("#cable-label-print-form");
   form.onsubmit = (e) => {
     e.preventDefault();
     const indexes = [...modal.querySelectorAll(".cable-label-print-check:checked")].map((check) =>
@@ -338,7 +360,7 @@ async function loadScopeOptions(scopeType, scopeSelectId) {
   if (!config) {
     return;
   }
-  await fillSelect(scopeSelectId, config.url, { ...config, errorLabel: "范围" });
+  await fillSelect(scopeSelectId, config.url, { ...config, errorLabelKey: "common.scope" });
 }
 
 // 加载机柜选项（设备接口流程第二级：房间内的机柜，首项「不限机柜」）
@@ -347,13 +369,13 @@ async function loadCabinetOptions(side, roomId) {
   if (!roomId) {
     await fillSelect(ids.cabinetSelect, null, {
       placeholderKey: "cable_link.cabinet_any",
-      errorLabel: "机柜"
+      errorLabelKey: "common.cabinet"
     });
     return;
   }
   await fillSelect(ids.cabinetSelect, `/api/resources/options/cabinets?room_id=${roomId}`, {
     placeholderKey: "cable_link.cabinet_any",
-    errorLabel: "机柜"
+    errorLabelKey: "common.cabinet"
   });
 }
 
@@ -366,27 +388,40 @@ async function loadDeviceOptions(side, { roomId = null, cabinetId = null } = {})
     roomId || cabinetId ? `/api/resources/options/devices?${query}` : null,
     {
       placeholderKey: "cable_link.select_device",
-      errorLabel: "设备",
+      errorLabelKey: "common.device",
       itemToLabel: (d) => d.name || d.id
     }
   );
 }
 
 // 动态加载端点选项（依据端点类型 + 已选范围）
+// 各端点下拉的加载序号（A/B 两端级联独立、可能并发加载，按 selectId 分别计数）：
+// 快速切换类型/范围时旧响应晚到会追加过期重复选项，序号不符则丢弃本次结果
+const endpointOptionsSeq = new Map();
+
 async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedId = null) {
   const select = elementCache.get(selectId);
   if (!select) {
     return;
   }
 
+  const requestSeq = (endpointOptionsSeq.get(selectId) || 0) + 1;
+  endpointOptionsSeq.set(selectId, requestSeq);
+
   select.innerHTML = `<option value="">${t("cable_link.select_endpoint")}</option>`;
   if (!scopeValue) {
     return;
   }
 
+  // 响应返回时序号已变化说明有更新的加载在途，本次结果一律丢弃
+  const isStale = () => endpointOptionsSeq.get(selectId) !== requestSeq;
+
   try {
     if (endpointType === "net_outlet") {
       const result = await apiGet(`/api/resources/options/net-outlets?room_id=${scopeValue}`);
+      if (isStale()) {
+        return;
+      }
       const data = result.success ? result.data : {};
       const items = (data.items || data || []).map((o) => ({ id: o.id, label: o.name }));
       appendOptions(select, items);
@@ -395,6 +430,9 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
       const ifaceRes = await apiGet(
         `/api/resources/devices/${scopeValue}/interfaces?page_size=1000`
       );
+      if (isStale()) {
+        return;
+      }
       const ifaces = (ifaceRes.success ? ifaceRes.data?.items || ifaceRes.data || [] : [])
         .filter((di) => !di.physical_type || di.physical_type !== "virtual")
         .map((di) => ({ id: di.id, label: di.name || di.id }));
@@ -414,6 +452,9 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
       const result = await apiGet(
         `/api/resources/patch-panels?cabinet_id=${scopeValue}&page_size=1000`
       );
+      if (isStale()) {
+        return;
+      }
       const data = result.success ? result.data : {};
       const items = (data.items || data || []).map((pp) => ({ id: pp.id, label: pp.name }));
       appendOptions(select, items);
@@ -422,6 +463,9 @@ async function loadEndpointOptions(endpointType, scopeValue, selectId, selectedI
     console.error("加载端点选项失败:", e);
   }
 
+  if (isStale()) {
+    return;
+  }
   if (selectedId) {
     select.value = selectedId;
   }

@@ -62,7 +62,11 @@
   margin-right: 6px;
 }
 
+/* 骨架条：span 默认 inline 无尺寸会完全不可见，按 loading-item 内的占位条形态给定尺寸 */
 .skeleton {
+  display: inline-block;
+  width: 100%;
+  height: 14px;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s infinite;

@@ -123,23 +123,24 @@ export function renderPagination(
 }
 
 function buildPageSizeSelector(options, current, _totalPages) {
+  // t() 第二参是插值对象而非兜底文案,此处仅传键
   const opts = options
     .map(
       (size) =>
-        `<option value="${size}" ${size === current ? "selected" : ""}>${size} / ${t("common.page", "页")}</option>`
+        `<option value="${size}" ${size === current ? "selected" : ""}>${size} / ${t("common.page")}</option>`
     )
     .join("");
   return `<span class="pagination-size">
-        <select class="pagination-size-selector" title="${t("common.page_size", "每页条数")}">${opts}</select>
+        <select class="pagination-size-selector" title="${t("common.page_size")}">${opts}</select>
     </span>`;
 }
 
 function buildJumpBox(currentPage, totalPages) {
   return `<span class="pagination-jump">
-        <span class="pagination-jump-label">${t("common.goto", "跳至")}</span>
+        <span class="pagination-jump-label">${t("common.goto")}</span>
         <input type="number" class="pagination-jump-input" min="1" max="${totalPages}" value="${currentPage}" />
-        <span class="pagination-jump-label">${t("common.page", "页")}</span>
-        <button class="pagination-btn pagination-jump-btn" type="button">${t("common.confirm", "GO")}</button>
+        <span class="pagination-jump-label">${t("common.page")}</span>
+        <button class="pagination-btn pagination-jump-btn" type="button">${t("common.confirm")}</button>
     </span>`;
 }
 

@@ -17,7 +17,6 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use axum::extract::{Query, State};
-use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -100,7 +99,8 @@ pub struct SsoConfig {
     pub issuer_url: String,
     pub client_id: String,
     pub client_secret: String,
-    /// 回调地址；留空时按请求 Host/X-Forwarded-Proto 推导
+    /// 回调地址（必填的绝对 URL，如 https://ipma.example.com/api/auth/sso/callback）；
+    /// 留空时 SSO 登录返回明确配置错误（不基于请求 Host 推导）
     pub redirect_uri: String,
     /// 首次登录自动建户的默认角色（admin/user）
     pub default_role: String,
@@ -207,28 +207,19 @@ pub async fn save_sso_config_to_db(pool: &PgPool, config: &SsoConfig) -> Result<
 
 // ==================== OIDC 客户端构建 ====================
 
-/// 按请求头推导回调地址（nginx 反代场景取 X-Forwarded-Proto）。
-fn derive_redirect_uri(headers: &HeaderMap, is_secure: bool) -> Result<String, AppError> {
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| AppError::Validation(msg("server.sso.host_header_missing")))?;
-    let scheme = headers
-        .get("X-Forwarded-Proto")
-        .and_then(|v| v.to_str().ok())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(if is_secure { "https" } else { "http" });
-    Ok(format!("{scheme}://{host}/api/auth/sso/callback"))
-}
-
-/// 解析回调地址：显式配置优先，否则按请求推导。
-fn resolve_redirect_uri(config: &SsoConfig, headers: &HeaderMap, is_secure: bool) -> String {
-    if !config.redirect_uri.is_empty() {
-        config.redirect_uri.clone()
-    } else {
-        derive_redirect_uri(headers, is_secure).unwrap_or_default()
+/// 解析回调地址：仅使用显式配置的 redirect_uri。
+///
+/// 不做任何基于请求 Host / X-Forwarded-Proto 的推导：Host 头是客户端可控
+/// 输入，推导出的回调地址会放大 Host 头注入面（缓存污染/密码重置类问题）。
+/// 未配置时返回明确的配置错误。
+fn resolve_redirect_uri(config: &SsoConfig) -> Result<String, AppError> {
+    let uri = config.redirect_uri.trim();
+    if uri.is_empty() {
+        return Err(AppError::Validation(msg(
+            "server.sso.redirect_uri_not_configured",
+        )));
     }
+    Ok(uri.to_string())
 }
 
 /// 发现文档获取（带 1 小时缓存）。
@@ -290,22 +281,14 @@ async fn build_oidc_client(
 // ==================== 登录 / 回调 ====================
 
 /// 发起 OIDC 授权码流程：302 跳转 IdP 授权端点。
-pub async fn sso_login<P: AuthProvider>(
-    State(state): State<Arc<P>>,
-    meta: RequestMeta,
-    headers: HeaderMap,
-) -> Response {
-    match sso_login_inner(state, meta, headers).await {
+pub async fn sso_login<P: AuthProvider>(State(state): State<Arc<P>>) -> Response {
+    match sso_login_inner(state).await {
         Ok(response) => response,
         Err(error) => sso_error_redirect(error.message().key()),
     }
 }
 
-async fn sso_login_inner<P: AuthProvider>(
-    state: Arc<P>,
-    meta: RequestMeta,
-    headers: HeaderMap,
-) -> Result<Response, AppError> {
+async fn sso_login_inner<P: AuthProvider>(state: Arc<P>) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let config = get_sso_config_from_db(&conn)
@@ -315,7 +298,7 @@ async fn sso_login_inner<P: AuthProvider>(
         return Err(AppError::Forbidden(msg("server.sso.disabled")));
     }
 
-    let redirect_uri = resolve_redirect_uri(&config, &headers, meta.is_secure);
+    let redirect_uri = resolve_redirect_uri(&config)?;
     let client = build_oidc_client(&config, &redirect_uri).await?;
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -353,25 +336,65 @@ pub struct SsoCallbackParams {
     code: Option<String>,
     state: Option<String>,
     error: Option<String>,
+    /// 启用 2FA 的外部账户回调重试时携带的 TOTP 动态码。
+    /// 仅 GET 兼容路径经 query 接收（记录迁移告警）；新接入应使用
+    /// POST 回调将动态码置于请求体（见 [`sso_callback_post`]）
+    totp_code: Option<String>,
 }
 
-/// OIDC 回调：换令牌、验 ID Token、建户/登录、写 Cookie 后跳转前端。
+/// POST 回调请求体：TOTP 动态码经请求体传输，不落入
+/// URL query（反代日志/浏览器历史/Referer）
+#[derive(Debug, Deserialize)]
+pub struct SsoCallbackPostBody {
+    /// 启用 2FA 的外部账户回调重试时携带的 TOTP 动态码
+    pub totp_code: Option<String>,
+}
+
+/// OIDC 回调（GET）：IdP 重定向浏览器回到本端点，换令牌、验 ID Token、
+/// 建户/登录、写 Cookie 后跳转前端。
+///
+/// 动态码仅接受 [`sso_callback_post`] 的请求体传输：query 会落入反向
+/// 代理访问日志、浏览器历史与 Referer，本入口对其显式拒绝。
 pub async fn sso_callback<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    headers: HeaderMap,
     Query(params): Query<SsoCallbackParams>,
 ) -> Response {
-    match sso_callback_inner(state, meta, headers, params).await {
+    // TOTP 动态码不再接受 URL query 传输（会落入反代访问日志/浏览器历史/
+    // Referer）：带码 GET 一律按"需要动态码"拒绝，重试改走 POST 请求体
+    let totp_code = if params.totp_code.is_some() {
+        return sso_error_redirect("server.auth.two_factor_required");
+    } else {
+        None
+    };
+    match sso_callback_inner(state, meta, params, totp_code).await {
         Ok(response) => response,
         Err(error) => sso_error_redirect(error.message().key()),
     }
 }
+
+/// OIDC 回调（POST）：动态码经 JSON 请求体传输。
+///
+/// 与 GET 回调共用同一路径的其余参数（code/state/error 仍取 query；
+/// IdP 的 302 重定向固定为 GET，POST 路径供前端携带动态码重试时使用）。
+pub async fn sso_callback_post<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    meta: RequestMeta,
+    Query(params): Query<SsoCallbackParams>,
+    AppJson(body): AppJson<SsoCallbackPostBody>,
+) -> Response {
+    let totp_code = body.totp_code;
+    match sso_callback_inner(state, meta, params, totp_code).await {
+        Ok(response) => response,
+        Err(error) => sso_error_redirect(error.message().key()),
+    }
+}
+
 async fn sso_callback_inner<P: AuthProvider>(
     state: Arc<P>,
     meta: RequestMeta,
-    headers: HeaderMap,
     params: SsoCallbackParams,
+    totp_code: Option<String>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
@@ -401,7 +424,7 @@ async fn sso_callback_inner<P: AuthProvider>(
         .code
         .ok_or_else(|| AppError::Unauthorized(msg("server.sso.code_missing")))?;
 
-    let redirect_uri = resolve_redirect_uri(&config, &headers, meta.is_secure);
+    let redirect_uri = resolve_redirect_uri(&config)?;
     let client = build_oidc_client(&config, &redirect_uri).await?;
 
     // 授权码 + PKCE verifier 换取令牌
@@ -464,8 +487,58 @@ async fn sso_callback_inner<P: AuthProvider>(
     )
     .await?;
 
+    // 签发前补应用层 fail2ban 双维封禁检查（与其余登录端点口径一致，
+    // 唯此路径此前完全绕过封禁）。重定向流无法交互式展示图形验证码，
+    // 故不强制 captcha——验证码递进兜底由密码/TOTP 登录路径承担；
+    // 封禁中返回 Err 走外层统一 sso_error 跳转
+    if crate::app_fail2ban::is_ip_banned(&meta.ip_address) {
+        let remaining = crate::app_fail2ban::get_ban_remaining(&meta.ip_address);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+    if crate::app_fail2ban::is_user_banned(&external.username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&external.username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
+    // 2FA：外部账户启用 TOTP 时不得直接签发令牌。浏览器重定向流无法在
+    // 回调中收集动态码：未携带 totp_code 时按未授权处理（外层统一跳转
+    // 登录页并携带 server.auth.two_factor_required 提示）；
+    // 携带时校验 TOTP（复用本地 claim/verify 逻辑，含已用码占用）后才签发
+    let mut totp_verified = false;
+    if external.two_factor_enabled {
+        match totp_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+        {
+            None => {
+                return Err(AppError::Unauthorized(msg(
+                    "server.auth.two_factor_required",
+                )));
+            }
+            Some(totp_code) => {
+                let verified =
+                    crate::login::verify_external_totp(&conn, &external, totp_code).await?;
+                if !verified {
+                    crate::app_fail2ban::record_login_failure(
+                        &meta.ip_address,
+                        &username,
+                        "server.login_log.invalid_2fa_code",
+                    );
+                    return Err(AppError::Unauthorized(msg("server.auth.code_invalid")));
+                }
+                totp_verified = true;
+            }
+        }
+    }
+
     // 签发令牌并写入 Cookie，随后跳转前端首页
-    let login_tokens = issue_external_login_tokens(&state, &meta, &external, true).await?;
+    let login_tokens =
+        issue_external_login_tokens(&state, &meta, &external, true, totp_verified).await?;
     let mut redirect = Redirect::to("/main.html").into_response();
     let secure = meta.is_secure;
     let access_cookie = create_auth_cookie(
@@ -578,7 +651,11 @@ pub struct UpdateSsoConfigRequest {
     pub client_id: String,
     #[validate(length(max = 200, message = "server.sso.validation.secret_length"))]
     pub client_secret: String,
-    #[validate(length(max = 255, message = "server.sso.validation.redirect_uri_length"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "server.sso.validation.redirect_uri_length"
+    ))]
     pub redirect_uri: String,
     #[validate(custom(
         function = "ipma_models::validate_role",

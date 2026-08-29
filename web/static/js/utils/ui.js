@@ -9,7 +9,9 @@ export { showToast } from "./toast.js";
 export { showConfirm, confirmDelete } from "./confirm.js";
 export { renderPagination } from "./pagination.js";
 export { formatDateTime } from "./formatter.js";
-export { escapeHtml } from "./helpers.js";
+import { escapeHtml } from "./helpers.js";
+
+export { escapeHtml };
 
 export const DEFAULT_PAGE_SIZE = 20;
 
@@ -284,6 +286,22 @@ export function handleError(error, defaultMessage = t("common.operation_failed")
   }
 }
 
+/**
+ * 解析表单提交按钮：优先使用调用方显式指定的按钮（元素或 id），
+ * 否则从 modalId 对应模态框内查找 submit 按钮。
+ * 找不到时返回 null（跳过防重复提交保护，不误伤页面其他按钮）。
+ */
+function resolveFormSubmitButton(config) {
+  if (config.submitBtn instanceof HTMLElement) {
+    return config.submitBtn;
+  }
+  if (typeof config.submitBtn === "string") {
+    return document.getElementById(config.submitBtn);
+  }
+  const modal = config.modalId ? document.getElementById(config.modalId) : null;
+  return modal ? modal.querySelector('button[type="submit"]') : null;
+}
+
 export async function handleFormSubmit(config) {
   const {
     formData,
@@ -294,6 +312,16 @@ export async function handleFormSubmit(config) {
     modalId,
     reloadFunction
   } = config;
+
+  // 防重复提交：请求期间禁用提交按钮（禁用后点击与回车隐式提交均被阻止），
+  // 进行中再次触发直接忽略；无论成功失败都在 finally 恢复
+  const submitBtn = resolveFormSubmitButton(config);
+  if (submitBtn?.disabled) {
+    return false;
+  }
+  if (submitBtn) {
+    submitBtn.disabled = true;
+  }
 
   try {
     let result;
@@ -321,6 +349,10 @@ export async function handleFormSubmit(config) {
   } catch (error) {
     handleError(error, errorMessage);
     return false;
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+    }
   }
 }
 
@@ -450,7 +482,7 @@ export function appendPaginationToTable(container, data, onPageChange, options =
  * @param {Object} options
  * @param {string} options.title 标题（通常为 "名称 - 列表类型"）
  * @param {Array<{label: string}>} options.columns 数据列定义（不含序号列）
- * @param {Array<string[]>} options.rows 行数据，单元格为已转义的 HTML 文本
+ * @param {Array<string[]>} options.rows 行数据，单元格为原始文本（转义统一由本函数负责，调用方不得预转义）
  * @returns {Promise<HTMLElement|null>} 模态框根节点
  */
 export async function openSimpleListModal({ title, columns, rows }) {
@@ -467,7 +499,7 @@ export async function openSimpleListModal({ title, columns, rows }) {
   const theadTr = modal.querySelector("#simple-list-thead-tr");
   if (theadTr) {
     theadTr.innerHTML = `<th data-i18n="common.index">No.</th>${columns
-      .map((col) => `<th>${col.label}</th>`)
+      .map((col) => `<th>${escapeHtml(col.label)}</th>`)
       .join("")}`;
   }
 
@@ -480,7 +512,7 @@ export async function openSimpleListModal({ title, columns, rows }) {
         .map(
           (cells, idx) =>
             `<tr><td class="index-column">${idx + 1}</td>${cells
-              .map((cell) => `<td>${cell}</td>`)
+              .map((cell) => `<td>${escapeHtml(cell)}</td>`)
               .join("")}</tr>`
         )
         .join("");

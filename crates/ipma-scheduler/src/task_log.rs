@@ -11,9 +11,25 @@ use crate::scheduler::error_message;
 
 /// 记录任务执行日志
 ///
+/// `started_at` 为执行器开始执行的真实时刻（调用方在执行前取
+/// `Utc::now()`），结束时刻与耗时在本函数内按当前时间计算，
+/// 保证审计数据（start_time/end_time/duration）真实反映执行区间。
+///
 /// `details` 为 i18n key（成功时为执行器返回的结果 key，失败时为
 /// `key(params)` 形式的诊断串），由前端负责翻译展示。
-pub async fn log_task_execution(pool: &sqlx::PgPool, task_name: &str, status: &str, details: &str) {
+pub async fn log_task_execution(
+    pool: &sqlx::PgPool,
+    task_name: &str,
+    status: &str,
+    details: &str,
+    started_at: chrono::DateTime<Utc>,
+) {
+    let end_time = Utc::now();
+    // 时钟回拨等异常情况下不允许出现负耗时；量纲与“立即执行”路径
+    // （src/system/scheduled_task.rs）一致，统一为毫秒
+    let duration = (end_time - started_at)
+        .num_milliseconds()
+        .clamp(0, i64::from(i32::MAX)) as i32;
     if let Err(e) = sqlx::query(
         r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
            VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -22,9 +38,9 @@ pub async fn log_task_execution(pool: &sqlx::PgPool, task_name: &str, status: &s
     .bind(task_name)
     .bind(status)
     .bind(sqlx::types::Json(serde_json::json!({ "message": details })))
-    .bind(Utc::now())
-    .bind(Utc::now())
-    .bind(0i32)
+    .bind(started_at)
+    .bind(end_time)
+    .bind(duration)
     .execute(pool)
     .await
     {
@@ -65,9 +81,10 @@ async fn update_next_run_at(pool: &sqlx::PgPool, task: &ScheduledTask) -> Schedu
             SchedulerError::Internal(msg("server.task.next_run_calc_task_failed").with("error", e))
         })??;
 
-    sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1, updated_at = $2 WHERE id = $3")
+    // 只更新调度字段：updated_at 语义是"最后配置变更时间"，例行调度
+    // 每 5 分钟覆盖会破坏该语义（对照手动编辑路径）
+    sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
         .bind(next_run)
-        .bind(Utc::now())
         .bind(task.id)
         .execute(pool)
         .await

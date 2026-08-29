@@ -242,16 +242,13 @@ pub fn is_secure_from_parts(parts: &Parts) -> bool {
         .unwrap_or(false)
 }
 
+/// 可信代理判定：仅信任回环地址（127.0.0.1 / ::1）。
+///
+/// 反向代理（nginx）与后端同机部署经回环/UDS 通信，属于可信来源；
+/// RFC1918 私网与 IPv6 ULA 一律不再视为可信——TCP 直接暴露时内网任意
+/// 客户端若被信任即可伪造 `X-Real-IP` 轮换身份，绕过 IP 限流与 fail2ban。
 fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
-    match ip {
-        std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
-        std::net::IpAddr::V6(v6) => v6.is_loopback() || is_ipv6_ula(v6),
-    }
-}
-
-fn is_ipv6_ula(v6: &std::net::Ipv6Addr) -> bool {
-    let segments = v6.segments();
-    (segments[0] & 0xfe00) == 0xfc00
+    ip.is_loopback()
 }
 
 // ==================== 单元测试 ====================
@@ -569,19 +566,19 @@ mod tests {
 
     #[test]
     fn test_get_real_ip_trusted_peer_uses_x_real_ip() {
-        // 内网 / 回环 peer 视为可信代理，优先 X-Real-IP
-        let private = parts_with_peer(
-            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)),
+        // 回环 peer 视为可信代理，优先 X-Real-IP
+        let loopback = parts_with_peer(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             &[("X-Real-IP", "1.2.3.4")],
         );
-        assert_eq!(get_real_ip_from_parts(&private), "1.2.3.4");
+        assert_eq!(get_real_ip_from_parts(&loopback), "1.2.3.4");
 
         // 可信 peer 但仅有可伪造的 X-Forwarded-For 时不再采信，回退 peer IP
-        let loopback = parts_with_peer(
+        let loopback2 = parts_with_peer(
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             &[("X-Forwarded-For", "5.6.7.8")],
         );
-        assert_eq!(get_real_ip_from_parts(&loopback), "127.0.0.1");
+        assert_eq!(get_real_ip_from_parts(&loopback2), "127.0.0.1");
     }
 
     #[test]
@@ -651,32 +648,22 @@ mod tests {
 
     #[test]
     fn test_is_trusted_proxy() {
-        // 回环与内网 IPv4 可信
+        // 仅回环可信（同机反代经回环/UDS 通信）
         assert!(is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
-        assert!(is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))));
-        assert!(is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(172, 16, 0, 1))));
-        assert!(is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))));
-        // 公网地址不可信
-        assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
-        // IPv6 回环与 ULA 可信，公网 IPv6 不可信
         assert!(is_trusted_proxy(&IpAddr::V6(Ipv6Addr::LOCALHOST)));
-        assert!(is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
+        // RFC1918 私网与 IPv6 ULA 不再视为可信（内网客户端可直连伪造头）
+        assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))));
+        assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(172, 16, 0, 1))));
+        assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(
+            192, 168, 1, 1
+        ))));
+        assert!(!is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
             0xfd00, 0, 0, 0, 0, 0, 0, 1
         ))));
+        // 公网地址不可信
+        assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
         assert!(!is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
             0x2001, 0xdb8, 0, 0, 0, 0, 0, 1
         ))));
-    }
-
-    #[test]
-    fn test_is_ipv6_ula() {
-        // fc00::/7（fd.. 与 fc.. 开头）为 ULA
-        assert!(is_ipv6_ula(&Ipv6Addr::new(0xfd12, 0, 0, 0, 0, 0, 0, 1)));
-        assert!(is_ipv6_ula(&Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 1)));
-        // fe80（链路本地）、2001（公网）不属于 ULA
-        assert!(!is_ipv6_ula(&Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)));
-        assert!(!is_ipv6_ula(&Ipv6Addr::new(
-            0x2001, 0xdb8, 0, 0, 0, 0, 0, 1
-        )));
     }
 }

@@ -1,9 +1,5 @@
 /* 通用工具类 */
 
-.mt-sm {
-  margin-top: var(--space-sm);
-}
-
 .mt-md {
   margin-top: var(--space-md);
 }
@@ -24,10 +20,6 @@
   text-align: center;
 }
 
-.d-inline-block {
-  display: inline-block;
-}
-
 .w-auto {
   width: auto;
 }
@@ -40,7 +32,12 @@
   padding-top: 0.85rem;
 }
 
-.form-group-inline label {
+/* label 不占定宽：单独使用（如 main.html 手动封禁行）走首条规则；
+   与 .form-group 组合（模态内 .form-row 中）时需覆盖 forms.css 的
+   .form-group label:not(.checkbox-label) 与 modals.css 的
+   .modal .form-row .form-group label（0,3,1 特异性，本文件后加载胜出） */
+.form-group-inline label,
+.form-group.form-group-inline label:not(.checkbox-label) {
   margin: 0;
   min-width: auto;
   padding-top: 0;

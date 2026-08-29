@@ -84,10 +84,10 @@ class CabinetPositionsManager extends DynamicRowManager {
           <input type="text" class="position-name form-control" value="${escapeHtml(name)}" placeholder="${t("cabinet_position.name")}" autocomplete="off" />
         </div>
         <div class="form-group">
-          <input type="number" class="position-start-u form-control" value="${startU}" min="1" max="48" placeholder="${t("cabinet_position.start_u")}" />
+          <input type="number" class="position-start-u form-control" value="${escapeHtml(String(startU))}" min="1" max="48" placeholder="${t("cabinet_position.start_u")}" />
         </div>
         <div class="form-group">
-          <input type="number" class="position-end-u form-control" value="${endU}" min="1" max="48" placeholder="${t("cabinet_position.end_u")}" />
+          <input type="number" class="position-end-u form-control" value="${escapeHtml(String(endU))}" min="1" max="48" placeholder="${t("cabinet_position.end_u")}" />
         </div>
         <div class="form-group">
           <input type="text" class="position-description form-control" value="${escapeHtml(description)}" placeholder="${t("cabinet_position.description")}" autocomplete="off" />
@@ -176,7 +176,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
       <div class="form-row">
         <div class="form-group">
           <input type="hidden" class="patch-panel-id" value="${escapeHtml(String(id))}" />
-          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t("cabinet.patch_panel_name") || t("net_outlet.name")}" autocomplete="off" />
+          <input type="text" class="patch-panel-name form-control" value="${escapeHtml(name)}" placeholder="${t("cabinet.patch_panel_name")}" autocomplete="off" />
         </div>
         <div class="form-group cabinet-item-actions">
           ${iconButton({ icon: "trash", label: t("common.delete"), cls: "btn-danger remove-patch-panel-btn" })}
@@ -226,12 +226,16 @@ export const cabinetPatchPanelsManager = new CabinetPatchPanelsManager();
 // 机柜管理功能
 // ==========================================
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let cabinetRequestSeq = 0;
+
 const tableState = createSortState("name", "asc");
 let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
 
 // 加载机柜数据
 export async function loadCabinetsData(page = currentPage, sortBy = null, sortOrder = null) {
+  const requestSeq = ++cabinetRequestSeq;
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -241,8 +245,25 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
     const result = await apiGet(
       `/api/resources/cabinets?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
+    if (requestSeq !== cabinetRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
     const data = result.success ? result.data : { items: [], total: 0 };
     const cabinets = data.items || data;
+
+    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+    // 回退到最后一页重新加载，避免停留在空页无法翻回
+    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
+    if (
+      Array.isArray(cabinets) &&
+      cabinets.length === 0 &&
+      page > 1 &&
+      totalPages > 0 &&
+      page > totalPages
+    ) {
+      return loadCabinetsData(totalPages);
+    }
+
     const startIndex = (page - 1) * currentPageSize;
 
     renderTable("#cabinets-table", {
@@ -340,11 +361,12 @@ export async function openCabinetPositionsListModal(cabinetId) {
         { label: t("cabinet_position.end_u") },
         { label: t("common.description") }
       ],
+      // openSimpleListModal 内部统一转义,此处传原始值即可
       rows: positions.map((pos) => [
-        escapeHtml(pos.name || "-"),
+        pos.name || "-",
         pos.start_u ?? "-",
         pos.end_u ?? "-",
-        escapeHtml(pos.description || "-")
+        pos.description || "-"
       ])
     });
   } catch (error) {
@@ -495,10 +517,7 @@ export async function submitCabinetForm() {
       patch_panels: patchPanelsData
     });
     if (!ppResult.success) {
-      showToast(
-        ppResult.message || t("cabinet.patch_panels_save_failed") || t("cabinet.save_failed"),
-        "error"
-      );
+      showToast(ppResult.message || t("cabinet.patch_panels_save_failed"), "error");
       await loadCabinetsData();
       return;
     }

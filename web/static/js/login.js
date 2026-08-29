@@ -387,8 +387,18 @@ class LoginManager {
     try {
       const result = await apiGet("/api/auth/captcha");
       if (result.success && result.data) {
-        this.captchaState[form].id = result.data.captcha_id;
-        image.innerHTML = result.data.svg;
+        // 先经 DOMParser 解析并校验根元素确为 svg 再注入，
+        // 非 SVG 内容（解析失败的 parsererror 等）不进入 DOM
+        const doc = new DOMParser().parseFromString(result.data.svg || "", "image/svg+xml");
+        if (doc.documentElement && doc.documentElement.localName === "svg") {
+          this.captchaState[form].id = result.data.captcha_id;
+          // 同步到 DOM：外部登录 2FA 重试（authManager）需携带验证码时
+          // 无法访问本实例状态，从图片元素 dataset 读取
+          image.dataset.captchaId = result.data.captcha_id;
+          image.replaceChildren(doc.documentElement);
+        } else {
+          this.showError(t("common.load_failed"));
+        }
       }
     } catch (error) {
       console.error("加载验证码失败:", error);
@@ -435,7 +445,7 @@ class LoginManager {
         }
       } else {
         this.showError(this.formatErrorMessage(result.message));
-        this.handleCaptchaOnFailure("password", result.message);
+        this.handleCaptchaOnFailure("password", result.message_key);
       }
     } catch (error) {
       this.handleNetworkError(error);
@@ -498,7 +508,7 @@ class LoginManager {
         loginUser(result.data, rememberMe);
       } else {
         this.showError(this.formatErrorMessage(result.message));
-        this.handleCaptchaOnFailure("ldap", result.message);
+        this.handleCaptchaOnFailure("ldap", result.message_key);
       }
     } catch (error) {
       this.handleNetworkError(error);
@@ -541,8 +551,9 @@ class LoginManager {
 
     this.setLoading(true);
 
+    // 失败时保留 tempAuthData 供直接重试；仅登录成功或用户主动返回登录视图
+    // （resetToInitState）时才清空，避免输错一次动态码就弹回重输全部凭证
     const { username, password, rememberMe } = this.tempAuthData;
-    this.tempAuthData = null;
 
     try {
       const result = await apiPost(
@@ -557,6 +568,7 @@ class LoginManager {
       );
 
       if (result.success) {
+        this.tempAuthData = null;
         loginUser(result.data, rememberMe);
       } else {
         this.showError(result.message || t("login.two_factor_failed"));
@@ -629,7 +641,8 @@ class LoginManager {
       btn.disabled = true;
       this.clearError();
     } else {
-      btn.textContent = t("login.send_code"); // 恢复默认文本
+      // 恢复进入加载态前记录的原始文案（缺失时回退默认发送文案）
+      btn.textContent = btn.dataset.originalText || t("login.send_code");
       btn.disabled = false;
     }
   }

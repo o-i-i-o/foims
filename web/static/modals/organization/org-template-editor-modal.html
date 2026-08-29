@@ -1,5 +1,5 @@
 <template id="org-template-editor-modal-template">
-<div id="org-template-editor-modal" class="modal" role="dialog" aria-modal="true">
+<div id="org-template-editor-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="org-template-editor-modal-title">
   <div class="modal-content">
     <header class="modal-header">
       <h3 class="modal-title" id="org-template-editor-modal-title" data-i18n="org_template.editor_title">Template Editor</h3>
@@ -7,14 +7,14 @@
     </header>
     <div class="modal-body">
       <form id="org-template-editor-form">
-        <input type="hidden" id="org-template-editor-id">
+        <input type="hidden" id="org-template-editor-id" name="id">
         <div class="form-group">
           <label for="org-template-editor-name"><span data-i18n="common.name">Name</span><span class="required">*</span></label>
           <input type="text" id="org-template-editor-name" name="name" autocomplete="off" required>
         </div>
         <div class="form-group">
           <label for="org-template-quick-fill" data-i18n="org_template.quick_fill">Quick Fill</label>
-          <select id="org-template-quick-fill">
+          <select id="org-template-quick-fill" name="quick_fill">
             <option value="" data-i18n="org_template.select_quick_fill">Select a preset...</option>
           </select>
         </div>
@@ -22,7 +22,7 @@
           <!-- 层级树为动态容器、无单一控件可关联：改为分组标题 span（样式与原 label 一致） -->
           <span class="group-label" data-i18n="org_template.levels">Hierarchy</span>
           <label class="checkbox-label">
-            <input type="checkbox" id="org-template-save-preset">
+            <input type="checkbox" id="org-template-save-preset" name="save_preset">
             <span data-i18n="org_template.save_as_preset">Save as Preset Template</span>
           </label>
           <div id="org-template-editor-levels-container" class="org-template-tree-container"></div>

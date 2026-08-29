@@ -69,6 +69,10 @@ pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
         }
     };
 
+    // 订阅进程内关闭广播：register_service（服务让位）等业务路径触发的
+    // request_shutdown 与 OS 信号同等待遇，唤醒优雅退出流程
+    let mut internal = shutdown.subscribe();
+
     loop {
         tokio::select! {
             _ = sigint.recv() => {
@@ -84,6 +88,9 @@ pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
             _ = sighup.recv() => {
                 log_warn!("log.shutdown.sighup_ignored");
                 continue;
+            }
+            _ = internal.recv() => {
+                break;
             }
         }
     }

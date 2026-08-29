@@ -32,7 +32,8 @@ export class TopologyVisualization {
       onNodeDrag: (deviceId) => this.renderer.updateConnectionPaths(deviceId),
       onNodeDragEnd: (deviceId) => this._handleNodeDragEnd(deviceId),
       onContainerClick: (kind, key, box) => this.openContainerCoordinateModal(kind, key, box),
-      onContainerDragEnd: (fixedKey) => this._handleGroupDragEnd(fixedKey),
+      onContainerDragEnd: (fixedKey, fixedGroupKey) =>
+        this._handleGroupDragEnd(fixedKey, fixedGroupKey),
       onConnectionComplete: (sDev, sPort, tDev, tPort) =>
         this._createConnection(sDev, sPort, tDev, tPort),
       onConnectionClick: (connId) => this._handleConnectionClick(connId),
@@ -48,14 +49,21 @@ export class TopologyVisualization {
     this.orgFilterSet = null;
     // 拖拽自动保存计时器（页面直接编辑坐标后静默持久化）
     this._autoSaveTimer = null;
+    // 加载代次：并发 loadTopology 时丢弃旧响应，避免画布出现重复节点与连线
+    this._loadToken = 0;
   }
 
   async loadTopology() {
+    const token = ++this._loadToken;
     this.renderer.clearAll();
     const [nodes, connections] = await Promise.all([
       this.dataManager.fetchTopologyNodes(),
       this.dataManager.fetchTopologyConnections()
     ]);
+    // 响应返回时已有更新的加载开启：丢弃本次结果
+    if (token !== this._loadToken) {
+      return;
+    }
 
     this.nodes = nodes;
     this.connections = connections;
@@ -120,6 +128,18 @@ export class TopologyVisualization {
   }
 
   async _createConnection(sourceDeviceId, sourcePortId, targetDeviceId, targetPortId) {
+    // 重复连线预检（两端设备对一致即重复，含方向翻转）：
+    // 与模态入口同口径。画布锚点不写 dataset.portId（端口恒 null），
+    // 端口比较在此入口恒退化，故统一按设备对判重
+    const isDuplicate = this.connections.some(
+      (c) =>
+        (c.source_device_id === sourceDeviceId && c.target_device_id === targetDeviceId) ||
+        (c.source_device_id === targetDeviceId && c.target_device_id === sourceDeviceId)
+    );
+    if (isDuplicate) {
+      showToast(t("server.visualization.connection_duplicate"), "warning");
+      return;
+    }
     const result = await this.dataManager.createConnection({
       connection_type: "physical",
       source_device_id: sourceDeviceId,
@@ -139,6 +159,7 @@ export class TopologyVisualization {
     const fixedKey = node?.room_id ? `room:${node.room_id}` : "room:none";
 
     this._syncPositionsFromDom();
+    // 节点拖拽（非容器拖拽）无机柜组整体固定，仅房间分组保持不动
     const moved = this._separateOverlappingGroups(fixedKey);
     if (moved) {
       this._renderCurrentView();
@@ -149,9 +170,9 @@ export class TopologyVisualization {
   }
 
   /// 容器（房间/机柜分组框）拖拽结束后：同步位置、推挤重叠分组并自动保存
-  _handleGroupDragEnd(fixedKey) {
+  _handleGroupDragEnd(fixedKey, fixedGroupKey = null) {
     this._syncPositionsFromDom();
-    const moved = this._separateOverlappingGroups(fixedKey);
+    const moved = this._separateOverlappingGroups(fixedKey, fixedGroupKey);
     if (moved) {
       this._renderCurrentView();
     } else {
@@ -247,8 +268,11 @@ export class TopologyVisualization {
     setText("topo-conn-detail-source-port", conn.source_port_label || t("viz.no_port"));
     setText("topo-conn-detail-target-port", conn.target_port_label || t("viz.no_port"));
 
+    // port_id 可能缺失：回退占位文案，避免对 null 调 slice 中断弹窗渲染
     const formatMembers = (members) =>
-      (members || []).map((m) => m.port_number || m.port_id.slice(0, 8)).join(", ");
+      (members || [])
+        .map((m) => m.port_number || m.port_id?.slice(0, 8) || t("viz.no_port"))
+        .join(", ");
     const hasMembers =
       conn.connection_type === "logical" &&
       ((conn.source_members?.length || 0) > 0 || (conn.target_members?.length || 0) > 0);
@@ -264,7 +288,10 @@ export class TopologyVisualization {
     if (hasPath) {
       setText(
         "topo-conn-detail-cables",
-        cables.map((c) => c.cable_label || c.cable_id.slice(0, 8)).join("  →  ")
+        // cable_id 可能缺失：回退占位文案，避免对 null 调 slice 中断弹窗渲染
+        cables
+          .map((c) => c.cable_label || c.cable_id?.slice(0, 8) || t("common.unknown"))
+          .join("  →  ")
       );
     }
 
@@ -309,14 +336,8 @@ export class TopologyVisualization {
       return;
     }
     this.core.connectionsGroup
-      .querySelectorAll(".selected, .selected-group, .conn-delete-marker")
-      .forEach((el) => {
-        if (el.classList.contains("conn-delete-marker")) {
-          el.remove();
-        } else {
-          el.classList.remove("selected", "selected-group");
-        }
-      });
+      .querySelectorAll(".selected")
+      .forEach((el) => el.classList.remove("selected"));
     this.selectedConnectionId = null;
   }
 
@@ -348,8 +369,9 @@ export class TopologyVisualization {
   async autoDiscover() {
     const result = await this.dataManager.autoDiscover();
     if (result) {
+      // 自动发现仅追加节点/连线并刷新画布；布局重排留给用户明确的
+      // "自动布局"动作（groupedLayout 会改坐标并自动保存，不宜隐式触发）
       await this.loadTopology();
-      this.groupedLayout();
       showToast(
         `${t("viz.auto_discover_done", { count: result.added_nodes })}，${result.discovered_connections ?? 0} ${t("viz.connections_unit")}`,
         "success"
@@ -538,7 +560,7 @@ export class TopologyVisualization {
 
   /// 推开包围盒相交的分组（先房间级、再房间内机柜级），
   /// 返回是否发生移动。fixedKey 指定的房间分组保持不动。
-  _separateOverlappingGroups(fixedKey = null) {
+  _separateOverlappingGroups(fixedKey = null, fixedCabinetKey = null) {
     const rooms = this._collectSpatialGroups();
     let moved = this._separateGroupBoxes(
       rooms.map((room) => ({
@@ -552,6 +574,8 @@ export class TopologyVisualization {
     );
 
     rooms.forEach((room) => {
+      // 机柜级推挤固定被拖机柜自身的分组键（cab:...）：
+      // 否则被拖机柜落定后会被对称推移偏离拖放位置
       const separated = this._separateGroupBoxes(
         room.cabinets.map((cab) => ({
           key: cab.key,
@@ -559,7 +583,8 @@ export class TopologyVisualization {
           padding: CABINET_PADDING,
           header: CABINET_HEADER
         })),
-        CABINET_GAP
+        CABINET_GAP,
+        fixedCabinetKey
       );
       moved = moved || separated;
     });
@@ -788,7 +813,15 @@ export class TopologyVisualization {
     saveBtn.onclick = async () => {
       const x = Number(xInput.value);
       const y = Number(yInput.value);
-      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+      // Number("") === 0 会被下方校验放行：空串先显式拒绝
+      if (
+        xInput.value.trim() === "" ||
+        yInput.value.trim() === "" ||
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        x < 0 ||
+        y < 0
+      ) {
         showToast(t("common.check_input"), "warning");
         return;
       }
@@ -851,6 +884,11 @@ export class TopologyVisualization {
   _fitView() {
     if (this.nodes.length === 0) {
       this.core.setViewBox(0, 0, 3000, 2000);
+      return;
+    }
+    // 组织筛选隐藏全部节点时没有可适配内容：保持当前视野，
+    // 避免以 Infinity 计算出非法 viewBox（fit 失效、部分浏览器网格消失）
+    if (this.visibleNodes().length === 0) {
       return;
     }
     let minX = Infinity,

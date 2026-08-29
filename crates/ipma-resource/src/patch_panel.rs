@@ -119,17 +119,20 @@ pub async fn sync_cabinet_patch_panels<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 机柜存在性检查放进同步事务内，避免事务外的快照读与后续写入
+    // 之间出现 TOCTOU（与 sync_room_children 同口径）
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let cabinet_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cabinets WHERE id = $1)")
             .bind(id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
     if !cabinet_exists {
         return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
     let items = &req.patch_panels;
-    let mut tx = state.pool()?.get_conn().begin().await?;
     let now = Utc::now();
 
     // 既有配线架 id 范围（仅本机柜的）
@@ -175,15 +178,21 @@ pub async fn sync_cabinet_patch_panels<P: DbProvider>(
         }
 
         if let Some(item_id) = item.id {
-            sqlx::query(
-                "UPDATE patch_panels SET name = $1, cabinet_id = $2, updated_at = $3 WHERE id = $4",
+            // 归属校验：仅允许更新当前机柜下的配线架，
+            // 携带其他机柜的 id 时按未找到处理，避免跨父资源静默搬移
+            let updated = sqlx::query(
+                "UPDATE patch_panels SET name = $1, cabinet_id = $2, updated_at = $3 WHERE id = $4 AND cabinet_id = $5",
             )
             .bind(&item.name)
             .bind(id)
             .bind(now)
             .bind(item_id)
+            .bind(id)
             .execute(&mut *tx)
             .await?;
+            if updated.rows_affected() == 0 {
+                return Err(AppError::NotFound(msg("server.common.not_found")));
+            }
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(

@@ -180,23 +180,30 @@ async fn resolve_org_type(pool: &sqlx::PgPool, org: &Organization) -> Result<Str
     resolve_type_name(&levels, &org.type_path)
 }
 
-/// 批量加载模板 levels（单条查询，避免逐模板 N+1）；加载失败时跳过该模板
+/// 批量加载模板 levels（单条查询，避免逐模板 N+1）；
+/// 数据库错误向上传播，不得静默回退导致 org_type 显示错误
 async fn load_template_levels_batch(
     pool: &sqlx::PgPool,
     template_ids: &[Uuid],
-) -> HashMap<Uuid, serde_json::Value> {
+) -> Result<HashMap<Uuid, serde_json::Value>, sqlx::Error> {
     if template_ids.is_empty() {
-        return HashMap::new();
+        return Ok(HashMap::new());
     }
-    sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+    let rows = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
         "SELECT id, levels FROM org_templates WHERE id = ANY($1)",
     )
     .bind(template_ids)
     .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect()
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// 空串规范化为 None（可空文本字段统一处理，与员工模块口径一致：
+/// 前端未填写的可空字段提交空串，规范化为 NULL 即清空）
+fn blank_to_none(value: Option<String>) -> Option<String> {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 // ==================== API 处理函数 ====================
@@ -321,7 +328,7 @@ pub async fn get_organization_tree<P: DbProvider>(
         ids.into_iter().collect()
     };
     let template_levels_map =
-        load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await;
+        load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await?;
 
     let tree = build_tree(&all_orgs, &template_levels_map);
     Ok(ipma_common::ok_json(
@@ -483,6 +490,17 @@ pub async fn create_organization<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    // 名称禁止包含 '/'：组织树以路径引用名称（导入/导出的 parent_path
+    // 以 '/' 拼接），与导入端口径一致，含分隔符的名称导出后无法再导入
+    if req.name.contains('/') {
+        return Err(AppError::Validation(msg(
+            "server.organization.validation.name_separator",
+        )));
+    }
+
+    // 可空描述空串规范化为 NULL（清空语义）
+    let description = blank_to_none(req.description.clone());
+
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let (template_id, level_index) = if let Some(parent_id) = req.parent_id {
@@ -614,7 +632,7 @@ pub async fn create_organization<P: DbProvider>(
     .bind(&req.name)
     .bind(&req.type_path)
     .bind(req.parent_id)
-    .bind(&req.description)
+    .bind(&description)
     .bind(template_id)
     .bind(level_index)
     .bind(now)
@@ -640,7 +658,7 @@ pub async fn create_organization<P: DbProvider>(
             name: req.name.clone(),
             type_path: req.type_path.clone(),
             parent_id: req.parent_id,
-            description: req.description.clone(),
+            description: description.clone(),
             template_id,
             level_index,
             created_at: now,
@@ -657,7 +675,7 @@ pub async fn create_organization<P: DbProvider>(
         "parent_id": req.parent_id,
         "template_id": template_id,
         "level_index": level_index,
-        "description": req.description
+        "description": description
     });
     log_op_best_effort(
         &state.pool()?.get_conn(),
@@ -676,7 +694,7 @@ pub async fn create_organization<P: DbProvider>(
             "type_path": req.type_path,
             "org_type": org_type,
             "parent_id": req.parent_id,
-            "description": req.description,
+            "description": description,
             "template_id": template_id,
             "level_index": level_index,
             "created_at": now,
@@ -718,34 +736,42 @@ pub async fn update_organization<P: DbProvider>(
         )));
     }
 
-    // 名称变更校验：同级下不能重名
-    if let Some(ref new_name) = req.name
-        && new_name != &existing.name
-    {
-        let duplicate: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM organizations WHERE parent_id IS NOT DISTINCT FROM $1 AND name = $2 AND id != $3",
-        )
-        .bind(existing.parent_id)
-        .bind(new_name)
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if duplicate.is_some() {
-            return Err(AppError::Conflict(msg("server.organization.name_exists")));
+    // 名称变更校验：同级下不能重名；且名称禁止包含 '/'
+    //（与导入端口径一致，组织树以路径引用名称）
+    if let Some(ref new_name) = req.name {
+        if new_name.contains('/') {
+            return Err(AppError::Validation(msg(
+                "server.organization.validation.name_separator",
+            )));
+        }
+        if new_name != &existing.name {
+            let duplicate: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM organizations WHERE parent_id IS NOT DISTINCT FROM $1 AND name = $2 AND id != $3",
+            )
+            .bind(existing.parent_id)
+            .bind(new_name)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            if duplicate.is_some() {
+                return Err(AppError::Conflict(msg("server.organization.name_exists")));
+            }
         }
     }
 
+    // 描述三态：缺省（None）保留旧值；空串清空（NULLIF 置 NULL）；
+    // 有值更新。部分更新请求不再因未携带 description 被意外清空
     let now = Utc::now();
 
     sqlx::query(
         "UPDATE organizations SET
          name = COALESCE($1, name),
-         description = COALESCE($2, description),
+         description = CASE WHEN $2 IS NULL THEN description ELSE NULLIF($2, '') END,
          updated_at = $3
          WHERE id = $4",
     )
     .bind(&req.name)
-    .bind(&req.description)
+    .bind(req.description.as_deref().map(str::trim))
     .bind(now)
     .bind(id)
     .execute(&mut *tx)
@@ -831,6 +857,25 @@ pub async fn delete_organization<P: DbProvider>(
     if room_count > 0 {
         return Err(AppError::Validation(
             msg("server.organization.has_rooms").with("count", room_count),
+        ));
+    }
+
+    // 挂在该节点及其所有子孙节点下的员工随 ON DELETE CASCADE 静默销毁，
+    // 必须与子组织/房间一样显式拦截，提示先转移员工（递归 CTE 收集子树）
+    let employee_count: i64 = sqlx::query_scalar(
+        r"WITH RECURSIVE org_tree AS (
+            SELECT id FROM organizations WHERE id = $1
+            UNION ALL
+            SELECT o.id FROM organizations o JOIN org_tree t ON o.parent_id = t.id
+        )
+        SELECT COUNT(*) FROM employees WHERE org_id IN (SELECT id FROM org_tree)",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if employee_count > 0 {
+        return Err(AppError::Validation(
+            msg("server.organization.has_employees").with("count", employee_count),
         ));
     }
 
@@ -963,7 +1008,7 @@ async fn resolve_org_list_types<P: DbProvider>(
         ids.into_iter().collect()
     };
     let template_levels_map =
-        load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await;
+        load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await?;
 
     let items: Vec<serde_json::Value> = orgs
         .iter()

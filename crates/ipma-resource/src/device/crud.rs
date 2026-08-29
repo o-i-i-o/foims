@@ -26,17 +26,20 @@ pub async fn get_devices<P: DbProvider>(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let workstation_id = query
-        .get("workstation_id")
-        .and_then(|id| Uuid::parse_str(id).ok());
-    let position_id = query
-        .get("position_id")
-        .and_then(|id| Uuid::parse_str(id).ok());
+    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    let parse_uuid = |key: &str| -> Result<Option<Uuid>, AppError> {
+        match query.get(key) {
+            Some(v) if !v.is_empty() => Ok(Some(Uuid::parse_str(v).map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", key))
+            })?)),
+            _ => Ok(None),
+        }
+    };
+    let workstation_id = parse_uuid("workstation_id")?;
+    let position_id = parse_uuid("position_id")?;
     let device_type = query.get("device_type").cloned();
-    let room_id = query.get("room_id").and_then(|id| Uuid::parse_str(id).ok());
-    let cabinet_id = query
-        .get("cabinet_id")
-        .and_then(|id| Uuid::parse_str(id).ok());
+    let room_id = parse_uuid("room_id")?;
+    let cabinet_id = parse_uuid("cabinet_id")?;
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -116,7 +119,7 @@ pub async fn get_devices<P: DbProvider>(
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
-                d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
+                d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u,
                 d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
@@ -170,21 +173,29 @@ pub async fn get_devices<P: DbProvider>(
 
     let items: Vec<serde_json::Value> = devices
         .into_iter()
-        .map(|d| {
-            let mut v = serde_json::to_value(&d).map_err(|e| {
-                AppError::Internal(msg("server.common.serialize_failed").with("error", e))
-            })?;
-            v["snmp_community"] = serde_json::Value::Null;
-            v["snmp_auth_password"] = serde_json::Value::Null;
-            v["snmp_priv_password"] = serde_json::Value::Null;
-            Ok(v)
-        })
+        .map(|d| sanitize_device_response(&d))
         .collect::<Result<Vec<_>, AppError>>()?;
 
     Ok(ipma_common::ok_json(
         paged_response(items, total, &pagination),
         "server.device.list_retrieved",
     ))
+}
+
+/// 响应脱敏：SNMP 凭据密文不出现在任何 JSON 响应中（列表/create/update
+/// 同口径），同时提供 snmp_configured 供前端判定设备是否已配置 SNMP 凭据
+///（v2c 设备仅有 community，snmp_version 列有 DEFAULT 'v2c' 不能作依据）。
+fn sanitize_device_response<T: serde::Serialize>(
+    device: &T,
+) -> Result<serde_json::Value, AppError> {
+    let mut v = serde_json::to_value(device)
+        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
+    let snmp_configured = v["snmp_community"].is_string() || v["snmp_username"].is_string();
+    v["snmp_configured"] = serde_json::Value::Bool(snmp_configured);
+    v["snmp_community"] = serde_json::Value::Null;
+    v["snmp_auth_password"] = serde_json::Value::Null;
+    v["snmp_priv_password"] = serde_json::Value::Null;
+    Ok(v)
 }
 
 pub async fn create_device<P: DbProvider>(
@@ -230,6 +241,27 @@ pub async fn create_device<P: DbProvider>(
         if !exists {
             return Err(AppError::NotFound(msg("server.position.not_found")));
         }
+    }
+
+    // room_id 引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
+    let room_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
+        .bind(req.room_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if !room_exists {
+        return Err(AppError::Validation(msg("server.room.not_found")));
+    }
+
+    // 同房间同名设备预检（与写入同事务，避免 TOCTOU）：
+    // 重名设备在同一房间内干扰识别与检索
+    let name_dup: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM devices WHERE room_id = $1 AND name = $2")
+            .bind(req.room_id)
+            .bind(&req.name)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if name_dup.is_some() {
+        return Err(AppError::Conflict(msg("server.device.name_exists")));
     }
 
     let (final_device_type, final_brand, final_model) = if let Some(tmpl_id) = req.template_id {
@@ -338,14 +370,20 @@ pub async fn create_device<P: DbProvider>(
         .await?;
 
     if req.save_as_template == Some(true) {
+        // 模板名缺省回退设备名；最终为空串（含全空白）时拒绝，不插入空名模板
         let template_name = req.template_name.as_deref().unwrap_or(&req.name);
+        if template_name.trim().is_empty() {
+            return Err(AppError::Validation(msg(
+                "server.device.validation.template_name_length",
+            )));
+        }
         let tmpl_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO device_templates (id, name, device_type, brand, model, description, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(tmpl_id)
-        .bind(template_name)
+        .bind(template_name.trim())
         .bind(&final_device_type)
         .bind(&final_brand)
         .bind(&final_model)
@@ -422,7 +460,8 @@ pub async fn create_device<P: DbProvider>(
     // 尽力而为的旁路通知：设备匹配工位且有 IP 时邮件通知管理人
     super::notify::spawn_ip_notification(state.pool()?.get_conn(), id);
 
-    Ok(ipma_common::ok_json(device, "server.device.created"))
+    let sanitized = sanitize_device_response(&device)?;
+    Ok(ipma_common::ok_json(sanitized, "server.device.created"))
 }
 
 pub async fn get_device<P: DbProvider>(
@@ -441,7 +480,7 @@ pub async fn get_device<P: DbProvider>(
                     d.snmp_auth_protocol, d.snmp_auth_password,
                     d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                     d.description,
-                    d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
+                    d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
                     d.start_u, d.end_u,
                     d.template_name,
                     d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
@@ -456,24 +495,11 @@ pub async fn get_device<P: DbProvider>(
     let device = device_opt?.ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
     let cards = cards?;
 
-    let (decrypted_community, decrypted_auth, decrypted_priv) = tokio::join!(
-        ipma_common::crypto::decrypt_credential_async(device.snmp_community.as_deref()),
-        ipma_common::crypto::decrypt_credential_async(device.snmp_auth_password.as_deref()),
-        ipma_common::crypto::decrypt_credential_async(device.snmp_priv_password.as_deref()),
-    );
-    let decrypted_community = decrypted_community?;
-    let decrypted_auth = decrypted_auth?;
-    let decrypted_priv = decrypted_priv?;
-
-    let mut result = serde_json::to_value(&device)
-        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
+    // SNMP 凭据不再解密回传：单条详情与列表/create/update 同口径脱敏
+    //（明文凭据出 API 会把网络设备的共同体字/v3 口令暴露给所有
+    // 可调用本端点的用户）；编辑态由前端以“留空表示不变更”提交
+    let mut result = sanitize_device_response(&device)?;
     result["cards"] = serde_json::to_value(cards)
-        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
-    result["snmp_community"] = serde_json::to_value(decrypted_community)
-        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
-    result["snmp_auth_password"] = serde_json::to_value(decrypted_auth)
-        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
-    result["snmp_priv_password"] = serde_json::to_value(decrypted_priv)
         .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
 
     Ok(ipma_common::ok_json(result, "server.device.fetched"))
@@ -502,6 +528,18 @@ pub async fn update_device<P: DbProvider>(
 
     if existing.is_none() {
         return Err(AppError::NotFound(msg("server.device.not_found")));
+    }
+
+    // room_id 引用存在性校验（None 表示不修改）
+    if let Some(room_id) = req.room_id {
+        let room_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
+                .bind(room_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !room_exists {
+            return Err(AppError::Validation(msg("server.room.not_found")));
+        }
     }
 
     // Fetch current device data for business validations
@@ -556,45 +594,50 @@ pub async fn update_device<P: DbProvider>(
 
     let now = Utc::now();
 
-    let encrypted_community = match &req.snmp_community {
-        Some(c) if !c.is_empty() => Some(encrypt_password_async(c.clone()).await?),
+    // 双层 Option 文本字段：Some(Some(v)) 设置新值（加密列存密文）、
+    // Some(None) 清空（SET NULL）、None 不修改
+    let encrypted_community = match req.snmp_community.as_ref().map(|v| v.as_deref()) {
+        Some(Some(c)) if !c.is_empty() => Some(encrypt_password_async(c.to_string()).await?),
         _ => None,
     };
-    let encrypted_auth_password = match &req.snmp_auth_password {
-        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
+    let encrypted_auth_password = match req.snmp_auth_password.as_ref().map(|v| v.as_deref()) {
+        Some(Some(p)) if !p.is_empty() => Some(encrypt_password_async(p.to_string()).await?),
         _ => None,
     };
-    let encrypted_priv_password = match &req.snmp_priv_password {
-        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
+    let encrypted_priv_password = match req.snmp_priv_password.as_ref().map(|v| v.as_deref()) {
+        Some(Some(p)) if !p.is_empty() => Some(encrypt_password_async(p.to_string()).await?),
         _ => None,
     };
 
     sqlx::query(
         "UPDATE devices SET
          name = COALESCE($1, name),
-         hostname = COALESCE($27, hostname),
-         device_type = COALESCE($2, device_type),
-         brand = COALESCE($3, brand),
-         model = COALESCE($4, model),
-         serial_number = COALESCE($5, serial_number),
-         workstation_id = CASE WHEN $6::boolean THEN $7 ELSE workstation_id END,
-         position_id = CASE WHEN $8::boolean THEN $9 ELSE position_id END,
-         room_id = COALESCE($10, room_id),
-         seller = COALESCE($11, seller),
-         location = COALESCE($12, location),
-         snmp_version = COALESCE($13, snmp_version),
-         snmp_community = CASE WHEN $14::boolean THEN $15 ELSE snmp_community END,
-         snmp_username = COALESCE($16, snmp_username),
-         snmp_auth_protocol = COALESCE($17, snmp_auth_protocol),
-         snmp_auth_password = CASE WHEN $18::boolean THEN $19 ELSE snmp_auth_password END,
-         snmp_priv_protocol = COALESCE($20, snmp_priv_protocol),
-         snmp_priv_password = CASE WHEN $21::boolean THEN $22 ELSE snmp_priv_password END,
-         snmp_port = COALESCE($23, snmp_port),
-         description = COALESCE($24, description),
-         updated_at = $25
-         WHERE id = $26",
+         hostname = CASE WHEN $2::boolean THEN $3 ELSE hostname END,
+         device_type = COALESCE($4, device_type),
+         brand = COALESCE($5, brand),
+         model = COALESCE($6, model),
+         serial_number = COALESCE($7, serial_number),
+         workstation_id = CASE WHEN $8::boolean THEN $9 ELSE workstation_id END,
+         position_id = CASE WHEN $10::boolean THEN $11 ELSE position_id END,
+         room_id = COALESCE($12, room_id),
+         seller = COALESCE($13, seller),
+         location = COALESCE($14, location),
+         snmp_version = COALESCE($15, snmp_version),
+         snmp_community = CASE WHEN $16::boolean THEN $17 ELSE snmp_community END,
+         snmp_username = CASE WHEN $18::boolean THEN $19 ELSE snmp_username END,
+         snmp_auth_protocol = CASE WHEN $20::boolean THEN $21 ELSE snmp_auth_protocol END,
+         snmp_auth_password = CASE WHEN $22::boolean THEN $23 ELSE snmp_auth_password END,
+         snmp_priv_protocol = CASE WHEN $24::boolean THEN $25 ELSE snmp_priv_protocol END,
+         snmp_priv_password = CASE WHEN $26::boolean THEN $27 ELSE snmp_priv_password END,
+         snmp_port = COALESCE($28, snmp_port),
+         description = CASE WHEN $29::boolean THEN $30 ELSE description END,
+         updated_at = $31
+         WHERE id = $32",
     )
     .bind(&req.name)
+    // 双层 Option：Some(_) 时 SET（Some(None) 绑定 NULL 即清空），None 不进 SET
+    .bind(req.hostname.is_some())
+    .bind(req.hostname.clone().flatten())
     .bind(&req.device_type)
     .bind(&req.brand)
     .bind(&req.model)
@@ -609,18 +652,21 @@ pub async fn update_device<P: DbProvider>(
     .bind(&req.snmp_version)
     .bind(req.snmp_community.is_some())
     .bind(&encrypted_community)
-    .bind(&req.snmp_username)
-    .bind(&req.snmp_auth_protocol)
+    .bind(req.snmp_username.is_some())
+    .bind(req.snmp_username.clone().flatten())
+    .bind(req.snmp_auth_protocol.is_some())
+    .bind(req.snmp_auth_protocol.clone().flatten())
     .bind(req.snmp_auth_password.is_some())
     .bind(&encrypted_auth_password)
-    .bind(&req.snmp_priv_protocol)
+    .bind(req.snmp_priv_protocol.is_some())
+    .bind(req.snmp_priv_protocol.clone().flatten())
     .bind(req.snmp_priv_password.is_some())
     .bind(&encrypted_priv_password)
     .bind(req.snmp_port)
-    .bind(&req.description)
+    .bind(req.description.is_some())
+    .bind(req.description.clone().flatten())
     .bind(now)
     .bind(id)
-    .bind(&req.hostname)
     .execute(&mut *tx)
     .await?;
 
@@ -631,10 +677,16 @@ pub async fn update_device<P: DbProvider>(
     }
 
     if req.save_as_template == Some(true) {
+        // 模板名缺省回退设备名；最终为空串（含全空白）时拒绝，不插入空名模板
         let template_name = req
             .template_name
             .as_deref()
             .unwrap_or(req.name.as_deref().unwrap_or(""));
+        if template_name.trim().is_empty() {
+            return Err(AppError::Validation(msg(
+                "server.device.validation.template_name_length",
+            )));
+        }
         let tmpl_id = Uuid::new_v4();
 
         let current_device_type: String =
@@ -666,7 +718,7 @@ pub async fn update_device<P: DbProvider>(
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(tmpl_id)
-        .bind(template_name)
+        .bind(template_name.trim())
         .bind(&current_device_type)
         .bind(&current_brand)
         .bind(&current_model)
@@ -702,7 +754,7 @@ pub async fn update_device<P: DbProvider>(
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                 d.description,
-                d.workstation_name, d.room_id, d.room_name, d.cabinet_id, d.cabinet_name,
+                d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u,
                 d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
@@ -716,8 +768,8 @@ pub async fn update_device<P: DbProvider>(
     // Fetch updated network cards (with nested ports and IPs)
     let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
-    let mut result = serde_json::to_value(&updated_device)
-        .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
+    // SNMP 凭据密文脱敏（与列表/create 响应同口径）
+    let mut result = sanitize_device_response(&updated_device)?;
     result["cards"] = serde_json::to_value(cards)
         .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
 

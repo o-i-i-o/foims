@@ -1,19 +1,19 @@
 <template id="pull-mac-modal-template">
-<div id="pull-mac-modal" class="modal" role="dialog" aria-modal="true">
+<div id="pull-mac-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pull-mac-modal-title">
   <div class="modal-content">
     <header class="modal-header">
-      <h3 class="modal-title" data-i18n="ip.pull_mac">Pull MAC</h3>
+      <h3 class="modal-title" id="pull-mac-modal-title" data-i18n="ip.pull_mac">Pull MAC</h3>
       <button type="button" class="close" data-modal-id="pull-mac-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
       <form id="pull-mac-form">
         <div class="form-group">
           <label for="pull-mac-device-select" data-i18n="ip.select_device">Select Device</label>
-          <select id="pull-mac-device-select" class="form-control" aria-label="Target device"></select>
+          <select id="pull-mac-device-select" name="device_id" class="form-control" aria-label="Target device"></select>
         </div>
         <div class="form-group">
           <label for="pull-mac-network-select" data-i18n="ip.select_network">Select Network</label>
-          <select id="pull-mac-network-select" class="form-control" aria-label="Target network"></select>
+          <select id="pull-mac-network-select" name="network_id" class="form-control" aria-label="Target network"></select>
         </div>
       </form>
     </div>

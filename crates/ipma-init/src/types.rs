@@ -6,6 +6,29 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const VERIFICATION_CODE_EXPIRY_SECS: u64 = 15 * 60;
 pub const BCRYPT_COST: u32 = 12;
 
+/// 密码字节长度上限：bcrypt 仅处理前 72 字节，超长部分被静默截断，
+/// 前 72 字节相同的口令将等价可登录，必须在入口拒绝
+pub const PASSWORD_MAX_BYTES: usize = 72;
+
+/// 密码字节长度校验（<=72 字节，multibyte 字符按 UTF-8 字节计）
+fn validate_password_bytes(password: &str) -> Result<(), validator::ValidationError> {
+    if password.len() <= PASSWORD_MAX_BYTES {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("length"))
+    }
+}
+
+/// 初始管理员角色合法集合（等保三权分立：admin 系统管理员 / secadmin
+/// 安全管理员 / auditor 审计管理员 / user 普通用户，与 ipma-models
+/// 的 validate_role 口径一致）
+fn validate_init_role(role: &str) -> Result<(), validator::ValidationError> {
+    match role {
+        "admin" | "user" | "secadmin" | "auditor" => Ok(()),
+        _ => Err(validator::ValidationError::new("role")),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct VerificationCode {
     pub code: String,
@@ -34,10 +57,18 @@ pub struct InitRequest {
     #[validate(length(min = 3, max = 50, message = "server.init.validation.username_length"))]
     pub username: String,
     #[validate(length(min = 8, message = "server.init.validation.password_length"))]
+    #[validate(custom(
+        function = "validate_password_bytes",
+        message = "server.init.validation.password_length"
+    ))]
     pub password: String,
     #[validate(email(message = "server.init.validation.email_invalid"))]
     pub email: String,
     #[validate(length(min = 1, max = 20, message = "server.init.validation.role_length"))]
+    #[validate(custom(
+        function = "validate_init_role",
+        message = "server.user.validation.role_invalid"
+    ))]
     pub role: String,
     #[validate(length(
         min = 16,
@@ -52,11 +83,6 @@ pub struct CreateDatabaseRequest {
     pub verification: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ImportDatabaseRequest {
-    pub verification: String,
-}
-
 #[derive(Debug, Serialize)]
 pub struct CreateDatabaseResponse {
     pub backup_file: Option<String>,
@@ -64,56 +90,9 @@ pub struct CreateDatabaseResponse {
     pub message: String,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct DatabaseConfig {
-    pub host: String,
-    pub port: u16,
-    pub database: String,
-    pub username: String,
-    pub password: String,
-    #[serde(default = "default_max_connections")]
-    pub max_connections: u32,
-    #[serde(default = "default_min_connections")]
-    pub min_connections: u32,
-    #[serde(default = "default_acquire_timeout")]
-    pub acquire_timeout_secs: u64,
-    #[serde(default = "default_idle_timeout")]
-    pub idle_timeout_secs: u64,
-    #[serde(default = "default_max_lifetime")]
-    pub max_lifetime_secs: u64,
-    #[serde(default = "default_query_timeout")]
-    pub query_timeout_secs: u64,
-    #[serde(default = "default_health_check_interval")]
-    pub health_check_interval_secs: u64,
-}
-
-const fn default_max_connections() -> u32 {
-    10
-}
-
-const fn default_min_connections() -> u32 {
-    5
-}
-
-const fn default_acquire_timeout() -> u64 {
-    15
-}
-
-const fn default_idle_timeout() -> u64 {
-    60
-}
-
-const fn default_max_lifetime() -> u64 {
-    1800
-}
-
-const fn default_query_timeout() -> u64 {
-    30
-}
-
-const fn default_health_check_interval() -> u64 {
-    30
-}
+/// 数据库连接配置：直接复用 ipma-common 的唯一定义
+///（原先在此处逐字段复制了一份，违反"跨 crate 共享类型放 ipma-common"规范）
+pub use ipma_common::config::DatabaseConfig;
 
 #[cfg(test)]
 mod tests {
@@ -176,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn init请求_密码长度校验_仅设下界() {
+    fn init请求_密码长度校验_下界与字节上界() {
         let mut req = valid_request();
         req.password = "1234567".to_string();
         assert_field_error(&req, "password", "server.init.validation.password_length");
@@ -184,10 +163,19 @@ mod tests {
         let mut req = valid_request();
         req.password = "12345678".to_string();
         assert!(req.validate().is_ok());
-        // 无上界约束：超长密码亦合法
+
+        // 字节上界：恰 72 字节合法（bcrypt 处理上限），73 字节拒绝
         let mut req = valid_request();
-        req.password = "x".repeat(200);
-        assert!(req.validate().is_ok());
+        req.password = "x".repeat(72);
+        assert!(req.validate().is_ok(), "72 字节密码应合法");
+        let mut req = valid_request();
+        req.password = "x".repeat(73);
+        assert_field_error(&req, "password", "server.init.validation.password_length");
+
+        // multibyte 字符按字节计：36 个中文字符 = 108 字节，超限拒绝
+        let mut req = valid_request();
+        req.password = "密".repeat(36);
+        assert_field_error(&req, "password", "server.init.validation.password_length");
     }
 
     #[test]
@@ -202,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn init请求_角色长度校验() {
+    fn init请求_角色长度与合法集合校验() {
         let mut req = valid_request();
         req.role = String::new();
         assert_field_error(&req, "role", "server.init.validation.role_length");
@@ -211,9 +199,24 @@ mod tests {
         req.role = "r".repeat(21);
         assert_field_error(&req, "role", "server.init.validation.role_length");
 
-        let mut req = valid_request();
-        req.role = "r".repeat(20);
-        assert!(req.validate().is_ok());
+        // 合法集合：admin/user/secadmin/auditor
+        for role in ["admin", "user", "secadmin", "auditor"] {
+            let mut req = valid_request();
+            req.role = role.to_string();
+            assert!(req.validate().is_ok(), "角色 {role} 应合法");
+        }
+
+        // 集合外的值即使长度合法也必须拒绝（如 "r".repeat(20)、超级管理员）
+        for role in [
+            "r".repeat(20),
+            "superadmin".to_string(),
+            "root".to_string(),
+            "Admin".to_string(),
+        ] {
+            let mut req = valid_request();
+            req.role = role.clone();
+            assert_field_error(&req, "role", "server.user.validation.role_invalid");
+        }
     }
 
     #[test]
@@ -307,13 +310,8 @@ mod tests {
     }
 
     #[test]
-    fn create与import请求_反序列化() {
+    fn create请求_反序列化() {
         let req: CreateDatabaseRequest =
-            serde_json::from_str(r#"{"verification": "ABCDEFGHIJKLMNOP"}"#)
-                .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
-        assert_eq!(req.verification, "ABCDEFGHIJKLMNOP");
-
-        let req: ImportDatabaseRequest =
             serde_json::from_str(r#"{"verification": "ABCDEFGHIJKLMNOP"}"#)
                 .unwrap_or_else(|e| panic!("反序列化失败: {e}"));
         assert_eq!(req.verification, "ABCDEFGHIJKLMNOP");

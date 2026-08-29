@@ -6,8 +6,6 @@ use std::time::{Duration, Instant};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::http::header::AUTHORIZATION;
-use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use dashmap::DashMap;
@@ -18,42 +16,6 @@ use crate::{log_info, log_warn, msg};
 
 const DEFAULT_EMAIL_LIMIT: u32 = 5;
 const DEFAULT_EMAIL_WINDOW_SECS: u64 = 3600;
-
-fn extract_user_id_from_parts(parts: &Parts) -> Option<String> {
-    let auth_header = parts.headers.get(AUTHORIZATION)?.to_str().ok()?;
-
-    if !auth_header.starts_with("Bearer ") {
-        return None;
-    }
-
-    let token = auth_header.strip_prefix("Bearer ")?;
-
-    let jwt_parts: Vec<&str> = token.split('.').collect();
-    if jwt_parts.len() != 3 {
-        return None;
-    }
-
-    use base64::Engine;
-    let payload = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(jwt_parts[1]) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::trace!("Base64解码JWT payload失败: {}", e);
-            return None;
-        }
-    };
-    let claims: serde_json::Value = match serde_json::from_slice(&payload) {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::trace!("解析JWT claims失败: {}", e);
-            return None;
-        }
-    };
-
-    claims
-        .get("sub")?
-        .as_str()
-        .map(std::string::ToString::to_string)
-}
 
 #[derive(Debug, Clone)]
 pub struct RateLimitError {
@@ -69,7 +31,7 @@ impl std::fmt::Display for RateLimitError {
 
 impl RateLimitError {
     /// 构造 429 速率限制响应（带 Retry-After 头）
-    fn into_response(self) -> Response {
+    pub fn into_response(self) -> Response {
         // 与 ApiResponse 保持一致的结构：message 为 i18n key，动态参数放 message_params
         let mut body = json!({
             "success": false,
@@ -118,7 +80,9 @@ impl RateLimitEntry {
 
     fn weighted_count(&self, window_secs: u64) -> u32 {
         let current_elapsed = self.window_start.elapsed().as_secs_f64();
-        let window_f64 = window_secs as f64;
+        // 防御性下界：window_secs=0 会产生除零 NaN（NaN as u32 == 0 使限流
+        // 永不触发），配置校验之外在此再兜底为 1 秒
+        let window_f64 = (window_secs as f64).max(1.0);
 
         let previous_weight = if let Some(prev_start) = self.previous_window_start {
             let prev_age = prev_start.elapsed().as_secs_f64();
@@ -155,7 +119,6 @@ pub struct RateLimiter {
     window_secs: u64,
     email_limit: u32,
     email_window_secs: u64,
-    trusted_proxies: Vec<String>,
 }
 
 impl RateLimiter {
@@ -168,24 +131,27 @@ impl RateLimiter {
             ip_limit,
             user_limit,
             login_limit,
-            window_secs,
+            // window_secs=0 会使窗口立即过期、限流静默失效，钳制为 1 秒兜底
+            //（配置层校验见 Config 校验口径，此处防御直接构造的调用方）
+            window_secs: window_secs.max(1),
             email_limit: DEFAULT_EMAIL_LIMIT,
             email_window_secs: DEFAULT_EMAIL_WINDOW_SECS,
-            trusted_proxies: Vec::new(),
         }
     }
 
     #[must_use]
     pub fn with_email_limit(mut self, limit: u32, window_secs: u64) -> Self {
         self.email_limit = limit;
-        self.email_window_secs = window_secs;
+        self.email_window_secs = window_secs.max(1);
         self
     }
 
+    /// 预鉴权限流检查：仅按 IP 维度（登录路径独立键与限额）与邮箱路径
+    /// 邮箱桶计数。用户维度不在此处理（JWT 未验签不可信），已认证请求由
+    /// [`RateLimiter::charge_user`] 在鉴权后补记。
     pub fn check_rate_limit(
         &self,
         ip: &str,
-        user_id: Option<&str>,
         is_login: bool,
         is_email: bool,
     ) -> Result<(), RateLimitError> {
@@ -197,10 +163,6 @@ impl RateLimiter {
                 self.email_limit,
                 self.email_window_secs,
             )?;
-        }
-
-        if let Some(uid) = user_id {
-            self.check_and_increment(&self.user_limits, &format!("user:{uid}"), self.user_limit)?;
         }
 
         let ip_key = if is_login {
@@ -216,6 +178,20 @@ impl RateLimiter {
         self.check_and_increment(&self.ip_limits, &ip_key, ip_limit)?;
 
         Ok(())
+    }
+
+    /// 对已认证请求补记用户维度限流桶（超限返回 429 错误）。
+    ///
+    /// 预鉴权限流中间件无法安全取得用户身份（JWT 未验签的 `sub` 可伪造，
+    /// 可借此填满受害者限流桶或绕开用户维度限流），因此该中间件路径只按
+    /// IP 计数；`user` 桶由鉴权中间件之后的钩子对已验证 claims 的请求
+    /// 调用本方法补记。限流语义：匿名按 IP，已认证 IP+用户双桶。
+    pub fn charge_user(&self, user_id: &str) -> Result<(), RateLimitError> {
+        self.check_and_increment(
+            &self.user_limits,
+            &format!("user:{user_id}"),
+            self.user_limit,
+        )
     }
 
     fn check_and_increment(
@@ -276,10 +252,6 @@ impl RateLimiter {
         let email_window_secs = self.email_window_secs;
         self.email_limits
             .retain(|_, entry| !entry.is_expired(email_window_secs));
-    }
-
-    fn is_trusted_proxy(&self, ip: &str) -> bool {
-        self.trusted_proxies.iter().any(|p| p == ip)
     }
 }
 
@@ -342,28 +314,19 @@ pub async fn rate_limit_middleware(
 
     let direct_ip = get_real_ip_from_parts(&parts);
 
-    let ip = if state.limiter.is_trusted_proxy(&direct_ip) {
-        direct_ip
-    } else {
-        normalize_ipv4_address(&direct_ip)
-    };
+    // 统一做 IPv4 归一化（原 trusted_proxies 白名单无任何赋值入口恒为空，
+    // if/else 两分支语义重复，属死逻辑，已删除）
+    let ip = normalize_ipv4_address(&direct_ip);
 
-    let user_id = if is_strict {
-        None
-    } else {
-        extract_user_id_from_parts(&parts)
-    };
-
-    if let Err(e) = state
-        .limiter
-        .check_rate_limit(&ip, user_id.as_deref(), is_strict, is_email)
-    {
+    // 仅按 IP 维度预限流：JWT payload 未验签可伪造 sub，不能作为限流键；
+    // 已认证请求的用户桶由鉴权中间件之后的 charge_user 钩子补记
+    if let Err(e) = state.limiter.check_rate_limit(&ip, is_strict, is_email) {
         log_warn!(
             "log.rate_limit.blocked",
             method = method,
             path = path,
             ip = ip,
-            user_id = user_id.as_deref().unwrap_or("-"),
+            user_id = "-",
             is_strict = is_strict,
             is_email = is_email,
             retry_after = e.retry_after
@@ -400,7 +363,7 @@ pub fn start_cleanup_task(
 mod tests {
     use super::*;
     use axum::http::StatusCode;
-    use base64::Engine;
+    use axum::http::request::Parts;
 
     /// 构造带请求头的 Parts
     fn parts_with_headers(headers: &[(&str, &str)]) -> Parts {
@@ -413,58 +376,6 @@ mod tests {
         };
         let (parts, _payload) = req.into_parts();
         parts
-    }
-
-    /// 构造 payload 为指定 JSON 的伪 JWT（签名段不做校验）
-    fn fake_jwt(payload_json: &str) -> String {
-        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload_json);
-        format!("fakeheader.{payload}.fakesignature")
-    }
-
-    // ---------- JWT 用户 ID 提取 ----------
-
-    #[test]
-    fn test_extract_user_id_valid_token() {
-        let token = fake_jwt(r#"{ "sub": "user-123", "username": "alice" }"#);
-        let parts = parts_with_headers(&[("Authorization", &format!("Bearer {token}"))]);
-        assert_eq!(
-            extract_user_id_from_parts(&parts),
-            Some("user-123".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_user_id_missing_or_malformed_header() {
-        // 无 Authorization 头
-        assert_eq!(extract_user_id_from_parts(&parts_with_headers(&[])), None);
-        // 非 Bearer 方案
-        let basic = parts_with_headers(&[("Authorization", "Basic dXNlcjpwYXNz")]);
-        assert_eq!(extract_user_id_from_parts(&basic), None);
-        // JWT 段数不足
-        let two_parts = parts_with_headers(&[("Authorization", "Bearer a.b")]);
-        assert_eq!(extract_user_id_from_parts(&two_parts), None);
-    }
-
-    #[test]
-    fn test_extract_user_id_invalid_payload() {
-        // payload 段非合法 base64
-        let bad_b64 = parts_with_headers(&[("Authorization", "Bearer abc.!!!.def")]);
-        assert_eq!(extract_user_id_from_parts(&bad_b64), None);
-
-        // payload 合法 base64 但非 JSON
-        let not_json = fake_jwt("not-json");
-        let bad_json = parts_with_headers(&[("Authorization", &format!("Bearer {not_json}"))]);
-        assert_eq!(extract_user_id_from_parts(&bad_json), None);
-
-        // JSON 合法但缺 sub 字段
-        let no_sub = fake_jwt(r#"{ "username": "alice" }"#);
-        let missing = parts_with_headers(&[("Authorization", &format!("Bearer {no_sub}"))]);
-        assert_eq!(extract_user_id_from_parts(&missing), None);
-
-        // sub 非字符串
-        let sub_num = fake_jwt(r#"{ "sub": 12345 }"#);
-        let numeric = parts_with_headers(&[("Authorization", &format!("Bearer {sub_num}"))]);
-        assert_eq!(extract_user_id_from_parts(&numeric), None);
     }
 
     // ---------- 滑动窗口条目 ----------
@@ -565,13 +476,11 @@ mod tests {
         let limiter = RateLimiter::new(3, 100, 100, 60);
         for round in 1..=3 {
             assert!(
-                limiter
-                    .check_rate_limit("1.1.1.1", None, false, false)
-                    .is_ok(),
+                limiter.check_rate_limit("1.1.1.1", false, false).is_ok(),
                 "第 {round} 次请求应通过"
             );
         }
-        let Err(err) = limiter.check_rate_limit("1.1.1.1", None, false, false) else {
+        let Err(err) = limiter.check_rate_limit("1.1.1.1", false, false) else {
             panic!("达到 IP 限制后应被拒绝");
         };
         assert_eq!(err.message.key(), "server.common.rate_limited");
@@ -582,21 +491,9 @@ mod tests {
     fn test_check_rate_limit_distinct_ips_isolated() {
         // 不同 IP 计数相互隔离
         let limiter = RateLimiter::new(2, 100, 100, 60);
-        assert!(
-            limiter
-                .check_rate_limit("1.1.1.1", None, false, false)
-                .is_ok()
-        );
-        assert!(
-            limiter
-                .check_rate_limit("1.1.1.1", None, false, false)
-                .is_ok()
-        );
-        assert!(
-            limiter
-                .check_rate_limit("2.2.2.2", None, false, false)
-                .is_ok()
-        );
+        assert!(limiter.check_rate_limit("1.1.1.1", false, false).is_ok());
+        assert!(limiter.check_rate_limit("1.1.1.1", false, false).is_ok());
+        assert!(limiter.check_rate_limit("2.2.2.2", false, false).is_ok());
     }
 
     #[test]
@@ -604,50 +501,32 @@ mod tests {
         // 登录路径使用独立键与独立限额：login_limit=1 时第 2 次拒绝，
         // 且不影响普通路径的计数
         let limiter = RateLimiter::new(100, 100, 1, 60);
-        assert!(
-            limiter
-                .check_rate_limit("3.3.3.3", None, true, false)
-                .is_ok()
-        );
-        assert!(
-            limiter
-                .check_rate_limit("3.3.3.3", None, true, false)
-                .is_err()
-        );
+        assert!(limiter.check_rate_limit("3.3.3.3", true, false).is_ok());
+        assert!(limiter.check_rate_limit("3.3.3.3", true, false).is_err());
 
         // 普通路径未受限
-        assert!(
-            limiter
-                .check_rate_limit("3.3.3.3", None, false, false)
-                .is_ok()
-        );
+        assert!(limiter.check_rate_limit("3.3.3.3", false, false).is_ok());
     }
 
     #[test]
-    fn test_check_rate_limit_user_limit() {
-        // user_limit=1：同一用户第 2 次请求被用户维度拒绝
+    fn test_charge_user_limit() {
+        // user_limit=1：同一用户第 2 次经 charge_user 补记时被用户维度拒绝；
+        // 不同用户互不影响
         let limiter = RateLimiter::new(100, 1, 100, 60);
-        assert!(
-            limiter
-                .check_rate_limit("4.4.4.4", Some("user-1"), false, false)
-                .is_ok()
-        );
-        let Err(err) = limiter.check_rate_limit("4.4.4.4", Some("user-1"), false, false) else {
+        assert!(limiter.charge_user("user-1").is_ok());
+        let Err(err) = limiter.charge_user("user-1") else {
             panic!("超过用户限制后应被拒绝");
         };
         assert_eq!(err.message.key(), "server.common.rate_limited");
+        assert!(limiter.charge_user("user-2").is_ok());
     }
 
     #[test]
     fn test_check_rate_limit_email_limit() {
         // 邮箱验证码路径使用独立邮箱限额（默认窗口 3600 秒）
         let limiter = RateLimiter::new(100, 100, 100, 60).with_email_limit(1, 3600);
-        assert!(
-            limiter
-                .check_rate_limit("5.5.5.5", None, false, true)
-                .is_ok()
-        );
-        let Err(err) = limiter.check_rate_limit("5.5.5.5", None, false, true) else {
+        assert!(limiter.check_rate_limit("5.5.5.5", false, true).is_ok());
+        let Err(err) = limiter.check_rate_limit("5.5.5.5", false, true) else {
             panic!("超过邮箱发送限制后应被拒绝");
         };
         assert!(err.retry_after >= 1);
@@ -721,7 +600,7 @@ mod tests {
         assert!(
             state
                 .limiter
-                .check_rate_limit("6.6.6.6", None, false, false)
+                .check_rate_limit("6.6.6.6", false, false)
                 .is_ok()
         );
 

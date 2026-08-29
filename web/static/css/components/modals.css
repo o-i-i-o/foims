@@ -209,14 +209,8 @@
   min-width: 80px;
 }
 
-/* 二级模态框覆盖层（嵌套模态场景，提高后开模态的层叠优先级） */
-.modal + .modal {
-  z-index: var(--z-modal-secondary);
-}
-
-.modal + .modal .modal-content {
-  z-index: calc(var(--z-modal-secondary) + 1);
-}
+/* 层叠模态框的层级不再由 CSS 兄弟选择器决定（DOM 相邻性 ≠ 打开顺序），
+   改由 js/utils/modalLoader.js 在打开时按顺序写内联 z-index（基准 1050、每层 +50） */
 
 /* 设备模板管理 */
 .device-template-list {
@@ -301,9 +295,7 @@
 
 /* ==================== 宽幅与滚动辅助（MAC/LLDP 等数据表模态框） ==================== */
 
-.modal-content.modal-xl {
-  max-width: 900px;
-}
+/* modal-xl 宽度统一走上方带 min() 窄视口保护的分组规则，此处不再重复定义 */
 
 .modal-body.modal-body-scroll {
   max-height: 31.25rem;

@@ -291,12 +291,14 @@ pub async fn send_email_to_users(
         return Err(AppError::Validation(msg("server.smtp.recipients_no_email")));
     }
 
+    // 收件人全部放 BCC：群发邮箱列表互相不可见（To/Cc 会向全部收件人泄露地址）。
+    // BCC 地址仍进入 SMTP 信封（lettre 发送时剥离 BCC 头），邮件可正常投递
     let mut email_builder = Message::builder()
         .from(parse_address(&smtp_config.from)?.into())
         .subject(subject);
 
     for recipient in &recipients {
-        email_builder = email_builder.to(parse_address(recipient)?.into());
+        email_builder = email_builder.bcc(parse_address(recipient)?.into());
     }
 
     let email = email_builder

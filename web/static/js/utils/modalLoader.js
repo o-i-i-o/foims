@@ -10,6 +10,16 @@ const htmlCache = new Map();
 // 层叠模态框计数：设备模态框上再开端口详情等场景，仅当全部关闭时恢复页面滚动
 let openModalCount = 0;
 
+// 模态框层级规则（唯一层级来源，CSS 侧不再按 DOM 相邻性判定）：
+// 按打开顺序显式设置顶层元素内联 z-index —— 基准 1050（与 --z-modal 一致），
+// 每多打开一层 +50（第 1 层 1050、第 2 层 1100、第 3 层 1150……），
+// 保证多开时后打开的模态框一定覆盖先打开的
+const MODAL_Z_INDEX_BASE = 1050;
+const MODAL_Z_INDEX_STEP = 50;
+// 层级封顶：超过后与顶层同 z（DOM 顺序后者居上），确保任何深度模态
+// 内的 data-tooltip（--z-tooltip 3000）都不被模态压住
+const MODAL_Z_INDEX_MAX = 2900;
+
 // 模态框清单：按功能模块分组存放于 modals/ 对应子目录
 const MODAL_REGISTRY = {
   // 公共
@@ -176,6 +186,10 @@ export async function openModal(id, title = "") {
 
   if (!alreadyActive) {
     openModalCount++;
+    // 按当前打开层数显式指定层级：后打开的一定在上
+    modal.style.zIndex = String(
+      Math.min(MODAL_Z_INDEX_BASE + (openModalCount - 1) * MODAL_Z_INDEX_STEP, MODAL_Z_INDEX_MAX)
+    );
   }
 
   if (title) {
@@ -201,14 +215,15 @@ export function closeModal(id) {
 
   modal.classList.remove("active");
 
-  const form = modal.querySelector("form");
-  if (form) {
+  // 重置全部表单（多表单模态框只重置第一个会残留旧输入，
+  // 含 hidden id，再次打开可能误走更新分支）
+  modal.querySelectorAll("form").forEach((form) => {
     form.reset();
     const hiddenIdField = form.querySelector('input[type="hidden"]');
     if (hiddenIdField) {
       hiddenIdField.value = "";
     }
-  }
+  });
 
   const ipContainers = modal.querySelectorAll('[id$="-ips-container"]');
   ipContainers.forEach((container) => {
@@ -217,6 +232,8 @@ export function closeModal(id) {
 
   if (wasActive) {
     openModalCount = Math.max(0, openModalCount - 1);
+    // 恢复（清除）内联层级：下次打开按新的打开顺序重新计算
+    modal.style.zIndex = "";
   }
   if (openModalCount === 0) {
     document.body.style.overflow = "";

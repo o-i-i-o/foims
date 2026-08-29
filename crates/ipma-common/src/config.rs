@@ -287,6 +287,16 @@ pub struct Config {
     pub snmp: SnmpConfig,
 }
 
+/// 进程内共享配置槽：启动时装入初始配置，各「写盘」端点成功落盘后
+/// 调用 `store` 刷新，读取方经 `load` / `load_full` 始终拿到最新快照，
+/// 消除「启动内存快照与磁盘配置脱节」问题。
+///
+/// `ArcSwap` 经本模块再导出，主程序 crate 无需声明 arc-swap 直接依赖
+/// 即可使用该类型（跨 crate 复用类型按规范统一放 ipma-common）。
+pub type SharedConfig = std::sync::Arc<ArcSwap<Config>>;
+
+pub use arc_swap::ArcSwap;
+
 impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
         // 构建配置加载器

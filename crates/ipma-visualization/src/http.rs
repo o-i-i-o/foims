@@ -139,6 +139,9 @@ pub async fn save_topology_nodes<P: DbProvider>(
     State(state): State<Arc<P>>,
     AppJson(req): AppJson<TopologyNodesRequest>,
 ) -> Result<Response, AppError> {
+    // 节点坐标范围校验（0<=坐标<=100000、0<宽高<=10000）
+    req.validate()?;
+
     crate::topology::save_topology_nodes(&state.pool()?.get_conn(), req)
         .await
         .map_err(AppError::from)

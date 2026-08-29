@@ -1,8 +1,8 @@
 <template id="two-factor-modal-template">
-<div id="two-factor-modal" class="modal" role="dialog" aria-modal="true">
+<div id="two-factor-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="two-factor-modal-title">
   <div class="modal-content modal-lg">
     <header class="modal-header">
-      <h3 class="modal-title" data-i18n="two_factor.title">Two-Factor Authentication Setup</h3>
+      <h3 class="modal-title" data-i18n="two_factor.title" id="two-factor-modal-title">Two-Factor Authentication Setup</h3>
       <button type="button" class="close" data-modal-id="two-factor-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
@@ -19,7 +19,7 @@
         </div>
         <div class="form-group">
           <label for="two-factor-verify-code" data-i18n="two_factor.verify_code">Verification Code</label>
-          <input type="text" id="two-factor-verify-code" maxlength="6" data-i18n-placeholder="two_factor.verify_code_placeholder" placeholder="Enter 6-digit code" aria-label="2FA verification code">
+          <input type="text" id="two-factor-verify-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" data-i18n-placeholder="two_factor.verify_code_placeholder" placeholder="Enter 6-digit code" aria-label="2FA verification code">
         </div>
         <div id="two-factor-error" class="error-message" role="alert" aria-live="polite"></div>
         <div id="two-factor-success" class="success-message" role="status" aria-live="polite"></div>
@@ -28,7 +28,7 @@
         <p class="hint-text" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
         <div class="form-group">
           <label for="two-factor-disable-code" data-i18n="two_factor.verify_code">Verification Code</label>
-          <input type="text" id="two-factor-disable-code" maxlength="6" data-i18n-placeholder="two_factor.disable_code_placeholder" placeholder="Enter 6-digit code to disable 2FA" aria-label="Disable 2FA code">
+          <input type="text" id="two-factor-disable-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" data-i18n-placeholder="two_factor.disable_code_placeholder" placeholder="Enter 6-digit code to disable 2FA" aria-label="Disable 2FA code">
         </div>
         <div id="two-factor-disable-error" class="error-message" role="alert" aria-live="polite"></div>
       </div>

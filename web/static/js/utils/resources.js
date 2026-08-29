@@ -111,8 +111,29 @@ document.addEventListener("ipma:data-mutation", () => {
  * @param {string} [opts.emptyKey] 过滤后无数据时的提示项 i18n 键
  * @param {Function} [opts.filter] 项过滤谓词（item => boolean）
  * @param {Function} [opts.itemToLabel] 自定义展示文本（item => string，默认 item.name）
- * @param {string} [opts.errorLabel] 失败日志中的资源名
+ * @param {string} [opts.errorLabelKey] 失败日志中资源名的 i18n 键
  */
+// 各下拉的加载序号：级联快速切换时旧响应晚到会覆盖/追加过期选项，
+// 序号不符则丢弃本次结果。字符串目标（元素 id）与元素目标分别用
+// Map/WeakMap 计数——元素可能无 id（如房间多网段的行内 select），
+// 混用会把全部无 id 元素并到同一计数器互相作废
+const fillSelectSeqById = new Map();
+const fillSelectSeqByEl = new WeakMap();
+
+function bumpFillSelectSeq(selectTarget) {
+  if (typeof selectTarget === "string") {
+    const seq = (fillSelectSeqById.get(selectTarget) || 0) + 1;
+    fillSelectSeqById.set(selectTarget, seq);
+    return () => fillSelectSeqById.get(selectTarget) !== seq;
+  }
+  if (selectTarget) {
+    const seq = (fillSelectSeqByEl.get(selectTarget) || 0) + 1;
+    fillSelectSeqByEl.set(selectTarget, seq);
+    return () => fillSelectSeqByEl.get(selectTarget) !== seq;
+  }
+  return () => false;
+}
+
 export async function fillSelect(selectTarget, url, opts = {}) {
   const {
     items: prefetched,
@@ -120,16 +141,21 @@ export async function fillSelect(selectTarget, url, opts = {}) {
     emptyKey,
     filter,
     itemToLabel,
-    errorLabel = "选项"
+    errorLabelKey = "common.option"
   } = opts;
+  const isStale = bumpFillSelectSeq(selectTarget);
+
   let fetched = [];
   if (prefetched) {
     fetched = prefetched;
   } else if (url) {
     try {
       fetched = extractItems(await fetchOptionItems(url));
+      if (isStale()) {
+        return; // 已有更新的加载在途，丢弃过期结果
+      }
     } catch (error) {
-      console.error(`加载${errorLabel}失败:`, error);
+      console.error(`加载${t(errorLabelKey)}失败:`, error);
       const errSelect = await resolveSelectTarget(selectTarget);
       if (errSelect) {
         errSelect.replaceChildren(buildOption("", t("common.load_failed"), true));
@@ -143,6 +169,9 @@ export async function fillSelect(selectTarget, url, opts = {}) {
   const select = await resolveSelectTarget(selectTarget);
   if (!select) {
     console.warn(`fillSelect: ${describeSelectTarget(selectTarget)} 不存在，已跳过填充`);
+    return;
+  }
+  if (isStale()) {
     return;
   }
 
@@ -169,7 +198,7 @@ export async function fillSelect(selectTarget, url, opts = {}) {
 export function loadNetworkRegionOptions(selectId = "network-region") {
   return fillSelect(selectId, "/api/resources/network-regions?page_size=1000", {
     emptyKey: "network.add_region_first",
-    errorLabel: "网络区域"
+    errorLabelKey: "common.network_region"
   });
 }
 
@@ -194,16 +223,6 @@ function buildRoomsUrl(orgId, roomTypes) {
   return `/api/resources/rooms?${params.toString()}`;
 }
 
-/** 判断是否办公类房间（含"其他"）。 */
-export function isOfficeRoomType(roomType) {
-  return OFFICE_ROOM_TYPE_LIST.split(",").includes((roomType || "").toLowerCase());
-}
-
-/** 判断是否机房类房间（含"其他"）。 */
-export function isDataCenterRoomType(roomType) {
-  return DATA_CENTER_ROOM_TYPE_LIST.split(",").includes((roomType || "").toLowerCase());
-}
-
 /**
  * 加载房间选项（可按组织与房间类型过滤）。
  *
@@ -215,7 +234,7 @@ export async function loadRoomsForSelect(selectId = "workstation-room", options 
   await fillSelect(selectId, buildRoomsUrl(orgId, typeList), {
     placeholderKey: onlyOffice ? "room.select_office" : "room.select_room",
     emptyKey: onlyOffice ? "room.no_office_data" : "room.no_room_data",
-    errorLabel: "房间"
+    errorLabelKey: "common.room"
   });
 }
 
@@ -233,7 +252,7 @@ export function loadDataCenterRoomsForSelect(selectId = "cabinet-room", orgId = 
   return fillSelect(selectId, buildRoomsUrl(orgId, DATA_CENTER_ROOM_TYPE_LIST), {
     placeholderKey: "room.select_datacenter",
     emptyKey: "room.no_datacenter_data",
-    errorLabel: "机房"
+    errorLabelKey: "room.type_datacenter"
   });
 }
 
@@ -253,7 +272,7 @@ export function loadVisualizationRoomsForSelect(selectId, roomTypes, orgId = nul
   return fillSelect(selectId, buildRoomsUrl(orgId, resolved), {
     placeholderKey: "room.select_room",
     emptyKey: "room.no_room_data",
-    errorLabel: "可视化房间"
+    errorLabelKey: "common.room"
   });
 }
 
@@ -284,7 +303,7 @@ export function loadOrgsForSelect(selectId = "room-org-id") {
     await fillSelect(selectId, null, {
       items: flatOrgs,
       placeholderKey: "organization.select_org",
-      errorLabel: "组织",
+      errorLabelKey: "common.organization",
       itemToLabel: (org) =>
         `${"\u00A0\u00A0\u00A0\u00A0".repeat(org.depth)}${org.name} (${org.org_type})`
     });
@@ -323,7 +342,7 @@ export async function getOrgSubtreeIds(orgId) {
 export function loadDeviceTemplatesForSelect(selectId) {
   return fillSelect(selectId, "/api/resources/device-templates", {
     placeholderKey: "device.select_template",
-    errorLabel: "设备模板"
+    errorLabelKey: "common.template"
   });
 }
 
@@ -337,12 +356,12 @@ export function loadWorkstationsForSelect(selectId, roomId = null) {
   if (!roomId) {
     return fillSelect(selectId, null, {
       placeholderKey: "device.select_room_first",
-      errorLabel: "工位"
+      errorLabelKey: "common.workstation"
     });
   }
   return fillSelect(selectId, `/api/resources/workstations?room_id=${roomId}&page_size=1000`, {
     placeholderKey: "device.select_workstation",
-    errorLabel: "工位"
+    errorLabelKey: "common.workstation"
   });
 }
 
@@ -356,13 +375,13 @@ export function loadCabinetsForSelect(selectId, roomId = null) {
   if (!roomId) {
     return fillSelect(selectId, null, {
       placeholderKey: "device.select_room_first",
-      errorLabel: "机柜"
+      errorLabelKey: "common.cabinet"
     });
   }
   const params = new URLSearchParams({ room_id: roomId, page_size: "1000" });
   return fillSelect(selectId, `/api/resources/cabinets?${params.toString()}`, {
     placeholderKey: "device.select_cabinet",
-    errorLabel: "机柜"
+    errorLabelKey: "common.cabinet"
   });
 }
 
@@ -372,7 +391,7 @@ export function loadPositionsForSelect(selectId, cabinetId = null, roomId = null
     // 无过滤条件时仅展示占位项
     return fillSelect(selectId, null, {
       placeholderKey: "device.select_position",
-      errorLabel: "机位"
+      errorLabelKey: "common.position"
     });
   }
   const params = new URLSearchParams({ page_size: "1000" });
@@ -383,6 +402,6 @@ export function loadPositionsForSelect(selectId, cabinetId = null, roomId = null
   }
   return fillSelect(selectId, `/api/resources/positions?${params.toString()}`, {
     placeholderKey: "device.select_position",
-    errorLabel: "机位"
+    errorLabelKey: "common.position"
   });
 }

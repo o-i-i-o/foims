@@ -20,8 +20,8 @@ pub use context::InitContext;
 pub use error::InitError;
 
 pub use types::{
-    BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, DatabaseConfig,
-    ImportDatabaseRequest, InitRequest, VERIFICATION_CODE_EXPIRY_SECS, VerificationCode,
+    BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, DatabaseConfig, InitRequest,
+    VERIFICATION_CODE_EXPIRY_SECS, VerificationCode,
 };
 
 pub use verification::{get_verification_code, verify_code};
@@ -41,7 +41,7 @@ pub use schema::create_tables;
 
 pub use handlers::{
     check_db_status, check_init_status, check_pgsql, clear_database, create_database_api,
-    import_database_api, import_database_from_file, init_db, init_system, restart_program,
+    import_database_from_file, init_db, init_system, restart_program,
 };
 
 /// 统一 API 响应结构（由 ipma-common 提供，保持原有路径兼容）。

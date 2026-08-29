@@ -104,9 +104,12 @@ pub async fn get_verification_code(
 
     let verification_code = generate_and_print_verification_code();
 
-    if let Ok(mut lock) = get_verification_code_storage().lock() {
-        *lock = verification_code;
-    }
+    // 锁中毒必须报错而非静默跳过：否则日志展示新码、存储仍是旧码，
+    // 用户按新码校验必然失败且原因无从排查
+    let mut lock = get_verification_code_storage()
+        .lock()
+        .map_err(|_| InitError::Internal(msg("server.init.verification.lock_failed")))?;
+    *lock = verification_code;
 
     Ok(ok_json((), "server.init.verification.generated"))
 }
@@ -126,6 +129,11 @@ mod tests {
             .unwrap_or_default()
             .as_secs()
     }
+
+    /// 串行化触及全局验证码存储的测试：verify_code 依赖进程级
+    /// OnceLock<Mutex> 存储，涉及该存储的多个测试并行运行会互相
+    /// 覆盖对方写入的码，导致断言偶发失败（全量并行测试下可复现）
+    static STORAGE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn 生成验证码_长度16且字符集合法() {
@@ -159,6 +167,7 @@ mod tests {
     /// 所有涉及该存储的分支集中在一个测试内串行执行避免并行互扰
     #[test]
     fn verify_code_过期_错误码_成功_边界分支() {
+        let _guard = STORAGE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // 覆盖过期分支：写入 created_at=0 的历史验证码，即使码正确也应报过期
         {
             let mut lock = get_verification_code_storage()
@@ -215,6 +224,7 @@ mod tests {
     /// 验证码一次性消费：校验成功后同一验证码不可再次使用（I-2）
     #[test]
     fn verify_code_成功后即作废_重放被拒绝() {
+        let _guard = STORAGE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         {
             let mut lock = get_verification_code_storage()
                 .lock()
@@ -236,6 +246,7 @@ mod tests {
     /// 时钟回拨（now < created_at）不应 panic，且按未过期处理
     #[test]
     fn verify_code_时钟回拨不panic() {
+        let _guard = STORAGE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         {
             let mut lock = get_verification_code_storage()
                 .lock()

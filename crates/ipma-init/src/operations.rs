@@ -28,11 +28,24 @@ pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessa
         .await
         .map_err(|e| msg("server.init.db.backup_dir_create_failed").with("error", e))?;
 
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let backup_file = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
+    // 备份内容为全库导出（含口令哈希等敏感数据）：目录仅属主可进入，
+    // 文件仅属主可读写（unix），防止本机其他用户读取备份
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tokio::fs::set_permissions(&backup_dir, std::fs::Permissions::from_mode(0o700))
+            .await
+            .map_err(|e| msg("server.init.db.backup_failed").with("error", e))?;
+    }
+
+    // 时间戳精度到毫秒：同一秒内的并发备份（初始化向导与手动触发
+    // 重叠）不再共用同名文件；同名冲突再按 _1.._99 递增重试
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S%3f");
 
     let config = config.clone();
-    let backup_file_clone = backup_file.clone();
+    // pg_dump 经 stdout 管道输出：备份文件由程序侧以 create_new + 0600
+    // 原子创建并写入，避免"先按 umask(0644) 落盘、成功后才补 chmod"
+    // 的暴露窗口；pg_dump 失败时不产生半成品文件
     let output = tokio::task::spawn_blocking(move || {
         let pgpass = PgPassFile::create(
             &config.host,
@@ -51,8 +64,10 @@ pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessa
             .arg(&config.username)
             .arg("-d")
             .arg(&config.database)
-            .arg("-f")
-            .arg(&backup_file_clone)
+            .arg("--no-owner")
+            .arg("--no-acl")
+            .arg("--clean")
+            .arg("--if-exists")
             .env("PGPASSFILE", pgpass.path())
             .output()
             .map_err(|e| msg("server.init.db.pg_dump_exec_failed").with("error", e))
@@ -63,6 +78,59 @@ pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessa
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(msg("server.init.db.backup_failed").with("error", stderr));
+    }
+
+    let sql_content = output.stdout;
+    if sql_content.is_empty() {
+        return Err(msg("server.init.db.backup_failed").with("error", "pg_dump 输出为空"));
+    }
+
+    // create_new + 0600 写入：文件创建即仅属主可读写；
+    // 同一毫秒内并发备份的文件名冲突按 _1.._99 有界递增重试
+    //（与 data-management backup.rs 同口径），写入失败时删除残留的
+    // 部分文件，不留可读取的半成品备份
+    #[cfg(unix)]
+    let (backup_file, write_result): (String, std::io::Result<()>) = {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut handle = None;
+        let mut candidate = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
+        for seq in 0..=99u32 {
+            if seq > 0 {
+                candidate = format!("{backup_dir}/ipma_backup_{timestamp}_{seq}.sql");
+            }
+            match std::fs::OpenOptions::new()
+                .mode(0o600)
+                .write(true)
+                .create_new(true)
+                .open(&candidate)
+            {
+                Ok(file) => {
+                    handle = Some(file);
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => {
+                    return Err(msg("server.init.db.backup_failed").with("error", e));
+                }
+            }
+        }
+        let Some(mut file) = handle else {
+            return Err(
+                msg("server.init.db.backup_failed").with("error", "备份文件名冲突超过重试上限")
+            );
+        };
+        (candidate, file.write_all(&sql_content))
+    };
+    #[cfg(not(unix))]
+    let (backup_file, write_result): (String, std::io::Result<()>) = {
+        let candidate = format!("{backup_dir}/ipma_backup_{timestamp}.sql");
+        let result = std::fs::write(&candidate, &sql_content);
+        (candidate, result)
+    };
+    if let Err(e) = write_result {
+        let _ = tokio::fs::remove_file(&backup_file).await;
+        return Err(msg("server.init.db.backup_failed").with("error", e));
     }
 
     ipma_common::log_info!("log.init.db.backup_created", path = backup_file);
@@ -172,21 +240,42 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             .execute(&mut *conn)
             .await?;
 
-        for table in &tables {
-            sqlx::query(sqlx::AssertSqlSafe(format!(
-                "DROP TABLE IF EXISTS {} CASCADE",
-                quote_ident(table)
-            )))
-            .execute(&mut *conn)
-            .await?;
+        // 逐表 DROP 的结果先挂起：无论成败都必须先把会话复位回 'origin'
+        // 再归还连接，避免任一 DROP 失败时连接以 replica 状态回到池中，
+        // 后续借用该连接的语句静默跳过 FK 与触发器
+        let drop_result: Result<(), sqlx::Error> = async {
+            for table in &tables {
+                sqlx::query(sqlx::AssertSqlSafe(format!(
+                    "DROP TABLE IF EXISTS {} CASCADE",
+                    quote_ident(table)
+                )))
+                .execute(&mut *conn)
+                .await?;
+            }
+            Ok(())
         }
+        .await;
 
-        sqlx::query("SET session_replication_role = 'origin'")
+        let reset_result = sqlx::query("SET session_replication_role = 'origin'")
             .execute(&mut *conn)
-            .await?;
-    }
+            .await;
 
-    Ok(())
+        match (drop_result, reset_result) {
+            (Err(e), Err(reset_err)) => {
+                // 复位失败同样不可忽略，但 DROP 的原始错误优先返回
+                ipma_common::log_warn!(
+                    "log.init.db.replication_role_reset_failed",
+                    error = reset_err
+                );
+                Err(e)
+            }
+            (Err(e), Ok(_)) => Err(e),
+            (Ok(()), Err(reset_err)) => Err(reset_err),
+            (Ok(()), Ok(_)) => Ok(()),
+        }
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

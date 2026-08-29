@@ -444,9 +444,10 @@ export class TopologyRenderer {
       if (!members || members.length === 0) {
         return null;
       }
+      // port_id 可能缺失：回退占位文案，避免对 null 调 slice 中断连线绘制
       const text = members
         .slice(0, 4)
-        .map((m) => m.port_number || m.port_id.slice(0, 8))
+        .map((m) => m.port_number || m.port_id?.slice(0, 8) || t("viz.no_port"))
         .join(", ");
       return this._createConnectionLabel(
         anchor.x,
@@ -531,30 +532,6 @@ export class TopologyRenderer {
     label.setAttribute("y", (from.y + to.y) / 2 - 6);
     centerText(label);
     group.appendChild(label);
-  }
-
-  /// 在连线上叠加删除标记（仅存储连线可删，派生物理连线由线路管理）
-  drawDeleteMarker(group, connectionId, midPoint) {
-    const marker = document.createElementNS(SVG_NS, "g");
-    marker.classList.add("conn-delete-marker");
-    marker.dataset.connectionId = connectionId;
-
-    const circle = document.createElementNS(SVG_NS, "circle");
-    circle.setAttribute("cx", midPoint.x);
-    circle.setAttribute("cy", midPoint.y - 26);
-    circle.setAttribute("r", 9);
-    marker.appendChild(circle);
-
-    const cross = document.createElementNS(SVG_NS, "text");
-    cross.textContent = "×";
-    cross.setAttribute("x", midPoint.x);
-    cross.setAttribute("y", midPoint.y - 22.5);
-    centerText(cross);
-    marker.appendChild(cross);
-
-    marker.dataset.tooltip = t("viz.delete_connection");
-    group.appendChild(marker);
-    return marker;
   }
 
   _getPairKey(id1, id2) {
@@ -649,27 +626,54 @@ export class TopologyRenderer {
 
   updateConnectionPaths(deviceId) {
     // 仅重画与被拖设备相关的连线（deviceId 为空时全量重画）。
-    // 同一设备对 (A,B) 的连线总是一起命中，平行偏移计数在子集内保持一致，
-    // 避免每 mousemove 全量删除重建所有连线造成拓扑页拖拽卡顿
-    const selector = deviceId
-      ? `.topology-connection-group[data-source-device="${deviceId}"], .topology-connection-group[data-target-device="${deviceId}"]`
-      : ".topology-connection-group";
-    const affectedGroups = this.core.connectionsGroup.querySelectorAll(selector);
-    if (affectedGroups.length === 0) {
+    // 重画范围扩展到直连线对端设备的全部连线（受影响设备对整体重画）：
+    // 锚点错开与平行偏移计数按完整连线集合重建，避免保留连线的锚点错位重叠
+    const groups = [...this.core.connectionsGroup.querySelectorAll(".topology-connection-group")];
+    if (groups.length === 0) {
       return;
     }
 
-    this._connectionPairCount.clear();
-    this._anchorSlots.clear();
-    const toRedraw = [];
-    affectedGroups.forEach((g) => {
-      const connectionId = g.dataset.connectionId;
-      const conn = this._connectionsMap?.get(connectionId);
-      if (conn) {
-        toRedraw.push(conn);
-        g.remove();
+    // 第一轮：命中与被拖设备直连的连线，并收集对端设备
+    const hit = new Set();
+    const neighborIds = new Set();
+    groups.forEach((g) => {
+      if (!deviceId || g.dataset.sourceDevice === deviceId || g.dataset.targetDevice === deviceId) {
+        hit.add(g);
+        if (g.dataset.sourceDevice !== deviceId) {
+          neighborIds.add(g.dataset.sourceDevice);
+        }
+        if (g.dataset.targetDevice !== deviceId) {
+          neighborIds.add(g.dataset.targetDevice);
+        }
       }
     });
+    if (hit.size === 0) {
+      return;
+    }
+
+    // 第二轮：扩展到对端设备的全部连线，并按 DOM 顺序收集待重画连线
+    const toRedraw = [];
+    groups.forEach((g) => {
+      if (
+        hit.has(g) ||
+        neighborIds.has(g.dataset.sourceDevice) ||
+        neighborIds.has(g.dataset.targetDevice)
+      ) {
+        const conn = this._connectionsMap?.get(g.dataset.connectionId);
+        if (conn) {
+          toRedraw.push(conn);
+          g.remove();
+        }
+      }
+    });
+    if (toRedraw.length === 0) {
+      return;
+    }
+
+    // 计数器在重画前统一清零：受影响设备的全部连线均已纳入重画，
+    // 锚点占用与平行偏移会按原 DOM 顺序完整重建，不会与保留连线错位
+    this._connectionPairCount.clear();
+    this._anchorSlots.clear();
     toRedraw.forEach((conn) => this.drawConnection(conn));
   }
 

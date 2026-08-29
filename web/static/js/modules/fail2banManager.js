@@ -36,17 +36,17 @@ async function loadAppFail2banStatus() {
   const logPathHint = elementCache.get("app-fail2ban-log-path-hint");
 
   if (bannedTbody) {
-    bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
+    bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.loading")}</td></tr>`;
   }
   if (trackedTbody) {
-    trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.loading") || "Loading..."}</td></tr>`;
+    trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.loading")}</td></tr>`;
   }
 
   try {
     const result = await apiGet("/api/system/fail2ban/app/status");
     if (!result.success || !result.data) {
       if (bannedTbody) {
-        bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
+        bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed")}</td></tr>`;
       }
       return;
     }
@@ -56,31 +56,43 @@ async function loadAppFail2banStatus() {
     // 状态徽章
     if (statusBadge) {
       if (status.enabled) {
-        statusBadge.textContent = t("security.status_active") || "Active";
+        statusBadge.textContent = t("security.status_active");
         statusBadge.className = "status-badge status-active";
       } else {
-        statusBadge.textContent = t("security.status_inactive") || "Inactive";
+        statusBadge.textContent = t("security.status_inactive");
         statusBadge.className = "status-badge status-inactive";
       }
     }
 
-    // 配置回填
-    elementCache.get("app-fail2ban-enabled").value = String(status.enabled);
-    elementCache.get("app-fail2ban-findtime").value = status.findtime;
-    elementCache.get("app-fail2ban-maxretry").value = status.max_retry;
-    elementCache.get("app-fail2ban-bantime").value = status.bantime;
+    // 配置回填（控件缺失时跳过，避免空引用）
+    const enabledInput = elementCache.get("app-fail2ban-enabled");
+    const findtimeInput = elementCache.get("app-fail2ban-findtime");
+    const maxretryInput = elementCache.get("app-fail2ban-maxretry");
+    const bantimeInput = elementCache.get("app-fail2ban-bantime");
+    if (enabledInput) {
+      enabledInput.value = String(status.enabled);
+    }
+    if (findtimeInput) {
+      findtimeInput.value = status.findtime ?? "";
+    }
+    if (maxretryInput) {
+      maxretryInput.value = status.max_retry ?? "";
+    }
+    if (bantimeInput) {
+      bantimeInput.value = status.bantime ?? "";
+    }
 
     // 日志路径提示
     if (logPathHint) {
       const logPath = status.log_path || "/var/log/ipma/auth.log";
-      const hint = t("security.os_integration_desc") || "Auth log path for OS fail2ban to monitor:";
+      const hint = t("security.os_integration_desc");
       logPathHint.textContent = `${hint} ${logPath}`;
     }
 
     // 已封禁 IP
     if (bannedTbody) {
-      if (status.banned_ips.length === 0) {
-        bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.no_data") || "No data"}</td></tr>`;
+      if (!Array.isArray(status.banned_ips) || status.banned_ips.length === 0) {
+        bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.no_data")}</td></tr>`;
       } else {
         bannedTbody.innerHTML = status.banned_ips
           .map(
@@ -88,7 +100,7 @@ async function loadAppFail2banStatus() {
           <tr>
             <td>${escapeHtml(item.ip)}</td>
             <td class="col-center">${item.remaining_seconds}</td>
-            <td class="col-center">${iconButton({ icon: "unlock", label: t("security.unban_ip") || "Unban", cls: "btn-success app-unban-btn", attrs: `data-ip="${escapeHtml(item.ip)}"` })}</td>
+            <td class="col-center">${iconButton({ icon: "unlock", label: t("security.unban_ip"), cls: "btn-success app-unban-btn", attrs: `data-ip="${escapeHtml(item.ip)}"` })}</td>
           </tr>
         `
           )
@@ -96,10 +108,7 @@ async function loadAppFail2banStatus() {
         bannedTbody.querySelectorAll(".app-unban-btn").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const ip = btn.dataset.ip;
-            const confirmed = await showConfirm(
-              t("security.unban_confirm") || "Unban this IP?",
-              ip
-            );
+            const confirmed = await showConfirm(`${t("security.unban_confirm")}: ${ip}`);
             if (confirmed) {
               await doUnbanIp(ip);
             }
@@ -110,8 +119,8 @@ async function loadAppFail2banStatus() {
 
     // 追踪中的 IP
     if (trackedTbody) {
-      if (status.tracked_ips.length === 0) {
-        trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.no_data") || "No data"}</td></tr>`;
+      if (!Array.isArray(status.tracked_ips) || status.tracked_ips.length === 0) {
+        trackedTbody.innerHTML = `<tr class="empty-row"><td colspan="2" class="text-center">${t("common.no_data")}</td></tr>`;
       } else {
         trackedTbody.innerHTML = status.tracked_ips
           .map(
@@ -128,31 +137,41 @@ async function loadAppFail2banStatus() {
   } catch (err) {
     console.error("loadAppFail2banStatus error:", err);
     if (bannedTbody) {
-      bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed") || "Load failed"}</td></tr>`;
+      bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.load_failed")}</td></tr>`;
     }
   }
 }
 
 // 保存配置
 async function saveAppFail2banConfig() {
+  const enabledInput = elementCache.get("app-fail2ban-enabled");
+  const findtimeInput = elementCache.get("app-fail2ban-findtime");
+  const maxretryInput = elementCache.get("app-fail2ban-maxretry");
+  const bantimeInput = elementCache.get("app-fail2ban-bantime");
+  if (!enabledInput || !findtimeInput || !maxretryInput || !bantimeInput) {
+    // 表单控件缺失（页面未渲染完成）时不做空引用读取
+    return;
+  }
+
   const config = {
-    enabled: elementCache.get("app-fail2ban-enabled").value === "true",
-    findtime: parseInt(elementCache.get("app-fail2ban-findtime").value, 10),
-    max_retry: parseInt(elementCache.get("app-fail2ban-maxretry").value, 10),
-    bantime: parseInt(elementCache.get("app-fail2ban-bantime").value, 10)
+    enabled: enabledInput.value === "true",
+    findtime: parseInt(findtimeInput.value, 10),
+    max_retry: parseInt(maxretryInput.value, 10),
+    bantime: parseInt(bantimeInput.value, 10)
   };
 
   try {
     const result = await apiPut("/api/system/fail2ban/app/config", config);
     if (result.success) {
-      showToast(t("security.config_saved") || "Config saved", "success");
+      showToast(t("security.config_saved"), "success");
       loadAppFail2banStatus();
     } else {
-      showToast(result.error || t("common.save_failed") || "Save failed", "error");
+      // ApiClient 失败响应的错误文案在 message 字段
+      showToast(result.message || t("common.save_failed"), "error");
     }
   } catch (err) {
     console.error("saveAppFail2banConfig error:", err);
-    showToast(t("common.save_failed") || "Save failed", "error");
+    showToast(t("common.save_failed"), "error");
   }
 }
 
@@ -161,22 +180,22 @@ async function handleBanIp() {
   const ipInput = elementCache.get("app-fail2ban-ip-input");
   const ip = ipInput?.value?.trim();
   if (!ip) {
-    showToast(t("security.input_ip") || "Please input IP", "warning");
+    showToast(t("security.input_ip"), "warning");
     return;
   }
 
   try {
     const result = await apiPost("/api/system/fail2ban/app/ban", { ip });
     if (result.success) {
-      showToast(result.data?.message || t("security.ban_success") || "Ban success", "success");
+      showToast(result.data?.message || t("security.ban_success"), "success");
       ipInput.value = "";
       loadAppFail2banStatus();
     } else {
-      showToast(result.error || t("security.ban_failed") || "Ban failed", "error");
+      showToast(result.message || t("security.ban_failed"), "error");
     }
   } catch (err) {
     console.error("banIp error:", err);
-    showToast(t("security.ban_failed") || "Ban failed", "error");
+    showToast(t("security.ban_failed"), "error");
   }
 }
 
@@ -185,30 +204,35 @@ async function handleUnbanIp() {
   const ipInput = elementCache.get("app-fail2ban-ip-input");
   const ip = ipInput?.value?.trim();
   if (!ip) {
-    showToast(t("security.input_ip") || "Please input IP", "warning");
+    showToast(t("security.input_ip"), "warning");
     return;
   }
-  const confirmed = await showConfirm(t("security.unban_confirm") || "Unban this IP?", ip);
+  const confirmed = await showConfirm(`${t("security.unban_confirm")}: ${ip}`);
   if (!confirmed) {
     return;
   }
-  await doUnbanIp(ip);
-  ipInput.value = "";
+  const success = await doUnbanIp(ip);
+  // 仅解封成功才清空输入框，失败时保留内容便于修正后重试
+  if (success && ipInput) {
+    ipInput.value = "";
+  }
 }
 
-// 执行解封
+// 执行解封，返回是否成功
 async function doUnbanIp(ip) {
   try {
     const result = await apiPost("/api/system/fail2ban/app/unban", { ip });
     if (result.success) {
-      showToast(result.data?.message || t("security.unban_success") || "Unban success", "success");
+      showToast(result.data?.message || t("security.unban_success"), "success");
       loadAppFail2banStatus();
-    } else {
-      showToast(result.error || t("security.unban_failed") || "Unban failed", "error");
+      return true;
     }
+    showToast(result.message || t("security.unban_failed"), "error");
+    return false;
   } catch (err) {
     console.error("unbanIp error:", err);
-    showToast(t("security.unban_failed") || "Unban failed", "error");
+    showToast(t("security.unban_failed"), "error");
+    return false;
   }
 }
 
@@ -247,12 +271,12 @@ async function saveRateLimitConfig() {
   try {
     const result = await apiPut("/api/system/config", { rate_limit: rateLimitConfig });
     if (result.success) {
-      showToast(t("config.rate_limit_saved") || "Rate limit config saved", "success");
+      showToast(t("config.rate_limit_saved"), "success");
     } else {
-      showToast(result.error || t("common.save_failed") || "Save failed", "error");
+      showToast(result.message || t("common.save_failed"), "error");
     }
   } catch (err) {
     console.error("saveRateLimitConfig error:", err);
-    showToast(t("common.save_failed") || "Save failed", "error");
+    showToast(t("common.save_failed"), "error");
   }
 }

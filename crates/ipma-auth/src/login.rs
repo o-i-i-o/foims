@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Request, State};
+use axum::extract::{ConnectInfo, Request, State};
 use axum::http::header::SET_COOKIE;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::Next;
@@ -11,6 +11,7 @@ use axum::response::{IntoResponse, Response};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use bcrypt::verify;
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use jsonwebtoken::errors::ErrorKind;
 use rand::RngExt;
 use serde::Deserialize;
@@ -56,6 +57,82 @@ fn db_unavailable_response() -> Response {
         ))),
     )
         .into_response()
+}
+
+// ==================== 公开邮件端点发送频控 ====================
+
+/// 每 IP / 每目标标识在窗口内允许的邮件发送次数
+const EMAIL_SEND_LIMIT: usize = 3;
+/// 邮件发送频控滑动窗口（进程内）
+const EMAIL_SEND_WINDOW: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// 发送时刻记录：键（"ip:<addr>" / "target:<标识>"）→ 窗口内的发送时刻列表
+static EMAIL_SEND_RECORDS: std::sync::LazyLock<DashMap<String, Vec<std::time::Instant>>> =
+    std::sync::LazyLock::new(DashMap::new);
+
+/// 滑动窗口频控检查并登记一次发送；超过限制时返回需等待的秒数
+fn check_email_send_limit(key: &str) -> Result<(), u64> {
+    let now = std::time::Instant::now();
+    let mut entry = EMAIL_SEND_RECORDS.entry(key.to_string()).or_default();
+    entry.retain(|t| now.duration_since(*t) < EMAIL_SEND_WINDOW);
+    if entry.len() >= EMAIL_SEND_LIMIT {
+        let oldest = entry.first().copied().unwrap_or(now);
+        let wait = EMAIL_SEND_WINDOW
+            .saturating_sub(now.duration_since(oldest))
+            .as_secs()
+            .max(1);
+        return Err(wait);
+    }
+    entry.push(now);
+    Ok(())
+}
+
+/// 公开邮件端点统一频控入口：每 IP 与每目标标识各自限频（防邮件轰炸）。
+fn enforce_email_send_limit(ip: &str, target: &str) -> Result<(), AppError> {
+    for key in [format!("ip:{ip}"), format!("target:{target}")] {
+        if let Err(wait) = check_email_send_limit(&key) {
+            return Err(AppError::Validation(
+                msg("server.common.rate_limited").with("seconds", wait),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 周期回收邮件发送频控记录：滑动窗口外的发送时刻随查询清理仅覆盖
+/// 被命中的键，公开端点可用海量伪造 IP+邮箱组合把 Map 撑到无上限；
+/// 由低频清理任务定期调用，移除整键使空 Map 收缩
+pub(crate) fn cleanup_email_send_records() {
+    let now = std::time::Instant::now();
+    EMAIL_SEND_RECORDS.retain(|_, times| {
+        times.retain(|t| now.duration_since(*t) < EMAIL_SEND_WINDOW);
+        !times.is_empty()
+    });
+}
+
+// ==================== 请求模型扩展 ====================
+
+/// 邮箱验证码登录请求：在 ipma-models 基础模型上扩展图形验证码字段
+///（连续失败达到阈值后必填；基础模型跨 crate 共享，字段经 flatten 组合）
+#[derive(Debug, Deserialize)]
+pub struct EmailCodeLoginRequest {
+    #[serde(flatten)]
+    pub base: EmailLoginRequest,
+    /// 连续失败触发后的图形验证码 id
+    pub captcha_id: Option<String>,
+    /// 连续失败触发后的图形验证码输入
+    pub captcha_text: Option<String>,
+}
+
+/// 密码 + TOTP 两步登录请求：在 ipma-models 基础模型上扩展图形验证码字段
+#[derive(Debug, Deserialize)]
+pub struct TwoFactorCodeLoginRequest {
+    #[serde(flatten)]
+    pub base: TwoFactorLoginRequest,
+    /// 连续失败触发后的图形验证码 id
+    pub captcha_id: Option<String>,
+    /// 连续失败触发后的图形验证码输入
+    pub captcha_text: Option<String>,
 }
 
 /// 原子占位一个 TOTP 码：未被使用则登记并返回 true，TTL 内已使用则返回 false。
@@ -142,7 +219,66 @@ pub async fn auth_middleware<P: AuthProvider>(
                 )
                     .into_response();
             }
-            Ok(false) => {}
+            Ok(false) => {
+                // 用户状态与令牌吊销点检查（同一中间件内完成，不延迟到 refresh）：
+                //   1. 账户被禁用 → 直接拒绝；
+                //   2. 令牌签发时间早于 tokens_invalidated_at（密码重置/权限变更
+                //      吊销点）→ 已被吊销，旧 access 令牌立即失效
+                let user_id = match Uuid::parse_str(&claims.sub) {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return (
+                            StatusCode::UNAUTHORIZED,
+                            Json(ipma_common::ApiResponse::<()>::error(msg(
+                                "server.auth.auth_failed",
+                            ))),
+                        )
+                            .into_response();
+                    }
+                };
+                match sqlx::query_as::<_, (bool, chrono::DateTime<Utc>)>(
+                    "SELECT status, tokens_invalidated_at FROM users WHERE id = $1",
+                )
+                .bind(user_id)
+                .fetch_optional(&pool.get_conn())
+                .await
+                {
+                    Ok(Some((status, invalidated_at))) => {
+                        if !status {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(ipma_common::ApiResponse::<()>::error(msg(
+                                    "server.auth.account_disabled",
+                                ))),
+                            )
+                                .into_response();
+                        }
+                        if (claims.iat as i64) <= invalidated_at.timestamp() {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(ipma_common::ApiResponse::<()>::error(msg(
+                                    "server.auth.token_invalidated_relogin",
+                                ))),
+                            )
+                                .into_response();
+                        }
+                    }
+                    // 用户已被删除：令牌随之为失效
+                    Ok(None) => {
+                        return (
+                            StatusCode::UNAUTHORIZED,
+                            Json(ipma_common::ApiResponse::<()>::error(msg(
+                                "server.auth.auth_failed",
+                            ))),
+                        )
+                            .into_response();
+                    }
+                    Err(e) => {
+                        ipma_common::log_error!("log.auth.check_revoke_failed", error = e);
+                        return db_unavailable_response();
+                    }
+                }
+            }
             Err(e) => {
                 ipma_common::log_error!("log.auth.check_revoke_failed", error = e);
                 return db_unavailable_response();
@@ -178,22 +314,41 @@ pub async fn auth_middleware<P: AuthProvider>(
 pub async fn localhost_only_middleware<P: AuthProvider>(req: Request, next: Next) -> Response {
     let (parts, body) = req.into_parts();
 
-    // UDS 场景无 peer IP，需依赖反代传入的来源 IP 头判断是否本地访问。
-    // 安全要点：
-    //   1. 只信任 X-Real-IP —— nginx 用 `proxy_set_header X-Real-IP $remote_addr;`
-    //      覆盖式设置，客户端无法伪造（$remote_addr 取自 TCP 对端）。
-    //      切勿使用 X-Forwarded-For：其经 `$proxy_add_x_forwarded_for` 会保留客户端
-    //      伪造的首段值（如 "127.0.0.1, <真实IP>"），而取首段判断即可被绕过。
-    //   2. fail-close：缺失可信来源 IP 头时默认拒绝。
-    let is_localhost = parts
+    // 判定请求来源是否为本机，要点：
+    //   1. TCP 直连（extensions 携带 ConnectInfo）时以真实对端地址为准——
+    //      X-Real-IP 是普通请求头，内网客户端可任意伪造（如 `X-Real-IP:
+    //      127.0.0.1`），直接据此判定回环等于开放鉴权绕过；
+    //   2. 仅当对端确为回环地址（本机直连，或经监听在同一台机器上的 nginx
+    //      转发）或连接来自 UDS（无对端信息，由本机 nginx 代理）时，才采信
+    //      X-Real-IP 头判定真实来源——nginx 以
+    //      `proxy_set_header X-Real-IP $remote_addr;` 覆盖式写入，取自
+    //      TCP 对端，客户端无法伪造。切勿改用 X-Forwarded-For：其经
+    //      `$proxy_add_x_forwarded_for` 会保留客户端伪造的首段值。
+    //      注意：nginx 部署在远端主机（对端为非回环的私网地址）时不在
+    //      信任范围，本机专用端点经该代理访问会被拒绝；
+    //   3. fail-close：无法判定来源时默认拒绝。
+    let peer_loopback = parts
+        .extensions
+        .get::<ConnectInfo<std::net::SocketAddr>>()
+        .map(|info| info.0.ip().is_loopback());
+
+    let header_ip = parts
         .headers
         .get("X-Real-IP")
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
-        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
-        .map(|addr| addr.is_loopback())
-        .unwrap_or(false);
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok());
+
+    let is_localhost = match peer_loopback {
+        // 回环对端：本机直连或经本机 nginx 转发，按 X-Real-IP 判定真实来源
+        //（无头时视为本机直连放行）
+        Some(true) => header_ip.is_none_or(|ip| ip.is_loopback()),
+        // 非回环对端：真实来源即对端，请求头不可信，直接拒绝
+        Some(false) => false,
+        // UDS：无对端信息，仅能依赖本机反代写入的 X-Real-IP 判定
+        None => header_ip.is_some_and(|ip| ip.is_loopback()),
+    };
 
     if !is_localhost {
         return (
@@ -218,10 +373,14 @@ pub async fn login<P: AuthProvider>(
 
     req.validate()?;
 
+    // 用户键统一使用原始输入（trim 后）：检查键与记录键为同一标识符，
+    // 避免出现「按邮箱检查、按用户名记录」的键错位（邮箱爆破绕过账户封禁）
+    let login_identifier = req.username.trim();
+
     // 连续失败达到阈值后要求图形验证码（未达阈值时直接放行）
     if let Err(key) = crate::captcha::enforce(
         &meta.ip_address,
-        &req.username,
+        login_identifier,
         &req.captcha_id,
         &req.captcha_text,
     ) {
@@ -237,8 +396,8 @@ pub async fn login<P: AuthProvider>(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
     }
-    if crate::app_fail2ban::is_user_banned(&req.username) {
-        let remaining = crate::app_fail2ban::get_user_ban_remaining(&req.username);
+    if crate::app_fail2ban::is_user_banned(login_identifier) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(login_identifier);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -250,7 +409,7 @@ pub async fn login<P: AuthProvider>(
     >(
         "SELECT id, username, password_hash, email, role, status, two_factor_enabled, auth_provider FROM users WHERE username = $1 OR email = $1",
     )
-    .bind(&req.username)
+    .bind(login_identifier)
     .fetch_optional(&conn)
     .await?
     {
@@ -260,10 +419,10 @@ pub async fn login<P: AuthProvider>(
             dummy_bcrypt_verify(&req.password).await;
             crate::app_fail2ban::record_login_failure(
                 client_ip,
-                &req.username,
+                login_identifier,
                 "server.login_log.user_not_found",
             );
-            if let Err(e) = log_login(&conn, &req.username, &meta.ip_address, &meta.user_agent, false, Some("server.login_log.user_not_found")).await {
+            if let Err(e) = log_login(&conn, login_identifier, &meta.ip_address, &meta.user_agent, false, Some("server.login_log.user_not_found")).await {
                 ipma_common::log_warn!("log.login.record_failed", error = e);
             }
             return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
@@ -273,10 +432,19 @@ pub async fn login<P: AuthProvider>(
     let (id, username, password_hash, email, role, status, two_factor_enabled, auth_provider) =
         user_row;
 
+    // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
+    //（以邮箱登录的请求同样受 DB username 维度封禁约束）
+    if crate::app_fail2ban::is_user_banned(&username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
     if !status {
         crate::app_fail2ban::record_login_failure(
             client_ip,
-            &username,
+            login_identifier,
             "server.login_log.account_disabled",
         );
         if let Err(e) = log_login(
@@ -294,11 +462,32 @@ pub async fn login<P: AuthProvider>(
         return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 
-    // 外部认证账户（LDAP/SSO）不持有本地密码，引导用户使用对应登录方式
+    // 外部认证账户（LDAP/SSO）不持有本地密码：
+    //   1. 返回与用户不存在/密码错误一致的统一 login_failed 文案，
+    //      并等价执行 dummy bcrypt 抹平耗时侧信道——专属错误会暴露
+    //      LDAP/SSO 账户名单（账户枚举）；
+    //   2. 按失败登录口径计入 fail2ban 与登录审计（该尝试本就是
+    //      凭据校验失败，与其余失败分支一致）
     if auth_provider != "local" {
-        return Err(AppError::Unauthorized(msg(
+        dummy_bcrypt_verify(&req.password).await;
+        crate::app_fail2ban::record_login_failure(
+            client_ip,
+            login_identifier,
             "server.auth.external_account_use_provider_login",
-        )));
+        );
+        if let Err(e) = log_login(
+            &conn,
+            &username,
+            &meta.ip_address,
+            &meta.user_agent,
+            false,
+            Some("server.auth.external_account_use_provider_login"),
+        )
+        .await
+        {
+            ipma_common::log_warn!("log.login.record_failed", error = e);
+        }
+        return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 
     let password_for_verify = req.password;
@@ -314,7 +503,7 @@ pub async fn login<P: AuthProvider>(
     if !valid {
         crate::app_fail2ban::record_login_failure(
             client_ip,
-            &username,
+            login_identifier,
             "server.login_log.invalid_password",
         );
         if let Err(e) = log_login(
@@ -395,6 +584,8 @@ pub async fn login<P: AuthProvider>(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
+    // 成功后清除本次使用的原始输入键与 DB 用户名键两个维度的失败记录
+    crate::app_fail2ban::record_login_success(client_ip, login_identifier);
     crate::app_fail2ban::record_login_success(client_ip, &username);
     ipma_common::log_info!("log.login.success", username = username);
 
@@ -404,15 +595,28 @@ pub async fn login<P: AuthProvider>(
 pub async fn login_with_email_code<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    AppJson(req): AppJson<EmailLoginRequest>,
+    AppJson(req): AppJson<EmailCodeLoginRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
-    req.validate()?;
+    req.base.validate()?;
+
+    // 连续失败达到阈值后要求图形验证码（与本地密码登录同阈值逻辑）
+    if let Err(key) = crate::captcha::enforce(
+        &meta.ip_address,
+        req.base.email.trim(),
+        &req.captcha_id,
+        &req.captcha_text,
+    ) {
+        return Err(AppError::Validation(msg(key)));
+    }
+
+    let req = req.base;
     let email = req.email.trim();
 
     // 应用层 fail2ban：邮箱验证码同样纳入 IP/账户维度爆破防护（A-5）
     //（此前仅密码/TOTP 登录有联动，6 位数字码可被不限速爆破）
+    // 用户键统一使用原始输入（trim 后的邮箱）：检查键与记录键为同一标识符
     let client_ip = meta.ip_address.as_str();
     if crate::app_fail2ban::is_ip_banned(client_ip) {
         let remaining = crate::app_fail2ban::get_ban_remaining(client_ip);
@@ -465,6 +669,15 @@ pub async fn login_with_email_code<P: AuthProvider>(
     let (id, username, email, role, status, two_factor_enabled, code, expiry, auth_provider) =
         user_row;
 
+    // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
+    //（按邮箱登录的请求同样受 DB username 维度封禁约束）
+    if crate::app_fail2ban::is_user_banned(&username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
     // 外部认证账户不提供邮箱验证码通道
     if auth_provider != "local" {
         return Err(AppError::Unauthorized(msg(
@@ -473,6 +686,12 @@ pub async fn login_with_email_code<P: AuthProvider>(
     }
 
     if !status {
+        // 禁用账户同样计入 fail2ban（与本地密码登录的禁用分支口径一致）
+        crate::app_fail2ban::record_login_failure(
+            client_ip,
+            &email,
+            "server.login_log.account_disabled",
+        );
         if let Err(e) = log_login(
             &conn,
             &username,
@@ -520,9 +739,10 @@ pub async fn login_with_email_code<P: AuthProvider>(
 
     if !verified {
         // 错误验证码计入 fail2ban：连续失败即封禁该 IP 与该邮箱（A-5）
+        // 记录键与入口检查键一致（原始输入的邮箱），保证计数可触发封禁
         crate::app_fail2ban::record_login_failure(
             client_ip,
-            &username,
+            &email,
             "server.login_log.invalid_email_code",
         );
         if let Err(e) = log_login(
@@ -547,6 +767,24 @@ pub async fn login_with_email_code<P: AuthProvider>(
             serde_json::json!({ "requires_two_factor": true, "username": username }),
             "server.common.success",
         ));
+    }
+
+    // 等保密码有效期：与本地密码登录/两步登录一致，签发令牌前检查有效期，
+    // 防止密码过期用户凭邮箱验证码取得完整登录态
+    if crate::password_policy::is_expired(&conn, id).await? {
+        if let Err(e) = log_login(
+            &conn,
+            &username,
+            &meta.ip_address,
+            &meta.user_agent,
+            false,
+            Some("server.login_log.password_expired"),
+        )
+        .await
+        {
+            ipma_common::log_warn!("log.login.record_failed", error = e);
+        }
+        return Err(AppError::Unauthorized(msg("server.auth.password_expired")));
     }
 
     let jwt_utils = &state.jwt_utils();
@@ -588,6 +826,8 @@ pub async fn login_with_email_code<P: AuthProvider>(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
+    // 成功后清除本次使用的原始输入键（邮箱）与 DB 用户名键两个维度的失败记录
+    crate::app_fail2ban::record_login_success(client_ip, &user.email);
     crate::app_fail2ban::record_login_success(client_ip, &username);
     ipma_common::log_info!("log.login.email_code_success", username = username);
 
@@ -596,12 +836,16 @@ pub async fn login_with_email_code<P: AuthProvider>(
 
 pub async fn send_login_code<P: AuthProvider>(
     State(state): State<Arc<P>>,
+    meta: RequestMeta,
     AppJson(req): AppJson<SendLoginCodeRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
     let email = req.email.trim();
 
     req.validate()?;
+
+    // 邮件轰炸防护：每 IP 与每目标邮箱滑动窗口限频
+    enforce_email_send_limit(&meta.ip_address, email)?;
 
     let user_row = match sqlx::query_as::<sqlx::Postgres, (Uuid, String, bool)>(
         "SELECT id, username, status FROM users WHERE email = $1",
@@ -642,11 +886,28 @@ pub async fn send_login_code<P: AuthProvider>(
 pub async fn login_with_two_factor<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    AppJson(req): AppJson<TwoFactorLoginRequest>,
+    AppJson(req): AppJson<TwoFactorCodeLoginRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
+    req.base.validate()?;
+
+    // 连续失败达到阈值后要求图形验证码（与本地密码登录同阈值逻辑，
+    // 防止在 2FA/邮箱码端点间切换绕过验证码递进）
+    if let Err(key) = crate::captcha::enforce(
+        &meta.ip_address,
+        req.base.username.trim(),
+        &req.captcha_id,
+        &req.captcha_text,
+    ) {
+        return Err(AppError::Validation(msg(key)));
+    }
+
+    let req = req.base;
+
     // 应用层 fail2ban: 检查 IP 与用户名是否被封禁
+    // 用户键统一使用原始输入（trim 后）：检查键与记录键为同一标识符
+    let login_identifier = req.username.trim();
     let client_ip = meta.ip_address.as_str();
     if crate::app_fail2ban::is_ip_banned(client_ip) {
         let remaining = crate::app_fail2ban::get_ban_remaining(client_ip);
@@ -654,8 +915,8 @@ pub async fn login_with_two_factor<P: AuthProvider>(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
     }
-    if crate::app_fail2ban::is_user_banned(&req.username) {
-        let remaining = crate::app_fail2ban::get_user_ban_remaining(&req.username);
+    if crate::app_fail2ban::is_user_banned(login_identifier) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(login_identifier);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -667,7 +928,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
     >(
         "SELECT id, username, password_hash, email, role, status, two_factor_enabled, two_factor_secret FROM users WHERE username = $1",
     )
-    .bind(&req.username)
+    .bind(login_identifier)
     .fetch_optional(&conn)
     .await?
     {
@@ -679,14 +940,35 @@ pub async fn login_with_two_factor<P: AuthProvider>(
             }
             crate::app_fail2ban::record_login_failure(
                 client_ip,
-                &req.username,
+                login_identifier,
                 "server.login_log.user_not_found",
             );
+            // 登录审计对齐本地密码登录：用户不存在分支同样写入 login_logs
+            if let Err(e) = log_login(
+                &conn,
+                login_identifier,
+                &meta.ip_address,
+                &meta.user_agent,
+                false,
+                Some("server.login_log.user_not_found"),
+            )
+            .await
+            {
+                ipma_common::log_warn!("log.login.record_failed", error = e);
+            }
             return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
         }
     };
 
     let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
+
+    // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
+    if crate::app_fail2ban::is_user_banned(&username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
 
     let password_for_verify = req
         .password
@@ -703,7 +985,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
     if !valid {
         crate::app_fail2ban::record_login_failure(
             client_ip,
-            &username,
+            login_identifier,
             "server.login_log.invalid_password",
         );
         return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
@@ -712,9 +994,22 @@ pub async fn login_with_two_factor<P: AuthProvider>(
     if !status {
         crate::app_fail2ban::record_login_failure(
             client_ip,
-            &username,
+            login_identifier,
             "server.login_log.account_disabled",
         );
+        // 登录审计对齐本地密码登录：禁用分支同样写入 login_logs
+        if let Err(e) = log_login(
+            &conn,
+            &username,
+            &meta.ip_address,
+            &meta.user_agent,
+            false,
+            Some("server.login_log.account_disabled"),
+        )
+        .await
+        {
+            ipma_common::log_warn!("log.login.record_failed", error = e);
+        }
         return Err(AppError::Unauthorized(msg("server.auth.account_disabled")));
     }
 
@@ -812,7 +1107,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
     if !verified {
         crate::app_fail2ban::record_login_failure(
             client_ip,
-            &username,
+            login_identifier,
             "server.login_log.invalid_2fa_code",
         );
         if let Err(e) = log_login(
@@ -828,6 +1123,24 @@ pub async fn login_with_two_factor<P: AuthProvider>(
             ipma_common::log_warn!("log.login.record_failed", error = e);
         }
         return Err(AppError::Unauthorized(msg("server.auth.code_invalid")));
+    }
+
+    // 等保密码有效期：与本地密码登录一致，密码验证通过后仍需检查有效期，
+    // 防止启用 2FA 的用户在密码过期后经本端点绕过有效期策略
+    if crate::password_policy::is_expired(&conn, id).await? {
+        if let Err(e) = log_login(
+            &conn,
+            &username,
+            &meta.ip_address,
+            &meta.user_agent,
+            false,
+            Some("server.login_log.password_expired"),
+        )
+        .await
+        {
+            ipma_common::log_warn!("log.login.record_failed", error = e);
+        }
+        return Err(AppError::Unauthorized(msg("server.auth.password_expired")));
     }
 
     let jwt_utils = &state.jwt_utils();
@@ -868,6 +1181,8 @@ pub async fn login_with_two_factor<P: AuthProvider>(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
+    // 成功后清除本次使用的原始输入键与 DB 用户名键两个维度的失败记录
+    crate::app_fail2ban::record_login_success(client_ip, login_identifier);
     crate::app_fail2ban::record_login_success(client_ip, &user.username);
     ipma_common::log_info!("log.login.2fa_success", username = user.username);
 
@@ -876,19 +1191,89 @@ pub async fn login_with_two_factor<P: AuthProvider>(
 
 pub async fn send_two_factor_code<P: AuthProvider>(
     State(state): State<Arc<P>>,
+    meta: RequestMeta,
     AppJson(req): AppJson<SendTwoFactorCodeRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
-    let Some(user) = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String)>(
-        "SELECT id, username, email FROM users WHERE username = $1",
-    )
-    .bind(&req.username)
-    .fetch_optional(&conn)
-    .await?
-    else {
-        return Ok(ipma_common::ok_json((), "server.auth.send_ok"));
+    req.validate()?;
+    let username = req.username.trim();
+
+    // 应用层 fail2ban：IP 或账户维度封禁中直接拒绝——该端点公开可达且
+    // 携带真实 bcrypt 校验，封禁者继续放行等于提供免费的口令探测通道
+    if crate::app_fail2ban::is_ip_banned(&meta.ip_address) {
+        let remaining = crate::app_fail2ban::get_ban_remaining(&meta.ip_address);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+    if crate::app_fail2ban::is_user_banned(username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
+    // 邮件轰炸防护：每 IP 与每目标用户滑动窗口限频
+    enforce_email_send_limit(&meta.ip_address, username)?;
+
+    // 密码必填并真实验证：该端点公开可达，凭用户名即可触发邮件的
+    // 行为等同于账户密码探测通道，必须先通过口令校验
+    //（密码不做 trim，与本地登录的口令校验口径一致）
+    let Some(password) = req.password.as_deref().filter(|p| !p.is_empty()) else {
+        return Err(AppError::Validation(msg(
+            "server.auth.2fa_password_required",
+        )));
     };
+
+    let user_row = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String, String)>(
+        "SELECT id, username, email, password_hash FROM users WHERE username = $1",
+    )
+    .bind(username)
+    .fetch_optional(&conn)
+    .await?;
+
+    let (id, username, email, password_hash) = match user_row {
+        Some(row) => row,
+        None => {
+            // 用户不存在：等价 bcrypt 校验抹平时间侧信道后返回统一成功响应
+            //（防用户枚举，与未启用 2FA 等场景的对外表现一致）
+            dummy_bcrypt_verify(password).await;
+            return Ok(ipma_common::ok_json((), "server.auth.send_ok"));
+        }
+    };
+
+    let password_for_verify = password.to_string();
+    let hash_for_verify = password_hash;
+    let valid = tokio::task::spawn_blocking(move || verify(&password_for_verify, &hash_for_verify))
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
+        })?;
+    if !valid {
+        // 密码错误计入 fail2ban；对外返回与用户不存在一致的响应（防枚举）
+        crate::app_fail2ban::record_login_failure(
+            &meta.ip_address,
+            &username,
+            "server.login_log.invalid_password",
+        );
+        if let Err(e) = log_login(
+            &conn,
+            &username,
+            &meta.ip_address,
+            &meta.user_agent,
+            false,
+            Some("server.login_log.invalid_password"),
+        )
+        .await
+        {
+            ipma_common::log_warn!("log.login.record_failed", error = e);
+        }
+        return Ok(ipma_common::ok_json((), "server.auth.send_ok"));
+    }
 
     let code: String = {
         let mut rng = rand::rng();
@@ -898,10 +1283,10 @@ pub async fn send_two_factor_code<P: AuthProvider>(
     };
     let expiry = Utc::now() + chrono::Duration::minutes(5);
     sqlx::query("UPDATE users SET two_factor_email_code = $1, two_factor_email_code_expiry = $2 WHERE id = $3")
-        .bind(&code).bind(expiry).bind(user.0).execute(&conn).await?;
+        .bind(&code).bind(expiry).bind(id).execute(&conn).await?;
 
     let email_body = format!("您的两步验证码是：{code}");
-    crate::smtp::send_email_async(&conn, &user.2, "两步验证码", &email_body).await?;
+    crate::smtp::send_email_async(&conn, &email, "两步验证码", &email_body).await?;
 
     Ok(ipma_common::ok_json((), "server.auth.code_sent"))
 }
@@ -1022,8 +1407,10 @@ pub async fn refresh_token<P: AuthProvider>(
             if !status {
                 return Err(AppError::Unauthorized(msg("server.auth.account_disabled")));
             }
-            // 令牌签发时间早于吊销时间点 → 已被吊销
-            if (claims.iat as i64) < invalidated_at.timestamp() {
+            // 令牌签发时间不晚于吊销时间点 → 已被吊销。
+            // 与 auth_middleware 的比较口径一致（<=）：恰落在吊销秒上
+            // 签发的令牌不允许「中间件拒绝但可刷新」的缝隙
+            if (claims.iat as i64) <= invalidated_at.timestamp() {
                 return Err(AppError::Unauthorized(msg(
                     "server.auth.token_invalidated_relogin",
                 )));
@@ -1032,6 +1419,12 @@ pub async fn refresh_token<P: AuthProvider>(
         }
         None => return Err(AppError::Unauthorized(msg("server.auth.account_not_found"))),
     };
+
+    // 等保密码有效期：密码过期用户禁止续期，防止持有未过期 refresh
+    // Cookie 绕过各登录路径的过期检查无限续期
+    if crate::password_policy::is_expired(&conn, user_id).await? {
+        return Err(AppError::Unauthorized(msg("server.auth.password_expired")));
+    }
 
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
@@ -1042,8 +1435,10 @@ pub async fn refresh_token<P: AuthProvider>(
         return Err(AppError::Database(msg("server.db.operation_failed")));
     }
 
-    let token_duration = claims.exp.saturating_sub(claims.iat);
-    let remember_me = token_duration > 86400;
+    // 保持登录意图读签发时写入的显式 claim；未携带该 claim 的存量令牌
+    // 缺省按非持久会话处理（刷新后回落短期会话），不再以 token 时长
+    // 反推用户意图——该启发式会把普通会话升级为 7 天持久会话
+    let remember_me = claims.remember_me.unwrap_or(false);
 
     let access_token = jwt_utils
         .generate_access_token(
@@ -1108,12 +1503,16 @@ pub async fn get_current_user<P: AuthProvider>(
 
 pub async fn forgot_password<P: AuthProvider>(
     State(state): State<Arc<P>>,
+    meta: RequestMeta,
     AppJson(req): AppJson<ForgotPasswordRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     req.validate()?;
     let email = req.email.trim();
+
+    // 邮件轰炸防护：每 IP 与每目标邮箱滑动窗口限频
+    enforce_email_send_limit(&meta.ip_address, email)?;
 
     let user_result = sqlx::query_as::<_, (Uuid, String, bool)>(
         "SELECT id, username, two_factor_enabled FROM users WHERE email = $1",
@@ -1794,17 +2193,94 @@ pub(crate) fn build_login_response(
     Ok(response)
 }
 
+/// 校验外部登录（LDAP/SSO）账户的 TOTP 动态码。
+///
+/// 复用本地登录的 TOTP 构建与已用码占位逻辑（含并发重放防护）：
+/// 返回 true 表示校验通过（已用码保持占用）；false 表示验证失败
+///（占位已回滚，可用新码重试）。
+pub(crate) async fn verify_external_totp(
+    conn: &sqlx::PgPool,
+    external: &ExternalUser,
+    code: &str,
+) -> Result<bool, AppError> {
+    let encrypted_secret: Option<String> =
+        sqlx::query_scalar("SELECT two_factor_secret FROM users WHERE id = $1")
+            .bind(external.id)
+            .fetch_optional(conn)
+            .await?
+            .flatten();
+    let Some(encrypted_secret) = encrypted_secret else {
+        // 已启用 2FA 开关但缺少密钥：按未验证处理（fail-closed）
+        return Ok(false);
+    };
+
+    let secret = decrypt_password_async(encrypted_secret)
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.2fa_secret_decrypt_failed").with("error", e))
+        })?;
+    let secret = Secret::try_from_base32(&secret)
+        .map_err(|_| AppError::Validation(msg("server.auth.2fa_secret_format_invalid")))?;
+    let totp = Builder::new()
+        .with_algorithm(Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret)
+        .build()
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.2fa_secret_too_short").with("error", e))
+        })?;
+
+    // 原子占位后再校验，失败回滚，见 claim_totp_code 注释
+    if !claim_totp_code(external.id, code) {
+        return Ok(false);
+    }
+    let code_for_check = code.to_string();
+    let valid = tokio::task::spawn_blocking(move || totp.check_current(&code_for_check).is_some())
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.auth.2fa_verify_task_failed").with("error", e))
+        })?;
+    if !valid {
+        release_totp_code(external.id, code);
+    }
+    Ok(valid)
+}
+
+/// 外部登录启用 2FA 且请求未携带动态码时返回的响应。
+///
+/// 字段形态与本地登录 2FA 分支完全一致：`requires_two_factor: true` +
+/// `username`，消息键 `server.common.success`；前端据此弹出动态码输入，
+/// 携带 code 重试同一登录端点。
+pub(crate) fn requires_two_factor_response(username: &str) -> Response {
+    ipma_common::ok_json(
+        serde_json::json!({ "requires_two_factor": true, "username": username }),
+        "server.common.success",
+    )
+}
+
 /// 外部认证（LDAP/SSO）通过后的通用收尾：状态检查、签发令牌、记录登录日志。
+///
+/// `totp_verified` 表示该账户的 TOTP 动态码是否已通过校验：启用了 2FA 的
+/// 外部账户在未通过校验时拒绝签发（兜底拦截，防止新增外部路径遗漏校验）。
 pub(crate) async fn issue_external_login_tokens<P: AuthProvider>(
     state: &Arc<P>,
     meta: &RequestMeta,
     external: &ExternalUser,
     remember_me: bool,
+    totp_verified: bool,
 ) -> Result<LoginTokens, AppError> {
     let conn = state.pool()?.get_conn();
 
     if !external.status {
         return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
+    }
+
+    if external.two_factor_enabled && !totp_verified {
+        return Err(AppError::Unauthorized(msg(
+            "server.auth.two_factor_required",
+        )));
     }
 
     let device_fingerprint =

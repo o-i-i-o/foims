@@ -30,14 +30,24 @@ export const goToStep = (stepNum) => {
 };
 
 /**
+ * showError 共用的自动隐藏定时器：新调用会取消上一次的隐藏计时，
+ * 避免第一条的定时器提前隐藏紧接着显示的第二条提示
+ */
+let errorHideTimer = null;
+
+/**
  * 在右上角短暂显示错误提示，5 秒后自动隐藏。
  */
 export const showError = (message) => {
   const errorElement = document.getElementById("error-message");
   errorElement.textContent = message;
   errorElement.hidden = false;
-  setTimeout(() => {
+  if (errorHideTimer) {
+    clearTimeout(errorHideTimer);
+  }
+  errorHideTimer = setTimeout(() => {
     errorElement.hidden = true;
+    errorHideTimer = null;
   }, 5000);
 };
 

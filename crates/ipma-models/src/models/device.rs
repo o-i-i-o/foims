@@ -119,7 +119,16 @@ pub struct DeviceInterfaceCreate {
     pub physical_type: Option<String>,
     pub interface_role: Option<String>,
     #[validate(length(max = 20, message = "server.device.validation.mac_length"))]
+    #[validate(custom(
+        function = "crate::models::validate_mac_address_option",
+        message = "server.device.validation.mac_format"
+    ))]
     pub mac_address: Option<String>,
+    /// 仅允许 1..=4094（IEEE 802.1Q）
+    #[validate(custom(
+        function = "crate::models::validate_vlan_id_option",
+        message = "server.device.validation.vlan_id_range"
+    ))]
     pub vlan_id: Option<i32>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
@@ -127,7 +136,11 @@ pub struct DeviceInterfaceCreate {
     pub status: Option<String>,
     #[validate(length(max = 20, message = "server.device.validation.speed_length"))]
     pub speed: Option<String>,
-    /// Trunk 端口的 Native VLAN id（其他类型留空）
+    /// Trunk 端口的 Native VLAN id（其他类型留空）；同 vlan_id 限制 1..=4094
+    #[validate(custom(
+        function = "crate::models::validate_vlan_id_option",
+        message = "server.device.validation.vlan_id_range"
+    ))]
     pub trunk_id: Option<i32>,
     /// 设备模态框托管标记；缺省 false（端口模态框/SNMP 来源）
     pub device_managed: Option<bool>,
@@ -149,7 +162,13 @@ pub struct DeviceInterfaceUpdate {
         message = "server.device.validation.mac_length"
     ))]
     pub mac_address: Option<Option<String>>,
-    pub vlan_id: Option<i32>,
+    /// 双层 Option：null 显式清空、缺失不修改、数值设置新值；数值仅允许 1..=4094
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_vlan_id_option",
+        message = "server.device.validation.vlan_id_range"
+    ))]
+    pub vlan_id: Option<Option<i32>>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
         function = "crate::models::validate_description_opt",
@@ -165,8 +184,12 @@ pub struct DeviceInterfaceUpdate {
     ))]
     pub speed: Option<Option<String>>,
     /// 双层 Option：null 显式清空（非 trunk/hybrid 类型留空即清除）、
-    /// 缺失不修改、数值设置新值
+    /// 缺失不修改、数值设置新值；数值仅允许 1..=4094
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_vlan_id_option",
+        message = "server.device.validation.vlan_id_range"
+    ))]
     pub trunk_id: Option<Option<i32>>,
     /// 缺省表示不修改（SNMP 覆盖同步时保留原值）
     pub device_managed: Option<bool>,
@@ -230,11 +253,23 @@ pub struct DeviceMac {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct DeviceMacCreate {
+    /// INET 列格式兜底（handler 亦校验，模型层防御纵深）
+    #[validate(custom(
+        function = "crate::models::validate_ip_address_string",
+        message = "server.common.validation.ip_format"
+    ))]
     pub ip_address: String,
+    #[validate(length(min = 1, max = 17, message = "server.device.validation.mac_format"))]
+    #[validate(custom(
+        function = "crate::models::validate_mac_address_string",
+        message = "server.device.validation.mac_format"
+    ))]
     pub mac_address: String,
+    #[validate(length(max = 50, message = "server.device.validation.interface_length"))]
     pub interface: Option<String>,
+    #[validate(range(min = 1, max = 4094, message = "vlan_id_range"))]
     pub vlan_id: Option<i32>,
 }
 
@@ -293,10 +328,10 @@ pub struct UpdateDeviceTemplateRequest {
         message = "server.device_template.validation.name_length"
     ))]
     pub name: String,
-    #[validate(length(
-        min = 1,
-        max = 30,
-        message = "server.device_template.validation.device_type_length"
+    /// 与 DeviceCreate 同一白名单校验（模板保存后要作为设备创建的类型来源）
+    #[validate(custom(
+        function = "crate::models::validate_device_type_string",
+        message = "server.device.validation.type_invalid"
     ))]
     pub device_type: String,
     pub brand: Option<String>,
@@ -431,6 +466,9 @@ pub struct DeviceCreate {
         message = "server.device.validation.snmp_port_range"
     ))]
     pub snmp_port: Option<i32>,
+    /// nested 显式开启：validator derive 不自动展开 Option<Vec> 元素，
+    /// 缺失时网卡→网口→IP 嵌套链的校验在请求路径不会执行
+    #[validate(nested)]
     pub cards: Option<Vec<NetworkCardSyncItem>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
@@ -443,8 +481,13 @@ pub struct DeviceCreate {
 pub struct DeviceUpdate {
     #[validate(length(min = 1, max = 100, message = "server.device.validation.name_length"))]
     pub name: Option<String>,
-    #[validate(length(max = 100, message = "server.device.validation.hostname_length"))]
-    pub hostname: Option<String>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_hostname_opt",
+        message = "server.device.validation.hostname_length"
+    ))]
+    pub hostname: Option<Option<String>>,
     #[validate(custom(
         function = "crate::models::validate_device_type_option",
         message = "server.device.validation.type_invalid"
@@ -470,39 +513,64 @@ pub struct DeviceUpdate {
         message = "server.device.validation.snmp_version_invalid"
     ))]
     pub snmp_version: Option<String>,
-    #[validate(length(max = 100, message = "server.device.validation.snmp_community_length"))]
-    pub snmp_community: Option<String>,
-    #[validate(length(max = 50, message = "server.device.validation.snmp_username_length"))]
-    pub snmp_username: Option<String>,
-    #[validate(length(
-        max = 10,
+    /// 双层 Option：null 清空 SNMP 团体字
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_snmp_community_opt",
+        message = "server.device.validation.snmp_community_length"
+    ))]
+    pub snmp_community: Option<Option<String>>,
+    /// 双层 Option：null 清空（SNMP v3 用户名）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_snmp_username_opt",
+        message = "server.device.validation.snmp_username_length"
+    ))]
+    pub snmp_username: Option<Option<String>>,
+    /// 双层 Option：null 清空（SNMP v3 认证协议）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_snmp_auth_protocol_opt",
         message = "server.device.validation.snmp_auth_protocol_length"
     ))]
-    pub snmp_auth_protocol: Option<String>,
-    #[validate(length(
-        max = 100,
+    pub snmp_auth_protocol: Option<Option<String>>,
+    /// 双层 Option：null 清空（SNMP v3 认证密码）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_snmp_auth_password_opt",
         message = "server.device.validation.snmp_auth_password_length"
     ))]
-    pub snmp_auth_password: Option<String>,
-    #[validate(length(
-        max = 10,
+    pub snmp_auth_password: Option<Option<String>>,
+    /// 双层 Option：null 清空（SNMP v3 加密协议）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_snmp_priv_protocol_opt",
         message = "server.device.validation.snmp_priv_protocol_length"
     ))]
-    pub snmp_priv_protocol: Option<String>,
-    #[validate(length(
-        max = 100,
+    pub snmp_priv_protocol: Option<Option<String>>,
+    /// 双层 Option：null 清空（SNMP v3 加密密码）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_snmp_priv_password_opt",
         message = "server.device.validation.snmp_priv_password_length"
     ))]
-    pub snmp_priv_password: Option<String>,
+    pub snmp_priv_password: Option<Option<String>>,
     #[validate(range(
         min = 1,
         max = 65535,
         message = "server.device.validation.snmp_port_range"
     ))]
     pub snmp_port: Option<i32>,
+    /// nested 显式开启：与 DeviceCreate.cards 同口径（网卡→网口→IP 嵌套链）
+    #[validate(nested)]
     pub cards: Option<Vec<NetworkCardSyncItem>>,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
+    /// 双层 Option：null 清空描述
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_description_opt",
+        message = "server.common.validation.description_length"
+    ))]
+    pub description: Option<Option<String>>,
     pub save_as_template: Option<bool>,
     #[validate(length(max = 100, message = "server.device.validation.template_name_length"))]
     pub template_name: Option<String>,
@@ -567,6 +635,47 @@ mod tests {
             panic!("超长 MAC 应被拒绝");
         };
         assert!(errors.errors().contains_key("mac_address"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_interface_create_mac_format() -> Result<(), serde_json::Error> {
+        // 合法格式：冒号 / 横线分隔的 6 组十六进制（大小写均可）
+        for ok_mac in [
+            "AA:BB:CC:DD:EE:FF",
+            "aa-bb-cc-dd-ee-ff",
+            "00:11:22:33:44:55",
+        ] {
+            let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
+                "name": "eth0",
+                "mac_address": ok_mac
+            }))?;
+            assert!(req.validate().is_ok(), "MAC {ok_mac} 应合法");
+        }
+        // 非法格式：组数不足 / 非十六进制 / 空串 / 含 IP 样式点分
+        for bad_mac in [
+            "AA:BB:CC",
+            "AA:BB:CC:DD:EE:GG",
+            "",
+            "192.168.1.1",
+            "aa::bb:cc:dd:ee",
+        ] {
+            let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
+                "name": "eth0",
+                "mac_address": bad_mac
+            }))?;
+            let Err(errors) = req.validate() else {
+                panic!("MAC {bad_mac:?} 应被拒绝");
+            };
+            assert!(
+                errors.errors().contains_key("mac_address"),
+                "MAC {bad_mac:?}"
+            );
+        }
+        // 缺省（None）不做格式校验
+        let req: DeviceInterfaceCreate =
+            serde_json::from_value(serde_json::json!({ "name": "eth0" }))?;
+        assert!(req.validate().is_ok());
         Ok(())
     }
 
@@ -752,6 +861,60 @@ mod tests {
     }
 
     #[test]
+    fn test_device_update_text_fields_three_states() -> Result<(), serde_json::Error> {
+        // 文本字段双层 Option：缺失 → None（不修改）
+        let missing: DeviceUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(missing.hostname, None);
+        assert_eq!(missing.snmp_community, None);
+        assert_eq!(missing.description, None);
+        assert!(missing.validate().is_ok());
+
+        // JSON null → Some(None)（清空，SET NULL）
+        let cleared: DeviceUpdate = serde_json::from_value(serde_json::json!({
+            "hostname": null,
+            "snmp_community": null,
+            "snmp_username": null,
+            "snmp_auth_protocol": null,
+            "snmp_auth_password": null,
+            "snmp_priv_protocol": null,
+            "snmp_priv_password": null,
+            "description": null
+        }))?;
+        assert_eq!(cleared.hostname, Some(None));
+        assert_eq!(cleared.snmp_community, Some(None));
+        assert_eq!(cleared.description, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        // JSON 值 → Some(Some(v))（设置新值）
+        let set: DeviceUpdate = serde_json::from_value(serde_json::json!({
+            "hostname": "core-sw-01",
+            "description": "核心设备"
+        }))?;
+        assert_eq!(set.hostname, Some(Some("core-sw-01".to_string())));
+        assert_eq!(set.description, Some(Some("核心设备".to_string())));
+        assert!(set.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_update_double_option_length_enforced() -> Result<(), serde_json::Error> {
+        // 双层 Option 的长度经 custom 函数校验：超长 hostname 拒绝
+        let req: DeviceUpdate = serde_json::from_value(serde_json::json!({
+            "hostname": "H".repeat(101)
+        }))?;
+        let Err(errors) = req.validate() else {
+            panic!("超长 hostname 应被拒绝");
+        };
+        assert!(errors.errors().contains_key("hostname"));
+
+        // null（清除）合法
+        let null_host: DeviceUpdate =
+            serde_json::from_value(serde_json::json!({ "hostname": null }))?;
+        assert!(null_host.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
     fn test_device_create_invalid_snmp_version() -> Result<(), serde_json::Error> {
         // snmp_version 仅允许 v1/v2c/v3（VARCHAR(3)，DB 无 CHECK，由应用层拦截）
         let mut json = valid_device_create_json();
@@ -873,6 +1036,96 @@ mod tests {
         };
         assert!(errors.errors().contains_key("name"));
         assert!(errors.errors().contains_key("device_type"));
+
+        // 非白名单类型拒绝（与 DeviceCreate 同口径），长度校验已由白名单取代
+        let bad_type: UpdateDeviceTemplateRequest = serde_json::from_value(serde_json::json!({
+            "name": "模板",
+            "device_type": "hypervisor"
+        }))?;
+        let Err(errors) = bad_type.validate() else {
+            panic!("非法模板设备类型应被拒绝");
+        };
+        assert!(errors.errors().contains_key("device_type"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_interface_vlan_id_range() -> Result<(), serde_json::Error> {
+        // 创建路径：vlan_id / trunk_id 仅允许 1..=4094
+        for bad_vlan in [0i32, -1, 4095] {
+            let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
+                "name": "eth0",
+                "vlan_id": bad_vlan
+            }))?;
+            let Err(errors) = req.validate() else {
+                panic!("vlan_id={bad_vlan} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("vlan_id"));
+
+            let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
+                "name": "eth0",
+                "trunk_id": bad_vlan
+            }))?;
+            let Err(errors) = req.validate() else {
+                panic!("trunk_id={bad_vlan} 应被拒绝");
+            };
+            assert!(errors.errors().contains_key("trunk_id"));
+        }
+        let ok: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
+            "name": "eth0",
+            "vlan_id": 1,
+            "trunk_id": 4094
+        }))?;
+        assert!(ok.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_interface_update_vlan_id_range() -> Result<(), serde_json::Error> {
+        // 更新路径：vlan_id 与 trunk_id 均为双层 Option，数值均限 1..=4094
+        let bad: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
+            "vlan_id": 4096
+        }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("vlan_id=4096 应被拒绝");
+        };
+        assert!(errors.errors().contains_key("vlan_id"));
+
+        let bad_trunk: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
+            "trunk_id": 0
+        }))?;
+        let Err(errors) = bad_trunk.validate() else {
+            panic!("trunk_id=0 应被拒绝");
+        };
+        assert!(errors.errors().contains_key("trunk_id"));
+
+        // null 清除（Some(None)）与缺失（None）均跳过校验
+        let null_vlan: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
+            "vlan_id": null
+        }))?;
+        assert_eq!(null_vlan.vlan_id, Some(None));
+        assert!(null_vlan.validate().is_ok());
+
+        let null_trunk: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
+            "trunk_id": null
+        }))?;
+        assert_eq!(null_trunk.trunk_id, Some(None));
+        assert!(null_trunk.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_device_create_cards_nested_validation() -> Result<(), serde_json::Error> {
+        // nested 校验生效：cards 内网口的非法 IP 应使整个 DeviceCreate 校验失败
+        let mut json = valid_device_create_json();
+        json["cards"] = serde_json::json!([
+            { "name": "eth0", "ports": [{ "name": "eth0", "ips": [{ "ip_address": "bad-ip" }] }] }
+        ]);
+        let req: DeviceCreate = serde_json::from_value(json)?;
+        let Err(errors) = req.validate() else {
+            panic!("嵌套链非法 IP 应被拒绝");
+        };
+        assert!(errors.errors().contains_key("cards"), "错误应挂在 cards 上");
         Ok(())
     }
 

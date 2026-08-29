@@ -193,7 +193,9 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         }
     };
 
-    // 检测非根节点间的循环引用（DFS 染色法）
+    // 检测循环引用（DFS 染色法）：必须从全部节点出发检测，仅从根出发时
+    // 游离于根可达范围之外的环（非根类型互相引用成环）会漏检通过校验；
+    // 已访问标记跨起点复用（2=已完成），整体仍为 O(节点数 + 边数)
     let mut visited: std::collections::HashMap<&str, u8> = std::collections::HashMap::new();
     fn has_cycle<'a>(
         node: &'a str,
@@ -221,10 +223,12 @@ pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, App
         visited.insert(node, 2);
         false
     }
-    if has_cycle(root_type.as_str(), levels_map, &mut visited) {
-        return Err(AppError::Validation(msg(
-            "server.org_template.validation.levels_cycle",
-        )));
+    for key in levels_map.keys() {
+        if has_cycle(key, levels_map, &mut visited) {
+            return Err(AppError::Validation(msg(
+                "server.org_template.validation.levels_cycle",
+            )));
+        }
     }
 
     // 层级深度不得超过组织创建上限（根为第 1 层），否则模板能建、组织节点建不全
@@ -775,6 +779,20 @@ mod tests {
         let err = validate_levels_mapping(&levels).unwrap_err();
         // 错误消息已 key 化，AppError Display 仅展示 key
         assert!(err.to_string().contains("levels_depth_exceeded"));
+    }
+
+    /// 游离于根可达范围之外的环（非根类型互相引用成环）必须整体拒绝，
+    /// 仅从根出发的 DFS 会漏检该类环
+    #[test]
+    fn test_validate_levels_detects_detached_cycle() {
+        let levels = serde_json::json!({
+            "公司": ["部门"],
+            "部门": [],
+            "x": ["y"],
+            "y": ["x"]
+        });
+        let err = validate_levels_mapping(&levels).unwrap_err();
+        assert!(err.to_string().contains("levels_cycle"));
     }
 
     #[test]

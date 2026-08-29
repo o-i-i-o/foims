@@ -8,16 +8,15 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
-use ipma_data_management::DatabaseConfig;
 use ipma_scheduler::{TaskContext, TaskLog, calculate_next_run};
 use serde_json;
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
 use ipma_auth::extractor::AdminUser;
 use ipma_common::AppError;
+use ipma_common::AppJson;
 use ipma_common::{log_warn, msg};
 use ipma_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 
@@ -43,14 +42,25 @@ fn validate_task_type(task_type: &str) -> Result<(), AppError> {
     }
 }
 
-/// 校验 log_cleanup 任务的 days 配置，禁止 days < 1 导致清空全部审计日志
-fn validate_log_cleanup_days(config: &serde_json::Value) -> Result<(), AppError> {
+/// 需要校验 days 配置的清理类任务（与 task_executors.rs 执行期校验口径一致）
+const CLEANUP_TASK_TYPES: &[&str] = &["log_cleanup", "token_usage_cleanup"];
+
+/// 清理类任务 days 合法区间（1..=3650）：越界值在执行器处会被拒绝，
+/// 创建/更新时同步校验，避免落库后任务每次执行都失败
+const CLEANUP_DAYS_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
+
+/// 校验清理类任务（log_cleanup / token_usage_cleanup）的 days 配置：
+/// days < 1 会清空全部审计日志/使用记录，超大值会被执行器按截断拒绝
+fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<(), AppError> {
+    if !CLEANUP_TASK_TYPES.contains(&task_type) {
+        return Ok(());
+    }
     if let Some(days) = config.get("days").and_then(serde_json::Value::as_i64)
-        && days < 1
+        && !CLEANUP_DAYS_RANGE.contains(&days)
     {
-        return Err(AppError::Validation(msg(
-            "server.task.log_cleanup_days_invalid",
-        )));
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "days (1-3650)"),
+        ));
     }
     Ok(())
 }
@@ -115,22 +125,24 @@ pub async fn create_scheduled_task(
     req.validate()?;
     validate_task_type(&req.task_type)?;
     let config = req.config.clone().unwrap_or_else(|| serde_json::json!({}));
-    if req.task_type == "log_cleanup" {
-        validate_log_cleanup_days(&config)?;
-    }
+    validate_cleanup_days(&req.task_type, &config)?;
     let enabled = req.enabled.unwrap_or(true);
 
+    // 校验 cron 表达式，非法时直接拒绝创建（与 update 口径一致），
+    // 不再告警后落库 NULL 导致任务静默永不执行
     let cron_expr = req.cron_expression.clone();
     let next_run_at =
         match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr)).await {
             Ok(Ok(time)) => Some(time),
             Ok(Err(e)) => {
-                log_warn!("log.task.next_run_calc_failed", error = e);
-                None
+                return Err(AppError::Validation(
+                    msg("server.task.cron_invalid").with("error", e),
+                ));
             }
             Err(e) => {
-                log_warn!("log.task.next_run_calc_task_failed", error = e);
-                None
+                return Err(AppError::Internal(
+                    msg("server.task.cron_validate_task_failed").with("error", e),
+                ));
             }
         };
 
@@ -177,9 +189,7 @@ pub async fn update_scheduled_task(
         } else {
             task_type.to_string()
         };
-        if effective_type == "log_cleanup" {
-            validate_log_cleanup_days(config)?;
-        }
+        validate_cleanup_days(&effective_type, config)?;
     }
 
     let now = Utc::now();
@@ -332,13 +342,7 @@ pub async fn run_scheduled_task_now(
     let task_name = task.name.clone();
     let task_type = task.task_type.clone();
 
-    let db_config = DatabaseConfig {
-        host: pool.db_config.host.clone(),
-        port: pool.db_config.port,
-        database: pool.db_config.database.clone(),
-        username: pool.db_config.username.clone(),
-        password: pool.db_config.password.clone(),
-    };
+    let db_config = pool.db_config.clone();
 
     let ctx = TaskContext {
         pool: conn.clone(),
@@ -434,14 +438,17 @@ pub async fn run_scheduled_task_now(
 
 pub async fn get_task_logs(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _viewer: ipma_auth::extractor::AdminOrAuditorUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let task_name = query.get("task_name").cloned();
+    // 钳制 1..=1000：负值/0 在 PG 中等价于无 LIMIT（全表返回），
+    // 超大值可被用于拉取全量日志
     let limit: i64 = query
         .get("limit")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(100);
+        .unwrap_or(100)
+        .clamp(1, 1000);
     let conn = state.pool()?.get_conn();
 
     let logs = if let Some(name) = task_name {

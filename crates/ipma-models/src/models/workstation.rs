@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 // ==================== 工位模型 ====================
 
@@ -64,10 +64,21 @@ pub struct WorkstationUpdate {
     ))]
     pub name: Option<String>,
     pub room_id: Option<Uuid>,
-    pub manager: Option<String>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_manager_opt",
+        message = "server.workstation.validation.manager_length"
+    ))]
+    pub manager: Option<Option<String>>,
     pub manager_employee_id: Option<Uuid>,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
+    /// 双层 Option：null 清空描述
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_description_opt",
+        message = "server.common.validation.description_length"
+    ))]
+    pub description: Option<Option<String>>,
 }
 
 // ==================== 批量同步模型 ====================
@@ -112,6 +123,9 @@ pub struct NetOutletSyncItem {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RoomNetOutletsSync {
+    /// nested 显式开启：同步 handler 仅调用容器 validate()，
+    /// 缺失时 NetOutletSyncItem 的字段校验不会执行（同 CabinetPositionsSync）
+    #[validate(nested)]
     pub net_outlets: Vec<NetOutletSyncItem>,
 }
 
@@ -128,6 +142,7 @@ pub struct PatchPanelBrief {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_position_sync_u_order"))]
 pub struct PositionSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]
@@ -144,14 +159,32 @@ pub struct PositionSyncItem {
     pub description: Option<String>,
 }
 
+/// 跨字段校验：start_u <= end_u（与 CabinetPositionCreate 同口径）
+fn validate_position_sync_u_order(req: &PositionSyncItem) -> Result<(), ValidationError> {
+    if req.start_u <= req.end_u {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.position.validation.u_order_invalid",
+        ))
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RoomChildrenSync {
+    /// nested 显式开启：validator derive 不自动展开 Option<Vec> 元素，
+    /// 缺失时同步子项的字段校验在同步路径不会执行（同 CabinetPositionsSync）
+    #[validate(nested)]
     pub workstations: Option<Vec<WorkstationSyncItem>>,
+    #[validate(nested)]
     pub cabinets: Option<Vec<CabinetSyncItem>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetPositionsSync {
+    /// nested 显式开启：同步 handler 仅调用容器 validate()，
+    /// 缺失时 PositionSyncItem 的字段与跨字段校验不会执行
+    #[validate(nested)]
     pub positions: Vec<PositionSyncItem>,
 }
 
@@ -168,6 +201,9 @@ pub struct PatchPanelSyncItem {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CabinetPatchPanelsSync {
+    /// nested 显式开启：同步 handler 仅调用容器 validate()，
+    /// 缺失时 PatchPanelSyncItem 的字段校验不会执行（同 CabinetPositionsSync）
+    #[validate(nested)]
     pub patch_panels: Vec<PatchPanelSyncItem>,
 }
 
@@ -217,13 +253,22 @@ mod tests {
             "manager": null
         }))?;
         assert!(ok.validate().is_ok());
-        assert_eq!(ok.manager, None);
+        assert_eq!(ok.manager, Some(None), "null 表示清空管理人");
 
         let bad: WorkstationUpdate = serde_json::from_value(serde_json::json!({ "name": "" }))?;
         let Err(errors) = bad.validate() else {
             panic!("空工位名应被拒绝");
         };
         assert!(errors.errors().contains_key("name"));
+
+        // 双层 Option 的长度经 custom 函数校验，超长负责人被拒绝
+        let bad: WorkstationUpdate = serde_json::from_value(serde_json::json!({
+            "manager": "M".repeat(51)
+        }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("超长负责人应被拒绝");
+        };
+        assert!(errors.errors().contains_key("manager"));
         Ok(())
     }
 
@@ -298,6 +343,14 @@ mod tests {
             panic!("越界 start_u 应被拒绝");
         };
         assert!(errors.errors().contains_key("start_u"));
+
+        // 跨字段校验：倒挂机位（start_u > end_u）拒绝
+        let reversed: PositionSyncItem = serde_json::from_value(serde_json::json!({
+            "name": "倒挂机位",
+            "start_u": 40,
+            "end_u": 2
+        }))?;
+        assert!(reversed.validate().is_err(), "倒挂机位应被拒绝");
         Ok(())
     }
 
@@ -341,6 +394,27 @@ mod tests {
         let empty: RoomChildrenSync = serde_json::from_value(serde_json::json!({}))?;
         assert!(empty.validate().is_ok());
         assert!(empty.workstations.is_none());
+
+        // nested 校验生效：子项非法（空工位名 / 越界容量）时容器校验失败
+        let bad_ws: RoomChildrenSync =
+            serde_json::from_value(serde_json::json!({ "workstations": [{ "name": "" }] }))?;
+        assert!(bad_ws.validate().is_err(), "空工位名应使容器被拒绝");
+
+        let bad_cab: RoomChildrenSync = serde_json::from_value(serde_json::json!({
+            "cabinets": [{ "name": "X", "capacity": 9999 }]
+        }))?;
+        assert!(bad_cab.validate().is_err(), "越界容量应使容器被拒绝");
+
+        // 信息点 / 配线架同步容器：超长子项名使容器校验失败
+        let bad_outlet: RoomNetOutletsSync = serde_json::from_value(serde_json::json!({
+            "net_outlets": [{ "name": "N".repeat(101) }]
+        }))?;
+        assert!(bad_outlet.validate().is_err(), "超长信息点名应使容器被拒绝");
+
+        let bad_panel: CabinetPatchPanelsSync = serde_json::from_value(serde_json::json!({
+            "patch_panels": [{ "name": "" }]
+        }))?;
+        assert!(bad_panel.validate().is_err(), "空配线架名应使容器被拒绝");
 
         let positions: CabinetPositionsSync = serde_json::from_value(serde_json::json!({
             "positions": [{ "name": "U1", "start_u": 1, "end_u": 1 }]

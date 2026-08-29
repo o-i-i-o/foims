@@ -72,12 +72,14 @@ class CacheManager {
   saveToStorage() {
     try {
       const now = Date.now();
-      const data = Object.fromEntries(
-        this.caches
-          .entries()
-          .filter(([, item]) => item.expiry > now && item.persist !== false)
-          .toArray()
-      );
+      // 常规循环替代迭代器 helper 链（filter/toArray 是极新的 ES 特性，
+      // 不支持的引擎抛 TypeError 且被 catch 静默吞掉，缓存持久化无声失效）
+      const data = {};
+      for (const [key, item] of this.caches.entries()) {
+        if (item.expiry > now && item.persist !== false) {
+          data[key] = item;
+        }
+      }
       localStorage.setItem(this.localStorageKey, JSON.stringify(data));
     } catch (e) {
       if (e.name === "QuotaExceededError") {
@@ -187,19 +189,6 @@ class CacheManager {
       this.cleanupIntervalId = null;
     }
   }
-
-  async getOrSet(key, fetcher, ttl = this.defaultTTL, persist = true) {
-    const cached = this.get(key);
-
-    if (cached !== null) {
-      return cached;
-    }
-
-    const value = await fetcher();
-    this.set(key, value, ttl, persist);
-
-    return value;
-  }
 }
 
 export const cache = new CacheManager();
@@ -265,12 +254,6 @@ class ElementCache {
       this.cache.delete(id);
     } else {
       this.cache.clear();
-    }
-  }
-
-  refresh() {
-    for (const [id] of this.cache) {
-      this.cache.set(id, document.getElementById(id));
     }
   }
 }

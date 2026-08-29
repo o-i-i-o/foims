@@ -91,6 +91,22 @@ pub async fn fetch_table_meta(conn: &mut PgConnection, table: &str) -> DataResul
     })
 }
 
+/// 对称剥离导出侧的公式注入转义前缀（security-review S-1 往返一致性）：
+/// 仅当单元格以 `'` 开头且其后首字符恰为导出侧会转义的前缀（`= + - @`、
+/// Tab、CR）时剥掉该撇号（如导出 `'+86…` 还原为 `+86…`）；
+/// 其余以 `'` 开头的内容（撇号本身是业务数据）原样保留。
+pub fn strip_formula_escape(cell: &str) -> &str {
+    let rest = match cell.strip_prefix('\'') {
+        Some(rest) => rest,
+        None => return cell,
+    };
+    let escaped_prefix = rest
+        .as_bytes()
+        .first()
+        .is_some_and(|&b| matches!(b, b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'));
+    if escaped_prefix { rest } else { cell }
+}
+
 /// 解析 CSV 字节流：剥离 BOM、严格解析、逐字段清洗。
 /// 返回（表头, 数据行）。
 pub fn parse_csv(data: &[u8]) -> DataResult<(Vec<String>, Vec<CsvRow>)> {
@@ -123,8 +139,9 @@ pub fn parse_csv(data: &[u8]) -> DataResult<(Vec<String>, Vec<CsvRow>)> {
         })?;
         let mut cells = HashMap::with_capacity(headers.len());
         for (i, header) in headers.iter().enumerate() {
-            // 逐字段清洗首尾空白（含换行、全角空格等 Unicode 空白）
-            let value = record.get(i).unwrap_or_default().trim().to_string();
+            // 逐字段清洗首尾空白（含换行、全角空格等 Unicode 空白），
+            // 再剥离导出侧公式转义前缀，保证导出→导入往返一致
+            let value = strip_formula_escape(record.get(i).unwrap_or_default().trim()).to_string();
             cells.insert(header.clone(), value);
         }
         rows.push(CsvRow {
@@ -265,6 +282,30 @@ mod tests {
         let (headers, rows) = parse_csv(&data).unwrap();
         assert_eq!(headers, vec!["name"]);
         assert_eq!(rows[0].cells["name"], "值");
+    }
+
+    /// 导出侧加撇号转义的单元格在导入时对称还原；撇号本身是业务数据的
+    /// 单元格（后随字符不属于导出侧转义前缀集合）必须原样保留
+    #[test]
+    fn 公式转义前缀对称剥离() {
+        // 导出侧会转义的前缀组合：撇号被剥掉
+        assert_eq!(
+            strip_formula_escape("'+86 138-0013-8000"),
+            "+86 138-0013-8000"
+        );
+        assert_eq!(strip_formula_escape("'=SUM(A1)"), "=SUM(A1)");
+        assert_eq!(strip_formula_escape("'-1"), "-1");
+        assert_eq!(strip_formula_escape("'@cmd"), "@cmd");
+        assert_eq!(strip_formula_escape("'\tTAB"), "\tTAB");
+        assert_eq!(strip_formula_escape("'\rCR"), "\rCR");
+
+        // 其余以撇号开头的内容原样保留
+        assert_eq!(strip_formula_escape("'abc"), "'abc");
+        assert_eq!(strip_formula_escape("'"), "'");
+        assert_eq!(strip_formula_escape("'"), "'");
+        // 不以撇号开头的内容不受影响
+        assert_eq!(strip_formula_escape("=abc"), "=abc");
+        assert_eq!(strip_formula_escape("+1"), "+1");
     }
 
     #[test]

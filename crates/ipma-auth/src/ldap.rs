@@ -264,27 +264,40 @@ async fn ldap_authenticate(
     Ok(LdapVerifiedUser { email })
 }
 
+/// LDAP 登录请求：在 ipma-models 基础模型上扩展动态码与图形验证码字段
+///（基础模型跨 crate 共享，字段经 flatten 组合）。
+///
+/// `code` 为外部账户启用 TOTP 时的动态码：未携带时若账户启用了 2FA，
+/// 返回 `requires_two_factor` 响应（字段形态与本地登录 2FA 分支一致）。
+#[derive(Debug, Deserialize)]
+pub struct LdapLoginRequestExt {
+    #[serde(flatten)]
+    pub base: LdapLoginRequest,
+    /// 启用 2FA 的外部账户登录时携带的 TOTP 动态码
+    pub code: Option<String>,
+}
+
 /// LDAP 登录入口（公开路由）。
 pub async fn login_with_ldap<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    AppJson(req): AppJson<LdapLoginRequest>,
+    AppJson(req): AppJson<LdapLoginRequestExt>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
-    req.validate()?;
-
-    let client_ip = meta.ip_address.clone();
+    req.base.validate()?;
 
     // 连续失败达到阈值后要求图形验证码（与本地登录共用触发计数）
     if let Err(key) = crate::captcha::enforce(
-        &client_ip,
-        &req.username,
-        &req.captcha_id,
-        &req.captcha_text,
+        &meta.ip_address,
+        req.base.username.trim(),
+        &req.base.captcha_id,
+        &req.base.captcha_text,
     ) {
         return Err(AppError::Validation(msg(key)));
     }
+
+    let client_ip = meta.ip_address.clone();
 
     if crate::app_fail2ban::is_ip_banned(&client_ip) {
         let remaining = crate::app_fail2ban::get_ban_remaining(&client_ip);
@@ -293,7 +306,16 @@ pub async fn login_with_ldap<P: AuthProvider>(
         ));
     }
 
-    let username = req.username.trim().to_string();
+    let username = req.base.username.trim().to_string();
+
+    // 用户名维度封禁检查（此前只查 IP，失败却写入用户名键——记录了但从未执行）
+    if crate::app_fail2ban::is_user_banned(&username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
     let config = get_ldap_config_from_db(&conn)
         .await
         .ok_or_else(|| AppError::NotFound(msg("server.ldap.not_configured")))?;
@@ -301,26 +323,37 @@ pub async fn login_with_ldap<P: AuthProvider>(
         return Err(AppError::Forbidden(msg("server.ldap.disabled")));
     }
 
-    // LDAP 验证失败与本地登录失败保持一致的对外提示与 fail2ban 记录
-    let ldap_user = match ldap_authenticate(&config, &username, &req.password).await {
+    // LDAP 认证失败与本地登录失败保持一致的对外提示与 fail2ban 记录。
+    // 仅认证语义失败（用户不存在/口令错误）计入失败封禁；连接、检索、
+    // 服务账号绑定等内部故障不计入，避免 LDAP 故障期间误封正常用户
+    let ldap_user = match ldap_authenticate(&config, &username, &req.base.password).await {
         Ok(user) => user,
         Err(error) => {
-            crate::app_fail2ban::record_login_failure(
-                &client_ip,
-                &username,
-                "server.login_log.ldap_auth_failed",
-            );
-            if let Err(e) = log_login(
-                &conn,
-                &username,
-                &meta.ip_address,
-                &meta.user_agent,
-                false,
-                Some("server.login_log.ldap_auth_failed"),
-            )
-            .await
-            {
-                ipma_common::log_warn!("log.login.record_failed", error = e);
+            if matches!(error, AppError::Unauthorized(_)) {
+                crate::app_fail2ban::record_login_failure(
+                    &client_ip,
+                    &username,
+                    "server.login_log.ldap_auth_failed",
+                );
+                if let Err(e) = log_login(
+                    &conn,
+                    &username,
+                    &meta.ip_address,
+                    &meta.user_agent,
+                    false,
+                    Some("server.login_log.ldap_auth_failed"),
+                )
+                .await
+                {
+                    ipma_common::log_warn!("log.login.record_failed", error = e);
+                }
+            } else {
+                // 内部故障：仅记录日志，不计入失败封禁
+                ipma_common::log_error!(
+                    "log.ldap.internal_error",
+                    username = username,
+                    error = error.message().log_string()
+                );
             }
             return Err(error);
         }
@@ -335,7 +368,61 @@ pub async fn login_with_ldap<P: AuthProvider>(
     )
     .await?;
 
-    complete_external_login(state, meta, external, req.remember_me.unwrap_or(false)).await
+    // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
+    if crate::app_fail2ban::is_user_banned(&external.username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&external.username);
+        return Err(AppError::Forbidden(
+            msg("server.auth.ip_banned").with("seconds", remaining),
+        ));
+    }
+
+    // 2FA：外部账户启用 TOTP 时与本地登录保持一致——
+    //   未携带动态码 → 返回 requires_two_factor 响应（字段形态与本地一致，
+    //   前端弹出动态码输入后携带 code 重试本端点）；
+    //   携带动态码 → 校验 TOTP（复用本地 claim/verify 逻辑，含已用码占用）通过后才签发
+    let mut totp_verified = false;
+    if external.two_factor_enabled {
+        match req.code.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+            None => {
+                return Ok(crate::login::requires_two_factor_response(
+                    &external.username,
+                ));
+            }
+            Some(code) => {
+                let verified = crate::login::verify_external_totp(&conn, &external, code).await?;
+                if !verified {
+                    crate::app_fail2ban::record_login_failure(
+                        &client_ip,
+                        &username,
+                        "server.login_log.invalid_2fa_code",
+                    );
+                    if let Err(e) = log_login(
+                        &conn,
+                        &username,
+                        &meta.ip_address,
+                        &meta.user_agent,
+                        false,
+                        Some("server.login_log.invalid_2fa_code"),
+                    )
+                    .await
+                    {
+                        ipma_common::log_warn!("log.login.record_failed", error = e);
+                    }
+                    return Err(AppError::Unauthorized(msg("server.auth.code_invalid")));
+                }
+                totp_verified = true;
+            }
+        }
+    }
+
+    complete_external_login(
+        state,
+        meta,
+        external,
+        req.base.remember_me.unwrap_or(false),
+        totp_verified,
+    )
+    .await
 }
 
 /// 外部认证（LDAP/SSO）通过后的通用收尾：签发令牌并构造 JSON 登录响应。
@@ -344,9 +431,16 @@ pub(crate) async fn complete_external_login<P: AuthProvider>(
     meta: RequestMeta,
     external: ExternalUser,
     remember_me: bool,
+    totp_verified: bool,
 ) -> Result<Response, AppError> {
-    let login_tokens =
-        crate::login::issue_external_login_tokens(&state, &meta, &external, remember_me).await?;
+    let login_tokens = crate::login::issue_external_login_tokens(
+        &state,
+        &meta,
+        &external,
+        remember_me,
+        totp_verified,
+    )
+    .await?;
 
     let user = ipma_models::User {
         id: external.id,

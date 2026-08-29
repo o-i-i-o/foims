@@ -37,7 +37,8 @@ const OPTION_QUERIES: &[(&str, &str)] = &[
 /// 可选过滤参数（按资源生效，不适用时被忽略）：
 /// - `room_id`：cabinets / workstations / net-outlets / devices
 /// - `region_id`：networks
-/// - `cabinet_id` / `workstation_id`：devices（cabinet_id 经机位关联）
+/// - `cabinet_id` / `workstation_id`：devices（cabinet_id 经机位关联）；
+///   devices 的三个过滤参数互斥，同时给出多个时返回 422
 pub async fn get_resource_options<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(resource): Path<String>,
@@ -49,14 +50,40 @@ pub async fn get_resource_options<P: DbProvider>(
         ));
     };
 
-    let room_id = query.get("room_id").and_then(|v| Uuid::parse_str(v).ok());
-    let region_id = query.get("region_id").and_then(|v| Uuid::parse_str(v).ok());
-    let cabinet_id = query
-        .get("cabinet_id")
-        .and_then(|v| Uuid::parse_str(v).ok());
-    let workstation_id = query
-        .get("workstation_id")
-        .and_then(|v| Uuid::parse_str(v).ok());
+    // 过滤参数非法 UUID 显式 422（与 net_outlet/patch_panel 口径一致），
+    // 不再静默忽略退化为全量列表
+    let parse_filter = |key: &str, param: &str| -> Result<Option<Uuid>, AppError> {
+        match query.get(key) {
+            Some(v) if !v.is_empty() => Uuid::parse_str(v).map(Some).map_err(|_| {
+                AppError::Validation(msg("server.common.invalid_param").with("param", param))
+            }),
+            _ => Ok(None),
+        }
+    };
+    let room_id = parse_filter("room_id", "room_id")?;
+    let region_id = parse_filter("region_id", "region_id")?;
+    let cabinet_id = parse_filter("cabinet_id", "cabinet_id")?;
+    let workstation_id = parse_filter("workstation_id", "workstation_id")?;
+
+    // devices 资源的过滤参数互斥：room_id / cabinet_id / workstation_id
+    // 同时给出多个时显式 422（并列罗列冲突参数），不再静默忽略其一
+    if resource == "devices" {
+        let mut given: Vec<&str> = Vec::with_capacity(3);
+        if room_id.is_some() {
+            given.push("room_id");
+        }
+        if cabinet_id.is_some() {
+            given.push("cabinet_id");
+        }
+        if workstation_id.is_some() {
+            given.push("workstation_id");
+        }
+        if given.len() > 1 {
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", given.join("/")),
+            ));
+        }
+    }
 
     let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(*base_sql);
 

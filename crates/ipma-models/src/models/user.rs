@@ -26,6 +26,11 @@ pub struct UserCreate {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    /// bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes",
+        message = "server.user.validation.password_max_length"
+    ))]
     pub password: String,
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
@@ -55,6 +60,10 @@ pub struct UserLogin {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes",
+        message = "server.user.validation.password_max_length"
+    ))]
     pub password: String,
     pub remember_me: Option<bool>,
     /// 连续失败触发后的图形验证码（captcha_id + 用户输入）
@@ -74,6 +83,10 @@ pub struct ResetPasswordRequest {
     #[validate(length(min = 1))]
     pub token: String,
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes",
+        message = "server.user.validation.password_max_length"
+    ))]
     pub new_password: String,
 }
 
@@ -84,6 +97,10 @@ pub struct TwoFactorLoginRequest {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes_option",
+        message = "server.user.validation.password_max_length"
+    ))]
     pub password: Option<String>,
     #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub two_factor_code: String,
@@ -94,6 +111,10 @@ pub struct TwoFactorLoginRequest {
 pub struct SendTwoFactorCodeRequest {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes_option",
+        message = "server.user.validation.password_max_length"
+    ))]
     pub password: Option<String>,
 }
 
@@ -107,6 +128,8 @@ pub struct SendLoginCodeRequest {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct EmailLoginRequest {
     #[validate(email(message = "server.common.validation.email_format"))]
+    /// 与其余登录邮箱字段同口径：上限 100 字符
+    #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
     #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,
@@ -118,6 +141,10 @@ pub struct LdapLoginRequest {
     #[validate(length(min = 1, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
     #[validate(length(min = 1, message = "server.auth.validation.password_required"))]
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes",
+        message = "server.user.validation.password_max_length"
+    ))]
     pub password: String,
     pub remember_me: Option<bool>,
     /// 连续失败触发后的图形验证码（captcha_id + 用户输入）
@@ -181,6 +208,68 @@ mod tests {
             panic!("过短密码应被拒绝");
         };
         assert!(errors.errors().contains_key("password"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_user_create_password_too_long_bytes() -> Result<(), serde_json::Error> {
+        // bcrypt 仅使用前 72 字节：73 字节（多字节字符）拒绝，72 字节通过
+        let mut json = valid_user_create_json();
+        json["password"] = serde_json::json!("密".repeat(25)); // 75 字节
+        let req: UserCreate = serde_json::from_value(json)?;
+        let Err(errors) = req.validate() else {
+            panic!("超 72 字节密码应被拒绝");
+        };
+        assert!(errors.errors().contains_key("password"));
+
+        let mut json = valid_user_create_json();
+        json["password"] = serde_json::json!("a".repeat(72)); // 恰 72 字节
+        let req: UserCreate = serde_json::from_value(json)?;
+        assert!(req.validate().is_ok(), "72 字节密码应合法");
+        Ok(())
+    }
+
+    #[test]
+    fn test_login_password_too_long_bytes() -> Result<(), serde_json::Error> {
+        // 登录 / LDAP / 2FA / 发码请求的密码同样受 72 字节上限约束
+        let login: UserLogin = serde_json::from_value(serde_json::json!({
+            "username": "alice",
+            "password": "p".repeat(73)
+        }))?;
+        assert!(login.validate().is_err());
+
+        let ldap: LdapLoginRequest = serde_json::from_value(serde_json::json!({
+            "username": "alice",
+            "password": "p".repeat(73)
+        }))?;
+        assert!(ldap.validate().is_err());
+
+        let two_factor: TwoFactorLoginRequest = serde_json::from_value(serde_json::json!({
+            "username": "alice",
+            "two_factor_code": "123456",
+            "password": "p".repeat(73)
+        }))?;
+        assert!(two_factor.validate().is_err());
+
+        // Option 密码为 None 时跳过校验
+        let no_password: SendTwoFactorCodeRequest =
+            serde_json::from_value(serde_json::json!({ "username": "alice" }))?;
+        assert!(no_password.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_email_login_request_email_max_length() -> Result<(), serde_json::Error> {
+        // 邮箱合法但超长（>100 字符）拒绝
+        let long_email = format!("{}@example.com", "a".repeat(100));
+        let req: EmailLoginRequest = serde_json::from_value(serde_json::json!({
+            "email": long_email,
+            "code": "123456"
+        }))?;
+        let Err(errors) = req.validate() else {
+            panic!("超长邮箱应被拒绝");
+        };
+        assert!(errors.errors().contains_key("email"));
         Ok(())
     }
 

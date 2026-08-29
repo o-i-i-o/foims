@@ -197,8 +197,15 @@ pub async fn update_employee<P: DbProvider>(
     AppJson(req): AppJson<EmployeeUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
-    let phone = blank_to_none(req.phone.clone());
-    let email = blank_to_none(req.email.clone());
+    // 三态语义：字段缺省（None）不修改、JSON null（Some(None)）清空、
+    // 提交值（Some(Some(v))）设置新值；文本值先经 blank_to_none 规范化，
+    // 空串等同清空
+    let phone_set = req.phone.is_some();
+    let phone = blank_to_none(req.phone.clone().flatten());
+    let email_set = req.email.is_some();
+    let email = blank_to_none(req.email.clone().flatten());
+    let hire_date_set = req.hire_date.is_some();
+    let hire_date = req.hire_date.flatten();
     validate_phone(&phone)?;
 
     let mut tx = state.pool()?.get_conn().begin().await?;
@@ -227,23 +234,26 @@ pub async fn update_employee<P: DbProvider>(
         }
     }
 
-    // 更新语义：name/gender 缺省（null）保留旧值；phone/email/hire_date
-    // 以提交值覆盖（前端未填写的可空字段提交空串，规范化为 NULL 即清空）
+    // 更新语义：name/gender 缺省保留旧值；phone/email/hire_date 三态
+    // （缺省保留 / null 清空 / 值覆盖），CASE WHEN 与 network.rs 同口径
     sqlx::query(
         "UPDATE employees SET
          name = COALESCE($1, name),
          gender = COALESCE($2, gender),
-         phone = $3,
-         email = $4,
-         hire_date = $5,
-         updated_at = $6
-         WHERE id = $7",
+         phone = CASE WHEN $3::boolean THEN $4::VARCHAR(20) ELSE phone END,
+         email = CASE WHEN $5::boolean THEN $6::VARCHAR(100) ELSE email END,
+         hire_date = CASE WHEN $7::boolean THEN $8::date ELSE hire_date END,
+         updated_at = $9
+         WHERE id = $10",
     )
     .bind(&req.name)
     .bind(req.normalized_gender())
+    .bind(phone_set)
     .bind(&phone)
+    .bind(email_set)
     .bind(&email)
-    .bind(req.hire_date)
+    .bind(hire_date_set)
+    .bind(hire_date)
     .bind(Utc::now())
     .bind(id)
     .execute(&mut *tx)

@@ -25,7 +25,7 @@ use validator::Validate;
 use super::nic::{
     get_or_create_auto_nic, port_group_prefix, validate_interface_role, validate_physical_type,
 };
-use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp};
+use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp, truncate_to_column_width};
 use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppJson;
 use ipma_common::DbProvider;
@@ -489,6 +489,9 @@ pub async fn delete_device_interface<P: DbProvider>(
     Ok(ipma_common::ok_json((), "server.device.interface.deleted"))
 }
 
+/// device_interfaces.name 列宽（VARCHAR(50)，与建表契约一致）
+const INTERFACE_NAME_MAX_CHARS: usize = 50;
+
 /// 将 SNMP 拉取的端口映射为统一接口写入参数（未指定网卡前缀）。
 fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
     let description = port
@@ -496,8 +499,12 @@ fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
         .as_deref()
         .filter(|d| !d.is_empty())
         .map(str::to_string);
+    // name 列宽 VARCHAR(50)：ifName/ifDescr 可能超长（如含描述性文本），
+    // 整批 INSERT 会因单行超宽整批失败，入库前按字符截断（与 mac.rs
+    // 的 interface 列处理同口径）；网卡前缀分组使用截断后的名称
+    let name = truncate_to_column_width(&port.name, INTERFACE_NAME_MAX_CHARS);
     DeviceInterfaceCreate {
-        name: port.name.clone(),
+        name,
         nic_id: None,
         physical_type: Some("other".to_string()),
         interface_role: Some("business".to_string()),

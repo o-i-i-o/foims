@@ -32,12 +32,16 @@ const NETWORK_REGION_PAGE_SIZE = 20;
 let currentNetworkRegionPageSize = NETWORK_REGION_PAGE_SIZE;
 const networkRegionTableState = createSortState("created_at", "desc");
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let networkRegionsRequestSeq = 0;
+
 // 加载网络区域数据并填充表格
 export async function loadNetworkRegionsData(
   page = currentNetworkRegionPage,
   sortBy = null,
   sortOrder = null
 ) {
+  const requestSeq = ++networkRegionsRequestSeq;
   currentNetworkRegionPage = page;
   if (sortBy) {
     networkRegionTableState.setSort(sortBy, sortOrder);
@@ -46,8 +50,31 @@ export async function loadNetworkRegionsData(
     const result = await apiGet(
       `/api/resources/network-regions?page=${page}&page_size=${currentNetworkRegionPageSize}&sort_by=${networkRegionTableState.sortBy}&sort_order=${networkRegionTableState.sortOrder}`
     );
-    const data = result.success ? result.data : { items: [], total: 0 };
+    if (requestSeq !== networkRegionsRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
+    // 接口失败时提示并中止，不再静默渲染空数据
+    if (!result.success) {
+      showToast(`${t("common.load_failed")}: ${result.message}`, "error");
+      return;
+    }
+    const data = result.data || { items: [], total: 0 };
     const items = data.items || data;
+
+    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+    // 回退到最后一页重新加载，避免停留在空页无法翻回
+    const totalPages =
+      data.total_pages || Math.ceil((data.total || 0) / currentNetworkRegionPageSize);
+    if (
+      Array.isArray(items) &&
+      items.length === 0 &&
+      page > 1 &&
+      totalPages > 0 &&
+      page > totalPages
+    ) {
+      return loadNetworkRegionsData(totalPages);
+    }
+
     const startIndex = (page - 1) * currentNetworkRegionPageSize;
 
     renderTable("#network-regions-table", {
@@ -123,12 +150,16 @@ let currentFilters = {
 
 const networkTableState = createSortState("created_at", "desc");
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let networksRequestSeq = 0;
+
 export async function loadNetworksData(
   page = currentNetworkPage,
   filters = currentFilters,
   sortBy = null,
   sortOrder = null
 ) {
+  const requestSeq = ++networksRequestSeq;
   currentNetworkPage = page;
   currentFilters = filters;
   if (sortBy) {
@@ -158,8 +189,30 @@ export async function loadNetworksData(
 
     const url = `/api/resources/networks?${params.toString()}`;
     const result = await apiGet(url);
-    const data = result.success ? result.data : { items: [], total: 0 };
+    if (requestSeq !== networksRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
+    // 接口失败时提示并中止，不再静默渲染空数据
+    if (!result.success) {
+      showToast(`${t("common.load_failed")}: ${result.message}`, "error");
+      return;
+    }
+    const data = result.data || { items: [], total: 0 };
     const networks = data.items || data;
+
+    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+    // 回退到最后一页重新加载，避免停留在空页无法翻回
+    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentNetworkPageSize);
+    if (
+      Array.isArray(networks) &&
+      networks.length === 0 &&
+      page > 1 &&
+      totalPages > 0 &&
+      page > totalPages
+    ) {
+      return loadNetworksData(totalPages, filters);
+    }
+
     const startIndex = (page - 1) * currentNetworkPageSize;
 
     renderTable("#networks-table", {
@@ -264,8 +317,13 @@ function calculateTotalIps(cidr) {
     }
 
     const prefixLength = parseInt(parts[1]);
-    // 计算总IP数量：2^(32 - 子网掩码长度) - 2（减去网络地址和广播地址）
-    return Math.pow(2, 32 - prefixLength) - 2;
+    if (isNaN(prefixLength) || prefixLength < 0 || prefixLength > 32) {
+      return 0;
+    }
+
+    // 计算总IP数量：2^(32 - 子网掩码长度) - 2（减去网络地址和广播地址）；
+    // /31、/32 扣除后为 0/负数，按 0 处理（无传统意义可用地址）
+    return Math.max(0, Math.pow(2, 32 - prefixLength) - 2);
   } catch (error) {
     console.error("计算总IP数量失败:", error);
     return 0;
@@ -388,8 +446,13 @@ function renderIpBlocks(ipAddresses, ipStatusMap) {
     .join("");
 }
 
+// 网段使用弹窗打开序号：快速连续打开不同网段时，晚到的旧响应据此丢弃，
+// 防止旧网段数据覆盖新弹窗
+let subnetUsageToken = 0;
+
 // 显示网段使用情况
 export async function showNetworkUsage(id) {
+  const token = ++subnetUsageToken;
   try {
     // 网段详情、IP 列表与模态框 HTML 三路互不依赖，并行加载
     const [networkResult, ipResult, modal] = await Promise.all([
@@ -397,6 +460,10 @@ export async function showNetworkUsage(id) {
       apiGet(`/api/resources/ip?network_id=${id}&page_size=1000`),
       openModal("subnet-usage-modal")
     ]);
+    if (token !== subnetUsageToken) {
+      // 已有更新的打开请求：本次响应全部丢弃
+      return;
+    }
     if (!networkResult.success) {
       closeModal("subnet-usage-modal");
       showToast(t("network.load_failed"), "error");
@@ -437,10 +504,10 @@ export async function showNetworkUsage(id) {
     let contentHtml = "";
     if (hasIPv4 && hasIPv6) {
       contentHtml = `
-        <div class="usage-tab-content active" id="ipv4-content">
+        <div class="usage-tab-content active" id="ipv4-content" role="tabpanel" aria-labelledby="subnet-usage-ipv4-btn">
           ${buildIPv4Content(network, ipv4Ips, id)}
         </div>
-        <div class="usage-tab-content" id="ipv6-content">
+        <div class="usage-tab-content" id="ipv6-content" role="tabpanel" aria-labelledby="subnet-usage-ipv6-btn">
           ${buildIPv6Content(network, ipv6Ips, id)}
         </div>
       `;
@@ -470,8 +537,13 @@ export async function showNetworkUsage(id) {
     const tabButtons = modal.querySelectorAll(".usage-tab-btn");
     tabButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
-        tabButtons.forEach((b) => b.classList.remove("active"));
+        // 同步 aria-selected（与 active 类一致，参考 login.js 的 Tab 切换写法）
+        tabButtons.forEach((b) => {
+          b.classList.remove("active");
+          b.setAttribute("aria-selected", "false");
+        });
         btn.classList.add("active");
+        btn.setAttribute("aria-selected", "true");
 
         const tabId = btn.dataset.tab;
         const contents = modal.querySelectorAll(".usage-tab-content");
@@ -512,7 +584,8 @@ function buildIPv4Content(network, networkIps, _networkId) {
   });
 
   const usedIps = networkIps.length;
-  const unusedIps = totalIps - usedIps;
+  // 扣除网络/广播地址后 /31、/32 的总量为 0：未用数钳制不为负
+  const unusedIps = Math.max(0, totalIps - usedIps);
   const usageRate = totalIps > 0 ? ((usedIps / totalIps) * 100).toFixed(2) : "0.00";
 
   // 可视化区域三态：掩码过小不渲染 / 含 /24 子网时带切换标签 / 单块网格
@@ -578,7 +651,9 @@ function buildIPv4Content(network, networkIps, _networkId) {
         <span class="stat-value">${usageRate}%</span>
       </div>
     </div>
-    
+
+    <p class="text-muted">${t("network.capacity_note")}</p>
+
     <div class="usage-controls">
       <div class="filter-controls">
         <label>${t("common.filter")}: </label>
@@ -795,6 +870,9 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
   const refreshButton = modalContainer.querySelector("#refresh-ipv4-usage");
   if (refreshButton) {
     refreshButton.addEventListener("click", async () => {
+      // 保存完整 innerHTML（含图标）：加载结束后原样恢复，
+      // 纯文本恢复会让图标永久丢失
+      const originalHtml = refreshButton.innerHTML;
       refreshButton.innerHTML = `<span class="loading" role="status" aria-hidden="true"></span> ${t("common.refreshing")}`;
       refreshButton.disabled = true;
 
@@ -863,7 +941,7 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
         console.error("刷新IPv4使用情况失败:", error);
         showToast(t("common.refresh_failed"), "error");
       } finally {
-        refreshButton.innerHTML = t("common.refresh");
+        refreshButton.innerHTML = originalHtml;
         refreshButton.disabled = false;
       }
     });
@@ -876,6 +954,9 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
 
   if (refreshButton) {
     refreshButton.addEventListener("click", async () => {
+      // 保存完整 innerHTML（含图标）：加载结束后原样恢复，
+      // 纯文本恢复会让图标永久丢失
+      const originalHtml = refreshButton.innerHTML;
       refreshButton.innerHTML = `<span class="loading" role="status" aria-hidden="true"></span> ${t("common.refreshing")}`;
       refreshButton.disabled = true;
 
@@ -936,7 +1017,7 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
         console.error("刷新IPv6使用情况失败:", error);
         showToast(t("common.refresh_failed"), "error");
       } finally {
-        refreshButton.innerHTML = t("common.refresh");
+        refreshButton.innerHTML = originalHtml;
         refreshButton.disabled = false;
       }
     });

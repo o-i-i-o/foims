@@ -66,6 +66,14 @@ export async function submitCabinetPositionForm() {
     description: description.trim() || null
   };
 
+  // 防重复提交：请求期间禁用保存按钮，结束后恢复（双击会重复提交产生两条机位）
+  const saveBtn = document.querySelector("#cabinet-position-form button[type='submit']");
+  const originalText = saveBtn?.textContent;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = t("common.saving");
+  }
+
   try {
     let result;
     if (parsedId) {
@@ -85,12 +93,21 @@ export async function submitCabinetPositionForm() {
   } catch (error) {
     console.error("提交机位表单失败:", error);
     showToast(t("common.operation_failed_retry"), "error");
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
   }
 }
 
 // ====== 机位管理模态框 ======
 export async function openCabinetPositionModal(position = null) {
-  await openModal("cabinet-position-modal");
+  const modal = await openModal("cabinet-position-modal");
+  // 模板加载失败时 openModal 返回空,直接中止避免 title.textContent 空引用
+  if (!modal) {
+    return;
+  }
 
   const title = elementCache.get("cabinet-position-modal-title");
   const form = elementCache.get("cabinet-position-form");
@@ -168,8 +185,8 @@ export async function openCabinetPositionModal(position = null) {
   // 加载房间选项（从 cabinets 数据源只读）
   await loadRoomsFromCabinets();
 
+  // 模态框每次打开均为全新 DOM（关闭即销毁），不会累积监听器，直接绑定即可
   if (roomSelect) {
-    roomSelect.removeEventListener("change", handleRoomChange);
     roomSelect.addEventListener("change", handleRoomChange);
   }
 

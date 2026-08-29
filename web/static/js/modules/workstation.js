@@ -15,15 +15,22 @@ import { elementCache } from "../utils/helpers.js";
 let roomOrgMap = new Map();
 
 /** 按组织加载员工到管理人下拉：组织人员是管理人唯一数据来源 */
+// 管理人下拉加载序号:快速切换房间时旧员工响应晚到,序号不符即丢弃
+let managerOptionsSeq = 0;
+
 async function loadManagerOptions(orgId, selectedEmployeeId = "") {
   const select = document.getElementById("workstation-manager");
   if (!select) {
     return;
   }
+  const requestSeq = ++managerOptionsSeq;
   let employees = [];
   if (orgId) {
     try {
       const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(orgId)}`);
+      if (requestSeq !== managerOptionsSeq) {
+        return; // 已有更新的加载在途，丢弃过期结果
+      }
       employees = result.success && Array.isArray(result.data) ? result.data : [];
     } catch (error) {
       console.error("加载组织员工失败:", error);
@@ -82,7 +89,10 @@ export async function openWorkstationModal(workstation = null, position = null) 
     elementCache.setValue("workstation-id", workstation.id);
     elementCache.setValue("workstation-name", workstation.name);
     elementCache.setValue("workstation-room", workstation.room_id);
-    await loadManagerOptions(roomOrgMap.get(workstation.room_id) || "", workstation.manager_employee_id || "");
+    await loadManagerOptions(
+      roomOrgMap.get(workstation.room_id) || "",
+      workstation.manager_employee_id || ""
+    );
     elementCache.setValue("workstation-description", workstation.description || "");
     // 画布传入的当前坐标回填（房间管理入口无画布上下文，留空表示不动位置）
     elementCache.setValue("workstation-x", position ? String(Math.round(position.x)) : "");
@@ -121,6 +131,14 @@ export async function submitWorkstationForm() {
     description: description.trim() || null
   };
 
+  // 防重复提交：请求期间禁用保存按钮，结束后恢复（双击会重复提交产生两条工位）
+  const saveBtn = document.querySelector("#workstation-form button[type='submit']");
+  const originalText = saveBtn?.textContent;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = t("common.saving");
+  }
+
   try {
     let result;
     if (parsedId) {
@@ -157,5 +175,10 @@ export async function submitWorkstationForm() {
   } catch (error) {
     console.error("提交工位表单失败:", error);
     showToast(t("common.operation_failed_retry"), "error");
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
   }
 }

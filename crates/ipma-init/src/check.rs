@@ -551,11 +551,28 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     columns
 }
 
-/// 检查全部必需表是否已创建。
+/// 检查全部必需表是否已创建（含必需视图与必需约束性索引）。
 pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
     for table in get_required_tables() {
         let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
             "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"
+        )))
+        .fetch_one(pool)
+        .await
+        else {
+            return false;
+        };
+
+        if !exists {
+            return false;
+        }
+    }
+
+    // 必需索引缺失（如按旧版 DDL 建的库）时同样视为结构不完整，
+    // 触发 init 路径的 create_tables 幂等补建
+    for (index, table) in get_required_indexes() {
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
+            "SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = '{table}' AND indexname = '{index}')"
         )))
         .fetch_one(pool)
         .await
@@ -654,16 +671,92 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), ipma_comm
         }
     }
 
+    // 列宽契约：密文落库的凭据列宽度不符说明库结构落后于当前 DDL
+    //（本项目无迁移框架，需按 AGENTS.md 手工执行 ALTER 后重试）。
+    // 独立于逐表循环执行一次，避免随表数量重复扫描
+    for (width_table, width_column, expected) in get_required_column_widths() {
+        let actual: Option<Option<i32>> = match sqlx::query_scalar(
+            sqlx::AssertSqlSafe(format!(
+                "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{width_table}' AND column_name = '{width_column}'"
+            )),
+        )
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                return Err(ipma_common::msg("server.init.db.column_check_failed")
+                    .with("table", width_table)
+                    .with("column", width_column)
+                    .with("error", e))
+            }
+        };
+
+        match actual {
+            // 列不存在交由上方必需列清单报告，此处跳过
+            None | Some(None) => {}
+            Some(Some(len)) if len == expected => {}
+            Some(Some(len)) => {
+                return Err(ipma_common::msg("server.init.db.column_check_failed")
+                    .with("table", width_table)
+                    .with("column", width_column)
+                    .with("error", format!("列宽不符：期望 {expected}，实际 {len}")));
+            }
+        }
+    }
+
     Ok(())
 }
 
 /// 检查系统是否已有业务数据（以 users 表是否非空为准）。
-pub async fn check_has_data(pool: &sqlx::PgPool) -> bool {
-    match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
+///
+/// 查询错误向上传播（fail-fast）：本函数的结论决定
+/// `backup_and_drop_for_rebuild` 是否跳过备份直接删库，
+/// 把数据库故障误判为"无数据"会销毁存量业务数据。
+pub async fn check_has_data(pool: &sqlx::PgPool) -> Result<bool, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(pool)
-        .await
-    {
-        Ok(count) => count > 0,
-        Err(_) => false,
-    }
+        .await?;
+    Ok(count > 0)
+}
+
+/// 必需列宽契约：`(表名, 列名, 期望 character_maximum_length)`。
+///
+/// 仅约束以密文落库的 SNMP 凭据列：AES-GCM（+12 字节 nonce +16 字节
+/// 认证标签）+ base64 后长度膨胀，列宽必须容纳模型允许的最长明文
+/// 加密结果，否则写入期 "value too long" 500。清单与
+/// `schema/tables/devices.rs` 的 DDL 保持同步。
+#[must_use]
+pub fn get_required_column_widths() -> Vec<(&'static str, &'static str, i32)> {
+    vec![
+        ("devices", "snmp_community", 255),
+        ("devices", "snmp_username", 128),
+        ("devices", "snmp_auth_password", 255),
+        ("devices", "snmp_priv_password", 255),
+    ]
+}
+
+/// 必需索引清单（与 `schema/tables/` 中创建的约束性索引一致）：
+/// `(索引名, 表名)`。仅列承载业务不变式（并发下仍需成立）的唯一索引。
+#[must_use]
+pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
+    vec![
+        // 同一对设备之间只允许一条逻辑连接（链路聚合）：
+        // 表达式部分索引，物理连线同设备对允许多条故不纳入
+        ("uq_topology_connections_logical", "topology_connections"),
+        // 同一对端点之间只允许一条跳接线路（cable_links.rs 建表后补建）
+        ("uq_cable_links_endpoint_pair", "cable_links"),
+        // 同一网段地址（v4/v6）全域唯一（network.rs 部分唯一索引）
+        ("uq_network_cidrs_ipv4", "network_cidrs"),
+        ("uq_network_cidrs_ipv6", "network_cidrs"),
+        // 逻辑连线成员端口全域唯一：同一端口不得同时参与两条逻辑连线
+        //（topology.rs 建表后补建）
+        (
+            "uq_topology_connection_member_port_global",
+            "topology_connection_members",
+        ),
+        // IP 地址全域唯一（ips.rs 建表约束 UNIQUE(ip_address)）：
+        // 单条创建与批量导入的并发去重均依赖该唯一索引兜底
+        ("uq_ips_ip_address", "ips"),
+    ]
 }

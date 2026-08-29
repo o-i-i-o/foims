@@ -119,9 +119,13 @@ pub async fn get_cable_links<P: DbProvider>(
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let endpoint_type = query.get("endpoint_type").map(String::as_str);
-    let endpoint_id = query
-        .get("endpoint_id")
-        .and_then(|s| Uuid::parse_str(s).ok());
+    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    let endpoint_id = match query.get("endpoint_id") {
+        Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
+            AppError::Validation(msg("server.common.invalid_param").with("param", "endpoint_id"))
+        })?),
+        _ => None,
+    };
     let link_type = query.get("link_type").map(String::as_str);
     let sort_by = query.get("sort_by").map(String::as_str).unwrap_or_default();
     let sort_order = query
@@ -165,7 +169,8 @@ pub async fn get_cable_links<P: DbProvider>(
         .push(" LIMIT ")
         .push_bind(pagination.page_size as i32)
         .push(" OFFSET ")
-        .push_bind(pagination.offset as i32);
+        // offset 直接绑定 i64：`as i32` 会在超大页码时截断为负值
+        .push_bind(pagination.offset);
     let links = data_builder
         .build_query_as::<CableLinkWithDetails>()
         .fetch_all(&state.pool()?.get_conn())
@@ -204,6 +209,57 @@ async fn ensure_interfaces_on_different_devices(
     Ok(())
 }
 
+/// 端点 (类型, id) 存在性预检：端点资源缺失时返回 422，
+/// 不再依赖 cable_links 防删触发器的 P0001 自定义异常（→ 500）。
+/// 表名来自类型白名单映射（非用户输入直拼），id 经参数绑定。
+async fn ensure_endpoint_exists(
+    tx: &mut sqlx::PgConnection,
+    endpoint_type: &str,
+    endpoint_id: Uuid,
+) -> Result<(), AppError> {
+    let table = match endpoint_type {
+        "net_outlet" => "net_outlets",
+        "device_interface" => "device_interfaces",
+        "patch_panel" => "patch_panels",
+        // validate_endpoint_type 已在入口拦截非法类型，此分支仅为白名单完备
+        _ => {
+            return Err(AppError::Validation(
+                msg("server.cable_link.invalid_endpoint_type")
+                    .with("types", VALID_ENDPOINT_TYPES.join(", ")),
+            ));
+        }
+    };
+    let mut builder = QueryBuilder::new("SELECT EXISTS(SELECT 1 FROM ");
+    builder.push(table);
+    builder.push(" WHERE id = ");
+    builder.push_bind(endpoint_id);
+    builder.push(")");
+    let exists: bool = builder.build_query_scalar().fetch_one(&mut *tx).await?;
+    if !exists {
+        return Err(AppError::Validation(
+            msg("server.cable_link.endpoint_not_found")
+                .with("type", endpoint_type)
+                .with("id", endpoint_id),
+        ));
+    }
+    Ok(())
+}
+
+/// 端点对重复（同 A/B 规范序端点已存在链路）→ 409 冲突。
+fn duplicate_link_error() -> AppError {
+    AppError::Conflict(msg("server.db.conflict"))
+}
+
+/// cable_links 唯一约束冲突（并发写入竞态触发 DB 兜底）→ 409。
+fn map_cable_link_unique_violation(e: sqlx::Error) -> AppError {
+    if let sqlx::Error::Database(ref db_err) = e
+        && db_err.is_unique_violation()
+    {
+        return duplicate_link_error();
+    }
+    AppError::from(e)
+}
+
 /// 创建物理链路（端点校验后按规范序写入）。
 pub async fn create_cable_link<P: DbProvider>(
     State(state): State<Arc<P>>,
@@ -219,6 +275,15 @@ pub async fn create_cable_link<P: DbProvider>(
         return Err(AppError::Validation(msg(
             "server.cable_link.self_connection_forbidden",
         )));
+    }
+
+    // 线缆长度非负校验（DB 列无 CHECK，handler 兜底）
+    if let Some(length) = req.length_m
+        && length < 0.0
+    {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "length_m"),
+        ));
     }
 
     let link_type = req.link_type.as_deref().unwrap_or("ethernet");
@@ -242,6 +307,27 @@ pub async fn create_cable_link<P: DbProvider>(
         ensure_interfaces_on_different_devices(&mut tx, a_id, b_id).await?;
     }
 
+    // 端点资源存在性预检：缺失时 422，而非触发器 P0001 的 500
+    ensure_endpoint_exists(&mut tx, &a_type, a_id).await?;
+    ensure_endpoint_exists(&mut tx, &b_type, b_id).await?;
+
+    // 重复端点对预检（uq_cable_links_endpoint_pair），并发兜底见 INSERT 的
+    // 唯一冲突映射：正常业务冲突返回 409 而非 500
+    let duplicate: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM cable_links \
+         WHERE a_endpoint_type = $1 AND a_endpoint_id = $2 \
+           AND b_endpoint_type = $3 AND b_endpoint_id = $4)",
+    )
+    .bind(&a_type)
+    .bind(a_id)
+    .bind(&b_type)
+    .bind(b_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if duplicate {
+        return Err(duplicate_link_error());
+    }
+
     sqlx::query(
         "INSERT INTO cable_links (id, a_endpoint_type, a_endpoint_id, b_endpoint_type, b_endpoint_id, link_type, cable_label, length_m, tested, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -258,7 +344,8 @@ pub async fn create_cable_link<P: DbProvider>(
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(map_cable_link_unique_violation)?;
 
     let link = fetch_link_by_id(&mut *tx, id)
         .await?
@@ -314,6 +401,15 @@ pub async fn update_cable_link<P: DbProvider>(
         validate_link_type(link_type)?;
     }
 
+    // 线缆长度非负校验（双层 Option：Some(Some(v)) 为设置新值）
+    if let Some(Some(length)) = req.length_m
+        && length < 0.0
+    {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "length_m"),
+        ));
+    }
+
     // 端点更新：四字段必须同时提供，参照 create 校验并按规范序排序
     let new_endpoints = match (
         req.a_endpoint_type.as_deref(),
@@ -349,12 +445,32 @@ pub async fn update_cable_link<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.cable_link.not_found")));
     }
 
-    // 端点变更时校验不属于同一设备（与 create 同一口径）
-    if let Some((a_type, a_id, b_type, b_id)) = &new_endpoints
-        && a_type == "device_interface"
-        && b_type == "device_interface"
-    {
-        ensure_interfaces_on_different_devices(&mut tx, *a_id, *b_id).await?;
+    // 端点变更后的端点对重复预检（排除自身，与 create 同一口径）
+    if let Some((a_type, a_id, b_type, b_id)) = &new_endpoints {
+        let duplicate: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM cable_links \
+             WHERE a_endpoint_type = $1 AND a_endpoint_id = $2 \
+               AND b_endpoint_type = $3 AND b_endpoint_id = $4 AND id != $5)",
+        )
+        .bind(a_type)
+        .bind(a_id)
+        .bind(b_type)
+        .bind(b_id)
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if duplicate {
+            return Err(duplicate_link_error());
+        }
+
+        // 端点变更时校验不属于同一设备（与 create 同一口径）
+        if a_type == "device_interface" && b_type == "device_interface" {
+            ensure_interfaces_on_different_devices(&mut tx, *a_id, *b_id).await?;
+        }
+
+        // 端点资源存在性预检（与 create 同一口径）
+        ensure_endpoint_exists(&mut tx, a_type, *a_id).await?;
+        ensure_endpoint_exists(&mut tx, b_type, *b_id).await?;
     }
 
     let has_field_update = req.link_type.is_some()
@@ -396,7 +512,11 @@ pub async fn update_cable_link<P: DbProvider>(
         sep.push("updated_at = ").push_bind_unseparated(Utc::now());
     }
     builder.push(" WHERE id = ").push_bind(id);
-    builder.build().execute(&mut *tx).await?;
+    builder
+        .build()
+        .execute(&mut *tx)
+        .await
+        .map_err(map_cable_link_unique_violation)?;
 
     let link = fetch_link_by_id(&mut *tx, id)
         .await?

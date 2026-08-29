@@ -73,11 +73,11 @@ async function loadTopLists() {
     return;
   }
 
+  // 仅请求页面实际渲染的榜单；devices 榜单无对应渲染区块，不请求（死数据）
   const results = await Promise.allSettled([
     fetchTopData("/api/resources/networks?page_size=5", "networks"),
     fetchTopData("/api/resources/ip?page_size=5", "ips"),
     fetchTopData("/api/resources/rooms?page_size=5", "rooms"),
-    fetchTopData("/api/resources/devices?page_size=5", "devices"),
     fetchTopData("/api/resources/cabinets?page_size=5", "cabinets"),
     fetchTopData("/api/logs/operation?page_size=5", "logs")
   ]);
@@ -86,9 +86,8 @@ async function loadTopLists() {
     networks: results[0].status === "fulfilled" ? results[0].value : [],
     ips: results[1].status === "fulfilled" ? results[1].value : [],
     rooms: results[2].status === "fulfilled" ? results[2].value : [],
-    devices: results[3].status === "fulfilled" ? results[3].value : [],
-    cabinets: results[4].status === "fulfilled" ? results[4].value : [],
-    logs: results[5].status === "fulfilled" ? results[5].value : []
+    cabinets: results[3].status === "fulfilled" ? results[3].value : [],
+    logs: results[4].status === "fulfilled" ? results[4].value : []
   };
 
   cache.set(CACHE_KEY_TOP_LISTS, topLists, CACHE_TTL);
@@ -166,7 +165,7 @@ function renderTopIPs(items) {
           <div class="item-meta">${escapeHtml([ip.network_region, ip.network_name].filter(Boolean).join(" / ") || "-")}</div>
         </div>
       </div>
-      <span class="item-status status-${ip.status || "inactive"}">${getStatusText(ip.status)}</span>
+      <span class="item-status status-${escapeHtml(ip.status || "inactive")}">${escapeHtml(getStatusText(ip.status))}</span>
     </li>
   `
     )

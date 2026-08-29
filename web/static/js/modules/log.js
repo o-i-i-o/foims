@@ -128,6 +128,9 @@ export function initLogTabs() {
     logsContainer.dataset.tabsInitialized = "true";
   }
 
+  // 本函数只负责纠正激活的子标签，不负责加载数据：
+  // 数据加载由 navigation.js 的 whenVisible 单一入口触发（读取最终激活的标签），
+  // 避免此处与 whenVisible 对同一标签双重加载
   // 检查URL中是否包含日志管理子标签信息
   const hash = window.location.hash;
   let targetTabId = null;
@@ -138,57 +141,33 @@ export function initLogTabs() {
     targetTabId = params.get("tab");
   }
 
-  // 如果URL中指定了子标签，激活该标签
+  // 如果URL中指定了子标签，仅激活该标签（数据由 whenVisible 按激活标签加载）
   if (targetTabId) {
-    const targetTabBtn = document.querySelector(`#logs [data-tab="${targetTabId}"]`);
-    if (targetTabBtn) {
-      // 检查是否已经是激活状态
-      if (!targetTabBtn.classList.contains("active")) {
-        // 更新按钮状态
-        tabBtns.forEach((b) => b.classList.remove("active"));
-        targetTabBtn.classList.add("active");
+    const targetTabBtn = document.querySelector(`#logs [data-tab="${CSS.escape(targetTabId)}"]`);
+    if (targetTabBtn && !targetTabBtn.classList.contains("active")) {
+      // 更新按钮状态
+      tabBtns.forEach((b) => b.classList.remove("active"));
+      targetTabBtn.classList.add("active");
 
-        // 更新内容显示
-        tabContents.forEach((content) => content.classList.remove("active"));
-        document.getElementById(`${targetTabId}-tab`).classList.add("active");
+      // 更新内容显示（getElementById 按字面匹配、不解析选择器，无需转义）
+      tabContents.forEach((content) => content.classList.remove("active"));
+      document.getElementById(`${targetTabId}-tab`)?.classList.add("active");
+    }
+    return;
+  }
 
-        // 加载对应类型的数据
-        if (targetTabId === "notifications") {
-          loadNotificationsData();
-        } else {
-          loadLogsData(targetTabId);
-        }
-      }
-    }
-  } else {
-    // 优先恢复上次记住的子标签（刷新后停留在原标签）
-    const savedTabId = getActiveSubtab("logs");
-    const savedTabBtn = savedTabId
-      ? document.querySelector(`#logs [data-tab="${CSS.escape(savedTabId)}"]`)
-      : null;
-    if (savedTabBtn && !savedTabBtn.classList.contains("active")) {
-      // 复用点击逻辑完成激活与数据加载
-      savedTabBtn.click();
-      return;
-    }
+  // 优先恢复上次记住的子标签（刷新后停留在原标签）：
+  // 仅切换激活态，不触发数据加载（由 whenVisible 统一加载）
+  const savedTabId = getActiveSubtab("logs");
+  const savedTabBtn = savedTabId
+    ? document.querySelector(`#logs [data-tab="${CSS.escape(savedTabId)}"]`)
+    : null;
+  if (savedTabBtn && !savedTabBtn.classList.contains("active")) {
+    tabBtns.forEach((b) => b.classList.remove("active"));
+    savedTabBtn.classList.add("active");
 
-    // 如果URL中没有指定子标签，为默认选中的标签加载数据
-    // 找到默认选中的标签按钮（通常是第一个或带有active类的）
-    let defaultTabBtn = document.querySelector("#logs .tab-btn.active");
-    if (!defaultTabBtn) {
-      // 如果没有默认选中的标签，选择第一个
-      defaultTabBtn = document.querySelector("#logs .tab-btn");
-    }
-
-    if (defaultTabBtn) {
-      const defaultTabId = defaultTabBtn.getAttribute("data-tab");
-      // 根据默认标签加载对应数据
-      if (defaultTabId === "notifications") {
-        loadNotificationsData();
-      } else {
-        loadLogsData(defaultTabId);
-      }
-    }
+    tabContents.forEach((content) => content.classList.remove("active"));
+    document.getElementById(`${savedTabId}-tab`)?.classList.add("active");
   }
 }
 
@@ -196,7 +175,10 @@ export function initLogTabs() {
 function initLogSearch() {
   const searchInput = document.getElementById("logs-search");
 
-  if (searchInput) {
+  // 搜索框位于常驻 DOM：每次导航到日志页都会执行本函数，
+  // 必须用 dataset 守卫防止 input 监听器无界累积（每敲一个字符触发 N 次请求）
+  if (searchInput && !searchInput.dataset.searchBound) {
+    searchInput.dataset.searchBound = "true";
     // 防抖搜索
     let timeout;
     searchInput.addEventListener("input", (e) => {
@@ -214,8 +196,12 @@ function initLogSearch() {
   }
 }
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止快速切换日志类型后表格与状态错乱
+let logsRequestSeq = 0;
+
 // 加载日志数据（支持搜索、排序和分页）
 export async function loadLogsData(logType = "operation", searchParams = {}) {
+  const requestSeq = ++logsRequestSeq;
   try {
     const {
       resource_type = "",
@@ -262,6 +248,9 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
     }
 
     const data = await apiGet(apiUrl);
+    if (requestSeq !== logsRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
     const tableId = `${logType}-logs-table`;
     const tbody = document.querySelector(`#${tableId} tbody`);
 
@@ -332,23 +321,22 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
         colSpan
       );
 
-      // 渲染分页控件
-      if (pagination && pagination.total_pages > 1) {
-        appendPaginationToTable(
-          `#${logType}-logs-table`,
-          {
-            total: pagination.total,
-            page: pagination.page,
-            page_size: pagination.page_size,
-            total_pages: pagination.total_pages
-          },
-          (p) => {
-            const searchInput = document.getElementById("logs-search");
-            const searchValue = searchInput ? searchInput.value : "";
-            loadLogsData(logType, { action: searchValue, page: p });
-          }
-        );
-      }
+      // 无条件渲染分页控件：单页/无分页数据时由渲染器自行清空，
+      // 与其他列表保持一致，避免筛选后残留上一次的旧分页
+      appendPaginationToTable(
+        `#${logType}-logs-table`,
+        {
+          total: pagination?.total ?? logs.length,
+          page: pagination?.page ?? page,
+          page_size: pagination?.page_size ?? page_size,
+          total_pages: pagination?.total_pages ?? 1
+        },
+        (p) => {
+          const searchInput = document.getElementById("logs-search");
+          const searchValue = searchInput ? searchInput.value : "";
+          loadLogsData(logType, { action: searchValue, page: p });
+        }
+      );
       updateSortIcons(`${logType}-logs-table`, tableState);
     } else {
       const colSpan = logType === "operation" ? 8 : 7;
@@ -367,12 +355,22 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
 }
 
 // 加载通知数据
+// 当前过滤态与页码记录在模块级：标记已读后按原状态重载，而不是无参重置
+let notificationsFilterStatus = "all";
+let notificationsCurrentPage = 1;
+
+// 通知列表请求序号:旧响应晚到时放弃渲染,防止筛选/翻页并发后列表错乱
+let notificationsRequestSeq = 0;
+
 export async function loadNotificationsData(
-  filterStatus = "all",
-  page = 1,
+  filterStatus = notificationsFilterStatus,
+  page = notificationsCurrentPage,
   sortBy = null,
   sortOrder = null
 ) {
+  const requestSeq = ++notificationsRequestSeq;
+  notificationsFilterStatus = filterStatus;
+  notificationsCurrentPage = page;
   try {
     if (sortBy) {
       notificationTableState.setSort(sortBy, sortOrder);
@@ -388,6 +386,9 @@ export async function loadNotificationsData(
     params.append("sort_order", notificationTableState.sortOrder);
 
     const result = await apiGet(`/api/notifications?${params.toString()}`);
+    if (requestSeq !== notificationsRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
     const tbody = document.querySelector("#notifications-table tbody");
 
     if (!tbody) {
@@ -396,8 +397,19 @@ export async function loadNotificationsData(
     }
     tbody.innerHTML = "";
 
-    const data = result.success ? result.data : { items: [], total: 0 };
+    // 接口失败时提示并中止，不再静默渲染空列表
+    if (!result.success) {
+      showToast(`${t("common.load_failed")}: ${result.message}`, "error");
+      return;
+    }
+    const data = result.data || { items: [], total: 0 };
     const notifications = data.items || data;
+
+    // 空列表且当前页大于 1：说明删除后页码越界，回退到上一页重载（分页控件随重载正常渲染）
+    if (notifications.length === 0 && page > 1) {
+      loadNotificationsData(filterStatus, page - 1, sortBy, sortOrder);
+      return;
+    }
 
     if (notifications.length > 0) {
       const startIndex = (page - 1) * 20;
@@ -528,7 +540,7 @@ function initLogSortEvents() {
     loadLogsData("login", { page, sort_by: sortBy, sort_order: sortOrder })
   );
   initSortEvents("notifications-table", notificationTableState, (page, sortBy, sortOrder) =>
-    loadNotificationsData("all", page, sortBy, sortOrder)
+    loadNotificationsData(notificationsFilterStatus, page, sortBy, sortOrder)
   );
 }
 

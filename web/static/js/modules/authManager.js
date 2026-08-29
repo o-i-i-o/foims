@@ -31,12 +31,192 @@ const parseDuration = (durationStr) => {
 };
 
 export const loginUser = (data, rememberMe) => {
+  // 外部登录（LDAP 等）在用户开启 2FA 时返回 requires_two_factor 标记：
+  // 切换到动态码输入步骤（复用本地登录 2FA 视图与文案）并暂存凭证，不建立会话。
+  // login.js 的本地登录路径已自行处理该标记，此处兜底覆盖未检查的 LDAP
+  // （及未来其他外部登录）路径
+  if (data && data.requires_two_factor) {
+    const usernameInput = document.getElementById("ldap-username");
+    const passwordInput = document.getElementById("ldap-password");
+    // 凭证快照连同验证码字段一并采集：后端在失败计数达阈值后强制校验
+    // 验证码，2FA 重试请求缺验证码字段会必然返回 captcha_required 且
+    // 动态码视图无验证码输入框可满足，外部账户将被锁死在 2FA 步骤
+    const captchaGroup = document.getElementById("ldap-captcha-group");
+    const captchaInput = document.getElementById("ldap-captcha-input");
+    const captchaImage = document.getElementById("ldap-captcha-image");
+    const captchaRequired = Boolean(captchaGroup && !captchaGroup.hidden);
+    const captcha = captchaRequired
+      ? {
+          captchaId: captchaImage?.dataset.captchaId || "",
+          captchaText: (captchaInput?.value || "").trim()
+        }
+      : null;
+    const switched = switchToExternalTwoFactorStep({
+      endpoint: "/api/auth/login/ldap",
+      username: usernameInput ? usernameInput.value.trim() : "",
+      password: passwordInput ? passwordInput.value : "",
+      rememberMe,
+      captcha
+    });
+    if (!switched) {
+      // 登录页 2FA 视图缺失（非预期场景）：不建立会话，避免绕过二次验证
+      console.error("收到 2FA 要求但登录页动态码视图不可用，已中止登录");
+    }
+    return;
+  }
+
   const { user } = data;
 
   SessionManager.setUser(user, rememberMe);
 
   window.location.href = "/main.html";
 };
+
+// ==========================================
+// 外部登录（LDAP/SSO）2FA 契约
+//
+// 后端约定：外部账户开启 TOTP 时，/api/auth/login/ldap 等外部登录端点返回
+// 与本地登录一致的 { requires_two_factor: true, ... } 响应，并接受携带
+// code 字段（TOTP）的重试请求（重试同一端点）。login.js 的 LDAP 路径验证
+// 通过后直接调用 loginUser，故在 loginUser 内统一接管；动态码表单提交经
+// 捕获阶段监听拦截后携带 code 重试原端点。
+// SSO 为后端整页跳转（login.js 仅重定向到 /api/auth/sso/login），前端无
+// 完成端点可接管，无需处理。
+// ==========================================
+
+/** 待重试的外部登录 2FA 上下文（null 表示无待办） */
+let pendingExternalTwoFactor = null;
+
+/** 展示登录页错误条（复用本地登录的错误元素与样式） */
+const showLoginError = (message) => {
+  const errorEl = document.getElementById("login-error");
+  if (!errorEl) {
+    return;
+  }
+  errorEl.textContent = message;
+  errorEl.classList.add("show");
+};
+
+/** 隐藏登录页错误条 */
+const hideLoginError = () => {
+  document.getElementById("login-error")?.classList.remove("show");
+};
+
+/**
+ * 切换到动态码输入步骤（复用本地登录 2FA 视图与文案），暂存重试上下文
+ * @param {Object} context 重试上下文（端点 + 凭证快照 + rememberMe）
+ * @returns {boolean} 视图存在且切换成功
+ */
+const switchToExternalTwoFactorStep = (context) => {
+  const loginView = document.getElementById("login-view");
+  const twoFactorView = document.getElementById("two-factor-view");
+  const codeInput = document.getElementById("two-factor-code");
+  if (!loginView || !twoFactorView || !codeInput) {
+    return false;
+  }
+
+  pendingExternalTwoFactor = context;
+  hideLoginError();
+
+  loginView.classList.remove("active");
+  twoFactorView.classList.add("active");
+  codeInput.value = "";
+  codeInput.focus();
+  return true;
+};
+
+/**
+ * 处理外部登录 2FA 表单提交：携带 code 重试原登录端点
+ */
+const handleExternalTwoFactorSubmit = async () => {
+  const pending = pendingExternalTwoFactor;
+  if (!pending) {
+    return;
+  }
+
+  const codeInput = document.getElementById("two-factor-code");
+  const code = codeInput ? codeInput.value.trim() : "";
+  if (!code) {
+    showLoginError(t("login.code_required"));
+    return;
+  }
+
+  // 复用本地 2FA 视图的提交按钮状态管理（.btn-text 结构与 login.js 一致）
+  const submitButton = document.getElementById("two-factor-submit-btn");
+  const btnText = submitButton?.querySelector(".btn-text");
+  const originalText = btnText ? btnText.textContent : "";
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+  if (btnText) {
+    btnText.textContent = t("common.processing");
+  }
+  hideLoginError();
+
+  try {
+    // 按契约携带 code 字段（TOTP）重试同一外部登录端点；
+    // 采集到验证码快照时一并携带（后端达失败阈值后强制校验）
+    const body = {
+      username: pending.username,
+      password: pending.password,
+      remember_me: pending.rememberMe,
+      code
+    };
+    if (pending.captcha) {
+      body.captcha_id = pending.captcha.captchaId;
+      body.captcha_text = pending.captcha.captchaText;
+    }
+    const result = await apiPost(pending.endpoint, body, { skipAuthCheck: true });
+
+    if (result.success) {
+      pendingExternalTwoFactor = null;
+      loginUser(result.data, pending.rememberMe);
+    } else {
+      // 动态码错误保留待办状态，用户可直接重试（不清凭证快照）
+      showLoginError(result.message || t("login.two_factor_failed"));
+      if (codeInput) {
+        codeInput.value = "";
+        codeInput.focus();
+      }
+    }
+  } catch (error) {
+    console.error("外部登录 2FA 验证请求失败:", error);
+    showLoginError(t("login.two_factor_failed"));
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+    if (btnText) {
+      btnText.textContent = originalText;
+    }
+  }
+};
+
+// 动态码表单提交在捕获阶段拦截：存在外部 2FA 待办时由本模块处理，
+// stopImmediatePropagation 阻止 login.js 本地 2FA 处理器在 tempAuthData
+// 为空时把视图重置回登录页；无待办时完全不干预本地登录流程
+document.addEventListener(
+  "submit",
+  (e) => {
+    if (pendingExternalTwoFactor && e.target?.id === "two-factor-form") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handleExternalTwoFactorSubmit();
+    }
+  },
+  true
+);
+
+// 返回账号登录时清空外部 2FA 待办，避免残留状态影响后续登录
+document.addEventListener(
+  "click",
+  (e) => {
+    if (pendingExternalTwoFactor && e.target?.closest?.("#back-to-login-btn")) {
+      pendingExternalTwoFactor = null;
+    }
+  },
+  true
+);
 
 export const logoutUser = async () => {
   try {
@@ -124,8 +304,17 @@ export const initChangePassword = () => {
     }
 
     const form = elementCache.get("change-password-form");
+    if (!form) {
+      return;
+    }
+
+    // 防重入：请求进行中忽略重复提交（快速双击会发起两次改密请求）
+    let submitting = false;
     form.onsubmit = async (e) => {
       e.preventDefault();
+      if (submitting) {
+        return;
+      }
       const oldPassword = elementCache.getValue("change-password-old");
       const newPassword = elementCache.getValue("change-password-new");
       const confirmPassword = elementCache.getValue("change-password-confirm");
@@ -137,6 +326,12 @@ export const initChangePassword = () => {
       if (newPassword !== confirmPassword) {
         showToast(t("auth.password_mismatch"), "warning");
         return;
+      }
+
+      const submitButton = form.querySelector('[type="submit"]');
+      submitting = true;
+      if (submitButton) {
+        submitButton.disabled = true;
       }
 
       try {
@@ -156,6 +351,11 @@ export const initChangePassword = () => {
       } catch (error) {
         console.error("修改密码请求失败:", error);
         showToast(t("auth.change_password_failed"), "error");
+      } finally {
+        submitting = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+        }
       }
     };
 

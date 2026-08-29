@@ -90,25 +90,6 @@
   height: 420px;
 }
 
-.left-panel .footer-links {
-  display: flex;
-  gap: 28px;
-  font-size: 13px;
-  color: rgb(80 70 90 / 70%);
-  z-index: 10;
-  position: relative;
-}
-
-.left-panel .footer-links a {
-  color: inherit;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-.left-panel .footer-links a:hover {
-  color: #333;
-}
-
 /* 装饰光斑 */
 .left-panel::after {
   content: "";
@@ -194,7 +175,7 @@
 
 .form-header p {
   font-size: 14px;
-  color: var(--color-text-muted);
+  color: var(--color-text-muted, #6b7280);
 }
 
 /* ============ 登录模式 Tabs（用户名密码 / 邮箱验证码） ============ */
@@ -260,7 +241,7 @@
 
 .view-desc {
   font-size: 14px;
-  color: var(--color-text-muted);
+  color: var(--color-text-muted, #6b7280);
 }
 
 /* 登录区段切换（用户名密码区 / 邮箱验证码区） */
@@ -283,10 +264,6 @@
   font-weight: 500;
   color: #333;
   margin-bottom: 8px;
-}
-
-.form-group label.error-label {
-  color: #dc2626;
 }
 
 .form-group .input-wrapper {
@@ -437,20 +414,6 @@
 .form-group.forgot-password {
   margin-bottom: 20px;
   text-align: right;
-}
-
-.form-group.forgot-password .link-text,
-.form-group.forgot-password a {
-  font-size: 13px;
-  color: #5b21b6;
-  text-decoration: none;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.form-group.forgot-password .link-text:hover {
-  opacity: 0.8;
 }
 
 /* 通用链接按钮：div/a 模拟链接按钮化时的按钮 reset（置于 .forgot-link 之前，具体类可覆盖下划线等细节） */
@@ -835,7 +798,7 @@
 .modal {
   display: none;
   position: fixed;
-  z-index: 1050;
+  z-index: var(--z-modal);
   left: 0;
   top: 0;
   width: 100%;

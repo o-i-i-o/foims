@@ -11,7 +11,6 @@ import {
 } from "../utils/ui.js";
 
 import { openModal, closeModal } from "../utils/modalLoader.js";
-import { SessionManager } from "../utils/sessionManager.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
@@ -35,8 +34,12 @@ let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
 const userTableState = createSortState("created_at", "desc");
 
+// 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
+let usersRequestSeq = 0;
+
 // 加载用户数据
 export async function loadUsersData(page = currentUserPage, sortBy = null, sortOrder = null) {
+  const requestSeq = ++usersRequestSeq;
   currentUserPage = page;
   if (sortBy) {
     userTableState.setSort(sortBy, sortOrder);
@@ -45,11 +48,20 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
     const response = await apiGet(
       `/api/users?page=${page}&page_size=${USER_PAGE_SIZE}&sort_by=${userTableState.sortBy}&sort_order=${userTableState.sortOrder}`
     );
+    if (requestSeq !== usersRequestSeq) {
+      return; // 已有更新的请求,丢弃过期响应
+    }
     if (response.success) {
       const data = response.data;
       const users = data.items || data;
       const pagination = data.total !== undefined ? data : null;
       const tableBody = document.querySelector("#users-table tbody");
+
+      // 空列表且当前页大于 1：删除后页码越界，回退上一页重载（分页控件随重载正常渲染）
+      if (users.length === 0 && page > 1) {
+        loadUsersData(page - 1);
+        return;
+      }
 
       if (users.length === 0) {
         tableBody.innerHTML = `
@@ -103,9 +115,16 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
   }
 }
 
+// 用户资料加载序号：每次打开模态框自增，晚到的旧响应据此丢弃，
+// 防止 A 用户的资料被写入 B 用户的编辑表单（隐藏 id 是 B，保存即串号）
+let userLoadToken = 0;
+
 // 打开用户模态框
 export async function openUserModal(userId) {
   await openModal("user-modal");
+
+  // 新弹窗打开即失效任何在途的用户资料请求
+  userLoadToken++;
 
   const modal = elementCache.get("user-modal");
   const title = elementCache.get("user-modal-title");
@@ -161,8 +180,13 @@ window.openUserModal = openUserModal;
 
 // 加载用户数据
 async function loadUserData(userId) {
+  const token = userLoadToken;
   try {
     const response = await apiGet(`/api/users/${userId}`);
+    if (token !== userLoadToken) {
+      // 响应期间已打开新的模态框：旧响应不得写入当前表单
+      return;
+    }
     if (response.success) {
       const user = response.data;
       elementCache.setValue("user-username", user.username);
@@ -172,7 +196,9 @@ async function loadUserData(userId) {
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
-    showToast(t("common.load_failed"), "error");
+    if (token === userLoadToken) {
+      showToast(t("common.load_failed"), "error");
+    }
   }
 }
 
@@ -314,15 +340,8 @@ async function openTwoFactorModal(userId, username, isEnabled) {
 // 初始化2FA配置
 async function initTwoFactorConfig(userId) {
   try {
-    const currentUser = SessionManager.getUser();
-    if (currentUser && currentUser.id !== userId) {
-      // 不是当前用户，需要检查是否是管理员
-      if (currentUser.role !== "admin") {
-        showToast(t("two_factor.admin_only"), "error");
-        return;
-      }
-    }
-
+    // 权限由后端强制校验：无权调用时后端返回 403，错误信息经下方 else 分支透传展示。
+    // 前端不再代为拦截（仅前端判断可被绕过，也不应伪造拦截成功的路径）
     const response = await apiPost("/api/two-factor/init", { user_id: userId });
     if (response.success) {
       const { secret, qr_code_base64, otpauth_url } = response.data;
@@ -344,11 +363,13 @@ async function initTwoFactorConfig(userId) {
         uriInput.value = otpauth_url;
       }
     } else {
+      // 后端拒绝（含 403）时展示后端返回的真实错误信息
       showToast(`${t("two_factor.fetch_config_failed")}：${response.message}`, "error");
     }
   } catch (error) {
     console.error("获取2FA配置失败:", error);
-    showToast(t("two_factor.fetch_config_network"), "error");
+    // 网络异常也尽量透出具体信息，避免只显示笼统文案
+    showToast(`${t("two_factor.fetch_config_network")}：${error?.message ?? error}`, "error");
   }
 }
 
@@ -441,6 +462,11 @@ async function handleTwoFactorDisable() {
 export async function submitUserForm() {
   const userId = elementCache.getValue("user-id");
   const form = elementCache.get("user-form");
+  // 模态模板加载失败时表单不存在,直接中止避免空引用
+  if (!form) {
+    console.error("用户表单元素未找到");
+    return;
+  }
   const formData = new FormData(form);
   const userData = {
     username: formData.get("username"),
@@ -458,6 +484,14 @@ export async function submitUserForm() {
       return;
     }
     userData.password = password;
+  }
+
+  // 防重复提交：请求期间禁用保存按钮，结束后恢复（双击会重复提交产生重复用户）
+  const saveBtn = document.querySelector("#user-form button[type='submit']");
+  const originalText = saveBtn?.textContent;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = t("common.saving");
   }
 
   try {
@@ -482,5 +516,10 @@ export async function submitUserForm() {
   } catch (error) {
     console.error("保存用户失败:", error);
     showToast(t("user.save_failed_network"), "error");
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
   }
 }

@@ -14,7 +14,10 @@
     "system": "系统",
     "organization": "组织管理",
     "collapse_sidebar": "收起导航栏",
-    "expand_sidebar": "展开导航栏"
+    "expand_sidebar": "展开导航栏",
+    "load_system_info": "加载系统信息",
+    "load_system_config": "加载系统配置",
+    "load_page": "加载页面 {{page}}"
   },
   "common": {
     "name": "名称",
@@ -70,7 +73,19 @@
     "page_size": "每页条数",
     "goto": "跳至",
     "type": "类型",
-    "search": "搜索"
+    "search": "搜索",
+    "current_user": "当前用户",
+    "option": "选项",
+    "scope": "范围",
+    "cabinet": "机柜",
+    "device": "设备",
+    "network": "网段",
+    "network_region": "网络区域",
+    "room": "房间",
+    "workstation": "工位",
+    "position": "机位",
+    "organization": "组织",
+    "template": "模板"
   },
   "status": {
     "active": "活跃",
@@ -493,7 +508,8 @@
     "region_delete_success": "网络区域删除成功",
     "region_save_success": "网络区域保存成功",
     "save_success": "网络保存成功",
-    "select_segment": "选择网段"
+    "select_segment": "选择网段",
+    "capacity_note": "容量按整个网段扣除网络地址与广播地址统计；/31、/32 无传统意义可用地址；图示仅展示部分地址（大网段仅展示首个 /24）"
   },
   "organization": {
     "add": "新增组织",
@@ -576,7 +592,8 @@
     "icon_workstation": "工位",
     "icon_cabinet": "机柜",
     "icon_cabinet_position": "机位",
-    "icon_org": "通用节点"
+    "icon_org": "通用节点",
+    "type_duplicate": "类型名「{{name}}」重复：同一模板内类型名必须全局唯一（含根类型）"
   },
   "workstation": {
     "name": "工位名称",
@@ -668,7 +685,11 @@
     "app_fail2ban_ip": "IP 地址",
     "open_source_components": "开源组件",
     "open_source_intro": "本项目以 GPL-3.0-or-later 授权发布，使用了以下开源组件（完整清单见 NOTICE 文件）。",
-    "notification": "通知配置"
+    "notification": "通知配置",
+    "uptime_days": "{{count}}天",
+    "uptime_hours": "{{count}}小时",
+    "uptime_minutes": "{{count}}分钟",
+    "uptime_seconds": "{{count}}秒"
   },
   "security": {
     "status_unknown": "未知",
@@ -804,7 +825,7 @@
     "log_type": "日志类型",
     "keep_days": "保留天数",
     "all_logs": "所有日志",
-    "clear_hint": "删除指定天数之前的日志记录，输入0或留空删除全部日志。此操作不可撤销。",
+    "clear_hint": "删除指定天数之前的日志记录，输入 0 删除全部日志。此操作不可撤销。",
     "clear": "清理",
     "clear_all_confirm": "确定要删除全部日志吗？此操作不可撤销。",
     "clear_days_confirm": "确定要清理 {{days}} 天前的日志吗？此操作不可撤销。",
@@ -902,7 +923,8 @@
     "forwarding_host_placeholder": "如 192.168.1.10",
     "forwarding_port": "端口",
     "forwarding_test": "发送测试",
-    "forwarding_hint": "操作日志与登录日志按 syslog（facility local0，RFC 3164）实时转发至采集主机；外发失败不影响本地存储"
+    "forwarding_hint": "操作日志与登录日志按 syslog（facility local0，RFC 3164）实时转发至采集主机；外发失败不影响本地存储",
+    "days_required": "请输入有效的保留天数（输入 0 表示删除全部）"
   },
   "notifications": {
     "all": "全部通知",
@@ -1232,13 +1254,15 @@
     "view_logs": "查看日志",
     "execution_time": "执行时间",
     "duration": "耗时(ms)",
-    "details": "详情"
+    "details": "详情",
+    "cron_invalid": "Cron 表达式格式不正确：应为 5 段（分 时 日 月 周）或 6 段（含秒），各段仅支持数字、范围、列表、步进与星号"
   },
   "viz": {
     "no_room_layout_data": "数据库中没有房间布局数据",
     "layout_load_failed": "加载布局失败",
     "layout_save_success": "布局保存成功",
     "layout_save_failed": "布局保存失败",
+    "rendering_in_progress": "画布渲染中，请稍后再试",
     "layout_delete_success": "布局删除成功",
     "layout_delete_failed": "布局删除失败",
     "select_room_first": "请先选择房间",
@@ -1320,7 +1344,8 @@
     "zoom_in": "放大",
     "zoom_out": "缩小",
     "zoom_level": "画布显示比例",
-    "zoom_fit": "适应画布"
+    "zoom_fit": "适应画布",
+    "data_page_limit_exceeded": "数据量较大，仅加载前 5000 条，显示可能不完整"
   },
   "import_export": {
     "backup_failed": "备份配置失败",
@@ -1397,7 +1422,13 @@
     "select_init_method": "请选择初始化方式。",
     "will_auto_create_db": "系统将尝试自动创建数据库。",
     "parse_empty": "请求失败（HTTP {{status}}），且响应体为空",
-    "parse_invalid_json": "响应解析失败（HTTP {{status}}）：服务端未返回有效的 JSON"
+    "parse_invalid_json": "响应解析失败（HTTP {{status}}）：服务端未返回有效的 JSON",
+    "checking_db_status": "正在检查数据库状态...",
+    "create_db_desc": "系统将创建全新的数据库结构，适用于首次部署。",
+    "create_db_li_tables": "自动创建所有必需的数据表",
+    "create_db_li_schema": "建立正确的表结构和关系",
+    "create_db_li_backup": "如数据库已有数据，将自动备份后重建",
+    "import_db_desc": "从 SQL 备份文件恢复数据库，适用于数据迁移或恢复。"
   },
   "server": {
     "auth": {
@@ -1464,7 +1495,9 @@
       "password_too_short": "密码长度不足（最少 {{min_length}} 个字符）",
       "password_complexity": "密码复杂度不足（缺少：{{missing}}）",
       "password_reused": "新密码与近期使用过的密码重复",
-      "secadmin_required": "需要安全管理员权限"
+      "secadmin_required": "需要安全管理员权限",
+      "two_factor_required": "该账户已启用两步验证，请输入动态验证码",
+      "admin_or_auditor_required": "需要管理员或审计员权限"
     },
     "backup": {
       "dir_create_failed": "创建备份目录失败",
@@ -1475,8 +1508,7 @@
       "pg_dump_exec_failed": "执行 pg_dump 失败",
       "pg_dump_failed": "pg_dump 执行失败",
       "pg_dump_task_failed": "pg_dump 任务失败",
-      "pgpass_permission_failed": "设置 .pgpass 权限失败",
-      "pgpass_write_failed": "写入 .pgpass 文件失败"
+      "pgpass_permission_failed": "设置 .pgpass 权限失败"
     },
     "cabinet": {
       "created": "机柜创建成功",
@@ -1514,12 +1546,15 @@
       "self_connection_forbidden": "不允许自连接链路",
       "updated": "物理链路更新成功",
       "validation": {
-        "cable_label_length": "线缆标签长度不能超过50个字符"
-      }
+        "cable_label_length": "线缆标签长度不能超过50个字符",
+        "length_m_range": "线缆长度必须在 0 至 10000 米之间"
+      },
+      "endpoint_not_found": "端点资源不存在（类型 {type}，ID {id}）"
     },
     "certificate": {
       "list_retrieved": "证书列表获取成功",
       "generate_succeeded": "证书生成成功",
+      "generate_succeeded_san_dropped": "证书已生成，但部分 SAN 条目无法解析被跳过，请核对证书中的主机名",
       "generate_failed": "证书生成失败",
       "import_succeeded": "证书导入成功",
       "delete_succeeded": "证书删除成功",
@@ -1539,7 +1574,12 @@
       "ca_not_found": "CA 未配置，请先生成或导入 CA",
       "ca_key_required": "缺少 CA 证书或私钥文件",
       "ca_invalid": "无效的 CA（需 BasicConstraints CA:TRUE 且私钥与证书匹配）",
-      "ca_key_missing": "所选 CA 缺少私钥，不能签发证书"
+      "ca_key_missing": "所选 CA 缺少私钥，不能签发证书",
+      "common_name_length": "通用名称长度必须在 1-64 字符之间",
+      "organization_length": "组织长度不能超过 64 字符",
+      "san_invalid": "没有可用的 SAN，且通用名称无法作为 SAN，无法生成证书",
+      "ca_already_exists": "站点根 CA 已存在，重复生成会废止此前签发的全部证书，如确需更换请先删除",
+      "ca_expired": "签发 CA 已过期或剩余有效期不足，无法签发新证书"
     },
     "common": {
       "cipher_init_failed": "创建加密器失败",
@@ -1560,8 +1600,10 @@
       "validation": {
         "description_length": "描述长度不能超过255个字符",
         "email_format": "邮箱格式不正确",
-        "uuid_invalid": "无效的 UUID 参数"
-      }
+        "uuid_invalid": "无效的 UUID 参数",
+        "ip_format": "IP 地址格式无效"
+      },
+      "pgpass_write_failed": "写入 .pgpass 临时文件失败"
     },
     "db": {
       "check_violation": "数据校验失败：{{message}}",
@@ -1602,13 +1644,15 @@
       "lldp": {
         "fetched": "获取LLDP邻居成功",
         "sync_changed": "同步 {{synced}} 条 LLDP 记录，清理 {{removed}} 条过期记录",
-        "sync_unchanged": "LLDP 数据无变化，清理 {{removed}} 条过期记录"
+        "sync_unchanged": "LLDP 数据无变化，清理 {{removed}} 条过期记录",
+        "sync_partial": "LLDP 邻居同步部分成功"
       },
       "mac": {
         "fetched": "获取MAC表成功",
         "sync_partial": "同步 {{synced}} 条 MAC 记录，{{failed}} 条失败",
         "synced": "同步 {{count}} 条 MAC 记录"
       },
+      "name_exists": "同房间下已存在同名设备",
       "nic": {
         "card_type_invalid": "网卡类型必须是pcie、onboard、usb、virtual、wwan、wifi或other",
         "fetched": "网卡配置获取成功",
@@ -1660,7 +1704,10 @@
         "snmp_version_invalid": "SNMP版本必须是 v1、v2c 或 v3",
         "snmp_auth_protocol_length": "SNMP认证协议长度不能超过10个字符",
         "snmp_priv_protocol_length": "SNMP加密协议长度不能超过10个字符",
-        "snmp_port_range": "SNMP端口必须在1到65535之间"
+        "snmp_port_range": "SNMP端口必须在1到65535之间",
+        "vlan_id_range": "VLAN ID 必须为 1-4094",
+        "mac_format": "MAC 地址格式无效",
+        "interface_length": "接口名长度不能超过 50 字符"
       },
       "workstation_position_exclusive": "工位和机位不能同时指定"
     },
@@ -1691,7 +1738,8 @@
         "bantime_range": "封禁时长必须在60到604800秒之间",
         "findtime_range": "检测时间必须在60到86400秒之间",
         "max_retry_range": "最大重试次数必须在1到100之间"
-      }
+      },
+      "disabled_ban_rejected": "fail2ban 未启用，手动封禁不会生效，请先启用"
     },
     "data-management": {
       "chunk_read_failed": "读取文件块失败",
@@ -1750,7 +1798,6 @@
         "pg_dump_exec_failed": "执行pg_dump失败",
         "pg_dump_task_failed": "pg_dump任务失败",
         "pgpass_chmod_failed": "设置 .pgpass 权限失败",
-        "pgpass_write_failed": "写入 .pgpass 文件失败",
         "pgsql_connect_failed": "连接PostgreSQL失败",
         "psql_exec_failed": "执行psql失败",
         "psql_task_failed": "psql任务失败",
@@ -1787,7 +1834,8 @@
         "invalid": "验证码无效",
         "lock_failed": "无法访问验证码",
         "missing": "缺少验证码"
-      }
+      },
+      "pgsql_connect_failed": "连接PostgreSQL失败"
     },
     "ip": {
       "already_assigned": "IP地址已被分配，请重试",
@@ -1818,7 +1866,9 @@
       "no_physical_interface": "设备没有可用的物理接口，请先创建接口或指定 device_interface_id",
       "validation": {
         "ip_address_invalid": "请输入有效的IP地址",
-        "status_length": "状态长度不能超过20个字符"
+        "status_length": "状态长度不能超过20个字符",
+        "ip_version_invalid": "IP 版本仅支持 4 或 6",
+        "status_invalid": "IP 状态非法"
       }
     },
     "login_log": {
@@ -1906,6 +1956,7 @@
       "updated": "网络更新成功",
       "validation": {
         "dns_count": "DNS服务器数量不能超过5个",
+        "dns_invalid": "DNS服务器地址格式无效，IPv4/IPv6 列表内每条都必须是对应版本的合法地址",
         "name_length": "网络名称长度必须在1到50个字符之间",
         "region_name_length": "网络区域名称长度必须在1到20个字符之间"
       }
@@ -1994,8 +2045,10 @@
         "type_path_out_of_range": "类型路径「{{path}}」在模板中不存在（索引 {{index}} 超出范围）",
         "type_path_required": "类型路径不能为空",
         "type_path_root_anchor": "类型路径「{{path}}」格式错误（首段必须为 0）",
-        "type_path_length": "类型路径长度不能超过50个字符"
-      }
+        "type_path_length": "类型路径长度不能超过50个字符",
+        "name_separator": "组织名称不允许包含 \"/\""
+      },
+      "has_employees": "该节点及其下级节点仍有 {{count}} 名员工，请先转移后再删除"
     },
     "patch_panel": {
       "in_use": "配线架已被线路引用，无法删除",
@@ -2019,7 +2072,8 @@
       "validation": {
         "end_u_range": "结束U位必须在1到48之间",
         "name_length": "机位名称长度必须在1到50个字符之间",
-        "start_u_range": "起始U位必须在1到48之间"
+        "start_u_range": "起始U位必须在1到48之间",
+        "u_order_invalid": "起始 U 位置不能大于结束 U 位置"
       },
       "cabinet_required": "机位必须隶属机柜，请指定所属机柜"
     },
@@ -2105,7 +2159,8 @@
       },
       "workdir_failed": "获取工作目录失败",
       "workdir_invalid": "无法将工作目录路径转换为字符串",
-      "password_policy_updated": "密码策略已更新"
+      "password_policy_updated": "密码策略已更新",
+      "restart_script_spawn_failed": "重启脚本启动失败"
     },
     "task": {
       "backup_completed": "备份成功",
@@ -2171,8 +2226,11 @@
         "password_length": "密码长度必须至少8个字符",
         "role_invalid": "角色必须是admin或user",
         "username_length": "用户名长度必须在3到50个字符之间",
-        "email_length": "邮箱长度不能超过100个字符"
-      }
+        "email_length": "邮箱长度不能超过100个字符",
+        "password_max_length": "密码长度不能超过 72 字节"
+      },
+      "cannot_delete_self": "不能删除当前登录的账户",
+      "last_admin_protected": "不能删除最后一个管理员账户"
     },
     "visualization": {
       "auto_discover_completed": "自动发现完成",
@@ -2206,7 +2264,9 @@
       "connection_ports_invalid": "所选端口不存在或不属于对应设备",
       "member_port_conflict": "成员端口已参与其他链路聚合",
       "logical_connection_exists": "该设备对之间已存在逻辑连接",
-      "connection_duplicate": "已存在相同的连线"
+      "connection_duplicate": "已存在相同的连线",
+      "position_invalid": "布局坐标无效",
+      "workstation_ids_invalid": "包含不属于当前房间的工位"
     },
     "workstation": {
       "created": "工位创建成功",
@@ -2268,7 +2328,8 @@
         "client_id_length": "Client ID不能为空且长度不超过100",
         "secret_length": "客户端密钥长度不合法",
         "redirect_uri_length": "回调地址长度不合法"
-      }
+      },
+      "redirect_uri_not_configured": "SSO 回调地址未配置，请在 SSO 设置中填写后重试"
     },
     "employee": {
       "list_retrieved": "员工列表获取成功",
@@ -2284,6 +2345,36 @@
         "phone_length": "电话号码长度不能超过20个字符",
         "phone_invalid": "电话号码仅允许数字与 + - 空格"
       }
+    },
+    "import_export": {
+      "chunk_read_failed": "读取分块数据失败",
+      "csv_build_failed": "生成 CSV 失败",
+      "csv_parse_failed": "CSV 解析失败",
+      "duplicate_key": "业务键重复",
+      "duplicate_table": "同一数据表出现多次",
+      "field_invalid": "字段值非法",
+      "file_read_failed": "读取上传文件失败",
+      "file_too_large": "文件大小超出限制",
+      "header_mismatch": "表头与模板不一致",
+      "invalid_file_type": "文件类型不受支持",
+      "invalid_ref_format": "引用列格式非法",
+      "invalid_zip_entry": "压缩包内含非法条目",
+      "ip_not_in_room_subnet": "IP 不在设备所在房间的网段内",
+      "name_contains_separator": "名称包含禁止的分隔字符",
+      "name_resolve_failed": "名称解析失败",
+      "no_csv_files": "压缩包内未找到 CSV 文件",
+      "no_data_rows": "没有可导入的数据行",
+      "no_file_selected": "未选择文件",
+      "ref_not_found": "引用的记录不存在",
+      "required_field_missing": "必填字段缺失",
+      "spec_missing": "导入规格缺失",
+      "unknown_endpoint_type": "未知端点类型",
+      "unknown_export_type": "未知导出类型",
+      "unrecognized_header": "无法识别的表头",
+      "zip_create_failed": "创建压缩包失败",
+      "zip_entry_read_failed": "读取压缩包条目失败",
+      "zip_finish_failed": "压缩包收尾失败",
+      "zip_write_failed": "写入压缩包失败"
     }
   },
   "ldap": {
@@ -2324,7 +2415,7 @@
     "secret_configured": "已配置（留空保持不变）",
     "redirect_uri": "回调地址",
     "redirect_uri_placeholder": "https://ipma.example.com/api/auth/sso/callback",
-    "redirect_uri_desc": "可留空按访问地址自动推导；需在认证平台注册相同回调地址",
+    "redirect_uri_desc": "必填；需在认证平台注册相同的回调地址",
     "default_role": "自动建户默认角色",
     "test_connection": "测试连接",
     "test_success": "SSO配置验证成功",
@@ -2355,5 +2446,8 @@
     "load_failed": "加载员工列表失败",
     "name_required": "请填写员工姓名",
     "delete_confirm": "确定要删除员工 {{name}} 吗？"
+  },
+  "resource_tabs": {
+    "load_tab_data": "加载标签 {{tab}} 数据"
   }
 }

@@ -17,6 +17,32 @@ pub(crate) fn data_error_message(e: ipma_data_management::DataError) -> AppMessa
     }
 }
 
+/// 清理类任务 days 的合法区间（1..=3650，约 10 年）。
+/// 与 scheduled_task.rs 的创建/更新校验口径一致：
+/// i64 → i32 直接 `as` 截断会把超大值变成负数（SQL 阈值落到未来导致
+/// 全表误删）或 0（清空全部审计日志），必须先做范围校验。
+const CLEANUP_DAYS_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
+
+/// 解析清理类任务（log_cleanup / token_usage_cleanup）的 days 配置，
+/// 越界或缺失时的处理：缺失回落默认 30 天，越界返回校验错误。
+fn parse_cleanup_days(config: &serde_json::Value) -> Result<i32, SchedulerError> {
+    let days = config
+        .get("days")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(30);
+    if !CLEANUP_DAYS_RANGE.contains(&days) {
+        return Err(SchedulerError::Validation(
+            msg("server.common.invalid_param").with("param", "days (1-3650)"),
+        ));
+    }
+    // 已通过 1..=3650 校验，转换不会截断
+    i32::try_from(days).map_err(|e| {
+        SchedulerError::Validation(
+            msg("server.common.invalid_param").with("param", format!("days: {e}")),
+        )
+    })
+}
+
 /// 数据库备份任务执行器
 pub struct BackupTaskExecutor;
 
@@ -90,11 +116,7 @@ impl TaskExecutor for TokenUsageCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let days = ctx
-            .config
-            .get("days")
-            .and_then(serde_json::Value::as_i64)
-            .unwrap_or(30) as i32;
+        let days = parse_cleanup_days(&ctx.config)?;
 
         let count = ipma_auth::utils::cleanup_old_token_usage(&ctx.pool, days)
             .await
@@ -122,11 +144,7 @@ impl TaskExecutor for LogCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let days = ctx
-            .config
-            .get("days")
-            .and_then(serde_json::Value::as_i64)
-            .unwrap_or(30) as i32;
+        let days = parse_cleanup_days(&ctx.config)?;
 
         let deleted = ipma_data_management::clear_logs_core(&ctx.pool, days, "all")
             .await

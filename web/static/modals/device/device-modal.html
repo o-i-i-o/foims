@@ -1,5 +1,5 @@
 <template id="device-modal-template">
-<div id="device-modal" class="modal" role="dialog" aria-modal="true">
+<div id="device-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
   <div class="modal-content modal-lg">
     <header class="modal-header">
       <h3 class="modal-title" id="device-modal-title" data-i18n="device.add">Add Device</h3>
@@ -176,7 +176,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="device-snmp-auth-password" data-i18n="device.snmp_auth_password">Auth Password</label>
-              <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="off">
+              <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="new-password">
             </div>
             <div class="form-group">
               <label for="device-snmp-priv-protocol" data-i18n="device.snmp_priv_protocol">Privacy Protocol</label>
@@ -193,7 +193,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="device-snmp-priv-password" data-i18n="device.snmp_priv_password">Privacy Password</label>
-              <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="off">
+              <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="new-password">
             </div>
           </div>
         </div>

@@ -31,7 +31,10 @@ pub struct EmployeeCreate {
     pub gender: Option<String>,
     #[validate(length(max = 20, message = "server.employee.validation.phone_length"))]
     pub phone: Option<String>,
-    #[validate(email(message = "server.common.validation.email_format"))]
+    #[validate(custom(
+        function = "crate::models::validate_email_blankable_opt",
+        message = "server.common.validation.email_format"
+    ))]
     pub email: Option<String>,
     pub hire_date: Option<NaiveDate>,
 }
@@ -42,11 +45,24 @@ pub struct EmployeeUpdate {
     pub name: Option<String>,
     #[validate(length(max = 10, message = "server.employee.validation.gender_invalid"))]
     pub gender: Option<String>,
-    #[validate(length(max = 20, message = "server.employee.validation.phone_length"))]
-    pub phone: Option<String>,
-    #[validate(email(message = "server.common.validation.email_format"))]
-    pub email: Option<String>,
-    pub hire_date: Option<NaiveDate>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_phone_opt",
+        message = "server.employee.validation.phone_length"
+    ))]
+    pub phone: Option<Option<String>>,
+    /// 双层 Option：null 清空邮箱（custom 函数自动解包，Some(Some(v)) 才校验格式；
+    /// 空串经 trim 后放行，handler 侧 blank_to_none 规范化为 NULL）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_email_blankable_opt",
+        message = "server.common.validation.email_format"
+    ))]
+    pub email: Option<Option<String>>,
+    /// 双层 Option：null 清空入职日期
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub hire_date: Option<Option<NaiveDate>>,
 }
 
 impl EmployeeCreate {
@@ -129,6 +145,27 @@ mod tests {
     }
 
     #[test]
+    fn 员工创建_空白邮箱放行() -> Result<(), serde_json::Error> {
+        // 空串 / 纯空白邮箱先放行：handler 侧 blank_to_none 规范化为 NULL，
+        // 非空但非法的格式仍拒绝
+        for blank in ["", "   "] {
+            let req: EmployeeCreate = serde_json::from_value(serde_json::json!({
+                "org_id": Uuid::new_v4(),
+                "name": "张三",
+                "email": blank
+            }))?;
+            assert!(req.validate().is_ok(), "空白邮箱 {blank:?} 应放行");
+        }
+        let req: EmployeeCreate = serde_json::from_value(serde_json::json!({
+            "org_id": Uuid::new_v4(),
+            "name": "张三",
+            "email": "zhangsan@example.com"
+        }))?;
+        assert!(req.validate().is_ok());
+        Ok(())
+    }
+
+    #[test]
     fn 手机号校验_合法与非法() {
         assert!(is_valid_phone("13800138000"));
         assert!(is_valid_phone("+86 138-0013-8000"));
@@ -145,6 +182,43 @@ mod tests {
         let req: EmployeeUpdate =
             serde_json::from_value(serde_json::json!({ "gender": "female" }))?;
         assert_eq!(req.normalized_gender().as_deref(), Some("female"));
+        Ok(())
+    }
+
+    #[test]
+    fn 员工更新_可空字段三态语义() -> Result<(), serde_json::Error> {
+        // phone/email/hire_date 双层 Option：缺失不修改、null 清空、值设置新值
+        let missing: EmployeeUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(missing.phone, None);
+        assert_eq!(missing.email, None);
+        assert_eq!(missing.hire_date, None);
+        assert!(missing.validate().is_ok());
+
+        let cleared: EmployeeUpdate = serde_json::from_value(serde_json::json!({
+            "phone": null,
+            "email": null,
+            "hire_date": null
+        }))?;
+        assert_eq!(cleared.phone, Some(None));
+        assert_eq!(cleared.email, Some(None));
+        assert_eq!(cleared.hire_date, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        // 非法邮箱经 custom 函数拒绝
+        let bad: EmployeeUpdate =
+            serde_json::from_value(serde_json::json!({ "email": "not-an-email" }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("非法邮箱应被拒绝");
+        };
+        assert!(errors.errors().contains_key("email"));
+
+        // 空串 / 纯空白邮箱放行（规范化为 NULL 的语义交由 handler 处理）
+        for blank in ["", "   "] {
+            let blanked: EmployeeUpdate =
+                serde_json::from_value(serde_json::json!({ "email": blank }))?;
+            assert_eq!(blanked.email, Some(Some(blank.to_string())));
+            assert!(blanked.validate().is_ok(), "空白邮箱 {blank:?} 应放行");
+        }
         Ok(())
     }
 }

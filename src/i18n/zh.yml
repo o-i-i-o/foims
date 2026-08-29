@@ -2,6 +2,8 @@
 # API 消息不在此文件：后端只返回 key，由前端翻译
 
 log:
+  visualization:
+    connection_member_side_invalid: "连线成员 side 非法已跳过: {{side}} (连线 {{connection}})"
   auth:
     external_user_created: "外部认证自动建户: {{username}} ({{provider}})"
     external_email_conflict: "外部认证用户邮箱已被占用，使用占位邮箱: {{username}} -> {{email}}"
@@ -30,6 +32,7 @@ log:
     toml_length: "配置TOML序列化完成，内容长度: {{count}}"
     verify_read: "验证读取成功，内容长度: {{count}}"
   crypto:
+    key_load_failed: "加载加密密钥失败: {{{error}}}"
     backup_create_failed: "无法创建密钥备份: {{error}}，不影响正常运行"
     backup_integrity_passed: "密钥备份完整性检查通过（与主密钥一致）"
     backup_key_path: "备份密钥路径: {{path}}"
@@ -85,6 +88,8 @@ log:
     auth_log_open_failed: "打开认证日志文件 {{path}} 失败: {{error}}"
     auth_log_write_failed: "写入认证日志失败: {{error}}"
     ip_banned: "IP {{ip}} 登录失败 {{count}} 次，已封禁 {{seconds}} 秒"
+    config_load_failed: "加载 fail2ban 配置失败，使用默认配置: {{{error}}}"
+    config_persist_failed: "fail2ban 配置持久化失败: {{{error}}}"
   i18n_config_error: "i18n日志配置错误，已回退为仅输出英文日志: {{reason}}"
   import:
     cabinet_network_query_failed: "查询机柜网络失败: {{error}}"
@@ -101,9 +106,13 @@ log:
   import_export:
     export_ref_missing: "导出时引用 {{id}} 的名称解析失败，单元格输出为空/占位"
   init:
+    config_tmp_chmod_failed: "设置配置临时文件权限失败: {{{error}}}"
+    config_tmp_remove_failed: "清理配置临时文件失败: {{{error}}}"
+    pgsql_connect_failed: "连接 PostgreSQL 失败: {{{error}}}"
     admin_create_failed: "创建管理员用户失败"
     creating_admin: "正在创建管理员用户"
     db:
+      status_check_failed: "数据库状态检查失败: {{{error}}}"
       backup_created: "数据库备份成功"
       backup_done_dropping: "备份完成，正在删除旧数据库"
       cleared: "通过API清空数据库成功"
@@ -151,6 +160,7 @@ log:
     mac_sync_failed: "MAC同步失败: {{error}}"
     mac_written: "MAC地址写入: 网口={{interface}}, MAC={{mac}}"
   login:
+    email_code_success: "已向用户发送邮箱登录验证码: {{{username}}}"
     2fa_success: "用户 {{username}} 2FA验证登录成功"
     record_failed: "记录登录日志失败: {{error}}"
     success: "用户 {{username}} 登录成功"
@@ -209,6 +219,7 @@ log:
     systemctl_exit_fallback: "systemctl 未终止进程，使用退出方式重启"
     systemctl_restart: "执行 systemctl restart {{service}}"
   task:
+    overlap_skipped: "任务上一轮尚未结束，跳过本轮执行: {{{name}}}"
     backup_completed: "备份成功: {{path}}（{{size_mb}} MB）"
     completed: "任务 {{name}} 执行完成: {{result}}"
     failed: "任务 {{name}} 执行失败: {{error}}"

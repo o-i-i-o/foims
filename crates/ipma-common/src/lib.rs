@@ -18,10 +18,12 @@ pub mod crypto;
 pub mod db;
 pub mod net;
 pub mod pagination;
+pub mod pgpass;
 pub mod provider;
 pub mod rate_limit;
 
 pub use api::{ApiResponse, ok_json};
+pub use config::{ArcSwap, Config, SharedConfig};
 pub use db_error::{DbErrorKind, classify_db_error};
 pub use error::AppError;
 pub use json::AppJson;

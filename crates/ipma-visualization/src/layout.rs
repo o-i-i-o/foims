@@ -97,16 +97,49 @@ pub async fn save_layout(
         let room_id = req.room_id;
         let mut tx = pool.begin().await?;
 
+        // element_type 白名单：仅 door（房间元素）与 workstation（工位），
+        // 未知类型一律拒绝而非静默按工位处理
+        if req
+            .layout
+            .iter()
+            .any(|item| item.element_type != "door" && item.element_type != "workstation")
+        {
+            return Err(VisualizationError::Validation(msg(
+                "server.visualization.type_unsupported",
+            )));
+        }
+
         let workstation_items: Vec<_> = req
             .layout
             .iter()
-            .filter(|item| item.element_type != "door")
+            .filter(|item| item.element_type == "workstation")
             .collect();
         let element_items: Vec<_> = req
             .layout
             .iter()
             .filter(|item| item.element_type == "door")
             .collect();
+
+        // 归属校验（与 cabinet 分支同型）：全部工位必须属于该房间，
+        // 防止跨房间工位被 UPSERT 进当前房间布局（重复 id 去重后再比对）
+        let workstation_ids: std::collections::HashSet<Uuid> =
+            workstation_items.iter().map(|item| item.id).collect();
+        let workstation_ids: Vec<Uuid> = workstation_ids.into_iter().collect();
+        if !workstation_ids.is_empty() {
+            let existing_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM workstations WHERE id = ANY($1) AND room_id = $2",
+            )
+            .bind(&workstation_ids)
+            .bind(room_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if existing_count as usize != workstation_ids.len() {
+                return Err(VisualizationError::Validation(msg(
+                    "server.visualization.workstation_ids_invalid",
+                )));
+            }
+        }
 
         for item in &workstation_items {
             sqlx::query(
@@ -164,7 +197,14 @@ pub async fn save_layout(
         let room_id = req.room_id;
         let mut tx = pool.begin().await?;
 
-        let cabinet_ids: Vec<Uuid> = req.layout.iter().map(|item| item.id).collect();
+        // id 先去重：重复条目会使 COUNT != len 误判为"归属非法"
+        //（workstation 分支同口径）
+        let mut cabinet_ids: Vec<Uuid> = Vec::with_capacity(req.layout.len());
+        for item in &req.layout {
+            if !cabinet_ids.contains(&item.id) {
+                cabinet_ids.push(item.id);
+            }
+        }
         let existing_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM cabinets WHERE id = ANY($1) AND room_id = $2")
                 .bind(&cabinet_ids)
@@ -212,18 +252,23 @@ pub async fn save_layout(
 }
 
 pub async fn delete_layout(pool: &PgPool, room_id: Uuid) -> Result<Response, VisualizationError> {
+    // 两表删除包进同一事务：部分删除不可回滚（与 save_layout 的事务口径一致）
+    let mut tx = pool.begin().await?;
+
     sqlx::query(
         r"DELETE FROM workstation_layouts
          WHERE workstation_id IN (SELECT id FROM workstations WHERE room_id = $1)",
     )
     .bind(room_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
     sqlx::query("DELETE FROM element_layouts WHERE room_id = $1")
         .bind(room_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     Ok(ok_json((), "server.visualization.layout_deleted"))
 }

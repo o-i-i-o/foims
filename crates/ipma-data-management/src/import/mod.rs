@@ -7,6 +7,7 @@
 //! 不存在则插入且 UUID 由数据库生成）、专项校验（IP 归属房间网段等）。
 //! 任一步失败则整批回滚，避免半成品数据。
 
+pub mod org_validate;
 pub mod resolve;
 pub mod rows;
 
@@ -57,15 +58,28 @@ pub async fn import_csv<P: DataProvider>(
 
             let meta = fetch_table_meta(&mut tx, table).await?;
             let mut resolver = Resolver::new();
+            // 组织模板 levels 全集（懒加载）：organizations.type_path 的
+            // 可解析性校验需要在模板表导入完成后读取全部模板 levels
+            let mut template_levels: Option<Vec<serde_json::Value>> = None;
             let mut inserted = 0u64;
             let mut updated = 0u64;
-            // 组织树按父路径深度排序，保证父节点先入库
+            // 组织树按父路径深度排序，保证父节点先入库：
+            // 根节点 parent_path 为空串（split 计数恒为 1，须特判为 0），
+            // 一级子节点为 1、孙节点为 2，依此类推；同深度保持 CSV 原顺序
+            //（稳定排序）。否则根节点与一级子节点深度相同、顺序随导出
+            // ORDER BY id（UUID 随机）漂移，子节点先入库会因父缺失整批回滚
             let mut ordered = bundle.rows.clone();
             if *table == "organizations" {
                 ordered.sort_by_key(|r| {
                     r.cells
                         .get("parent_path")
-                        .map(|p| p.split('/').count())
+                        .map(|p| {
+                            if p.is_empty() {
+                                0
+                            } else {
+                                p.split('/').count()
+                            }
+                        })
                         .unwrap_or(0)
                 });
             }
@@ -75,6 +89,15 @@ pub async fn import_csv<P: DataProvider>(
             for row in &ordered {
                 let values =
                     resolve_row(&mut tx, &mut resolver, &provider, spec, &meta, row).await?;
+                // 组织结构校验（与 API 端口径对齐，防止导入病态数据使
+                // 组织相关接口持续报错）：模板 levels 结构、组织 type_path 可解析性
+                match *table {
+                    "org_templates" => validate_template_levels(&values, row)?,
+                    "organizations" => {
+                        validate_org_type_path(&mut tx, &mut template_levels, &values, row).await?
+                    }
+                    _ => {}
+                }
                 if !seen_keys.insert(key_tuple(spec, &values)) {
                     return Err(DataError::Validation(
                         msg("server.import_export.duplicate_key")
@@ -242,6 +265,13 @@ fn read_zip_entries(file_data: &[u8]) -> DataResult<Vec<(String, Vec<u8>)>> {
         Read::read_to_end(&mut limited, &mut content).map_err(|e| {
             DataError::Internal(msg("server.import_export.zip_entry_read_failed").with("error", e))
         })?;
+        // 读取长度达到单条目上限即视为超限：take(MAX) 会静默截断超限内容，
+        // 截断点落在记录/UTF-8 边界时数据无声丢失，必须显式拒绝
+        if content.len() as u64 >= MAX_DECOMPRESSED_SIZE {
+            return Err(DataError::Validation(msg(
+                "server.import_export.file_too_large",
+            )));
+        }
         total += content.len() as u64;
         if total > MAX_TOTAL_DECOMPRESSED {
             return Err(DataError::Validation(msg(
@@ -349,6 +379,23 @@ async fn resolve_row<P: DataProvider>(
                     continue;
                 }
                 let encrypted = provider.encrypt_password(plain).await?;
+                // CSV 按“明文长度 ≤ 列宽”校验，而凭据以密文落库（+28 字节
+                // 再 base64 膨胀），明文贴着列宽上限时密文可能溢出；
+                // 提前给出明确的校验错误，而非等到写入期 value too long
+                if let Some(len) = meta.columns.get(*col).and_then(|m| m.char_len)
+                    && encrypted.chars().count() > len as usize
+                {
+                    return Err(DataError::Validation(
+                        msg("server.import_export.field_invalid")
+                            .with("table", spec.table)
+                            .with("row", row.row_no)
+                            .with("column", *col)
+                            .with(
+                                "reason",
+                                format!("凭据加密后超过列宽 {len}，请缩短明文长度"),
+                            ),
+                    ));
+                }
                 values.insert(col.to_string(), Some(encrypted));
             }
         }
@@ -425,6 +472,64 @@ async fn validate_ip_in_room(
                 .with("row", row.row_no)
                 .with("ip", &ip_str)
                 .with("room", room_name),
+        ));
+    }
+    Ok(())
+}
+
+/// 组织模板行结构校验：levels 走与 API 端相同的映射校验
+///（根唯一/子级类型已定义/环检测/深度上限），不合格整批回滚。
+/// 错误消息沿用 `server.org_template.validation.*`，与 API 校验提示一致。
+fn validate_template_levels(values: &ResolvedValues, row: &CsvRow) -> DataResult<()> {
+    let Some(Some(levels_text)) = values.get("levels") else {
+        // 缺省交由数据库 NOT NULL 约束报告
+        return Ok(());
+    };
+    let levels: serde_json::Value = serde_json::from_str(levels_text).map_err(|e| {
+        DataError::Validation(
+            msg("server.data-management.field_invalid")
+                .with("table", "org_templates")
+                .with("row", row.row_no)
+                .with("column", "levels")
+                .with("value", levels_text)
+                .with("reason", format!("不是有效的 JSON: {e}")),
+        )
+    })?;
+    org_validate::validate_levels_mapping(&levels).map_err(DataError::Validation)
+}
+
+/// 组织行 type_path 校验：在模板表导入完成后（同一事务内可见），
+/// type_path 必须能被某个模板的 levels 解析（根锚点 0 + 逐级索引导航），
+/// 不可解析拒绝该行，避免存量节点在组织编辑接口持续报错。
+async fn validate_org_type_path(
+    conn: &mut PgConnection,
+    cache: &mut Option<Vec<serde_json::Value>>,
+    values: &ResolvedValues,
+    row: &CsvRow,
+) -> DataResult<()> {
+    let Some(Some(type_path)) = values.get("type_path") else {
+        return Ok(());
+    };
+    if cache.is_none() {
+        let levels: Vec<serde_json::Value> = sqlx::query_scalar("SELECT levels FROM org_templates")
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(DataError::from)?;
+        *cache = Some(levels);
+    }
+    let resolvable = cache.as_ref().is_some_and(|levels| {
+        levels
+            .iter()
+            .any(|l| org_validate::type_path_resolvable(l, type_path))
+    });
+    if !resolvable {
+        return Err(DataError::Validation(
+            msg("server.data-management.field_invalid")
+                .with("table", "organizations")
+                .with("row", row.row_no)
+                .with("column", "type_path")
+                .with("value", type_path)
+                .with("reason", "无法被任何组织模板解析"),
         ));
     }
     Ok(())

@@ -151,6 +151,9 @@ pub async fn sync_device_network_config<P: DbProvider>(
 /// 清理不再被任何网口引用的网卡。若 cards 为空，则自动生成一张默认
 /// 网卡 + 一个默认网口（托管）。提交的网口名与幸存非托管网口重名
 /// （或请求内网卡间重名）时返回冲突错误。
+///
+/// 物理布线（cable_links）仅对本次被移除的托管网口清理：请求中保留
+/// port.id 的网口上的布线记录原样保留，避免未改动网口的布线被误删。
 pub async fn apply_network_config(
     tx: &mut PgConnection,
     device_id: Uuid,
@@ -213,16 +216,34 @@ pub async fn apply_network_config(
     .bind(device_id)
     .execute(&mut *tx)
     .await?;
-    sqlx::query(
-        r"DELETE FROM cable_links
-         WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id IN (
-                SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed))
-            OR (b_endpoint_type = 'device_interface' AND b_endpoint_id IN (
-                SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed))",
+    // 线缆记录仅对被移除的托管网口清理：先取现存托管网口 id 与请求中
+    // 保留的 port.id 求差集，避免幸存网口上的布线被无条件删除
+    let managed_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed",
     )
     .bind(device_id)
-    .execute(&mut *tx)
+    .fetch_all(&mut *tx)
     .await?;
+    let kept_ids: HashSet<Uuid> = effective_cards
+        .iter()
+        .flat_map(|card| card.ports.iter())
+        .filter_map(|port| port.id)
+        .collect();
+    let removed_ids: Vec<Uuid> = managed_ids
+        .iter()
+        .filter(|id| !kept_ids.contains(id))
+        .copied()
+        .collect();
+    if !removed_ids.is_empty() {
+        sqlx::query(
+            r"DELETE FROM cable_links
+             WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id = ANY($1))
+                OR (b_endpoint_type = 'device_interface' AND b_endpoint_id = ANY($1))",
+        )
+        .bind(&removed_ids)
+        .execute(&mut *tx)
+        .await?;
+    }
     sqlx::query("DELETE FROM device_interfaces WHERE device_id = $1 AND device_managed")
         .bind(device_id)
         .execute(&mut *tx)
@@ -259,6 +280,14 @@ pub async fn apply_network_config(
 
         for (port_idx, port) in card.ports.iter().enumerate() {
             port.validate()?;
+            // VLAN id 合法范围 1..=4094（模型未约束数值范围，handler 兜底）
+            if let Some(vlan_id) = port.vlan_id
+                && !(1..=4094).contains(&vlan_id)
+            {
+                return Err(AppError::Validation(
+                    msg("server.common.invalid_param").with("param", "vlan_id"),
+                ));
+            }
             let port_id = port.id.unwrap_or_else(Uuid::new_v4);
             let physical_type = port.physical_type.as_deref().unwrap_or("rj45");
             validate_physical_type(physical_type)?;

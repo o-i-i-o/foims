@@ -5,6 +5,7 @@
 
 import { loadModule } from "../utils/resourceLoader.js";
 import { nextFrame, safeAsync, setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
+import { t } from "../utils/i18n.js";
 
 // ==========================================
 // 常量定义
@@ -110,7 +111,7 @@ function loadTabData(tabId) {
       module[config.initFn]?.();
     }
 
-    safeAsync(() => module[config.loadFn](), `加载标签 ${tabId} 数据`);
+    safeAsync(() => module[config.loadFn](), t("resource_tabs.load_tab_data", { tab: tabId }));
   });
 }
 

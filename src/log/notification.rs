@@ -61,9 +61,13 @@ pub async fn get_notifications(
     .await?;
 
     let notifications = sqlx::query_as::<_, Notification>(sqlx::AssertSqlSafe(format!(
-        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} {order_clause} LIMIT {page_size} OFFSET {offset}"
+        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} {order_clause} LIMIT $2 OFFSET $3"
     )))
     .bind(user_id)
+    // page_size/offset 经参数绑定传入（与 login.rs/operation.rs 一致），
+    // 不再内插进 SQL
+    .bind(page_size)
+    .bind(offset)
     .fetch_all(&conn)
     .await?;
 

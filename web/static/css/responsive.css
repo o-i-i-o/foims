@@ -183,6 +183,16 @@
     margin-bottom: 0.25rem;
   }
 
+  /* 模态内表单控件随纵向堆叠拉伸全宽：覆盖 modals.css 的
+     align-items:center 与 textarea 的 align-self（responsive.css 最后加载，同特异性胜出） */
+  .modal .form-group {
+    align-items: stretch;
+  }
+
+  .modal .form-group textarea {
+    align-self: stretch;
+  }
+
   .form-inline-group {
     flex-direction: column;
     align-items: stretch;
@@ -205,16 +215,6 @@
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
     white-space: nowrap;
-  }
-
-  /* 通知头部纵向 */
-  .notifications-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .notifications-header select {
-    width: 100%;
   }
 
   /* 导入导出纵向 */

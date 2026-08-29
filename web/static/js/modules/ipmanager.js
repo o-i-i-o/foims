@@ -35,6 +35,13 @@ let currentPage = 1;
 
 const ipTableState = createSortState("updated_at", "desc");
 
+// 列表请求序号：翻页/排序/过滤共用同一加载函数，防抖只减少不消除并发，
+// 旧请求的宽过滤响应可能晚于新请求到达并覆盖表格，响应返回时序号不符则丢弃
+let ipListRequestSeq = 0;
+
+// 拉取MAC模态框的下拉元素 id（多处引用，抽为常量）
+const PULL_MAC_DEVICE_SELECT_ID = "pull-mac-device-select";
+
 // ====== IP查询 ======
 
 // 加载设备列表到拉取MAC模态框（仅列出配置了 SNMP 的设备）
@@ -51,7 +58,7 @@ async function loadDevicesForPullMac() {
   // 请求异常时与原实现一致：置入失败短提示占位项（fillSelect 的失败路径
   // 固定用 common.load_failed，无法表达该专属文案，故此处单独处理）
   if (!result) {
-    const select = document.getElementById("pull-mac-device-select");
+    const select = document.getElementById(PULL_MAC_DEVICE_SELECT_ID);
     if (select) {
       select.innerHTML = `<option value="">${t("ip.load_failed_short")}</option>`;
     }
@@ -59,23 +66,24 @@ async function loadDevicesForPullMac() {
   }
 
   // success=false 时与原实现一致：仅保留占位项
-  const devices = result.success ? result.data?.items ?? [] : null;
+  const devices = result.success ? (result.data?.items ?? []) : null;
   if (devices === null) {
-    await fillSelect("pull-mac-device-select", null, { placeholderKey: "ip.select_device" });
+    await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, { placeholderKey: "ip.select_device" });
     return;
   }
   if (devices.length === 0) {
-    await fillSelect("pull-mac-device-select", null, { placeholderKey: "ip.no_device_data" });
+    await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, { placeholderKey: "ip.no_device_data" });
     return;
   }
 
-  const snmpDevices = devices.filter((dev) => dev.snmp_community || dev.snmp_username);
+  // snmp_community 在列表响应中已脱敏为 null，判定用后端提供的 snmp_configured 标记
+  const snmpDevices = devices.filter((dev) => dev.snmp_configured);
   if (snmpDevices.length === 0) {
-    await fillSelect("pull-mac-device-select", null, { placeholderKey: "ip.no_snmp_device" });
+    await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, { placeholderKey: "ip.no_snmp_device" });
     return;
   }
 
-  await fillSelect("pull-mac-device-select", null, {
+  await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, {
     items: snmpDevices,
     placeholderKey: "ip.select_device",
     itemToLabel: (dev) => `${dev.name} (${dev.ip_address || "-"})`
@@ -137,7 +145,7 @@ async function openPullMacModal() {
 
 // 拉取IP MAC数据（目标设备与网段取自拉取MAC模态框）
 async function pullIpMacData() {
-  const deviceSelect = document.getElementById("pull-mac-device-select");
+  const deviceSelect = document.getElementById(PULL_MAC_DEVICE_SELECT_ID);
   const deviceId = deviceSelect ? deviceSelect.value : "";
 
   if (!deviceId) {
@@ -192,6 +200,10 @@ export async function loadIpMacData(
     ipTableState.setSort(sortBy, sortOrder);
   }
 
+  // 捕获本次请求序号；响应（含异常路径）返回时序号已变化说明有更新的请求，
+  // 本次结果一律丢弃，避免旧响应/旧错误覆盖新状态
+  const requestSeq = ++ipListRequestSeq;
+
   try {
     const { device_name = "", device_type = "", network = "", ip_address = "" } = filters;
 
@@ -215,9 +227,27 @@ export async function loadIpMacData(
 
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
+    if (requestSeq !== ipListRequestSeq) {
+      return null;
+    }
+
     if (result.success && result.data) {
-      const { items, total, page: currentPage, total_pages } = result.data;
-      const pageNum = currentPage || 1;
+      const { items, total, page: respPage, total_pages } = result.data;
+      const pageNum = respPage || 1;
+
+      // 删除末页最后一条后当前页可能越界（页码大于总页数且列表为空）：
+      // 回退到最后一页重新加载，避免停留在空页无法翻回
+      const totalPages = total_pages || Math.ceil((total || 0) / currentPageSize);
+      if (
+        Array.isArray(items) &&
+        items.length === 0 &&
+        pageNum > 1 &&
+        totalPages > 0 &&
+        pageNum > totalPages
+      ) {
+        return loadIpMacData(filters, totalPages);
+      }
+
       const startIndex = (pageNum - 1) * currentPageSize;
 
       renderTable("#ip-table", {
@@ -283,12 +313,16 @@ export async function loadIpMacData(
 
       updateSortIcons("ip-table", ipTableState);
 
-      return { total, page: currentPage, total_pages };
+      return { total, page: pageNum, total_pages };
     }
 
     return null;
   } catch (error) {
     console.error("加载IP数据失败:", error);
+    // 已有更新的请求在途时，旧请求的失败不覆盖表格
+    if (requestSeq !== ipListRequestSeq) {
+      return null;
+    }
     renderTable("#ip-table", {
       data: [],
       columns: [],

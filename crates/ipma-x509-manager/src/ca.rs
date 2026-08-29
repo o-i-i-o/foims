@@ -33,6 +33,9 @@ const CA_KEY_FILE: &str = "ca.key";
 const DEFAULT_CA_VALIDITY_DAYS: i64 = 7300;
 const MAX_CA_VALIDITY_DAYS: i64 = 36500;
 
+/// 导入 CA 目录名冲突重试上限（毫秒时间戳下冲突概率极低，仅作有界保护）
+const MAX_DIR_NAME_RETRIES: u64 = 100;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateCaRequest {
     pub common_name: String,
@@ -77,6 +80,79 @@ fn ca_cert_path() -> PathBuf {
     Path::new(CA_DIR).join(CA_CERT_FILE)
 }
 
+/// CA 证书原子写入：先写同目录临时文件（create_new 独占 + fsync），
+/// 再 rename 覆盖目标文件。
+///
+/// ca.pem 在程序运行期被签发路径与 list_cas 清点并发读取，直接
+/// 截断写（tokio::fs::write）会让读者拿到半截 PEM；临时文件 + rename
+/// 保证任意时刻读到的都是完整的旧版或新版内容（与 ipma-init
+/// config.rs 的原子写法同口径）。私钥不走此路径——write_key_file
+/// 已有 create_new(0600) 独占语义。
+async fn write_ca_cert_atomic(target: &Path, cert_pem: &[u8]) -> Result<(), CertManagerError> {
+    use tokio::io::AsyncWriteExt;
+
+    let write_err = |e: std::io::Error| {
+        CertManagerError::Internal(msg("server.certificate.write_failed").with("error", e))
+    };
+
+    let mut seq: u64 = 0;
+    loop {
+        // 临时文件名 = 目标名 + 进程号 + 微秒时间戳 + 序号（create_new 独占）
+        let stamp = chrono::Utc::now().timestamp_micros();
+        let tmp_path = PathBuf::from(format!(
+            "{}.{}.{}.{}.tmp",
+            target.display(),
+            std::process::id(),
+            stamp,
+            seq
+        ));
+        let mut file = match tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)
+            .await
+        {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                seq += 1;
+                if seq > MAX_DIR_NAME_RETRIES {
+                    return Err(write_err(e));
+                }
+                continue;
+            }
+            Err(e) => return Err(write_err(e)),
+        };
+
+        // 写入并 fsync 后 rename；写失败与 rename 失败同样清理临时文件
+        let write_result: std::io::Result<()> = async {
+            file.write_all(cert_pem).await?;
+            file.sync_all().await
+        }
+        .await;
+        if let Err(e) = write_result {
+            if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
+                ipma_common::log_warn!("log.certificate.ca_tmp_remove_failed", error = remove_err);
+            }
+            return Err(write_err(e));
+        }
+
+        // 临时文件继承目标既有权限（rename 替换后保留原访问控制，尽力而为）
+        if let Ok(meta) = tokio::fs::metadata(target).await
+            && let Err(e) = tokio::fs::set_permissions(&tmp_path, meta.permissions()).await
+        {
+            ipma_common::log_warn!("log.certificate.ca_tmp_chmod_failed", error = e);
+        }
+
+        if let Err(e) = tokio::fs::rename(&tmp_path, target).await {
+            if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
+                ipma_common::log_warn!("log.certificate.ca_tmp_remove_failed", error = remove_err);
+            }
+            return Err(write_err(e));
+        }
+        return Ok(());
+    }
+}
+
 fn ca_key_path() -> PathBuf {
     Path::new(CA_DIR).join(CA_KEY_FILE)
 }
@@ -99,7 +175,7 @@ async fn read_ca_cert() -> Option<Vec<u8>> {
     tokio::fs::read(ca_cert_path()).await.ok()
 }
 
-/// 校验证书是 CA（BasicConstraints CA:TRUE）；
+/// 校验证书是 CA（BasicConstraints CA:TRUE）、处于有效期内；
 /// 提供私钥时一并校验与证书公钥匹配（防止导入错配的证书/私钥对）
 fn validate_ca(cert_pem: &[u8], key_pem: Option<&str>) -> Result<(), CertManagerError> {
     let invalid = || CertManagerError::Validation(msg("server.certificate.ca_invalid"));
@@ -120,17 +196,114 @@ fn validate_ca(cert_pem: &[u8], key_pem: Option<&str>) -> Result<(), CertManager
         return Err(invalid());
     }
 
+    // 有效期校验：当前时间不在 [not_before, not_after] 内的 CA 视为无效
+    // （过期 CA 导入后签出的全部叶子证书都不可信）
+    let now = chrono::Utc::now().timestamp();
+    let validity = &cert.tbs_certificate.validity;
+    if validity.not_before.timestamp() > now || validity.not_after.timestamp() < now {
+        return Err(invalid());
+    }
+
     if let Some(key_pem) = key_pem {
-        let key_pair = KeyPair::from_pem(key_pem).map_err(|_| invalid())?;
-        let cert_key: &[u8] = cert
-            .tbs_certificate
-            .subject_pki
-            .subject_public_key
-            .data
-            .as_ref();
-        if cert_key != key_pair.public_key_raw() {
-            return Err(invalid());
-        }
+        ensure_key_matches(&cert, key_pem)?;
+    }
+    Ok(())
+}
+
+/// 校验私钥可解析且其公钥与证书公钥匹配（CA 与叶子证书导入共用）
+pub(crate) fn ensure_key_matches(
+    cert: &x509_parser::certificate::X509Certificate<'_>,
+    key_pem: &str,
+) -> Result<(), CertManagerError> {
+    let invalid = || CertManagerError::Validation(msg("server.certificate.ca_invalid"));
+    let key_pair = KeyPair::from_pem(key_pem).map_err(|_| invalid())?;
+    let cert_key: &[u8] = cert
+        .tbs_certificate
+        .subject_pki
+        .subject_public_key
+        .data
+        .as_ref();
+    if cert_key != key_pair.public_key_raw() {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+/// 校验证书/私钥对：两者均可解析且公钥匹配（导入叶子证书用，不要求 CA 属性）。
+/// 私钥为 "Hello" 之类的假内容在此即被拒绝。
+pub(crate) fn validate_cert_key_pair(
+    cert_pem: &[u8],
+    key_pem: &str,
+) -> Result<(), CertManagerError> {
+    let unparsable = || CertManagerError::Validation(msg("server.certificate.cert_file_invalid"));
+    let pems = pem::parse_many(cert_pem).map_err(|_| unparsable())?;
+    let Some(block) = pems.iter().find(|p| p.tag() == "CERTIFICATE") else {
+        return Err(unparsable());
+    };
+    let (_, cert) =
+        x509_parser::parse_x509_certificate(block.contents()).map_err(|_| unparsable())?;
+    // 错配（含私钥不可解析）按无效证书/私钥口径拒绝
+    ensure_key_matches(&cert, key_pem)
+        .map_err(|_| CertManagerError::Validation(msg("server.certificate.cert_file_invalid")))
+}
+
+/// 请求参数校验（等价 Validate 派生：本 crate 未依赖 validator，手写实现）：
+/// common_name trim 后 1..=64 字符、organization/organizational_unit/state/
+/// locality ≤64 字符、country trim 后为 2 字符。
+fn validate_generate_ca_request(req: &GenerateCaRequest) -> Result<(), CertManagerError> {
+    validate_dn_fields(
+        &req.common_name,
+        req.organization.as_deref(),
+        req.organizational_unit.as_deref(),
+        req.country.as_deref(),
+        req.state.as_deref(),
+        req.locality.as_deref(),
+    )
+}
+
+/// DN 字段统一校验（CA 与叶子证书共用同一套口径）：
+/// CN trim 后 1..=64、org/ou/state/locality ≤64、country trim 后必须为 2 字符。
+pub(crate) fn validate_dn_fields(
+    common_name: &str,
+    organization: Option<&str>,
+    organizational_unit: Option<&str>,
+    country: Option<&str>,
+    state: Option<&str>,
+    locality: Option<&str>,
+) -> Result<(), CertManagerError> {
+    let validation = |key: &'static str| CertManagerError::Validation(msg(key));
+
+    let cn_len = common_name.trim().chars().count();
+    if cn_len == 0 {
+        return Err(validation("server.certificate.common_name_required"));
+    }
+    if cn_len > 64 {
+        return Err(validation("server.certificate.common_name_length"));
+    }
+    if let Some(org) = organization
+        && org.trim().chars().count() > 64
+    {
+        return Err(validation("server.certificate.organization_length"));
+    }
+    if let Some(ou) = organizational_unit
+        && ou.trim().chars().count() > 64
+    {
+        return Err(validation("server.certificate.organizational_unit_length"));
+    }
+    if let Some(state) = state
+        && state.trim().chars().count() > 64
+    {
+        return Err(validation("server.certificate.state_length"));
+    }
+    if let Some(locality) = locality
+        && locality.trim().chars().count() > 64
+    {
+        return Err(validation("server.certificate.locality_length"));
+    }
+    if let Some(country) = country
+        && country.trim().len() != 2
+    {
+        return Err(validation("server.certificate.country_invalid"));
     }
     Ok(())
 }
@@ -182,24 +355,25 @@ fn build_dn(req: &GenerateCaRequest) -> DistinguishedName {
     dn
 }
 
-/// 生成自签名根 CA 并覆盖写入 CA 目录，返回证书路径。
+/// 生成自签名根 CA 并写入 CA 目录，返回证书路径。
 ///
+/// 覆盖保护：ca.pem 或 ca.key 任一已存在即返回 Conflict（站点根 CA 重建属高危
+/// 操作，会使既有叶子证书与 HTTPS 信任全部失效，需先删除旧 CA 再生成）。
 /// x509v3 扩展：BasicConstraints CA:TRUE（无路径长度限制）、
 /// KeyUsage 含 keyCertSign/cRLSign，不含 EKU（CA 不做终端认证）。
 pub async fn generate_ca(req: GenerateCaRequest) -> Result<PathBuf, CertManagerError> {
-    let common_name = req.common_name.trim().to_string();
-    if common_name.is_empty() {
-        return Err(CertManagerError::Validation(msg(
-            "server.certificate.common_name_required",
+    // 统一请求校验（CN/组织/国家，country 先 trim 再判长度，与叶子证书同口径）
+    validate_generate_ca_request(&req)?;
+
+    // 覆盖保护（先于任何写入）：任一文件已存在即拒绝，不提供静默覆盖
+    let cert_exists = tokio::fs::try_exists(ca_cert_path()).await.unwrap_or(false);
+    let key_exists = tokio::fs::try_exists(ca_key_path()).await.unwrap_or(false);
+    if cert_exists || key_exists {
+        return Err(CertManagerError::Conflict(msg(
+            "server.certificate.ca_already_exists",
         )));
     }
-    if let Some(country) = &req.country
-        && country.trim().len() != 2
-    {
-        return Err(CertManagerError::Validation(msg(
-            "server.certificate.country_invalid",
-        )));
-    }
+
     let validity_days = req
         .validity_days
         .map_or(DEFAULT_CA_VALIDITY_DAYS, i64::from)
@@ -246,14 +420,11 @@ pub async fn generate_ca(req: GenerateCaRequest) -> Result<PathBuf, CertManagerE
         )
     })??;
 
+    // 先写证书后写私钥：证书写失败时目录仍为空（一致性最好）；
+    // 私钥写失败至多留下"仅证书不可签发"的一致状态（cert-only 语义），
+    // 不会出现"新 key + 旧 cert"的错配；证书走临时文件 + rename 原子写
+    write_ca_cert_atomic(&ca_cert_path(), generation.0.as_bytes()).await?;
     write_key_file(&ca_key_path(), &generation.1).await?;
-    tokio::fs::write(ca_cert_path(), &generation.0)
-        .await
-        .map_err(|e| {
-            CertManagerError::Internal(
-                msg("server.certificate.write_failed").with("error", e.to_string()),
-            )
-        })?;
 
     Ok(ca_cert_path())
 }
@@ -261,7 +432,9 @@ pub async fn generate_ca(req: GenerateCaRequest) -> Result<PathBuf, CertManagerE
 /// 导入已有 CA（证书 + 私钥），写入导入 CA 池的独立子目录，返回该目录。
 ///
 /// 校验：证书可解析、BasicConstraints CA:TRUE、私钥可解析且与证书公钥匹配。
-/// 导入 CA 不覆盖站点根 CA；同秒内多次导入以序号后缀区分目录。
+/// 导入 CA 不覆盖站点根 CA；目录以 `import_{毫秒时间戳}` 命名，并用
+/// `create_dir` 原子独占创建（已存在即失败），冲突时按序号重试（有界），
+/// 消除"预检-创建"之间的 check-then-act 竞态窗口。
 pub async fn import_ca(cert_pem: Vec<u8>, key_pem: Vec<u8>) -> Result<PathBuf, CertManagerError> {
     if cert_pem.is_empty() || key_pem.is_empty() {
         return Err(CertManagerError::Validation(msg(
@@ -291,39 +464,47 @@ pub async fn import_ca(cert_pem: Vec<u8>, key_pem: Vec<u8>) -> Result<PathBuf, C
             )
         })?;
 
-    // 目录名：import_{时间戳}，已存在时追加序号，保证重复导入互不覆盖
-    let timestamp = chrono::Utc::now().timestamp();
-    let mut id = format!("import_{timestamp}");
-    let mut seq = 1;
-    while tokio::fs::try_exists(import_ca_dir(&id))
-        .await
-        .unwrap_or(false)
-    {
-        id = format!("import_{timestamp}_{seq}");
-        seq += 1;
-    }
-    let target_dir = import_ca_dir(&id);
+    // 目录名：import_{毫秒时间戳}，create_dir 独占创建，冲突时递增序号重试，
+    // 保证并发/双击导入互不覆盖、也不交错写同一目录
+    let timestamp = chrono::Utc::now().timestamp_millis();
+    let mut seq: u64 = 0;
+    let target_dir = loop {
+        let id = match seq {
+            0 => format!("import_{timestamp}"),
+            n => format!("import_{timestamp}_{n}"),
+        };
+        match tokio::fs::create_dir(import_ca_dir(&id)).await {
+            Ok(()) => break import_ca_dir(&id),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                seq += 1;
+                if seq > MAX_DIR_NAME_RETRIES {
+                    return Err(CertManagerError::Internal(
+                        msg("server.certificate.write_failed")
+                            .with("error", format!("目录名冲突重试耗尽: import_{timestamp}")),
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(CertManagerError::Internal(
+                    msg("server.certificate.write_failed").with("error", e.to_string()),
+                ));
+            }
+        }
+    };
 
-    tokio::fs::create_dir_all(&target_dir).await.map_err(|e| {
-        CertManagerError::Internal(
-            msg("server.certificate.write_failed").with("error", e.to_string()),
-        )
-    })?;
-    // 证书与私钥成对写入，避免新旧错配
+    // 证书与私钥成对写入，避免新旧错配；证书走临时文件 + rename 原子写
+    //（list_cas 会并发清点该目录，不能让读者看到半截 PEM）
     write_key_file(&target_dir.join(CA_KEY_FILE), &key_pem).await?;
-    tokio::fs::write(target_dir.join(CA_CERT_FILE), &cert_pem)
-        .await
-        .map_err(|e| {
-            CertManagerError::Internal(
-                msg("server.certificate.write_failed").with("error", e.to_string()),
-            )
-        })?;
+    write_ca_cert_atomic(&target_dir.join(CA_CERT_FILE), &cert_pem).await?;
 
     Ok(target_dir)
 }
 
-/// 仅导入 CA 证书（无私钥）：供"随服务器证书一并导入 CA"场景，
-/// 写入 ca.pem 并删除既有 ca.key（防止旧私钥配新证书造成错签）。
+/// 仅导入 CA 证书（无私钥）：供"随服务器证书一并导入 CA"场景。
+///
+/// 先删除既有 ca.key（NotFound 容忍）再写入 ca.pem：若先写证书后删私钥，
+/// 中途失败会留下"新证书 + 旧私钥"的错配状态，后续签发产出废证书；
+/// 先删私钥失败至多回到"旧证书且不可签发"的一致状态。
 pub async fn set_ca_cert_only(cert_pem: Vec<u8>) -> Result<(), CertManagerError> {
     if cert_pem.is_empty() {
         return Err(CertManagerError::Validation(msg(
@@ -347,15 +528,9 @@ pub async fn set_ca_cert_only(cert_pem: Vec<u8>) -> Result<(), CertManagerError>
             msg("server.certificate.write_failed").with("error", e.to_string()),
         )
     })?;
-    tokio::fs::write(ca_cert_path(), &cert_pem)
-        .await
-        .map_err(|e| {
-            CertManagerError::Internal(
-                msg("server.certificate.write_failed").with("error", e.to_string()),
-            )
-        })?;
-    // 清除可能存在的旧私钥，确保 CA 状态一致（cert-only 不可签发）。
-    // 删除失败不能静默：残留私钥会破坏"cert-only 不可签发"的不变量
+    // 先清除可能存在的旧私钥（删除失败不能静默：残留私钥会破坏
+    // "cert-only 不可签发"的不变量），再原子写入新证书（临时文件 + rename，
+    // 避免 HTTPS/清点路径并发读到截断的半截 PEM）
     if let Err(e) = tokio::fs::remove_file(ca_key_path()).await
         && e.kind() != std::io::ErrorKind::NotFound
     {
@@ -363,6 +538,7 @@ pub async fn set_ca_cert_only(cert_pem: Vec<u8>) -> Result<(), CertManagerError>
             msg("server.certificate.write_failed").with("error", e),
         ));
     }
+    write_ca_cert_atomic(&ca_cert_path(), &cert_pem).await?;
     Ok(())
 }
 
@@ -546,6 +722,94 @@ mod tests {
             .unwrap_or_else(|e| panic!("生成证书失败: {e}"));
 
         assert!(validate_ca(ca.pem().as_bytes(), None).is_ok());
+    }
+
+    /// CA 有效期校验：已过期的 CA 应被拒绝
+    #[test]
+    fn ca校验_过期ca被拒绝() {
+        let key_pair = rcgen::KeyPair::generate().unwrap_or_else(|e| panic!("生成密钥失败: {e}"));
+        let mut params = rcgen::CertificateParams::default();
+        let mut dn = rcgen::DistinguishedName::new();
+        dn.push(rcgen::DnType::CommonName, "Expired Root CA");
+        params.distinguished_name = dn;
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let now = time::OffsetDateTime::now_utc();
+        params.not_before = now - time::Duration::days(10);
+        params.not_after = now - time::Duration::days(1);
+        let ca = params
+            .self_signed(&key_pair)
+            .unwrap_or_else(|e| panic!("生成证书失败: {e}"));
+
+        let err = validate_ca(ca.pem().as_bytes(), None)
+            .err()
+            .unwrap_or_else(|| panic!("过期 CA 应被拒绝"));
+        match err {
+            CertManagerError::Validation(m) => assert_eq!(m.key(), "server.certificate.ca_invalid"),
+            other => panic!("应为校验错误，实际 {other}"),
+        }
+    }
+
+    /// CA 请求校验：CN 长度、组织长度、国家代码 trim 后判长度
+    #[test]
+    fn ca请求校验_长度与国家代码() {
+        let mut req = ca_request("IPMA Root CA");
+        assert!(validate_generate_ca_request(&req).is_ok());
+
+        req.common_name = "C".repeat(65);
+        assert!(
+            validate_generate_ca_request(&req).is_err(),
+            "超长 CN 应被拒绝"
+        );
+        req.common_name = "C".repeat(64);
+        assert!(validate_generate_ca_request(&req).is_ok());
+
+        req.organization = Some("O".repeat(65));
+        assert!(
+            validate_generate_ca_request(&req).is_err(),
+            "超长组织应被拒绝"
+        );
+        req.organization = Some("O".repeat(64));
+        assert!(validate_generate_ca_request(&req).is_ok());
+
+        // OU / state / locality 同样限 64 字符
+        req.organizational_unit = Some("OU".repeat(33));
+        assert!(
+            validate_generate_ca_request(&req).is_err(),
+            "超长 OU 应被拒绝"
+        );
+        req.organizational_unit = Some("OU".repeat(32));
+        assert!(
+            validate_generate_ca_request(&req).is_ok(),
+            "64 字符 OU 应合法"
+        );
+
+        req.state = Some("S".repeat(65));
+        assert!(
+            validate_generate_ca_request(&req).is_err(),
+            "超长州/省应被拒绝"
+        );
+        req.state = Some("S".repeat(64));
+        assert!(validate_generate_ca_request(&req).is_ok());
+
+        req.locality = Some("L".repeat(65));
+        assert!(
+            validate_generate_ca_request(&req).is_err(),
+            "超长城市应被拒绝"
+        );
+        req.locality = Some("L".repeat(64));
+        assert!(validate_generate_ca_request(&req).is_ok());
+
+        // country 先 trim 再判长度（与 generate.rs 统一口径）
+        req.country = Some(" C ".to_string());
+        assert!(
+            validate_generate_ca_request(&req).is_err(),
+            "trim 后 1 位应被拒绝"
+        );
+        req.country = Some("CN ".to_string());
+        assert!(
+            validate_generate_ca_request(&req).is_ok(),
+            "trim 后 2 位应合法"
+        );
     }
 
     /// 私钥与证书公钥匹配校验：另一把钥匙应被拒绝

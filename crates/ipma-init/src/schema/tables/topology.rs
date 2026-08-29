@@ -67,7 +67,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    // 同一对设备之间只允许一条逻辑连接（链路聚合）
+    // 同一对设备之间只允许一条逻辑连接（链路聚合）：以表达式部分索引
+    // 兜底并发下的 check-then-insert（清单见 check.rs 必需索引）。
+    // 物理连线同一对设备允许多条（不同端口组合），故仅对 logical 生效
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS uq_topology_connections_logical
            ON topology_connections (
@@ -86,6 +88,16 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_tcm_device_port ON topology_connection_members(device_port_id)")
         .execute(pool)
         .await?;
+
+    // 成员表仅承载逻辑连线（链路聚合）的成员端口，端口全域唯一：
+    // 同一端口不得同时参与两条逻辑连线，约束兜底并发下的 check-then-insert
+    //（预检见 ipma-visualization/topology.rs，冲突映射见必需索引清单）
+    sqlx::query(
+        r"CREATE UNIQUE INDEX IF NOT EXISTS uq_topology_connection_member_port_global
+           ON topology_connection_members (device_port_id)",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

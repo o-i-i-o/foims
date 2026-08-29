@@ -24,20 +24,6 @@
   justify-content: flex-end;
 }
 
-/* 工具栏内 组织→房间类型→房间 级联筛选组 */
-#visualization .viz-filter-group {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-right: auto;
-}
-
-#visualization .viz-filter-group .form-control {
-  min-width: 10rem;
-  max-width: 16rem;
-}
-
 #visualization .tab-content {
   display: none;
 }
@@ -205,7 +191,9 @@
   white-space: pre-line;
   max-width: 260px;
   pointer-events: none;
-  z-index: 1000;
+
+  /* 画布浮窗与全局 .global-tooltip 同层（--z-tooltip），仅低于 toast */
+  z-index: var(--z-tooltip);
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -214,8 +202,8 @@
   opacity: 1;
 }
 
-/* .viz-port-item 方块与状态色、.port-tooltip 基础样式及悬停触发
-   均由 modals/unified-device-ports.css 的分组选择器全局提供，此处不再重复定义 */
+/* .port-tooltip 基础样式及悬停触发由 modals/unified-device-ports.css 全局提供，
+   此处不再重复定义 */
 
 /* ==================== 全局可视化 ==================== */
 
@@ -290,7 +278,7 @@
   stroke: #7b1fa2;
 }
 
-.topology-device-node.type-pc rect {
+.topology-device-node.type-desktop rect {
   fill: #f5f5f5;
   stroke: #9e9e9e;
 }
@@ -341,8 +329,7 @@
   transition: all var(--transition-fast);
 }
 
-.port-anchor:hover,
-.port-anchor.highlight {
+.port-anchor:hover {
   fill: #1976d2;
   stroke: #0d47a1;
 }
@@ -433,18 +420,6 @@
   font-size: 0.8rem;
 }
 
-/* 纯文本指示器保留（zoom-select 未渲染时的降级显示） */
-.zoom-indicator {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  padding: 4px 8px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  min-width: 50px;
-  text-align: center;
-}
-
 .btn.btn-warning.active-mode {
   background-color: #e65100;
   color: var(--color-bg-white);
@@ -464,7 +439,9 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  z-index: 10000;
+
+  /* 高于普通模态（1050/1100+），低于 toast（9999），保证弹窗内 toast 校验反馈可见 */
+  z-index: 9000;
 }
 
 .topology-detail-header {
@@ -613,7 +590,7 @@
   position: fixed;
   inset: 0;
   background: rgb(0 0 0 / 50%);
-  z-index: 9999;
+  z-index: 8999;
 }
 
 /* ==================== 设备可视化：连线类型 ==================== */
@@ -684,29 +661,6 @@
   stroke: var(--color-bg);
   stroke-width: 3px;
   stroke-linejoin: round;
-}
-
-/* 连线删除标记（选中后显示，派生物理连线不显示） */
-.conn-delete-marker {
-  cursor: pointer;
-}
-
-.conn-delete-marker circle {
-  fill: #ffebee;
-  stroke: #e53935;
-  stroke-width: 1.5;
-}
-
-.conn-delete-marker:hover circle {
-  fill: #ffcdd2;
-}
-
-.conn-delete-marker text {
-  font-size: 13px;
-  font-weight: 700;
-  fill: #c62828;
-  dominant-baseline: middle;
-  pointer-events: none;
 }
 
 /* ==================== 设备可视化：区域容器（房间外框 + 机柜内框） ==================== */
@@ -832,11 +786,4 @@
   justify-content: flex-end;
   padding-left: 0;
   align-items: center;
-}
-
-#global-visualization .toolbar .toolbar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
 }

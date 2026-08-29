@@ -5,83 +5,16 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use ipma_common::{log_error, log_info, log_warn, msg};
 
-pub struct PgPassFile {
-    path: std::path::PathBuf,
-}
-
-impl PgPassFile {
-    pub fn create(
-        host: &str,
-        port: u16,
-        database: &str,
-        username: &str,
-        password: &str,
-    ) -> DataResult<Self> {
-        let pgpass_dir = std::env::temp_dir();
-        // 随机后缀避免并发冲突；用户名/库名仅作可读性前缀（转义路径分隔符）
-        let safe_user: String = username
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '_' })
-            .collect();
-        let safe_db: String = database
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '_' })
-            .collect();
-        let pgpass_path = pgpass_dir.join(format!(
-            ".pgpass_ipma_{}_{}_{}_{}",
-            safe_user,
-            safe_db,
-            std::process::id(),
-            uuid::Uuid::new_v4()
-        ));
-        let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
-        // 以 0600 原子创建（create_new）：避免「先写后 chmod」窗口期内
-        // 其他本地用户读取到明文口令（security-review I-6）
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = std::fs::OpenOptions::new()
-                .mode(0o600)
-                .write(true)
-                .create_new(true)
-                .open(&pgpass_path)
-                .map_err(|e| {
-                    DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
-                })?;
-            file.write_all(pgpass_content.as_bytes()).map_err(|e| {
-                DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
-            })?;
-        }
-        #[cfg(not(unix))]
-        {
-            std::fs::write(&pgpass_path, &pgpass_content).map_err(|e| {
-                DataError::Internal(msg("server.backup.pgpass_write_failed").with("error", e))
-            })?;
-        }
-        Ok(Self { path: pgpass_path })
-    }
-
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
-    }
-}
-
-impl Drop for PgPassFile {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 /// 执行 pg_dump 并返回原始 SQL 字节
 pub fn pg_dump_raw(config: &crate::types::DatabaseConfig) -> DataResult<Vec<u8>> {
-    let pgpass = PgPassFile::create(
+    let pgpass = ipma_common::pgpass::PgPassFile::create(
         &config.host,
         config.port,
         &config.database,
         &config.username,
         &config.password,
-    )?;
+    )
+    .map_err(DataError::Internal)?;
 
     let output = std::process::Command::new("pg_dump")
         .arg("-h")
@@ -139,36 +72,60 @@ pub fn backup_to_file(
         }
     }
 
-    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let backup_file = format!("{backup_dir}/{file_prefix}_{timestamp}.sql");
+    // 时间戳精度到毫秒：手动备份与定时备份并发落在同一秒时，
+    // 秒级文件名会在 create_new 上直接冲突报错
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S%3f").to_string();
 
     let sql_content = pg_dump_raw(config)?;
 
-    // 以 0600 原子创建写入（I-6）：备份含全库数据，避免先写后 chmod 的暴露窗口
+    // 以 0600 原子创建写入（I-6）：备份含全库数据，避免先写后 chmod 的暴露窗口。
+    // create_new 冲突（同一毫秒内并发备份）时递增序号 `_1`..`_99` 有界重试
     #[cfg(unix)]
     {
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
-        let mut file = std::fs::OpenOptions::new()
-            .mode(0o600)
-            .write(true)
-            .create_new(true)
-            .open(&backup_file)
-            .map_err(|e| {
-                DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
-            })?;
+        let mut handle = None;
+        let mut backup_file = format!("{backup_dir}/{file_prefix}_{timestamp}.sql");
+        for seq in 0..=99u32 {
+            if seq > 0 {
+                backup_file = format!("{backup_dir}/{file_prefix}_{timestamp}_{seq}.sql");
+            }
+            match std::fs::OpenOptions::new()
+                .mode(0o600)
+                .write(true)
+                .create_new(true)
+                .open(&backup_file)
+            {
+                Ok(file) => {
+                    handle = Some(file);
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => {
+                    return Err(DataError::Internal(
+                        msg("server.backup.file_write_failed").with("error", e),
+                    ));
+                }
+            }
+        }
+        let Some(mut file) = handle else {
+            return Err(DataError::Internal(
+                msg("server.backup.file_write_failed").with("error", "备份文件名冲突超过重试上限"),
+            ));
+        };
         file.write_all(&sql_content).map_err(|e| {
             DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
         })?;
+        Ok(backup_file)
     }
     #[cfg(not(unix))]
     {
+        let backup_file = format!("{backup_dir}/{file_prefix}_{timestamp}.sql");
         std::fs::write(&backup_file, &sql_content).map_err(|e| {
             DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
         })?;
+        Ok(backup_file)
     }
-
-    Ok(backup_file)
 }
 
 /// 清理超过 keep_days 天的旧备份文件

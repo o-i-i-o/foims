@@ -78,6 +78,8 @@ export class NetworkCardManager {
     this.roomNetworkIds = new Set();
     /** 查询用网段全集（房间网段 + 遗留网段），供 CIDR 校验与区域回填 */
     this.networks = [];
+    /** setRoomContext 请求序号：仅接受最新一次请求的结果（防快速切换竞态） */
+    this.roomSeq = 0;
     /** 遗留数据：不属于当前房间的区域/网段，保留显示并标记 */
     this.legacyRegions = new Map();
     this.legacyNetworks = new Map();
@@ -101,6 +103,9 @@ export class NetworkCardManager {
    */
   async setRoomContext(roomId) {
     this.roomId = roomId || null;
+    // 请求序号：快速切换房间 A→B 时，A 的晚到响应不得覆盖 B 的上下文
+    // （否则缓存与 roomId 脱节，下拉显示错误房间网段、collectData 校验错乱）
+    const seq = ++this.roomSeq;
     this.roomNetworks = [];
     this.regions = [];
     this.networksByRegionCache = new Map();
@@ -109,12 +114,22 @@ export class NetworkCardManager {
     if (this.roomId) {
       try {
         const result = await apiGet(`/api/resources/rooms/${this.roomId}/networks`);
+        if (seq !== this.roomSeq) {
+          return; // 响应期间已发起新的房间请求，丢弃过期结果
+        }
         if (result.success && Array.isArray(result.data)) {
           this.roomNetworks = result.data;
         }
       } catch (e) {
+        if (seq !== this.roomSeq) {
+          return;
+        }
         console.error("加载房间网段失败:", e);
       }
+    }
+
+    if (seq !== this.roomSeq) {
+      return;
     }
 
     const regionMap = new Map();

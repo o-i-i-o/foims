@@ -17,12 +17,14 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             seller VARCHAR(50), -- 销售商（采购渠道）
             location VARCHAR(100),
             snmp_version VARCHAR(3) DEFAULT 'v2c',
-            snmp_community VARCHAR(64),
-            snmp_username VARCHAR(22),
+            -- SNMP 凭据列以密文落库（AES-GCM + base64：明文 +28 字节再编码），
+            -- 列宽须容纳模型允许的最长明文加密结果（详见 check.rs 列宽契约）
+            snmp_community VARCHAR(255),
+            snmp_username VARCHAR(128),
             snmp_auth_protocol VARCHAR(10),
-            snmp_auth_password VARCHAR(100),
+            snmp_auth_password VARCHAR(255),
             snmp_priv_protocol VARCHAR(10),
-            snmp_priv_password VARCHAR(100),
+            snmp_priv_password VARCHAR(255),
             snmp_port INTEGER DEFAULT 161,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

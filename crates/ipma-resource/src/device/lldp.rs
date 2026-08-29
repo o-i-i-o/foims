@@ -14,7 +14,13 @@ use ipma_common::log_error;
 use ipma_common::{AppError, msg};
 use ipma_models::{DeviceLldp, LldpNeighbor};
 
-use super::snmp::{DeviceForSnmp, SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error};
+use super::snmp::{
+    DeviceForSnmp, SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target,
+    truncate_to_column_width,
+};
+
+/// device_lldps.local_port 列宽（VARCHAR(50)，与建表契约一致）
+const LOCAL_PORT_MAX_CHARS: usize = 50;
 
 /// 获取设备的 LLDP 邻居（先校验设备/IP/SNMP 配置，再走 SNMP 采集）。
 pub async fn get_lldp_neighbors(
@@ -94,7 +100,8 @@ where
 pub async fn get_lldp_neighbors_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<ipma_models::LldpNeighbor>, SnmpError> {
-    let addr = format!("{}:{}", params.ip, params.port);
+    // 复用 snmp_target：IPv6 地址须包裹方括号，直接 ip:port 拼接必然解析失败
+    let addr = snmp_target(&params.ip, params.port);
     let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
@@ -422,14 +429,23 @@ pub async fn sync_lldp_from_snmp<P: DbProvider>(
     let neighbors = get_lldp_neighbors(&conn, &device_id).await?;
 
     let now = chrono::Utc::now();
-    let synced_count = neighbors.len();
+    let mut synced_count = 0usize;
+    let mut failed_count = 0usize;
+    // 截断后的本地端口名：入库与过期清理必须使用同一口径
+    let mut local_ports: Vec<String> = Vec::with_capacity(neighbors.len());
 
     // 在同一事务内 upsert 全部邻居并清理已消失的邻居，避免逐条 autocommit 造成部分写入与数据漂移
     let mut tx = conn.begin().await?;
 
     for neighbor in &neighbors {
-        let id = Uuid::new_v4();
-        if let Err(e) = sqlx::query(
+        // local_port 列宽 VARCHAR(50)：入库前按字符截断（超宽截断优于必败写入）
+        let local_port = truncate_to_column_width(&neighbor.local_port, LOCAL_PORT_MAX_CHARS);
+        local_ports.push(local_port.clone());
+        // 逐行 SAVEPOINT：单行 upsert 失败仅回滚该行（ROLLBACK TO + RELEASE），
+        // 事务保持可用后继续处理后续行；单行失败不再令 PostgreSQL 事务
+        // 进入 aborted 状态导致整单 500
+        let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
+        let result = sqlx::query(
             r"INSERT INTO device_lldps (id, device_id, local_port, neighbor_chassis_id, neighbor_port_id, neighbor_port_desc, neighbor_sys_name, neighbor_sys_desc, created_at, updated_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
                ON CONFLICT (device_id, local_port) DO UPDATE SET
@@ -440,38 +456,53 @@ pub async fn sync_lldp_from_snmp<P: DbProvider>(
                     neighbor_sys_desc = EXCLUDED.neighbor_sys_desc,
                     updated_at = EXCLUDED.updated_at",
         )
-        .bind(id)
+        .bind(Uuid::new_v4())
         .bind(device_id)
-        .bind(&neighbor.local_port)
+        .bind(&local_port)
         .bind(&neighbor.neighbor_chassis_id)
         .bind(&neighbor.neighbor_port_id)
         .bind(&neighbor.neighbor_port_desc)
         .bind(&neighbor.neighbor_sys_name)
         .bind(&neighbor.neighbor_sys_desc)
         .bind(now)
-        .execute(&mut *tx)
-        .await
-        {
-            log_error!(
-                "log.device.lldp.record_write_failed",
-                port = neighbor.local_port,
-                error = e
-            );
+        .execute(&mut *sp)
+        .await;
+
+        match result {
+            Ok(_) => {
+                sp.commit().await?;
+                synced_count += 1;
+            }
+            Err(e) => {
+                // 回滚到 SAVEPOINT，恢复本事务可用状态后计入失败并继续
+                sp.rollback().await?;
+                failed_count += 1;
+                log_error!(
+                    "log.device.lldp.record_write_failed",
+                    port = neighbor.local_port,
+                    error = e
+                );
+            }
         }
     }
 
-    // 清理本次未发现的旧邻居记录（防止数据漂移）
-    let local_ports: Vec<&str> = neighbors.iter().map(|n| n.local_port.as_str()).collect();
-    let stale_removed: i64 = sqlx::query_scalar(
-        "WITH deleted AS (
-            DELETE FROM device_lldps WHERE device_id = $1 AND NOT (local_port = ANY($2)) RETURNING 1
-         ) SELECT COUNT(*) FROM deleted",
-    )
-    .bind(device_id)
-    .bind(&local_ports)
-    .fetch_one(&mut *tx)
-    .await
-    .unwrap_or(0);
+    // 清理本次未发现的旧邻居记录（防止数据漂移）；
+    // 空采集结果（seen 集为空）时跳过 DELETE 保留存量记录——空结果
+    // 视为采集异常而非"邻居全部消失"，与 mac.rs 的 seen_ips 空分支同口径；
+    // 清理失败经 ? 向上传播并回滚事务，避免 removed 计数失真与半提交状态
+    let stale_removed: i64 = if local_ports.is_empty() {
+        0
+    } else {
+        sqlx::query_scalar(
+            "WITH deleted AS (
+                DELETE FROM device_lldps WHERE device_id = $1 AND NOT (local_port = ANY($2)) RETURNING 1
+             ) SELECT COUNT(*) FROM deleted",
+        )
+        .bind(device_id)
+        .bind(&local_ports)
+        .fetch_one(&mut *tx)
+        .await?
+    };
 
     tx.commit().await?;
 
@@ -482,8 +513,13 @@ pub async fn sync_lldp_from_snmp<P: DbProvider>(
     .fetch_all(&conn)
     .await?;
 
-    // 按同步结果构造消息：有变化 / 无变化
-    let message = if synced_count > 0 {
+    // 按同步结果构造消息：有失败（部分成功）/ 有变化 / 无变化
+    let message = if failed_count > 0 {
+        msg("server.device.lldp.sync_partial")
+            .with("synced", synced_count)
+            .with("failed", failed_count)
+            .with("removed", stale_removed)
+    } else if synced_count > 0 {
         msg("server.device.lldp.sync_changed")
             .with("synced", synced_count)
             .with("removed", stale_removed)

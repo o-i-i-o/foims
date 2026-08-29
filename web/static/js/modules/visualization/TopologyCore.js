@@ -1,4 +1,6 @@
 import { SVG_NS } from "./SVGCore.js";
+import { showToast } from "../../utils/ui.js";
+import { t } from "../../utils/i18n.js";
 
 export class TopologyCore {
   constructor(containerId, callbacks = {}) {
@@ -318,8 +320,10 @@ export class TopologyCore {
       if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
         this.hasMoved = true;
         this._hideTooltip();
-        const newX = this.elementStartPos.x + dx;
-        const newY = this.elementStartPos.y + dy;
+        // 坐标钳制为非负：与坐标模态框"拒绝负值"口径一致，
+        // 防止拖出画布左上后负坐标直接入库
+        const newX = Math.max(0, this.elementStartPos.x + dx);
+        const newY = Math.max(0, this.elementStartPos.y + dy);
         this._setElementPosition(this.selectedElement, newX, newY);
         if (this.callbacks.onNodeDrag) {
           this.callbacks.onNodeDrag(this.selectedElement.dataset.deviceId);
@@ -392,7 +396,7 @@ export class TopologyCore {
       if (this.hasMoved) {
         drag.memberStart.forEach(({ el }) => this._snapElementToGrid(el));
         if (this.callbacks.onContainerDragEnd) {
-          this.callbacks.onContainerDragEnd(drag.fixedKey);
+          this.callbacks.onContainerDragEnd(drag.fixedKey, drag.fixedGroupKey);
         }
       } else if (this.callbacks.onContainerClick) {
         // 容器单击（未拖动）：与设备一致打开模态框，透传当前包围盒坐标
@@ -410,9 +414,6 @@ export class TopologyCore {
           drag.groupEl.dataset.containerKey,
           box
         );
-      } else if (this.callbacks.onCanvasClick) {
-        // 容器内空白处的单击视同画布点击（保持清空选中等既有行为）
-        this.callbacks.onCanvasClick();
       }
       this.hasMoved = false;
       return;
@@ -510,6 +511,14 @@ export class TopologyCore {
       return;
     }
 
+    // 同一设备两个端口互连属自环：与模态框创建入口（visualizationManager）校验一致，
+    // 拒绝并提示
+    if (this.connectionSource.deviceId === deviceId) {
+      showToast(t("viz.no_self_connection"), "warning");
+      this._cancelConnection();
+      return;
+    }
+
     if (this.callbacks.onConnectionComplete) {
       this.callbacks.onConnectionComplete(
         this.connectionSource.deviceId,
@@ -603,8 +612,10 @@ export class TopologyCore {
 
     this.isContainerDragging = true;
     this.hasMoved = false;
-    // 推挤分组时被拖容器保持不动：房间容器即房间键，机柜容器取首个成员的房间键
+    // 推挤分组时被拖容器保持不动：房间容器即房间键，机柜容器取首个成员的房间键；
+    // 机柜级推挤还需固定被拖机柜自身的分组键（cab:...），否则落定后被对称推移
     const fixedKey = kind === "room" ? key : members[0].dataset.roomKey || "room:none";
+    const fixedGroupKey = kind === "cabinet" ? key : null;
     this.containerDrag = {
       groupEl: containerG,
       rectStart: {
@@ -624,7 +635,8 @@ export class TopologyCore {
         x: parseFloat(text.getAttribute("x")),
         y: parseFloat(text.getAttribute("y"))
       })),
-      fixedKey
+      fixedKey,
+      fixedGroupKey
     };
     this.mouseStartPos = this._getSvgCoordinates(e);
     return true;
@@ -741,7 +753,7 @@ export class TopologyCore {
   }
 
   getNodePosition(deviceId) {
-    const element = this.elementsGroup.querySelector(`[data-device-id="${deviceId}"]`);
+    const element = this.elementsGroup.querySelector(`[data-device-id="${CSS.escape(deviceId)}"]`);
     if (!element) {
       return null;
     }
@@ -774,10 +786,5 @@ export class TopologyCore {
       default:
         return { x: pos.x + pos.width / 2, y: pos.y + pos.height / 2 };
     }
-  }
-
-  resetZoom() {
-    this.setViewBox(0, 0, 3000, 2000);
-    this._updateZoomIndicator();
   }
 }

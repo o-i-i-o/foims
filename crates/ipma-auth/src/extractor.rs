@@ -76,6 +76,32 @@ impl<S: Send + Sync> FromRequestParts<S> for SecAdminUser {
     }
 }
 
+/// 管理员或审计员（等保三权分立）：admin 或 auditor 可用。
+///
+/// 供日志只读访问等审计类端点使用：admin 拥有全部权限，
+/// auditor 仅获得只读审计视图（角色拦截由中间件与 handler 共同保证）。
+pub struct AdminOrAuditorUser {
+    pub sub: String,
+    pub username: String,
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for AdminOrAuditorUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" || c.role == "auditor" => Ok(AdminOrAuditorUser {
+                sub: c.sub.clone(),
+                username: c.username.clone(),
+            }),
+            Some(_) => Err(AppError::Forbidden(msg(
+                "server.auth.admin_or_auditor_required",
+            ))),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
+        }
+    }
+}
+
 /// 提取 access_token（优先 Cookie `access_token`，其次 Authorization: Bearer 头）
 pub struct AccessToken(pub Option<String>);
 
