@@ -18,6 +18,7 @@ pub mod crypto;
 pub mod db;
 pub mod net;
 pub mod pagination;
+pub mod provider;
 pub mod rate_limit;
 
 pub use api::{ApiResponse, ok_json};
@@ -29,4 +30,5 @@ pub use log_i18n::{
     set_log_translate, translate_for,
 };
 pub use msg::{AppMessage, msg};
+pub use provider::DbProvider;
 pub use validation::validation_errors_to_message;

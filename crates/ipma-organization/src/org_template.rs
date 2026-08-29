@@ -1,12 +1,12 @@
 //! 组织类型模板管理。
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::msg;
 use ipma_models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use serde_json::json;
@@ -18,8 +18,8 @@ use validator::Validate;
 pub const MAX_ORG_DEPTH: usize = 10;
 
 /// 获取所有可用的组织类型配置（从所有模板中提取）
-pub async fn get_available_org_types(
-    State(state): State<Arc<AppState>>,
+pub async fn get_available_org_types<P: DbProvider>(
+    State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
     // 获取所有模板
     let templates: Vec<OrgTemplate> = sqlx::query_as(
@@ -431,7 +431,9 @@ pub fn get_allowed_children(
 }
 
 /// 获取所有模板
-pub async fn get_org_templates(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+pub async fn get_org_templates<P: DbProvider>(
+    State(state): State<Arc<P>>,
+) -> Result<Response, AppError> {
     let templates = sqlx::query_as::<_, OrgTemplateSummary>(
         "SELECT id, name, levels, icons, description FROM org_templates ORDER BY created_at ASC",
     )
@@ -445,8 +447,8 @@ pub async fn get_org_templates(State(state): State<Arc<AppState>>) -> Result<Res
 }
 
 /// 获取单个模板
-pub async fn get_org_template(
-    State(state): State<Arc<AppState>>,
+pub async fn get_org_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let template = sqlx::query_as::<_, OrgTemplate>(
@@ -465,8 +467,8 @@ pub async fn get_org_template(
 }
 
 /// 创建模板
-pub async fn create_org_template(
-    State(state): State<Arc<AppState>>,
+pub async fn create_org_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<OrgTemplateCreate>,
 ) -> Result<Response, AppError> {
@@ -536,8 +538,8 @@ pub async fn create_org_template(
 }
 
 /// 更新模板
-pub async fn update_org_template(
-    State(state): State<Arc<AppState>>,
+pub async fn update_org_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<OrgTemplateUpdate>,
@@ -695,8 +697,8 @@ pub async fn update_org_template(
 }
 
 /// 删除模板
-pub async fn delete_org_template(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_org_template<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {

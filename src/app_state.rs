@@ -9,7 +9,7 @@ use ipma_auth::utils::JwtUtils;
 use ipma_common::config::Config;
 use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::db::DbPool;
-use ipma_common::{AppError, msg};
+use ipma_common::{AppError, DbProvider, msg};
 use ipma_data_management::{DataError, DataProvider, DataResult, DatabaseConfig};
 use ipma_scheduler::TaskRegistry;
 use sqlx::PgPool;
@@ -44,11 +44,13 @@ impl AppState {
     }
 }
 
-impl AuthProvider for AppState {
+impl DbProvider for AppState {
     fn pool(&self) -> Result<&DbPool, AppError> {
         AppState::pool(self)
     }
+}
 
+impl AuthProvider for AppState {
     fn jwt_utils(&self) -> &JwtUtils {
         &self.jwt_utils
     }

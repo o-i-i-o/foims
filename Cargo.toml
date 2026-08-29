@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-management", "crates/ipma-scheduler", "crates/ipma-models", "crates/ipma-auth", "crates/ipma-x509-manager"]
+members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-management", "crates/ipma-scheduler", "crates/ipma-models", "crates/ipma-auth", "crates/ipma-organization", "crates/ipma-x509-manager"]
 resolver = "2"
 
 [workspace.package]
@@ -86,7 +86,7 @@ config = { version = "0.15.25", features = ["toml"] }
 
 [package]
 name = "ipma"
-version = "0.15.88"
+version = "0.15.89"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -101,6 +101,7 @@ ipma-data-management = { path = "crates/ipma-data-management" }
 ipma-scheduler = { path = "crates/ipma-scheduler" }
 ipma-models = { path = "crates/ipma-models" }
 ipma-auth = { path = "crates/ipma-auth" }
+ipma-organization = { path = "crates/ipma-organization" }
 ipma-x509-manager = { path = "crates/ipma-x509-manager" }
 
 # Workspace dependencies (使用共享版本)

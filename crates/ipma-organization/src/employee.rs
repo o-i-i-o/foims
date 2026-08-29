@@ -14,9 +14,9 @@ use sqlx::{Postgres, QueryBuilder};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::{AppError, msg};
 use ipma_models::{Employee, EmployeeCreate, EmployeeUpdate, is_valid_phone};
 
@@ -46,8 +46,8 @@ fn blank_to_none(value: Option<String>) -> Option<String> {
 }
 
 /// 获取员工列表（可选 org_id / search 过滤，登录即可读，供下拉与模态框使用）。
-pub async fn get_employees(
-    State(state): State<Arc<AppState>>,
+pub async fn get_employees<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let org_id = query.get("org_id").cloned();
@@ -60,7 +60,7 @@ pub async fn get_employees(
         )));
     }
 
-    let search_pattern = (!search.is_empty()).then(|| crate::utils::escape_like(&search));
+    let search_pattern = (!search.is_empty()).then(|| ipma_common::net::escape_like(&search));
 
     let mut builder = QueryBuilder::<Postgres>::new(format!(
         "SELECT {EMPLOYEE_COLUMNS}
@@ -100,8 +100,8 @@ pub async fn get_employees(
 }
 
 /// 查询单个员工。
-pub async fn get_employee(
-    State(state): State<Arc<AppState>>,
+pub async fn get_employee<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let employee = sqlx::query_as::<_, Employee>(sqlx::AssertSqlSafe(format!(
@@ -119,8 +119,8 @@ pub async fn get_employee(
 }
 
 /// 创建员工（同组织内名称唯一，检查与写入在同一事务内）。
-pub async fn create_employee(
-    State(state): State<Arc<AppState>>,
+pub async fn create_employee<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<EmployeeCreate>,
 ) -> Result<Response, AppError> {
@@ -190,8 +190,8 @@ pub async fn create_employee(
 
 /// 更新员工（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值；
 /// 空串语义为清空对应字段）。
-pub async fn update_employee(
-    State(state): State<Arc<AppState>>,
+pub async fn update_employee<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<EmployeeUpdate>,
@@ -269,8 +269,8 @@ pub async fn update_employee(
 }
 
 /// 删除员工（工位上的 manager_employee_id 因 ON DELETE SET NULL 自动解绑）。
-pub async fn delete_employee(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_employee<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {

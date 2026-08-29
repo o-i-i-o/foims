@@ -10,15 +10,15 @@ pub mod org_template;
 pub use employee::*;
 pub use org_template::*;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_common::AppJson;
+use ipma_common::DbProvider;
 use ipma_common::msg;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_models::{
     OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
 };
@@ -202,8 +202,8 @@ async fn load_template_levels_batch(
 // ==================== API 处理函数 ====================
 
 /// 获取组织列表（支持按 parent_id 筛选）
-pub async fn get_organizations(
-    State(state): State<Arc<AppState>>,
+pub async fn get_organizations<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -243,7 +243,7 @@ pub async fn get_organizations(
 
         if !search.is_empty() {
             qb.push(" WHERE name ILIKE ");
-            qb.push_bind(crate::utils::escape_like(search));
+            qb.push_bind(ipma_common::net::escape_like(search));
             conditions.push("search");
         }
 
@@ -300,8 +300,8 @@ pub async fn get_organizations(
 }
 
 /// 获取组织树形结构
-pub async fn get_organization_tree(
-    State(state): State<Arc<AppState>>,
+pub async fn get_organization_tree<P: DbProvider>(
+    State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
     let all_orgs = sqlx::query_as::<_, Organization>(
         "SELECT id, name, type_path, parent_id, description, template_id, level_index, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
@@ -414,8 +414,8 @@ fn build_tree(
 }
 
 /// 获取单个组织节点（含子节点）
-pub async fn get_organization(
-    State(state): State<Arc<AppState>>,
+pub async fn get_organization<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let org = sqlx::query_as::<_, Organization>(
@@ -476,8 +476,8 @@ pub async fn get_organization(
 }
 
 /// 创建组织节点
-pub async fn create_organization(
-    State(state): State<Arc<AppState>>,
+pub async fn create_organization<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<OrganizationCreate>,
 ) -> Result<Response, AppError> {
@@ -690,8 +690,8 @@ pub async fn create_organization(
 ///
 /// 仅支持更新 name / description。
 /// type_path 由模板结构决定，不允许通过此接口修改。
-pub async fn update_organization(
-    State(state): State<Arc<AppState>>,
+pub async fn update_organization<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
     AppJson(req): AppJson<OrganizationUpdate>,
@@ -798,8 +798,8 @@ pub async fn update_organization(
 }
 
 /// 删除组织节点
-pub async fn delete_organization(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_organization<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -858,8 +858,8 @@ pub async fn delete_organization(
 }
 
 /// 获取指定节点的下级类型信息（基于模板）
-pub async fn get_allowed_child_types(
-    State(state): State<Arc<AppState>>,
+pub async fn get_allowed_child_types<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let org = sqlx::query_as::<_, Organization>(
@@ -918,8 +918,8 @@ pub async fn get_allowed_child_types(
 }
 
 /// 获取指定父节点的子节点列表
-pub async fn get_children(
-    State(state): State<Arc<AppState>>,
+pub async fn get_children<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")
@@ -949,8 +949,8 @@ pub async fn get_children(
 // ==================== 内部辅助函数 ====================
 
 /// 批量解析组织列表的 org_type
-async fn resolve_org_list_types(
-    state: &Arc<AppState>,
+async fn resolve_org_list_types<P: DbProvider>(
+    state: &Arc<P>,
     orgs: &[Organization],
 ) -> Result<Vec<serde_json::Value>, AppError> {
     let template_ids: Vec<Uuid> = {
@@ -1025,8 +1025,8 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
 }
 
 /// 获取组织节点关联的房间列表
-pub async fn get_org_rooms(
-    State(state): State<Arc<AppState>>,
+pub async fn get_org_rooms<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM organizations WHERE id = $1")

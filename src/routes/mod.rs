@@ -22,12 +22,6 @@ use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
 use crate::log::{get_login_logs, get_operation_logs};
-use crate::organization::{
-    create_org_template, create_organization, delete_org_template, delete_organization,
-    get_allowed_child_types, get_available_org_types, get_children, get_org_rooms,
-    get_org_template, get_org_templates, get_organization, get_organization_tree,
-    get_organizations, update_org_template, update_organization,
-};
 use crate::resource::{
     auto_assign_device_ip, auto_assign_ip, batch_create_ip_managers, create_cabinet,
     create_cabinet_position, create_cable_link, create_device, create_device_interface,
@@ -454,56 +448,58 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 组织管理
         .route(
             "/api/resources/organizations",
-            get(get_organizations).post(create_organization),
+            get(ipma_organization::get_organizations::<AppState>)
+                .post(ipma_organization::create_organization::<AppState>),
         )
         .route(
             "/api/resources/organizations/tree",
-            get(get_organization_tree),
+            get(ipma_organization::get_organization_tree::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}",
-            get(get_organization)
-                .put(update_organization)
-                .delete(delete_organization),
+            get(ipma_organization::get_organization::<AppState>)
+                .put(ipma_organization::update_organization::<AppState>)
+                .delete(ipma_organization::delete_organization::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}/children",
-            get(get_children),
+            get(ipma_organization::get_children::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}/allowed-child-types",
-            get(get_allowed_child_types),
+            get(ipma_organization::get_allowed_child_types::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}/rooms",
-            get(get_org_rooms),
+            get(ipma_organization::get_org_rooms::<AppState>),
         )
         // 员工管理（挂在组织节点下；GET 登录即可读供下拉使用）
         .route(
             "/api/resources/employees",
-            get(crate::organization::employee::get_employees)
-                .post(crate::organization::employee::create_employee),
+            get(ipma_organization::employee::get_employees::<AppState>)
+                .post(ipma_organization::employee::create_employee::<AppState>),
         )
         .route(
             "/api/resources/employees/{id}",
-            get(crate::organization::employee::get_employee)
-                .put(crate::organization::employee::update_employee)
-                .delete(crate::organization::employee::delete_employee),
+            get(ipma_organization::employee::get_employee::<AppState>)
+                .put(ipma_organization::employee::update_employee::<AppState>)
+                .delete(ipma_organization::employee::delete_employee::<AppState>),
         )
         // 组织模板管理
         .route(
             "/api/resources/org-templates",
-            get(get_org_templates).post(create_org_template),
+            get(ipma_organization::get_org_templates::<AppState>)
+                .post(ipma_organization::create_org_template::<AppState>),
         )
         .route(
             "/api/resources/org-templates/available-types",
-            get(get_available_org_types),
+            get(ipma_organization::get_available_org_types::<AppState>),
         )
         .route(
             "/api/resources/org-templates/{id}",
-            get(get_org_template)
-                .put(update_org_template)
-                .delete(delete_org_template),
+            get(ipma_organization::get_org_template::<AppState>)
+                .put(ipma_organization::update_org_template::<AppState>)
+                .delete(ipma_organization::delete_org_template::<AppState>),
         )
         // 信息点管理
         .route(
