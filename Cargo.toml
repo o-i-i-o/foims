@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-management", "crates/ipma-scheduler", "crates/ipma-models", "crates/ipma-x509-manager"]
+members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-management", "crates/ipma-scheduler", "crates/ipma-models", "crates/ipma-auth", "crates/ipma-x509-manager"]
 resolver = "2"
 
 [workspace.package]
@@ -68,6 +68,13 @@ tokio-cron-scheduler = "0.15.1"
 bcrypt = "0.19.3"
 rand = "0.10.2"
 toml = "1.1.4"
+
+# JWT / 外部认证 / 邮件 / 2FA（主程序与 ipma-auth 共享）
+jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
+ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
+openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
+totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 time = "0.3.55"
 
 # 网络 / 哈希 / 并发表 / 配置加载（主程序与 ipma-common 共享）
@@ -79,7 +86,7 @@ config = { version = "0.15.25", features = ["toml"] }
 
 [package]
 name = "ipma"
-version = "0.15.87"
+version = "0.15.88"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
@@ -93,6 +100,7 @@ ipma-visualization = { path = "crates/ipma-visualization" }
 ipma-data-management = { path = "crates/ipma-data-management" }
 ipma-scheduler = { path = "crates/ipma-scheduler" }
 ipma-models = { path = "crates/ipma-models" }
+ipma-auth = { path = "crates/ipma-auth" }
 ipma-x509-manager = { path = "crates/ipma-x509-manager" }
 
 # Workspace dependencies (使用共享版本)
@@ -117,17 +125,17 @@ rand = { workspace = true }
 toml = { workspace = true }
 time = { workspace = true }
 
-# 主项目特有依赖
+# 主项目特有依赖（与 ipma-auth 共享的部分已提升至 workspace）
 
 # rust_crypto 后端（纯 Rust，无 C 构建链）。其引入的 rsa 0.9 有
 # RUSTSEC-2023-0071（Marvin Attack，无修复版本），但 openidconnect
 # 本就无条件依赖同一 rsa，且本项目仅作 OIDC 客户端公钥验签与 HS256
 # 签名，不触及受影响的私钥运算路径
-jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
+jsonwebtoken = { workspace = true }
 
 # 外部认证（LDAP / OIDC SSO）
-ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
-openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+ldap3 = { workspace = true }
+openidconnect = { workspace = true }
 
 tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
 
@@ -136,8 +144,8 @@ ipnetwork = { workspace = true }
 async-snmp = "0.18.1"
 
 dashmap = { workspace = true }
-lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
-totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
+lettre = { workspace = true }
+totp-rs = { workspace = true }
 
 
 rust-i18n = "4.2.1"

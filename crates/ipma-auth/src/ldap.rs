@@ -16,13 +16,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::auth::login::{
-    ExternalUser, build_login_response, find_or_create_external_user, log_login,
-};
-use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::login::{ExternalUser, build_login_response, find_or_create_external_user, log_login};
+use crate::meta::RequestMeta;
+use crate::provider::AuthProvider;
 use ipma_common::AppError;
+use ipma_common::AppJson;
 use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::msg;
 use ipma_models::LdapLoginRequest;
@@ -267,8 +265,8 @@ async fn ldap_authenticate(
 }
 
 /// LDAP 登录入口（公开路由）。
-pub async fn login_with_ldap(
-    State(state): State<Arc<AppState>>,
+pub async fn login_with_ldap<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<LdapLoginRequest>,
 ) -> Result<Response, AppError> {
@@ -279,7 +277,7 @@ pub async fn login_with_ldap(
     let client_ip = meta.ip_address.clone();
 
     // 连续失败达到阈值后要求图形验证码（与本地登录共用触发计数）
-    if let Err(key) = crate::auth::captcha::enforce(
+    if let Err(key) = crate::captcha::enforce(
         &client_ip,
         &req.username,
         &req.captcha_id,
@@ -288,8 +286,8 @@ pub async fn login_with_ldap(
         return Err(AppError::Validation(msg(key)));
     }
 
-    if crate::system::app_fail2ban::is_ip_banned(&client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(&client_ip);
+    if crate::app_fail2ban::is_ip_banned(&client_ip) {
+        let remaining = crate::app_fail2ban::get_ban_remaining(&client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -307,7 +305,7 @@ pub async fn login_with_ldap(
     let ldap_user = match ldap_authenticate(&config, &username, &req.password).await {
         Ok(user) => user,
         Err(error) => {
-            crate::system::app_fail2ban::record_login_failure(
+            crate::app_fail2ban::record_login_failure(
                 &client_ip,
                 &username,
                 "server.login_log.ldap_auth_failed",
@@ -341,15 +339,14 @@ pub async fn login_with_ldap(
 }
 
 /// 外部认证（LDAP/SSO）通过后的通用收尾：签发令牌并构造 JSON 登录响应。
-pub(crate) async fn complete_external_login(
-    state: Arc<AppState>,
+pub(crate) async fn complete_external_login<P: AuthProvider>(
+    state: Arc<P>,
     meta: RequestMeta,
     external: ExternalUser,
     remember_me: bool,
 ) -> Result<Response, AppError> {
     let login_tokens =
-        crate::auth::login::issue_external_login_tokens(&state, &meta, &external, remember_me)
-            .await?;
+        crate::login::issue_external_login_tokens(&state, &meta, &external, remember_me).await?;
 
     let user = ipma_models::User {
         id: external.id,
@@ -379,9 +376,9 @@ pub struct LdapConfigResponse {
     pub has_password: bool,
 }
 
-pub async fn get_ldap_config(
-    State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn get_ldap_config<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    _admin: crate::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let resp = match get_ldap_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => LdapConfigResponse {
@@ -427,9 +424,9 @@ pub struct UpdateLdapConfigRequest {
     pub default_role: String,
 }
 
-pub async fn update_ldap_config(
-    State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn update_ldap_config<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    _admin: crate::extractor::AdminUser,
     AppJson(req): AppJson<UpdateLdapConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -466,9 +463,9 @@ pub async fn update_ldap_config(
 }
 
 /// 测试已保存的 LDAP 配置：连通性 + 服务账号绑定 + 基础检索。
-pub async fn test_ldap_connection(
-    State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn test_ldap_connection<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    _admin: crate::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let config = get_ldap_config_from_db(&state.pool()?.get_conn())
         .await

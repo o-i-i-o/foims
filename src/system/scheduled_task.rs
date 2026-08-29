@@ -15,8 +15,8 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::auth::extractor::AdminUser;
 use crate::routes::static_files::AppJson;
+use ipma_auth::extractor::AdminUser;
 use ipma_common::AppError;
 use ipma_common::{log_warn, msg};
 use ipma_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};

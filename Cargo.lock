@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.87"
+version = "0.15.88"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -2100,6 +2100,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "hex",
+ "ipma-auth",
  "ipma-common",
  "ipma-data-management",
  "ipma-init",
@@ -2127,6 +2128,35 @@ dependencies = [
  "tower-http 0.7.0",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "ipma-auth"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "base64 0.23.1",
+ "bcrypt",
+ "chrono",
+ "dashmap",
+ "hex",
+ "ipma-common",
+ "ipma-models",
+ "jsonwebtoken",
+ "ldap3",
+ "lettre",
+ "openidconnect",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sqlx",
+ "time",
+ "tokio",
+ "totp-rs",
  "uuid",
  "validator",
 ]

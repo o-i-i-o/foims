@@ -105,7 +105,7 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
     );
 
     // SMTP 未配置属于业务状态：静默跳过，不产生错误日志刷屏
-    if crate::system::smtp::send_email_async(pool, &info.manager_email, &subject, &body)
+    if ipma_auth::smtp::send_email_async(pool, &info.manager_email, &subject, &body)
         .await
         .is_err()
     {

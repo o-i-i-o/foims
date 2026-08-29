@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::auth::utils::JwtUtils;
+use ipma_auth::provider::AuthProvider;
+use ipma_auth::utils::JwtUtils;
 use ipma_common::config::Config;
 use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::db::DbPool;
@@ -40,6 +41,20 @@ impl AppState {
         self.pool
             .as_ref()
             .ok_or_else(|| AppError::Internal(msg("server.db.not_initialized")))
+    }
+}
+
+impl AuthProvider for AppState {
+    fn pool(&self) -> Result<&DbPool, AppError> {
+        AppState::pool(self)
+    }
+
+    fn jwt_utils(&self) -> &JwtUtils {
+        &self.jwt_utils
+    }
+
+    fn config(&self) -> &Config {
+        &self.config
     }
 }
 

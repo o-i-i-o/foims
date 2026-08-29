@@ -24,14 +24,14 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::auth::login::{
+use crate::login::{
     append_cookie_to_response, create_auth_cookie, find_or_create_external_user,
     issue_external_login_tokens,
 };
-use crate::routes::static_files::AppJson;
-use crate::utils::common::RequestMeta;
+use crate::meta::RequestMeta;
+use crate::provider::AuthProvider;
 use ipma_common::AppError;
+use ipma_common::AppJson;
 use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::{log_info, msg};
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
@@ -290,8 +290,8 @@ async fn build_oidc_client(
 // ==================== 登录 / 回调 ====================
 
 /// 发起 OIDC 授权码流程：302 跳转 IdP 授权端点。
-pub async fn sso_login(
-    State(state): State<Arc<AppState>>,
+pub async fn sso_login<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     headers: HeaderMap,
 ) -> Response {
@@ -301,8 +301,8 @@ pub async fn sso_login(
     }
 }
 
-async fn sso_login_inner(
-    state: Arc<AppState>,
+async fn sso_login_inner<P: AuthProvider>(
+    state: Arc<P>,
     meta: RequestMeta,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
@@ -356,8 +356,8 @@ pub struct SsoCallbackParams {
 }
 
 /// OIDC 回调：换令牌、验 ID Token、建户/登录、写 Cookie 后跳转前端。
-pub async fn sso_callback(
-    State(state): State<Arc<AppState>>,
+pub async fn sso_callback<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     headers: HeaderMap,
     Query(params): Query<SsoCallbackParams>,
@@ -367,9 +367,8 @@ pub async fn sso_callback(
         Err(error) => sso_error_redirect(error.message().key()),
     }
 }
-
-async fn sso_callback_inner(
-    state: Arc<AppState>,
+async fn sso_callback_inner<P: AuthProvider>(
+    state: Arc<P>,
     meta: RequestMeta,
     headers: HeaderMap,
     params: SsoCallbackParams,
@@ -498,12 +497,14 @@ fn sso_error_redirect(error_key: &str) -> Response {
 ///
 /// 邮箱登录依赖 SMTP：未配置时该入口静默隐藏（模块视为未运行），
 /// 避免用户触发必然失败的发码请求。
-pub async fn get_auth_methods(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+pub async fn get_auth_methods<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let ldap_enabled = get_ldap_config_enabled(&conn, "ldap").await;
     let sso_enabled = get_ldap_config_enabled(&conn, "sso").await;
-    let email_enabled = crate::system::smtp::smtp_configured(&conn).await;
+    let email_enabled = crate::smtp::smtp_configured(&conn).await;
 
     Ok(ipma_common::ok_json(
         serde_json::json!({
@@ -542,9 +543,9 @@ pub struct SsoConfigResponse {
     pub has_secret: bool,
 }
 
-pub async fn get_sso_config(
-    State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn get_sso_config<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    _admin: crate::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let resp = match get_sso_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => SsoConfigResponse {
@@ -586,9 +587,9 @@ pub struct UpdateSsoConfigRequest {
     pub default_role: String,
 }
 
-pub async fn update_sso_config(
-    State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn update_sso_config<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    _admin: crate::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSsoConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -621,9 +622,9 @@ pub async fn update_sso_config(
 }
 
 /// 测试已保存的 SSO 配置：执行 OIDC 发现文档获取。
-pub async fn test_sso_connection(
-    State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn test_sso_connection<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    _admin: crate::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let config = get_sso_config_from_db(&state.pool()?.get_conn())
         .await

@@ -70,7 +70,7 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let count = crate::utils::cleanup_expired_revoked_tokens(&ctx.pool)
+        let count = ipma_auth::utils::cleanup_expired_revoked_tokens(&ctx.pool)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(msg("server.task.token_cleanup_failed").with("error", e))
@@ -96,7 +96,7 @@ impl TaskExecutor for TokenUsageCleanupTaskExecutor {
             .and_then(serde_json::Value::as_i64)
             .unwrap_or(30) as i32;
 
-        let count = crate::utils::cleanup_old_token_usage(&ctx.pool, days)
+        let count = ipma_auth::utils::cleanup_old_token_usage(&ctx.pool, days)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(

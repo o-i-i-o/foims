@@ -10,18 +10,18 @@ use serde_json::json;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::auth::utils::hash_password;
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
-use crate::utils::pagination::{Pagination, paged_response};
+use crate::meta::{RequestMeta, log_op_best_effort};
+use crate::provider::AuthProvider;
+use crate::utils::hash_password;
+use ipma_common::AppJson;
 use ipma_common::log_info;
+use ipma_common::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
 use ipma_models::{User, UserCreate, UserUpdate};
 
-pub async fn get_users(
-    _secadmin: crate::auth::extractor::SecAdminUser,
-    State(state): State<Arc<AppState>>,
+pub async fn get_users<P: AuthProvider>(
+    _secadmin: crate::extractor::SecAdminUser,
+    State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -91,10 +91,10 @@ pub async fn get_users(
     ))
 }
 
-pub async fn create_user(
-    State(state): State<Arc<AppState>>,
+pub async fn create_user<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: crate::extractor::SecAdminUser,
     AppJson(req): AppJson<UserCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -120,8 +120,7 @@ pub async fn create_user(
     }
 
     // 等保密码策略：复杂度校验（新用户无历史记录可查）
-    crate::auth::password_policy::validate_complexity(&state.pool()?.get_conn(), &req.password)
-        .await?;
+    crate::password_policy::validate_complexity(&state.pool()?.get_conn(), &req.password).await?;
 
     let hashed_password = hash_password(&req.password).await?;
 
@@ -144,7 +143,7 @@ pub async fn create_user(
     .await?;
 
     // 等保密码策略：记录密码历史（供后续改密时的重复使用检查）
-    crate::auth::password_policy::record_history(&conn, id, &hashed_password).await;
+    crate::password_policy::record_history(&conn, id, &hashed_password).await;
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;
@@ -165,9 +164,9 @@ pub async fn create_user(
     Ok(ipma_common::ok_json(user, "server.user.created"))
 }
 
-pub async fn get_user(
-    _secadmin: crate::auth::extractor::SecAdminUser,
-    State(state): State<Arc<AppState>>,
+pub async fn get_user<P: AuthProvider>(
+    _secadmin: crate::extractor::SecAdminUser,
+    State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -183,10 +182,10 @@ pub async fn get_user(
     Ok(ipma_common::ok_json(user, "server.user.retrieved"))
 }
 
-pub async fn update_user(
-    State(state): State<Arc<AppState>>,
+pub async fn update_user<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: crate::extractor::SecAdminUser,
     Path(id): Path<Uuid>,
     AppJson(req): AppJson<UserUpdate>,
 ) -> Result<Response, AppError> {
@@ -238,10 +237,10 @@ pub async fn update_user(
     Ok(ipma_common::ok_json(user, "server.user.updated"))
 }
 
-pub async fn delete_user(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_user<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: crate::extractor::SecAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();

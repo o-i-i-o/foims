@@ -8,8 +8,8 @@ use axum::response::Response;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::auth::extractor::AuthUser;
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_auth::extractor::AuthUser;
 use ipma_common::{AppError, msg};
 use ipma_models::Notification;
 

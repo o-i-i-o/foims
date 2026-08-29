@@ -1,0 +1,61 @@
+[package]
+name = "ipma-auth"
+version = "0.1.0"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "IPMA Auth - authentication, user management, password policy, fail2ban, SMTP and audit op-log"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# Workspace crates
+ipma-common = { path = "../ipma-common" }
+ipma-models = { path = "../ipma-models" }
+
+# Axum
+axum = { workspace = true }
+axum-extra = { workspace = true }
+
+# SQLx
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Async
+# （bcrypt 校验、TOTP 二维码生成走 spawn_blocking；fail2ban 清理任务）
+tokio = { workspace = true }
+
+# Date/Time
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# JWT 与哈希/编码
+jsonwebtoken = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+bcrypt = { workspace = true }
+rand = { workspace = true }
+
+# 限流并发表（captcha / SSO state）
+dashmap = { workspace = true }
+
+# 外部认证（LDAP / OIDC SSO）
+ldap3 = { workspace = true }
+openidconnect = { workspace = true }
+
+# 邮件发送（验证码 / 密码重置）
+lettre = { workspace = true }
+
+# 两步验证（TOTP）
+totp-rs = { workspace = true }
+time = { workspace = true }
+
+[lints]
+workspace = true

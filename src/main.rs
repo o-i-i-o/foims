@@ -318,7 +318,7 @@ fn configure_app_services(
             )
             .route("/api/init/check-pgsql", get(ipma_init::check_pgsql))
             .route_layer(middleware::from_fn(
-                ipma::auth::login::localhost_only_middleware,
+                ipma_auth::login::localhost_only_middleware::<AppState>,
             ))
             .with_state(init_context);
 
@@ -429,8 +429,13 @@ async fn main() -> std::io::Result<()> {
     init_start_time();
     ipma_common::log_info!("system.start_time_initialized");
 
+    // 审计外发钩子：操作日志的 syslog 外发由 log 模块实现（ipma-auth 经钩子调用）
+    ipma_auth::meta::set_forward_hook(|pool, message| {
+        ipma::log::forwarding::spawn_forward(pool, message);
+    });
+
     // 启动应用层 fail2ban 清理任务
-    ipma::system::app_fail2ban::start_cleanup_task();
+    ipma_auth::app_fail2ban::start_cleanup_task();
     ipma_common::log_info!("system.fail2ban_cleanup_started");
 
     let mut running_scheduler: Option<RunningScheduler> = None;

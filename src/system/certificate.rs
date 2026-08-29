@@ -25,9 +25,9 @@ use ipma_x509_manager::{
 };
 
 use crate::app_state::AppState;
-use crate::auth::extractor::AdminUser;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
+use ipma_auth::extractor::AdminUser;
 use ipma_common::AppError;
 
 pub async fn list(_admin: AdminUser) -> Result<Response, AppError> {

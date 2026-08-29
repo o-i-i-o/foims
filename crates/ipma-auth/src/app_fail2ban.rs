@@ -8,8 +8,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use validator::Validate;
 
-use crate::routes::static_files::AppJson;
+use crate::provider::AuthProvider;
 use ipma_common::AppError;
+use ipma_common::AppJson;
 use ipma_common::{log_warn, msg};
 
 /// 应用层 Fail2ban 日志文件路径（供 OS fail2ban 监控）
@@ -388,8 +389,8 @@ pub struct UnbanIpRequest {
 // ==================== API Handler ====================
 
 /// 获取应用层 fail2ban 状态（仅管理员）
-pub async fn get_app_fail2ban_status(
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn get_app_fail2ban_status<P: AuthProvider>(
+    _admin: crate::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let store = app_fail2ban();
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
@@ -458,8 +459,8 @@ pub async fn get_app_fail2ban_status(
 }
 
 /// 更新应用层 fail2ban 配置（仅管理员）
-pub async fn update_app_fail2ban_config(
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn update_app_fail2ban_config<P: AuthProvider>(
+    _admin: crate::extractor::AdminUser,
     AppJson(req): AppJson<UpdateFail2banConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -487,8 +488,8 @@ pub async fn update_app_fail2ban_config(
 }
 
 /// 手动解封 IP（仅管理员）
-pub async fn app_unban_ip(
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn app_unban_ip<P: AuthProvider>(
+    _admin: crate::extractor::AdminUser,
     AppJson(req): AppJson<UnbanIpRequest>,
 ) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();
@@ -515,8 +516,8 @@ pub async fn app_unban_ip(
 }
 
 /// 手动封禁 IP（仅管理员）
-pub async fn app_ban_ip(
-    _admin: crate::auth::extractor::AdminUser,
+pub async fn app_ban_ip<P: AuthProvider>(
+    _admin: crate::extractor::AdminUser,
     AppJson(req): AppJson<BanIpRequest>,
 ) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();

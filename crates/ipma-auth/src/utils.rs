@@ -830,3 +830,83 @@ mod tests {
         assert_ne!(hashed, hashed2);
     }
 }
+
+// ==================== Token 黑名单 ====================
+
+pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, sqlx::Error> {
+    let token_hash = ipma_common::net::generate_token_hash(token);
+
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM revoked_tokens WHERE token_hash = $1 AND expiry > NOW()",
+    )
+    .bind(&token_hash)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
+pub async fn revoke_token(
+    pool: &sqlx::PgPool,
+    token: &str,
+    user_id: Option<Uuid>,
+    expiry: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    let token_hash = ipma_common::net::generate_token_hash(token);
+
+    // 检查用户是否存在，不存在则使用 NULL
+    let valid_user_id = if let Some(uid) = user_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(uid)
+            .fetch_one(pool)
+            .await?;
+        if exists { Some(uid) } else { None }
+    } else {
+        None
+    };
+
+    sqlx::query("INSERT INTO revoked_tokens (token_hash, user_id, expiry) VALUES ($1, $2, $3)")
+        .bind(&token_hash)
+        .bind(valid_user_id)
+        .bind(expiry)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query("DELETE FROM revoked_tokens WHERE expiry < NOW()")
+        .execute(pool)
+        .await?;
+
+    let deleted_count = result.rows_affected();
+    if deleted_count > 0 {
+        // 仅供 token_cleanup 定时任务调用，例行日志降为 debug 避免刷屏
+        ipma_common::log_debug!("log.token.revoked_cleaned", count = deleted_count);
+    }
+
+    Ok(deleted_count)
+}
+
+pub async fn cleanup_old_token_usage(
+    pool: &sqlx::PgPool,
+    days_to_keep: i32,
+) -> Result<u64, sqlx::Error> {
+    let result =
+        sqlx::query("DELETE FROM token_usage WHERE created_at < NOW() - INTERVAL '1 day' * $1")
+            .bind(days_to_keep)
+            .execute(pool)
+            .await?;
+
+    let deleted_count = result.rows_affected();
+    if deleted_count > 0 {
+        ipma_common::log_info!(
+            "log.token.usage_cleaned",
+            count = deleted_count,
+            days = days_to_keep
+        );
+    }
+
+    Ok(deleted_count)
+}

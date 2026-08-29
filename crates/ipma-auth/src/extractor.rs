@@ -3,7 +3,7 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
-use crate::auth::utils::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
+use crate::utils::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
 use ipma_common::net::is_secure_from_parts;
 use ipma_common::{AppError, msg};
 

@@ -18,19 +18,6 @@ use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 
 use crate::app_state::AppState;
-use crate::auth::ldap::{
-    get_ldap_config, login_with_ldap, test_ldap_connection, update_ldap_config,
-};
-use crate::auth::login::{
-    auth_middleware, disable_two_factor, enable_two_factor, forgot_password, get_current_user,
-    init_two_factor, login, login_with_email_code, login_with_two_factor, logout, refresh_token,
-    reset_password, send_login_code, send_two_factor_code,
-};
-use crate::auth::sso::{
-    get_auth_methods, get_sso_config, sso_callback, sso_login, test_sso_connection,
-    update_sso_config,
-};
-use crate::auth::user::{create_user, delete_user, get_user, get_users, update_user};
 use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
@@ -63,9 +50,6 @@ use crate::resource::{
     update_network_region, update_room, update_workstation,
 };
 use crate::routes::static_files::AppJson;
-use crate::system::app_fail2ban::{
-    app_ban_ip, app_unban_ip, get_app_fail2ban_status, update_app_fail2ban_config,
-};
 use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_notification_settings,
@@ -89,7 +73,7 @@ use crate::visualization::{
 use ipma_common::AppError;
 
 async fn data_export_csv(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -99,7 +83,7 @@ async fn data_export_csv(
 }
 
 async fn data_import_csv(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
     payload: Multipart,
 ) -> Result<Response, AppError> {
@@ -117,7 +101,7 @@ async fn data_download_template(
 }
 
 async fn data_export_database(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
     ipma_data_management::export_database(state.as_ref().clone())
@@ -126,7 +110,7 @@ async fn data_export_database(
 }
 
 async fn data_clear_logs(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<ipma_data_management::ClearLogsRequest>,
 ) -> Result<Response, AppError> {
@@ -136,7 +120,7 @@ async fn data_clear_logs(
 }
 
 async fn data_get_logs_stats(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
     ipma_data_management::get_logs_stats(state.as_ref().clone())
@@ -190,7 +174,7 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
 
     let allowed_roles = needs_admin_with_roles.unwrap_or(&["admin"]);
 
-    match req.extensions().get::<crate::auth::utils::JwtClaims>() {
+    match req.extensions().get::<ipma_auth::utils::JwtClaims>() {
         Some(claims) if allowed_roles.contains(&claims.role.as_str()) => next.run(req).await,
         Some(_) => (
             StatusCode::FORBIDDEN,
@@ -226,20 +210,56 @@ pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
 pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     // 公开认证路由（不需要认证）
     let public_auth_routes = Router::new()
-        .route("/api/auth/login", post(login))
-        .route("/api/auth/login/email", post(login_with_email_code))
-        .route("/api/auth/login/send-code", post(send_login_code))
-        .route("/api/auth/login/two-factor", post(login_with_two_factor))
-        .route("/api/auth/login/send-2fa-code", post(send_two_factor_code))
-        .route("/api/auth/login/ldap", post(login_with_ldap))
-        .route("/api/auth/sso/login", get(sso_login))
-        .route("/api/auth/sso/callback", get(sso_callback))
-        .route("/api/auth/methods", get(get_auth_methods))
-        .route("/api/auth/captcha", get(crate::auth::get_captcha))
-        .route("/api/auth/logout", post(logout))
-        .route("/api/auth/refresh", post(refresh_token))
-        .route("/api/auth/forgot-password", post(forgot_password))
-        .route("/api/auth/reset-password", post(reset_password));
+        .route("/api/auth/login", post(ipma_auth::login::login::<AppState>))
+        .route(
+            "/api/auth/login/email",
+            post(ipma_auth::login::login_with_email_code::<AppState>),
+        )
+        .route(
+            "/api/auth/login/send-code",
+            post(ipma_auth::login::send_login_code::<AppState>),
+        )
+        .route(
+            "/api/auth/login/two-factor",
+            post(ipma_auth::login::login_with_two_factor::<AppState>),
+        )
+        .route(
+            "/api/auth/login/send-2fa-code",
+            post(ipma_auth::login::send_two_factor_code::<AppState>),
+        )
+        .route(
+            "/api/auth/login/ldap",
+            post(ipma_auth::ldap::login_with_ldap::<AppState>),
+        )
+        .route(
+            "/api/auth/sso/login",
+            get(ipma_auth::sso::sso_login::<AppState>),
+        )
+        .route(
+            "/api/auth/sso/callback",
+            get(ipma_auth::sso::sso_callback::<AppState>),
+        )
+        .route(
+            "/api/auth/methods",
+            get(ipma_auth::sso::get_auth_methods::<AppState>),
+        )
+        .route("/api/auth/captcha", get(ipma_auth::get_captcha))
+        .route(
+            "/api/auth/logout",
+            post(ipma_auth::login::logout::<AppState>),
+        )
+        .route(
+            "/api/auth/refresh",
+            post(ipma_auth::login::refresh_token::<AppState>),
+        )
+        .route(
+            "/api/auth/forgot-password",
+            post(ipma_auth::login::forgot_password::<AppState>),
+        )
+        .route(
+            "/api/auth/reset-password",
+            post(ipma_auth::login::reset_password::<AppState>),
+        );
 
     // 公开的站点 CA 端点：CA 证书是公开数据，登录页提供下载入口（仅 PEM）；
     // 私钥不存在任何公开通道
@@ -255,14 +275,17 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
 
     // /me 路由（单独应用认证中间件）
     let me_routes = Router::new()
-        .route("/api/auth/me", get(get_current_user))
+        .route(
+            "/api/auth/me",
+            get(ipma_auth::login::get_current_user::<AppState>),
+        )
         .route(
             "/api/auth/change-password",
-            post(crate::auth::login::change_password),
+            post(ipma_auth::login::change_password::<AppState>),
         )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            auth_middleware,
+            ipma_auth::login::auth_middleware::<AppState>,
         ));
 
     // 健康检查（不需要认证）
@@ -271,15 +294,30 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     // 需要认证的 API 路由
     let protected_api_routes = Router::new()
         // 用户管理路由
-        .route("/api/users", get(get_users).post(create_user))
+        .route(
+            "/api/users",
+            get(ipma_auth::user::get_users::<AppState>)
+                .post(ipma_auth::user::create_user::<AppState>),
+        )
         .route(
             "/api/users/{id}",
-            get(get_user).put(update_user).delete(delete_user),
+            get(ipma_auth::user::get_user::<AppState>)
+                .put(ipma_auth::user::update_user::<AppState>)
+                .delete(ipma_auth::user::delete_user::<AppState>),
         )
         // 2FA管理路由
-        .route("/api/two-factor/init", post(init_two_factor))
-        .route("/api/two-factor/enable", post(enable_two_factor))
-        .route("/api/two-factor/disable", post(disable_two_factor))
+        .route(
+            "/api/two-factor/init",
+            post(ipma_auth::login::init_two_factor::<AppState>),
+        )
+        .route(
+            "/api/two-factor/enable",
+            post(ipma_auth::login::enable_two_factor::<AppState>),
+        )
+        .route(
+            "/api/two-factor/disable",
+            post(ipma_auth::login::disable_two_factor::<AppState>),
+        )
         // 资源管理路由
         // 下拉专用精简选项端点（id+name，仅登录即可读）
         .route(
@@ -602,15 +640,23 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // LDAP 配置
         .route(
             "/api/system/ldap/config",
-            get(get_ldap_config).put(update_ldap_config),
+            get(ipma_auth::ldap::get_ldap_config::<AppState>)
+                .put(ipma_auth::ldap::update_ldap_config::<AppState>),
         )
-        .route("/api/system/ldap/test", post(test_ldap_connection))
+        .route(
+            "/api/system/ldap/test",
+            post(ipma_auth::ldap::test_ldap_connection::<AppState>),
+        )
         // SSO（OIDC）配置
         .route(
             "/api/system/sso/config",
-            get(get_sso_config).put(update_sso_config),
+            get(ipma_auth::sso::get_sso_config::<AppState>)
+                .put(ipma_auth::sso::update_sso_config::<AppState>),
         )
-        .route("/api/system/sso/test", post(test_sso_connection))
+        .route(
+            "/api/system/sso/test",
+            post(ipma_auth::sso::test_sso_connection::<AppState>),
+        )
         // 配置管理
         .route(
             "/api/system/config",
@@ -712,20 +758,26 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // Fail2ban 安全管理（应用层）
         .route(
             "/api/system/fail2ban/app/status",
-            get(get_app_fail2ban_status),
+            get(ipma_auth::app_fail2ban::get_app_fail2ban_status::<AppState>),
         )
         .route(
             "/api/system/fail2ban/app/config",
-            put(update_app_fail2ban_config),
+            put(ipma_auth::app_fail2ban::update_app_fail2ban_config::<AppState>),
         )
-        .route("/api/system/fail2ban/app/ban", post(app_ban_ip))
-        .route("/api/system/fail2ban/app/unban", post(app_unban_ip))
+        .route(
+            "/api/system/fail2ban/app/ban",
+            post(ipma_auth::app_fail2ban::app_ban_ip::<AppState>),
+        )
+        .route(
+            "/api/system/fail2ban/app/unban",
+            post(ipma_auth::app_fail2ban::app_unban_ip::<AppState>),
+        )
         // admin_guard_middleware 先注册（位于 auth_middleware 之内）：
         // 请求先经 auth_middleware 校验令牌注入 claims，再由守卫做角色判定
         .route_layer(middleware::from_fn(admin_guard_middleware))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            auth_middleware,
+            ipma_auth::login::auth_middleware::<AppState>,
         ));
 
     Router::new()

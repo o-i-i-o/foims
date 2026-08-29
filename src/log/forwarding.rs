@@ -170,7 +170,7 @@ async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String>
 
 pub async fn get_forwarding(
     State(state): State<Arc<AppState>>,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: ipma_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     let config = load(&state.pool()?.get_conn()).await;
     Ok(ipma_common::ok_json(
@@ -181,7 +181,7 @@ pub async fn get_forwarding(
 
 pub async fn update_forwarding(
     State(state): State<Arc<AppState>>,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: ipma_auth::extractor::SecAdminUser,
     AppJson(req): AppJson<LogForwardingConfig>,
 ) -> Result<Response, AppError> {
     save(&state.pool()?.get_conn(), &req).await?;
@@ -191,7 +191,7 @@ pub async fn update_forwarding(
 /// 发送一条测试报文验证连通性
 pub async fn test_forwarding(
     State(state): State<Arc<AppState>>,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: ipma_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
     let config = load(&conn).await;

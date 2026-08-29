@@ -17,14 +17,12 @@ use serde::Deserialize;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::app_state::AppState;
-use crate::auth::extractor::{AccessToken, RefreshToken, SecureFlag};
-use crate::auth::utils::{
-    JwtUtils, extract_token_from_parts, get_client_info_from_parts, hash_password,
-};
-use crate::routes::static_files::AppJson;
-use crate::utils::common::{RequestMeta, log_op_best_effort};
+use crate::extractor::{AccessToken, RefreshToken, SecureFlag};
+use crate::meta::{RequestMeta, log_op_best_effort};
+use crate::provider::AuthProvider;
+use crate::utils::{JwtUtils, extract_token_from_parts, get_client_info_from_parts, hash_password};
 use ipma_common::AppError;
+use ipma_common::AppJson;
 use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
 use ipma_common::msg;
 use ipma_models::{
@@ -89,8 +87,8 @@ fn release_totp_code(user_id: Uuid, code: &str) {
     }
 }
 
-pub async fn auth_middleware(
-    State(state): State<Arc<AppState>>,
+pub async fn auth_middleware<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     req: Request,
     next: Next,
 ) -> Response {
@@ -106,7 +104,7 @@ pub async fn auth_middleware(
             .into_response();
     };
 
-    let claims = match state.jwt_utils.validate_token(&token) {
+    let claims = match state.jwt_utils().validate_token(&token) {
         Ok(claims) => claims,
         Err(err) => {
             let error_key = match err.kind() {
@@ -134,7 +132,7 @@ pub async fn auth_middleware(
     // 检查令牌是否已被撤销。数据库不可用时 fail-closed 拒绝请求
     // （与 refresh 流程策略一致），防止 DB 故障期间被吊销令牌继续通行
     match state.pool() {
-        Ok(pool) => match crate::utils::common::is_token_revoked(&pool.get_conn(), &token).await {
+        Ok(pool) => match crate::utils::is_token_revoked(&pool.get_conn(), &token).await {
             Ok(true) => {
                 return (
                     StatusCode::UNAUTHORIZED,
@@ -177,7 +175,7 @@ pub async fn auth_middleware(
     next.run(req).await
 }
 
-pub async fn localhost_only_middleware(req: Request, next: Next) -> Response {
+pub async fn localhost_only_middleware<P: AuthProvider>(req: Request, next: Next) -> Response {
     let (parts, body) = req.into_parts();
 
     // UDS 场景无 peer IP，需依赖反代传入的来源 IP 头判断是否本地访问。
@@ -211,8 +209,8 @@ pub async fn localhost_only_middleware(req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
-pub async fn login(
-    State(state): State<Arc<AppState>>,
+pub async fn login<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<UserLogin>,
 ) -> Result<Response, AppError> {
@@ -221,7 +219,7 @@ pub async fn login(
     req.validate()?;
 
     // 连续失败达到阈值后要求图形验证码（未达阈值时直接放行）
-    if let Err(key) = crate::auth::captcha::enforce(
+    if let Err(key) = crate::captcha::enforce(
         &meta.ip_address,
         &req.username,
         &req.captcha_id,
@@ -233,14 +231,14 @@ pub async fn login(
     // 应用层 fail2ban: 检查 IP 与用户名是否被封禁（用户名维度拦截
     // 分布式来源针对同一账户的爆破，A-1）
     let client_ip = meta.ip_address.as_str();
-    if crate::system::app_fail2ban::is_ip_banned(client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(client_ip);
+    if crate::app_fail2ban::is_ip_banned(client_ip) {
+        let remaining = crate::app_fail2ban::get_ban_remaining(client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
     }
-    if crate::system::app_fail2ban::is_user_banned(&req.username) {
-        let remaining = crate::system::app_fail2ban::get_user_ban_remaining(&req.username);
+    if crate::app_fail2ban::is_user_banned(&req.username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&req.username);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -260,7 +258,7 @@ pub async fn login(
         None => {
             // 等价 bcrypt 校验后再返回，抹平用户名枚举时间侧信道（A-4）
             dummy_bcrypt_verify(&req.password).await;
-            crate::system::app_fail2ban::record_login_failure(
+            crate::app_fail2ban::record_login_failure(
                 client_ip,
                 &req.username,
                 "server.login_log.user_not_found",
@@ -276,7 +274,7 @@ pub async fn login(
         user_row;
 
     if !status {
-        crate::system::app_fail2ban::record_login_failure(
+        crate::app_fail2ban::record_login_failure(
             client_ip,
             &username,
             "server.login_log.account_disabled",
@@ -314,7 +312,7 @@ pub async fn login(
             AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
         })?;
     if !valid {
-        crate::system::app_fail2ban::record_login_failure(
+        crate::app_fail2ban::record_login_failure(
             client_ip,
             &username,
             "server.login_log.invalid_password",
@@ -342,7 +340,7 @@ pub async fn login(
     }
 
     // 等保密码有效期：过期后拒绝登录（由安全管理员重置或走找回流程）
-    if crate::auth::password_policy::is_expired(&conn, id).await? {
+    if crate::password_policy::is_expired(&conn, id).await? {
         if let Err(e) = log_login(
             &conn,
             &username,
@@ -358,7 +356,7 @@ pub async fn login(
         return Err(AppError::Unauthorized(msg("server.auth.password_expired")));
     }
 
-    let jwt_utils = &state.jwt_utils;
+    let jwt_utils = &state.jwt_utils();
     let device_fingerprint =
         JwtUtils::generate_device_fingerprint(&meta.user_agent, &meta.ip_address);
 
@@ -397,14 +395,14 @@ pub async fn login(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(client_ip, &username);
+    crate::app_fail2ban::record_login_success(client_ip, &username);
     ipma_common::log_info!("log.login.success", username = username);
 
     build_login_response(user, login_tokens, meta.is_secure)
 }
 
-pub async fn login_with_email_code(
-    State(state): State<Arc<AppState>>,
+pub async fn login_with_email_code<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<EmailLoginRequest>,
 ) -> Result<Response, AppError> {
@@ -416,14 +414,14 @@ pub async fn login_with_email_code(
     // 应用层 fail2ban：邮箱验证码同样纳入 IP/账户维度爆破防护（A-5）
     //（此前仅密码/TOTP 登录有联动，6 位数字码可被不限速爆破）
     let client_ip = meta.ip_address.as_str();
-    if crate::system::app_fail2ban::is_ip_banned(client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(client_ip);
+    if crate::app_fail2ban::is_ip_banned(client_ip) {
+        let remaining = crate::app_fail2ban::get_ban_remaining(client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
     }
-    if crate::system::app_fail2ban::is_user_banned(email) {
-        let remaining = crate::system::app_fail2ban::get_user_ban_remaining(email);
+    if crate::app_fail2ban::is_user_banned(email) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(email);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -452,7 +450,7 @@ pub async fn login_with_email_code(
         Some(row) => row,
         None => {
             // 未注册邮箱：记录失败计入 fail2ban（防止对任意邮箱爆破验证码）
-            crate::system::app_fail2ban::record_login_failure(
+            crate::app_fail2ban::record_login_failure(
                 client_ip,
                 email,
                 "server.login_log.user_not_found",
@@ -522,7 +520,7 @@ pub async fn login_with_email_code(
 
     if !verified {
         // 错误验证码计入 fail2ban：连续失败即封禁该 IP 与该邮箱（A-5）
-        crate::system::app_fail2ban::record_login_failure(
+        crate::app_fail2ban::record_login_failure(
             client_ip,
             &username,
             "server.login_log.invalid_email_code",
@@ -551,7 +549,7 @@ pub async fn login_with_email_code(
         ));
     }
 
-    let jwt_utils = &state.jwt_utils;
+    let jwt_utils = &state.jwt_utils();
     let device_fingerprint =
         JwtUtils::generate_device_fingerprint(&meta.user_agent, &meta.ip_address);
 
@@ -590,14 +588,14 @@ pub async fn login_with_email_code(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(client_ip, &username);
+    crate::app_fail2ban::record_login_success(client_ip, &username);
     ipma_common::log_info!("log.login.email_code_success", username = username);
 
     build_login_response(user, login_tokens, meta.is_secure)
 }
 
-pub async fn send_login_code(
-    State(state): State<Arc<AppState>>,
+pub async fn send_login_code<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<SendLoginCodeRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -636,13 +634,13 @@ pub async fn send_login_code(
         .bind(&code).bind(expiry).bind(id).execute(&conn).await?;
 
     let email_body = format!("您的登录验证码是：{code}");
-    crate::system::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
+    crate::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
 
     Ok(ipma_common::ok_json((), "server.auth.code_sent"))
 }
 
-pub async fn login_with_two_factor(
-    State(state): State<Arc<AppState>>,
+pub async fn login_with_two_factor<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<TwoFactorLoginRequest>,
 ) -> Result<Response, AppError> {
@@ -650,14 +648,14 @@ pub async fn login_with_two_factor(
 
     // 应用层 fail2ban: 检查 IP 与用户名是否被封禁
     let client_ip = meta.ip_address.as_str();
-    if crate::system::app_fail2ban::is_ip_banned(client_ip) {
-        let remaining = crate::system::app_fail2ban::get_ban_remaining(client_ip);
+    if crate::app_fail2ban::is_ip_banned(client_ip) {
+        let remaining = crate::app_fail2ban::get_ban_remaining(client_ip);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
     }
-    if crate::system::app_fail2ban::is_user_banned(&req.username) {
-        let remaining = crate::system::app_fail2ban::get_user_ban_remaining(&req.username);
+    if crate::app_fail2ban::is_user_banned(&req.username) {
+        let remaining = crate::app_fail2ban::get_user_ban_remaining(&req.username);
         return Err(AppError::Forbidden(
             msg("server.auth.ip_banned").with("seconds", remaining),
         ));
@@ -679,7 +677,7 @@ pub async fn login_with_two_factor(
             if let Some(password) = req.password.as_deref() {
                 dummy_bcrypt_verify(password).await;
             }
-            crate::system::app_fail2ban::record_login_failure(
+            crate::app_fail2ban::record_login_failure(
                 client_ip,
                 &req.username,
                 "server.login_log.user_not_found",
@@ -703,7 +701,7 @@ pub async fn login_with_two_factor(
             AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
         })?;
     if !valid {
-        crate::system::app_fail2ban::record_login_failure(
+        crate::app_fail2ban::record_login_failure(
             client_ip,
             &username,
             "server.login_log.invalid_password",
@@ -712,7 +710,7 @@ pub async fn login_with_two_factor(
     }
 
     if !status {
-        crate::system::app_fail2ban::record_login_failure(
+        crate::app_fail2ban::record_login_failure(
             client_ip,
             &username,
             "server.login_log.account_disabled",
@@ -812,7 +810,7 @@ pub async fn login_with_two_factor(
     }
 
     if !verified {
-        crate::system::app_fail2ban::record_login_failure(
+        crate::app_fail2ban::record_login_failure(
             client_ip,
             &username,
             "server.login_log.invalid_2fa_code",
@@ -832,7 +830,7 @@ pub async fn login_with_two_factor(
         return Err(AppError::Unauthorized(msg("server.auth.code_invalid")));
     }
 
-    let jwt_utils = &state.jwt_utils;
+    let jwt_utils = &state.jwt_utils();
     let device_fingerprint =
         JwtUtils::generate_device_fingerprint(&meta.user_agent, &meta.ip_address);
     let remember_me = req.remember_me.unwrap_or(false);
@@ -870,14 +868,14 @@ pub async fn login_with_two_factor(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(client_ip, &user.username);
+    crate::app_fail2ban::record_login_success(client_ip, &user.username);
     ipma_common::log_info!("log.login.2fa_success", username = user.username);
 
     build_login_response(user, login_tokens, meta.is_secure)
 }
 
-pub async fn send_two_factor_code(
-    State(state): State<Arc<AppState>>,
+pub async fn send_two_factor_code<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<SendTwoFactorCodeRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -903,31 +901,27 @@ pub async fn send_two_factor_code(
         .bind(&code).bind(expiry).bind(user.0).execute(&conn).await?;
 
     let email_body = format!("您的两步验证码是：{code}");
-    crate::system::smtp::send_email_async(&conn, &user.2, "两步验证码", &email_body).await?;
+    crate::smtp::send_email_async(&conn, &user.2, "两步验证码", &email_body).await?;
 
     Ok(ipma_common::ok_json((), "server.auth.code_sent"))
 }
 
-pub async fn logout(
-    State(state): State<Arc<AppState>>,
+pub async fn logout<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     AccessToken(access_token): AccessToken,
     RefreshToken(refresh_token): RefreshToken,
     SecureFlag(secure): SecureFlag,
 ) -> Result<Response, AppError> {
     // 撤销 access_token
     if let Some(access_token) = access_token
-        && let Ok(claims) = state.jwt_utils.validate_token(&access_token)
+        && let Ok(claims) = state.jwt_utils().validate_token(&access_token)
     {
         let user_id = Uuid::parse_str(&claims.sub).ok();
         let expiry = chrono::DateTime::from_timestamp(claims.exp as i64, 0)
             .unwrap_or(chrono::Utc::now() + chrono::Duration::hours(1));
-        if let Err(e) = crate::utils::common::revoke_token(
-            &state.pool()?.get_conn(),
-            &access_token,
-            user_id,
-            expiry,
-        )
-        .await
+        if let Err(e) =
+            crate::utils::revoke_token(&state.pool()?.get_conn(), &access_token, user_id, expiry)
+                .await
         {
             ipma_common::log_warn!("log.auth.revoke_access_token_failed", error = e);
         }
@@ -935,18 +929,14 @@ pub async fn logout(
 
     // 撤销 refresh_token（长期凭证，撤销失败必须让客户端感知登出未完成）
     if let Some(refresh_token) = refresh_token
-        && let Ok(claims) = state.jwt_utils.validate_token(&refresh_token)
+        && let Ok(claims) = state.jwt_utils().validate_token(&refresh_token)
     {
         let user_id = Uuid::parse_str(&claims.sub).ok();
         let expiry = chrono::DateTime::from_timestamp(claims.exp as i64, 0)
             .unwrap_or(chrono::Utc::now() + chrono::Duration::days(7));
-        if let Err(e) = crate::utils::common::revoke_token(
-            &state.pool()?.get_conn(),
-            &refresh_token,
-            user_id,
-            expiry,
-        )
-        .await
+        if let Err(e) =
+            crate::utils::revoke_token(&state.pool()?.get_conn(), &refresh_token, user_id, expiry)
+                .await
         {
             ipma_common::log_error!("log.auth.revoke_refresh_token_failed", error = e);
             return Err(AppError::Database(
@@ -964,8 +954,8 @@ pub async fn logout(
     Ok(response)
 }
 
-pub async fn refresh_token(
-    State(state): State<Arc<AppState>>,
+pub async fn refresh_token<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     RefreshToken(token): RefreshToken,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
@@ -976,7 +966,7 @@ pub async fn refresh_token(
         None => return Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
     };
 
-    let jwt_utils = &state.jwt_utils;
+    let jwt_utils = &state.jwt_utils();
 
     let claims = jwt_utils.validate_token(&token).map_err(|err| {
         let key = match err.kind() {
@@ -1107,8 +1097,8 @@ pub async fn refresh_token(
     Ok(response)
 }
 
-pub async fn get_current_user(
-    auth: crate::auth::extractor::AuthUser,
+pub async fn get_current_user<P: AuthProvider>(
+    auth: crate::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     Ok(ipma_common::ok_json(
         serde_json::json!({ "id": auth.sub, "username": auth.username, "role": auth.role }),
@@ -1116,8 +1106,8 @@ pub async fn get_current_user(
     ))
 }
 
-pub async fn forgot_password(
-    State(state): State<Arc<AppState>>,
+pub async fn forgot_password<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<ForgotPasswordRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -1148,15 +1138,14 @@ pub async fn forgot_password(
             {
                 ipma_common::log_error!("log.auth.save_reset_token_failed", error = e);
             } else {
-                let smtp_config = crate::system::smtp::get_smtp_config_from_db(&conn).await;
+                let smtp_config = crate::smtp::get_smtp_config_from_db(&conn).await;
                 if let Some(ref _config) = smtp_config {
                     // 使用应用公共URL（而非SMTP主机名）构建重置链接
-                    let base_url = state.config.server.public_url.trim_end_matches('/');
+                    let base_url = state.config().server.public_url.trim_end_matches('/');
                     let reset_link = format!("{base_url}/reset-password?token={reset_token}");
                     let email_body = format!("请点击以下链接重置密码：{reset_link}");
                     if let Err(e) =
-                        crate::system::smtp::send_email_async(&conn, email, "密码重置", &email_body)
-                            .await
+                        crate::smtp::send_email_async(&conn, email, "密码重置", &email_body).await
                     {
                         ipma_common::log_error!("log.auth.send_reset_email_failed", error = e);
                     }
@@ -1174,8 +1163,8 @@ pub async fn forgot_password(
     Ok(ipma_common::ok_json((), "server.auth.forgot_password_sent"))
 }
 
-pub async fn reset_password(
-    State(state): State<Arc<AppState>>,
+pub async fn reset_password<P: AuthProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<ResetPasswordRequest>,
 ) -> Result<Response, AppError> {
     let mut tx = state.pool()?.begin().await?;
@@ -1192,7 +1181,7 @@ pub async fn reset_password(
     match user_result {
         Some((user_id,)) => {
             // 等保密码策略：复杂度 + 历史重复检查
-            crate::auth::password_policy::validate_password(
+            crate::password_policy::validate_password(
                 &state.pool()?.get_conn(),
                 user_id,
                 &req.new_password,
@@ -1211,7 +1200,7 @@ pub async fn reset_password(
 
             tx.commit().await?;
 
-            crate::auth::password_policy::record_history(
+            crate::password_policy::record_history(
                 &state.pool()?.get_conn(),
                 user_id,
                 &hashed_password,
@@ -1236,9 +1225,9 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
-pub async fn change_password(
-    State(state): State<Arc<AppState>>,
-    auth: crate::auth::extractor::AuthUser,
+pub async fn change_password<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    auth: crate::extractor::AuthUser,
     meta: RequestMeta,
     AppJson(req): AppJson<ChangePasswordRequest>,
 ) -> Result<Response, AppError> {
@@ -1273,7 +1262,7 @@ pub async fn change_password(
     }
 
     // 等保密码策略：复杂度 + 历史重复检查
-    crate::auth::password_policy::validate_password(&conn, user_id, &req.new_password).await?;
+    crate::password_policy::validate_password(&conn, user_id, &req.new_password).await?;
 
     let hashed_password = hash_password(&req.new_password).await?;
 
@@ -1285,7 +1274,7 @@ pub async fn change_password(
     .execute(&conn)
     .await?;
 
-    crate::auth::password_policy::record_history(&conn, user_id, &hashed_password).await;
+    crate::password_policy::record_history(&conn, user_id, &hashed_password).await;
 
     let details = serde_json::json!({ "username": auth.username });
     log_op_best_effort(
@@ -1301,9 +1290,9 @@ pub async fn change_password(
     Ok(ipma_common::ok_json((), "server.auth.password_changed"))
 }
 
-pub async fn init_two_factor(
-    State(state): State<Arc<AppState>>,
-    auth: crate::auth::extractor::AuthUser,
+pub async fn init_two_factor<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    auth: crate::extractor::AuthUser,
     AppJson(req): AppJson<TwoFactorInitRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -1395,9 +1384,9 @@ pub async fn init_two_factor(
     ))
 }
 
-pub async fn enable_two_factor(
-    State(state): State<Arc<AppState>>,
-    auth: crate::auth::extractor::AuthUser,
+pub async fn enable_two_factor<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    auth: crate::extractor::AuthUser,
     AppJson(req): AppJson<TwoFactorEnableRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -1491,9 +1480,9 @@ pub async fn enable_two_factor(
     Ok(ipma_common::ok_json((), "server.auth.2fa_enabled"))
 }
 
-pub async fn disable_two_factor(
-    State(state): State<Arc<AppState>>,
-    auth: crate::auth::extractor::AuthUser,
+pub async fn disable_two_factor<P: AuthProvider>(
+    State(state): State<Arc<P>>,
+    auth: crate::extractor::AuthUser,
     AppJson(req): AppJson<TwoFactorDisableRequest>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -1806,8 +1795,8 @@ pub(crate) fn build_login_response(
 }
 
 /// 外部认证（LDAP/SSO）通过后的通用收尾：状态检查、签发令牌、记录登录日志。
-pub(crate) async fn issue_external_login_tokens(
-    state: &Arc<AppState>,
+pub(crate) async fn issue_external_login_tokens<P: AuthProvider>(
+    state: &Arc<P>,
     meta: &RequestMeta,
     external: &ExternalUser,
     remember_me: bool,
@@ -1821,7 +1810,7 @@ pub(crate) async fn issue_external_login_tokens(
     let device_fingerprint =
         JwtUtils::generate_device_fingerprint(&meta.user_agent, &meta.ip_address);
     let login_tokens = generate_login_tokens(
-        &state.jwt_utils,
+        state.jwt_utils(),
         &external.id,
         &external.username,
         &external.role,
@@ -1842,7 +1831,7 @@ pub(crate) async fn issue_external_login_tokens(
     {
         ipma_common::log_warn!("log.login.record_failed", error = e);
     }
-    crate::system::app_fail2ban::record_login_success(&meta.ip_address, &external.username);
+    crate::app_fail2ban::record_login_success(&meta.ip_address, &external.username);
     ipma_common::log_info!("log.login.success", username = external.username);
 
     Ok(login_tokens)
@@ -1955,7 +1944,7 @@ pub(crate) async fn log_login(
         "login user={username} ip={ip_address} success={success} error={}",
         error_message.unwrap_or("-")
     );
-    crate::log::forwarding::spawn_forward(pool.clone(), forward_message);
+    crate::meta::forward_op_log(pool.clone(), forward_message);
 
     Ok(())
 }

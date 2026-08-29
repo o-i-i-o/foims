@@ -15,7 +15,7 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::routes::static_files::AppJson;
-use crate::system::smtp::{
+use ipma_auth::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
 use ipma_common::AppError;
@@ -64,7 +64,7 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
 
 pub async fn get_system_info(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let database_status = match sqlx::query("SELECT 1")
         .execute(&state.pool()?.get_conn())
@@ -107,7 +107,7 @@ pub async fn get_system_info(
 
 pub async fn get_system_config(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
@@ -120,7 +120,7 @@ pub async fn get_system_config(
 
 pub async fn update_system_config(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSystemConfigRequest>,
 ) -> Result<Response, AppError> {
     let mut new_config = state.config.clone();
@@ -238,7 +238,7 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
 }
 
 pub async fn restart_application(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     log_info!("log.system.restart_requested");
     trigger_service_restart().await
@@ -324,7 +324,7 @@ exec "$2"
 
 pub async fn disable_init_mode(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     log_info!("log.system.disable_init_requested");
 
@@ -349,7 +349,7 @@ pub async fn disable_init_mode(
 
 pub async fn backup_config(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
@@ -380,7 +380,7 @@ pub async fn backup_config(
 
 pub async fn restore_config(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(payload): AppJson<Config>,
 ) -> Result<Response, AppError> {
     let mut new_config = payload;
@@ -442,7 +442,7 @@ pub async fn get_session_timeout_config(
 
 pub async fn update_session_timeout_config(
     State(_state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
 ) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -495,7 +495,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
 
 pub async fn update_language_setting(
     State(_state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateLanguageRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -554,7 +554,7 @@ pub async fn get_page_timeout_config(
 
 pub async fn update_page_timeout_config(
     State(_state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdatePageTimeoutRequest>,
 ) -> Result<Response, AppError> {
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -619,7 +619,7 @@ pub async fn get_notification_settings(
 
 pub async fn update_notification_settings(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<NotificationSettings>,
 ) -> Result<Response, AppError> {
     let value = serde_json::to_string(&req.email_recipients)
@@ -654,7 +654,7 @@ pub struct SmtpConfigResponse {
 
 pub async fn get_smtp_config(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     // 未配置属于业务状态而非错误：返回 200 + configured=false，避免浏览器控制台出现 404
     let resp = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
@@ -697,7 +697,7 @@ pub struct UpdateSmtpConfigRequest {
 
 pub async fn update_smtp_config(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSmtpConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -733,7 +733,7 @@ pub async fn update_smtp_config(
 /// 测试已保存的通知邮件（SMTP）配置连通性。无需请求体。
 pub async fn test_smtp_connection(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
@@ -743,7 +743,7 @@ pub async fn test_smtp_connection(
         }
     };
 
-    crate::system::smtp::test_smtp_connection(&config).await?;
+    ipma_auth::smtp::test_smtp_connection(&config).await?;
 
     Ok(ipma_common::ok_json((), "server.smtp.test_success"))
 }
@@ -760,7 +760,7 @@ pub struct SendSystemEmailRequest {
 
 pub async fn send_system_email(
     State(state): State<Arc<AppState>>,
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
     AppJson(req): AppJson<SendSystemEmailRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -781,9 +781,9 @@ pub async fn send_system_email(
 /// 读取密码策略（未配置时返回等保三级默认值）
 pub async fn get_password_policy(
     State(state): State<Arc<AppState>>,
-    _secadmin: crate::auth::extractor::SecAdminUser,
+    _secadmin: ipma_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
-    let policy = crate::auth::password_policy::load(&state.pool()?.get_conn()).await;
+    let policy = ipma_auth::password_policy::load(&state.pool()?.get_conn()).await;
     Ok(ipma_common::ok_json(
         policy,
         "server.system.config_retrieved",
@@ -793,10 +793,10 @@ pub async fn get_password_policy(
 /// 保存密码策略（长度下限 8、各数值范围由模块内钳制）
 pub async fn update_password_policy(
     State(state): State<Arc<AppState>>,
-    _secadmin: crate::auth::extractor::SecAdminUser,
-    AppJson(req): AppJson<crate::auth::password_policy::PasswordPolicy>,
+    _secadmin: ipma_auth::extractor::SecAdminUser,
+    AppJson(req): AppJson<ipma_auth::password_policy::PasswordPolicy>,
 ) -> Result<Response, AppError> {
-    crate::auth::password_policy::save(&state.pool()?.get_conn(), &req).await?;
+    ipma_auth::password_policy::save(&state.pool()?.get_conn(), &req).await?;
     Ok(ipma_common::ok_json(
         (),
         "server.system.password_policy_updated",
@@ -894,7 +894,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
 }
 
 pub async fn register_service(
-    _admin: crate::auth::extractor::AdminUser,
+    _admin: ipma_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
         .map_err(|e| AppError::Internal(msg("server.system.exe_path_failed").with("error", e)))?;

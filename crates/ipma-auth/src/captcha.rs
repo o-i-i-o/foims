@@ -68,7 +68,7 @@ pub fn verify(captcha_id: &str, answer: &str) -> bool {
 
 /// 当前是否应要求验证码（IP 或用户名任一维度失败计数达到阈值）
 pub fn required(ip: &str, username: &str) -> bool {
-    crate::system::app_fail2ban::failure_count(ip, username) >= CAPTCHA_THRESHOLD
+    crate::app_fail2ban::failure_count(ip, username) >= CAPTCHA_THRESHOLD
 }
 
 /// 校验请求携带的验证码；未达触发条件时直接放行
