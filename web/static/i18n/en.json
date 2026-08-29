@@ -2196,6 +2196,8 @@
       "topology_nodes_retrieved": "Topology nodes retrieved successfully",
       "topology_nodes_saved": "Topology nodes saved successfully",
       "type_unsupported": "Unsupported layout type",
+      "layout_empty": "Layout items cannot be empty",
+      "element_type_too_long": "Element type cannot exceed 20 characters",
       "workstation_layout_saved": "Workstation layout saved successfully",
       "connection_type_invalid": "Invalid connection type",
       "connection_label_too_long": "Connection label cannot exceed 100 characters",

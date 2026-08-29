@@ -1,8 +1,22 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 布局领域模型：画布布局保存请求与渲染坐标（唯一副本）。
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
+
+/// 布局画布类型白名单（与前端可视化画布类型一一对应）。
+pub const LAYOUT_TYPES: [&str; 2] = ["workstation", "cabinet"];
+
+/// 校验布局类型取值（`server.visualization.type_unsupported`）。
+fn validate_layout_type(value: &str) -> Result<(), validator::ValidationError> {
+    if LAYOUT_TYPES.contains(&value) {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new(
+            "server.visualization.type_unsupported",
+        ))
+    }
+}
 
 // ==================== 布局模型 ====================
 
@@ -39,12 +53,16 @@ impl Position {
     }
 }
 
+/// 布局保存请求（`POST /api/resources/layouts`）。
+///
+/// 约定：两种画布类型均必需 `room_id`，且布局项非空；`element_type`
+/// 长度上限对齐 `element_layouts.element_type VARCHAR(20)`。
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct LayoutSaveRequest {
+    #[validate(custom(function = validate_layout_type))]
     pub r#type: String,
-    pub room_id: Option<Uuid>,
-    pub network_region_id: Option<Uuid>,
-    pub cabinet_id: Option<Uuid>,
+    pub room_id: Uuid,
+    #[validate(length(min = 1, message = "server.visualization.layout_empty"))]
     pub layout: Vec<LayoutItem>,
 }
 
@@ -52,6 +70,7 @@ pub struct LayoutSaveRequest {
 pub struct LayoutItem {
     pub id: Uuid,
     pub position: Position,
+    #[validate(length(max = 20, message = "server.visualization.element_type_too_long"))]
     pub element_type: String,
 }
 
@@ -113,36 +132,84 @@ mod tests {
 
     #[test]
     fn test_layout_save_request_deserialize() -> Result<(), serde_json::Error> {
-        // r#type / room_id / layout 数组均正确解析
+        // r#type / room_id / layout 数组均正确解析；未知字段被忽略
         let req: LayoutSaveRequest = serde_json::from_value(serde_json::json!({
-            "type": "room",
+            "type": "workstation",
             "room_id": Uuid::new_v4(),
             "cabinet_id": null,
             "layout": [
                 {
                     "id": Uuid::new_v4(),
                     "position": { "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0, "rotation": 0.0 },
-                    "element_type": "cabinet"
+                    "element_type": "door"
                 }
             ]
         }))?;
         assert!(req.validate().is_ok());
-        assert_eq!(req.r#type, "room");
+        assert_eq!(req.r#type, "workstation");
         assert_eq!(req.layout.len(), 1);
-        assert_eq!(req.network_region_id, None);
         Ok(())
     }
 
     #[test]
-    fn test_layout_save_request_empty_layout() -> Result<(), serde_json::Error> {
-        // 空布局（清空画布场景）合法
+    fn test_layout_save_request_rejects_unknown_type() -> Result<(), serde_json::Error> {
+        // r#type 不在白名单（workstation/cabinet）时校验失败
         let req: LayoutSaveRequest = serde_json::from_value(serde_json::json!({
             "type": "room",
+            "room_id": Uuid::new_v4(),
+            "layout": [
+                {
+                    "id": Uuid::new_v4(),
+                    "position": { "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0, "rotation": 0.0 },
+                    "element_type": "workstation"
+                }
+            ]
+        }))?;
+        let errors = req.validate().unwrap_err();
+        assert!(errors.errors().contains_key("r#type"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_layout_save_request_empty_layout_rejected() -> Result<(), serde_json::Error> {
+        // 空布局不再合法：保存即整表 upsert，空列表是无意义写入
+        let req: LayoutSaveRequest = serde_json::from_value(serde_json::json!({
+            "type": "cabinet",
+            "room_id": Uuid::new_v4(),
             "layout": []
         }))?;
-        assert!(req.validate().is_ok());
-        assert!(req.layout.is_empty());
-        assert_eq!(req.room_id, None);
+        let errors = req.validate().unwrap_err();
+        assert!(errors.errors().contains_key("layout"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_layout_save_request_missing_room_id_rejected() {
+        // room_id 为必填字段，缺失或 null 时反序列化失败
+        let missing: Result<LayoutSaveRequest, _> = serde_json::from_value(serde_json::json!({
+            "type": "workstation",
+            "layout": []
+        }));
+        assert!(missing.is_err());
+
+        let null_: Result<LayoutSaveRequest, _> = serde_json::from_value(serde_json::json!({
+            "type": "workstation",
+            "room_id": null,
+            "layout": []
+        }));
+        assert!(null_.is_err());
+    }
+
+    #[test]
+    fn test_layout_item_element_type_too_long_rejected() -> Result<(), serde_json::Error> {
+        // element_type 上限 20 字符，对齐 element_layouts.element_type VARCHAR(20)
+        let item: LayoutItem = serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "position": { "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0, "rotation": 0.0 },
+            "element_type": "a".repeat(21)
+        }))?;
+        let errors = item.validate().unwrap_err();
+        assert!(errors.errors().contains_key("element_type"));
         Ok(())
     }
 
@@ -150,6 +217,7 @@ mod tests {
     fn test_layout_save_request_missing_type_rejected() {
         // type 为必填字段，缺失时反序列化失败
         let result: Result<LayoutSaveRequest, _> = serde_json::from_value(serde_json::json!({
+            "room_id": Uuid::new_v4(),
             "layout": []
         }));
         assert!(result.is_err());

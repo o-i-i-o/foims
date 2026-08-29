@@ -446,9 +446,7 @@ export class SVGDataManager {
     try {
       const result = await this.apiPost("/api/resources/layouts", {
         type: this.core.type === "cabinet" ? "cabinet" : this.core.type,
-        room_id: this.core.currentRoomId || null,
-        network_region_id: null,
-        cabinet_id: null,
+        room_id: this.core.currentRoomId,
         layout: layoutData
       });
 

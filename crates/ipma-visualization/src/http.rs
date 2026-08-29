@@ -14,6 +14,7 @@ use ipma_auth::meta::{RequestMeta, log_op_best_effort};
 use ipma_common::{AppError, AppJson, DbProvider};
 use ipma_models::LayoutSaveRequest;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::topology::{TopologyConnectionRequest, TopologyNodesRequest};
 
@@ -22,26 +23,27 @@ pub async fn save_layout<P: DbProvider>(
     meta: RequestMeta,
     AppJson(req): AppJson<LayoutSaveRequest>,
 ) -> Result<Response, AppError> {
+    req.validate()?;
+
     let result = crate::layout::save_layout(&state.pool()?.get_conn(), req.clone())
         .await
         .map_err(AppError::from)?;
 
-    if let Some(room_id) = req.room_id {
-        let details = serde_json::json!({
-            "room_id": room_id,
-            "layout_count": req.layout.len(),
-            "type": req.r#type
-        });
-        log_op_best_effort(
-            &state.pool()?.get_conn(),
-            &meta,
-            "update",
-            "layout",
-            Some(&room_id),
-            &details,
-        )
-        .await;
-    }
+    let room_id = req.room_id;
+    let details = serde_json::json!({
+        "room_id": room_id,
+        "layout_count": req.layout.len(),
+        "type": req.r#type
+    });
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "layout",
+        Some(&room_id),
+        &details,
+    )
+    .await;
 
     Ok(result)
 }

@@ -1,6 +1,6 @@
 [package]
 name = "ipma-visualization"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA Visualization Module - Layout management and visualization"
@@ -21,6 +21,9 @@ sqlx = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# Validation
+validator = { workspace = true }
 
 # Utilities
 uuid = { workspace = true }

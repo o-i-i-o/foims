@@ -93,12 +93,8 @@ pub async fn save_layout(
     req: LayoutSaveRequest,
 ) -> Result<Response, VisualizationError> {
     if req.r#type == "workstation" {
-        let Some(room_id) = req.room_id else {
-            return Err(VisualizationError::Validation(msg(
-                "server.visualization.room_id_required",
-            )));
-        };
-
+        // room_id 与 layout 非空已由 LayoutSaveRequest 校验保证
+        let room_id = req.room_id;
         let mut tx = pool.begin().await?;
 
         let workstation_items: Vec<_> = req
@@ -165,12 +161,7 @@ pub async fn save_layout(
 
         Ok(ok_json((), "server.visualization.workstation_layout_saved"))
     } else if req.r#type == "cabinet" {
-        let Some(room_id) = req.room_id else {
-            return Err(VisualizationError::Validation(msg(
-                "server.visualization.room_id_required",
-            )));
-        };
-
+        let room_id = req.room_id;
         let mut tx = pool.begin().await?;
 
         let cabinet_ids: Vec<Uuid> = req.layout.iter().map(|item| item.id).collect();
@@ -509,9 +500,10 @@ mod tests {
         let req: LayoutSaveRequest =
             serde_json::from_str(json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
         assert_eq!(req.r#type, "workstation");
-        assert!(req.room_id.is_some());
-        assert!(req.network_region_id.is_none());
-        assert!(req.cabinet_id.is_none());
+        assert_eq!(
+            req.room_id.to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
         assert!(req.layout.is_empty());
     }
 

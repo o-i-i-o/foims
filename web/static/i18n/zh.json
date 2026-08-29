@@ -2196,6 +2196,8 @@
       "topology_nodes_retrieved": "获取拓扑节点成功",
       "topology_nodes_saved": "拓扑节点保存成功",
       "type_unsupported": "不支持的布局类型",
+      "layout_empty": "布局项不能为空",
+      "element_type_too_long": "元素类型不能超过 20 个字符",
       "workstation_layout_saved": "工位布局保存成功",
       "connection_type_invalid": "连线类型无效",
       "connection_label_too_long": "连线标签不能超过 100 个字符",

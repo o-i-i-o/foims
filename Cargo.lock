@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.92"
+version = "0.15.93"
 dependencies = [
  "async-trait",
  "axum",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-models"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "ipma-common",
@@ -2283,7 +2283,7 @@ dependencies = [
 
 [[package]]
 name = "ipma-visualization"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "ipma-auth",
@@ -2294,6 +2294,7 @@ dependencies = [
  "sqlx",
  "thiserror 2.0.20",
  "uuid",
+ "validator",
 ]
 
 [[package]]
