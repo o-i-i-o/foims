@@ -1,30 +1,28 @@
-//! 可视化模块的 axum 适配层（机房布局图纸 + 拓扑可视化）。
+//! 可视化 HTTP handler 层（机房布局图纸 + 拓扑可视化）。
 //!
-//! `ipma-visualization` crate 只暴露纯数据库函数（不依赖 axum 与
-//! 主程序 AppState），本模块负责将其包装为 HTTP handler：注入
-//! AppState 连接池、转换错误类型并补记操作日志。可视化与资源管理
-//! （`resource`）为平级模块，故本文件独立于 `resource/` 存放。
+//! handler 面向 `P: DbProvider` 泛型编写，由主程序 `AppState` 实现，
+//! 与 resource/organization 的 crate 结构一致。业务与 SQL 位于
+//! `layout` / `topology` 模块；此处负责 axum 提取器解析、审计日志
+//! 与错误转换（`VisualizationError` → `AppError`）。
 
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::response::Response;
 
-use crate::app_state::AppState;
-use crate::routes::static_files::AppJson;
-use crate::utils::{RequestMeta, log_op_best_effort};
-use ipma_common::AppError;
+use ipma_auth::meta::{RequestMeta, log_op_best_effort};
+use ipma_common::{AppError, AppJson, DbProvider};
 use ipma_models::LayoutSaveRequest;
-use ipma_visualization::{TopologyConnectionRequest, TopologyNodesRequest};
-use serde_json;
 use uuid::Uuid;
 
-pub async fn save_layout(
-    State(state): State<Arc<AppState>>,
+use crate::topology::{TopologyConnectionRequest, TopologyNodesRequest};
+
+pub async fn save_layout<P: DbProvider>(
+    State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<LayoutSaveRequest>,
 ) -> Result<Response, AppError> {
-    let visualization_req = ipma_visualization::LayoutSaveRequest {
+    let visualization_req = crate::layout::LayoutSaveRequest {
         r#type: req.r#type.clone(),
         room_id: req.room_id,
         network_region_id: req.network_region_id,
@@ -32,9 +30,9 @@ pub async fn save_layout(
         layout: req
             .layout
             .iter()
-            .map(|item| ipma_visualization::LayoutItem {
+            .map(|item| crate::layout::LayoutItem {
                 id: item.id,
-                position: ipma_visualization::Position {
+                position: crate::layout::Position {
                     x: item.position.x,
                     y: item.position.y,
                     width: item.position.width,
@@ -46,7 +44,7 @@ pub async fn save_layout(
             .collect(),
     };
 
-    let result = ipma_visualization::save_layout(&state.pool()?.get_conn(), visualization_req)
+    let result = crate::layout::save_layout(&state.pool()?.get_conn(), visualization_req)
         .await
         .map_err(AppError::from)?;
 
@@ -70,12 +68,12 @@ pub async fn save_layout(
     Ok(result)
 }
 
-pub async fn delete_layout(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_layout<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
-    let result = ipma_visualization::delete_layout(&state.pool()?.get_conn(), room_id)
+    let result = crate::layout::delete_layout(&state.pool()?.get_conn(), room_id)
         .await
         .map_err(AppError::from)?;
 
@@ -95,12 +93,12 @@ pub async fn delete_layout(
     Ok(result)
 }
 
-pub async fn delete_positions_layout(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_positions_layout<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
-    let result = ipma_visualization::delete_positions_layout(&state.pool()?.get_conn(), room_id)
+    let result = crate::layout::delete_positions_layout(&state.pool()?.get_conn(), room_id)
         .await
         .map_err(AppError::from)?;
 
@@ -120,89 +118,91 @@ pub async fn delete_positions_layout(
     Ok(result)
 }
 
-pub async fn get_layout(
-    State(state): State<Arc<AppState>>,
+pub async fn get_layout<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::get_layout(&state.pool()?.get_conn(), room_id)
+    crate::layout::get_layout(&state.pool()?.get_conn(), room_id)
         .await
         .map_err(AppError::from)
 }
 
-pub async fn get_positions_layout(
-    State(state): State<Arc<AppState>>,
+pub async fn get_positions_layout<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::get_positions_layout(&state.pool()?.get_conn(), room_id)
+    crate::layout::get_positions_layout(&state.pool()?.get_conn(), room_id)
         .await
         .map_err(AppError::from)
 }
 
-pub async fn get_room_cabinets_with_positions(
-    State(state): State<Arc<AppState>>,
+pub async fn get_room_cabinets_with_positions<P: DbProvider>(
+    State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::get_room_cabinets_with_positions(&state.pool()?.get_conn(), room_id)
+    crate::layout::get_room_cabinets_with_positions(&state.pool()?.get_conn(), room_id)
         .await
         .map_err(AppError::from)
 }
 
 // ==================== 拓扑可视化 ====================
 
-pub async fn get_topology_nodes(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
-    ipma_visualization::get_topology_nodes(&state.pool()?.get_conn())
+pub async fn get_topology_nodes<P: DbProvider>(
+    State(state): State<Arc<P>>,
+) -> Result<Response, AppError> {
+    crate::topology::get_topology_nodes(&state.pool()?.get_conn())
         .await
         .map_err(AppError::from)
 }
 
-pub async fn save_topology_nodes(
-    State(state): State<Arc<AppState>>,
+pub async fn save_topology_nodes<P: DbProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<TopologyNodesRequest>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::save_topology_nodes(&state.pool()?.get_conn(), req)
+    crate::topology::save_topology_nodes(&state.pool()?.get_conn(), req)
         .await
         .map_err(AppError::from)
 }
 
-pub async fn delete_topology_node(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_topology_node<P: DbProvider>(
+    State(state): State<Arc<P>>,
     device_id: Path<Uuid>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::delete_topology_node(&state.pool()?.get_conn(), device_id)
+    crate::topology::delete_topology_node(&state.pool()?.get_conn(), device_id)
         .await
         .map_err(AppError::from)
 }
 
-pub async fn get_topology_connections(
-    State(state): State<Arc<AppState>>,
+pub async fn get_topology_connections<P: DbProvider>(
+    State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::get_topology_connections(&state.pool()?.get_conn())
+    crate::topology::get_topology_connections(&state.pool()?.get_conn())
         .await
         .map_err(AppError::from)
 }
 
-pub async fn create_topology_connection(
-    State(state): State<Arc<AppState>>,
+pub async fn create_topology_connection<P: DbProvider>(
+    State(state): State<Arc<P>>,
     AppJson(req): AppJson<TopologyConnectionRequest>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::create_topology_connection(&state.pool()?.get_conn(), req)
+    crate::topology::create_topology_connection(&state.pool()?.get_conn(), req)
         .await
         .map_err(AppError::from)
 }
 
-pub async fn delete_topology_connection(
-    State(state): State<Arc<AppState>>,
+pub async fn delete_topology_connection<P: DbProvider>(
+    State(state): State<Arc<P>>,
     id: Path<Uuid>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::delete_topology_connection(&state.pool()?.get_conn(), id)
+    crate::topology::delete_topology_connection(&state.pool()?.get_conn(), id)
         .await
         .map_err(AppError::from)
 }
 
-pub async fn trigger_auto_discover(
-    State(state): State<Arc<AppState>>,
+pub async fn trigger_auto_discover<P: DbProvider>(
+    State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
-    ipma_visualization::trigger_auto_discover(&state.pool()?.get_conn())
+    crate::topology::trigger_auto_discover(&state.pool()?.get_conn())
         .await
         .map_err(AppError::from)
 }

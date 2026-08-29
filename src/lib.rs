@@ -37,4 +37,3 @@ pub mod routes;
 pub mod shutdown;
 pub mod system;
 pub mod utils;
-pub mod visualization;

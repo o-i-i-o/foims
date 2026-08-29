@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.90"
+version = "0.15.91"
 dependencies = [
  "async-trait",
  "axum",
@@ -2283,10 +2283,12 @@ dependencies = [
 
 [[package]]
 name = "ipma-visualization"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
+ "ipma-auth",
  "ipma-common",
+ "ipma-models",
  "serde",
  "serde_json",
  "sqlx",

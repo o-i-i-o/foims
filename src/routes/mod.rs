@@ -37,12 +37,6 @@ use crate::system::scheduled_task::{
     create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
-use crate::visualization::{
-    create_topology_connection, delete_layout, delete_positions_layout, delete_topology_connection,
-    delete_topology_node, get_layout, get_positions_layout, get_room_cabinets_with_positions,
-    get_topology_connections, get_topology_nodes, save_layout, save_topology_nodes,
-    trigger_auto_discover,
-};
 use ipma_common::AppError;
 
 async fn data_export_csv(
@@ -422,39 +416,46 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             post(ipma_resource::batch_create_ip_managers::<AppState>),
         )
         // 布局管理
-        .route("/api/resources/layouts", post(save_layout))
+        .route(
+            "/api/resources/layouts",
+            post(ipma_visualization::http::save_layout::<AppState>),
+        )
         .route(
             "/api/resources/layouts/workstation/{room_id}",
-            get(get_layout).delete(delete_layout),
+            get(ipma_visualization::http::get_layout::<AppState>)
+                .delete(ipma_visualization::http::delete_layout::<AppState>),
         )
         .route(
             "/api/resources/layouts/positions/{room_id}",
-            get(get_positions_layout).delete(delete_positions_layout),
+            get(ipma_visualization::http::get_positions_layout::<AppState>)
+                .delete(ipma_visualization::http::delete_positions_layout::<AppState>),
         )
         .route(
             "/api/resources/layouts/room-cabinets/{room_id}",
-            get(get_room_cabinets_with_positions),
+            get(ipma_visualization::http::get_room_cabinets_with_positions::<AppState>),
         )
         // 拓扑可视化
         .route(
             "/api/resources/topology/nodes",
-            get(get_topology_nodes).post(save_topology_nodes),
+            get(ipma_visualization::http::get_topology_nodes::<AppState>)
+                .post(ipma_visualization::http::save_topology_nodes::<AppState>),
         )
         .route(
             "/api/resources/topology/nodes/{device_id}",
-            delete(delete_topology_node),
+            delete(ipma_visualization::http::delete_topology_node::<AppState>),
         )
         .route(
             "/api/resources/topology/connections",
-            get(get_topology_connections).post(create_topology_connection),
+            get(ipma_visualization::http::get_topology_connections::<AppState>)
+                .post(ipma_visualization::http::create_topology_connection::<AppState>),
         )
         .route(
             "/api/resources/topology/connections/{id}",
-            delete(delete_topology_connection),
+            delete(ipma_visualization::http::delete_topology_connection::<AppState>),
         )
         .route(
             "/api/resources/topology/auto-discover",
-            post(trigger_auto_discover),
+            post(ipma_visualization::http::trigger_auto_discover::<AppState>),
         )
         // 组织管理
         .route(

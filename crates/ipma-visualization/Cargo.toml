@@ -1,6 +1,6 @@
 [package]
 name = "ipma-visualization"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "IPMA Visualization Module - Layout management and visualization"
@@ -9,6 +9,8 @@ license = "GPL-3.0-or-later"
 [dependencies]
 # Workspace crates
 ipma-common = { path = "../ipma-common" }
+ipma-auth = { path = "../ipma-auth" }
+ipma-models = { path = "../ipma-models" }
 
 # Axum
 axum = { workspace = true }
