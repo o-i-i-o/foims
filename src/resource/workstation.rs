@@ -15,13 +15,13 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::models::{
-    IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
+use ipma_models::{
+    IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
+};
 
 /// 工位基础查询列（含房间名联表），列表与单条查询共用。
 const WORKSTATION_COLUMNS: &str = "w.id, w.name, w.room_id,

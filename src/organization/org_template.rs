@@ -1,7 +1,6 @@
 //! 组织类型模板管理。
 
 use crate::app_state::AppState;
-use crate::models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
@@ -9,6 +8,7 @@ use axum::response::Response;
 use chrono::Utc;
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;

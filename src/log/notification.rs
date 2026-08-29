@@ -9,9 +9,9 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AuthUser;
-use crate::models::Notification;
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
+use ipma_models::Notification;
 
 pub async fn get_notifications(
     State(state): State<Arc<AppState>>,

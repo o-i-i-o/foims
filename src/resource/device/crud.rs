@@ -2,7 +2,6 @@
 
 use crate::app_state::AppState;
 use crate::crypto::encrypt_password_async;
-use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
@@ -10,6 +9,7 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
 use ipma_common::{AppError, msg};
+use ipma_models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;

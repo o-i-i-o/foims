@@ -1,10 +1,6 @@
 //! 房间资源管理（含网络绑定与子资源级联）。
 
 use crate::app_state::AppState;
-use crate::models::{
-    CabinetBrief, NetOutletBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate,
-    RoomNetOutletsSync, RoomUpdate, RoomWithNetworks, WorkstationBrief,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
@@ -12,6 +8,10 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
 use ipma_common::{AppError, msg};
+use ipma_models::{
+    CabinetBrief, NetOutletBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate,
+    RoomNetOutletsSync, RoomUpdate, RoomWithNetworks, WorkstationBrief,
+};
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -859,7 +859,7 @@ pub async fn sync_room_net_outlets(
 async fn sync_workstation_children(
     tx: &mut sqlx::PgConnection,
     room_id: Uuid,
-    items: &[crate::models::WorkstationSyncItem],
+    items: &[ipma_models::WorkstationSyncItem],
     now: chrono::DateTime<Utc>,
 ) -> Result<(), AppError> {
     let existing_ids: Vec<Uuid> =
@@ -935,7 +935,7 @@ async fn sync_workstation_children(
 async fn sync_cabinet_children(
     tx: &mut sqlx::PgConnection,
     room_id: Uuid,
-    items: &[crate::models::CabinetSyncItem],
+    items: &[ipma_models::CabinetSyncItem],
     now: chrono::DateTime<Utc>,
 ) -> Result<(), AppError> {
     let existing_ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM cabinets WHERE room_id = $1")

@@ -15,10 +15,10 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::models::{Employee, EmployeeCreate, EmployeeUpdate, is_valid_phone};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_common::{AppError, msg};
+use ipma_models::{Employee, EmployeeCreate, EmployeeUpdate, is_valid_phone};
 
 /// 员工基础查询列（含组织名联表）
 const EMPLOYEE_COLUMNS: &str = "e.id, e.org_id,

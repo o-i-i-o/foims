@@ -580,7 +580,7 @@ pub struct UpdateSsoConfigRequest {
     #[validate(length(max = 255, message = "server.sso.validation.redirect_uri_length"))]
     pub redirect_uri: String,
     #[validate(custom(
-        function = "crate::models::validate_role",
+        function = "ipma_models::validate_role",
         message = "server.user.validation.role_invalid"
     ))]
     pub default_role: String,

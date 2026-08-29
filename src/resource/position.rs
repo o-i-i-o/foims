@@ -15,14 +15,14 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::models::{
-    CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
-    IpManager,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
+use ipma_models::{
+    CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
+    IpManager,
+};
 
 /// 追加机位列表过滤条件（关键字 + 机柜 + 机房），供 COUNT 与数据查询共用。
 fn push_position_filters(

@@ -11,9 +11,6 @@ pub use employee::*;
 pub use org_template::*;
 
 use crate::app_state::AppState;
-use crate::models::{
-    OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
@@ -22,6 +19,9 @@ use axum::response::Response;
 use chrono::Utc;
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_models::{
+    OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
+};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -11,14 +11,14 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::models::{
-    DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
-    PortSyncItem,
-};
 use crate::resource::ip::detect_ip_version;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_common::{AppError, msg};
+use ipma_models::{
+    DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
+    PortSyncItem,
+};
 
 /// 默认网卡名称
 pub const DEFAULT_CARD_NAME: &str = "网卡1";

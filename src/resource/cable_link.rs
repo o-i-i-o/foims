@@ -17,11 +17,11 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::AppError;
+use ipma_models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 
 /// 合法的端点资源类型。
 const VALID_ENDPOINT_TYPES: [&str; 3] = ["net_outlet", "device_interface", "patch_panel"];

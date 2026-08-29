@@ -11,10 +11,10 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 
 use crate::app_state::AppState;
-use crate::models::LayoutSaveRequest;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
+use ipma_models::LayoutSaveRequest;
 use ipma_visualization::{TopologyConnectionRequest, TopologyNodesRequest};
 use serde_json;
 use uuid::Uuid;

@@ -21,11 +21,11 @@ use crate::auth::login::{
     ExternalUser, build_login_response, find_or_create_external_user, log_login,
 };
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::models::LdapLoginRequest;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_models::LdapLoginRequest;
 
 const LDAP_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -351,7 +351,7 @@ pub(crate) async fn complete_external_login(
         crate::auth::login::issue_external_login_tokens(&state, &meta, &external, remember_me)
             .await?;
 
-    let user = crate::models::User {
+    let user = ipma_models::User {
         id: external.id,
         username: external.username,
         email: external.email,
@@ -421,7 +421,7 @@ pub struct UpdateLdapConfigRequest {
     #[validate(length(min = 3, max = 255, message = "server.ldap.validation.filter_length"))]
     pub user_filter: String,
     #[validate(custom(
-        function = "crate::models::validate_role",
+        function = "ipma_models::validate_role",
         message = "server.user.validation.role_invalid"
     ))]
     pub default_role: String,

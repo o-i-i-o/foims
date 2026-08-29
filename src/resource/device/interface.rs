@@ -27,14 +27,14 @@ use super::nic::{
 };
 use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp};
 use crate::app_state::AppState;
-use crate::models::{
-    DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
-    SnmpPort,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::{AppError, msg};
+use ipma_models::{
+    DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
+    SnmpPort,
+};
 
 /// 接口联表查询列（含所属设备名），列表与单条查询共用。
 const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,

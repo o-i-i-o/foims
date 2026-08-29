@@ -12,12 +12,12 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::auth::utils::hash_password;
-use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::log_info;
 use ipma_common::{AppError, msg};
+use ipma_models::{User, UserCreate, UserUpdate};
 
 pub async fn get_users(
     _secadmin: crate::auth::extractor::SecAdminUser,

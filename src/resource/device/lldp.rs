@@ -10,9 +10,9 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::models::{DeviceLldp, LldpNeighbor};
 use ipma_common::log_error;
 use ipma_common::{AppError, msg};
+use ipma_models::{DeviceLldp, LldpNeighbor};
 
 use super::snmp::{DeviceForSnmp, SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error};
 
@@ -93,7 +93,7 @@ where
 
 pub async fn get_lldp_neighbors_via_snmp(
     params: &SnmpParamsLegacy,
-) -> Result<Vec<crate::models::LldpNeighbor>, SnmpError> {
+) -> Result<Vec<ipma_models::LldpNeighbor>, SnmpError> {
     let addr = format!("{}:{}", params.ip, params.port);
     let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
@@ -201,7 +201,7 @@ pub async fn get_lldp_neighbors_via_snmp(
     .await?;
 
     let lldp_rem_table = oid!(1, 0, 8802, 1, 1, 2, 1, 4, 1, 1);
-    let mut neighbor_data: HashMap<(String, String), crate::models::LldpNeighbor> = HashMap::new();
+    let mut neighbor_data: HashMap<(String, String), ipma_models::LldpNeighbor> = HashMap::new();
     let mut chassis_subtype_map: HashMap<(String, String), u8> = HashMap::new();
     let mut port_subtype_map: HashMap<(String, String), u8> = HashMap::new();
 
@@ -220,7 +220,7 @@ pub async fn get_lldp_neighbors_via_snmp(
                     &port_id_map,
                     &port_desc_map,
                 );
-                crate::models::LldpNeighbor {
+                ipma_models::LldpNeighbor {
                     local_port,
                     neighbor_chassis_id: None,
                     neighbor_port_id: None,
@@ -303,7 +303,7 @@ pub async fn get_lldp_neighbors_via_snmp(
     })
     .await?;
 
-    let neighbors: Vec<crate::models::LldpNeighbor> = neighbor_data
+    let neighbors: Vec<ipma_models::LldpNeighbor> = neighbor_data
         .into_values()
         .filter(|n| n.neighbor_sys_name.is_some() || n.neighbor_chassis_id.is_some())
         .collect();

@@ -7,9 +7,9 @@ use axum::extract::{Query, State};
 use axum::response::Response;
 
 use crate::app_state::AppState;
-use crate::models::LoginLog;
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::AppError;
+use ipma_models::LoginLog;
 
 pub async fn get_login_logs(
     State(state): State<Arc<AppState>>,

@@ -6,16 +6,16 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 
 use crate::app_state::AppState;
-use crate::models::{
-    Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
-    PatchPanelBrief, PositionBrief, PositionSyncItem,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use chrono::Utc;
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_models::{
+    Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
+    PatchPanelBrief, PositionBrief, PositionSyncItem,
+};
 use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;

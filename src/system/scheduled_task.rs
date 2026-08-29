@@ -16,10 +16,10 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AdminUser;
-use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 use crate::routes::static_files::AppJson;
 use ipma_common::AppError;
 use ipma_common::{log_warn, msg};
+use ipma_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 
 /// 允许通过 API 创建/更新的任务类型白名单（与 task_executors 中注册的类型保持一致）
 const ALLOWED_TASK_TYPES: &[&str] = &[

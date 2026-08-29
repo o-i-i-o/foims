@@ -8,7 +8,6 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use crate::app_state::AppState;
-use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
@@ -16,6 +15,7 @@ use crate::utils::validate_network_in_room;
 use chrono::Utc;
 use ipma_common::AppError;
 use ipma_common::{AppMessage, log_error, log_info, log_warn, msg};
+use ipma_models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
 use std::net::IpAddr;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -644,7 +644,7 @@ async fn sync_switch_macs(
 
 pub async fn pull_ip_managers(
     State(state): State<Arc<AppState>>,
-    AppJson(req): AppJson<crate::models::PullIpManagersRequest>,
+    AppJson(req): AppJson<ipma_models::PullIpManagersRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
@@ -831,7 +831,7 @@ pub async fn get_available_ips(
 pub async fn auto_assign_ip(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    AppJson(req): AppJson<crate::models::AutoAssignIpRequest>,
+    AppJson(req): AppJson<ipma_models::AutoAssignIpRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
@@ -986,7 +986,7 @@ pub async fn auto_assign_device_ip(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
-    AppJson(req): AppJson<crate::models::AutoAssignIpRequest>,
+    AppJson(req): AppJson<ipma_models::AutoAssignIpRequest>,
 ) -> Result<Response, AppError> {
     let mut req = req;
     req.device_id = id;

@@ -1,12 +1,12 @@
 //! 设备模板管理。
 
 use crate::app_state::AppState;
-use crate::models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use ipma_common::{AppError, msg};
+use ipma_models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;

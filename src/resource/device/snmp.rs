@@ -15,10 +15,10 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
-use crate::models::{SnmpPort, SnmpTestRequest};
 use crate::routes::static_files::AppJson;
 use ipma_common::{AppError, msg};
 use ipma_common::{AppMessage, log_info, log_warn};
+use ipma_models::{SnmpPort, SnmpTestRequest};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DeviceForSnmp {
@@ -1134,7 +1134,7 @@ mod tests {
 
     /// 发起 SNMP 连接测试并断言返回的错误消息 key
     async fn assert_snmp_ip_rejected(ip: Option<&str>, expected_key: &str) {
-        let req = crate::models::SnmpTestRequest {
+        let req = ipma_models::SnmpTestRequest {
             device_id: None,
             ip_address: ip.map(str::to_string),
             snmp_version: Some("v2c".to_string()),

@@ -17,7 +17,7 @@ pub mod config;
 pub mod crypto;
 pub mod db;
 pub mod log;
-pub mod models;
+
 pub mod organization;
 pub mod resource;
 pub mod routes;

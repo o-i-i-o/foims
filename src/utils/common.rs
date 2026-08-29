@@ -640,10 +640,10 @@ pub const NETWORK_QUERY: &str = r"
 
 pub fn parse_network_from_row(
     row: &sqlx::postgres::PgRow,
-) -> Result<crate::models::Network, ipma_common::AppError> {
+) -> Result<ipma_models::Network, ipma_common::AppError> {
     use sqlx::Row;
 
-    Ok(crate::models::Network {
+    Ok(ipma_models::Network {
         id: row.get(0),
         name: row.get(1),
         network_region_id: row.get(2),

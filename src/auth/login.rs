@@ -23,14 +23,14 @@ use crate::auth::utils::{
     JwtUtils, extract_token_from_parts, get_client_info_from_parts, hash_password,
 };
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::models::{
-    EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest, SendLoginCodeRequest,
-    SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
-};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_models::{
+    EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest, SendLoginCodeRequest,
+    SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
+};
 use totp_rs::{Algorithm, Builder, Secret};
 
 /// TOTP 已用码存储：保留每个用户最近 N 个已用码。
@@ -1684,7 +1684,7 @@ pub(crate) async fn find_or_create_external_user(
     }
 
     // 角色合法性兜底（配置更新时已校验，此处防御性重验）
-    let role = if crate::models::validate_role(default_role).is_ok() {
+    let role = if ipma_models::validate_role(default_role).is_ok() {
         default_role.to_string()
     } else {
         "user".to_string()

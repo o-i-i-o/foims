@@ -1,7 +1,6 @@
 //! 信息点（net_outlets）资源管理。
 
 use crate::app_state::AppState;
-use crate::models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
@@ -10,6 +9,7 @@ use axum::response::Response;
 use chrono::Utc;
 use ipma_common::AppError;
 use ipma_common::msg;
+use ipma_models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;

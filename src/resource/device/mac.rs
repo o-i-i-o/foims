@@ -11,9 +11,9 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::models::{ArpEntry, DeviceMac};
 use ipma_common::{AppError, msg};
 use ipma_common::{log_error, log_warn};
+use ipma_models::{ArpEntry, DeviceMac};
 
 use super::snmp::{
     SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, get_device_snmp_config,
