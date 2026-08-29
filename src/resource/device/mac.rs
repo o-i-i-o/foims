@@ -11,8 +11,8 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{ArpEntry, DeviceMac};
+use ipma_common::{AppError, msg};
 use ipma_common::{log_error, log_warn};
 
 use super::snmp::{
@@ -356,7 +356,7 @@ pub async fn get_device_mac_table(
         msg("server.device.mac.synced").with("count", upserted_count)
     };
 
-    Ok(crate::error::ok_json(saved_macs, message))
+    Ok(ipma_common::ok_json(saved_macs, message))
 }
 
 pub async fn get_device_macs_from_db(
@@ -386,5 +386,5 @@ pub async fn get_device_macs_from_db(
         AppError::Database(msg("server.error.database"))
     })?;
 
-    Ok(crate::error::ok_json(macs, "server.device.mac.fetched"))
+    Ok(ipma_common::ok_json(macs, "server.device.mac.fetched"))
 }

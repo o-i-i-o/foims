@@ -15,7 +15,6 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{
     CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
     IpManager,
@@ -23,6 +22,7 @@ use crate::models::{
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::{AppError, msg};
 
 /// 追加机位列表过滤条件（关键字 + 机柜 + 机房），供 COUNT 与数据查询共用。
 fn push_position_filters(
@@ -131,7 +131,7 @@ pub async fn get_positions(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(items, total, &pagination),
         "server.position.list_retrieved",
     ))
@@ -223,7 +223,7 @@ pub async fn create_cabinet_position(
     )
     .await;
 
-    Ok(crate::error::ok_json(position, "server.position.created"))
+    Ok(ipma_common::ok_json(position, "server.position.created"))
 }
 
 /// 查询机位基础信息（含机柜/机房名称联表）。
@@ -281,7 +281,7 @@ pub async fn get_cabinet_position(
         .ok_or_else(|| AppError::NotFound(msg("server.position.not_found")))?;
     position.ips = fetch_position_ips(&conn, id).await?;
 
-    Ok(crate::error::ok_json(position, "server.position.fetched"))
+    Ok(ipma_common::ok_json(position, "server.position.fetched"))
 }
 
 /// 更新机位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
@@ -348,7 +348,7 @@ pub async fn update_cabinet_position(
     )
     .await;
 
-    Ok(crate::error::ok_json(result, "server.position.updated"))
+    Ok(ipma_common::ok_json(result, "server.position.updated"))
 }
 
 /// 删除机位（被设备占用时拒绝删除）。
@@ -399,5 +399,5 @@ pub async fn delete_cabinet_position(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.position.deleted"))
+    Ok(ipma_common::ok_json((), "server.position.deleted"))
 }

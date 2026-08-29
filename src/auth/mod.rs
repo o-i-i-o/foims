@@ -10,9 +10,9 @@ pub mod user;
 pub mod utils;
 
 /// 获取图形验证码（公开端点，登录页按需加载）
-pub async fn get_captcha() -> Result<axum::response::Response, crate::error::AppError> {
+pub async fn get_captcha() -> Result<axum::response::Response, ipma_common::AppError> {
     let challenge = captcha::generate();
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "captcha_id": challenge.captcha_id,
             "svg": challenge.svg,

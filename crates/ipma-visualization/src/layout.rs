@@ -676,3 +676,15 @@ mod tests {
         );
     }
 }
+
+impl From<VisualizationError> for ipma_common::AppError {
+    fn from(err: VisualizationError) -> Self {
+        match err {
+            VisualizationError::Database(m) => ipma_common::AppError::Database(m),
+            VisualizationError::NotFound(m) => ipma_common::AppError::NotFound(m),
+            VisualizationError::Validation(m) => ipma_common::AppError::Validation(m),
+            VisualizationError::Conflict(m) => ipma_common::AppError::Conflict(m),
+            VisualizationError::Internal(m) => ipma_common::AppError::Internal(m),
+        }
+    }
+}

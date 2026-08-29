@@ -1,7 +1,6 @@
 //! 配线架资源管理。
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{CabinetPatchPanelsSync, PatchPanelWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -9,6 +8,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::{AppError, msg};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -104,7 +104,7 @@ pub async fn get_patch_panels(
         q.fetch_all(&state.pool()?.get_conn()).await?
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(patch_panels, total, &pagination),
         "server.patch_panel.list_retrieved",
     ))
@@ -215,5 +215,5 @@ pub async fn sync_cabinet_patch_panels(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.patch_panel.synced"))
+    Ok(ipma_common::ok_json((), "server.patch_panel.synced"))
 }

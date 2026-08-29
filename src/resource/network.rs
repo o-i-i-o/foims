@@ -1,7 +1,6 @@
 //! 网络区域与网段管理。
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{
     Network, NetworkCreate, NetworkRegion, NetworkRegionCreate, NetworkRegionUpdate, NetworkUpdate,
 };
@@ -12,6 +11,7 @@ use crate::utils::parse_network_from_row;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::AppError;
 use ipma_common::{log_error, log_info, msg};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -274,7 +274,7 @@ pub async fn get_networks(
             .collect::<Result<_, _>>()?
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(networks, total, &pagination),
         "server.network.fetched",
     ))
@@ -468,7 +468,7 @@ pub async fn create_network(
         updated_at: now,
     };
 
-    Ok(crate::error::ok_json(network, "server.network.created"))
+    Ok(ipma_common::ok_json(network, "server.network.created"))
 }
 
 pub async fn get_network(
@@ -494,7 +494,7 @@ pub async fn get_network(
 
     let network = parse_network_from_row(&row)?;
 
-    Ok(crate::error::ok_json(network, "server.network.fetched"))
+    Ok(ipma_common::ok_json(network, "server.network.fetched"))
 }
 
 pub async fn update_network(
@@ -738,7 +738,7 @@ pub async fn update_network(
     .await;
     log_info!("log.network.updated", name = network.name, id = id);
 
-    Ok(crate::error::ok_json(network, "server.network.updated"))
+    Ok(ipma_common::ok_json(network, "server.network.updated"))
 }
 
 pub async fn delete_network(
@@ -808,7 +808,7 @@ pub async fn delete_network(
     .await;
     log_info!("log.network.deleted", id = id);
 
-    Ok(crate::error::ok_json((), "server.network.deleted"))
+    Ok(ipma_common::ok_json((), "server.network.deleted"))
 }
 
 pub async fn get_network_regions(
@@ -875,7 +875,7 @@ pub async fn get_network_regions(
             .await?
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(network_regions, total, &pagination),
         "server.network.region_fetched",
     ))
@@ -939,7 +939,7 @@ pub async fn create_network_region(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         network_region,
         "server.network.region_created",
     ))
@@ -958,7 +958,7 @@ pub async fn get_network_region(
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound(msg("server.network.region_not_found")))?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         network_region,
         "server.network.region_fetched",
     ))
@@ -1038,7 +1038,7 @@ pub async fn update_network_region(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         network_region,
         "server.network.region_updated",
     ))
@@ -1088,7 +1088,7 @@ pub async fn delete_network_region(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.network.region_deleted"))
+    Ok(ipma_common::ok_json((), "server.network.region_deleted"))
 }
 
 #[cfg(test)]
@@ -1096,10 +1096,10 @@ mod tests {
     //! 本模块覆盖 network.rs 处理器所依赖的纯校验链
     //!（CIDR 格式/类型、网关归属、区域包含），不触及数据库。
 
-    use crate::error::AppError;
     use crate::utils::{
         cidr_belongs_to_region, get_cidr_type, validate_cidr, validate_gateway_in_cidr,
     };
+    use ipma_common::AppError;
 
     // ==================== CIDR 格式校验（IPv4） ====================
 

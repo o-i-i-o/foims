@@ -1,13 +1,13 @@
 //! 组织类型模板管理。
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::AppError;
 use ipma_common::msg;
 use serde_json::json;
 use std::sync::Arc;
@@ -64,7 +64,7 @@ pub async fn get_available_org_types(
     let types: Vec<String> = all_types.into_iter().collect();
     let icons = serde_json::Value::Object(all_icons);
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         json!({
             "types": types,
             "icons": icons
@@ -438,7 +438,7 @@ pub async fn get_org_templates(State(state): State<Arc<AppState>>) -> Result<Res
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         json!({ "items": templates }),
         "server.org_template.list_fetched",
     ))
@@ -458,7 +458,7 @@ pub async fn get_org_template(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.org_template.not_found")))?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         template,
         "server.org_template.fetched",
     ))
@@ -529,7 +529,7 @@ pub async fn create_org_template(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         template,
         "server.org_template.created",
     ))
@@ -688,7 +688,7 @@ pub async fn update_org_template(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         template,
         "server.org_template.updated",
     ))
@@ -739,7 +739,7 @@ pub async fn delete_org_template(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.org_template.deleted"))
+    Ok(ipma_common::ok_json((), "server.org_template.deleted"))
 }
 
 #[cfg(test)]

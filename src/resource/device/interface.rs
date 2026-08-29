@@ -27,7 +27,6 @@ use super::nic::{
 };
 use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp};
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{
     DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
     SnmpPort,
@@ -35,6 +34,7 @@ use crate::models::{
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::{AppError, msg};
 
 /// 接口联表查询列（含所属设备名），列表与单条查询共用。
 const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,
@@ -88,7 +88,7 @@ pub async fn get_device_interfaces(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(data, total, &pagination),
         "server.device.interface.list_retrieved",
     ))
@@ -140,7 +140,7 @@ pub async fn get_all_device_interfaces(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(data, total, &pagination),
         "server.device.interface.list_all_retrieved",
     ))
@@ -279,7 +279,7 @@ pub async fn create_device_interface(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         data,
         "server.device.interface.created",
     ))
@@ -301,7 +301,7 @@ pub async fn get_device_interface(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.device.interface.not_found")))?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         data,
         "server.device.interface.fetched",
     ))
@@ -413,7 +413,7 @@ pub async fn update_device_interface(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         data,
         "server.device.interface.updated",
     ))
@@ -486,7 +486,7 @@ pub async fn delete_device_interface(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.device.interface.deleted"))
+    Ok(ipma_common::ok_json((), "server.device.interface.deleted"))
 }
 
 /// 将 SNMP 拉取的端口映射为统一接口写入参数（未指定网卡前缀）。
@@ -632,5 +632,5 @@ pub async fn sync_ports_from_snmp(
         msg("server.device.interface.sync_all_skipped").with("skipped", skipped_count)
     };
 
-    Ok(crate::error::ok_json(saved_interfaces, message))
+    Ok(ipma_common::ok_json(saved_interfaces, message))
 }

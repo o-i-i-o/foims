@@ -8,8 +8,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use validator::Validate;
 
-use crate::error::AppError;
 use crate::routes::static_files::AppJson;
+use ipma_common::AppError;
 use ipma_common::{log_warn, msg};
 
 /// 应用层 Fail2ban 日志文件路径（供 OS fail2ban 监控）
@@ -441,7 +441,7 @@ pub async fn get_app_fail2ban_status(
     banned_usernames.sort_by_key(|a| a.remaining_seconds);
     tracked_usernames.sort_by_key(|b| std::cmp::Reverse(b.failure_count));
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         AppFail2banStatus {
             enabled: config.enabled,
             findtime: config.findtime,
@@ -480,7 +480,7 @@ pub async fn update_app_fail2ban_config(
         }
     }
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({"message": "server.fail2ban.config_updated"}),
         "server.fail2ban.config_updated",
     ))
@@ -508,7 +508,7 @@ pub async fn app_unban_ip(
     }
 
     let response = msg("server.fail2ban.ip_unbanned").with("ip", &ip);
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({"message": "server.fail2ban.ip_unbanned", "ip": ip}),
         response,
     ))
@@ -537,7 +537,7 @@ pub async fn app_ban_ip(
     let response = msg("server.fail2ban.ip_banned")
         .with("ip", &ip)
         .with("seconds", config.bantime);
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({"message": "server.fail2ban.ip_banned", "ip": ip}),
         response,
     ))

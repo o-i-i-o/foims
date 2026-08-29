@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 use uuid::Uuid;
 
-use crate::error::{AppError, msg};
+use ipma_common::{AppError, msg};
 use ipma_common::{log_error, log_info, log_warn};
 
 static GLOBAL_TOKEN_CACHE: LazyLock<Arc<DashMap<String, TokenCacheValue>>> =

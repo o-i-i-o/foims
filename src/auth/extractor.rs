@@ -4,8 +4,8 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
 use crate::auth::utils::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
-use crate::error::{AppError, msg};
 use crate::utils::common::is_secure_from_parts;
+use ipma_common::{AppError, msg};
 
 pub struct AuthUser {
     pub sub: String,

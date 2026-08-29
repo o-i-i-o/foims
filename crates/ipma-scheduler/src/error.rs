@@ -89,3 +89,17 @@ mod tests {
         }
     }
 }
+
+impl From<SchedulerError> for ipma_common::AppError {
+    fn from(err: SchedulerError) -> Self {
+        match err {
+            SchedulerError::Database(m) => ipma_common::AppError::Database(m),
+            SchedulerError::NotFound(m) => ipma_common::AppError::NotFound(m),
+            SchedulerError::Validation(m) => ipma_common::AppError::Validation(m),
+            SchedulerError::Conflict(m) => ipma_common::AppError::Conflict(m),
+            SchedulerError::TaskNotFound(m) => ipma_common::AppError::NotFound(m),
+            SchedulerError::Execution(m) => ipma_common::AppError::Internal(m),
+            SchedulerError::Internal(m) => ipma_common::AppError::Internal(m),
+        }
+    }
+}

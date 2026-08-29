@@ -11,7 +11,6 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{
     DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
     PortSyncItem,
@@ -19,6 +18,7 @@ use crate::models::{
 use crate::resource::ip::detect_ip_version;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
+use ipma_common::{AppError, msg};
 
 /// 默认网卡名称
 pub const DEFAULT_CARD_NAME: &str = "网卡1";
@@ -143,7 +143,7 @@ pub async fn sync_device_network_config(
     .await;
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), device_id).await?;
-    Ok(crate::error::ok_json(cards, "server.device.nic.synced"))
+    Ok(ipma_common::ok_json(cards, "server.device.nic.synced"))
 }
 
 /// 应用网卡配置：整体替换设备模态框托管的网口（device_managed=TRUE），
@@ -457,7 +457,7 @@ pub async fn get_device_nics(
         .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     let cards = fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({ "device_type": device_type, "cards": cards }),
         "server.device.nic.fetched",
     ))

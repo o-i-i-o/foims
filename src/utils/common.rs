@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 
 use hex::encode;
 
-use crate::error::AppError;
+use ipma_common::AppError;
 use ipma_common::msg;
 
 #[must_use]
@@ -107,8 +107,8 @@ pub fn validate_gateway_in_cidr(
     gateway: Option<&str>,
     cidr: Option<&str>,
     family: &str,
-) -> Result<(), crate::error::AppError> {
-    let validation_error = |key: String| crate::error::AppError::Validation(msg(key));
+) -> Result<(), ipma_common::AppError> {
+    let validation_error = |key: String| ipma_common::AppError::Validation(msg(key));
 
     let Some(gateway) = gateway.map(str::trim).filter(|g| !g.is_empty()) else {
         return Ok(());
@@ -149,7 +149,7 @@ pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,
     network_id: Option<Uuid>,
-) -> Result<(), crate::error::AppError>
+) -> Result<(), ipma_common::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -166,7 +166,7 @@ where
     .await?;
 
     if !network_in_room {
-        return Err(crate::error::AppError::Validation(msg(
+        return Err(ipma_common::AppError::Validation(msg(
             "server.network.not_in_room",
         )));
     }
@@ -177,7 +177,7 @@ where
 pub async fn get_room_id_by_workstation<'e, E>(
     executor: E,
     workstation_id: Uuid,
-) -> Result<Option<Uuid>, crate::error::AppError>
+) -> Result<Option<Uuid>, ipma_common::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -194,7 +194,7 @@ where
 pub async fn get_room_id_by_position<'e, E>(
     executor: E,
     position_id: Uuid,
-) -> Result<Option<Uuid>, crate::error::AppError>
+) -> Result<Option<Uuid>, ipma_common::AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -640,7 +640,7 @@ pub const NETWORK_QUERY: &str = r"
 
 pub fn parse_network_from_row(
     row: &sqlx::postgres::PgRow,
-) -> Result<crate::models::Network, crate::error::AppError> {
+) -> Result<crate::models::Network, ipma_common::AppError> {
     use sqlx::Row;
 
     Ok(crate::models::Network {
@@ -656,7 +656,7 @@ pub fn parse_network_from_row(
             .get::<Option<serde_json::Value>, _>(8)
             .map(|v| {
                 serde_json::from_value(v).map_err(|e| {
-                    crate::error::AppError::Internal(
+                    ipma_common::AppError::Internal(
                         msg("server.common.deserialize_failed").with("error", e),
                     )
                 })
@@ -666,7 +666,7 @@ pub fn parse_network_from_row(
             .get::<Option<serde_json::Value>, _>(9)
             .map(|v| {
                 serde_json::from_value(v).map_err(|e| {
-                    crate::error::AppError::Internal(
+                    ipma_common::AppError::Internal(
                         msg("server.common.deserialize_failed").with("error", e),
                     )
                 })
@@ -806,9 +806,9 @@ mod tests {
     // ---------- 网关校验 ----------
 
     /// 从 AppError::Validation 中取出消息 key，便于断言
-    fn validation_key(result: Result<(), crate::error::AppError>) -> String {
+    fn validation_key(result: Result<(), ipma_common::AppError>) -> String {
         match result {
-            Err(crate::error::AppError::Validation(m)) => m.key().to_string(),
+            Err(ipma_common::AppError::Validation(m)) => m.key().to_string(),
             Err(other) => panic!("应为 Validation 错误，实际 {other}"),
             Ok(()) => panic!("应为 Err，实际 Ok"),
         }

@@ -23,13 +23,13 @@ use crate::auth::utils::{
     JwtUtils, extract_token_from_parts, get_client_info_from_parts, hash_password,
 };
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::error::AppError;
 use crate::models::{
     EmailLoginRequest, ForgotPasswordRequest, ResetPasswordRequest, SendLoginCodeRequest,
     SendTwoFactorCodeRequest, TwoFactorLoginRequest, User, UserLogin,
 };
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
+use ipma_common::AppError;
 use ipma_common::msg;
 use totp_rs::{Algorithm, Builder, Secret};
 
@@ -335,7 +335,7 @@ pub async fn login(
     }
 
     if two_factor_enabled {
-        return Ok(crate::error::ok_json(
+        return Ok(ipma_common::ok_json(
             serde_json::json!({ "requires_two_factor": true, "username": username }),
             "server.common.success",
         ));
@@ -545,7 +545,7 @@ pub async fn login_with_email_code(
     }
 
     if two_factor_enabled {
-        return Ok(crate::error::ok_json(
+        return Ok(ipma_common::ok_json(
             serde_json::json!({ "requires_two_factor": true, "username": username }),
             "server.common.success",
         ));
@@ -614,14 +614,14 @@ pub async fn send_login_code(
     {
         Some(row) => row,
         None => {
-            return Ok(crate::error::ok_json((), "server.auth.code_sent"));
+            return Ok(ipma_common::ok_json((), "server.auth.code_sent"));
         }
     };
 
     let (id, _username, status) = user_row;
 
     if !status {
-        return Ok(crate::error::ok_json((), "server.auth.code_sent"));
+        return Ok(ipma_common::ok_json((), "server.auth.code_sent"));
     }
 
     let code: String = {
@@ -638,7 +638,7 @@ pub async fn send_login_code(
     let email_body = format!("您的登录验证码是：{code}");
     crate::system::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
 
-    Ok(crate::error::ok_json((), "server.auth.code_sent"))
+    Ok(ipma_common::ok_json((), "server.auth.code_sent"))
 }
 
 pub async fn login_with_two_factor(
@@ -889,7 +889,7 @@ pub async fn send_two_factor_code(
     .fetch_optional(&conn)
     .await?
     else {
-        return Ok(crate::error::ok_json((), "server.auth.send_ok"));
+        return Ok(ipma_common::ok_json((), "server.auth.send_ok"));
     };
 
     let code: String = {
@@ -905,7 +905,7 @@ pub async fn send_two_factor_code(
     let email_body = format!("您的两步验证码是：{code}");
     crate::system::smtp::send_email_async(&conn, &user.2, "两步验证码", &email_body).await?;
 
-    Ok(crate::error::ok_json((), "server.auth.code_sent"))
+    Ok(ipma_common::ok_json((), "server.auth.code_sent"))
 }
 
 pub async fn logout(
@@ -958,7 +958,7 @@ pub async fn logout(
     let access_cookie = create_clear_cookie("access_token", secure);
     let refresh_cookie = create_clear_cookie("refresh_token", secure);
 
-    let mut response = crate::error::ok_json((), "server.common.success");
+    let mut response = ipma_common::ok_json((), "server.common.success");
     append_cookie_to_response(&mut response, &access_cookie)?;
     append_cookie_to_response(&mut response, &refresh_cookie)?;
     Ok(response)
@@ -1098,7 +1098,7 @@ pub async fn refresh_token(
         secure,
     );
 
-    let mut response = crate::error::ok_json(
+    let mut response = ipma_common::ok_json(
         serde_json::json!({ "expires_in": access_token_expiry, "remember_me": remember_me }),
         "server.common.success",
     );
@@ -1110,7 +1110,7 @@ pub async fn refresh_token(
 pub async fn get_current_user(
     auth: crate::auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({ "id": auth.sub, "username": auth.username, "role": auth.role }),
         "server.common.success",
     ))
@@ -1171,10 +1171,7 @@ pub async fn forgot_password(
         }
     }
 
-    Ok(crate::error::ok_json(
-        (),
-        "server.auth.forgot_password_sent",
-    ))
+    Ok(ipma_common::ok_json((), "server.auth.forgot_password_sent"))
 }
 
 pub async fn reset_password(
@@ -1221,7 +1218,7 @@ pub async fn reset_password(
             )
             .await;
 
-            Ok(crate::error::ok_json(
+            Ok(ipma_common::ok_json(
                 (),
                 "server.auth.reset_password_success",
             ))
@@ -1301,7 +1298,7 @@ pub async fn change_password(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.auth.password_changed"))
+    Ok(ipma_common::ok_json((), "server.auth.password_changed"))
 }
 
 pub async fn init_two_factor(
@@ -1388,7 +1385,7 @@ pub async fn init_two_factor(
                 AppError::Internal(msg("server.auth.qr_generate_failed").with("error", e))
             })?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "otpauth_url": otpauth_url,
             "qr_code_base64": qr_code_base64,
@@ -1491,7 +1488,7 @@ pub async fn enable_two_factor(
     .execute(&conn)
     .await?;
 
-    Ok(crate::error::ok_json((), "server.auth.2fa_enabled"))
+    Ok(ipma_common::ok_json((), "server.auth.2fa_enabled"))
 }
 
 pub async fn disable_two_factor(
@@ -1591,7 +1588,7 @@ pub async fn disable_two_factor(
     .execute(&conn)
     .await?;
 
-    Ok(crate::error::ok_json((), "server.auth.2fa_disabled"))
+    Ok(ipma_common::ok_json((), "server.auth.2fa_disabled"))
 }
 
 #[derive(Debug, Deserialize, Validate)]

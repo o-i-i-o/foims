@@ -31,7 +31,6 @@ use crate::auth::sso::{
     update_sso_config,
 };
 use crate::auth::user::{create_user, delete_user, get_user, get_users, update_user};
-use crate::error::AppError;
 use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
@@ -87,6 +86,7 @@ use crate::visualization::{
     get_topology_connections, get_topology_nodes, save_layout, save_topology_nodes,
     trigger_auto_discover,
 };
+use ipma_common::AppError;
 
 async fn data_export_csv(
     _admin: crate::auth::extractor::AdminUser,
@@ -145,7 +145,7 @@ async fn data_get_logs_stats(
 }
 
 async fn health_check() -> Response {
-    crate::error::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
+    ipma_common::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
 }
 
 /// 资源写操作与敏感查询的管理员守卫（security-review A-2/S-2）。
@@ -213,7 +213,7 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
 /// 供前端登录页判断：当 init_enabled=true 时跳转到初始化页 /init_index.html
 /// 仅返回 init_enabled 一个布尔字段，避免泄露系统是否已初始化等额外信息。
 pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
-    crate::error::ok_json(
+    ipma_common::ok_json(
         serde_json::json!({
             "init_enabled": state.config.init.enabled,
         }),

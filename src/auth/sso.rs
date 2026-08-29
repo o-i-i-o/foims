@@ -30,9 +30,9 @@ use crate::auth::login::{
     issue_external_login_tokens,
 };
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::error::AppError;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
+use ipma_common::AppError;
 use ipma_common::{log_info, msg};
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
 use openidconnect::reqwest;
@@ -505,7 +505,7 @@ pub async fn get_auth_methods(State(state): State<Arc<AppState>>) -> Result<Resp
     let sso_enabled = get_ldap_config_enabled(&conn, "sso").await;
     let email_enabled = crate::system::smtp::smtp_configured(&conn).await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "password": true,
             "email": email_enabled,
@@ -565,7 +565,7 @@ pub async fn get_sso_config(
         },
     };
 
-    Ok(crate::error::ok_json(resp, "server.sso.config_retrieved"))
+    Ok(ipma_common::ok_json(resp, "server.sso.config_retrieved"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -617,7 +617,7 @@ pub async fn update_sso_config(
 
     save_sso_config_to_db(pool, &config).await?;
 
-    Ok(crate::error::ok_json((), "server.sso.config_updated"))
+    Ok(ipma_common::ok_json((), "server.sso.config_updated"))
 }
 
 /// 测试已保存的 SSO 配置：执行 OIDC 发现文档获取。
@@ -637,5 +637,5 @@ pub async fn test_sso_connection(
             AppError::Internal(msg("server.sso.discovery_failed").with("error", format!("{e:?}")))
         })?;
 
-    Ok(crate::error::ok_json((), "server.sso.test_success"))
+    Ok(ipma_common::ok_json((), "server.sso.test_success"))
 }

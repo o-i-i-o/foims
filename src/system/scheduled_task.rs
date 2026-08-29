@@ -16,9 +16,9 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AdminUser;
-use crate::error::AppError;
 use crate::models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 use crate::routes::static_files::AppJson;
+use ipma_common::AppError;
 use ipma_common::{log_warn, msg};
 
 /// 允许通过 API 创建/更新的任务类型白名单（与 task_executors 中注册的类型保持一致）
@@ -86,7 +86,7 @@ pub async fn get_scheduled_tasks(
     .await
     ?;
 
-    Ok(crate::error::ok_json(tasks, "server.task.list_retrieved"))
+    Ok(ipma_common::ok_json(tasks, "server.task.list_retrieved"))
 }
 
 pub async fn get_scheduled_task(
@@ -102,7 +102,7 @@ pub async fn get_scheduled_task(
     .await?;
 
     match task {
-        Some(t) => Ok(crate::error::ok_json(t, "server.task.retrieved")),
+        Some(t) => Ok(ipma_common::ok_json(t, "server.task.retrieved")),
         None => Err(AppError::NotFound(msg("server.task.not_found"))),
     }
 }
@@ -241,7 +241,7 @@ pub async fn update_scheduled_task(
 
     tx.commit().await?;
 
-    Ok(crate::error::ok_json(task, "server.task.updated"))
+    Ok(ipma_common::ok_json(task, "server.task.updated"))
 }
 
 pub async fn delete_scheduled_task(
@@ -255,7 +255,7 @@ pub async fn delete_scheduled_task(
         .await?;
 
     if result.rows_affected() > 0 {
-        Ok(crate::error::ok_json((), "server.task.deleted"))
+        Ok(ipma_common::ok_json((), "server.task.deleted"))
     } else {
         Err(AppError::NotFound(msg("server.task.not_found")))
     }
@@ -284,7 +284,7 @@ pub async fn toggle_scheduled_task(
         .fetch_one(&conn)
         .await?;
 
-        Ok(crate::error::ok_json(task, "server.task.toggled"))
+        Ok(ipma_common::ok_json(task, "server.task.toggled"))
     } else {
         Err(AppError::NotFound(msg("server.task.not_found")))
     }
@@ -422,7 +422,7 @@ pub async fn run_scheduled_task_now(
         log_warn!("log.task.lock_release_failed", error = e);
     }
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "result": result.map_err(|e| {
                 ipma_scheduler::error_message(&e).key().to_string()
@@ -463,5 +463,5 @@ pub async fn get_task_logs(
         ?
     };
 
-    Ok(crate::error::ok_json(logs, "server.task.logs_retrieved"))
+    Ok(ipma_common::ok_json(logs, "server.task.logs_retrieved"))
 }

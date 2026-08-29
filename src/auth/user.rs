@@ -12,12 +12,12 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::auth::utils::hash_password;
-use crate::error::{AppError, msg};
 use crate::models::{User, UserCreate, UserUpdate};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use ipma_common::log_info;
+use ipma_common::{AppError, msg};
 
 pub async fn get_users(
     _secadmin: crate::auth::extractor::SecAdminUser,
@@ -85,7 +85,7 @@ pub async fn get_users(
         (total, users)
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(users, total, &pagination),
         "server.user.list_retrieved",
     ))
@@ -162,7 +162,7 @@ pub async fn create_user(
         updated_at: now,
     };
 
-    Ok(crate::error::ok_json(user, "server.user.created"))
+    Ok(ipma_common::ok_json(user, "server.user.created"))
 }
 
 pub async fn get_user(
@@ -180,7 +180,7 @@ pub async fn get_user(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.user.not_found")))?;
 
-    Ok(crate::error::ok_json(user, "server.user.retrieved"))
+    Ok(ipma_common::ok_json(user, "server.user.retrieved"))
 }
 
 pub async fn update_user(
@@ -235,7 +235,7 @@ pub async fn update_user(
     .fetch_one(&conn)
     .await?;
 
-    Ok(crate::error::ok_json(user, "server.user.updated"))
+    Ok(ipma_common::ok_json(user, "server.user.updated"))
 }
 
 pub async fn delete_user(
@@ -278,5 +278,5 @@ pub async fn delete_user(
     .await;
     log_info!("log.user.deleted", id = id);
 
-    Ok(crate::error::ok_json((), "server.user.deleted"))
+    Ok(ipma_common::ok_json((), "server.user.deleted"))
 }

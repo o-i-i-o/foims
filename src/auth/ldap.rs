@@ -21,10 +21,10 @@ use crate::auth::login::{
     ExternalUser, build_login_response, find_or_create_external_user, log_login,
 };
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::error::AppError;
 use crate::models::LdapLoginRequest;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::RequestMeta;
+use ipma_common::AppError;
 use ipma_common::msg;
 
 const LDAP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -404,7 +404,7 @@ pub async fn get_ldap_config(
         },
     };
 
-    Ok(crate::error::ok_json(resp, "server.ldap.config_retrieved"))
+    Ok(ipma_common::ok_json(resp, "server.ldap.config_retrieved"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -462,7 +462,7 @@ pub async fn update_ldap_config(
 
     save_ldap_config_to_db(pool, &config).await?;
 
-    Ok(crate::error::ok_json((), "server.ldap.config_updated"))
+    Ok(ipma_common::ok_json((), "server.ldap.config_updated"))
 }
 
 /// 测试已保存的 LDAP 配置：连通性 + 服务账号绑定 + 基础检索。
@@ -505,7 +505,7 @@ pub async fn test_ldap_connection(
         .map_err(|e| AppError::Internal(msg("server.ldap.search_failed").with("error", e)))?;
     let _ = ldap.unbind().await;
 
-    Ok(crate::error::ok_json((), "server.ldap.test_success"))
+    Ok(ipma_common::ok_json((), "server.ldap.test_success"))
 }
 
 #[cfg(test)]

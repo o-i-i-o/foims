@@ -117,3 +117,15 @@ pub struct ClearLogsRequest {
     pub log_type: String,
     pub days: Option<i32>,
 }
+
+impl From<DataError> for ipma_common::AppError {
+    fn from(err: DataError) -> Self {
+        match err {
+            DataError::Database(m) => ipma_common::AppError::Database(m),
+            DataError::NotFound(m) => ipma_common::AppError::NotFound(m),
+            DataError::Validation(m) => ipma_common::AppError::Validation(m),
+            DataError::Conflict(m) => ipma_common::AppError::Conflict(m),
+            DataError::Internal(m) => ipma_common::AppError::Internal(m),
+        }
+    }
+}

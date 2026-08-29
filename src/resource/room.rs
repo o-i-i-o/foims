@@ -1,7 +1,6 @@
 //! 房间资源管理（含网络绑定与子资源级联）。
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{
     CabinetBrief, NetOutletBrief, NetworkInfo, Room, RoomChildrenSync, RoomCreate,
     RoomNetOutletsSync, RoomUpdate, RoomWithNetworks, WorkstationBrief,
@@ -12,6 +11,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::{AppError, msg};
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -205,7 +205,7 @@ pub async fn get_rooms(
         rooms_with_networks.push(room_with_networks);
     }
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(rooms_with_networks, total, &pagination),
         "server.room.list_retrieved",
     ))
@@ -289,7 +289,7 @@ pub async fn create_room(
     )
     .await;
 
-    Ok(crate::error::ok_json(room, "server.room.created"))
+    Ok(ipma_common::ok_json(room, "server.room.created"))
 }
 
 /// 房间编辑回显专用轻量端点（GET /{id}/brief）。
@@ -357,7 +357,7 @@ pub async fn get_room_brief(
         })
         .collect();
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "id": room.id,
             "name": room.name,
@@ -508,7 +508,7 @@ pub async fn get_room(
         updated_at: room.updated_at,
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         room_with_networks,
         "server.room.fetched",
     ))
@@ -598,7 +598,7 @@ pub async fn update_room(
     )
     .await;
 
-    Ok(crate::error::ok_json(room, "server.room.updated"))
+    Ok(ipma_common::ok_json(room, "server.room.updated"))
 }
 
 pub async fn delete_room(
@@ -663,7 +663,7 @@ pub async fn delete_room(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.room.deleted"))
+    Ok(ipma_common::ok_json((), "server.room.deleted"))
 }
 
 pub async fn get_room_networks(
@@ -690,7 +690,7 @@ pub async fn get_room_networks(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         room_networks,
         "server.room.networks_retrieved",
     ))
@@ -758,7 +758,7 @@ pub async fn sync_room_children(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.room.children_synced"))
+    Ok(ipma_common::ok_json((), "server.room.children_synced"))
 }
 
 pub async fn sync_room_net_outlets(
@@ -852,7 +852,7 @@ pub async fn sync_room_net_outlets(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.room.net_outlets_synced"))
+    Ok(ipma_common::ok_json((), "server.room.net_outlets_synced"))
 }
 
 /// 同步房间工位：删除请求中缺失的（被设备引用的拒绝），再新增/更新。

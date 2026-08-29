@@ -11,7 +11,6 @@ pub use employee::*;
 pub use org_template::*;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{
     OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
 };
@@ -21,6 +20,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::AppError;
 use ipma_common::msg;
 use serde_json::json;
 use std::collections::HashMap;
@@ -293,7 +293,7 @@ pub async fn get_organizations(
     // 解析 org_type
     let items = resolve_org_list_types(&state, &organizations).await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(items, total, &pagination),
         "server.organization.list_fetched",
     ))
@@ -324,7 +324,7 @@ pub async fn get_organization_tree(
         load_template_levels_batch(&state.pool()?.get_conn(), &template_ids).await;
 
     let tree = build_tree(&all_orgs, &template_levels_map);
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         tree,
         "server.organization.tree_fetched",
     ))
@@ -472,7 +472,7 @@ pub async fn get_organization(
         "updated_at": org.updated_at,
     });
 
-    Ok(crate::error::ok_json(result, "server.organization.fetched"))
+    Ok(ipma_common::ok_json(result, "server.organization.fetched"))
 }
 
 /// 创建组织节点
@@ -669,7 +669,7 @@ pub async fn create_organization(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         json!({
             "id": id,
             "name": req.name,
@@ -780,7 +780,7 @@ pub async fn update_organization(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         json!({
             "id": org.id,
             "name": org.name,
@@ -854,7 +854,7 @@ pub async fn delete_organization(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.organization.deleted"))
+    Ok(ipma_common::ok_json((), "server.organization.deleted"))
 }
 
 /// 获取指定节点的下级类型信息（基于模板）
@@ -902,7 +902,7 @@ pub async fn get_allowed_child_types(
     let levels_map = template.levels.as_object();
     let type_count = levels_map.as_ref().map(|m| m.len()).unwrap_or(0);
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         json!({
             "parent_id": id,
             "parent_name": org.name,
@@ -940,7 +940,7 @@ pub async fn get_children(
 
     let items = resolve_org_list_types(&state, &children).await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         items,
         "server.organization.children_fetched",
     ))
@@ -1043,7 +1043,7 @@ pub async fn get_org_rooms(
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         rooms,
         "server.organization.rooms_fetched",
     ))

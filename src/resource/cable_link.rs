@@ -17,11 +17,11 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::AppError;
 
 /// 合法的端点资源类型。
 const VALID_ENDPOINT_TYPES: [&str; 3] = ["net_outlet", "device_interface", "patch_panel"];
@@ -171,7 +171,7 @@ pub async fn get_cable_links(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(links, total, &pagination),
         "server.cable_link.fetched",
     ))
@@ -283,7 +283,7 @@ pub async fn create_cable_link(
     )
     .await;
 
-    Ok(crate::error::ok_json(link, "server.cable_link.created"))
+    Ok(ipma_common::ok_json(link, "server.cable_link.created"))
 }
 
 /// 获取单条物理链路详情。
@@ -295,7 +295,7 @@ pub async fn get_cable_link(
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.cable_link.not_found")))?;
 
-    Ok(crate::error::ok_json(link, "server.cable_link.fetched"))
+    Ok(ipma_common::ok_json(link, "server.cable_link.fetched"))
 }
 
 /// 更新物理链路。
@@ -415,7 +415,7 @@ pub async fn update_cable_link(
     )
     .await;
 
-    Ok(crate::error::ok_json(link, "server.cable_link.updated"))
+    Ok(ipma_common::ok_json(link, "server.cable_link.updated"))
 }
 
 /// 删除物理链路。
@@ -452,7 +452,7 @@ pub async fn delete_cable_link(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.cable_link.deleted"))
+    Ok(ipma_common::ok_json((), "server.cable_link.deleted"))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -499,7 +499,7 @@ pub async fn get_cable_path(
         return Err(AppError::NotFound(msg("server.cable_link.path_not_found")));
     }
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({ "path": path, "hop_count": path.len() }),
         "server.cable_link.path_fetched",
     ))

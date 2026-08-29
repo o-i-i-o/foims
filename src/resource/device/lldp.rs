@@ -10,9 +10,9 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{DeviceLldp, LldpNeighbor};
 use ipma_common::log_error;
+use ipma_common::{AppError, msg};
 
 use super::snmp::{DeviceForSnmp, SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error};
 
@@ -409,7 +409,7 @@ pub async fn get_device_lldp_neighbors(
     .fetch_all(&conn)
     .await?;
 
-    Ok(crate::error::ok_json(lldps, "server.device.lldp.fetched"))
+    Ok(ipma_common::ok_json(lldps, "server.device.lldp.fetched"))
 }
 
 pub async fn sync_lldp_from_snmp(
@@ -491,5 +491,5 @@ pub async fn sync_lldp_from_snmp(
         msg("server.device.lldp.sync_unchanged").with("removed", stale_removed)
     };
 
-    Ok(crate::error::ok_json(saved_lldps, message))
+    Ok(ipma_common::ok_json(saved_lldps, message))
 }

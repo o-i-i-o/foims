@@ -13,7 +13,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::crypto::{decrypt_password_async, encrypt_password_async};
-use crate::error::AppError;
+use ipma_common::AppError;
 use ipma_common::{log_error, log_warn, msg};
 
 const SMTP_TIMEOUT: Duration = Duration::from_secs(30);

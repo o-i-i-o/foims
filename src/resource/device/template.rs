@@ -1,12 +1,12 @@
 //! 设备模板管理。
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{DeviceTemplate, DeviceTemplateSummary, UpdateDeviceTemplateRequest};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use axum::extract::{Path, State};
 use axum::response::Response;
+use ipma_common::{AppError, msg};
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -22,7 +22,7 @@ pub async fn get_device_templates(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         json!({ "items": templates }),
         "server.device_template.list_retrieved",
     ))
@@ -42,7 +42,7 @@ pub async fn get_device_template(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.device_template.not_found")))?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         template,
         "server.device_template.fetched",
     ))
@@ -94,7 +94,7 @@ pub async fn delete_device_template(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.device_template.deleted"))
+    Ok(ipma_common::ok_json((), "server.device_template.deleted"))
 }
 
 /// 更新设备模板
@@ -151,5 +151,5 @@ pub async fn update_device_template(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.device_template.updated"))
+    Ok(ipma_common::ok_json((), "server.device_template.updated"))
 }

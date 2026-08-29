@@ -2,7 +2,6 @@
 
 use crate::app_state::AppState;
 use crate::crypto::encrypt_password_async;
-use crate::error::{AppError, msg};
 use crate::models::{Device, DeviceCreate, DeviceUpdate, DeviceWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -10,6 +9,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::{AppError, msg};
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -181,7 +181,7 @@ pub async fn get_devices(
         })
         .collect::<Result<Vec<_>, AppError>>()?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(items, total, &pagination),
         "server.device.list_retrieved",
     ))
@@ -422,7 +422,7 @@ pub async fn create_device(
     // 尽力而为的旁路通知：设备匹配工位且有 IP 时邮件通知管理人
     super::notify::spawn_ip_notification(state.pool()?.get_conn(), id);
 
-    Ok(crate::error::ok_json(device, "server.device.created"))
+    Ok(ipma_common::ok_json(device, "server.device.created"))
 }
 
 pub async fn get_device(
@@ -476,7 +476,7 @@ pub async fn get_device(
     result["snmp_priv_password"] = serde_json::to_value(decrypted_priv)
         .map_err(|e| AppError::Internal(msg("server.common.serialize_failed").with("error", e)))?;
 
-    Ok(crate::error::ok_json(result, "server.device.fetched"))
+    Ok(ipma_common::ok_json(result, "server.device.fetched"))
 }
 
 pub async fn update_device(
@@ -741,7 +741,7 @@ pub async fn update_device(
     // 尽力而为的旁路通知：设备编辑完成且匹配工位时邮件通知管理人 IP 信息
     super::notify::spawn_ip_notification(state.pool()?.get_conn(), id);
 
-    Ok(crate::error::ok_json(result, "server.device.updated"))
+    Ok(ipma_common::ok_json(result, "server.device.updated"))
 }
 
 pub async fn delete_device(
@@ -806,5 +806,5 @@ pub async fn delete_device(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.device.deleted"))
+    Ok(ipma_common::ok_json((), "server.device.deleted"))
 }

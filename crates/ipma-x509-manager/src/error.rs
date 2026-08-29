@@ -13,3 +13,13 @@ pub enum CertManagerError {
     #[error("内部错误: {0}")]
     Internal(AppMessage),
 }
+
+impl From<CertManagerError> for ipma_common::AppError {
+    fn from(err: CertManagerError) -> Self {
+        match err {
+            CertManagerError::Validation(m) => ipma_common::AppError::Validation(m),
+            CertManagerError::NotFound(m) => ipma_common::AppError::NotFound(m),
+            CertManagerError::Internal(m) => ipma_common::AppError::Internal(m),
+        }
+    }
+}

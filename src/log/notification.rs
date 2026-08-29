@@ -9,9 +9,9 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AuthUser;
-use crate::error::{AppError, msg};
 use crate::models::Notification;
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::{AppError, msg};
 
 pub async fn get_notifications(
     State(state): State<Arc<AppState>>,
@@ -67,7 +67,7 @@ pub async fn get_notifications(
     .fetch_all(&conn)
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(notifications, total, &pagination),
         "server.notification.list_retrieved",
     ))
@@ -100,7 +100,7 @@ pub async fn mark_notification_read(
         .execute(&conn)
         .await?;
 
-    Ok(crate::error::ok_json((), "server.notification.marked_read"))
+    Ok(ipma_common::ok_json((), "server.notification.marked_read"))
 }
 
 pub async fn mark_all_notifications_read(
@@ -116,7 +116,7 @@ pub async fn mark_all_notifications_read(
         .execute(&conn)
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.notification.all_marked_read",
     ))

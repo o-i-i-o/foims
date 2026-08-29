@@ -6,7 +6,7 @@ use axum::Json;
 use axum::extract::{FromRequest, Request};
 use serde::de::DeserializeOwned;
 
-use crate::error::AppError;
+use ipma_common::AppError;
 
 pub const WEB_DIR_PATHS: [&str; 2] = ["/opt/ipma/web", "/usr/share/ipma/web"];
 

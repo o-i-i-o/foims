@@ -9,7 +9,7 @@ use axum::response::Response;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
+use ipma_common::{AppError, msg};
 
 /// 单个选项（id + 名称）
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
@@ -101,5 +101,5 @@ pub async fn get_resource_options(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(options, "server.common.success"))
+    Ok(ipma_common::ok_json(options, "server.common.success"))
 }

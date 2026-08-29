@@ -17,7 +17,7 @@ pub use nic::*;
 pub use snmp::*;
 pub use template::*;
 
-use crate::error::{AppError, msg};
+use ipma_common::{AppError, msg};
 
 /// Valid device types matching the database CHECK constraint
 const VALID_DEVICE_TYPES: [&str; 9] = [

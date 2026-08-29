@@ -15,10 +15,10 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{Employee, EmployeeCreate, EmployeeUpdate, is_valid_phone};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
+use ipma_common::{AppError, msg};
 
 /// 员工基础查询列（含组织名联表）
 const EMPLOYEE_COLUMNS: &str = "e.id, e.org_id,
@@ -93,7 +93,7 @@ pub async fn get_employees(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         items,
         "server.employee.list_retrieved",
     ))
@@ -115,7 +115,7 @@ pub async fn get_employee(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.employee.not_found")))?;
 
-    Ok(crate::error::ok_json(employee, "server.employee.fetched"))
+    Ok(ipma_common::ok_json(employee, "server.employee.fetched"))
 }
 
 /// 创建员工（同组织内名称唯一，检查与写入在同一事务内）。
@@ -185,7 +185,7 @@ pub async fn create_employee(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.employee.created"))
+    Ok(ipma_common::ok_json((), "server.employee.created"))
 }
 
 /// 更新员工（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值；
@@ -265,7 +265,7 @@ pub async fn update_employee(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.employee.updated"))
+    Ok(ipma_common::ok_json((), "server.employee.updated"))
 }
 
 /// 删除员工（工位上的 manager_employee_id 因 ON DELETE SET NULL 自动解绑）。
@@ -293,5 +293,5 @@ pub async fn delete_employee(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.employee.deleted"))
+    Ok(ipma_common::ok_json((), "server.employee.deleted"))
 }

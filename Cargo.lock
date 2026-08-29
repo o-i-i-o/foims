@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ipma"
-version = "0.15.85"
+version = "0.15.86"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -2135,11 +2135,12 @@ dependencies = [
 
 [[package]]
 name = "ipma-common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "serde",
  "sqlx",
+ "thiserror 2.0.20",
  "tracing",
  "validator",
 ]

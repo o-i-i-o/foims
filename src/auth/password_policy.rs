@@ -8,8 +8,8 @@ use chrono::Utc;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::error::{AppError, msg};
 use ipma_common::log_warn;
+use ipma_common::{AppError, msg};
 
 /// 密码策略配置
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

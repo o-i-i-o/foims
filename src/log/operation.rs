@@ -8,9 +8,9 @@ use axum::response::Response;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::OperationLog;
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::{AppError, msg};
 
 pub async fn get_operation_logs(
     State(state): State<Arc<AppState>>,
@@ -127,7 +127,7 @@ pub async fn get_operation_logs(
         (total, logs)
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(logs, total, &pagination),
         "server.logs.operation_retrieved",
     ))

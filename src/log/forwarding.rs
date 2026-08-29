@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::routes::static_files::AppJson;
+use ipma_common::AppError;
 
 /// local0(16) × 8 + informational(6)
 const SYSLOG_PRI_INFO: u32 = 16 * 8 + 6;
@@ -173,7 +173,7 @@ pub async fn get_forwarding(
     _secadmin: crate::auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     let config = load(&state.pool()?.get_conn()).await;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         config,
         "server.logs.forwarding_retrieved",
     ))
@@ -185,7 +185,7 @@ pub async fn update_forwarding(
     AppJson(req): AppJson<LogForwardingConfig>,
 ) -> Result<Response, AppError> {
     save(&state.pool()?.get_conn(), &req).await?;
-    Ok(crate::error::ok_json((), "server.logs.forwarding_updated"))
+    Ok(ipma_common::ok_json((), "server.logs.forwarding_updated"))
 }
 
 /// 发送一条测试报文验证连通性
@@ -204,8 +204,5 @@ pub async fn test_forwarding(
             AppError::Internal(msg("server.logs.forwarding_test_failed").with("error", e))
         })?;
     log_debug!("log.forwarding.test_sent");
-    Ok(crate::error::ok_json(
-        (),
-        "server.logs.forwarding_test_sent",
-    ))
+    Ok(ipma_common::ok_json((), "server.logs.forwarding_test_sent"))
 }

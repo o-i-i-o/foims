@@ -15,9 +15,9 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::crypto::decrypt_credential_async;
-use crate::error::{AppError, msg};
 use crate::models::{SnmpPort, SnmpTestRequest};
 use crate::routes::static_files::AppJson;
+use ipma_common::{AppError, msg};
 use ipma_common::{AppMessage, log_info, log_warn};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -680,7 +680,7 @@ pub async fn test_snmp_connection(
     );
 
     match test_snmp(&snmp_params, 5).await {
-        Ok(sys_descr) => Ok(crate::error::ok_json(
+        Ok(sys_descr) => Ok(ipma_common::ok_json(
             serde_json::json!({ "sysDescr": sys_descr }),
             "server.device.snmp.test_success",
         )),
@@ -703,7 +703,7 @@ pub async fn get_device_info_snmp(
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_info_via_snmp(&snmp_params).await {
-        Ok(info) => Ok(crate::error::ok_json(
+        Ok(info) => Ok(ipma_common::ok_json(
             serde_json::json!({
                 "brand": info.brand,
                 "model": info.model,
@@ -730,7 +730,7 @@ pub async fn get_device_ports_snmp(
     let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
 
     match get_device_ports_via_snmp(&snmp_params).await {
-        Ok(ports) => Ok(crate::error::ok_json(
+        Ok(ports) => Ok(ipma_common::ok_json(
             ports,
             "server.device.snmp.ports_retrieved",
         )),

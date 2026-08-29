@@ -8,13 +8,13 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use crate::utils::validate_network_in_room;
 use chrono::Utc;
+use ipma_common::AppError;
 use ipma_common::{AppMessage, log_error, log_info, log_warn, msg};
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -212,7 +212,7 @@ pub async fn get_ip_managers(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(mappings, total, &pagination),
         "server.ip.fetched",
     ))
@@ -253,7 +253,7 @@ pub async fn get_device_ips(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({ "items": ips }),
         "server.ip.device_list_fetched",
     ))
@@ -412,7 +412,7 @@ pub async fn create_device_ip(
     )
     .await;
 
-    Ok(crate::error::ok_json(mapping, "server.ip.created"))
+    Ok(ipma_common::ok_json(mapping, "server.ip.created"))
 }
 
 struct MacSyncResult {
@@ -660,7 +660,7 @@ pub async fn pull_ip_managers(
             )
                 .into_response());
         }
-        return Ok(crate::error::ok_json(
+        return Ok(ipma_common::ok_json(
             Vec::<IpManager>::new(),
             "server.ip.no_managed_ips",
         ));
@@ -693,7 +693,7 @@ pub async fn pull_ip_managers(
                 .with("skipped", result.skipped_count)
         };
 
-    Ok(crate::error::ok_json(results, message))
+    Ok(ipma_common::ok_json(results, message))
 }
 
 pub async fn pull_ip_managers_internal(
@@ -816,7 +816,7 @@ pub async fn get_available_ips(
         ));
     }
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "network_id": network_id,
             "network_name": network.name,
@@ -979,7 +979,7 @@ pub async fn auto_assign_ip(
     )
     .await;
 
-    Ok(crate::error::ok_json(mapping, "server.ip.auto_assigned"))
+    Ok(ipma_common::ok_json(mapping, "server.ip.auto_assigned"))
 }
 
 pub async fn auto_assign_device_ip(
@@ -1228,7 +1228,7 @@ pub async fn batch_create_ip_managers(
         .map(|e| serde_json::json!({ "key": e.key(), "params": e.params_map() }))
         .collect();
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "created": created_ips,
             "created_count": created_ips.len(),

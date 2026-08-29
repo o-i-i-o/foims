@@ -15,13 +15,13 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use crate::error::{AppError, msg};
 use crate::models::{
     IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
+use ipma_common::{AppError, msg};
 
 /// 工位基础查询列（含房间名联表），列表与单条查询共用。
 const WORKSTATION_COLUMNS: &str = "w.id, w.name, w.room_id,
@@ -117,7 +117,7 @@ pub async fn get_workstations(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(items, total, &pagination),
         "server.workstation.list_retrieved",
     ))
@@ -193,7 +193,7 @@ pub async fn create_workstation(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         workstation,
         "server.workstation.created",
     ))
@@ -253,7 +253,7 @@ pub async fn get_workstation(
         .ok_or_else(|| AppError::NotFound(msg("server.workstation.not_found")))?;
     workstation.ips = fetch_workstation_ips(&conn, id).await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         workstation,
         "server.workstation.fetched",
     ))
@@ -323,7 +323,7 @@ pub async fn update_workstation(
     )
     .await;
 
-    Ok(crate::error::ok_json(result, "server.workstation.updated"))
+    Ok(ipma_common::ok_json(result, "server.workstation.updated"))
 }
 
 /// 删除工位（连同布局数据一并清理，同一事务内完成）。
@@ -368,5 +368,5 @@ pub async fn delete_workstation(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.workstation.deleted"))
+    Ok(ipma_common::ok_json((), "server.workstation.deleted"))
 }

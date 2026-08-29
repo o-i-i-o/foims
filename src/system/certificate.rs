@@ -26,13 +26,13 @@ use ipma_x509_manager::{
 
 use crate::app_state::AppState;
 use crate::auth::extractor::AdminUser;
-use crate::error::AppError;
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
+use ipma_common::AppError;
 
 pub async fn list(_admin: AdminUser) -> Result<Response, AppError> {
     let inventory = list_certificates().await?;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         inventory,
         "server.certificate.list_retrieved",
     ))
@@ -79,7 +79,7 @@ pub async fn generate(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.certificate.generate_succeeded",
     ))
@@ -105,7 +105,7 @@ pub async fn ca_generate(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.certificate.ca_generate_succeeded",
     ))
@@ -132,7 +132,7 @@ pub async fn ca_import(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.certificate.ca_import_succeeded",
     ))
@@ -171,7 +171,7 @@ async fn read_multipart_cert_pair(
 /// 公开的 CA 状态查询：登录页据此显示/隐藏根证书下载入口
 pub async fn ca_info() -> Result<Response, AppError> {
     let status: CaStatus = ca_status().await;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         status,
         "server.certificate.list_retrieved",
     ))
@@ -250,7 +250,7 @@ pub async fn import(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.certificate.import_succeeded",
     ))
@@ -282,7 +282,7 @@ pub async fn delete(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.certificate.delete_succeeded",
     ))

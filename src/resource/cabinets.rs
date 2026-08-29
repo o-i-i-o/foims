@@ -6,7 +6,6 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{
     Cabinet, CabinetCreate, CabinetPositionsSync, CabinetUpdate, CabinetWithNetworks, NetworkInfo,
     PatchPanelBrief, PositionBrief, PositionSyncItem,
@@ -15,6 +14,7 @@ use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
 use crate::utils::pagination::{Pagination, paged_response};
 use chrono::Utc;
+use ipma_common::AppError;
 use ipma_common::msg;
 use sqlx::Row;
 use std::collections::HashMap;
@@ -154,7 +154,7 @@ pub async fn get_cabinets(
         cabinets_with_networks.push(cabinet_with_networks);
     }
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(cabinets_with_networks, total, &pagination),
         "server.cabinet.fetched",
     ))
@@ -202,7 +202,7 @@ pub async fn get_cabinets_by_network_region(
         .await?
     };
 
-    Ok(crate::error::ok_json(cabinets, "server.cabinet.fetched"))
+    Ok(ipma_common::ok_json(cabinets, "server.cabinet.fetched"))
 }
 
 pub async fn create_cabinet(
@@ -266,7 +266,7 @@ pub async fn create_cabinet(
     )
     .await;
 
-    Ok(crate::error::ok_json(cabinet, "server.cabinet.created"))
+    Ok(ipma_common::ok_json(cabinet, "server.cabinet.created"))
 }
 
 pub async fn get_cabinet(
@@ -335,7 +335,7 @@ pub async fn get_cabinet(
         updated_at: cabinet.updated_at,
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         cabinet_with_networks,
         "server.cabinet.fetched",
     ))
@@ -399,7 +399,7 @@ pub async fn update_cabinet(
     )
     .await;
 
-    Ok(crate::error::ok_json(cabinet, "server.cabinet.updated"))
+    Ok(ipma_common::ok_json(cabinet, "server.cabinet.updated"))
 }
 
 pub async fn delete_cabinet(
@@ -463,7 +463,7 @@ pub async fn delete_cabinet(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.cabinet.deleted"))
+    Ok(ipma_common::ok_json((), "server.cabinet.deleted"))
 }
 
 pub async fn get_cabinet_networks(
@@ -493,7 +493,7 @@ pub async fn get_cabinet_networks(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         cabinet_networks,
         "server.cabinet.networks_fetched",
     ))
@@ -607,5 +607,5 @@ pub async fn sync_cabinet_positions(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.cabinet.positions_synced"))
+    Ok(ipma_common::ok_json((), "server.cabinet.positions_synced"))
 }

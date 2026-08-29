@@ -15,11 +15,11 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::config::{Config, I18nConfig, ServerConfig};
-use crate::error::AppError;
 use crate::routes::static_files::AppJson;
 use crate::system::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
+use ipma_common::AppError;
 use ipma_common::{log_error, log_info, log_warn, msg};
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
@@ -99,7 +99,7 @@ pub async fn get_system_info(
         }
     });
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         system_info,
         "server.system.info_retrieved",
     ))
@@ -112,7 +112,7 @@ pub async fn get_system_config(
     let mut config = state.config.clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         config,
         "server.system.config_retrieved",
     ))
@@ -179,10 +179,7 @@ pub async fn update_system_config(
     masked.database.password = "***".to_string();
     masked.jwt.secret = "***".to_string();
 
-    Ok(crate::error::ok_json(
-        masked,
-        "server.system.config_updated",
-    ))
+    Ok(ipma_common::ok_json(masked, "server.system.config_updated"))
 }
 
 pub async fn trigger_service_restart() -> Result<Response, AppError> {
@@ -230,7 +227,7 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
             std::process::exit(0);
         });
 
-        Ok(crate::error::ok_json(
+        Ok(ipma_common::ok_json(
             (),
             "server.system.restart_command_sent",
         ))
@@ -319,7 +316,7 @@ exec "$2"
         std::process::exit(0);
     });
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.system.restart_command_sent",
     ))
@@ -413,7 +410,7 @@ pub async fn restore_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    Ok(crate::error::ok_json((), "server.system.config_restored"))
+    Ok(ipma_common::ok_json((), "server.system.config_restored"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -435,7 +432,7 @@ pub struct UpdatePageTimeoutRequest {
 pub async fn get_session_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "session_timeout": state.config.server.session_timeout
         }),
@@ -470,7 +467,7 @@ pub async fn update_session_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.system.session_timeout_updated",
     ))
@@ -490,7 +487,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
         }),
     ];
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         supported_languages,
         "server.system.languages_retrieved",
     ))
@@ -541,13 +538,13 @@ pub async fn update_language_setting(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    Ok(crate::error::ok_json((), "server.system.language_updated"))
+    Ok(ipma_common::ok_json((), "server.system.language_updated"))
 }
 
 pub async fn get_page_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         serde_json::json!({
             "page_timeout": state.config.server.page_timeout
         }),
@@ -582,7 +579,7 @@ pub async fn update_page_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.system.page_timeout_updated",
     ))
@@ -612,7 +609,7 @@ pub async fn get_notification_settings(
         _ => Vec::new(),
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         NotificationSettings {
             email_recipients: recipients,
         },
@@ -637,7 +634,7 @@ pub async fn update_notification_settings(
     .await
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.notification.settings_updated",
     ))
@@ -681,7 +678,7 @@ pub async fn get_smtp_config(
         },
     };
 
-    Ok(crate::error::ok_json(resp, "server.smtp.config_retrieved"))
+    Ok(ipma_common::ok_json(resp, "server.smtp.config_retrieved"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -730,7 +727,7 @@ pub async fn update_smtp_config(
 
     save_smtp_config_to_db(&state.pool()?.get_conn(), &config).await?;
 
-    Ok(crate::error::ok_json((), "server.smtp.config_updated"))
+    Ok(ipma_common::ok_json((), "server.smtp.config_updated"))
 }
 
 /// 测试已保存的通知邮件（SMTP）配置连通性。无需请求体。
@@ -748,7 +745,7 @@ pub async fn test_smtp_connection(
 
     crate::system::smtp::test_smtp_connection(&config).await?;
 
-    Ok(crate::error::ok_json((), "server.smtp.test_success"))
+    Ok(ipma_common::ok_json((), "server.smtp.test_success"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -776,7 +773,7 @@ pub async fn send_system_email(
     )
     .await?;
 
-    Ok(crate::error::ok_json((), "server.smtp.email_sent"))
+    Ok(ipma_common::ok_json((), "server.smtp.email_sent"))
 }
 
 // ==================== 等保密码策略配置 ====================
@@ -787,7 +784,7 @@ pub async fn get_password_policy(
     _secadmin: crate::auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     let policy = crate::auth::password_policy::load(&state.pool()?.get_conn()).await;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         policy,
         "server.system.config_retrieved",
     ))
@@ -800,7 +797,7 @@ pub async fn update_password_policy(
     AppJson(req): AppJson<crate::auth::password_policy::PasswordPolicy>,
 ) -> Result<Response, AppError> {
     crate::auth::password_policy::save(&state.pool()?.get_conn(), &req).await?;
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         (),
         "server.system.password_policy_updated",
     ))
@@ -882,7 +879,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
         (false, None, false, None)
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         ServiceStatus {
             registered: service_file_exists,
             running_as_service,
@@ -960,10 +957,9 @@ WantedBy=multi-user.target
         .await;
 
     match start_output {
-        Ok(output) if output.status.success() => Ok(crate::error::ok_json(
-            (),
-            "server.system.service_registered",
-        )),
+        Ok(output) if output.status.success() => {
+            Ok(ipma_common::ok_json((), "server.system.service_registered"))
+        }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
             Err(AppError::Internal(
@@ -1096,7 +1092,7 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<R
         }
     });
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         stats,
         "server.system.dashboard_stats_retrieved",
     ))

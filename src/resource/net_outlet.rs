@@ -1,7 +1,6 @@
 //! 信息点（net_outlets）资源管理。
 
 use crate::app_state::AppState;
-use crate::error::AppError;
 use crate::models::{NetOutlet, NetOutletCreate, NetOutletUpdate, NetOutletWithDetails};
 use crate::routes::static_files::AppJson;
 use crate::utils::common::{RequestMeta, log_op_best_effort};
@@ -9,6 +8,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
+use ipma_common::AppError;
 use ipma_common::msg;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -103,7 +103,7 @@ pub async fn get_net_outlets(
         q.fetch_all(&state.pool()?.get_conn()).await?
     };
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         paged_response(net_outlets, total, &pagination),
         "server.net_outlet.fetched",
     ))
@@ -167,7 +167,7 @@ pub async fn create_net_outlet(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         net_outlet,
         "server.net_outlet.created",
     ))
@@ -187,7 +187,7 @@ pub async fn get_net_outlet(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.net_outlet.not_found")))?;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         net_outlet,
         "server.net_outlet.fetched",
     ))
@@ -270,7 +270,7 @@ pub async fn update_net_outlet(
     )
     .await;
 
-    Ok(crate::error::ok_json(
+    Ok(ipma_common::ok_json(
         net_outlet,
         "server.net_outlet.updated",
     ))
@@ -318,5 +318,5 @@ pub async fn delete_net_outlet(
     )
     .await;
 
-    Ok(crate::error::ok_json((), "server.net_outlet.deleted"))
+    Ok(ipma_common::ok_json((), "server.net_outlet.deleted"))
 }
