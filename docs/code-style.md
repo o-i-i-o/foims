@@ -21,15 +21,25 @@
 ### 2.1 工程结构
 
 ```
-ipma（bin/lib）            业务 handler 与模型
-├── crates/ipma-common      ApiResponse / ok_json / PG 错误归类（唯一副本）
-├── crates/ipma-init        建库建表/校验/备份恢复
-├── crates/ipma-visualization
+ipma（bin/lib）             应用组装层：路由装配/系统管理/日志/可视化包装/app_state
+├── crates/ipma-resource        资源管理（网络/房间/机柜/工位/设备/IP/链路…）
+├── crates/ipma-organization    组织管理（组织树/员工/模板）
+├── crates/ipma-auth            认证与用户管理（登录/JWT/fail2ban/SMTP/操作日志）
+├── crates/ipma-models          领域模型（请求/响应/行模型，唯一副本）
+├── crates/ipma-common          共享基础设施（响应/错误/配置/加密/连接池/限流/网络工具）
+├── crates/ipma-init            建库建表/校验/备份恢复
+├── crates/ipma-visualization   拓扑与布局计算
 ├── crates/ipma-data-management CSV 导入导出
-└── crates/ipma-scheduler   定时任务
+└── crates/ipma-scheduler       定时任务
 ```
 
-- 跨 crate 共享的类型与工具放 `ipma-common`，**不得在多个 crate 各存一份副本**。
+- 依赖方向自上而下（`resource → auth → models → common`），禁止反向依赖与环。
+- 跨 crate 共享的类型与工具放 `ipma-common` / `ipma-models`，
+  **不得在多个 crate 各存一份副本**。
+- 业务 crate 不依赖主程序：状态访问经依赖倒置——handler 面向
+  `ipma_common::DbProvider`（连接池）与 `ipma_auth::provider::AuthProvider`
+  （认证扩展）泛型编写，由主程序 `AppState` 实现；主程序路由注册处
+  以 turbofish（`handler::<AppState>`）单态化。
 - 依赖版本统一由根 `Cargo.toml` 的 `[workspace.dependencies]` 管理，子 crate
   一律 `workspace = true`。
 - `[workspace.lints.clippy]` 已启用 unwrap/expect/print/dbg/todo/unreachable/
@@ -68,7 +78,7 @@ let total: i64 = builder.build_query_scalar().fetch_one(&pool).await?;
 
 - 拼接动态 SQL 字符串（`format!` 结果）传给 `sqlx::query*` 时用
   `sqlx::AssertSqlSafe(...)` 显式声明已审计；用户输入永远走 `push_bind`。
-- ILIKE 模式先经 `crate::utils::escape_like` 转义，排序字段走 match 白名单。
+- ILIKE 模式先经 `ipma_common::net::escape_like` 转义，排序字段走 match 白名单。
 - 行映射统一 `query_as::<T>` + `#[derive(sqlx::FromRow)]`；不由 SQL 携带的
   字段用 `#[sqlx(skip)]` 后在代码中填充。
 - 事务约定：**多步写操作（存在性检查 + 写入 + 回读）必须包在同一事务**；
@@ -77,8 +87,8 @@ let total: i64 = builder.build_query_scalar().fetch_one(&pool).await?;
 ### 2.4 API 响应
 
 - 响应体统一 `ipma_common::ApiResponse { success, message, data }`，
-  成功响应用 `crate::error::ok_json(data, "消息")`。
-- 分页列表响应统一（`src/utils/pagination.rs`）：
+  成功响应用 `ipma_common::ok_json(data, "消息")`。
+- 分页列表响应统一（`ipma_common::pagination`）：
 
 ```rust
 Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
