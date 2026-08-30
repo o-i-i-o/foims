@@ -1390,6 +1390,232 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "foims"
+version = "0.15.97"
+dependencies = [
+ "async-trait",
+ "axum",
+ "axum-extra",
+ "chrono",
+ "config",
+ "foims-auth",
+ "foims-common",
+ "foims-data-management",
+ "foims-init",
+ "foims-models",
+ "foims-organization",
+ "foims-resource",
+ "foims-scheduler",
+ "foims-visualization",
+ "foims-x509-management",
+ "regex",
+ "rust-i18n",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "time",
+ "tokio",
+ "toml 1.1.4+spec-1.1.0",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-auth"
+version = "0.1.1"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "base64 0.23.1",
+ "bcrypt",
+ "chrono",
+ "dashmap",
+ "foims-common",
+ "foims-models",
+ "hex",
+ "jsonwebtoken",
+ "ldap3",
+ "lettre",
+ "openidconnect",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sqlx",
+ "time",
+ "tokio",
+ "totp-rs",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-common"
+version = "0.3.1"
+dependencies = [
+ "aes-gcm",
+ "arc-swap",
+ "axum",
+ "base64 0.23.1",
+ "config",
+ "dashmap",
+ "hex",
+ "ipnetwork",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "validator",
+]
+
+[[package]]
+name = "foims-data-management"
+version = "0.2.1"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "csv",
+ "foims-common",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+ "validator",
+ "zip",
+]
+
+[[package]]
+name = "foims-init"
+version = "0.1.2"
+dependencies = [
+ "axum",
+ "bcrypt",
+ "chrono",
+ "foims-common",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml 1.1.4+spec-1.1.0",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-models"
+version = "0.2.3"
+dependencies = [
+ "chrono",
+ "foims-common",
+ "foims-scheduler",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-organization"
+version = "0.1.1"
+dependencies = [
+ "axum",
+ "chrono",
+ "foims-auth",
+ "foims-common",
+ "foims-models",
+ "serde_json",
+ "sqlx",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-resource"
+version = "0.1.2"
+dependencies = [
+ "async-snmp",
+ "axum",
+ "chrono",
+ "dashmap",
+ "foims-auth",
+ "foims-common",
+ "foims-models",
+ "ipnetwork",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-scheduler"
+version = "0.1.1"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "foims-common",
+ "foims-data-management",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-cron-scheduler",
+ "uuid",
+]
+
+[[package]]
+name = "foims-visualization"
+version = "0.2.2"
+dependencies = [
+ "axum",
+ "foims-auth",
+ "foims-common",
+ "foims-models",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "foims-x509-management"
+version = "0.2.2"
+dependencies = [
+ "chrono",
+ "foims-common",
+ "pem 4.0.0",
+ "rcgen",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "time",
+ "tokio",
+ "x509-parser",
+]
+
+[[package]]
 name = "foldhash"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2085,232 +2311,6 @@ checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
 dependencies = [
  "block-padding",
  "hybrid-array",
-]
-
-[[package]]
-name = "ipma"
-version = "0.15.96"
-dependencies = [
- "async-trait",
- "axum",
- "axum-extra",
- "chrono",
- "config",
- "ipma-auth",
- "ipma-common",
- "ipma-data-management",
- "ipma-init",
- "ipma-models",
- "ipma-organization",
- "ipma-resource",
- "ipma-scheduler",
- "ipma-visualization",
- "ipma-x509-manager",
- "regex",
- "rust-i18n",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "time",
- "tokio",
- "toml 1.1.4+spec-1.1.0",
- "tower-http 0.7.0",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-auth"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-extra",
- "base64 0.23.1",
- "bcrypt",
- "chrono",
- "dashmap",
- "hex",
- "ipma-common",
- "ipma-models",
- "jsonwebtoken",
- "ldap3",
- "lettre",
- "openidconnect",
- "rand 0.10.2",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sqlx",
- "time",
- "tokio",
- "totp-rs",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-common"
-version = "0.3.0"
-dependencies = [
- "aes-gcm",
- "arc-swap",
- "axum",
- "base64 0.23.1",
- "config",
- "dashmap",
- "hex",
- "ipnetwork",
- "rand 0.10.2",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "validator",
-]
-
-[[package]]
-name = "ipma-data-management"
-version = "0.2.0"
-dependencies = [
- "async-trait",
- "axum",
- "chrono",
- "csv",
- "ipma-common",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "uuid",
- "validator",
- "zip",
-]
-
-[[package]]
-name = "ipma-init"
-version = "0.1.1"
-dependencies = [
- "axum",
- "bcrypt",
- "chrono",
- "ipma-common",
- "rand 0.10.2",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "toml 1.1.4+spec-1.1.0",
- "tracing",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-models"
-version = "0.2.2"
-dependencies = [
- "chrono",
- "ipma-common",
- "ipma-scheduler",
- "serde",
- "serde_json",
- "sqlx",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-organization"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "ipma-auth",
- "ipma-common",
- "ipma-models",
- "serde_json",
- "sqlx",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-resource"
-version = "0.1.1"
-dependencies = [
- "async-snmp",
- "axum",
- "chrono",
- "dashmap",
- "ipma-auth",
- "ipma-common",
- "ipma-models",
- "ipnetwork",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-scheduler"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "ipma-common",
- "ipma-data-management",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "tokio-cron-scheduler",
- "uuid",
-]
-
-[[package]]
-name = "ipma-visualization"
-version = "0.2.1"
-dependencies = [
- "axum",
- "ipma-auth",
- "ipma-common",
- "ipma-models",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "ipma-x509-manager"
-version = "0.2.1"
-dependencies = [
- "chrono",
- "ipma-common",
- "pem 4.0.0",
- "rcgen",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "time",
- "tokio",
- "x509-parser",
 ]
 
 [[package]]

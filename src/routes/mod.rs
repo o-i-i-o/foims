@@ -36,68 +36,68 @@ use crate::system::scheduled_task::{
     create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
-use ipma_common::AppError;
-use ipma_common::AppJson;
+use foims_common::AppError;
+use foims_common::AppJson;
 
 async fn data_export_csv(
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    ipma_data_management::export_csv(state.as_ref().clone(), type_param)
+    foims_data_management::export_csv(state.as_ref().clone(), type_param)
         .await
         .map_err(AppError::from)
 }
 
 async fn data_import_csv(
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
     payload: Multipart,
 ) -> Result<Response, AppError> {
-    ipma_data_management::import_csv(state.as_ref().clone(), payload)
+    foims_data_management::import_csv(state.as_ref().clone(), payload)
         .await
         .map_err(AppError::from)
 }
 
 async fn data_download_template(
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    ipma_data_management::download_template(type_param)
+    foims_data_management::download_template(type_param)
         .await
         .map_err(AppError::from)
 }
 
 async fn data_export_database(
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    ipma_data_management::export_database(state.as_ref().clone())
+    foims_data_management::export_database(state.as_ref().clone())
         .await
         .map_err(AppError::from)
 }
 
 async fn data_clear_logs(
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     State(state): State<Arc<AppState>>,
-    AppJson(req): AppJson<ipma_data_management::ClearLogsRequest>,
+    AppJson(req): AppJson<foims_data_management::ClearLogsRequest>,
 ) -> Result<Response, AppError> {
-    ipma_data_management::clear_logs(state.as_ref().clone(), req)
+    foims_data_management::clear_logs(state.as_ref().clone(), req)
         .await
         .map_err(AppError::from)
 }
 
 async fn data_get_logs_stats(
-    _viewer: ipma_auth::extractor::AdminOrAuditorUser,
+    _viewer: foims_auth::extractor::AdminOrAuditorUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    ipma_data_management::get_logs_stats(state.as_ref().clone())
+    foims_data_management::get_logs_stats(state.as_ref().clone())
         .await
         .map_err(AppError::from)
 }
 
 async fn health_check() -> Response {
-    ipma_common::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
+    foims_common::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
 }
 
 /// 资源写操作与敏感查询的管理员守卫（security-review A-2/S-2）。
@@ -142,18 +142,18 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
 
     let allowed_roles = needs_admin_with_roles.unwrap_or(&["admin"]);
 
-    match req.extensions().get::<ipma_auth::utils::JwtClaims>() {
+    match req.extensions().get::<foims_auth::utils::JwtClaims>() {
         Some(claims) if allowed_roles.contains(&claims.role.as_str()) => next.run(req).await,
         Some(_) => (
             StatusCode::FORBIDDEN,
-            Json(ipma_common::ApiResponse::<()>::error(ipma_common::msg(
+            Json(foims_common::ApiResponse::<()>::error(foims_common::msg(
                 "server.auth.admin_required",
             ))),
         )
             .into_response(),
         None => (
             StatusCode::UNAUTHORIZED,
-            Json(ipma_common::ApiResponse::<()>::error(ipma_common::msg(
+            Json(foims_common::ApiResponse::<()>::error(foims_common::msg(
                 "server.auth.auth_failed",
             ))),
         )
@@ -167,7 +167,7 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
 pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
     // 读共享槽最新快照（disable_init_mode 写盘成功后已刷新）
     let config = state.config_snapshot();
-    ipma_common::ok_json(
+    foims_common::ok_json(
         serde_json::json!({
             "init_enabled": config.init.enabled,
         }),
@@ -186,7 +186,7 @@ async fn charge_user_rate_limit_middleware(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    if let Some(claims) = req.extensions().get::<ipma_auth::utils::JwtClaims>()
+    if let Some(claims) = req.extensions().get::<foims_auth::utils::JwtClaims>()
         && let Err(e) = state.rate_limiter.charge_user(&claims.sub)
     {
         return e.into_response();
@@ -199,56 +199,59 @@ async fn charge_user_rate_limit_middleware(
 pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     // 公开认证路由（不需要认证）
     let public_auth_routes = Router::new()
-        .route("/api/auth/login", post(ipma_auth::login::login::<AppState>))
+        .route(
+            "/api/auth/login",
+            post(foims_auth::login::login::<AppState>),
+        )
         .route(
             "/api/auth/login/email",
-            post(ipma_auth::login::login_with_email_code::<AppState>),
+            post(foims_auth::login::login_with_email_code::<AppState>),
         )
         .route(
             "/api/auth/login/send-code",
-            post(ipma_auth::login::send_login_code::<AppState>),
+            post(foims_auth::login::send_login_code::<AppState>),
         )
         .route(
             "/api/auth/login/two-factor",
-            post(ipma_auth::login::login_with_two_factor::<AppState>),
+            post(foims_auth::login::login_with_two_factor::<AppState>),
         )
         .route(
             "/api/auth/login/send-2fa-code",
-            post(ipma_auth::login::send_two_factor_code::<AppState>),
+            post(foims_auth::login::send_two_factor_code::<AppState>),
         )
         .route(
             "/api/auth/login/ldap",
-            post(ipma_auth::ldap::login_with_ldap::<AppState>),
+            post(foims_auth::ldap::login_with_ldap::<AppState>),
         )
         .route(
             "/api/auth/sso/login",
-            get(ipma_auth::sso::sso_login::<AppState>),
+            get(foims_auth::sso::sso_login::<AppState>),
         )
         .route(
             "/api/auth/sso/callback",
-            get(ipma_auth::sso::sso_callback::<AppState>)
-                .post(ipma_auth::sso::sso_callback_post::<AppState>),
+            get(foims_auth::sso::sso_callback::<AppState>)
+                .post(foims_auth::sso::sso_callback_post::<AppState>),
         )
         .route(
             "/api/auth/methods",
-            get(ipma_auth::sso::get_auth_methods::<AppState>),
+            get(foims_auth::sso::get_auth_methods::<AppState>),
         )
-        .route("/api/auth/captcha", get(ipma_auth::get_captcha))
+        .route("/api/auth/captcha", get(foims_auth::get_captcha))
         .route(
             "/api/auth/logout",
-            post(ipma_auth::login::logout::<AppState>),
+            post(foims_auth::login::logout::<AppState>),
         )
         .route(
             "/api/auth/refresh",
-            post(ipma_auth::login::refresh_token::<AppState>),
+            post(foims_auth::login::refresh_token::<AppState>),
         )
         .route(
             "/api/auth/forgot-password",
-            post(ipma_auth::login::forgot_password::<AppState>),
+            post(foims_auth::login::forgot_password::<AppState>),
         )
         .route(
             "/api/auth/reset-password",
-            post(ipma_auth::login::reset_password::<AppState>),
+            post(foims_auth::login::reset_password::<AppState>),
         );
 
     // 公开的站点 CA 端点：CA 证书是公开数据，登录页提供下载入口（仅 PEM）；
@@ -267,11 +270,11 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     let me_routes = Router::new()
         .route(
             "/api/auth/me",
-            get(ipma_auth::login::get_current_user::<AppState>),
+            get(foims_auth::login::get_current_user::<AppState>),
         )
         .route(
             "/api/auth/change-password",
-            post(ipma_auth::login::change_password::<AppState>),
+            post(foims_auth::login::change_password::<AppState>),
         )
         // 注册顺序即执行顺序的反序：auth_middleware 先行校验并注入 claims，
         // 随后 admin_guard/限流补记依次运行
@@ -281,7 +284,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            ipma_auth::login::auth_middleware::<AppState>,
+            foims_auth::login::auth_middleware::<AppState>,
         ));
 
     // 健康检查（不需要认证）
@@ -292,382 +295,383 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 用户管理路由
         .route(
             "/api/users",
-            get(ipma_auth::user::get_users::<AppState>)
-                .post(ipma_auth::user::create_user::<AppState>),
+            get(foims_auth::user::get_users::<AppState>)
+                .post(foims_auth::user::create_user::<AppState>),
         )
         .route(
             "/api/users/{id}",
-            get(ipma_auth::user::get_user::<AppState>)
-                .put(ipma_auth::user::update_user::<AppState>)
-                .delete(ipma_auth::user::delete_user::<AppState>),
+            get(foims_auth::user::get_user::<AppState>)
+                .put(foims_auth::user::update_user::<AppState>)
+                .delete(foims_auth::user::delete_user::<AppState>),
         )
         // 2FA管理路由
         .route(
             "/api/two-factor/init",
-            post(ipma_auth::login::init_two_factor::<AppState>),
+            post(foims_auth::login::init_two_factor::<AppState>),
         )
         .route(
             "/api/two-factor/enable",
-            post(ipma_auth::login::enable_two_factor::<AppState>),
+            post(foims_auth::login::enable_two_factor::<AppState>),
         )
         .route(
             "/api/two-factor/disable",
-            post(ipma_auth::login::disable_two_factor::<AppState>),
+            post(foims_auth::login::disable_two_factor::<AppState>),
         )
         // 资源管理路由
         // 下拉专用精简选项端点（id+name，仅登录即可读）
         .route(
             "/api/resources/options/{resource}",
-            get(ipma_resource::options::get_resource_options::<AppState>),
+            get(foims_resource::options::get_resource_options::<AppState>),
         )
         // 网络管理
         .route(
             "/api/resources/networks",
-            get(ipma_resource::get_networks::<AppState>)
-                .post(ipma_resource::create_network::<AppState>),
+            get(foims_resource::get_networks::<AppState>)
+                .post(foims_resource::create_network::<AppState>),
         )
         .route(
             "/api/resources/networks/{id}",
-            get(ipma_resource::get_network::<AppState>)
-                .put(ipma_resource::update_network::<AppState>)
-                .delete(ipma_resource::delete_network::<AppState>),
+            get(foims_resource::get_network::<AppState>)
+                .put(foims_resource::update_network::<AppState>)
+                .delete(foims_resource::delete_network::<AppState>),
         )
         // 网络区域管理
         .route(
             "/api/resources/network-regions",
-            get(ipma_resource::get_network_regions::<AppState>)
-                .post(ipma_resource::create_network_region::<AppState>),
+            get(foims_resource::get_network_regions::<AppState>)
+                .post(foims_resource::create_network_region::<AppState>),
         )
         .route(
             "/api/resources/network-regions/{id}",
-            get(ipma_resource::get_network_region::<AppState>)
-                .put(ipma_resource::update_network_region::<AppState>)
-                .delete(ipma_resource::delete_network_region::<AppState>),
+            get(foims_resource::get_network_region::<AppState>)
+                .put(foims_resource::update_network_region::<AppState>)
+                .delete(foims_resource::delete_network_region::<AppState>),
         )
         .route(
             "/api/resources/network-regions/{id}/cabinets",
-            get(ipma_resource::get_cabinets_by_network_region::<AppState>),
+            get(foims_resource::get_cabinets_by_network_region::<AppState>),
         )
         // 房间管理
         .route(
             "/api/resources/rooms",
-            get(ipma_resource::get_rooms::<AppState>).post(ipma_resource::create_room::<AppState>),
+            get(foims_resource::get_rooms::<AppState>)
+                .post(foims_resource::create_room::<AppState>),
         )
         .route(
             "/api/resources/rooms/{id}",
-            get(ipma_resource::get_room::<AppState>)
-                .put(ipma_resource::update_room::<AppState>)
-                .delete(ipma_resource::delete_room::<AppState>),
+            get(foims_resource::get_room::<AppState>)
+                .put(foims_resource::update_room::<AppState>)
+                .delete(foims_resource::delete_room::<AppState>),
         )
         .route(
             "/api/resources/rooms/{id}/brief",
-            get(ipma_resource::get_room_brief::<AppState>),
+            get(foims_resource::get_room_brief::<AppState>),
         )
         .route(
             "/api/resources/rooms/{id}/networks",
-            get(ipma_resource::get_room_networks::<AppState>),
+            get(foims_resource::get_room_networks::<AppState>),
         )
         .route(
             "/api/resources/rooms/{id}/children",
-            put(ipma_resource::sync_room_children::<AppState>),
+            put(foims_resource::sync_room_children::<AppState>),
         )
         .route(
             "/api/resources/rooms/{id}/net-outlets",
-            put(ipma_resource::sync_room_net_outlets::<AppState>),
+            put(foims_resource::sync_room_net_outlets::<AppState>),
         )
         // 机柜管理
         .route(
             "/api/resources/cabinets",
-            get(ipma_resource::get_cabinets::<AppState>)
-                .post(ipma_resource::create_cabinet::<AppState>),
+            get(foims_resource::get_cabinets::<AppState>)
+                .post(foims_resource::create_cabinet::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}",
-            get(ipma_resource::get_cabinet::<AppState>)
-                .put(ipma_resource::update_cabinet::<AppState>)
-                .delete(ipma_resource::delete_cabinet::<AppState>),
+            get(foims_resource::get_cabinet::<AppState>)
+                .put(foims_resource::update_cabinet::<AppState>)
+                .delete(foims_resource::delete_cabinet::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}/networks",
-            get(ipma_resource::get_cabinet_networks::<AppState>),
+            get(foims_resource::get_cabinet_networks::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}/positions",
-            put(ipma_resource::sync_cabinet_positions::<AppState>),
+            put(foims_resource::sync_cabinet_positions::<AppState>),
         )
         .route(
             "/api/resources/cabinets/{id}/patch-panels",
-            put(ipma_resource::sync_cabinet_patch_panels::<AppState>),
+            put(foims_resource::sync_cabinet_patch_panels::<AppState>),
         )
         // 工位管理
         .route(
             "/api/resources/workstations",
-            get(ipma_resource::get_workstations::<AppState>)
-                .post(ipma_resource::create_workstation::<AppState>),
+            get(foims_resource::get_workstations::<AppState>)
+                .post(foims_resource::create_workstation::<AppState>),
         )
         .route(
             "/api/resources/workstations/{id}",
-            get(ipma_resource::get_workstation::<AppState>)
-                .put(ipma_resource::update_workstation::<AppState>)
-                .delete(ipma_resource::delete_workstation::<AppState>),
+            get(foims_resource::get_workstation::<AppState>)
+                .put(foims_resource::update_workstation::<AppState>)
+                .delete(foims_resource::delete_workstation::<AppState>),
         )
         // 机位管理
         .route(
             "/api/resources/positions",
-            get(ipma_resource::get_positions::<AppState>)
-                .post(ipma_resource::create_cabinet_position::<AppState>),
+            get(foims_resource::get_positions::<AppState>)
+                .post(foims_resource::create_cabinet_position::<AppState>),
         )
         .route(
             "/api/resources/positions/{id}",
-            get(ipma_resource::get_cabinet_position::<AppState>)
-                .put(ipma_resource::update_cabinet_position::<AppState>)
-                .delete(ipma_resource::delete_cabinet_position::<AppState>),
+            get(foims_resource::get_cabinet_position::<AppState>)
+                .put(foims_resource::update_cabinet_position::<AppState>)
+                .delete(foims_resource::delete_cabinet_position::<AppState>),
         )
         // IP查询
         .route(
             "/api/resources/ip",
-            get(ipma_resource::get_ip_managers::<AppState>),
+            get(foims_resource::get_ip_managers::<AppState>),
         )
         .route(
             "/api/resources/ip/pull",
-            post(ipma_resource::pull_ip_managers::<AppState>),
+            post(foims_resource::pull_ip_managers::<AppState>),
         )
         .route(
             "/api/resources/ip/available/{network_id}",
-            get(ipma_resource::get_available_ips::<AppState>),
+            get(foims_resource::get_available_ips::<AppState>),
         )
         .route(
             "/api/resources/ip/auto-assign",
-            post(ipma_resource::auto_assign_ip::<AppState>),
+            post(foims_resource::auto_assign_ip::<AppState>),
         )
         .route(
             "/api/resources/ip/batch",
-            post(ipma_resource::batch_create_ip_managers::<AppState>),
+            post(foims_resource::batch_create_ip_managers::<AppState>),
         )
         // 布局管理
         .route(
             "/api/resources/layouts",
-            post(ipma_visualization::http::save_layout::<AppState>),
+            post(foims_visualization::http::save_layout::<AppState>),
         )
         .route(
             "/api/resources/layouts/workstation/{room_id}",
-            get(ipma_visualization::http::get_layout::<AppState>)
-                .delete(ipma_visualization::http::delete_layout::<AppState>),
+            get(foims_visualization::http::get_layout::<AppState>)
+                .delete(foims_visualization::http::delete_layout::<AppState>),
         )
         .route(
             "/api/resources/layouts/positions/{room_id}",
-            get(ipma_visualization::http::get_positions_layout::<AppState>)
-                .delete(ipma_visualization::http::delete_positions_layout::<AppState>),
+            get(foims_visualization::http::get_positions_layout::<AppState>)
+                .delete(foims_visualization::http::delete_positions_layout::<AppState>),
         )
         .route(
             "/api/resources/layouts/room-cabinets/{room_id}",
-            get(ipma_visualization::http::get_room_cabinets_with_positions::<AppState>),
+            get(foims_visualization::http::get_room_cabinets_with_positions::<AppState>),
         )
         // 拓扑可视化
         .route(
             "/api/resources/topology/nodes",
-            get(ipma_visualization::http::get_topology_nodes::<AppState>)
-                .post(ipma_visualization::http::save_topology_nodes::<AppState>),
+            get(foims_visualization::http::get_topology_nodes::<AppState>)
+                .post(foims_visualization::http::save_topology_nodes::<AppState>),
         )
         .route(
             "/api/resources/topology/nodes/{device_id}",
-            delete(ipma_visualization::http::delete_topology_node::<AppState>),
+            delete(foims_visualization::http::delete_topology_node::<AppState>),
         )
         .route(
             "/api/resources/topology/connections",
-            get(ipma_visualization::http::get_topology_connections::<AppState>)
-                .post(ipma_visualization::http::create_topology_connection::<AppState>),
+            get(foims_visualization::http::get_topology_connections::<AppState>)
+                .post(foims_visualization::http::create_topology_connection::<AppState>),
         )
         .route(
             "/api/resources/topology/connections/{id}",
-            delete(ipma_visualization::http::delete_topology_connection::<AppState>),
+            delete(foims_visualization::http::delete_topology_connection::<AppState>),
         )
         .route(
             "/api/resources/topology/auto-discover",
-            post(ipma_visualization::http::trigger_auto_discover::<AppState>),
+            post(foims_visualization::http::trigger_auto_discover::<AppState>),
         )
         // 组织管理
         .route(
             "/api/resources/organizations",
-            get(ipma_organization::get_organizations::<AppState>)
-                .post(ipma_organization::create_organization::<AppState>),
+            get(foims_organization::get_organizations::<AppState>)
+                .post(foims_organization::create_organization::<AppState>),
         )
         .route(
             "/api/resources/organizations/tree",
-            get(ipma_organization::get_organization_tree::<AppState>),
+            get(foims_organization::get_organization_tree::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}",
-            get(ipma_organization::get_organization::<AppState>)
-                .put(ipma_organization::update_organization::<AppState>)
-                .delete(ipma_organization::delete_organization::<AppState>),
+            get(foims_organization::get_organization::<AppState>)
+                .put(foims_organization::update_organization::<AppState>)
+                .delete(foims_organization::delete_organization::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}/children",
-            get(ipma_organization::get_children::<AppState>),
+            get(foims_organization::get_children::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}/allowed-child-types",
-            get(ipma_organization::get_allowed_child_types::<AppState>),
+            get(foims_organization::get_allowed_child_types::<AppState>),
         )
         .route(
             "/api/resources/organizations/{id}/rooms",
-            get(ipma_organization::get_org_rooms::<AppState>),
+            get(foims_organization::get_org_rooms::<AppState>),
         )
         // 员工管理（挂在组织节点下；GET 登录即可读供下拉使用）
         .route(
             "/api/resources/employees",
-            get(ipma_organization::employee::get_employees::<AppState>)
-                .post(ipma_organization::employee::create_employee::<AppState>),
+            get(foims_organization::employee::get_employees::<AppState>)
+                .post(foims_organization::employee::create_employee::<AppState>),
         )
         .route(
             "/api/resources/employees/{id}",
-            get(ipma_organization::employee::get_employee::<AppState>)
-                .put(ipma_organization::employee::update_employee::<AppState>)
-                .delete(ipma_organization::employee::delete_employee::<AppState>),
+            get(foims_organization::employee::get_employee::<AppState>)
+                .put(foims_organization::employee::update_employee::<AppState>)
+                .delete(foims_organization::employee::delete_employee::<AppState>),
         )
         // 组织模板管理
         .route(
             "/api/resources/org-templates",
-            get(ipma_organization::get_org_templates::<AppState>)
-                .post(ipma_organization::create_org_template::<AppState>),
+            get(foims_organization::get_org_templates::<AppState>)
+                .post(foims_organization::create_org_template::<AppState>),
         )
         .route(
             "/api/resources/org-templates/available-types",
-            get(ipma_organization::get_available_org_types::<AppState>),
+            get(foims_organization::get_available_org_types::<AppState>),
         )
         .route(
             "/api/resources/org-templates/{id}",
-            get(ipma_organization::get_org_template::<AppState>)
-                .put(ipma_organization::update_org_template::<AppState>)
-                .delete(ipma_organization::delete_org_template::<AppState>),
+            get(foims_organization::get_org_template::<AppState>)
+                .put(foims_organization::update_org_template::<AppState>)
+                .delete(foims_organization::delete_org_template::<AppState>),
         )
         // 信息点管理
         .route(
             "/api/resources/net-outlets",
-            get(ipma_resource::get_net_outlets::<AppState>)
-                .post(ipma_resource::create_net_outlet::<AppState>),
+            get(foims_resource::get_net_outlets::<AppState>)
+                .post(foims_resource::create_net_outlet::<AppState>),
         )
         .route(
             "/api/resources/net-outlets/{id}",
-            get(ipma_resource::get_net_outlet::<AppState>)
-                .put(ipma_resource::update_net_outlet::<AppState>)
-                .delete(ipma_resource::delete_net_outlet::<AppState>),
+            get(foims_resource::get_net_outlet::<AppState>)
+                .put(foims_resource::update_net_outlet::<AppState>)
+                .delete(foims_resource::delete_net_outlet::<AppState>),
         )
         // 配线架管理（隶属机柜，列表供线路端点选择）
         .route(
             "/api/resources/patch-panels",
-            get(ipma_resource::get_patch_panels::<AppState>),
+            get(foims_resource::get_patch_panels::<AppState>),
         )
         // 物理链路管理
         .route(
             "/api/resources/cable-links",
-            get(ipma_resource::get_cable_links::<AppState>)
-                .post(ipma_resource::create_cable_link::<AppState>),
+            get(foims_resource::get_cable_links::<AppState>)
+                .post(foims_resource::create_cable_link::<AppState>),
         )
         .route(
             "/api/resources/cable-links/path",
-            get(ipma_resource::get_cable_path::<AppState>),
+            get(foims_resource::get_cable_path::<AppState>),
         )
         .route(
             "/api/resources/cable-links/{id}",
-            get(ipma_resource::get_cable_link::<AppState>)
-                .put(ipma_resource::update_cable_link::<AppState>)
-                .delete(ipma_resource::delete_cable_link::<AppState>),
+            get(foims_resource::get_cable_link::<AppState>)
+                .put(foims_resource::update_cable_link::<AppState>)
+                .delete(foims_resource::delete_cable_link::<AppState>),
         )
         // 设备模板管理
         .route(
             "/api/resources/device-templates",
-            get(ipma_resource::get_device_templates::<AppState>),
+            get(foims_resource::get_device_templates::<AppState>),
         )
         .route(
             "/api/resources/device-templates/{id}",
-            get(ipma_resource::get_device_template::<AppState>)
-                .put(ipma_resource::update_device_template::<AppState>)
-                .delete(ipma_resource::delete_device_template::<AppState>),
+            get(foims_resource::get_device_template::<AppState>)
+                .put(foims_resource::update_device_template::<AppState>)
+                .delete(foims_resource::delete_device_template::<AppState>),
         )
         // 设备管理（含统一端口接口/MAC/LLDP/SNMP 功能）
         .route(
             "/api/resources/devices",
-            get(ipma_resource::get_devices::<AppState>)
-                .post(ipma_resource::create_device::<AppState>),
+            get(foims_resource::get_devices::<AppState>)
+                .post(foims_resource::create_device::<AppState>),
         )
         .route(
             "/api/resources/devices/interfaces",
-            get(ipma_resource::get_all_device_interfaces::<AppState>),
+            get(foims_resource::get_all_device_interfaces::<AppState>),
         )
         .route(
             "/api/resources/devices/test-snmp",
-            post(ipma_resource::test_snmp_connection::<AppState>),
+            post(foims_resource::test_snmp_connection::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}",
-            get(ipma_resource::get_device::<AppState>)
-                .put(ipma_resource::update_device::<AppState>)
-                .delete(ipma_resource::delete_device::<AppState>),
+            get(foims_resource::get_device::<AppState>)
+                .put(foims_resource::update_device::<AppState>)
+                .delete(foims_resource::delete_device::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/nics",
-            get(ipma_resource::get_device_nics::<AppState>),
+            get(foims_resource::get_device_nics::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/ips",
-            get(ipma_resource::get_device_ips::<AppState>),
+            get(foims_resource::get_device_ips::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/ips",
-            post(ipma_resource::create_device_ip::<AppState>),
+            post(foims_resource::create_device_ip::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/auto-assign-ip",
-            post(ipma_resource::auto_assign_device_ip::<AppState>),
+            post(foims_resource::auto_assign_device_ip::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/test-snmp",
-            post(ipma_resource::test_snmp_connection_by_id::<AppState>),
+            post(foims_resource::test_snmp_connection_by_id::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/macs",
-            get(ipma_resource::get_device_macs_from_db::<AppState>),
+            get(foims_resource::get_device_macs_from_db::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/macs/sync",
-            post(ipma_resource::get_device_mac_table::<AppState>),
+            post(foims_resource::get_device_mac_table::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/lldp-neighbors",
-            get(ipma_resource::get_device_lldp_neighbors::<AppState>),
+            get(foims_resource::get_device_lldp_neighbors::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/lldp/sync",
-            post(ipma_resource::sync_lldp_from_snmp::<AppState>),
+            post(foims_resource::sync_lldp_from_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/snmp-info",
-            get(ipma_resource::get_device_info_snmp::<AppState>),
+            get(foims_resource::get_device_info_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/snmp-ports",
-            get(ipma_resource::get_device_ports_snmp::<AppState>),
+            get(foims_resource::get_device_ports_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/interfaces",
-            get(ipma_resource::get_device_interfaces::<AppState>)
-                .post(ipma_resource::create_device_interface::<AppState>),
+            get(foims_resource::get_device_interfaces::<AppState>)
+                .post(foims_resource::create_device_interface::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/interfaces/sync-snmp",
-            post(ipma_resource::sync_ports_from_snmp::<AppState>),
+            post(foims_resource::sync_ports_from_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/network-config",
-            put(ipma_resource::sync_device_network_config::<AppState>),
+            put(foims_resource::sync_device_network_config::<AppState>),
         )
         .route(
             "/api/resources/devices/interfaces/{interface_id}",
-            get(ipma_resource::get_device_interface::<AppState>)
-                .put(ipma_resource::update_device_interface::<AppState>)
-                .delete(ipma_resource::delete_device_interface::<AppState>),
+            get(foims_resource::get_device_interface::<AppState>)
+                .put(foims_resource::update_device_interface::<AppState>)
+                .delete(foims_resource::delete_device_interface::<AppState>),
         )
         // 日志管理路由
         .route("/api/logs/operation", get(get_operation_logs))
@@ -701,22 +705,22 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // LDAP 配置
         .route(
             "/api/system/ldap/config",
-            get(ipma_auth::ldap::get_ldap_config::<AppState>)
-                .put(ipma_auth::ldap::update_ldap_config::<AppState>),
+            get(foims_auth::ldap::get_ldap_config::<AppState>)
+                .put(foims_auth::ldap::update_ldap_config::<AppState>),
         )
         .route(
             "/api/system/ldap/test",
-            post(ipma_auth::ldap::test_ldap_connection::<AppState>),
+            post(foims_auth::ldap::test_ldap_connection::<AppState>),
         )
         // SSO（OIDC）配置
         .route(
             "/api/system/sso/config",
-            get(ipma_auth::sso::get_sso_config::<AppState>)
-                .put(ipma_auth::sso::update_sso_config::<AppState>),
+            get(foims_auth::sso::get_sso_config::<AppState>)
+                .put(foims_auth::sso::update_sso_config::<AppState>),
         )
         .route(
             "/api/system/sso/test",
-            post(ipma_auth::sso::test_sso_connection::<AppState>),
+            post(foims_auth::sso::test_sso_connection::<AppState>),
         )
         // 配置管理
         .route(
@@ -725,8 +729,8 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/system/config/backup", get(backup_config))
         .route("/api/system/config/restore", post(restore_config))
-        // 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs，
-        // 站点根 CA /etc/ssl/ipma-ca，导入 CA 池 /etc/ssl/ipma-import-cas；
+        // 证书管理（生成 /etc/ssl/foims-certs，导入 /etc/ssl/foims-import-certs，
+        // 站点根 CA /etc/ssl/foims-ca，导入 CA 池 /etc/ssl/foims-import-cas；
         // CA 的公开下载走 /api/certificate/ca/*。证书仅程序自用，无下载端点）
         .route("/api/system/certificate/list", get(certificate::list))
         .route(
@@ -819,19 +823,19 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // Fail2ban 安全管理（应用层）
         .route(
             "/api/system/fail2ban/app/status",
-            get(ipma_auth::app_fail2ban::get_app_fail2ban_status::<AppState>),
+            get(foims_auth::app_fail2ban::get_app_fail2ban_status::<AppState>),
         )
         .route(
             "/api/system/fail2ban/app/config",
-            put(ipma_auth::app_fail2ban::update_app_fail2ban_config::<AppState>),
+            put(foims_auth::app_fail2ban::update_app_fail2ban_config::<AppState>),
         )
         .route(
             "/api/system/fail2ban/app/ban",
-            post(ipma_auth::app_fail2ban::app_ban_ip::<AppState>),
+            post(foims_auth::app_fail2ban::app_ban_ip::<AppState>),
         )
         .route(
             "/api/system/fail2ban/app/unban",
-            post(ipma_auth::app_fail2ban::app_unban_ip::<AppState>),
+            post(foims_auth::app_fail2ban::app_unban_ip::<AppState>),
         )
         // admin_guard_middleware 先注册（位于 auth_middleware 之内）：
         // 请求先经 auth_middleware 校验令牌注入 claims，再由守卫做角色判定；
@@ -844,7 +848,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route_layer(middleware::from_fn(admin_guard_middleware))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            ipma_auth::login::auth_middleware::<AppState>,
+            foims_auth::login::auth_middleware::<AppState>,
         ));
 
     Router::new()

@@ -1,0 +1,54 @@
+[package]
+name = "foims-resource"
+version = "0.1.2"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Resource - networks, rooms, cabinets, workstations, devices, IPs, cable links"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# Workspace crates
+foims-common = { path = "../foims-common" }
+foims-models = { path = "../foims-models" }
+foims-auth = { path = "../foims-auth" }
+
+# Axum
+axum = { workspace = true }
+
+# SQLx
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Date/Time
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# 网络/CIDR 工具
+ipnetwork = { workspace = true }
+
+# 并发表（SNMP 同步任务去重）
+dashmap = { workspace = true }
+
+# SNMP 探测
+async-snmp = "0.18.1"
+
+# Async
+# （tokio::join 并行查询）
+tokio = { workspace = true }
+
+# 错误处理
+thiserror = { workspace = true }
+
+# 日志
+tracing = { workspace = true }
+
+[lints]
+workspace = true

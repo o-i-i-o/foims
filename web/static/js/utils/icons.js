@@ -1,5 +1,5 @@
 /**
- * IPMA - 内联 SVG 图标库（Feather 风格）
+ * FOIMS - 内联 SVG 图标库（Feather 风格）
  *
  * 所有图标 24x24 viewBox、stroke=currentColor，
  * 颜色随按钮 CSS 状态自动适配，无外部依赖（离线可用）。
@@ -119,9 +119,11 @@ function listBadgeIcon(letter) {
 export function iconButton({ icon, label, cls = "", attrs = "", badge = "" }) {
   const safeLabel = escapeHtml(label);
   const clsPart = cls ? ` ${cls}` : "";
-  // 属性串中的引号转实体：调用方拼入含 " 的动态值时会破坏属性边界
-  //（label 已转义，此处补齐 attrs 的同口径防护）
-  const attrsPart = attrs ? ` ${attrs.replace(/"/g, "&quot;")}` : "";
+  // attrs 是调用方拼好的完整属性串（含属性边界引号），必须原样输出：
+  // 若在此对 " 做全局转义，边界引号会变成 &quot;，属性退化为无引号形式，
+  // 浏览器解码实体后 dataset 值带上字面引号（data-id="'825c-…'" → 详情 400）。
+  // 含动态值的调用方自行用 escapeHtml 转义值（escapeHtml 覆盖引号）
+  const attrsPart = attrs ? ` ${attrs}` : "";
   const badgeHtml = badge
     ? `<span class="icon-badge" aria-hidden="true">${escapeHtml(badge)}</span>`
     : "";

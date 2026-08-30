@@ -9,13 +9,13 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::utils::pagination::{Pagination, paged_response};
-use ipma_common::{AppError, msg};
-use ipma_models::OperationLog;
+use foims_common::{AppError, msg};
+use foims_models::OperationLog;
 
 pub async fn get_operation_logs(
     State(state): State<Arc<AppState>>,
     // 与 admin_guard_middleware 的 /api/logs/** 角色矩阵一致：admin 或 auditor
-    _viewer: ipma_auth::extractor::AdminOrAuditorUser,
+    _viewer: foims_auth::extractor::AdminOrAuditorUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let resource_type = query.get("resource_type").cloned().unwrap_or_default();
@@ -129,7 +129,7 @@ pub async fn get_operation_logs(
         (total, logs)
     };
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         paged_response(logs, total, &pagination),
         "server.logs.operation_retrieved",
     ))

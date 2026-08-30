@@ -48,7 +48,7 @@ class CacheManager {
   constructor() {
     this.caches = new Map();
     this.defaultTTL = 5 * 60 * 1000;
-    this.localStorageKey = "ipma_cache";
+    this.localStorageKey = "foims_cache";
     this.cleanupIntervalId = null;
     this.loadFromStorage();
     this.startCleanupInterval();
@@ -280,7 +280,7 @@ export const elementCache = new ElementCache();
 // 子标签页持久化（刷新后停留在当前子标签）
 // ==========================================
 
-const SUBTAB_STORAGE_PREFIX = "ipma_subtab_";
+const SUBTAB_STORAGE_PREFIX = "foims_subtab_";
 
 /**
  * 记住某个页面当前激活的子标签

@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="IPMA 系统初始化向导：数据库检查、创建与管理员账户配置">
+    <meta name="description" content="FOIMS 系统初始化向导：数据库检查、创建与管理员账户配置">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
-    <title>IPMA - 系统初始化</title>
+    <title>FOIMS - 系统初始化</title>
     <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01362">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01362">
-    <link rel="stylesheet" href="/static/css/pages/ipma_init.css?v=01362">
-    <script type="module" src="/static/js/modules/ipma_init/index.js?v=01362"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01363">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01363">
+    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01363">
+    <script type="module" src="/static/js/modules/foims_init/index.js?v=01363"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -24,7 +24,7 @@
                     <option value="en">English</option>
                 </select>
             </div>
-            <h1 data-i18n="init.title">IPMA 系统初始化</h1>
+            <h1 data-i18n="init.title">FOIMS 系统初始化</h1>
             <p data-i18n="init.subtitle">请完成以下初始化步骤，以启动 IP 地址管理系统</p>
         </div>
 
@@ -164,7 +164,7 @@
                     <div class="init-success">
                         <h2 data-i18n="init.done_title">初始化完成!</h2>
                         <div class="success-icon">✓</div>
-                        <p data-i18n="init.done_desc">IPMA 系统已成功初始化。</p>
+                        <p data-i18n="init.done_desc">FOIMS 系统已成功初始化。</p>
                         <p data-i18n="init.restarting">系统正在重启，请稍候...</p>
                         <div class="form-actions">
                             <a href="/main.html" class="btn btn-primary" data-i18n="init.login_system">登录系统</a>

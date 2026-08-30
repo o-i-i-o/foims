@@ -3,8 +3,8 @@
 # 设置数据库连接信息
 HOST=localhost
 PORT=5432
-USER=ipma
-DB=ipma
+USER=foims
+DB=foims
 PASSWORD=admin123
 
 # 获取所有表名

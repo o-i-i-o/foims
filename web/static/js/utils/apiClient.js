@@ -117,7 +117,7 @@ export class ApiClient {
       // 资源写操作成功后广播：下拉选项短期缓存（resources.js）等据此失效。
       // 用事件而非直接导入，避免 apiClient ↔ resources 循环依赖
       if (result?.success && (options.method || "GET").toUpperCase() !== "GET") {
-        document.dispatchEvent(new CustomEvent("ipma:data-mutation", { detail: { url } }));
+        document.dispatchEvent(new CustomEvent("foims:data-mutation", { detail: { url } }));
       }
       return result;
     } finally {
@@ -150,8 +150,11 @@ export class ApiClient {
           return this.makeRequest(url, options, retryCount + 1, requestKey, skipAuthCheck);
         }
 
+        // 先取文本再尝试 JSON 解析：部分 4xx/5xx 的响应体是纯文本，
+        // 直接 response.json() 会抛 SyntaxError 丢失服务端返回的原文
+        const errorText = await response.text();
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(errorText);
           translateServerMessage(errorData);
           return {
             success: false,
@@ -162,9 +165,10 @@ export class ApiClient {
           };
         } catch (jsonError) {
           console.error("错误响应体非 JSON:", jsonError);
+          const detail = errorText ? ` (${errorText.slice(0, 120)})` : "";
           return {
             success: false,
-            message: `${t("api.request_failed")}: ${response.status}`,
+            message: `${t("api.request_failed")}: ${response.status}${detail}`,
             errorType: "network_error"
           };
         }

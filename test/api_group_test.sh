@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # =============================================================================
-# IPMA API 分组集成测试
+# FOIMS API 分组集成测试
 # 顺序：组织管理 → 网络区域 → 网段 → 房间 → 机柜 → 设备 → 线路 → 可视化
 # 说明：
-#   - 通过 UDS(/tmp/ipma-dev.sock) 直连本机 ipma 服务；
+#   - 通过 UDS(/tmp/foims-dev.sock) 直连本机 foims 服务；
 #   - 测试产生的业务数据全部保留在数据库中（不做清理）；
 #   - 结果写入 Markdown 报告（由 REPORT 变量指定）。
 # =============================================================================
 set -u
 
-SOCK="/tmp/ipma-dev.sock"
+SOCK="/tmp/foims-dev.sock"
 BASE="http://localhost"
 RUN="T$(date +%m%d%H%M)"
-REPORT="/media/oi-io/AA709DF48A7AD5C2/ipma/docs/api-test-report.md"
-ADMIN_COOKIE="/tmp/ipma_admin_cookie_$RUN.txt"
-USER_COOKIE="/tmp/ipma_user_cookie_$RUN.txt"
-RESP="/tmp/ipma_resp_$RUN.json"
+REPORT="/media/oi-io/AA709DF48A7AD5C2/foims/docs/api-test-report.md"
+ADMIN_COOKIE="/tmp/foims_admin_cookie_$RUN.txt"
+USER_COOKIE="/tmp/foims_user_cookie_$RUN.txt"
+RESP="/tmp/foims_resp_$RUN.json"
 ADMIN_USER="admin"
 ADMIN_PASS="admin123"
 TEST_USER="apitest_$RUN"
@@ -70,7 +70,7 @@ V6_NET="fd00:99:$N::/64"; V6_GW="fd00:99:$N::1"
 # =============================================================================
 # 前置：会话与测试用户
 # =============================================================================
-echo "# IPMA API 分组集成测试报告" > "$REPORT"
+echo "# FOIMS API 分组集成测试报告" > "$REPORT"
 echo "" >> "$REPORT"
 echo "- 测试时间：$START_TS" >> "$REPORT"
 echo "- 运行标识：$RUN（本批次创建的数据名均含该后缀，全部保留）" >> "$REPORT"

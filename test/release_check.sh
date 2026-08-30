@@ -1,12 +1,12 @@
 #!/bin/sh
 
-# IPMA 发布前检查脚本
+# FOIMS 发布前检查脚本
 
 ERROR_COUNT=0
 TOTAL_CHECKS=0
 
 echo "========================================"
-echo "   IPMA 发布前检查"
+echo "   FOIMS 发布前检查"
 echo "========================================"
 echo ""
 
@@ -42,7 +42,7 @@ main() {
     cd "$SCRIPT_DIR" || exit 1
 
     echo "────────────────────────────────────"
-    echo "   项目: ipma (IP/MAC 地址管理系统)"
+    echo "   项目: foims (IP/MAC 地址管理系统)"
     echo "────────────────────────────────────"
 
     if [ ! -f "Cargo.toml" ]; then

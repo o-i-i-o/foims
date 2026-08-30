@@ -1,5 +1,5 @@
 /**
- * IPMA - 全局轻量 Tooltip 组件
+ * FOIMS - 全局轻量 Tooltip 组件
  *
  * 通过事件委托为所有带 data-tooltip 属性的元素显示悬浮提示。
  * 浮动层挂在 body 上（fixed 定位），避免被表格容器 overflow 裁剪；

@@ -1,0 +1,33 @@
+[package]
+name = "foims-visualization"
+version = "0.2.2"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Visualization Module - Layout management and visualization"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# Workspace crates
+foims-common = { path = "../foims-common" }
+foims-auth = { path = "../foims-auth" }
+foims-models = { path = "../foims-models" }
+
+# Axum
+axum = { workspace = true }
+
+# SQLx PostgreSQL
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

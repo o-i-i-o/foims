@@ -1,19 +1,19 @@
 //! 定时任务执行器实现（绑定具体业务任务类型）。
 
 use async_trait::async_trait;
-use ipma_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
+use foims_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
 use uuid::Uuid;
 
-use ipma_common::{AppMessage, log_debug, log_info, msg};
+use foims_common::{AppMessage, log_debug, log_info, msg};
 
 /// 提取数据层错误内部的 i18n 消息（避免拼接中文前缀导致文案泄漏）
-pub(crate) fn data_error_message(e: ipma_data_management::DataError) -> AppMessage {
+pub(crate) fn data_error_message(e: foims_data_management::DataError) -> AppMessage {
     match e {
-        ipma_data_management::DataError::Database(m)
-        | ipma_data_management::DataError::NotFound(m)
-        | ipma_data_management::DataError::Validation(m)
-        | ipma_data_management::DataError::Conflict(m)
-        | ipma_data_management::DataError::Internal(m) => m,
+        foims_data_management::DataError::Database(m)
+        | foims_data_management::DataError::NotFound(m)
+        | foims_data_management::DataError::Validation(m)
+        | foims_data_management::DataError::Conflict(m)
+        | foims_data_management::DataError::Internal(m) => m,
     }
 }
 
@@ -56,11 +56,12 @@ impl TaskExecutor for BackupTaskExecutor {
         let db_config = ctx.db_config.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            let backup_dir = "/var/lib/ipma/backups";
-            let path = ipma_data_management::backup_to_file(&db_config, backup_dir, "ipma_backup")?;
-            ipma_data_management::cleanup_old_backup_files(backup_dir, 7)?;
+            let backup_dir = "/var/lib/foims/backups";
+            let path =
+                foims_data_management::backup_to_file(&db_config, backup_dir, "foims_backup")?;
+            foims_data_management::cleanup_old_backup_files(backup_dir, 7)?;
             let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-            Ok::<(String, String), ipma_data_management::DataError>((
+            Ok::<(String, String), foims_data_management::DataError>((
                 path,
                 format!("{:.2}", file_size as f64 / (1024.0 * 1024.0)),
             ))
@@ -96,7 +97,7 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let count = ipma_auth::utils::cleanup_expired_revoked_tokens(&ctx.pool)
+        let count = foims_auth::utils::cleanup_expired_revoked_tokens(&ctx.pool)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(msg("server.task.token_cleanup_failed").with("error", e))
@@ -118,7 +119,7 @@ impl TaskExecutor for TokenUsageCleanupTaskExecutor {
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
         let days = parse_cleanup_days(&ctx.config)?;
 
-        let count = ipma_auth::utils::cleanup_old_token_usage(&ctx.pool, days)
+        let count = foims_auth::utils::cleanup_old_token_usage(&ctx.pool, days)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(
@@ -146,7 +147,7 @@ impl TaskExecutor for LogCleanupTaskExecutor {
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
         let days = parse_cleanup_days(&ctx.config)?;
 
-        let deleted = ipma_data_management::clear_logs_core(&ctx.pool, days, "all")
+        let deleted = foims_data_management::clear_logs_core(&ctx.pool, days, "all")
             .await
             .map_err(|e| SchedulerError::Execution(data_error_message(e)))?;
 
@@ -182,10 +183,10 @@ impl TaskExecutor for MacSyncTaskExecutor {
 
         match (device_id, network_id) {
             (Some(device_id), Some(network_id)) => {
-                ipma_resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
+                foims_resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
                     .await
                     .map(|()| "server.task.mac_sync_completed".to_string())
-                    .map_err(|e| SchedulerError::Execution(ipma_common::AppMessage::new(e)))
+                    .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))
             }
             _ => Err(SchedulerError::Validation(msg(
                 "server.task.mac_sync_missing_config",

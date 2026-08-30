@@ -1,8 +1,8 @@
-//! 证书管理接口（转发 ipma-x509-manager 模块）。
+//! 证书管理接口（转发 foims-x509-management 模块）。
 //!
-//! 生成证书写入 /etc/ssl/ipma-certs/，导入证书写入
-//! /etc/ssl/ipma-import-certs/，站点根 CA 存于 /etc/ssl/ipma-ca/，
-//! 导入 CA 池存于 /etc/ssl/ipma-import-cas/{id}/。
+//! 生成证书写入 /etc/ssl/foims-certs/，导入证书写入
+//! /etc/ssl/foims-import-certs/，站点根 CA 存于 /etc/ssl/foims-ca/，
+//! 导入 CA 池存于 /etc/ssl/foims-import-cas/{id}/。
 //!
 //! 权限约定：
 //! - 管理端点（生成/导入/删除/CA 管理）仅管理员可用；
@@ -17,8 +17,8 @@ use axum::extract::Multipart;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use ipma_common::msg;
-use ipma_x509_manager::{
+use foims_common::msg;
+use foims_x509_management::{
     CaStatus, CertKind, GenerateCaRequest, GenerateCertRequest, ca_status, delete_certificate,
     generate_ca, generate_certificate, import_ca, import_certificate, list_certificates,
     read_ca_cert_pem, set_ca_cert_only,
@@ -26,13 +26,13 @@ use ipma_x509_manager::{
 
 use crate::app_state::AppState;
 use crate::utils::{RequestMeta, log_op_best_effort};
-use ipma_auth::extractor::AdminUser;
-use ipma_common::AppError;
-use ipma_common::AppJson;
+use foims_auth::extractor::AdminUser;
+use foims_common::AppError;
+use foims_common::AppJson;
 
 pub async fn list(_admin: AdminUser) -> Result<Response, AppError> {
     let inventory = list_certificates().await?;
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         inventory,
         "server.certificate.list_retrieved",
     ))
@@ -98,7 +98,7 @@ pub async fn generate(
     } else {
         "server.certificate.generate_succeeded"
     };
-    Ok(ipma_common::ok_json((), message_key))
+    Ok(foims_common::ok_json((), message_key))
 }
 
 /// 生成站点根 CA（覆盖既有 CA；由 CA 签发的旧证书将不再被新链信任）
@@ -121,7 +121,7 @@ pub async fn ca_generate(
     )
     .await;
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.certificate.ca_generate_succeeded",
     ))
@@ -148,7 +148,7 @@ pub async fn ca_import(
     )
     .await;
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.certificate.ca_import_succeeded",
     ))
@@ -187,7 +187,7 @@ async fn read_multipart_cert_pair(
 /// 公开的 CA 状态查询：登录页据此显示/隐藏根证书下载入口
 pub async fn ca_info() -> Result<Response, AppError> {
     let status: CaStatus = ca_status().await;
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         status,
         "server.certificate.list_retrieved",
     ))
@@ -198,7 +198,7 @@ pub async fn ca_info() -> Result<Response, AppError> {
 /// CA 证书是公开数据；私钥不存在任何下载通道。
 pub async fn ca_download() -> Result<Response, AppError> {
     let content = read_ca_cert_pem().await?;
-    serve_file(content, "ipma-root-ca.crt", "application/x-pem-file")
+    serve_file(content, "foims-root-ca.crt", "application/x-pem-file")
 }
 
 fn serve_file(content: Vec<u8>, filename: &str, content_type: &str) -> Result<Response, AppError> {
@@ -266,7 +266,7 @@ pub async fn import(
     )
     .await;
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.certificate.import_succeeded",
     ))
@@ -298,7 +298,7 @@ pub async fn delete(
     )
     .await;
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.certificate.delete_succeeded",
     ))

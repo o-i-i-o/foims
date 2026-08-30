@@ -84,7 +84,7 @@ async function loadAppFail2banStatus() {
 
     // 日志路径提示
     if (logPathHint) {
-      const logPath = status.log_path || "/var/log/ipma/auth.log";
+      const logPath = status.log_path || "/var/log/foims/auth.log";
       const hint = t("security.os_integration_desc");
       logPathHint.textContent = `${hint} ${logPath}`;
     }

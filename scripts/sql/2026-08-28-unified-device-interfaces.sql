@@ -1,5 +1,5 @@
 -- 2026-08-28 统一端口模型：device_ports 合并进 device_interfaces
--- （现有部署直接执行；全新部署由 ipma-init 建表代码自动完成，无需执行本文件）
+-- （现有部署直接执行；全新部署由 foims-init 建表代码自动完成，无需执行本文件）
 --
 -- 背景：原代码严格区分「设备端口」（device_ports，交换机二层端口）与
 -- 「设备网口」（device_interfaces，网卡-网口-IP 层级）。现将两表合并为
@@ -93,7 +93,7 @@ ALTER TABLE cable_links
         CHECK (b_endpoint_type IN ('net_outlet', 'device_interface', 'patch_panel'));
 
 -- 8. 重建端点校验触发器函数（移除 device_port 分支；设备间直连一律放行，
---    仅禁止同一设备的两个端口互连以防环路，与 ipma-init cable_links.rs
+--    仅禁止同一设备的两个端口互连以防环路，与 foims-init cable_links.rs
 --    保持同步），随后恢复触发器
 CREATE OR REPLACE FUNCTION validate_cable_link_endpoints() RETURNS TRIGGER AS $$
 DECLARE

@@ -17,23 +17,23 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
-use ipma::app_state::AppState;
-use ipma::routes::get_init_status;
-use ipma::routes::init_routes;
-use ipma::routes::static_files::get_web_dir;
-use ipma::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
-use ipma::system::config::init_start_time;
-use ipma::system::task_executors::{
+use foims::app_state::AppState;
+use foims::routes::get_init_status;
+use foims::routes::init_routes;
+use foims::routes::static_files::get_web_dir;
+use foims::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
+use foims::system::config::init_start_time;
+use foims::system::task_executors::{
     BackupTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor, TokenCleanupTaskExecutor,
     TokenUsageCleanupTaskExecutor,
 };
-use ipma::utils::rate_limit::{
+use foims::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
 };
-use ipma_common::config::Config;
-use ipma_common::db::DbPool;
-use ipma_init::InitContext;
-use ipma_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
+use foims_common::config::Config;
+use foims_common::db::DbPool;
+use foims_init::InitContext;
+use foims_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
 
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
@@ -323,11 +323,11 @@ fn configure_app_services(
         // 创建 InitContext 用于初始化模块
         let init_context = Arc::new(InitContext::new(
             config.database.clone(),
-            ipma_common::config::get_config_file_path(),
+            foims_common::config::get_config_file_path(),
             config.init.enabled,
             Arc::new(|| {
                 Box::pin(async move {
-                    ipma::system::config::trigger_service_restart()
+                    foims::system::config::trigger_service_restart()
                         .await
                         .map_err(|e| e.to_string())?;
                     Ok(())
@@ -336,28 +336,28 @@ fn configure_app_services(
         ));
 
         let init_router = Router::new()
-            .route("/api/init", post(ipma_init::init_system))
-            .route("/api/init/db", post(ipma_init::init_db))
-            .route("/api/init/db/clear", post(ipma_init::clear_database))
-            .route("/api/init/db/create", post(ipma_init::create_database_api))
+            .route("/api/init", post(foims_init::init_system))
+            .route("/api/init/db", post(foims_init::init_db))
+            .route("/api/init/db/clear", post(foims_init::clear_database))
+            .route("/api/init/db/create", post(foims_init::create_database_api))
             // import（无文件）与 create 共用同一 handler：原 import_database_api
             //             是 create 的逐行重复且无任何导入动作
-            .route("/api/init/db/import", post(ipma_init::create_database_api))
+            .route("/api/init/db/import", post(foims_init::create_database_api))
             .route(
                 "/api/init/db/import-file",
-                post(ipma_init::import_database_from_file)
+                post(foims_init::import_database_from_file)
                     .layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
             )
-            .route("/api/init/restart", post(ipma_init::restart_program))
-            .route("/api/init/status", get(ipma_init::check_init_status))
-            .route("/api/init/db-status", get(ipma_init::check_db_status))
+            .route("/api/init/restart", post(foims_init::restart_program))
+            .route("/api/init/status", get(foims_init::check_init_status))
+            .route("/api/init/db-status", get(foims_init::check_db_status))
             .route(
                 "/api/init/verification-code",
-                get(ipma_init::get_verification_code),
+                get(foims_init::get_verification_code),
             )
-            .route("/api/init/check-pgsql", get(ipma_init::check_pgsql))
+            .route("/api/init/check-pgsql", get(foims_init::check_pgsql))
             .route_layer(middleware::from_fn(
-                ipma_auth::login::localhost_only_middleware::<AppState>,
+                foims_auth::login::localhost_only_middleware::<AppState>,
             ))
             .with_state(init_context);
 
@@ -436,21 +436,21 @@ async fn main() -> std::io::Result<()> {
     let config = match Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
-            let _ = ipma::log::setup_logging(None);
-            ipma_common::log_error!("system.config_load_failed", error = e);
+            let _ = foims::log::setup_logging(None);
+            foims_common::log_error!("system.config_load_failed", error = e);
             std::process::exit(1);
         }
     };
 
-    let log_files = ipma::log::setup_logging(config.i18n.as_ref());
+    let log_files = foims::log::setup_logging(config.i18n.as_ref());
 
-    ipma_common::log_info!("log.output_to", path = log_files.join(", "));
-    ipma_common::log_info!("system.start");
+    foims_common::log_info!("log.output_to", path = log_files.join(", "));
+    foims_common::log_info!("system.start");
 
-    ipma_common::log_info!("system.config_loaded");
+    foims_common::log_info!("system.config_loaded");
 
-    if let Err(e) = ipma_common::crypto::check_key_integrity() {
-        ipma_common::log_error!("system.key_integrity_check_failed", error = e);
+    if let Err(e) = foims_common::crypto::check_key_integrity() {
+        foims_common::log_error!("system.key_integrity_check_failed", error = e);
         // 密钥不可用（加载/校验失败）时以错误退出：存量密文将无法解密，
         // 带病运行只会产生不可恢复的数据错误
         return Err(std::io::Error::other(e));
@@ -459,33 +459,33 @@ async fn main() -> std::io::Result<()> {
     let shutdown = ShutdownSignal::new();
 
     let pool = if config.init.enabled {
-        ipma_common::log_info!("system.init_mode_enabled");
+        foims_common::log_info!("system.init_mode_enabled");
         None
     } else {
         match DbPool::new(&config.database).await {
             // 池创建成功的日志（含全部参数）由 DbPool::new_with_config 统一记录
             Ok(p) => Some(p),
             Err(e) => {
-                ipma_common::log_error!("system.db_pool_create_failed", error = e);
+                foims_common::log_error!("system.db_pool_create_failed", error = e);
                 std::process::exit(1);
             }
         }
     };
 
     init_start_time();
-    ipma_common::log_info!("system.start_time_initialized");
+    foims_common::log_info!("system.start_time_initialized");
 
-    // 审计外发钩子：操作日志的 syslog 外发由 log 模块实现（ipma-auth 经钩子调用）
-    ipma_auth::meta::set_forward_hook(|pool, message| {
-        ipma::log::forwarding::spawn_forward(pool, message);
+    // 审计外发钩子：操作日志的 syslog 外发由 log 模块实现（foims-auth 经钩子调用）
+    foims_auth::meta::set_forward_hook(|pool, message| {
+        foims::log::forwarding::spawn_forward(pool, message);
     });
 
     // 启动应用层 fail2ban 清理任务（新签名需连接池：先加载持久化配置）。
     // 初始化模式无连接池，跳过启动
     if let Some(db_pool) = pool.as_ref() {
-        ipma_auth::app_fail2ban::start_cleanup_task(db_pool.get_conn());
+        foims_auth::app_fail2ban::start_cleanup_task(db_pool.get_conn());
     }
-    ipma_common::log_info!("system.fail2ban_cleanup_started");
+    foims_common::log_info!("system.fail2ban_cleanup_started");
 
     let mut running_scheduler: Option<RunningScheduler> = None;
 
@@ -519,7 +519,7 @@ async fn main() -> std::io::Result<()> {
                     )
                     .await
                 {
-                    ipma_common::log_error!("system.register_backup_job_failed", error = e);
+                    foims_common::log_error!("system.register_backup_job_failed", error = e);
                 }
                 if let Err(e) = state
                     .add_system_job(
@@ -530,7 +530,7 @@ async fn main() -> std::io::Result<()> {
                     )
                     .await
                 {
-                    ipma_common::log_error!("system.register_token_cleanup_job_failed", error = e);
+                    foims_common::log_error!("system.register_token_cleanup_job_failed", error = e);
                 }
                 if let Err(e) = state
                     .add_system_job(
@@ -541,27 +541,27 @@ async fn main() -> std::io::Result<()> {
                     )
                     .await
                 {
-                    ipma_common::log_error!("system.register_usage_cleanup_job_failed", error = e);
+                    foims_common::log_error!("system.register_usage_cleanup_job_failed", error = e);
                 }
 
                 match state.start().await {
                     Ok(running) => {
                         running_scheduler = Some(running);
-                        ipma_common::log_info!("system.scheduler_started");
+                        foims_common::log_info!("system.scheduler_started");
                     }
                     Err(e) => {
-                        ipma_common::log_error!("system.scheduler_start_failed", error = e);
+                        foims_common::log_error!("system.scheduler_start_failed", error = e);
                     }
                 }
             }
             Err(e) => {
-                ipma_common::log_error!("system.scheduler_create_failed", error = e);
+                foims_common::log_error!("system.scheduler_create_failed", error = e);
             }
         }
 
         let health_interval = config.database.health_check_interval_secs.max(1) as u64;
         db_pool.start_health_check_task(health_interval, shutdown.subscribe());
-        ipma_common::log_info!("system.db_health_check_started", interval = health_interval);
+        foims_common::log_info!("system.db_health_check_started", interval = health_interval);
     }
 
     let rate_limiter = RateLimiter::new(
@@ -578,23 +578,23 @@ async fn main() -> std::io::Result<()> {
 
     if rate_limit_enabled {
         start_cleanup_task(rate_limiter.clone(), shutdown.subscribe());
-        ipma_common::log_info!("system.rate_limit_enabled");
-        ipma_common::log_info!(
+        foims_common::log_info!("system.rate_limit_enabled");
+        foims_common::log_info!(
             "system.rate_limit_ip",
             limit = config.rate_limit.ip_limit,
             window = config.rate_limit.window_secs
         );
-        ipma_common::log_info!(
+        foims_common::log_info!(
             "system.rate_limit_user",
             limit = config.rate_limit.user_limit,
             window = config.rate_limit.window_secs
         );
-        ipma_common::log_info!(
+        foims_common::log_info!(
             "system.rate_limit_login",
             limit = config.rate_limit.login_limit,
             window = config.rate_limit.window_secs
         );
-        ipma_common::log_info!(
+        foims_common::log_info!(
             "system.rate_limit_email",
             limit = config.rate_limit.email_limit,
             window = config.rate_limit.email_window_secs
@@ -606,7 +606,7 @@ async fn main() -> std::io::Result<()> {
 
     let web_dir = get_web_dir();
     if serve_static && !Path::new(web_dir).exists() {
-        ipma_common::log_info!("system.web_dir_created", path = web_dir);
+        foims_common::log_info!("system.web_dir_created", path = web_dir);
         // 同步文件系统操作移出 async 上下文，避免阻塞运行时工作线程
         tokio::task::block_in_place(|| fs::create_dir_all(web_dir))?;
     }
@@ -614,13 +614,13 @@ async fn main() -> std::io::Result<()> {
     let init_enabled = config.init.enabled;
 
     if init_enabled {
-        ipma_common::log_info!("system.init_mode_enabled");
+        foims_common::log_info!("system.init_mode_enabled");
     } else {
-        ipma_common::log_info!("system.init_mode_disabled");
+        foims_common::log_info!("system.init_mode_disabled");
     }
 
-    ipma_common::log_info!("system.listening_uds", path = uds_path);
-    ipma_common::log_info!(
+    foims_common::log_info!("system.listening_uds", path = uds_path);
+    foims_common::log_info!(
         "system.static_serve_mode",
         mode = if serve_static { "axum" } else { "nginx" }
     );
@@ -656,19 +656,19 @@ async fn main() -> std::io::Result<()> {
         Err(UdsBindError::AddressInUse) => {
             match tokio::net::UnixStream::connect(&uds_path).await {
                 Ok(_) => {
-                    ipma_common::log_error!("system.uds_in_use", path = uds_path);
+                    foims_common::log_error!("system.uds_in_use", path = uds_path);
                     std::process::exit(1);
                 }
                 Err(_) => {
                     // 文件存在但无人监听 → 安全清理后重试一次
-                    ipma_common::log_info!("system.uds_stale_cleaned", path = uds_path);
+                    foims_common::log_info!("system.uds_stale_cleaned", path = uds_path);
                     tokio::fs::remove_file(&uds_path).await?;
                     match tokio::task::block_in_place(|| create_uds_listener(&uds_path, &uds_group))
                     {
                         Ok(listener) => listener,
                         // 重试仍被占用（清理与 bind 之间被并发抢占）或 IO 错误：直接失败
                         Err(UdsBindError::AddressInUse) => {
-                            ipma_common::log_error!("system.uds_in_use", path = uds_path);
+                            foims_common::log_error!("system.uds_in_use", path = uds_path);
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::AddrInUse,
                                 format!("UDS {uds_path} 重试绑定仍被占用"),
@@ -690,8 +690,8 @@ async fn main() -> std::io::Result<()> {
         rate_limit_state,
     );
 
-    ipma_common::log_info!("system.uds_server_started", path = uds_path);
-    ipma_common::log_info!("system.ready");
+    foims_common::log_info!("system.uds_server_started", path = uds_path);
+    foims_common::log_info!("system.ready");
 
     // 启动服务器（使用 oneshot 通道在收到第一次信号时通知主任务）
     let (signal_tx, signal_rx) = tokio::sync::oneshot::channel::<()>();
@@ -706,7 +706,7 @@ async fn main() -> std::io::Result<()> {
     let shutdown_for_server = shutdown.clone();
     let server_task = tokio::spawn(async move {
         if let Err(e) = serve.with_graceful_shutdown(graceful_shutdown).await {
-            ipma_common::log_error!("system.server_run_error", error = e);
+            foims_common::log_error!("system.server_run_error", error = e);
             // serve 失败时主动广播关闭信号：graceful_shutdown（持有 oneshot
             // 发送端）随 serve 结束被丢弃也会唤醒主流程，此处显式触发保证
             // 后台任务同样收到关闭通知，进程不空转
@@ -720,51 +720,51 @@ async fn main() -> std::io::Result<()> {
     // 注册强制退出信号处理（第二次 Ctrl-C）
     let force_shutdown_handle = tokio::spawn(async {
         if let Err(e) = tokio::signal::ctrl_c().await {
-            ipma_common::log_warn!("system.force_exit_register_failed", error = e);
+            foims_common::log_warn!("system.force_exit_register_failed", error = e);
         }
-        ipma_common::log_warn!("system.force_exit");
+        foims_common::log_warn!("system.force_exit");
         std::process::exit(1);
     });
 
     // 1. 停止接收新连接并等待请求完成（graceful_shutdown 已触发，等待服务器结束）
-    ipma_common::log_info!("system.shutdown_step_connections");
+    foims_common::log_info!("system.shutdown_step_connections");
     let server_stop_timeout = tokio::time::Duration::from_secs(10);
     if let Err(e) = tokio::time::timeout(server_stop_timeout, server_task).await {
-        ipma_common::log_warn!("system.graceful_shutdown_timeout", error = e);
+        foims_common::log_warn!("system.graceful_shutdown_timeout", error = e);
     }
-    ipma_common::log_info!("system.shutdown_connections_closed");
+    foims_common::log_info!("system.shutdown_connections_closed");
 
     // 2. 服务器任务已结束
-    ipma_common::log_info!("system.shutdown_step_server");
-    ipma_common::log_info!("system.shutdown_server_done");
+    foims_common::log_info!("system.shutdown_step_server");
+    foims_common::log_info!("system.shutdown_server_done");
 
     // 3. 关闭后台任务
-    ipma_common::log_info!("system.shutdown_step_background");
+    foims_common::log_info!("system.shutdown_step_background");
     shutdown.request_shutdown();
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    ipma_common::log_info!("system.shutdown_background_signaled");
+    foims_common::log_info!("system.shutdown_background_signaled");
 
     // 4. 关闭调度器
-    ipma_common::log_info!("system.shutdown_step_scheduler");
+    foims_common::log_info!("system.shutdown_step_scheduler");
     if let Some(scheduler) = running_scheduler
         && let Err(e) =
             tokio::time::timeout(tokio::time::Duration::from_secs(5), scheduler.shutdown()).await
     {
-        ipma_common::log_warn!("system.scheduler_shutdown_timeout", error = e);
+        foims_common::log_warn!("system.scheduler_shutdown_timeout", error = e);
     }
 
     // 5. 关闭数据库连接池
-    ipma_common::log_info!("system.shutdown_step_db");
+    foims_common::log_info!("system.shutdown_step_db");
     if let Some(db_pool) = pool
         && let Err(e) =
             tokio::time::timeout(tokio::time::Duration::from_secs(5), db_pool.close()).await
     {
-        ipma_common::log_warn!("system.db_pool_close_timeout", error = e);
+        foims_common::log_warn!("system.db_pool_close_timeout", error = e);
     }
 
     force_shutdown_handle.abort();
 
-    ipma_common::log_info!("system.shutdown_complete");
+    foims_common::log_info!("system.shutdown_complete");
 
     Ok(())
 }

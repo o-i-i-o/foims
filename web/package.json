@@ -1,8 +1,8 @@
 {
-  "name": "ipma-web",
+  "name": "foims-web",
   "private": true,
   "version": "0.15.74",
-  "description": "IPMA 前端 lint/test 工具链（源码为无构建的原生 ESM，本文件仅提供工具运行环境）",
+  "description": "FOIMS 前端 lint/test 工具链（源码为无构建的原生 ESM，本文件仅提供工具运行环境）",
   "scripts": {
     "lint": "eslint static/js tests && stylelint \"static/css/**/*.css\" && npm run lint:html",
     "lint:html": "htmlhint \"static/*.html\" \"static/modals/**/*.html\"",

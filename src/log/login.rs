@@ -8,13 +8,13 @@ use axum::response::Response;
 
 use crate::app_state::AppState;
 use crate::utils::pagination::{Pagination, paged_response};
-use ipma_common::AppError;
-use ipma_models::LoginLog;
+use foims_common::AppError;
+use foims_models::LoginLog;
 
 pub async fn get_login_logs(
     State(state): State<Arc<AppState>>,
     // 与 admin_guard_middleware 的 /api/logs/** 角色矩阵一致：admin 或 auditor
-    _viewer: ipma_auth::extractor::AdminOrAuditorUser,
+    _viewer: foims_auth::extractor::AdminOrAuditorUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
@@ -74,7 +74,7 @@ pub async fn get_login_logs(
         (total, logs)
     };
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         paged_response(logs, total, &pagination),
         "server.logs.login_retrieved",
     ))

@@ -9,13 +9,13 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::response::Response;
-use ipma_common::{log_debug, log_warn, msg};
+use foims_common::{log_debug, log_warn, msg};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 
 use crate::app_state::AppState;
-use ipma_common::AppError;
-use ipma_common::AppJson;
+use foims_common::AppError;
+use foims_common::AppJson;
 
 /// local0(16) × 8 + informational(6)
 const SYSLOG_PRI_INFO: u32 = 16 * 8 + 6;
@@ -155,7 +155,7 @@ async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String>
     } else {
         message.to_string()
     };
-    let packet = format!("<{SYSLOG_PRI_INFO}>{timestamp} ipma op: {trimmed}");
+    let packet = format!("<{SYSLOG_PRI_INFO}>{timestamp} foims op: {trimmed}");
 
     // 以 (host, port) 元组形式解析目标地址：裸 IPv6 字面量（如 2001:db8::1）
     // 拼成 "host:port" 字符串会被误解析为非法地址，元组形式可正确处理
@@ -206,11 +206,11 @@ async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String>
 
 pub async fn get_forwarding(
     State(state): State<Arc<AppState>>,
-    _secadmin: ipma_auth::extractor::SecAdminUser,
+    _secadmin: foims_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     // DB 错误透传，不再静默回退「关闭」默认配置
     let config = load(&state.pool()?.get_conn()).await?;
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         config,
         "server.logs.forwarding_retrieved",
     ))
@@ -218,28 +218,31 @@ pub async fn get_forwarding(
 
 pub async fn update_forwarding(
     State(state): State<Arc<AppState>>,
-    _secadmin: ipma_auth::extractor::SecAdminUser,
+    _secadmin: foims_auth::extractor::SecAdminUser,
     AppJson(req): AppJson<LogForwardingConfig>,
 ) -> Result<Response, AppError> {
     save(&state.pool()?.get_conn(), &req).await?;
-    Ok(ipma_common::ok_json((), "server.logs.forwarding_updated"))
+    Ok(foims_common::ok_json((), "server.logs.forwarding_updated"))
 }
 
 /// 发送一条测试报文验证连通性
 pub async fn test_forwarding(
     State(state): State<Arc<AppState>>,
-    _secadmin: ipma_auth::extractor::SecAdminUser,
+    _secadmin: foims_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
     let config = load(&conn).await?;
     if !config.enabled {
         return Err(AppError::Validation(msg("server.logs.forwarding_disabled")));
     }
-    send(&config, "IPMA log forwarding test message")
+    send(&config, "FOIMS log forwarding test message")
         .await
         .map_err(|e| {
             AppError::Internal(msg("server.logs.forwarding_test_failed").with("error", e))
         })?;
     log_debug!("log.forwarding.test_sent");
-    Ok(ipma_common::ok_json((), "server.logs.forwarding_test_sent"))
+    Ok(foims_common::ok_json(
+        (),
+        "server.logs.forwarding_test_sent",
+    ))
 }

@@ -4,17 +4,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use ipma_auth::provider::AuthProvider;
-use ipma_auth::utils::JwtUtils;
-use ipma_common::ArcSwap;
-use ipma_common::SharedConfig;
-use ipma_common::config::Config;
-use ipma_common::crypto::{decrypt_password_async, encrypt_password_async};
-use ipma_common::db::DbPool;
-use ipma_common::rate_limit::RateLimiter;
-use ipma_common::{AppError, DbProvider, msg};
-use ipma_data_management::{DataError, DataProvider, DataResult, DatabaseConfig};
-use ipma_scheduler::TaskRegistry;
+use foims_auth::provider::AuthProvider;
+use foims_auth::utils::JwtUtils;
+use foims_common::ArcSwap;
+use foims_common::SharedConfig;
+use foims_common::config::Config;
+use foims_common::crypto::{decrypt_password_async, encrypt_password_async};
+use foims_common::db::DbPool;
+use foims_common::rate_limit::RateLimiter;
+use foims_common::{AppError, DbProvider, msg};
+use foims_data_management::{DataError, DataProvider, DataResult, DatabaseConfig};
+use foims_scheduler::TaskRegistry;
 use sqlx::PgPool;
 
 use crate::shutdown::ShutdownSignal;
@@ -25,7 +25,7 @@ pub struct AppState {
     /// src 侧读取一律经 `config_snapshot()` 取最新值，消除启动快照陈旧问题。
     pub config: SharedConfig,
     /// 进程启动时的配置快照。仅供 `AuthProvider::config()` trait 实现——
-    /// 该 trait（ipma-auth，签名 `fn config(&self) -> &Config`）要求按引用
+    /// 该 trait（foims-auth，签名 `fn config(&self) -> &Config`）要求按引用
     /// 返回，无法从共享槽出借；其内部唯一读取点为重置链接的 public_url。
     startup_config: Config,
     pub pool: Option<DbPool>,

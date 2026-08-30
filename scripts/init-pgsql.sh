@@ -2,17 +2,17 @@
 
 set -e
 
-echo "=== IPMA PostgreSQL 初始化脚本 ==="
-echo "=== IPMA PostgreSQL Init Script ==="
+echo "=== FOIMS PostgreSQL 初始化脚本 ==="
+echo "=== FOIMS PostgreSQL Init Script ==="
 
 echo ""
 
-PG_USER="${PG_USER:-ipma}"
+PG_USER="${PG_USER:-foims}"
 PG_PASSWORD="${PG_PASSWORD:-}"
-PG_DATABASE="${PG_DATABASE:-ipma}"
+PG_DATABASE="${PG_DATABASE:-foims}"
 PG_HOST="${PG_HOST:-localhost}"
 PG_PORT="${PG_PORT:-5432}"
-CONFIG_FILE="/etc/ipma/config.toml"
+CONFIG_FILE="/etc/foims/config.toml"
 
 if [ -z "$PG_PASSWORD" ]; then
     echo "错误: 请设置环境变量 PG_PASSWORD"
@@ -23,14 +23,14 @@ if [ -z "$PG_PASSWORD" ]; then
     echo ""
     echo "可选环境变量:"
     echo "Optional environment variables:"
-    echo "  PG_USER      - 数据库用户名 (默认: ipma)"
-    echo "  PG_USER      - Database username (default: ipma)"
+    echo "  PG_USER      - 数据库用户名 (默认: foims)"
+    echo "  PG_USER      - Database username (default: foims)"
 
     echo "  PG_PASSWORD  - 数据库密码 (必需)"
     echo "  PG_PASSWORD  - Database password (required)"
 
-    echo "  PG_DATABASE  - 数据库名称 (默认: ipma)"
-    echo "  PG_DATABASE  - Database name (default: ipma)"
+    echo "  PG_DATABASE  - 数据库名称 (默认: foims)"
+    echo "  PG_DATABASE  - Database name (default: foims)"
 
     echo "  PG_HOST      - 数据库主机 (默认: localhost)"
     echo "  PG_HOST      - Database host (default: localhost)"
@@ -134,8 +134,8 @@ echo "  PGPASSWORD=$PG_PASSWORD psql -U $PG_USER -h $PG_HOST -d $PG_DATABASE"
 echo ""
 echo "启动服务:"
 echo "Start service:"
-echo "  systemctl restart ipma"
+echo "  systemctl restart foims"
 echo ""
 echo "查看日志:"
 echo "View logs:"
-echo "  journalctl -u ipma -f"
+echo "  journalctl -u foims -f"

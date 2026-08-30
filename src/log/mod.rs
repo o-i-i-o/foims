@@ -7,8 +7,8 @@
 //! - `logfiles_i18n_out` 必须是 `supported_languages` 的子集（且
 //!   `log_language` 必须在 `supported_languages` 内），否则视为配置错误，
 //!   控制台与日志文件整体回退为仅输出英文（en）日志；
-//! - 各业务 crate 通过 `ipma_common::log_info!` 等宏输出带 key 的日志，
-//!   宏为每种激活语言生成一条 target 为 `ipma_log::{lang}` 的事件，
+//! - 各业务 crate 通过 `foims_common::log_info!` 等宏输出带 key 的日志，
+//!   宏为每种激活语言生成一条 target 为 `foims_log::{lang}` 的事件，
 //!   本模块按 target 将事件路由到对应语言的控制台/文件输出层。
 
 pub mod forwarding;
@@ -22,13 +22,13 @@ pub use operation::get_operation_logs;
 use std::fs;
 use std::path::Path;
 
-use ipma_common::{log_error, log_warn};
+use foims_common::{log_error, log_warn};
 use time::format_description::BorrowedFormatItem;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::prelude::*;
 
-use ipma_common::config::I18nConfig;
+use foims_common::config::I18nConfig;
 
 /// 时间格式候选，按优先级排列，解析失败时逐级降级
 const TIME_FORMATS: [&str; 3] = [
@@ -146,7 +146,7 @@ fn open_log_file(log_dir: &str, lang: &str) -> (Option<fs::File>, String, Vec<St
         Err(e) => errors.push(format!("创建日志文件 {primary} 失败: {e}")),
     }
 
-    let degraded = format!("ipma.{lang}.log");
+    let degraded = format!("foims.{lang}.log");
     match fs::File::create(&degraded) {
         Ok(file) => (Some(file), degraded, errors),
         Err(e) => {
@@ -169,16 +169,16 @@ fn rust_i18n_translate(locale: &str, key: &str, params: &[(&str, &str)]) -> Stri
 }
 
 /// 为某个输出层构建过滤规则：
-/// - 常规业务事件（target 以 `ipma` 开头）按既有级别放行；
-/// - 多语言宏事件（target `ipma_log::{lang}`）只放行本层语言，其余语言全部关闭。
+/// - 常规业务事件（target 以 `foims` 开头）按既有级别放行；
+/// - 多语言宏事件（target `foims_log::{lang}`）只放行本层语言，其余语言全部关闭。
 ///
 /// `i18n_level` 为多语言日志输出级别（来自 `resolve_i18n_log_level`）。
 fn build_filter(allow_lang: &str, all_langs: &[String], i18n_level: LevelFilter) -> Targets {
     let mut targets = Targets::new()
-        .with_target("ipma", LevelFilter::INFO)
+        .with_target("foims", LevelFilter::INFO)
         .with_target("axum", LevelFilter::WARN);
     for lang in all_langs {
-        let target = format!("ipma_log::{lang}");
+        let target = format!("foims_log::{lang}");
         if lang == allow_lang {
             targets = targets.with_target(target, i18n_level);
         } else {
@@ -188,13 +188,13 @@ fn build_filter(allow_lang: &str, all_langs: &[String], i18n_level: LevelFilter)
     targets.with_default(LevelFilter::WARN)
 }
 
-/// 解析多语言日志（target `ipma_log::{lang}`）的输出级别。
+/// 解析多语言日志（target `foims_log::{lang}`）的输出级别。
 ///
-/// 环境变量 `IPMA_LOG_LEVEL` 可设为 debug/info/warn/error，缺省 info。
+/// 环境变量 `FOIMS_LOG_LEVEL` 可设为 debug/info/warn/error，缺省 info。
 /// 高频维护任务的例行日志已降为 debug，需要排查时设为 debug 放开；
 /// 返回值第二项为非法值告警（订阅器就绪后统一输出），缺省/合法时为 None。
 fn resolve_i18n_log_level() -> (LevelFilter, Option<String>) {
-    let Ok(raw) = std::env::var("IPMA_LOG_LEVEL") else {
+    let Ok(raw) = std::env::var("FOIMS_LOG_LEVEL") else {
         return (LevelFilter::INFO, None);
     };
     match raw.trim().to_lowercase().as_str() {
@@ -205,7 +205,7 @@ fn resolve_i18n_log_level() -> (LevelFilter, Option<String>) {
         other => (
             LevelFilter::INFO,
             Some(format!(
-                "环境变量 IPMA_LOG_LEVEL='{other}' 不是合法级别（debug/info/warn/error），按 info 处理"
+                "环境变量 FOIMS_LOG_LEVEL='{other}' 不是合法级别（debug/info/warn/error），按 info 处理"
             )),
         ),
     }
@@ -225,8 +225,8 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
             active.push(lang.clone());
         }
     }
-    ipma_common::set_active_log_langs(active.clone());
-    ipma_common::set_log_translate(rust_i18n_translate);
+    foims_common::set_active_log_langs(active.clone());
+    foims_common::set_log_translate(rust_i18n_translate);
 
     let (timer, mut warnings) = build_timer();
 

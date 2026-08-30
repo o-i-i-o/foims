@@ -42,7 +42,7 @@ function scheduleWorkstationAutoSave() {
 
 // 工位模态框保存：携带坐标时把画布元素移动到指定位置并静默保存布局
 function bindWorkstationSavedEvent() {
-  document.addEventListener("ipma:workstation-saved", (e) => {
+  document.addEventListener("foims:workstation-saved", (e) => {
     const { id, x, y } = e.detail || {};
     if (!workstationVisualization || !id || x == null || y == null) {
       return;

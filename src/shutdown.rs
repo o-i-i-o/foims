@@ -1,6 +1,6 @@
 //! 优雅退出处理。
 
-use ipma_common::{log_error, log_info, log_warn};
+use foims_common::{log_error, log_info, log_warn};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::broadcast;

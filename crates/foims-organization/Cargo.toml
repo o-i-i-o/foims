@@ -1,0 +1,34 @@
+[package]
+name = "foims-organization"
+version = "0.1.1"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Organization - org tree, employees and org templates"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# Workspace crates
+foims-common = { path = "../foims-common" }
+foims-models = { path = "../foims-models" }
+foims-auth = { path = "../foims-auth" }
+
+# Axum
+axum = { workspace = true }
+
+# SQLx
+sqlx = { workspace = true }
+
+# Serialization
+serde_json = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Date/Time
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+[lints]
+workspace = true

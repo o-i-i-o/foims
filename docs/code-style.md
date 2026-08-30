@@ -1,4 +1,4 @@
-# IPMA 代码风格规范
+# FOIMS 代码风格规范
 
 本文档是全项目代码风格的唯一权威来源，AGENTS.md 与 `.trae/rules/` 指向此处。
 目标：多人长期迭代下风格不漂移。写代码前先读对应章节，改代码时遵守既有模式。
@@ -14,30 +14,30 @@
   `_admin: AdminUser` / `_user: CurrentUser`（axum 惯用法，见 routes/mod.rs）。
 - 版本号规则：`0.x.yy`，每次代码更新 bump `yy`（`yy>=99` 时 `x+1, yy=0`）。
 - 每次改动后：`cargo fmt && cargo clippy --release -- -D warnings`；数据库结构
-  变更走“直接执行 SQL + 同步完善 ipma-init 的 DDL”，不用迁移框架。
+  变更走“直接执行 SQL + 同步完善 foims-init 的 DDL”，不用迁移框架。
 - 新增功能（rust、js）、新增前端布局、新增样式代码 保障代码健壮性的前提下遵循最少代码实现原则
 ## 2. Rust（2024 Edition）
 
 ### 2.1 工程结构
 
 ```
-ipma（bin/lib）             应用组装层：路由装配/系统管理/日志/可视化包装/app_state
-├── crates/ipma-resource        资源管理（网络/房间/机柜/工位/设备/IP/链路…）
-├── crates/ipma-organization    组织管理（组织树/员工/模板）
-├── crates/ipma-auth            认证与用户管理（登录/JWT/fail2ban/SMTP/操作日志）
-├── crates/ipma-models          领域模型（请求/响应/行模型，唯一副本）
-├── crates/ipma-common          共享基础设施（响应/错误/配置/加密/连接池/限流/网络工具）
-├── crates/ipma-init            建库建表/校验/备份恢复
-├── crates/ipma-visualization   拓扑与布局计算
-├── crates/ipma-data-management CSV 导入导出
-└── crates/ipma-scheduler       定时任务
+foims（bin/lib）             应用组装层：路由装配/系统管理/日志/可视化包装/app_state
+├── crates/foims-resource        资源管理（网络/房间/机柜/工位/设备/IP/链路…）
+├── crates/foims-organization    组织管理（组织树/员工/模板）
+├── crates/foims-auth            认证与用户管理（登录/JWT/fail2ban/SMTP/操作日志）
+├── crates/foims-models          领域模型（请求/响应/行模型，唯一副本）
+├── crates/foims-common          共享基础设施（响应/错误/配置/加密/连接池/限流/网络工具）
+├── crates/foims-init            建库建表/校验/备份恢复
+├── crates/foims-visualization   拓扑与布局计算
+├── crates/foims-data-management CSV 导入导出
+└── crates/foims-scheduler       定时任务
 ```
 
 - 依赖方向自上而下（`resource → auth → models → common`），禁止反向依赖与环。
-- 跨 crate 共享的类型与工具放 `ipma-common` / `ipma-models`，
+- 跨 crate 共享的类型与工具放 `foims-common` / `foims-models`，
   **不得在多个 crate 各存一份副本**。
 - 业务 crate 不依赖主程序：状态访问经依赖倒置——handler 面向
-  `ipma_common::DbProvider`（连接池）与 `ipma_auth::provider::AuthProvider`
+  `foims_common::DbProvider`（连接池）与 `foims_auth::provider::AuthProvider`
   （认证扩展）泛型编写，由主程序 `AppState` 实现；主程序路由注册处
   以 turbofish（`handler::<AppState>`）单态化。
 - 依赖版本统一由根 `Cargo.toml` 的 `[workspace.dependencies]` 管理，子 crate
@@ -48,12 +48,12 @@ ipma（bin/lib）             应用组装层：路由装配/系统管理/日志
 ### 2.2 错误处理
 
 - 统一 thiserror 枚举 + `AppError` 风格；禁止 anyhow 混用。
-- `From<sqlx::Error>` 一律委托 `ipma_common::classify_db_error`：
+- `From<sqlx::Error>` 一律委托 `foims_common::classify_db_error`：
 
 ```rust
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
-        match ipma_common::classify_db_error(&err) {
+        match foims_common::classify_db_error(&err) {
             DbErrorKind::Conflict(msg) => AppError::Conflict(msg),
             DbErrorKind::Validation(msg) => AppError::Validation(msg),
             DbErrorKind::NotFound => AppError::NotFound("资源不存在".to_string()),
@@ -78,7 +78,7 @@ let total: i64 = builder.build_query_scalar().fetch_one(&pool).await?;
 
 - 拼接动态 SQL 字符串（`format!` 结果）传给 `sqlx::query*` 时用
   `sqlx::AssertSqlSafe(...)` 显式声明已审计；用户输入永远走 `push_bind`。
-- ILIKE 模式先经 `ipma_common::net::escape_like` 转义，排序字段走 match 白名单。
+- ILIKE 模式先经 `foims_common::net::escape_like` 转义，排序字段走 match 白名单。
 - 行映射统一 `query_as::<T>` + `#[derive(sqlx::FromRow)]`；不由 SQL 携带的
   字段用 `#[sqlx(skip)]` 后在代码中填充。
 - 事务约定：**多步写操作（存在性检查 + 写入 + 回读）必须包在同一事务**；
@@ -86,9 +86,9 @@ let total: i64 = builder.build_query_scalar().fetch_one(&pool).await?;
 
 ### 2.4 API 响应
 
-- 响应体统一 `ipma_common::ApiResponse { success, message, data }`，
-  成功响应用 `ipma_common::ok_json(data, "消息")`。
-- 分页列表响应统一（`ipma_common::pagination`）：
+- 响应体统一 `foims_common::ApiResponse { success, message, data }`，
+  成功响应用 `foims_common::ok_json(data, "消息")`。
+- 分页列表响应统一（`foims_common::pagination`）：
 
 ```rust
 Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
@@ -282,9 +282,9 @@ id/注册表/i18n 键/版本号四类一致性校验已固化为 Rust 集成测�
 | --- | --- |
 | 列表接口 | `Pagination::from_query` → QueryBuilder → `paged_response` |
 | 更新可空字段 | `Option<Option<T>>` + QueryBuilder `push_bind` |
-| crate 间共享类型 | 放 `ipma-common`，原路径 `pub use` 兼容 |
-| 建表/视图/触发器 | ipma-init `schema/tables/`，重复结构数据驱动（见 views.rs） |
-| 结构校验清单 | `ipma-init/src/check.rs` 与 schema 同步增补 |
+| crate 间共享类型 | 放 `foims-common`，原路径 `pub use` 兼容 |
+| 建表/视图/触发器 | foims-init `schema/tables/`，重复结构数据驱动（见 views.rs） |
+| 结构校验清单 | `foims-init/src/check.rs` 与 schema 同步增补 |
 | 前端下拉 | `fillSelect(selectId, url, { placeholderKey, filter, itemToLabel })` |
 | 前端表格 | `renderTable` + `appendPaginationToTable` + `createSortState` |
 | 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network.js"` |

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# IPMA 全面API测试脚本
+# FOIMS 全面API测试脚本
 # 用户名: admin
 # 密码: admin@123
 
@@ -25,7 +25,7 @@ SKIP_COUNT=0
 SKIP_DETAILS=()
 
 # 测试数据存储
-TEST_DATA_DIR="/tmp/ipma_test_data"
+TEST_DATA_DIR="/tmp/foims_test_data"
 mkdir -p "$TEST_DATA_DIR"
 
 # Cookie文件用于存储会话
@@ -169,7 +169,7 @@ print_group() {
 
 echo -e "${YELLOW}"
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║            IPMA 全面API测试脚本                              ║"
+echo "║            FOIMS 全面API测试脚本                              ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo "基础URL: $BASE_URL"

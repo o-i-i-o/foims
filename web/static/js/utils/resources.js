@@ -71,7 +71,7 @@ function describeSelectTarget(target) {
 /**
  * 下拉选项请求短期缓存（10s TTL）：弹窗短时间内重复打开时不再全量重拉
  * page_size=1000 的选项列表。资源写操作成功后由 apiClient 广播的
- * ipma:data-mutation 事件即时失效（见 apiClient.js），避免"刚建的资源
+ * foims:data-mutation 事件即时失效（见 apiClient.js），避免"刚建的资源
  * 10 秒内选不到、编辑回显被清空"的新鲜度回归。
  */
 const OPTION_FETCH_TTL = 10 * 1000;
@@ -94,7 +94,7 @@ export function fetchOptionItems(url) {
   return promise;
 }
 
-document.addEventListener("ipma:data-mutation", () => {
+document.addEventListener("foims:data-mutation", () => {
   optionFetchCache.clear();
 });
 

@@ -1,5 +1,5 @@
 /**
- * IPMA - IP/MAC Address Management System
+ * FOIMS - Organization IT Information Management System
  * Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
  * SPDX-License-Identifier: MIT
  *

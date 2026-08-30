@@ -10,14 +10,14 @@ fi
 SCRIPT_DIR="/root/ipma"
 PROJECT_DIR="/root/ipma"
 DEBPAK_DIR="$PROJECT_DIR/debpak"
-BINARY_NAME="ipma"
+BINARY_NAME="foims"
 
 # 从 Cargo.toml 读取版本号
 VERSION=$(grep -m1 '^version = "' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 ARCH="amd64"
-DEB_NAME="ipma_${VERSION}_${ARCH}.deb"
+DEB_NAME="foims_${VERSION}_${ARCH}.deb"
 
-echo "=== IPMA DEB 打包脚本 (Debian 规范) ==="
+echo "=== FOIMS DEB 打包脚本 (Debian 规范) ==="
 echo "项目目录: $PROJECT_DIR"
 echo "打包目录: $DEBPAK_DIR"
 echo "版本: $VERSION"
@@ -40,14 +40,14 @@ rm -rf "$DEBPAK_DIR"
 echo ""
 echo "3. 创建目录结构..."
 mkdir -p "$DEBPAK_DIR/usr/bin"
-mkdir -p "$DEBPAK_DIR/opt/ipma"
-mkdir -p "$DEBPAK_DIR/var/log/ipma"
-mkdir -p "$DEBPAK_DIR/etc/ipma"
+mkdir -p "$DEBPAK_DIR/opt/foims"
+mkdir -p "$DEBPAK_DIR/var/log/foims"
+mkdir -p "$DEBPAK_DIR/etc/foims"
 mkdir -p "$DEBPAK_DIR/usr/lib/systemd/system"
-mkdir -p "$DEBPAK_DIR/usr/share/doc/ipma"
+mkdir -p "$DEBPAK_DIR/usr/share/doc/foims"
 mkdir -p "$DEBPAK_DIR/usr/share/man/man1"
 mkdir -p "$DEBPAK_DIR/usr/share/lintian/overrides"
-mkdir -p "$DEBPAK_DIR/usr/share/ipma/scripts"
+mkdir -p "$DEBPAK_DIR/usr/share/foims/scripts"
 mkdir -p "$DEBPAK_DIR/usr/share/polkit-1/actions"
 mkdir -p "$DEBPAK_DIR/usr/share/polkit-1/rules.d"
 
@@ -60,47 +60,47 @@ strip "$DEBPAK_DIR/usr/bin/$BINARY_NAME"
 echo ""
 echo "5. 复制资源文件..."
 if [ -d "web" ]; then
-    cp -r web "$DEBPAK_DIR/opt/ipma/"
+    cp -r web "$DEBPAK_DIR/opt/foims/"
     # 删除开发配置文件
-    rm -f "$DEBPAK_DIR/opt/ipma/web/.eslintrc.json"
-    rm -f "$DEBPAK_DIR/opt/ipma/web/.editorconfig"
+    rm -f "$DEBPAK_DIR/opt/foims/web/.eslintrc.json"
+    rm -f "$DEBPAK_DIR/opt/foims/web/.editorconfig"
     # 设置 web 目录权限
-    find "$DEBPAK_DIR/opt/ipma/web" -type d -exec chmod 755 {} \;
-    find "$DEBPAK_DIR/opt/ipma/web" -type f -exec chmod 644 {} \;
+    find "$DEBPAK_DIR/opt/foims/web" -type d -exec chmod 755 {} \;
+    find "$DEBPAK_DIR/opt/foims/web" -type f -exec chmod 644 {} \;
 fi
 if [ -d "templates" ]; then
-    cp -r templates "$DEBPAK_DIR/opt/ipma/"
+    cp -r templates "$DEBPAK_DIR/opt/foims/"
     # 设置 templates 目录权限
-    find "$DEBPAK_DIR/opt/ipma/templates" -type d -exec chmod 755 {} \;
-    find "$DEBPAK_DIR/opt/ipma/templates" -type f -exec chmod 644 {} \;
+    find "$DEBPAK_DIR/opt/foims/templates" -type d -exec chmod 755 {} \;
+    find "$DEBPAK_DIR/opt/foims/templates" -type f -exec chmod 644 {} \;
 fi
 
-# 复制配置文件到 /etc/ipma/
+# 复制配置文件到 /etc/foims/
 if [ -f "config.toml" ]; then
-    cp config.toml "$DEBPAK_DIR/etc/ipma/config.toml"
-    chmod 640 "$DEBPAK_DIR/etc/ipma/config.toml"
+    cp config.toml "$DEBPAK_DIR/etc/foims/config.toml"
+    chmod 640 "$DEBPAK_DIR/etc/foims/config.toml"
 fi
 
 # 复制初始化脚本
 if [ -d "scripts" ]; then
-    cp scripts/*.sh "$DEBPAK_DIR/usr/share/ipma/scripts/"
-    chmod 755 "$DEBPAK_DIR/usr/share/ipma/scripts/"*.sh
+    cp scripts/*.sh "$DEBPAK_DIR/usr/share/foims/scripts/"
+    chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh
 fi
 
 echo ""
-echo "6. 创建 polkit 规则（允许 ipma 用户重启服务）..."
-cat > "$DEBPAK_DIR/usr/share/polkit-1/actions/cc.example.ipma.policy" << 'EOF'
+echo "6. 创建 polkit 规则（允许 foims 用户重启服务）..."
+cat > "$DEBPAK_DIR/usr/share/polkit-1/actions/cc.example.foims.policy" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
-  <vendor>IPMA</vendor>
-  <vendor_url>https://github.com/example/ipma</vendor_url>
+  <vendor>FOIMS</vendor>
+  <vendor_url>https://github.com/example/foims</vendor_url>
 
-  <action id="cc.example.ipma.restart">
-    <description>Restart IPMA Service</description>
-    <message>Authentication is required to restart the IPMA service</message>
+  <action id="cc.example.foims.restart">
+    <description>Restart FOIMS Service</description>
+    <message>Authentication is required to restart the FOIMS service</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
@@ -108,18 +108,18 @@ cat > "$DEBPAK_DIR/usr/share/polkit-1/actions/cc.example.ipma.policy" << 'EOF'
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/systemctl</annotate>
     <annotate key="org.freedesktop.policykit.exec.argv1">restart</annotate>
-    <annotate key="org.freedesktop.policykit.exec.argv2">ipma.service</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv2">foims.service</annotate>
   </action>
 </policyconfig>
 EOF
 
-cat > "$DEBPAK_DIR/usr/share/polkit-1/rules.d/ipma.rules" << 'EOF'
-// Allow ipma user to restart ipma.service without authentication
+cat > "$DEBPAK_DIR/usr/share/polkit-1/rules.d/foims.rules" << 'EOF'
+// Allow foims user to restart foims.service without authentication
 polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
-        action.lookup("unit") == "ipma.service" &&
+        action.lookup("unit") == "foims.service" &&
         action.lookup("verb") == "restart" &&
-        subject.user == "ipma") {
+        subject.user == "foims") {
         return polkit.Result.YES;
     }
 });
@@ -127,19 +127,19 @@ EOF
 
 echo ""
 echo "7. 创建 systemd service 文件..."
-cat > "$DEBPAK_DIR/usr/lib/systemd/system/ipma.service" << 'EOF'
+cat > "$DEBPAK_DIR/usr/lib/systemd/system/foims.service" << 'EOF'
 [Unit]
 Description=IP Management Application
-Documentation=man:ipma(1)
+Documentation=man:foims(1)
 After=network.target postgresql.service
 Wants=postgresql.service
 
 [Service]
 Type=simple
-User=ipma
-Group=ipma
-WorkingDirectory=/opt/ipma
-ExecStart=/usr/bin/ipma
+User=foims
+Group=foims
+WorkingDirectory=/opt/foims
+ExecStart=/usr/bin/foims
 Restart=always
 RestartSec=5s
 
@@ -150,7 +150,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ipma /var/log/ipma /etc/ipma
+ReadWritePaths=/opt/foims /var/log/foims /etc/foims
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
@@ -171,17 +171,17 @@ mkdir -p "$DEBPAK_DIR/DEBIAN"
 INSTALLED_SIZE=$(du -sk "$DEBPAK_DIR" | cut -f1)
 
 cat > "$DEBPAK_DIR/DEBIAN/control" << EOF
-Package: ipma
+Package: foims
 Version: $VERSION
 Section: net
 Priority: optional
 Architecture: $ARCH
-Maintainer: IPMA Team <admin@example.com>
+Maintainer: FOIMS Team <admin@example.com>
 Installed-Size: $INSTALLED_SIZE
 Depends: libc6 (>= 2.31), adduser
 Recommends: postgresql
 Suggests: nginx
-Homepage: https://github.com/example/ipma
+Homepage: https://github.com/example/foims
 Description: IP Management Application
  A comprehensive IP address management system with web interface.
  Features include:
@@ -200,8 +200,8 @@ set -e
 # 升级时停止旧服务
 if [ "$1" = "upgrade" ]; then
     if command -v systemctl >/dev/null 2>&1; then
-        if systemctl is-active --quiet ipma 2>/dev/null; then
-            deb-systemd-invoke stop ipma.service || true
+        if systemctl is-active --quiet foims 2>/dev/null; then
+            deb-systemd-invoke stop foims.service || true
         fi
     fi
 fi
@@ -218,32 +218,32 @@ set -e
 
 case "$1" in
     configure)
-        # 创建 ipma 系统用户
-        if ! getent passwd ipma > /dev/null; then
+        # 创建 foims 系统用户
+        if ! getent passwd foims > /dev/null; then
             adduser --system \
                 --shell /usr/sbin/nologin \
-                --home /opt/ipma \
+                --home /opt/foims \
                 --no-create-home \
-                --gecos "IPMA Service Account" \
+                --gecos "FOIMS Service Account" \
                 --group \
-                ipma
+                foims
         fi
 
         # 创建必要的目录
-        install -d -o ipma -g ipma -m 755 /var/log/ipma
-        install -d -o ipma -g ipma -m 755 /opt/ipma
-        install -d -o ipma -g ipma -m 755 /etc/ipma
+        install -d -o foims -g foims -m 755 /var/log/foims
+        install -d -o foims -g foims -m 755 /opt/foims
+        install -d -o foims -g foims -m 755 /etc/foims
 
         # 设置配置文件权限
-        if [ -f /etc/ipma/config.toml ]; then
-            chown ipma:ipma /etc/ipma/config.toml
-            chmod 640 /etc/ipma/config.toml
+        if [ -f /etc/foims/config.toml ]; then
+            chown foims:foims /etc/foims/config.toml
+            chmod 640 /etc/foims/config.toml
         fi
 
         # 重载并启用 systemd
         if command -v systemctl >/dev/null 2>&1; then
-            deb-systemd-helper enable ipma.service >/dev/null || true
-            deb-systemd-invoke start ipma.service >/dev/null || true
+            deb-systemd-helper enable foims.service >/dev/null || true
+            deb-systemd-invoke start foims.service >/dev/null || true
         fi
         ;;
 
@@ -269,7 +269,7 @@ set -e
 case "$1" in
     remove|upgrade|deconfigure)
         if command -v systemctl >/dev/null 2>&1; then
-            deb-systemd-invoke stop ipma.service || true
+            deb-systemd-invoke stop foims.service || true
         fi
         ;;
 
@@ -295,16 +295,16 @@ case "$1" in
     purge)
         # 禁用服务
         if command -v systemctl >/dev/null 2>&1; then
-            deb-systemd-helper disable ipma.service >/dev/null || true
-            deb-systemd-helper purge ipma.service >/dev/null || true
+            deb-systemd-helper disable foims.service >/dev/null || true
+            deb-systemd-helper purge foims.service >/dev/null || true
         fi
 
         # 删除数据目录
-        rm -rf /opt/ipma/*
+        rm -rf /opt/foims/*
 
         # 删除用户
-        if getent passwd ipma > /dev/null; then
-            deluser --system ipma || true
+        if getent passwd foims > /dev/null; then
+            deluser --system foims || true
         fi
         ;;
 
@@ -323,19 +323,19 @@ chmod 755 "$DEBPAK_DIR/DEBIAN/postrm"
 echo ""
 echo "13. 创建 conffiles 文件..."
 cat > "$DEBPAK_DIR/DEBIAN/conffiles" << 'EOF'
-/etc/ipma/config.toml
+/etc/foims/config.toml
 EOF
 
 echo ""
 echo "14. 创建文档文件..."
-cat > "$DEBPAK_DIR/usr/share/doc/ipma/copyright" << 'EOF'
+cat > "$DEBPAK_DIR/usr/share/doc/foims/copyright" << 'EOF'
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: ipma
-Upstream-Contact: IPMA Team <admin@example.com>
-Source: https://github.com/example/ipma
+Upstream-Name: foims
+Upstream-Contact: FOIMS Team <admin@example.com>
+Source: https://github.com/example/foims
 
 Files: *
-Copyright: 2024 IPMA Team
+Copyright: 2024 FOIMS Team
 License: MIT
 
 License: MIT
@@ -359,32 +359,32 @@ License: MIT
 EOF
 
 # 创建 changelog（Debian 格式）
-cat > "$DEBPAK_DIR/usr/share/doc/ipma/changelog" << EOF
-ipma ($VERSION) stable; urgency=medium
+cat > "$DEBPAK_DIR/usr/share/doc/foims/changelog" << EOF
+foims ($VERSION) stable; urgency=medium
 
   * Release version $VERSION
   * IP Management Application with web interface
 
- -- IPMA Team <admin@example.com>  $(date -R)
+ -- FOIMS Team <admin@example.com>  $(date -R)
 EOF
-gzip -9 -n "$DEBPAK_DIR/usr/share/doc/ipma/changelog"
+gzip -9 -n "$DEBPAK_DIR/usr/share/doc/foims/changelog"
 
 if [ -f "README.md" ]; then
-    cp README.md "$DEBPAK_DIR/usr/share/doc/ipma/README"
-    gzip -9 -n "$DEBPAK_DIR/usr/share/doc/ipma/README"
+    cp README.md "$DEBPAK_DIR/usr/share/doc/foims/README"
+    gzip -9 -n "$DEBPAK_DIR/usr/share/doc/foims/README"
 fi
 
 echo ""
 echo "15. 创建 man 手册页..."
-cat > "$DEBPAK_DIR/usr/share/man/man1/ipma.1" << EOF
-.TH IPMA 1 "$(date +'%B %Y')" "ipma $VERSION" "IP Management Application"
+cat > "$DEBPAK_DIR/usr/share/man/man1/foims.1" << EOF
+.TH FOIMS 1 "$(date +'%B %Y')" "foims $VERSION" "IP Management Application"
 .SH NAME
-ipma \- IP Management Application
+foims \- IP Management Application
 .SH SYNOPSIS
-.B ipma
+.B foims
 .RI [ options ]
 .SH DESCRIPTION
-.B ipma
+.B foims
 is a comprehensive IP address management system with web interface.
 .PP
 Features include:
@@ -405,46 +405,46 @@ Show help message and exit.
 Show version information and exit.
 .SH FILES
 .TP
-.I /etc/ipma/config.toml
+.I /etc/foims/config.toml
 Configuration file.
 .TP
-.I /opt/ipma/
+.I /opt/foims/
 Application resources directory.
 .TP
-.I /var/log/ipma/
+.I /var/log/foims/
 Log files directory.
 .SH SERVICE
 The application runs as a systemd service:
 .PP
 .nf
 .RS
-systemctl start ipma
-systemctl stop ipma
-systemctl status ipma
+systemctl start foims
+systemctl stop foims
+systemctl status foims
 .RE
 .fi
 .SH AUTHOR
-IPMA Team <admin@example.com>
+FOIMS Team <admin@example.com>
 .SH "SEE ALSO"
 .BR systemd (1),
 .BR postgresql (1)
 EOF
-gzip -9 -n "$DEBPAK_DIR/usr/share/man/man1/ipma.1"
+gzip -9 -n "$DEBPAK_DIR/usr/share/man/man1/foims.1"
 
 echo ""
 echo "16. 创建 lintian 覆盖文件..."
-cat > "$DEBPAK_DIR/usr/share/lintian/overrides/ipma" << 'EOF'
+cat > "$DEBPAK_DIR/usr/share/lintian/overrides/foims" << 'EOF'
 # /opt 目录用于第三方软件，符合 FHS 3.0 规范
-ipma: dir-or-file-in-opt
+foims: dir-or-file-in-opt
 
 # 嵌入的库是静态链接的，无法避免
-ipma: embedded-library
+foims: embedded-library
 
 # 使用 deb-systemd-helper 而非直接调用 systemctl
-ipma: maintainer-script-calls-systemctl
+foims: maintainer-script-calls-systemctl
 
 # 配置文件需要受限权限以保护敏感信息
-ipma: non-standard-file-perm 0640 != 0644 [etc/ipma/config.toml]
+foims: non-standard-file-perm 0640 != 0644 [etc/foims/config.toml]
 EOF
 
 echo ""
@@ -455,43 +455,43 @@ chmod 755 "$DEBPAK_DIR/DEBIAN/preinst"
 chmod 755 "$DEBPAK_DIR/DEBIAN/postinst"
 chmod 755 "$DEBPAK_DIR/DEBIAN/prerm"
 chmod 755 "$DEBPAK_DIR/DEBIAN/postrm"
-chmod 644 "$DEBPAK_DIR/usr/lib/systemd/system/ipma.service"
-chmod 644 "$DEBPAK_DIR/usr/share/doc/ipma/copyright"
+chmod 644 "$DEBPAK_DIR/usr/lib/systemd/system/foims.service"
+chmod 644 "$DEBPAK_DIR/usr/share/doc/foims/copyright"
 
 # 为特定目录设置权限
 chmod 755 "$DEBPAK_DIR/usr/bin"
 chmod 755 "$DEBPAK_DIR/opt"
-chmod 755 "$DEBPAK_DIR/opt/ipma"
+chmod 755 "$DEBPAK_DIR/opt/foims"
 chmod 755 "$DEBPAK_DIR/var"
 chmod 755 "$DEBPAK_DIR/var/log"
-chmod 755 "$DEBPAK_DIR/var/log/ipma"
+chmod 755 "$DEBPAK_DIR/var/log/foims"
 chmod 755 "$DEBPAK_DIR/etc"
-chmod 755 "$DEBPAK_DIR/etc/ipma"
+chmod 755 "$DEBPAK_DIR/etc/foims"
 chmod 755 "$DEBPAK_DIR/usr"
 chmod 755 "$DEBPAK_DIR/usr/lib"
 chmod 755 "$DEBPAK_DIR/usr/lib/systemd"
 chmod 755 "$DEBPAK_DIR/usr/lib/systemd/system"
 chmod 755 "$DEBPAK_DIR/usr/share"
 chmod 755 "$DEBPAK_DIR/usr/share/doc"
-chmod 755 "$DEBPAK_DIR/usr/share/doc/ipma"
+chmod 755 "$DEBPAK_DIR/usr/share/doc/foims"
 chmod 755 "$DEBPAK_DIR/usr/share/man"
 chmod 755 "$DEBPAK_DIR/usr/share/man/man1"
 chmod 755 "$DEBPAK_DIR/usr/share/lintian"
 chmod 755 "$DEBPAK_DIR/usr/share/lintian/overrides"
-chmod 755 "$DEBPAK_DIR/usr/share/ipma"
-chmod 755 "$DEBPAK_DIR/usr/share/ipma/scripts"
+chmod 755 "$DEBPAK_DIR/usr/share/foims"
+chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts"
 chmod 755 "$DEBPAK_DIR/usr/share/polkit-1"
 chmod 755 "$DEBPAK_DIR/usr/share/polkit-1/actions"
 chmod 755 "$DEBPAK_DIR/usr/share/polkit-1/rules.d"
 
 # 为特定文件设置权限
-chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/actions/cc.example.ipma.policy"
-chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/rules.d/ipma.rules"
-chmod 644 "$DEBPAK_DIR/usr/share/lintian/overrides/ipma"
+chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/actions/cc.example.foims.policy"
+chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/rules.d/foims.rules"
+chmod 644 "$DEBPAK_DIR/usr/share/lintian/overrides/foims"
 
 # 确保脚本文件可执行
-if [ -d "$DEBPAK_DIR/usr/share/ipma/scripts" ]; then
-    chmod 755 "$DEBPAK_DIR/usr/share/ipma/scripts"/*.sh
+if [ -d "$DEBPAK_DIR/usr/share/foims/scripts" ]; then
+    chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts"/*.sh
 fi
 
 echo ""

@@ -1,0 +1,39 @@
+[package]
+name = "foims-init"
+version = "0.1.2"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Init Module - Database initialization and management"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# Workspace crates
+foims-common = { path = "../foims-common" }
+
+# Axum
+axum = { workspace = true }
+
+# SQLx PostgreSQL
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Password hashing
+bcrypt = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

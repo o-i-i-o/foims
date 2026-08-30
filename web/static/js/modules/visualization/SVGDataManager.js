@@ -12,7 +12,7 @@ const CABINET_WIDTH = 150;
 const CABINET_BATCH_SIZE = 16;
 
 /**
- * 机柜容量缺省值：与后端建表默认（ipma-init cabinets DDL `capacity DEFAULT 42`）一致。
+ * 机柜容量缺省值：与后端建表默认（foims-init cabinets DDL `capacity DEFAULT 42`）一致。
  * 列表接口可能缺失该字段，渲染时统一回退到此常量。
  */
 export const DEFAULT_CABINET_CAPACITY = 42;

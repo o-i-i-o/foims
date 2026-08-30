@@ -157,7 +157,7 @@ export async function submitWorkstationForm() {
         !Number.isNaN(Number(xInput)) &&
         !Number.isNaN(Number(yInput));
       document.dispatchEvent(
-        new CustomEvent("ipma:workstation-saved", {
+        new CustomEvent("foims:workstation-saved", {
           detail: {
             id: result.data?.id || parsedId,
             room_id: roomId,

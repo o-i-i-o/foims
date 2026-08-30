@@ -14,24 +14,24 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use ipma_auth::smtp::{
+use foims_auth::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
-use ipma_common::AppError;
-use ipma_common::AppJson;
-use ipma_common::config::{Config, I18nConfig, ServerConfig};
-use ipma_common::{log_error, log_info, log_warn, msg};
+use foims_common::AppError;
+use foims_common::AppJson;
+use foims_common::config::{Config, I18nConfig, ServerConfig};
+use foims_common::{log_error, log_info, log_warn, msg};
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateSystemConfigRequest {
-    pub database: Option<ipma_common::config::DatabaseConfig>,
+    pub database: Option<foims_common::config::DatabaseConfig>,
     pub server: Option<ServerConfig>,
-    pub jwt: Option<ipma_common::config::JwtConfig>,
-    pub init: Option<ipma_common::config::InitConfig>,
-    pub rate_limit: Option<ipma_common::config::RateLimitConfig>,
-    pub snmp: Option<ipma_common::config::SnmpConfig>,
+    pub jwt: Option<foims_common::config::JwtConfig>,
+    pub init: Option<foims_common::config::InitConfig>,
+    pub rate_limit: Option<foims_common::config::RateLimitConfig>,
+    pub snmp: Option<foims_common::config::SnmpConfig>,
 }
 
 /// 配置落盘前的校验（对齐 `Config::load` 启动校验与各组件启动期约束）：
@@ -48,7 +48,7 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
             msg("server.common.invalid_param").with("param", "database.port (1-65535)"),
         ));
     }
-    ipma_common::db::PoolConfig::from(&config.database)
+    foims_common::db::PoolConfig::from(&config.database)
         .validate()
         .map_err(|e| {
             AppError::Validation(
@@ -62,8 +62,8 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
             msg("server.common.invalid_param").with("param", "jwt.secret (at least 32 characters)"),
         ));
     }
-    ipma_common::config::parse_duration(&config.jwt.access_token_expiry)
-        .and_then(|_| ipma_common::config::parse_duration(&config.jwt.refresh_token_expiry))
+    foims_common::config::parse_duration(&config.jwt.access_token_expiry)
+        .and_then(|_| foims_common::config::parse_duration(&config.jwt.refresh_token_expiry))
         .map_err(|e| {
             AppError::Validation(
                 msg("server.common.invalid_param").with("param", format!("jwt token expiry: {e}")),
@@ -102,7 +102,7 @@ pub fn init_start_time() {
 }
 
 async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
 
     let toml_str = toml::to_string_pretty(config)?;
@@ -119,7 +119,7 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
 
 pub async fn get_system_info(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let database_status = match sqlx::query("SELECT 1")
         .execute(&state.pool()?.get_conn())
@@ -143,7 +143,7 @@ pub async fn get_system_info(
     let system_time = chrono::Utc::now();
 
     let system_info = serde_json::json!({
-        "name": "IPMA",
+        "name": "FOIMS",
         "version": env!("CARGO_PKG_VERSION"),
         "database_status": database_status,
         "uptime_seconds": uptime,
@@ -155,7 +155,7 @@ pub async fn get_system_info(
         }
     });
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         system_info,
         "server.system.info_retrieved",
     ))
@@ -163,13 +163,13 @@ pub async fn get_system_info(
 
 pub async fn get_system_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     // 读共享槽最新快照（写盘端点成功后已刷新），而非进程启动时快照
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         config,
         "server.system.config_retrieved",
     ))
@@ -177,7 +177,7 @@ pub async fn get_system_config(
 
 pub async fn update_system_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSystemConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -240,7 +240,7 @@ pub async fn update_system_config(
     // 落盘前校验：拒绝写入启动校验无法通过的配置（防持久化自伤）
     validate_config_for_save(&new_config)?;
 
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
 
     save_config_to_file(&new_config).await.map_err(|e| {
@@ -257,11 +257,14 @@ pub async fn update_system_config(
     masked.database.password = "***".to_string();
     masked.jwt.secret = "***".to_string();
 
-    Ok(ipma_common::ok_json(masked, "server.system.config_updated"))
+    Ok(foims_common::ok_json(
+        masked,
+        "server.system.config_updated",
+    ))
 }
 
 pub async fn trigger_service_restart() -> Result<Response, AppError> {
-    let service_name = "ipma.service";
+    let service_name = "foims.service";
 
     let is_running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
         .await
@@ -274,7 +277,7 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
 
     if is_running_as_service {
         let check_output = Command::new("systemctl")
-            .args(["show", "ipma.service", "--property=ActiveState"])
+            .args(["show", "foims.service", "--property=ActiveState"])
             .output()
             .await;
 
@@ -305,7 +308,7 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
             std::process::exit(0);
         });
 
-        Ok(ipma_common::ok_json(
+        Ok(foims_common::ok_json(
             (),
             "server.system.restart_command_sent",
         ))
@@ -316,7 +319,7 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
 }
 
 pub async fn restart_application(
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     log_info!("log.system.restart_requested");
     trigger_service_restart().await
@@ -333,7 +336,7 @@ fn check_if_running_as_service() -> bool {
         return true;
     }
 
-    std::path::Path::new("/etc/systemd/system/ipma.service").exists()
+    std::path::Path::new("/etc/systemd/system/foims.service").exists()
 }
 
 async fn restart_standalone_process() -> Result<Response, AppError> {
@@ -359,7 +362,7 @@ exec "$2"
 
     // 随机文件名 + create_new 原子创建（0700）：避免固定路径被本地低权用户
     // 预置符号链接劫持为任意文件写入/执行（security-review I-5）
-    let script_path = format!("/tmp/ipma_restart_{}.sh", Uuid::new_v4());
+    let script_path = format!("/tmp/foims_restart_{}.sh", Uuid::new_v4());
     {
         // tokio::fs::OpenOptions 在 Unix 上原生提供 mode()
         let mut opts = tokio::fs::OpenOptions::new();
@@ -399,7 +402,7 @@ exec "$2"
         std::process::exit(0);
     });
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.system.restart_command_sent",
     ))
@@ -407,7 +410,7 @@ exec "$2"
 
 pub async fn disable_init_mode(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     log_info!("log.system.disable_init_requested");
 
@@ -432,7 +435,7 @@ pub async fn disable_init_mode(
     // 无法通过的配置
     validate_config_for_save(&new_config)?;
 
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -453,7 +456,7 @@ pub async fn disable_init_mode(
 
 pub async fn backup_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
@@ -472,7 +475,7 @@ pub async fn backup_config(
             (
                 axum::http::header::CONTENT_DISPOSITION,
                 format!(
-                    "attachment; filename=ipma_config_backup_{}.json",
+                    "attachment; filename=foims_config_backup_{}.json",
                     chrono::Utc::now().format("%Y%m%d_%H%M%S")
                 ),
             ),
@@ -484,7 +487,7 @@ pub async fn backup_config(
 
 pub async fn restore_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(payload): AppJson<Config>,
 ) -> Result<Response, AppError> {
     // 与其他「读-改-写盘」配置端点互斥，避免并发写盘互相覆盖
@@ -519,7 +522,7 @@ pub async fn restore_config(
     // 或被篡改，直接写入会导致重启后服务永久无法启动
     validate_config_for_save(&new_config)?;
 
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     let config_str = toml::to_string(&new_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -533,7 +536,7 @@ pub async fn restore_config(
     // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(new_config));
 
-    Ok(ipma_common::ok_json((), "server.system.config_restored"))
+    Ok(foims_common::ok_json((), "server.system.config_restored"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -557,7 +560,7 @@ pub async fn get_session_timeout_config(
 ) -> Result<Response, AppError> {
     // 读共享槽最新快照（写盘端点成功后已刷新）
     let config = state.config_snapshot();
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         serde_json::json!({
             "session_timeout": config.server.session_timeout
         }),
@@ -567,7 +570,7 @@ pub async fn get_session_timeout_config(
 
 pub async fn update_session_timeout_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
 ) -> Result<Response, AppError> {
     // 配置写锁：与其他「读-改-写盘」端点互斥
@@ -584,7 +587,7 @@ pub async fn update_session_timeout_config(
 
     current_config.server.session_timeout = req.session_timeout;
 
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -598,7 +601,7 @@ pub async fn update_session_timeout_config(
     // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(current_config));
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.system.session_timeout_updated",
     ))
@@ -618,7 +621,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
         }),
     ];
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         supported_languages,
         "server.system.languages_retrieved",
     ))
@@ -626,7 +629,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
 
 pub async fn update_language_setting(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateLanguageRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -661,7 +664,7 @@ pub async fn update_language_setting(
     i18n.log_language = language;
     current_config.i18n = Some(i18n);
 
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -675,7 +678,7 @@ pub async fn update_language_setting(
     // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(current_config));
 
-    Ok(ipma_common::ok_json((), "server.system.language_updated"))
+    Ok(foims_common::ok_json((), "server.system.language_updated"))
 }
 
 pub async fn get_page_timeout_config(
@@ -683,7 +686,7 @@ pub async fn get_page_timeout_config(
 ) -> Result<Response, AppError> {
     // 读共享槽最新快照（写盘端点成功后已刷新）
     let config = state.config_snapshot();
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         serde_json::json!({
             "page_timeout": config.server.page_timeout
         }),
@@ -693,7 +696,7 @@ pub async fn get_page_timeout_config(
 
 pub async fn update_page_timeout_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdatePageTimeoutRequest>,
 ) -> Result<Response, AppError> {
     // 配置写锁：与其他「读-改-写盘」端点互斥
@@ -710,7 +713,7 @@ pub async fn update_page_timeout_config(
 
     current_config.server.page_timeout = req.page_timeout;
 
-    let config_path = ipma_common::config::get_config_file_path();
+    let config_path = foims_common::config::get_config_file_path();
     let config_str = toml::to_string(&current_config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -724,7 +727,7 @@ pub async fn update_page_timeout_config(
     // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(current_config));
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.system.page_timeout_updated",
     ))
@@ -737,7 +740,7 @@ pub struct NotificationSettings {
 
 pub async fn get_notification_settings(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let recipients =
         match sqlx::query_scalar::<_, String>(
@@ -748,7 +751,7 @@ pub async fn get_notification_settings(
         {
             Ok(Some(value)) => serde_json::from_str(&value).map_err(|e| {
                 // 存量数据损坏时不能静默清空收件人，否则 MAC 变更通知会失效
-                ipma_common::log_error!("log.system.recipients_parse_failed", error = e);
+                foims_common::log_error!("log.system.recipients_parse_failed", error = e);
                 AppError::Internal(
                     msg("server.notification.recipients_parse_failed").with("error", e),
                 )
@@ -762,7 +765,7 @@ pub async fn get_notification_settings(
             }
         };
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         NotificationSettings {
             email_recipients: recipients,
         },
@@ -772,7 +775,7 @@ pub async fn get_notification_settings(
 
 pub async fn update_notification_settings(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<NotificationSettings>,
 ) -> Result<Response, AppError> {
     let value = serde_json::to_string(&req.email_recipients)
@@ -787,7 +790,7 @@ pub async fn update_notification_settings(
     .await
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         (),
         "server.notification.settings_updated",
     ))
@@ -807,7 +810,7 @@ pub struct SmtpConfigResponse {
 
 pub async fn get_smtp_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     // 未配置属于业务状态而非错误：返回 200 + configured=false，避免浏览器控制台出现 404
     let resp = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
@@ -831,7 +834,7 @@ pub async fn get_smtp_config(
         },
     };
 
-    Ok(ipma_common::ok_json(resp, "server.smtp.config_retrieved"))
+    Ok(foims_common::ok_json(resp, "server.smtp.config_retrieved"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -850,7 +853,7 @@ pub struct UpdateSmtpConfigRequest {
 
 pub async fn update_smtp_config(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<UpdateSmtpConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -880,13 +883,13 @@ pub async fn update_smtp_config(
 
     save_smtp_config_to_db(&state.pool()?.get_conn(), &config).await?;
 
-    Ok(ipma_common::ok_json((), "server.smtp.config_updated"))
+    Ok(foims_common::ok_json((), "server.smtp.config_updated"))
 }
 
 /// 测试已保存的通知邮件（SMTP）配置连通性。无需请求体。
 pub async fn test_smtp_connection(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
@@ -896,9 +899,9 @@ pub async fn test_smtp_connection(
         }
     };
 
-    ipma_auth::smtp::test_smtp_connection(&config).await?;
+    foims_auth::smtp::test_smtp_connection(&config).await?;
 
-    Ok(ipma_common::ok_json((), "server.smtp.test_success"))
+    Ok(foims_common::ok_json((), "server.smtp.test_success"))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -913,7 +916,7 @@ pub struct SendSystemEmailRequest {
 
 pub async fn send_system_email(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
     AppJson(req): AppJson<SendSystemEmailRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -926,7 +929,7 @@ pub async fn send_system_email(
     )
     .await?;
 
-    Ok(ipma_common::ok_json((), "server.smtp.email_sent"))
+    Ok(foims_common::ok_json((), "server.smtp.email_sent"))
 }
 
 // ==================== 等保密码策略配置 ====================
@@ -934,10 +937,10 @@ pub async fn send_system_email(
 /// 读取密码策略（未配置时返回等保三级默认值）
 pub async fn get_password_policy(
     State(state): State<Arc<AppState>>,
-    _secadmin: ipma_auth::extractor::SecAdminUser,
+    _secadmin: foims_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
-    let policy = ipma_auth::password_policy::load(&state.pool()?.get_conn()).await;
-    Ok(ipma_common::ok_json(
+    let policy = foims_auth::password_policy::load(&state.pool()?.get_conn()).await;
+    Ok(foims_common::ok_json(
         policy,
         "server.system.config_retrieved",
     ))
@@ -946,11 +949,11 @@ pub async fn get_password_policy(
 /// 保存密码策略（长度下限 8、各数值范围由模块内钳制）
 pub async fn update_password_policy(
     State(state): State<Arc<AppState>>,
-    _secadmin: ipma_auth::extractor::SecAdminUser,
-    AppJson(req): AppJson<ipma_auth::password_policy::PasswordPolicy>,
+    _secadmin: foims_auth::extractor::SecAdminUser,
+    AppJson(req): AppJson<foims_auth::password_policy::PasswordPolicy>,
 ) -> Result<Response, AppError> {
-    ipma_auth::password_policy::save(&state.pool()?.get_conn(), &req).await?;
-    Ok(ipma_common::ok_json(
+    foims_auth::password_policy::save(&state.pool()?.get_conn(), &req).await?;
+    Ok(foims_common::ok_json(
         (),
         "server.system.password_policy_updated",
     ))
@@ -971,13 +974,13 @@ pub async fn get_service_status() -> Result<Response, AppError> {
     let running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
         .await
         .unwrap_or(false);
-    let service_file_exists = tokio::fs::try_exists("/etc/systemd/system/ipma.service")
+    let service_file_exists = tokio::fs::try_exists("/etc/systemd/system/foims.service")
         .await
         .unwrap_or(false);
 
     let (active, status, enabled, uptime_seconds) = if running_as_service {
         let active_output = Command::new("systemctl")
-            .args(["show", "ipma.service", "--property=ActiveState"])
+            .args(["show", "foims.service", "--property=ActiveState"])
             .output()
             .await;
 
@@ -990,7 +993,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
         };
 
         let status_output = Command::new("systemctl")
-            .args(["show", "ipma.service", "--property=StatusText"])
+            .args(["show", "foims.service", "--property=StatusText"])
             .output()
             .await;
 
@@ -1004,7 +1007,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
         };
 
         let enabled_output = Command::new("systemctl")
-            .args(["is-enabled", "ipma.service"])
+            .args(["is-enabled", "foims.service"])
             .output()
             .await;
 
@@ -1032,7 +1035,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
         (false, None, false, None)
     };
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         ServiceStatus {
             registered: service_file_exists,
             running_as_service,
@@ -1048,7 +1051,7 @@ pub async fn get_service_status() -> Result<Response, AppError> {
 
 pub async fn register_service(
     State(state): State<Arc<AppState>>,
-    _admin: ipma_auth::extractor::AdminUser,
+    _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     let exe_path = std::env::current_exe()
         .map_err(|e| AppError::Internal(msg("server.system.exe_path_failed").with("error", e)))?;
@@ -1064,7 +1067,7 @@ pub async fn register_service(
 
     let service_content = format!(
         r#"[Unit]
-Description=IPMA - IP/MAC Address Management System
+Description=FOIMS - Organization IT Information Management System
 After=network.target postgresql.service
 
 [Service]
@@ -1080,7 +1083,7 @@ WantedBy=multi-user.target
         working_dir_str, exe_path_str
     );
 
-    let service_path = "/etc/systemd/system/ipma.service";
+    let service_path = "/etc/systemd/system/foims.service";
     tokio::fs::write(service_path, service_content)
         .await
         .map_err(|e| {
@@ -1097,7 +1100,7 @@ WantedBy=multi-user.target
     }
 
     let enable_output = Command::new("systemctl")
-        .args(["enable", "ipma.service"])
+        .args(["enable", "foims.service"])
         .output()
         .await;
 
@@ -1113,7 +1116,7 @@ WantedBy=multi-user.target
     // 3. 新实例接管端口；即使首启与退出窗口重叠，Restart=always 兜底重试。
     let start_spawn = tokio::process::Command::new("sh")
         .arg("-c")
-        .arg("sleep 5 && systemctl start ipma.service")
+        .arg("sleep 5 && systemctl start foims.service")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -1135,7 +1138,7 @@ WantedBy=multi-user.target
         shutdown_for_handover.request_shutdown();
     });
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         serde_json::json!({ "handover": "systemd" }),
         "server.system.service_registered",
     ))
@@ -1261,7 +1264,7 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<R
         }
     });
 
-    Ok(ipma_common::ok_json(
+    Ok(foims_common::ok_json(
         stats,
         "server.system.dashboard_stats_retrieved",
     ))

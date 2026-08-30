@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ipma-common", "crates/ipma-init", "crates/ipma-visualization", "crates/ipma-data-management", "crates/ipma-scheduler", "crates/ipma-models", "crates/ipma-auth", "crates/ipma-organization", "crates/ipma-resource", "crates/ipma-x509-manager"]
+members = [".", "crates/foims-common", "crates/foims-init", "crates/foims-visualization", "crates/foims-data-management", "crates/foims-scheduler", "crates/foims-models", "crates/foims-auth", "crates/foims-organization", "crates/foims-resource", "crates/foims-x509-management"]
 resolver = "2"
 
 [workspace.package]
@@ -69,7 +69,7 @@ bcrypt = "0.19.3"
 rand = "0.10.2"
 toml = "1.1.4"
 
-# JWT / 外部认证 / 邮件 / 2FA（主程序与 ipma-auth 共享）
+# JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
@@ -77,7 +77,7 @@ lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
 totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 time = "0.3.55"
 
-# 网络 / 哈希 / 并发表 / 配置加载（主程序与 ipma-common 共享）
+# 网络 / 哈希 / 并发表 / 配置加载（主程序与 foims-common 共享）
 ipnetwork = "0.21.1"
 sha2 = "0.11.0"
 dashmap = "6.2.1"
@@ -85,25 +85,25 @@ arc-swap = "1.9.2"
 config = { version = "0.15.25", features = ["toml"] }
 
 [package]
-name = "ipma"
-version = "0.15.96"
+name = "foims"
+version = "0.15.97"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "IP/MAC Address Management System based on Rust Axum and PostgreSQL"
+description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"
 license = "GPL-3.0-or-later"
 
 [dependencies]
 # Workspace crates
-ipma-common = { path = "crates/ipma-common" }
-ipma-init = { path = "crates/ipma-init" }
-ipma-visualization = { path = "crates/ipma-visualization" }
-ipma-data-management = { path = "crates/ipma-data-management" }
-ipma-scheduler = { path = "crates/ipma-scheduler" }
-ipma-models = { path = "crates/ipma-models" }
-ipma-auth = { path = "crates/ipma-auth" }
-ipma-organization = { path = "crates/ipma-organization" }
-ipma-resource = { path = "crates/ipma-resource" }
-ipma-x509-manager = { path = "crates/ipma-x509-manager" }
+foims-common = { path = "crates/foims-common" }
+foims-init = { path = "crates/foims-init" }
+foims-visualization = { path = "crates/foims-visualization" }
+foims-data-management = { path = "crates/foims-data-management" }
+foims-scheduler = { path = "crates/foims-scheduler" }
+foims-models = { path = "crates/foims-models" }
+foims-auth = { path = "crates/foims-auth" }
+foims-organization = { path = "crates/foims-organization" }
+foims-resource = { path = "crates/foims-resource" }
+foims-x509-management = { path = "crates/foims-x509-management" }
 
 # Workspace dependencies (使用共享版本)
 axum = { workspace = true }

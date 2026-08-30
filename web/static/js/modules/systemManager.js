@@ -682,7 +682,7 @@ export async function loadSystemInfo() {
     if (result.success) {
       const systemInfo = result.data;
 
-      setTextById("system-name", systemInfo.name || "IPMA");
+      setTextById("system-name", systemInfo.name || "FOIMS");
       setTextById("system-version", systemInfo.version || "-");
       const dbStatus = systemInfo.database_status || "-";
       let dbStatusText;
@@ -844,7 +844,7 @@ export async function exportCsvData() {
 
     downloadBlobResult(
       result,
-      `ipma-export-${exportType}-${new Date().toISOString().slice(0, 10)}.zip`
+      `foims-export-${exportType}-${new Date().toISOString().slice(0, 10)}.zip`
     );
   } catch (error) {
     console.error("导出CSV数据失败:", error);
@@ -862,7 +862,7 @@ export async function exportDatabase() {
       return;
     }
 
-    downloadBlobResult(result, `ipma_backup_${new Date().toISOString().slice(0, 10)}.sql`);
+    downloadBlobResult(result, `foims_backup_${new Date().toISOString().slice(0, 10)}.sql`);
     showToast(t("import_export.export_db_success"), "success");
   } catch (error) {
     console.error("导出数据库失败:", error);
@@ -880,7 +880,7 @@ export async function backupConfig() {
       return;
     }
 
-    downloadBlobResult(result, `ipma-config-${new Date().toISOString().slice(0, 10)}.toml`);
+    downloadBlobResult(result, `foims-config-${new Date().toISOString().slice(0, 10)}.toml`);
   } catch (error) {
     console.error("备份配置失败:", error);
     showToast(`${t("import_export.backup_failed")}: ${error.message}`, "error");
@@ -1138,8 +1138,8 @@ async function savePasswordPolicy() {
   }
 }
 
-// ==================== 证书管理（生成 /etc/ssl/ipma-certs，导入 /etc/ssl/ipma-import-certs，
-// 站点根 CA /etc/ssl/ipma-ca，导入 CA 池 /etc/ssl/ipma-import-cas） ====================
+// ==================== 证书管理（生成 /etc/ssl/foims-certs，导入 /etc/ssl/foims-import-certs，
+// 站点根 CA /etc/ssl/foims-ca，导入 CA 池 /etc/ssl/foims-import-cas） ====================
 
 // 可选字段：空串转 null
 function certOptionalField(value) {

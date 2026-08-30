@@ -1,6 +1,6 @@
-# IPMA (IP Management Application)
+# FOIMS (IP Management Application)
 
-IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网络资源管理系统。它旨在为网络管理员提供一个安全、高效且直观的平台，用于管理 IP 地址、交换机、物理资产（机房/机柜/工位）以及网络拓扑可视化。
+FOIMS 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网络资源管理系统。它旨在为网络管理员提供一个安全、高效且直观的平台，用于管理 IP 地址、交换机、物理资产（机房/机柜/工位）以及网络拓扑可视化。
 
 ## ✨ 核心特性
 
@@ -57,7 +57,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 1.  **克隆仓库**
     ```bash
     git clone https://gitee.com/oi-io0/ipma.git
-    cd ipma
+    cd foims
     ```
 
 2.  **配置数据库**
@@ -65,7 +65,7 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
     - 编辑 `config.toml` 文件，配置数据库连接信息
     ```toml
     [database]
-    url = "postgres://username:password@localhost:5432/ipma"
+    url = "postgres://username:password@localhost:5432/foims"
     ```
 
 3.  **运行项目**
@@ -90,12 +90,12 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 
 2.  **安装生成的 Debian 包**
     ```bash
-    apt reinstall ./ipma_0.7.2_amd64.deb
+    apt reinstall ./foims_0.7.2_amd64.deb
     ```
 
 3.  **启动服务**
     ```bash
-    systemctl restart ipma
+    systemctl restart foims
     ```
 
 #### 方法二：手动构建
@@ -107,14 +107,14 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 
 2.  **运行**
     ```bash
-    ./target/release/ipma
+    ./target/release/foims
     ```
 
 3.  **注册为系统服务**
     - 在系统设置页面点击 "注册为服务" 或手动配置 Systemd
     - 手动配置示例：
     ```bash
-    # /etc/systemd/system/ipma.service
+    # /etc/systemd/system/foims.service
     [Unit]
     Description=IP Management Application
     After=network.target postgresql.service
@@ -122,8 +122,8 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
     [Service]
     Type=simple
     User=root
-    WorkingDirectory=/opt/ipma
-    ExecStart=/opt/ipma/ipma
+    WorkingDirectory=/opt/foims
+    ExecStart=/opt/foims/foims
     Restart=always
     
     [Install]
@@ -132,8 +132,8 @@ IPMA 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网
 
 4.  **启用并启动服务**
     ```bash
-    systemctl enable ipma
-    systemctl start ipma
+    systemctl enable foims
+    systemctl start foims
     ```
 
 ## 🔧 配置说明
@@ -165,7 +165,7 @@ cert_type = "self_signed"
 ```toml
 [database]
 # 数据库连接 URL
-url = "postgres://username:password@localhost:5432/ipma"
+url = "postgres://username:password@localhost:5432/foims"
 ```
 
 ### 安全配置
@@ -219,7 +219,7 @@ tls = true
 ## 📂 项目结构
 
 ```
-ipma/
+foims/
 ├── src/                # Rust 后端源码
 │   ├── auth/           # 认证与用户模块
 │   │   ├── login.rs    # 登录相关逻辑
@@ -329,7 +329,7 @@ A: 在个人设置页面，点击 "启用双因素认证"，使用认证器应�
 - 确保数据库用户有足够的权限
 
 ### 服务启动失败
-- 检查系统日志：`journalctl -u ipma`
+- 检查系统日志：`journalctl -u foims`
 - 验证端口是否被占用
 - 检查配置文件是否正确
 
@@ -374,4 +374,4 @@ Copyright (c) 2025-2026 oi-io <boss@oi-io.cc>
 
 ---
 
-**IPMA - 让 IP 管理更简单！**
+**FOIMS - 让组织 IT 管理更简单！**
