@@ -1,6 +1,6 @@
-# FOIMS (IP Management Application)
+# FOIMS (F Organization‑IT‑Information System)
 
-FOIMS 是一个基于 Rust 和现代 Web 技术构建的高性能 IP 地址与网络资源管理系统。它旨在为网络管理员提供一个安全、高效且直观的平台，用于管理 IP 地址、交换机、物理资产（机房/机柜/工位）以及网络拓扑可视化。
+FOIMS 是一个基于 Rust 和现代 Web 技术构建的高性能组织 IT 信息管理系统。它旨在为网络管理员提供一个安全、高效且直观的平台，用于管理 IP 地址、交换机、物理资产（机房/机柜/工位）以及网络拓扑可视化等。
 
 ## ✨ 核心特性
 
