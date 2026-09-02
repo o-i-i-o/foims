@@ -75,12 +75,20 @@ SQLx PostgreSQL Driver
 双因素认证
   - totp-rs (MIT)
 
+外部认证（LDAP / OIDC 单点登录）
+  - ldap3 (MIT OR Apache-2.0)
+  - openidconnect (MIT)
+
+证书管理（X.509 生成 / 解析）
+  - rcgen (MIT OR Apache-2.0)
+  - x509-parser (MIT OR Apache-2.0)
+  - pem (MIT)
+
 国际化
   - rust-i18n (MIT)
 
 主要传递依赖（TLS / 压缩等，来自 Cargo.lock）
   - rustls (Apache-2.0 OR MIT)
-  - pem (MIT)
   - flate2 (MIT)
   - bytes (MIT)
   - http (MIT OR Apache-2.0)
