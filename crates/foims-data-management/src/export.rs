@@ -381,8 +381,8 @@ fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> Da
     };
     match (table, csv_col) {
         ("room_networks", "region_name") => Ok(resolve_or_warn(
-            &id_of("network_id"),
-            ctx.cidrs.get(&id_of("network_id")).map(|(r, _)| r.clone()),
+            &id_of("subnet_id"),
+            ctx.cidrs.get(&id_of("subnet_id")).map(|(r, _)| r.clone()),
         )),
         ("ips", "device") => {
             let iface = id_of("device_interface_id");
@@ -393,8 +393,8 @@ fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> Da
             Ok(resolve_or_warn(&iface, device))
         }
         ("ips", "region_name") => Ok(resolve_or_warn(
-            &id_of("network_id"),
-            ctx.cidrs.get(&id_of("network_id")).map(|(r, _)| r.clone()),
+            &id_of("subnet_id"),
+            ctx.cidrs.get(&id_of("subnet_id")).map(|(r, _)| r.clone()),
         )),
         ("topology_connection_members", "source_device") => Ok(resolve_or_warn(
             &id_of("connection_id"),

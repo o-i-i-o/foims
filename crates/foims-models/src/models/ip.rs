@@ -14,7 +14,7 @@ pub struct IpDetail {
     pub device_interface_id: Uuid,
     #[sqlx(default)]
     pub device_id: Uuid,
-    pub network_id: Uuid,
+    pub subnet_id: Uuid,
     #[sqlx(default)]
     pub network_region_id: Option<Uuid>,
     #[sqlx(default)]
@@ -39,7 +39,7 @@ pub struct IpDetailWithNames {
     pub device_id: Uuid,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
-    pub network_id: Uuid,
+    pub subnet_id: Uuid,
     pub workstation_name: Option<String>,
     pub cabinet_position_name: Option<String>,
     pub interface_name: Option<String>,
@@ -67,7 +67,7 @@ pub struct IpDetailWithNames {
 pub struct IpDetailCreate {
     pub device_interface_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
-    pub network_id: Option<Uuid>,
+    pub subnet_id: Option<Uuid>,
     #[validate(custom(
         function = "crate::models::validate_ip_address",
         message = "server.ip.validation.ip_address_invalid"
@@ -82,7 +82,7 @@ pub struct IpDetailCreate {
 #[derive(Debug, Serialize, Deserialize, Validate, Clone)]
 pub struct IpSyncItem {
     pub id: Option<Uuid>,
-    pub network_id: Option<Uuid>,
+    pub subnet_id: Option<Uuid>,
     #[validate(custom(
         function = "crate::models::validate_ip_address",
         message = "server.ip.validation.ip_address_invalid"
@@ -148,7 +148,7 @@ pub struct DeviceNetworkConfigSync {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct AutoAssignIpRequest {
-    pub network_id: Uuid,
+    pub subnet_id: Uuid,
     pub device_interface_id: Option<Uuid>,
     pub device_id: Uuid,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
@@ -158,7 +158,7 @@ pub struct AutoAssignIpRequest {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PullIpDetailsRequest {
     pub device_id: Uuid,
-    pub network_id: Uuid,
+    pub subnet_id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -200,7 +200,7 @@ mod tests {
     fn test_ip_detail_create_valid_ipv4() -> Result<(), serde_json::Error> {
         let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
             "device_interface_id": Uuid::new_v4(),
-            "network_id": Uuid::new_v4(),
+            "subnet_id": Uuid::new_v4(),
             "ip_address": "192.168.1.10",
             "description": "办公 IP"
         }))?;
@@ -249,7 +249,7 @@ mod tests {
     fn test_ip_sync_item_ip_validation() -> Result<(), serde_json::Error> {
         let ok: IpSyncItem = serde_json::from_value(serde_json::json!({
             "id": Uuid::new_v4(),
-            "network_id": Uuid::new_v4(),
+            "subnet_id": Uuid::new_v4(),
             "ip_address": "10.0.0.1"
         }))?;
         assert!(ok.validate().is_ok());
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn test_auto_assign_and_pull_requests() -> Result<(), serde_json::Error> {
         let assign: AutoAssignIpRequest = serde_json::from_value(serde_json::json!({
-            "network_id": Uuid::new_v4(),
+            "subnet_id": Uuid::new_v4(),
             "device_id": Uuid::new_v4(),
             "description": "自动分配"
         }))?;
@@ -366,7 +366,7 @@ mod tests {
 
         let pull: PullIpDetailsRequest = serde_json::from_value(serde_json::json!({
             "device_id": Uuid::new_v4(),
-            "network_id": Uuid::new_v4()
+            "subnet_id": Uuid::new_v4()
         }))?;
         assert!(pull.validate().is_ok());
         Ok(())
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_pull_request_missing_fields_rejected() {
-        // device_id / network_id 均为必填，缺失时反序列化失败
+        // device_id / subnet_id 均为必填，缺失时反序列化失败
         let result: Result<PullIpDetailsRequest, _> =
             serde_json::from_value(serde_json::json!({ "device_id": Uuid::new_v4() }));
         assert!(result.is_err());
@@ -499,7 +499,7 @@ mod tests {
             id: Uuid::new_v4(),
             device_interface_id: Uuid::new_v4(),
             device_id: Uuid::new_v4(),
-            network_id: Uuid::new_v4(),
+            subnet_id: Uuid::new_v4(),
             network_region_id: None,
             network_name: Some("办公网".to_string()),
             network_region: None,
@@ -527,7 +527,7 @@ mod tests {
             device_id: Uuid::new_v4(),
             device_type: Some("server".to_string()),
             device_name: Some("web-01".to_string()),
-            network_id: Uuid::new_v4(),
+            subnet_id: Uuid::new_v4(),
             workstation_name: None,
             cabinet_position_name: None,
             interface_name: Some("eth0".to_string()),

@@ -1,6 +1,6 @@
 [package]
 name = "foims-resource"
-version = "0.1.4"
+version = "0.1.5"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Resource - networks, rooms, cabinets, workstations, devices, IPs, cable links"

@@ -16,7 +16,7 @@ const VIEWS: &[(&str, &str)] = &[
             imm.id,
             imm.device_interface_id,
             dv.id AS device_id,
-            imm.network_id,
+            imm.subnet_id,
             dv.name::text AS device_name,
             dv.device_type::text AS device_type,
             dv.hostname::text AS hostname,
@@ -47,7 +47,7 @@ const VIEWS: &[(&str, &str)] = &[
         LEFT JOIN cabinets c ON cp.cabinet_id = c.id
         LEFT JOIN rooms r ON dv.room_id = r.id
         LEFT JOIN organizations org ON r.org_id = org.id
-        LEFT JOIN network_cidrs nc ON imm.network_id = nc.id
+        LEFT JOIN network_cidrs nc ON imm.subnet_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
     ",
     ),

@@ -60,7 +60,7 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
         r"SELECT host(m.ip_address) AS ip, COALESCE(nc.name, '') AS network
            FROM ips m
            JOIN device_interfaces di ON m.device_interface_id = di.id
-           LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+           LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
            WHERE di.device_id = $1
            ORDER BY m.ip_address",
     )

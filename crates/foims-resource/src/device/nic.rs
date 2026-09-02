@@ -337,17 +337,17 @@ pub async fn apply_network_config(
                     ));
                 }
 
-                let network_id: Uuid = if let Some(nid) = ip.network_id {
+                let subnet_id: Uuid = if let Some(nid) = ip.subnet_id {
                     // 显式指定子网时校验其必须属于设备所在房间，确保数据一致性
                     crate::helpers::validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
                     nid
                 } else {
                     // 未显式指定时按房间绑定子网探测；IP 必须归属子网
-                    //（ips.network_id NOT NULL），探测不中直接报错回滚
+                    //（ips.subnet_id NOT NULL），探测不中直接报错回滚
                     sqlx::query_scalar(
                         r"SELECT nc.id
                             FROM room_networks rn
-                            JOIN network_cidrs nc ON rn.network_id = nc.id
+                            JOIN network_cidrs nc ON rn.subnet_id = nc.id
                             WHERE rn.room_id = $1
                             AND (
                                 (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
@@ -369,12 +369,12 @@ pub async fn apply_network_config(
                 let ip_version = detect_ip_version(&ip.ip_address)?;
 
                 sqlx::query(
-                    "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+                    "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
                      VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
                 )
                 .bind(Uuid::new_v4())
                 .bind(port_id)
-                .bind(network_id)
+                .bind(subnet_id)
                 .bind(&ip.ip_address)
                 .bind(ip_version)
                 .bind(&ip.description)
@@ -412,7 +412,7 @@ pub async fn fetch_device_network_config(
         .fetch_all(pool),
         sqlx::query_as::<_, IpDetail>(
             r"SELECT
-                m.id, m.device_interface_id, di.device_id, m.network_id,
+                m.id, m.device_interface_id, di.device_id, m.subnet_id,
                 nc.network_region_id AS network_region_id,
                 nc.name AS network_name,
                 nr.name AS network_region,
@@ -421,7 +421,7 @@ pub async fn fetch_device_network_config(
                 m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
               FROM ips m
               JOIN device_interfaces di ON m.device_interface_id = di.id
-              LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+              LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
               LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
               WHERE di.device_id = $1
               ORDER BY m.ip_address",

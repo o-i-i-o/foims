@@ -4,7 +4,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     let indexes = [
         "CREATE INDEX IF NOT EXISTS idx_network_cidrs_region ON network_cidrs(network_region_id)",
         "CREATE INDEX IF NOT EXISTS idx_room_networks_room_id ON room_networks(room_id)",
-        "CREATE INDEX IF NOT EXISTS idx_room_networks_network_id ON room_networks(network_id)",
+        "CREATE INDEX IF NOT EXISTS idx_room_networks_subnet_id ON room_networks(subnet_id)",
         "CREATE INDEX IF NOT EXISTS idx_cabinet_layouts_cabinet_id ON cabinet_layouts(cabinet_id)",
         "CREATE INDEX IF NOT EXISTS idx_cabinets_room_id ON cabinets(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_positions_cabinet_id ON positions(cabinet_id)",
@@ -19,7 +19,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_device_macs_mac_address ON device_macs(mac_address)",
         "CREATE INDEX IF NOT EXISTS idx_device_lldps_device_id ON device_lldps(device_id)",
         "CREATE INDEX IF NOT EXISTS idx_ips_device_interface_id ON ips(device_interface_id)",
-        "CREATE INDEX IF NOT EXISTS idx_ips_network_id ON ips(network_id)",
+        "CREATE INDEX IF NOT EXISTS idx_ips_subnet_id ON ips(subnet_id)",
         "CREATE INDEX IF NOT EXISTS idx_cable_links_a ON cable_links(a_endpoint_type, a_endpoint_id)",
         "CREATE INDEX IF NOT EXISTS idx_cable_links_b ON cable_links(b_endpoint_type, b_endpoint_id)",
         "CREATE INDEX IF NOT EXISTS idx_cable_links_link_type ON cable_links(link_type)",

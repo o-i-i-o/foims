@@ -1,6 +1,6 @@
 [package]
 name = "foims-init"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Init Module - Database initialization and management"

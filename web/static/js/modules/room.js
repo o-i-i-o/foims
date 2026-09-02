@@ -316,22 +316,22 @@ class NetworkConfigManager {
 
   collectData() {
     if (!this.ensureContainer()) {
-      return { networkIds: [], hasEmpty: false };
+      return { subnetIds: [], hasEmpty: false };
     }
 
     const selects = this.container.querySelectorAll(`.${this.options.networkSelectClass}`);
-    const networkIds = [];
+    const subnetIds = [];
     let hasEmpty = false;
 
     for (const select of selects) {
       if (!select.value) {
         hasEmpty = true;
       } else {
-        networkIds.push(select.value);
+        subnetIds.push(select.value);
       }
     }
 
-    return { networkIds, hasEmpty };
+    return { subnetIds, hasEmpty };
   }
 }
 
@@ -999,14 +999,14 @@ export async function submitRoomForm() {
     return;
   }
 
-  const { networkIds, hasEmpty } = roomNetworkConfigManager.collectData();
+  const { subnetIds, hasEmpty } = roomNetworkConfigManager.collectData();
 
   if (hasEmpty) {
     showToast(t("room.network_all_required"), "warning");
     return;
   }
 
-  if (networkIds.length === 0) {
+  if (subnetIds.length === 0) {
     showToast(t("room.network_required"), "warning");
     return;
   }
@@ -1036,7 +1036,7 @@ export async function submitRoomForm() {
     name: name.trim(),
     room_type: formattedRoomType,
     org_id: orgId || null,
-    network_ids: networkIds,
+    subnet_ids: subnetIds,
     description: description || null
   };
 

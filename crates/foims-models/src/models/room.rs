@@ -25,7 +25,7 @@ pub struct Room {
 pub struct RoomNetwork {
     pub id: Uuid,
     pub room_id: Uuid,
-    pub network_id: Uuid,
+    pub subnet_id: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -36,7 +36,7 @@ pub struct RoomNetworkDetail {
     pub room_name: String,
     pub room_type: String,
     pub description: Option<String>,
-    pub network_id: Option<Uuid>,
+    pub subnet_id: Option<Uuid>,
     pub network_name: Option<String>,
     pub network_region: Option<String>,
     pub network_region_id: Option<Uuid>,
@@ -98,7 +98,7 @@ pub struct RoomCreate {
     ))]
     pub room_type: String,
     pub org_id: Option<Uuid>,
-    pub network_ids: Vec<Uuid>,
+    pub subnet_ids: Vec<Uuid>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -114,7 +114,7 @@ pub struct RoomUpdate {
     pub room_type: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub org_id: Option<Option<Uuid>>,
-    pub network_ids: Option<Vec<Uuid>>,
+    pub subnet_ids: Option<Vec<Uuid>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -131,11 +131,11 @@ mod tests {
         let req: RoomCreate = serde_json::from_value(serde_json::json!({
             "name": "301 会议室",
             "room_type": "office",
-            "network_ids": [Uuid::new_v4()],
+            "subnet_ids": [Uuid::new_v4()],
             "description": "三楼办公区"
         }))?;
         assert!(req.validate().is_ok());
-        assert_eq!(req.network_ids.len(), 1);
+        assert_eq!(req.subnet_ids.len(), 1);
         Ok(())
     }
 
@@ -145,7 +145,7 @@ mod tests {
         let req: RoomCreate = serde_json::from_value(serde_json::json!({
             "name": "机房",
             "room_type": "Data_Center",
-            "network_ids": []
+            "subnet_ids": []
         }))?;
         assert!(req.validate().is_ok());
         assert_eq!(req.room_type, "Data_Center");
@@ -157,7 +157,7 @@ mod tests {
         let req: RoomCreate = serde_json::from_value(serde_json::json!({
             "name": "杂物间",
             "room_type": "storage",
-            "network_ids": []
+            "subnet_ids": []
         }))?;
         let Err(errors) = req.validate() else {
             panic!("非法房间类型应被拒绝");
@@ -171,7 +171,7 @@ mod tests {
         let req: RoomCreate = serde_json::from_value(serde_json::json!({
             "name": "R".repeat(51),
             "room_type": "office",
-            "network_ids": []
+            "subnet_ids": []
         }))?;
         let Err(errors) = req.validate() else {
             panic!("超长房间名应被拒绝");
@@ -181,13 +181,13 @@ mod tests {
     }
 
     #[test]
-    fn test_room_create_network_ids_required() {
-        // network_ids 为必填字段，缺失时反序列化失败
+    fn test_room_create_subnet_ids_required() {
+        // subnet_ids 为必填字段，缺失时反序列化失败
         let result: Result<RoomCreate, _> = serde_json::from_value(serde_json::json!({
             "name": "301",
             "room_type": "office"
         }));
-        assert!(result.is_err(), "缺失 network_ids 应反序列化失败");
+        assert!(result.is_err(), "缺失 subnet_ids 应反序列化失败");
     }
 
     #[test]
@@ -195,7 +195,7 @@ mod tests {
         let req: RoomUpdate = serde_json::from_value(serde_json::json!({
             "name": "302 会议室",
             "room_type": "LOBBY",
-            "network_ids": []
+            "subnet_ids": []
         }))?;
         // room_type 大小写不敏感，LOBBY 合法
         assert!(req.validate().is_ok());

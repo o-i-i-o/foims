@@ -437,7 +437,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             post(foims_resource::pull_ip_details::<AppState>),
         )
         .route(
-            "/api/resources/ip/available/{network_id}",
+            "/api/resources/ip/available/{subnet_id}",
             get(foims_resource::get_available_ips::<AppState>),
         )
         .route(

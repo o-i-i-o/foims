@@ -61,17 +61,17 @@ pub fn parse_network_from_row(
 pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,
-    network_id: Option<Uuid>,
+    subnet_id: Option<Uuid>,
 ) -> Result<(), AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    let Some(nid) = network_id else {
+    let Some(nid) = subnet_id else {
         return Ok(());
     };
 
     let network_in_room: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND network_id = $2)",
+        "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1 AND subnet_id = $2)",
     )
     .bind(room_id)
     .bind(nid)

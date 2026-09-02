@@ -179,22 +179,20 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
         )));
     };
 
-    let network_id_filter = query
-        .get("network_id")
-        .and_then(|s| Uuid::parse_str(s).ok());
+    let subnet_id_filter = query.get("subnet_id").and_then(|s| Uuid::parse_str(s).ok());
 
-    let cabinets = if let Some(network_id) = network_id_filter {
+    let cabinets = if let Some(subnet_id) = subnet_id_filter {
         // 归属校验：提供的网段必须属于路径中的区域，防止跨区域越权枚举
         let network_in_region: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1 AND network_region_id = $2)",
         )
-        .bind(network_id)
+        .bind(subnet_id)
         .bind(region_id)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
         if !network_in_region {
             return Err(AppError::Validation(
-                msg("server.common.invalid_param").with("param", "network_id"),
+                msg("server.common.invalid_param").with("param", "subnet_id"),
             ));
         }
         sqlx::query_as::<_, Cabinet>(
@@ -202,10 +200,10 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
                FROM cabinets c
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
-               WHERE rn.network_id = $1
+               WHERE rn.subnet_id = $1
                ORDER BY c.name"
         )
-        .bind(network_id)
+        .bind(subnet_id)
         .fetch_all(&state.pool()?.get_conn())
         .await?
     } else {
@@ -214,7 +212,7 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
                FROM cabinets c
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
-               LEFT JOIN network_cidrs nc ON rn.network_id = nc.id
+               LEFT JOIN network_cidrs nc ON rn.subnet_id = nc.id
                WHERE nc.network_region_id = $1
                ORDER BY c.name"
         )
@@ -586,7 +584,7 @@ pub async fn get_cabinet_networks<P: DbProvider>(
         r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr 
            FROM rooms r 
            JOIN room_networks rn ON r.id = rn.room_id
-           JOIN network_cidrs n ON rn.network_id = n.id 
+           JOIN network_cidrs n ON rn.subnet_id = n.id 
            JOIN network_regions nr ON n.network_region_id = nr.id 
            WHERE r.id = (SELECT room_id FROM cabinets WHERE id = $1) 
            -- 房型口径与 sync_room_children 对齐：OTHER 房型的机柜同样参与机柜子网（R7）

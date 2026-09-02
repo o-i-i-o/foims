@@ -30,7 +30,7 @@ struct IpListFilters {
     device_type: Option<String>,
     network: Option<String>,
     ip_address: Option<String>,
-    network_id: Option<Uuid>,
+    subnet_id: Option<Uuid>,
     /// 机位 ID 批量过滤（机柜可视化分批拉取机位 IP）。
     position_ids: Vec<Uuid>,
 }
@@ -104,12 +104,9 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
             .push_bind(pattern)
             .push(")");
     }
-    if let Some(network_id) = filters.network_id {
+    if let Some(subnet_id) = filters.subnet_id {
         next(builder, &mut first);
-        builder
-            .push("network_id = ")
-            .push_bind(network_id)
-            .push(")");
+        builder.push("subnet_id = ").push_bind(subnet_id).push(")");
     }
     if !filters.position_ids.is_empty() {
         next(builder, &mut first);
@@ -145,8 +142,8 @@ pub async fn get_ip_details<P: DbProvider>(
         device_type: (!device_type.is_empty()).then(|| foims_common::net::escape_like(device_type)),
         network: (!network.is_empty()).then(|| foims_common::net::escape_like(network)),
         ip_address: (!ip_address.is_empty()).then(|| foims_common::net::escape_like(ip_address)),
-        network_id: query
-            .get("network_id")
+        subnet_id: query
+            .get("subnet_id")
             .and_then(|s| uuid::Uuid::parse_str(s).ok()),
         // 逗号分隔的机位 ID 列表，非法片段直接忽略
         position_ids: query
@@ -197,7 +194,7 @@ pub async fn get_ip_details<P: DbProvider>(
         .await?;
 
     let mut data_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, network_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at, position_id FROM ip_with_details",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, subnet_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at, position_id FROM ip_with_details",
     );
     push_ip_filters(&mut data_builder, &filters);
     data_builder
@@ -235,7 +232,7 @@ pub async fn get_device_ips<P: DbProvider>(
 
     let ips: Vec<IpDetail> = sqlx::query_as(
         r"SELECT
-            m.id, m.device_interface_id, di.device_id, m.network_id,
+            m.id, m.device_interface_id, di.device_id, m.subnet_id,
             nc.network_region_id AS network_region_id,
             nc.name AS network_name,
             nr.name AS network_region,
@@ -244,7 +241,7 @@ pub async fn get_device_ips<P: DbProvider>(
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
         FROM ips m
         JOIN device_interfaces di ON m.device_interface_id = di.id
-        LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+        LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
         WHERE di.device_id = $1
         ORDER BY m.ip_address",
@@ -287,10 +284,10 @@ pub async fn create_device_ip<P: DbProvider>(
         ));
     }
 
-    let network_id: Option<Uuid> = sqlx::query_scalar(
+    let subnet_id: Option<Uuid> = sqlx::query_scalar(
         r"SELECT nc.id
             FROM room_networks rn
-            JOIN network_cidrs nc ON rn.network_id = nc.id
+            JOIN network_cidrs nc ON rn.subnet_id = nc.id
             WHERE rn.room_id = $1
             AND (
                 (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
@@ -303,17 +300,17 @@ pub async fn create_device_ip<P: DbProvider>(
     .fetch_optional(&mut *tx)
     .await?;
 
-    // 显式指定的 network_id 优先（经归属校验），不与自动检测结果
+    // 显式指定的 subnet_id 优先（经归属校验），不与自动检测结果
     // 一致时不再被静默覆盖——与批量创建路径的语义对齐
-    let network_id = match req.network_id {
+    let subnet_id = match req.subnet_id {
         Some(nid) => {
             validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
             nid
         }
-        None => match network_id {
+        None => match subnet_id {
             Some(nid) => nid,
             // 自动探测不中且请求未显式指定子网：IP 必须归属子网
-            //（ips.network_id NOT NULL），不再放行 NULL
+            //（ips.subnet_id NOT NULL），不再放行 NULL
             None => {
                 return Err(AppError::Validation(
                     msg("server.ip.network_required").with("ip", &req.ip_address),
@@ -355,12 +352,12 @@ pub async fn create_device_ip<P: DbProvider>(
     };
 
     sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+        "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
     )
     .bind(ip_id)
     .bind(interface_id)
-    .bind(network_id)
+    .bind(subnet_id)
     .bind(&req.ip_address)
     .bind(ip_version)
     .bind(&req.description)
@@ -388,7 +385,7 @@ pub async fn create_device_ip<P: DbProvider>(
     let (network_name, network_region, network_region_id): (Option<String>, Option<String>, Option<Uuid>) = sqlx::query_as(
         "SELECT nc.name, nr.name, nc.network_region_id FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
     )
-    .bind(network_id)
+    .bind(subnet_id)
     .fetch_optional(&state.pool()?.get_conn())
     .await?
     .map_or((None, None, None), |(name, region, region_id)| {
@@ -399,7 +396,7 @@ pub async fn create_device_ip<P: DbProvider>(
         id: ip_id,
         device_interface_id: interface_id,
         device_id: id,
-        network_id,
+        subnet_id,
         network_region_id,
         network_name,
         network_region,
@@ -468,13 +465,13 @@ struct ObservedMacRow {
 async fn sync_switch_macs(
     pool: &sqlx::PgPool,
     device_id: Uuid,
-    network_id: Uuid,
+    subnet_id: Uuid,
 ) -> Result<MacSyncResult, AppError> {
     let mut tx = pool.begin().await?;
 
     let network_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
-            .bind(network_id)
+            .bind(subnet_id)
             .fetch_one(&mut *tx)
             .await?;
 
@@ -488,13 +485,13 @@ async fn sync_switch_macs(
                   i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
                   di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
           FROM device_macs sm
-          INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.network_id = $2
+          INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
           INNER JOIN device_interfaces di ON i.device_interface_id = di.id
           INNER JOIN devices dv ON di.device_id = dv.id
           WHERE sm.device_id = $1",
     )
     .bind(device_id)
-    .bind(network_id)
+    .bind(subnet_id)
     .fetch_all(&mut *tx)
     .await?;
 
@@ -664,7 +661,7 @@ pub async fn pull_ip_details<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    let result = sync_switch_macs(&state.pool()?.get_conn(), req.device_id, req.network_id).await?;
+    let result = sync_switch_macs(&state.pool()?.get_conn(), req.device_id, req.subnet_id).await?;
 
     if result.switch_macs_empty {
         if result.total_macs_on_switch == 0 {
@@ -683,18 +680,18 @@ pub async fn pull_ip_details<P: DbProvider>(
     }
 
     let results: Vec<IpDetail> = sqlx::query_as::<_, IpDetail>(
-        r"SELECT m.id, m.device_interface_id, di.device_id, m.network_id,
+        r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
            nc.network_region_id AS network_region_id,
            nc.name AS network_name, nr.name AS network_region,
            host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
            m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM ips m
            JOIN device_interfaces di ON m.device_interface_id = di.id
-           LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+           LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
            LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-           WHERE m.network_id = $1",
+           WHERE m.subnet_id = $1",
     )
-    .bind(req.network_id)
+    .bind(req.subnet_id)
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
@@ -715,9 +712,9 @@ pub async fn pull_ip_details<P: DbProvider>(
 pub async fn pull_ip_details_internal(
     pool: &sqlx::PgPool,
     device_id: Uuid,
-    network_id: Uuid,
+    subnet_id: Uuid,
 ) -> Result<(), String> {
-    let result = sync_switch_macs(pool, device_id, network_id)
+    let result = sync_switch_macs(pool, device_id, subnet_id)
         .await
         .map_err(|e| {
             log_error!("log.ip.mac_sync_failed", error = e);
@@ -795,18 +792,18 @@ pub fn find_available_ips_in_cidr(
 
 pub async fn get_available_ips<P: DbProvider>(
     State(state): State<Arc<P>>,
-    Path(network_id): Path<Uuid>,
+    Path(subnet_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let network = sqlx::query(crate::helpers::NETWORK_QUERY)
-        .bind(network_id)
+        .bind(subnet_id)
         .fetch_optional(&state.pool()?.get_conn())
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))
         .and_then(|row| crate::helpers::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
-        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
-            .bind(network_id)
+        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE subnet_id = $1")
+            .bind(subnet_id)
             .fetch_all(&state.pool()?.get_conn())
             .await?;
 
@@ -834,7 +831,7 @@ pub async fn get_available_ips<P: DbProvider>(
 
     Ok(foims_common::ok_json(
         serde_json::json!({
-            "network_id": network_id,
+            "subnet_id": subnet_id,
             "network_name": network.name,
             "network_region": network.network_region,
             "available_count": available_ips.len(),
@@ -851,7 +848,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    let req_network_id = req.network_id;
+    let req_subnet_id = req.subnet_id;
     let device_id = req.device_id;
     let device_interface_id = req.device_interface_id;
     let description = req.description.clone();
@@ -864,18 +861,18 @@ pub async fn auto_assign_ip<P: DbProvider>(
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.device.not_found").with("id", device_id)))?;
 
-    validate_network_in_room(&mut *tx, room_id, Some(req_network_id)).await?;
+    validate_network_in_room(&mut *tx, room_id, Some(req_subnet_id)).await?;
 
     let network = sqlx::query(crate::helpers::NETWORK_QUERY)
-        .bind(req_network_id)
+        .bind(req_subnet_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.network.not_found")))
         .and_then(|row| crate::helpers::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
-        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE network_id = $1")
-            .bind(req_network_id)
+        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE subnet_id = $1")
+            .bind(req_subnet_id)
             .fetch_all(&mut *tx)
             .await?;
 
@@ -931,12 +928,12 @@ pub async fn auto_assign_ip<P: DbProvider>(
     };
 
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+        "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
     .bind(interface_id)
-    .bind(req_network_id)
+    .bind(req_subnet_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
     .bind(&description)
@@ -966,7 +963,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
         id,
         device_interface_id: interface_id,
         device_id,
-        network_id: req_network_id,
+        subnet_id: req_subnet_id,
         network_region_id: None,
         network_name: Some(network.name.clone()),
         network_region: Some(network.network_region.clone()),
@@ -1065,15 +1062,15 @@ pub async fn batch_create_ip_details<P: DbProvider>(
     // 批量预取网段与区域名称，保证返回的每条 IP 都带所属网段/区域
     /// 网段摘要：(网段名, 区域名, 区域ID)
     type NetworkSummary = (Option<String>, Option<String>, Option<Uuid>);
-    let network_ids: Vec<Uuid> = valid_requests
+    let subnet_ids: Vec<Uuid> = valid_requests
         .iter()
-        .filter_map(|(_, ip_req, _, _)| ip_req.network_id)
+        .filter_map(|(_, ip_req, _, _)| ip_req.subnet_id)
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
     let mut network_names: std::collections::HashMap<Uuid, NetworkSummary> =
         std::collections::HashMap::new();
-    for nid in network_ids {
+    for nid in subnet_ids {
         let row: Option<(String, String, Uuid)> = sqlx::query_as(
             "SELECT nc.name, nr.name, nc.network_region_id FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
         )
@@ -1123,10 +1120,10 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             }
         };
 
-        // 网段归属校验：IP 必须归属子网（ips.network_id NOT NULL），
+        // 网段归属校验：IP 必须归属子网（ips.subnet_id NOT NULL），
         // 未显式指定的记录直接报错；显式指定时与单条路径（create_device_ip）
         // 保持一致：校验子网属于设备所在房间，防止跨房间挂载
-        let network_id = match ip_req.network_id {
+        let subnet_id = match ip_req.subnet_id {
             Some(nid) => {
                 let room_id: Option<Uuid> =
                     match sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
@@ -1221,12 +1218,12 @@ pub async fn batch_create_ip_details<P: DbProvider>(
         };
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, device_interface_id, network_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+            "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
              VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
         )
         .bind(*id)
         .bind(interface_id)
-        .bind(network_id)
+        .bind(subnet_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
         .bind(&ip_req.description)
@@ -1248,17 +1245,17 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             id: *id,
             device_interface_id: interface_id,
             device_id,
-            network_id,
+            subnet_id,
             network_region_id: ip_req
-                .network_id
+                .subnet_id
                 .and_then(|nid| network_names.get(&nid))
                 .and_then(|(_, _, region_id)| *region_id),
             network_name: ip_req
-                .network_id
+                .subnet_id
                 .and_then(|nid| network_names.get(&nid))
                 .and_then(|(name, _, _)| name.clone()),
             network_region: ip_req
-                .network_id
+                .subnet_id
                 .and_then(|nid| network_names.get(&nid))
                 .and_then(|(_, region, _)| region.clone()),
             ip_address: ip_req.ip_address.clone(),

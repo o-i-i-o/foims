@@ -145,7 +145,7 @@ pub async fn get_rooms<P: DbProvider>(
     let network_rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, Uuid, Option<String>, Option<String>)>(
         r"SELECT rn.room_id, n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text, n.ipv6_cidr::text
            FROM room_networks rn
-           JOIN network_cidrs n ON rn.network_id = n.id
+           JOIN network_cidrs n ON rn.subnet_id = n.id
            JOIN network_regions nr ON n.network_region_id = nr.id
            WHERE rn.room_id = ANY($1)",
     )
@@ -237,7 +237,7 @@ pub async fn create_room<P: DbProvider>(
     // 房间与其子网关联必须在同一事务内写入，避免中途失败导致子网关联残缺
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    // 引用存在性校验：org_id 与 network_ids 非法引用返回校验错误，
+    // 引用存在性校验：org_id 与 subnet_ids 非法引用返回校验错误，
     // 而非依赖 FK 约束的 500 兜底
     if let Some(org_id) = req.org_id {
         let org_exists: bool =
@@ -249,10 +249,10 @@ pub async fn create_room<P: DbProvider>(
             return Err(AppError::Validation(msg("server.organization.not_found")));
         }
     }
-    for network_id in &req.network_ids {
+    for subnet_id in &req.subnet_ids {
         let network_exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
-                .bind(network_id)
+                .bind(subnet_id)
                 .fetch_one(&mut *tx)
                 .await?;
         if !network_exists {
@@ -286,14 +286,14 @@ pub async fn create_room<P: DbProvider>(
         AppError::from(e)
     })?;
 
-    for network_id in &req.network_ids {
+    for subnet_id in &req.subnet_ids {
         sqlx::query(
-            "INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at)
+            "INSERT INTO room_networks (id, room_id, subnet_id, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(Uuid::new_v4())
         .bind(id)
-        .bind(network_id)
+        .bind(subnet_id)
         .bind(now)
         .bind(now)
         .execute(&mut *tx)
@@ -316,7 +316,7 @@ pub async fn create_room<P: DbProvider>(
         "name": room.name,
         "room_type": room.room_type,
         "description": room.description,
-        "network_count": req.network_ids.len()
+        "network_count": req.subnet_ids.len()
     });
     log_op_best_effort(
         &state.pool()?.get_conn(),
@@ -350,7 +350,7 @@ pub async fn get_room_brief<P: DbProvider>(
         sqlx::query_as::<_, NetworkInfo>(
             r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
                FROM room_networks rn
-               JOIN network_cidrs n ON rn.network_id = n.id
+               JOIN network_cidrs n ON rn.subnet_id = n.id
                JOIN network_regions nr ON n.network_region_id = nr.id
                WHERE rn.room_id = $1",
         )
@@ -439,7 +439,7 @@ pub async fn get_room<P: DbProvider>(
             sqlx::query_as::<_, NetworkInfo>(
                 r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
                    FROM room_networks rn
-                   JOIN network_cidrs n ON rn.network_id = n.id
+                   JOIN network_cidrs n ON rn.subnet_id = n.id
                    JOIN network_regions nr ON n.network_region_id = nr.id
                    WHERE rn.room_id = $1",
             )
@@ -598,12 +598,12 @@ pub async fn update_room<P: DbProvider>(
         }
     }
 
-    // network_ids 引用存在性校验
-    if let Some(network_ids) = &req.network_ids {
-        for network_id in network_ids {
+    // subnet_ids 引用存在性校验
+    if let Some(subnet_ids) = &req.subnet_ids {
+        for subnet_id in subnet_ids {
             let network_exists: bool =
                 sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
-                    .bind(network_id)
+                    .bind(subnet_id)
                     .fetch_one(&mut *tx)
                     .await?;
             if !network_exists {
@@ -642,20 +642,20 @@ pub async fn update_room<P: DbProvider>(
         AppError::from(e)
     })?;
 
-    if let Some(network_ids) = &req.network_ids {
+    if let Some(subnet_ids) = &req.subnet_ids {
         sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await?;
 
-        for network_id in network_ids {
+        for subnet_id in subnet_ids {
             sqlx::query(
-                "INSERT INTO room_networks (id, room_id, network_id, created_at, updated_at)
+                "INSERT INTO room_networks (id, room_id, subnet_id, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5)",
             )
             .bind(Uuid::new_v4())
             .bind(id)
-            .bind(network_id)
+            .bind(subnet_id)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)
@@ -774,7 +774,7 @@ pub async fn get_room_networks<P: DbProvider>(
     let room_networks = sqlx::query_as::<_, NetworkInfo>(
         r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
            FROM room_networks rn
-           JOIN network_cidrs n ON rn.network_id = n.id
+           JOIN network_cidrs n ON rn.subnet_id = n.id
            JOIN network_regions nr ON n.network_region_id = nr.id
            WHERE rn.room_id = $1",
     )

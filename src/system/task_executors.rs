@@ -175,15 +175,15 @@ impl TaskExecutor for MacSyncTaskExecutor {
             .get("device_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
-        let network_id = ctx
+        let subnet_id = ctx
             .config
-            .get("network_id")
+            .get("subnet_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
 
-        match (device_id, network_id) {
-            (Some(device_id), Some(network_id)) => {
-                foims_resource::ip::pull_ip_details_internal(&ctx.pool, device_id, network_id)
+        match (device_id, subnet_id) {
+            (Some(device_id), Some(subnet_id)) => {
+                foims_resource::ip::pull_ip_details_internal(&ctx.pool, device_id, subnet_id)
                     .await
                     .map(|()| "server.task.mac_sync_completed".to_string())
                     .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))

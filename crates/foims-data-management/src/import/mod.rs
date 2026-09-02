@@ -456,7 +456,7 @@ async fn validate_ip_in_room(
     };
     if cidrs.is_empty() {
         // 房间未绑定网段：无法做房间归属校验，跳过（IP 归属子网本身
-        // 已由 ips.network_id NOT NULL 与 CSV network_name 必填保证）
+        // 已由 ips.subnet_id NOT NULL 与 CSV network_name 必填保证）
         return Ok(());
     }
 

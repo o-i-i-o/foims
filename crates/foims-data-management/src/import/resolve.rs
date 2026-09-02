@@ -562,7 +562,7 @@ pub async fn room_name_of(conn: &mut PgConnection, room_id: &str) -> String {
 pub async fn room_cidrs(conn: &mut PgConnection, room_id: &str) -> DataResult<Vec<Option<String>>> {
     let rows: Vec<(Option<String>, Option<String>)> = sqlx::query_as(
         r"SELECT n.ipv4_cidr::text, n.ipv6_cidr::text
-           FROM room_networks rn JOIN network_cidrs n ON n.id = rn.network_id
+           FROM room_networks rn JOIN network_cidrs n ON n.id = rn.subnet_id
            WHERE rn.room_id = $1::uuid",
     )
     .bind(room_id)

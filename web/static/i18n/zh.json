@@ -2185,7 +2185,7 @@
       "log_cleanup_days_invalid": "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志",
       "logs_retrieved": "获取任务日志成功",
       "mac_sync_completed": "MAC同步成功",
-      "mac_sync_missing_config": "MAC同步任务需要配置device_id和network_id",
+      "mac_sync_missing_config": "MAC同步任务需要配置device_id和subnet_id",
       "next_run_calc_task_failed": "计算下次执行时间任务失败",
       "next_run_update_failed": "更新下次执行时间失败",
       "not_found": "定时任务不存在",

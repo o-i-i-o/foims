@@ -75,7 +75,7 @@ export class NetworkCardManager {
     /** 区域 → 网段缓存（仅房间网段） */
     this.networksByRegionCache = new Map();
     /** 房间允许的网段 ID 集合 */
-    this.roomNetworkIds = new Set();
+    this.roomSubnetIds = new Set();
     /** 查询用网段全集（房间网段 + 遗留网段），供 CIDR 校验与区域回填 */
     this.networks = [];
     /** setRoomContext 请求序号：仅接受最新一次请求的结果（防快速切换竞态） */
@@ -109,7 +109,7 @@ export class NetworkCardManager {
     this.roomNetworks = [];
     this.regions = [];
     this.networksByRegionCache = new Map();
-    this.roomNetworkIds = new Set();
+    this.roomSubnetIds = new Set();
 
     if (this.roomId) {
       try {
@@ -134,7 +134,7 @@ export class NetworkCardManager {
 
     const regionMap = new Map();
     for (const n of this.roomNetworks) {
-      this.roomNetworkIds.add(n.id);
+      this.roomSubnetIds.add(n.id);
       const rid = n.network_region_id;
       if (rid && !regionMap.has(rid)) {
         regionMap.set(rid, { id: rid, name: n.network_region });
@@ -235,8 +235,8 @@ export class NetworkCardManager {
     }
   }
 
-  getNetworkCidr(networkId, ipAddress) {
-    const network = this.networks.find((n) => n.id === networkId);
+  getNetworkCidr(subnetId, ipAddress) {
+    const network = this.networks.find((n) => n.id === subnetId);
     if (!network) {
       return { cidr: null, hasCidr: false };
     }
@@ -494,8 +494,8 @@ export class NetworkCardManager {
     });
 
     networkSelect?.addEventListener("change", () => {
-      const networkId = networkSelect.value;
-      const network = this.networks.find((n) => n.id === networkId);
+      const subnetId = networkSelect.value;
+      const network = this.networks.find((n) => n.id === subnetId);
       if (network) {
         const regionId = network.network_region_id;
         if (regionId && regionSelect.value !== regionId) {
@@ -507,13 +507,13 @@ export class NetworkCardManager {
 
     // 自动分配：从所选网段取第一个未使用的 IP 填入地址框
     element.querySelector(".auto-assign-ip-btn")?.addEventListener("click", async () => {
-      const networkId = networkSelect?.value;
-      if (!networkId) {
+      const subnetId = networkSelect?.value;
+      if (!subnetId) {
         showToast(t("device.auto_assign_select_network"), "warning");
         return;
       }
       try {
-        const result = await apiGet(`/api/resources/ip/available/${encodeURIComponent(networkId)}`);
+        const result = await apiGet(`/api/resources/ip/available/${encodeURIComponent(subnetId)}`);
         const first = result.success ? (result.data?.available_ips || [])[0] : null;
         if (first) {
           addressInput.value = first;
@@ -540,16 +540,16 @@ export class NetworkCardManager {
         );
       }
       if (
-        ipData.network_id &&
-        !this.roomNetworkIds.has(ipData.network_id) &&
-        !this.legacyNetworks.has(ipData.network_id)
+        ipData.subnet_id &&
+        !this.roomSubnetIds.has(ipData.subnet_id) &&
+        !this.legacyNetworks.has(ipData.subnet_id)
       ) {
         const legacyNet = {
-          id: ipData.network_id,
-          name: ipData.network_name || ipData.network_id,
+          id: ipData.subnet_id,
+          name: ipData.network_name || ipData.subnet_id,
           network_region_id: ipData.network_region_id || null
         };
-        this.legacyNetworks.set(ipData.network_id, legacyNet);
+        this.legacyNetworks.set(ipData.subnet_id, legacyNet);
         this.networks.push(legacyNet);
       }
 
@@ -557,7 +557,7 @@ export class NetworkCardManager {
       if (ipData.network_region_id && regionSelect) {
         regionSelect.value = ipData.network_region_id;
       }
-      this.renderNetworkOptions(networkSelect, regionSelect.value, ipData.network_id || null);
+      this.renderNetworkOptions(networkSelect, regionSelect.value, ipData.subnet_id || null);
 
       if (addressInput) {
         addressInput.value = ipData.ip_address || "";
@@ -663,22 +663,22 @@ export class NetworkCardManager {
         const ipElements = portEl.querySelectorAll(".nc-ip-item");
         ipElements.forEach((ipEl, ipIdx) => {
           const ipNum = ipIdx + 1;
-          const networkId = ipEl.querySelector(".ip-network")?.value || null;
+          const subnetId = ipEl.querySelector(".ip-network")?.value || null;
           const ipAddress = ipEl.querySelector(".ip-address")?.value?.trim() || "";
           const ipDescription = ipEl.querySelector(".ip-description")?.value?.trim() || null;
           const networkRegionId = ipEl.querySelector(".ip-region")?.value || null;
 
-          if (!networkId && !ipAddress && !ipDescription) {
+          if (!subnetId && !ipAddress && !ipDescription) {
             return;
           }
 
-          if (!networkId) {
+          if (!subnetId) {
             errors.push(
               `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.network_required")}`
             );
             return;
           }
-          if (!this.roomNetworkIds.has(networkId)) {
+          if (!this.roomSubnetIds.has(subnetId)) {
             errors.push(
               `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum} - IP ${ipNum}: ${t("device.network_not_in_room")}`
             );
@@ -697,7 +697,7 @@ export class NetworkCardManager {
             return;
           }
 
-          const cidrResult = this.getNetworkCidr(networkId, ipAddress);
+          const cidrResult = this.getNetworkCidr(subnetId, ipAddress);
           if (!cidrResult.hasCidr) {
             const ipType = isIPv6(ipAddress) ? "IPv6" : "IPv4";
             errors.push(
@@ -713,7 +713,7 @@ export class NetworkCardManager {
           }
 
           const ipData = {
-            network_id: networkId,
+            subnet_id: subnetId,
             ip_address: ipAddress,
             description: ipDescription
           };

@@ -2185,7 +2185,7 @@
       "log_cleanup_days_invalid": "The days of log_cleanup task must be >= 1; clearing all logs is forbidden",
       "logs_retrieved": "Task logs retrieved",
       "mac_sync_completed": "MAC sync completed",
-      "mac_sync_missing_config": "MAC sync task requires device_id and network_id",
+      "mac_sync_missing_config": "MAC sync task requires device_id and subnet_id",
       "next_run_calc_task_failed": "Failed to spawn next-run calculation task",
       "next_run_update_failed": "Failed to update next run time",
       "not_found": "Scheduled task not found",

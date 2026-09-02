@@ -457,7 +457,7 @@ export async function showNetworkUsage(id) {
     // 网段详情、IP 列表与模态框 HTML 三路互不依赖，并行加载
     const [networkResult, ipResult, modal] = await Promise.all([
       apiGet(`/api/resources/networks/${id}`),
-      apiGet(`/api/resources/ip?network_id=${id}&page_size=1000`),
+      apiGet(`/api/resources/ip?subnet_id=${id}&page_size=1000`),
       openModal("subnet-usage-modal")
     ]);
     if (token !== subnetUsageToken) {
@@ -565,7 +565,7 @@ export async function showNetworkUsage(id) {
 }
 
 // 构建网段使用详情弹窗的 IPv4 动态正文。
-function buildIPv4Content(network, networkIps, _networkId) {
+function buildIPv4Content(network, networkIps, _subnetId) {
   const cidr = network.ipv4_cidr;
   const totalIps = calculateTotalIps(cidr);
   const prefixLength = cidr ? parseInt(cidr.split("/")[1], 10) : 32;
@@ -713,7 +713,7 @@ function buildIPv4Content(network, networkIps, _networkId) {
   `;
 }
 
-function buildIPv6Content(network, networkIps, _networkId) {
+function buildIPv6Content(network, networkIps, _subnetId) {
   const hasIPv6Config = !!network.ipv6_cidr;
 
   if (!hasIPv6Config) {
@@ -814,7 +814,7 @@ function buildIPv6Content(network, networkIps, _networkId) {
   `;
 }
 
-function bindIPv4Events(modalContainer, network, networkIps, networkId) {
+function bindIPv4Events(modalContainer, network, networkIps, subnetId) {
   const filterSelect = modalContainer.querySelector("#ip-status-filter");
   const ipGrid = modalContainer.querySelector("#ip-grid");
   const ipListBody = modalContainer.querySelector("#ipv4-list-body");
@@ -877,17 +877,17 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
       refreshButton.disabled = true;
 
       try {
-        // 与首次打开一致按 network_id 过滤请求：全库拉取在 IP 超过
+        // 与首次打开一致按 subnet_id 过滤请求：全库拉取在 IP 超过
         // page_size 上限时还会静默缺数据
         const refreshIpResult = await apiGet(
-          `/api/resources/ip?network_id=${networkId}&page_size=1000`
+          `/api/resources/ip?subnet_id=${subnetId}&page_size=1000`
         );
         if (refreshIpResult.success) {
           const allIps =
             refreshIpResult.data.data || refreshIpResult.data?.items || refreshIpResult.data || [];
           const isIPv6 = (ip) => ip.ip_address.includes(":");
           const refreshedNetworkIps = allIps.filter(
-            (ip) => ip.network_id === networkId && !isIPv6(ip)
+            (ip) => ip.subnet_id === subnetId && !isIPv6(ip)
           );
 
           const newIpStatusMap = new Map();
@@ -948,7 +948,7 @@ function bindIPv4Events(modalContainer, network, networkIps, networkId) {
   }
 }
 
-function bindIPv6Events(modalContainer, network, networkIps, networkId) {
+function bindIPv6Events(modalContainer, network, networkIps, subnetId) {
   const refreshButton = modalContainer.querySelector("#refresh-ipv6-usage");
   const ipListBody = modalContainer.querySelector("#ipv6-list-body");
 
@@ -961,17 +961,17 @@ function bindIPv6Events(modalContainer, network, networkIps, networkId) {
       refreshButton.disabled = true;
 
       try {
-        // 与首次打开一致按 network_id 过滤请求：全库拉取在 IP 超过
+        // 与首次打开一致按 subnet_id 过滤请求：全库拉取在 IP 超过
         // page_size 上限时还会静默缺数据
         const refreshIpResult = await apiGet(
-          `/api/resources/ip?network_id=${networkId}&page_size=1000`
+          `/api/resources/ip?subnet_id=${subnetId}&page_size=1000`
         );
         if (refreshIpResult.success) {
           const allIps =
             refreshIpResult.data.data || refreshIpResult.data?.items || refreshIpResult.data || [];
           const isIPv6 = (ip) => ip.ip_address.includes(":");
           const refreshedNetworkIps = allIps.filter(
-            (ip) => ip.network_id === networkId && isIPv6(ip)
+            (ip) => ip.subnet_id === subnetId && isIPv6(ip)
           );
 
           if (ipListBody) {

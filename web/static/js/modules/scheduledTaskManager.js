@@ -102,7 +102,7 @@ function populateDeviceSelect() {
 }
 
 function populateNetworkSelect() {
-  return fillSelect("scheduled-task-network-id", "/api/resources/networks", {
+  return fillSelect("scheduled-task-subnet-id", "/api/resources/networks", {
     placeholderKey: "scheduled_tasks.config_fields.select_network",
     itemToLabel: (net) => net.name || net.id,
     errorLabelKey: "common.subnet"
@@ -221,7 +221,7 @@ async function editScheduledTask(id) {
 
     if (task.task_type === "mac_sync" && task.config) {
       document.getElementById("scheduled-task-device-id").value = task.config.device_id || "";
-      document.getElementById("scheduled-task-network-id").value = task.config.network_id || "";
+      document.getElementById("scheduled-task-subnet-id").value = task.config.subnet_id || "";
     } else if (task.task_type === "log_cleanup" && task.config) {
       document.getElementById("scheduled-task-keep-days").value = task.config.days || 30;
     }
@@ -288,12 +288,12 @@ async function saveScheduledTask() {
 
   if (taskType === "mac_sync") {
     const deviceId = document.getElementById("scheduled-task-device-id").value;
-    const networkId = document.getElementById("scheduled-task-network-id").value;
-    if (!deviceId || !networkId) {
+    const subnetId = document.getElementById("scheduled-task-subnet-id").value;
+    if (!deviceId || !subnetId) {
       showToast(t("scheduled_tasks.required_fields"), "warning");
       return;
     }
-    config = { device_id: deviceId, network_id: networkId };
+    config = { device_id: deviceId, subnet_id: subnetId };
   } else if (taskType === "log_cleanup") {
     const keepDays = parseInt(document.getElementById("scheduled-task-keep-days").value, 10) || 30;
     config = { days: keepDays };

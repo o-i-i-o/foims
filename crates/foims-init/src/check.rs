@@ -147,7 +147,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     );
     columns.insert(
         "room_networks",
-        vec!["id", "room_id", "network_id", "created_at", "updated_at"],
+        vec!["id", "room_id", "subnet_id", "created_at", "updated_at"],
     );
     columns.insert(
         "cabinets",
@@ -361,7 +361,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         vec![
             "id",
             "device_interface_id",
-            "network_id",
+            "subnet_id",
             "ip_address",
             "ip_version",
             "description",
@@ -782,7 +782,7 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         // IP 必须挂载在网口下（网口删除级联删除 IP）
         ("ips", "device_interface_id"),
         // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）
-        ("ips", "network_id"),
+        ("ips", "subnet_id"),
     ]
 }
 

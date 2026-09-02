@@ -249,7 +249,7 @@ async fn fetch_workstation_ips(
 ) -> Result<Vec<IpDetail>, sqlx::Error> {
     sqlx::query_as(
         r"SELECT
-            m.id, m.device_interface_id, di.device_id, m.network_id,
+            m.id, m.device_interface_id, di.device_id, m.subnet_id,
             nc.network_region_id AS network_region_id,
             nc.name AS network_name,
             nr.name AS network_region,
@@ -259,7 +259,7 @@ async fn fetch_workstation_ips(
         FROM ips m
         JOIN device_interfaces di ON m.device_interface_id = di.id
         JOIN devices d ON di.device_id = d.id
-        LEFT JOIN network_cidrs nc ON m.network_id = nc.id
+        LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
         WHERE d.workstation_id = $1
         ORDER BY m.ip_address",

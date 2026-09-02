@@ -783,7 +783,7 @@ pub async fn update_network<P: DbProvider>(
     if req.ipv4_cidr.is_some() || req.ipv6_cidr.is_some() {
         let outside_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM ips \
-             WHERE network_id = $1 \
+             WHERE subnet_id = $1 \
              AND NOT ( \
                  (CAST($2 AS CIDR) IS NOT NULL AND ip_address <<= CAST($2 AS CIDR)) \
                  OR (CAST($3 AS CIDR) IS NOT NULL AND ip_address <<= CAST($3 AS CIDR)) \
@@ -900,7 +900,7 @@ pub async fn delete_network<P: DbProvider>(
     }
 
     let ip_count: i64 =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips WHERE network_id = $1")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips WHERE subnet_id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
@@ -910,7 +910,7 @@ pub async fn delete_network<P: DbProvider>(
     }
 
     let room_network_count: i64 =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_networks WHERE network_id = $1")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_networks WHERE subnet_id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
@@ -931,7 +931,7 @@ pub async fn delete_network<P: DbProvider>(
     tx.commit().await?;
 
     let details = serde_json::json!({
-        "network_id": id.to_string()
+        "subnet_id": id.to_string()
     });
     log_op_best_effort(
         &state.pool()?.get_conn(),

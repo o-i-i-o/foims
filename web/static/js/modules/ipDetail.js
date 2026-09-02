@@ -154,9 +154,9 @@ async function pullIpMacData() {
   }
 
   const networkSelect = document.getElementById("pull-mac-network-select");
-  const networkId = networkSelect ? networkSelect.value : "";
+  const subnetId = networkSelect ? networkSelect.value : "";
 
-  if (!networkId) {
+  if (!subnetId) {
     showToast(t("ip.select_network_first"), "warning");
     return;
   }
@@ -170,7 +170,7 @@ async function pullIpMacData() {
 
     const result = await apiPost("/api/resources/ip/pull", {
       device_id: deviceId,
-      network_id: networkId
+      subnet_id: subnetId
     });
 
     if (result.success) {

@@ -222,11 +222,11 @@ pub const TABLE_SPECS: &[TableSpec] = &[
             Col::Info("region_name"),
             Col::Ref {
                 csv: "network_name",
-                db: "network_id",
+                db: "subnet_id",
                 target: Target::Cidr,
             },
         ],
-        key: &["room_id", "network_id"],
+        key: &["room_id", "subnet_id"],
     },
     // ---------- 机柜模块 ----------
     TableSpec {
@@ -423,7 +423,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
             Col::Info("region_name"),
             Col::Ref {
                 csv: "network_name",
-                db: "network_id",
+                db: "subnet_id",
                 target: Target::Cidr,
             },
             Col::Plain("ip_address"),
