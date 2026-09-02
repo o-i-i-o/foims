@@ -282,7 +282,7 @@ export function initNetworksFilters() {
     }
   });
 
-  // 网段表头搜索弹层（与 IP 查询页同一套通用实现）
+  // 网段表头搜索弹层（与 IP 详情页同一套通用实现）
   initThSearchPopovers("#networks-table");
 
   // 网络区域与网段两张表的排序事件（resourceTabs 每模块仅初始化一次）

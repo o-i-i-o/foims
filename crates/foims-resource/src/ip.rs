@@ -15,7 +15,7 @@ use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppMessage, log_error, log_info, log_warn, msg};
-use foims_models::{ApiResponse, IpManager, IpManagerCreate, IpManagerWithNames};
+use foims_models::{ApiResponse, IpDetail, IpDetailCreate, IpDetailWithNames};
 use std::net::IpAddr;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -120,7 +120,7 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
     }
 }
 
-pub async fn get_ip_managers<P: DbProvider>(
+pub async fn get_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -208,7 +208,7 @@ pub async fn get_ip_managers<P: DbProvider>(
         .push(" OFFSET ")
         .push_bind(pagination.offset);
     let mappings = data_builder
-        .build_query_as::<IpManagerWithNames>()
+        .build_query_as::<IpDetailWithNames>()
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
@@ -233,7 +233,7 @@ pub async fn get_device_ips<P: DbProvider>(
         ));
     }
 
-    let ips: Vec<IpManager> = sqlx::query_as(
+    let ips: Vec<IpDetail> = sqlx::query_as(
         r"SELECT
             m.id, m.device_interface_id, di.device_id, m.network_id,
             nc.network_region_id AS network_region_id,
@@ -263,7 +263,7 @@ pub async fn create_device_ip<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
-    AppJson(req): AppJson<IpManagerCreate>,
+    AppJson(req): AppJson<IpDetailCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
@@ -410,7 +410,7 @@ pub async fn create_device_ip<P: DbProvider>(
         None => (None, None, None),
     };
 
-    let mapping = IpManager {
+    let mapping = IpDetail {
         id: ip_id,
         device_interface_id: interface_id,
         device_id: id,
@@ -673,9 +673,9 @@ async fn sync_switch_macs(
     })
 }
 
-pub async fn pull_ip_managers<P: DbProvider>(
+pub async fn pull_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
-    AppJson(req): AppJson<foims_models::PullIpManagersRequest>,
+    AppJson(req): AppJson<foims_models::PullIpDetailsRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
@@ -685,19 +685,19 @@ pub async fn pull_ip_managers<P: DbProvider>(
         if result.total_macs_on_switch == 0 {
             return Ok((
                 StatusCode::OK,
-                Json(ApiResponse::<Vec<IpManager>>::error(msg(
+                Json(ApiResponse::<Vec<IpDetail>>::error(msg(
                     "server.ip.no_mac_data",
                 ))),
             )
                 .into_response());
         }
         return Ok(foims_common::ok_json(
-            Vec::<IpManager>::new(),
+            Vec::<IpDetail>::new(),
             "server.ip.no_managed_ips",
         ));
     }
 
-    let results: Vec<IpManager> = sqlx::query_as::<_, IpManager>(
+    let results: Vec<IpDetail> = sqlx::query_as::<_, IpDetail>(
         r"SELECT m.id, m.device_interface_id, di.device_id, m.network_id,
            nc.network_region_id AS network_region_id,
            nc.name AS network_name, nr.name AS network_region,
@@ -727,7 +727,7 @@ pub async fn pull_ip_managers<P: DbProvider>(
     Ok(foims_common::ok_json(results, message))
 }
 
-pub async fn pull_ip_managers_internal(
+pub async fn pull_ip_details_internal(
     pool: &sqlx::PgPool,
     device_id: Uuid,
     network_id: Uuid,
@@ -977,7 +977,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
 
     tx.commit().await?;
 
-    let mapping = IpManager {
+    let mapping = IpDetail {
         id,
         device_interface_id: interface_id,
         device_id,
@@ -1005,7 +1005,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
         &state.pool()?.get_conn(),
         &meta,
         "auto_assign_ip",
-        "ip_manager",
+        "ip_detail",
         Some(&id),
         &details,
     )
@@ -1028,10 +1028,10 @@ pub async fn auto_assign_device_ip<P: DbProvider>(
 /// 批量创建单条记录的条数上限，防止一次请求写入过量数据
 const BATCH_IP_CREATE_LIMIT: usize = 500;
 
-pub async fn batch_create_ip_managers<P: DbProvider>(
+pub async fn batch_create_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    AppJson(req): AppJson<Vec<IpManagerCreate>>,
+    AppJson(req): AppJson<Vec<IpDetailCreate>>,
 ) -> Result<Response, AppError> {
     // 条数上限：超出直接拒绝整个批次（422），不做部分写入
     if req.len() > BATCH_IP_CREATE_LIMIT {
@@ -1041,7 +1041,7 @@ pub async fn batch_create_ip_managers<P: DbProvider>(
     }
 
     let now = Utc::now();
-    let mut valid_requests: Vec<(usize, &IpManagerCreate, Uuid, i16)> = Vec::new();
+    let mut valid_requests: Vec<(usize, &IpDetailCreate, Uuid, i16)> = Vec::new();
     // 逐条错误以「key + 参数」记录，随响应返回由前端翻译
     let mut errors: Vec<AppMessage> = Vec::new();
 
@@ -1246,7 +1246,7 @@ pub async fn batch_create_ip_managers<P: DbProvider>(
             continue;
         }
 
-        created_ips.push(IpManager {
+        created_ips.push(IpDetail {
             id: *id,
             device_interface_id: interface_id,
             device_id,
@@ -1288,7 +1288,7 @@ pub async fn batch_create_ip_managers<P: DbProvider>(
         &state.pool()?.get_conn(),
         &meta,
         "batch_create",
-        "ip_manager",
+        "ip_detail",
         None,
         &details,
     )

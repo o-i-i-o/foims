@@ -21,7 +21,7 @@ use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::{
     CabinetPosition, CabinetPositionCreate, CabinetPositionUpdate, CabinetPositionWithDetails,
-    IpManager,
+    IpDetail,
 };
 
 /// 追加机位列表过滤条件（关键字 + 机柜 + 机房），供 COUNT 与数据查询共用。
@@ -266,7 +266,7 @@ async fn fetch_position_base(
 async fn fetch_position_ips(
     executor: impl PgExecutor<'_>,
     id: Uuid,
-) -> Result<Vec<IpManager>, sqlx::Error> {
+) -> Result<Vec<IpDetail>, sqlx::Error> {
     sqlx::query_as(
         r"SELECT m.id, m.device_interface_id, di.device_id, m.network_id,
            nc.network_region_id AS network_region_id,

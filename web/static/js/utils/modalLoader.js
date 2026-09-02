@@ -30,7 +30,7 @@ const MODAL_REGISTRY = {
   "network-region-modal": "/static/modals/network/network-region-modal.html",
   "network-modal": "/static/modals/network/network-modal.html",
   "subnet-usage-modal": "/static/modals/network/subnet-usage-modal.html",
-  // IP 查询（拉取 MAC）
+  // IP 详情（拉取 MAC）
   "pull-mac-modal": "/static/modals/ip/pull-mac-modal.html",
   // 组织模块
   "organization-modal": "/static/modals/organization/organization-modal.html",

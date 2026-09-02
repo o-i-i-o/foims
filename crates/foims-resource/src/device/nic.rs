@@ -16,7 +16,7 @@ use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::{AppError, msg};
 use foims_models::{
-    DeviceInterface, DeviceNetworkConfigSync, IpManager, NetworkCard, NetworkCardSyncItem,
+    DeviceInterface, DeviceNetworkConfigSync, IpDetail, NetworkCard, NetworkCardSyncItem,
     PortSyncItem,
 };
 
@@ -404,7 +404,7 @@ pub async fn fetch_device_network_config(
         )
         .bind(device_id)
         .fetch_all(pool),
-        sqlx::query_as::<_, IpManager>(
+        sqlx::query_as::<_, IpDetail>(
             r"SELECT
                 m.id, m.device_interface_id, di.device_id, m.network_id,
                 nc.network_region_id AS network_region_id,
@@ -428,7 +428,7 @@ pub async fn fetch_device_network_config(
     let ports = ports?;
 
     // 网口 ID → 其 IP 列表（批量结果按接口分组）
-    let mut ips_by_port: HashMap<Uuid, Vec<IpManager>> = HashMap::new();
+    let mut ips_by_port: HashMap<Uuid, Vec<IpDetail>> = HashMap::new();
     for ip in ip_rows? {
         ips_by_port
             .entry(ip.device_interface_id)

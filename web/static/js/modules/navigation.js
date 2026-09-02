@@ -144,12 +144,12 @@ async function loadOrganizationPage() {
 }
 
 /**
- * 加载 IP 查询页面
+ * 加载 IP 详情页面
  */
 async function loadIpPage() {
-  const ipmanager = await loadModule("ipmanager");
-  ipmanager.initIpMacFunctions();
-  nextFrame(() => ipmanager.loadIpMacData());
+  const ipDetail = await loadModule("ipDetail");
+  ipDetail.initIpMacFunctions();
+  nextFrame(() => ipDetail.loadIpMacData());
 }
 
 /**

@@ -119,7 +119,7 @@ async function initResourcePreloading() {
       "position",
       "cableLink",
       "device",
-      "ipmanager",
+      "ipDetail",
       "visualizationManager"
     ],
     { delay: 2000, priority: "low" }

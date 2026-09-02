@@ -183,7 +183,7 @@ impl TaskExecutor for MacSyncTaskExecutor {
 
         match (device_id, network_id) {
             (Some(device_id), Some(network_id)) => {
-                foims_resource::ip::pull_ip_managers_internal(&ctx.pool, device_id, network_id)
+                foims_resource::ip::pull_ip_details_internal(&ctx.pool, device_id, network_id)
                     .await
                     .map(|()| "server.task.mac_sync_completed".to_string())
                     .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))

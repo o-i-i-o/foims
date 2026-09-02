@@ -42,7 +42,7 @@ export class SVGVisualization {
       // 自动排布纳入渲染代次管理：await 期间若有并发加载开启则放弃本次绘制
       const token = this.dataManager.beginWorkstationRender();
 
-      const [workstations, ipManagers] = await Promise.all([
+      const [workstations, ipDetails] = await Promise.all([
         this.dataManager.fetchWorkstationsByRoom(roomId),
         this.dataManager.fetchIps()
       ]);
@@ -51,14 +51,14 @@ export class SVGVisualization {
       }
 
       const ipMap = new Map();
-      if (Array.isArray(ipManagers)) {
-        ipManagers.forEach((ipManager) => {
-          if (!ipManager.workstation_id) {
+      if (Array.isArray(ipDetails)) {
+        ipDetails.forEach((ipDetail) => {
+          if (!ipDetail.workstation_id) {
             return;
           }
-          const existing = ipMap.get(ipManager.workstation_id);
-          if (!existing || (existing.status !== "active" && ipManager.status === "active")) {
-            ipMap.set(ipManager.workstation_id, ipManager);
+          const existing = ipMap.get(ipDetail.workstation_id);
+          if (!existing || (existing.status !== "active" && ipDetail.status === "active")) {
+            ipMap.set(ipDetail.workstation_id, ipDetail);
           }
         });
       }
@@ -91,7 +91,7 @@ export class SVGVisualization {
         const col = index % cols;
         const row = Math.floor(index / cols);
 
-        workstation.ipManager = ipMap.get(workstation.id) || null;
+        workstation.ipDetail = ipMap.get(workstation.id) || null;
         workstation.position = {
           x: startX + col * (width + gap),
           y: startY + row * (height + gap),

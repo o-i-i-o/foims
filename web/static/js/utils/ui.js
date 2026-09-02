@@ -87,7 +87,7 @@ let thSearchOutsideClickRegistered = false;
 /**
  * 表头搜索弹层初始化：点击放大镜图标展开/收起输入框，Esc 或点击外部收起。
  *
- * 适用于任意 `.data-table`（IP 查询页、资源管理网段表等）：
+ * 适用于任意 `.data-table`（IP 详情页、资源管理网段表等）：
  * 表头需为 `th.th-searchable`，内含 `.th-search-toggle` 按钮与
  * `.th-search-popover > input` 输入框（结构见 main.html）。
  *

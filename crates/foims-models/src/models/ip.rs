@@ -6,10 +6,10 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== IP 查询模型 ====================
+// ==================== IP 详情模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct IpManager {
+pub struct IpDetail {
     pub id: Uuid,
     pub device_interface_id: Uuid,
     #[sqlx(default)]
@@ -33,7 +33,7 @@ pub struct IpManager {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct IpManagerWithNames {
+pub struct IpDetailWithNames {
     pub id: Uuid,
     pub device_interface_id: Uuid,
     pub device_id: Uuid,
@@ -64,7 +64,7 @@ pub struct IpManagerWithNames {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct IpManagerCreate {
+pub struct IpDetailCreate {
     pub device_interface_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     pub network_id: Option<Uuid>,
@@ -156,17 +156,17 @@ pub struct AutoAssignIpRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct PullIpManagersRequest {
+pub struct PullIpDetailsRequest {
     pub device_id: Uuid,
     pub network_id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct IpManagerUpdate {
+pub struct IpDetailUpdate {
     // 挂 deserialize_some 后 JSON null → Some(None)：可通过 null 解绑接口
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub device_interface_id: Option<Option<Uuid>>,
-    /// 有值才校验：与 IpManagerCreate 同口径拒绝带掩码/非法地址
+    /// 有值才校验：与 IpDetailCreate 同口径拒绝带掩码/非法地址
     #[validate(custom(
         function = "crate::models::validate_ip_address_option",
         message = "server.ip.validation.ip_address_invalid"
@@ -197,8 +197,8 @@ mod tests {
     use validator::Validate;
 
     #[test]
-    fn test_ip_manager_create_valid_ipv4() -> Result<(), serde_json::Error> {
-        let req: IpManagerCreate = serde_json::from_value(serde_json::json!({
+    fn test_ip_detail_create_valid_ipv4() -> Result<(), serde_json::Error> {
+        let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
             "device_interface_id": Uuid::new_v4(),
             "network_id": Uuid::new_v4(),
             "ip_address": "192.168.1.10",
@@ -209,8 +209,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_create_valid_ipv6() -> Result<(), serde_json::Error> {
-        let req: IpManagerCreate = serde_json::from_value(serde_json::json!({
+    fn test_ip_detail_create_valid_ipv6() -> Result<(), serde_json::Error> {
+        let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
             "ip_address": "2001:db8::10"
         }))?;
         assert!(req.validate().is_ok());
@@ -218,10 +218,10 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_create_invalid_ip() -> Result<(), serde_json::Error> {
+    fn test_ip_detail_create_invalid_ip() -> Result<(), serde_json::Error> {
         // 非法 IP 走自定义校验拒绝；带掩码后缀同样拒绝
         for bad_ip in ["999.1.1.1", "not-ip", "10.0.0.1/24"] {
-            let req: IpManagerCreate = serde_json::from_value(serde_json::json!({
+            let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
                 "ip_address": bad_ip
             }))?;
             let Err(errors) = req.validate() else {
@@ -233,8 +233,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_create_description_too_long() -> Result<(), serde_json::Error> {
-        let req: IpManagerCreate = serde_json::from_value(serde_json::json!({
+    fn test_ip_detail_create_description_too_long() -> Result<(), serde_json::Error> {
+        let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
             "ip_address": "1.2.3.4",
             "description": "D".repeat(256)
         }))?;
@@ -364,7 +364,7 @@ mod tests {
         assert!(assign.validate().is_ok());
         assert_eq!(assign.device_interface_id, None);
 
-        let pull: PullIpManagersRequest = serde_json::from_value(serde_json::json!({
+        let pull: PullIpDetailsRequest = serde_json::from_value(serde_json::json!({
             "device_id": Uuid::new_v4(),
             "network_id": Uuid::new_v4()
         }))?;
@@ -375,24 +375,24 @@ mod tests {
     #[test]
     fn test_pull_request_missing_fields_rejected() {
         // device_id / network_id 均为必填，缺失时反序列化失败
-        let result: Result<PullIpManagersRequest, _> =
+        let result: Result<PullIpDetailsRequest, _> =
             serde_json::from_value(serde_json::json!({ "device_id": Uuid::new_v4() }));
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_ip_manager_update_semantics() -> Result<(), serde_json::Error> {
+    fn test_ip_detail_update_semantics() -> Result<(), serde_json::Error> {
         use serde::de::Error as _;
         // device_interface_id 带 serde(default) 且已挂 deserialize_some（null 清除语义可达）：
         // 缺失与 null 均为 None；值则包一层 Some
-        let missing: IpManagerUpdate = serde_json::from_value(serde_json::json!({}))?;
+        let missing: IpDetailUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert_eq!(missing.device_interface_id, None);
 
-        let null_id: IpManagerUpdate =
+        let null_id: IpDetailUpdate =
             serde_json::from_value(serde_json::json!({ "device_interface_id": null }))?;
         assert_eq!(null_id.device_interface_id, Some(None));
 
-        let set_id: IpManagerUpdate = serde_json::from_value(serde_json::json!({
+        let set_id: IpDetailUpdate = serde_json::from_value(serde_json::json!({
             "device_interface_id": "550e8400-e29b-41d4-a716-446655440000"
         }))?;
         let expected = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")
@@ -403,8 +403,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_update_status_too_long() -> Result<(), serde_json::Error> {
-        let req: IpManagerUpdate = serde_json::from_value(serde_json::json!({
+    fn test_ip_detail_update_status_too_long() -> Result<(), serde_json::Error> {
+        let req: IpDetailUpdate = serde_json::from_value(serde_json::json!({
             "status": "S".repeat(21)
         }))?;
         let Err(errors) = req.validate() else {
@@ -415,14 +415,14 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_update_status_whitelist() -> Result<(), serde_json::Error> {
+    fn test_ip_detail_update_status_whitelist() -> Result<(), serde_json::Error> {
         // 白名单：active / inactive / reserved 合法，其余拒绝
         for ok_status in ["active", "inactive", "reserved"] {
-            let req: IpManagerUpdate =
+            let req: IpDetailUpdate =
                 serde_json::from_value(serde_json::json!({ "status": ok_status }))?;
             assert!(req.validate().is_ok(), "状态 {ok_status} 应合法");
         }
-        let bad: IpManagerUpdate =
+        let bad: IpDetailUpdate =
             serde_json::from_value(serde_json::json!({ "status": "enabled" }))?;
         let Err(errors) = bad.validate() else {
             panic!("白名单外状态应被拒绝");
@@ -432,9 +432,9 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_update_ip_address_validation() -> Result<(), serde_json::Error> {
+    fn test_ip_detail_update_ip_address_validation() -> Result<(), serde_json::Error> {
         // 更新路径与创建路径同口径：带掩码 / 非法地址拒绝；合法地址通过
-        let bad: IpManagerUpdate = serde_json::from_value(serde_json::json!({
+        let bad: IpDetailUpdate = serde_json::from_value(serde_json::json!({
             "ip_address": "10.0.0.1/24"
         }))?;
         let Err(errors) = bad.validate() else {
@@ -442,22 +442,22 @@ mod tests {
         };
         assert!(errors.errors().contains_key("ip_address"));
 
-        let ok: IpManagerUpdate = serde_json::from_value(serde_json::json!({
+        let ok: IpDetailUpdate = serde_json::from_value(serde_json::json!({
             "ip_address": "10.0.0.1"
         }))?;
         assert!(ok.validate().is_ok());
 
         // 缺省（None）跳过校验
-        let missing: IpManagerUpdate = serde_json::from_value(serde_json::json!({}))?;
+        let missing: IpDetailUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert!(missing.validate().is_ok());
         Ok(())
     }
 
     #[test]
-    fn test_ip_manager_update_ip_version_validation() -> Result<(), serde_json::Error> {
+    fn test_ip_detail_update_ip_version_validation() -> Result<(), serde_json::Error> {
         // ip_version 仅允许 4 / 6（有值才校验）
         for bad_version in [0i16, 5, -1, 7] {
-            let req: IpManagerUpdate =
+            let req: IpDetailUpdate =
                 serde_json::from_value(serde_json::json!({ "ip_version": bad_version }))?;
             let Err(errors) = req.validate() else {
                 panic!("ip_version={bad_version} 应被拒绝");
@@ -465,7 +465,7 @@ mod tests {
             assert!(errors.errors().contains_key("ip_version"));
         }
         for ok_version in [4i16, 6] {
-            let req: IpManagerUpdate =
+            let req: IpDetailUpdate =
                 serde_json::from_value(serde_json::json!({ "ip_version": ok_version }))?;
             assert!(req.validate().is_ok(), "ip_version={ok_version} 应合法");
         }
@@ -494,8 +494,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_manager_entity_serde_roundtrip() -> Result<(), serde_json::Error> {
-        let record = IpManager {
+    fn test_ip_detail_entity_serde_roundtrip() -> Result<(), serde_json::Error> {
+        let record = IpDetail {
             id: Uuid::new_v4(),
             device_interface_id: Uuid::new_v4(),
             device_id: Uuid::new_v4(),
@@ -513,15 +513,15 @@ mod tests {
             updated_at: Utc::now(),
         };
         let first = serde_json::to_value(&record)?;
-        let back: IpManager = serde_json::from_value(first.clone())?;
+        let back: IpDetail = serde_json::from_value(first.clone())?;
         let second = serde_json::to_value(&back)?;
         assert_eq!(first, second);
         Ok(())
     }
 
     #[test]
-    fn test_ip_manager_with_names_serde_roundtrip() -> Result<(), serde_json::Error> {
-        let record = IpManagerWithNames {
+    fn test_ip_detail_with_names_serde_roundtrip() -> Result<(), serde_json::Error> {
+        let record = IpDetailWithNames {
             id: Uuid::new_v4(),
             device_interface_id: Uuid::new_v4(),
             device_id: Uuid::new_v4(),
@@ -550,7 +550,7 @@ mod tests {
             position_id: Some(Uuid::new_v4()),
         };
         let first = serde_json::to_value(&record)?;
-        let back: IpManagerWithNames = serde_json::from_value(first.clone())?;
+        let back: IpDetailWithNames = serde_json::from_value(first.clone())?;
         let second = serde_json::to_value(&back)?;
         assert_eq!(first, second);
         Ok(())

@@ -44,15 +44,15 @@ export class SVGRenderer {
     rect.setAttribute("width", width);
     rect.setAttribute("height", height);
 
-    const ipManager = workstation.ipManager || null;
-    const ipAddress = ipManager ? ipManager.ip_address : t("viz.no_ip");
+    const ipDetail = workstation.ipDetail || null;
+    const ipAddress = ipDetail ? ipDetail.ip_address : t("viz.no_ip");
     let portInfo = t("viz.no_port");
-    if (ipManager && ipManager.port_device_name && ipManager.port_device_number) {
-      portInfo = `${ipManager.port_device_name}: ${ipManager.port_device_number}`;
+    if (ipDetail && ipDetail.port_device_name && ipDetail.port_device_number) {
+      portInfo = `${ipDetail.port_device_name}: ${ipDetail.port_device_number}`;
     }
 
     const statusClass =
-      ipManager && ipManager.status ? `status-${ipManager.status}` : "status-unknown";
+      ipDetail && ipDetail.status ? `status-${ipDetail.status}` : "status-unknown";
     group.classList.add(statusClass);
 
     // 工位卡片四行标签文本（名称/IP/端口/负责人），统一走 labelText helper
@@ -82,8 +82,8 @@ export class SVGRenderer {
       `${t("viz.port_label")}: ${portInfo}`,
       `${t("viz.manager_label")}: ${workstation.manager || t("viz.no_manager")}`
     ];
-    if (ipManager && (ipManager.network_name || ipManager.network_region)) {
-      const netParts = [ipManager.network_region, ipManager.network_name]
+    if (ipDetail && (ipDetail.network_name || ipDetail.network_region)) {
+      const netParts = [ipDetail.network_region, ipDetail.network_name]
         .filter(Boolean)
         .join(" / ");
       tooltipLines.splice(2, 0, `${t("viz.network_label")}: ${netParts}`);
@@ -230,18 +230,18 @@ export class SVGRenderer {
 
     let portsLabel = t("viz.no_port");
     if (
-      position.ipManager &&
-      position.ipManager.port_device_name &&
-      position.ipManager.port_device_number
+      position.ipDetail &&
+      position.ipDetail.port_device_name &&
+      position.ipDetail.port_device_number
     ) {
-      portsLabel = `${position.ipManager.port_device_name}: ${position.ipManager.port_device_number}`;
+      portsLabel = `${position.ipDetail.port_device_name}: ${position.ipDetail.port_device_number}`;
     }
 
-    const ipAddress = position.ipManager ? position.ipManager.ip_address : t("viz.no_ip");
+    const ipAddress = position.ipDetail ? position.ipDetail.ip_address : t("viz.no_ip");
 
     let tooltip = `${t("viz.position_label")}: ${position.name}\n${t("viz.u_position_label")}: ${startU}-${endU}\nIP: ${ipAddress}`;
-    if (position.ipManager) {
-      const netParts = [position.ipManager.network_region, position.ipManager.network_name]
+    if (position.ipDetail) {
+      const netParts = [position.ipDetail.network_region, position.ipDetail.network_name]
         .filter(Boolean)
         .join(" / ");
       if (netParts) {

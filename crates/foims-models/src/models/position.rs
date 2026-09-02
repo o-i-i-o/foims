@@ -1,6 +1,6 @@
 //! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
 
-use super::ip::IpManager;
+use super::ip::IpDetail;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -44,7 +44,7 @@ pub struct CabinetPositionWithDetails {
     pub end_u: i32,
     /// IP 明细不从 SQL 映射（列表不携带、详情单独查询后手动填充）
     #[sqlx(skip)]
-    pub ips: Vec<IpManager>,
+    pub ips: Vec<IpDetail>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

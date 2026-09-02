@@ -5,7 +5,7 @@ const preloadedModules = new Set();
 /* 版本号仅用于 CSS / 模态框 HTML 等经 fetch 加载的资源的缓存穿透；
    JS 模块动态 import 一律使用无版本号 URL —— 与静态 import 保持同一 URL 空间，
    避免同一模块因 URL 不同产生双实例、双份独立状态 */
-export const MODULE_VERSION = "01363";
+export const MODULE_VERSION = "01365";
 
 export function withVersion(path) {
   if (!path) {
@@ -30,7 +30,7 @@ const MODULE_REGISTRY = {
   userManager: "/static/js/modules/userManager.js",
   systemManager: "/static/js/modules/systemManager.js",
   log: "/static/js/modules/log.js",
-  ipmanager: "/static/js/modules/ipmanager.js",
+  ipDetail: "/static/js/modules/ipDetail.js",
   resourceTabs: "/static/js/modules/resourceTabs.js",
   authManager: "/static/js/modules/authManager.js",
   device: "/static/js/modules/device.js",

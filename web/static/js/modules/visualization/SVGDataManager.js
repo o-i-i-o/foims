@@ -136,7 +136,7 @@ export class SVGDataManager {
       if (this.core.type === "workstation") {
         token = this.beginWorkstationRender();
 
-        const [layoutResult, workstations, ipManagers] = await Promise.all([
+        const [layoutResult, workstations, ipDetails] = await Promise.all([
           this.apiGet(`/api/resources/layouts/workstation/${id}`),
           this.fetchWorkstationsByRoom(id),
           this.fetchIps()
@@ -156,15 +156,15 @@ export class SVGDataManager {
         }
 
         const ipMap = new Map();
-        if (Array.isArray(ipManagers)) {
-          ipManagers.forEach((ipManager) => {
-            if (!ipManager.workstation_id) {
+        if (Array.isArray(ipDetails)) {
+          ipDetails.forEach((ipDetail) => {
+            if (!ipDetail.workstation_id) {
               return;
             }
             // 同一工位多条 IP 时 active 优先（与 autoDrawWorkstations 取值策略一致）
-            const existing = ipMap.get(ipManager.workstation_id);
-            if (!existing || (existing.status !== "active" && ipManager.status === "active")) {
-              ipMap.set(ipManager.workstation_id, ipManager);
+            const existing = ipMap.get(ipDetail.workstation_id);
+            if (!existing || (existing.status !== "active" && ipDetail.status === "active")) {
+              ipMap.set(ipDetail.workstation_id, ipDetail);
             }
           });
         }
@@ -224,7 +224,7 @@ export class SVGDataManager {
                 height
               };
             }
-            workstation.ipManager = ipMap.get(workstation.id);
+            workstation.ipDetail = ipMap.get(workstation.id);
             this.renderer.drawWorkstation(workstation);
 
             const pos = workstation.position;
@@ -497,7 +497,7 @@ export class SVGDataManager {
     return true;
   }
 
-  /** 按机位 ID 批量拉取 IP 信息，返回 position_id → ipManager 映射。 */
+  /** 按机位 ID 批量拉取 IP 信息，返回 position_id → ipDetail 映射。 */
   async fetchIpMapByPositions(positionIds) {
     try {
       const ids = [...new Set(positionIds)].join(",");
@@ -507,9 +507,9 @@ export class SVGDataManager {
       );
       const map = new Map();
       if (result.success && Array.isArray(result.data?.items)) {
-        result.data.items.forEach((ipManager) => {
-          if (ipManager.position_id) {
-            map.set(ipManager.position_id, ipManager);
+        result.data.items.forEach((ipDetail) => {
+          if (ipDetail.position_id) {
+            map.set(ipDetail.position_id, ipDetail);
           }
         });
       } else if (!result.success) {
@@ -525,7 +525,7 @@ export class SVGDataManager {
   /** 绘制单个机柜下的全部机位（IP 信息已由批量拉取结果提供）。 */
   drawCabinetPositions(cabinet, ipMap) {
     (cabinet.positions || []).forEach((position) => {
-      position.ipManager = ipMap.get(position.id) || null;
+      position.ipDetail = ipMap.get(position.id) || null;
       this.renderer.drawCabinetPosition(position, cabinet);
     });
   }

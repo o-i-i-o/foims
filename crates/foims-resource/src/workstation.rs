@@ -20,7 +20,7 @@ use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::{
-    IpManager, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
+    IpDetail, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
 
 /// 工位基础查询列（含房间名联表），列表与单条查询共用。
@@ -246,7 +246,7 @@ async fn fetch_workstation_base(
 async fn fetch_workstation_ips(
     executor: impl PgExecutor<'_>,
     id: Uuid,
-) -> Result<Vec<IpManager>, sqlx::Error> {
+) -> Result<Vec<IpDetail>, sqlx::Error> {
     sqlx::query_as(
         r"SELECT
             m.id, m.device_interface_id, di.device_id, m.network_id,

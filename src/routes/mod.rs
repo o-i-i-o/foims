@@ -427,14 +427,14 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_cabinet_position::<AppState>)
                 .delete(foims_resource::delete_cabinet_position::<AppState>),
         )
-        // IP查询
+        // IP详情
         .route(
             "/api/resources/ip",
-            get(foims_resource::get_ip_managers::<AppState>),
+            get(foims_resource::get_ip_details::<AppState>),
         )
         .route(
             "/api/resources/ip/pull",
-            post(foims_resource::pull_ip_managers::<AppState>),
+            post(foims_resource::pull_ip_details::<AppState>),
         )
         .route(
             "/api/resources/ip/available/{network_id}",
@@ -446,7 +446,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route(
             "/api/resources/ip/batch",
-            post(foims_resource::batch_create_ip_managers::<AppState>),
+            post(foims_resource::batch_create_ip_details::<AppState>),
         )
         // 布局管理
         .route(
