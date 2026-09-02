@@ -72,7 +72,7 @@ pub fn parse_cidr(value: &str) -> Option<(IpAddr, u8)> {
     Some((addr, prefix))
 }
 
-/// 地址是否属于网段（含网络地址与广播地址）。
+/// 地址是否属于子网（含网络地址与广播地址）。
 pub fn ip_in_cidr(ip: IpAddr, cidr_addr: IpAddr, prefix: u8) -> bool {
     match (ip, cidr_addr) {
         (IpAddr::V4(ip), IpAddr::V4(net)) => {

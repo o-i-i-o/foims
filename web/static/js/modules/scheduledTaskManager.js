@@ -105,7 +105,7 @@ function populateNetworkSelect() {
   return fillSelect("scheduled-task-network-id", "/api/resources/networks", {
     placeholderKey: "scheduled_tasks.config_fields.select_network",
     itemToLabel: (net) => net.name || net.id,
-    errorLabelKey: "common.network"
+    errorLabelKey: "common.subnet"
   });
 }
 

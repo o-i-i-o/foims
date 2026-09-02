@@ -337,12 +337,13 @@ pub async fn apply_network_config(
                     ));
                 }
 
-                let network_id: Option<Uuid> = if ip.network_id.is_some() {
-                    // 显式指定网段时校验其必须属于设备所在房间，确保数据一致性
-                    crate::helpers::validate_network_in_room(&mut *tx, room_id, ip.network_id)
-                        .await?;
-                    ip.network_id
+                let network_id: Uuid = if let Some(nid) = ip.network_id {
+                    // 显式指定子网时校验其必须属于设备所在房间，确保数据一致性
+                    crate::helpers::validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
+                    nid
                 } else {
+                    // 未显式指定时按房间绑定子网探测；IP 必须归属子网
+                    //（ips.network_id NOT NULL），探测不中直接报错回滚
                     sqlx::query_scalar(
                         r"SELECT nc.id
                             FROM room_networks rn
@@ -358,6 +359,11 @@ pub async fn apply_network_config(
                     .bind(&ip.ip_address)
                     .fetch_optional(&mut *tx)
                     .await?
+                    .ok_or_else(|| {
+                        AppError::Validation(
+                            msg("server.ip.network_required").with("ip", &ip.ip_address),
+                        )
+                    })?
                 };
 
                 let ip_version = detect_ip_version(&ip.ip_address)?;

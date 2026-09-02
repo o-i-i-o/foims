@@ -49,7 +49,7 @@ async function loadNetworks(regionId, select, excludeIds = []) {
   await fillSelect(select, url, {
     placeholderKey: "network.select_segment",
     filter: (n) => !excludeIds.includes(n.id),
-    errorLabelKey: "common.network"
+    errorLabelKey: "common.subnet"
   });
 }
 
@@ -1217,7 +1217,7 @@ async function loadRoomNetworks(room) {
       await roomNetworkConfigManager.init();
     }
   } catch (error) {
-    console.error("加载网络信息失败:", error);
+    console.error("加载子网信息失败:", error);
     await roomNetworkConfigManager.init();
   }
 }

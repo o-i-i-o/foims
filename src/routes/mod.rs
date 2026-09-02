@@ -323,7 +323,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/options/{resource}",
             get(foims_resource::options::get_resource_options::<AppState>),
         )
-        // 网络管理
+        // 子网管理
         .route(
             "/api/resources/networks",
             get(foims_resource::get_networks::<AppState>)

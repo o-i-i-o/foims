@@ -4,40 +4,40 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="FOIMS - Organization IT Information Management System">
-  <meta name="keywords" content="IT Information Management,IP Address Management,Network Resource Management,Switch Management,FOIMS">
+  <meta name="keywords" content="IT Information Management,IP Address Management,Subnet Resource Management,Switch Management,FOIMS">
   <meta name="theme-color" content="#667eea">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
   <title>FOIMS - Organization IT Information Management System</title>
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01365">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01365">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01365">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01365">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01365">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01365">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01365">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01365">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01365">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01365">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01365">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01365">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01365">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01367">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01367">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01367">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01367">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01367">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01367">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01367">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01367">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01367">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01367">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01367">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01367">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01367">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -122,7 +122,7 @@
           <article class="stat-card clickable" data-nav="resources" data-tab="networks">
             <div class="stat-icon">🌐</div>
             <div class="stat-content">
-              <h3 data-i18n="dashboard.total_networks">Total Networks</h3>
+              <h3 data-i18n="dashboard.total_networks">Total Subnets</h3>
               <div class="stat-value" id="total-networks">0</div>
             </div>
           </article>
@@ -160,7 +160,7 @@
         <div class="dashboard-grid">
           <article class="dashboard-card" data-nav="resources" data-tab="networks">
             <header class="dashboard-card-header">
-              <h3><span class="card-icon">🌐</span><span data-i18n="dashboard.top_networks">Top Networks</span></h3>
+              <h3><span class="card-icon">🌐</span><span data-i18n="dashboard.top_networks">Top Subnets</span></h3>
               <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
             </header>
             <div class="dashboard-card-body">
@@ -249,7 +249,7 @@
       <section id="resources" class="content-section" aria-label="Resources" data-i18n-aria-label="nav.resources">
         <div class="tabs" role="tablist">
           <button class="tab-btn active" data-tab="network-regions" role="tab" aria-selected="true" aria-controls="network-regions-tab" data-i18n="resources.network_regions">Network Regions</button>
-          <button class="tab-btn" data-tab="networks" role="tab" aria-selected="false" aria-controls="networks-tab" data-i18n="resources.network_segments">Network Segments</button>
+          <button class="tab-btn" data-tab="networks" role="tab" aria-selected="false" aria-controls="networks-tab" data-i18n="resources.network_segments">Subnets</button>
           <button class="tab-btn" data-tab="rooms" role="tab" aria-selected="false" aria-controls="rooms-tab" data-i18n="resources.rooms">Rooms</button>
           <button class="tab-btn" data-tab="cabinets" role="tab" aria-selected="false" aria-controls="cabinets-tab" data-i18n="resources.cabinets">Cabinets</button>
           <button class="tab-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devices-tab" data-i18n="resources.devices">Devices</button>
@@ -322,7 +322,7 @@
                     </div>
                   </th>
                   <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
-                  <th><button id="add-network-btn" class="btn btn-primary btn-sm" data-i18n="network.add_network">Add Network</button></th>
+                  <th><button id="add-network-btn" class="btn btn-primary btn-sm" data-i18n="network.add_network">Add Subnet</button></th>
                 </tr>
               </thead>
               <tbody>
@@ -344,7 +344,7 @@
                   <th data-i18n="common.type" class="sortable col-center" data-sort="room_type">Type</th>
                   <th data-i18n="organization.parent_org" class="sortable" data-sort="org_name">Organization</th>
                   <th data-i18n="room.workstation_count" class="col-center">Workstation Count</th>
-                  <th data-i18n="room.networks">Networks</th>
+                  <th data-i18n="room.networks">Subnets</th>
                   <th data-i18n="common.description">Description</th>
                   <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
                   <th><button id="add-room-btn" class="btn btn-primary btn-sm" data-i18n="room.add_room">Add Room</button></th>
@@ -479,7 +479,7 @@
                   </div>
                 </th>
                 <th class="sortable th-searchable" data-sort="network_name">
-                  <span data-i18n="ip.network">Network</span>
+                  <span data-i18n="ip.network">Subnet</span>
                   <button type="button" class="th-search-toggle" data-i18n-aria-label="common.search" aria-label="Search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
@@ -1379,6 +1379,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01365"></script>
+  <script type="module" src="/static/js/app.js?v=01367"></script>
 </body>
 </html>

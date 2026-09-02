@@ -49,7 +49,7 @@ pub struct NetworkRegionUpdate {
     pub ipv6_cidrs: Option<Vec<String>>,
 }
 
-// ==================== 网络模型 ====================
+// ==================== 子网模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct Network {
@@ -221,7 +221,7 @@ mod tests {
     fn test_region_create_valid() -> Result<(), serde_json::Error> {
         let req: NetworkRegionCreate = serde_json::from_value(serde_json::json!({
             "name": "办公区",
-            "description": "一楼办公网络",
+            "description": "一楼办公子网",
             "ipv4_cidrs": ["10.0.0.0/8"],
             "ipv6_cidrs": ["2001:db8::/32"]
         }))?;

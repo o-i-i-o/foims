@@ -1,4 +1,4 @@
-//! 房间资源管理（含网络绑定与子资源级联）。
+//! 房间资源管理（含子网绑定与子资源级联）。
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -136,7 +136,7 @@ pub async fn get_rooms<P: DbProvider>(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    // 批量查询（避免逐房间 N+1）：一次取全部房间的网络、工位数、组织名
+    // 批量查询（避免逐房间 N+1）：一次取全部房间的子网、工位数、组织名
     let conn = state.pool()?.get_conn();
     let room_ids: Vec<Uuid> = rooms.iter().map(|r| r.id).collect();
     let org_ids: Vec<Uuid> = rooms.iter().filter_map(|r| r.org_id).collect();
@@ -234,7 +234,7 @@ pub async fn create_room<P: DbProvider>(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    // 房间与其网络关联必须在同一事务内写入，避免中途失败导致网络关联残缺
+    // 房间与其子网关联必须在同一事务内写入，避免中途失败导致子网关联残缺
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     // 引用存在性校验：org_id 与 network_ids 非法引用返回校验错误，

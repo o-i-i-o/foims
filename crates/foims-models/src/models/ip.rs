@@ -14,7 +14,7 @@ pub struct IpDetail {
     pub device_interface_id: Uuid,
     #[sqlx(default)]
     pub device_id: Uuid,
-    pub network_id: Option<Uuid>,
+    pub network_id: Uuid,
     #[sqlx(default)]
     pub network_region_id: Option<Uuid>,
     #[sqlx(default)]
@@ -39,7 +39,7 @@ pub struct IpDetailWithNames {
     pub device_id: Uuid,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
-    pub network_id: Option<Uuid>,
+    pub network_id: Uuid,
     pub workstation_name: Option<String>,
     pub cabinet_position_name: Option<String>,
     pub interface_name: Option<String>,
@@ -499,7 +499,7 @@ mod tests {
             id: Uuid::new_v4(),
             device_interface_id: Uuid::new_v4(),
             device_id: Uuid::new_v4(),
-            network_id: Some(Uuid::new_v4()),
+            network_id: Uuid::new_v4(),
             network_region_id: None,
             network_name: Some("办公网".to_string()),
             network_region: None,
@@ -527,7 +527,7 @@ mod tests {
             device_id: Uuid::new_v4(),
             device_type: Some("server".to_string()),
             device_name: Some("web-01".to_string()),
-            network_id: None,
+            network_id: Uuid::new_v4(),
             workstation_name: None,
             cabinet_position_name: None,
             interface_name: Some("eth0".to_string()),

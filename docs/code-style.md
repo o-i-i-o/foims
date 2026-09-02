@@ -22,7 +22,7 @@
 
 ```
 foims（bin/lib）             应用组装层：路由装配/系统管理/日志/可视化包装/app_state
-├── crates/foims-resource        资源管理（网络/房间/机柜/工位/设备/IP/链路…）
+├── crates/foims-resource        资源管理（子网/房间/机柜/工位/设备/IP/链路…）
 ├── crates/foims-organization    组织管理（组织树/员工/模板）
 ├── crates/foims-auth            认证与用户管理（登录/JWT/fail2ban/SMTP/操作日志）
 ├── crates/foims-models          领域模型（请求/响应/行模型，唯一副本）

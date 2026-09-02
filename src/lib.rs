@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! main（本 crate：路由装配/系统管理/日志/可视化包装/app_state）
-//!   ├── foims-resource        资源管理（网络/房间/设备/IP/链路…）
+//!   ├── foims-resource        资源管理（子网/房间/设备/IP/链路…）
 //!   ├── foims-organization    组织管理（组织树/员工/模板）
 //!   ├── foims-auth            认证与用户管理（登录/JWT/fail2ban/SMTP/操作日志）
 //!   ├── foims-visualization   拓扑与布局计算

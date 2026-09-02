@@ -40,7 +40,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     org_templates::create(pool).await?;
     device_templates::create(pool).await?;
 
-    // 网络（network_regions → network_cidrs）
+    // 子网（network_regions → network_cidrs）
     network::create(pool).await?;
 
     // 组织（引用 org_templates、自引用）

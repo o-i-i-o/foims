@@ -1,4 +1,4 @@
-//! 资源域内部辅助：网络查询、房间校验、站内通知与 MAC 变更告警。
+//! 资源域内部辅助：子网查询、房间校验、站内通知与 MAC 变更告警。
 //!
 //! 仅由本 crate 的各资源模块使用；不对外再导出。
 
@@ -8,7 +8,7 @@ use foims_common::AppError;
 use foims_common::msg;
 use foims_common::{log_error, log_info, log_warn};
 
-// ==================== 网络业务查询 ====================
+// ==================== 子网业务查询 ====================
 
 pub const NETWORK_QUERY: &str = r"
     SELECT n.id, n.name, n.network_region_id, nt.name as network_region,

@@ -1,4 +1,4 @@
-//! 房间（rooms）与房间网络绑定表结构创建。
+//! 房间（rooms）与房间子网绑定表结构创建。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(

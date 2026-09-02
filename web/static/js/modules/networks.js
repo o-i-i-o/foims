@@ -1318,7 +1318,7 @@ export async function openNetworkRegionModal(networkRegion = null) {
   }
 }
 
-// ====== 网络管理模态框 ======
+// ====== 子网管理模态框 ======
 export async function openNetworkModal(network = null) {
   await openModal("network-modal");
 

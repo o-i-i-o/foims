@@ -308,28 +308,16 @@ pub async fn create_device_ip<P: DbProvider>(
     let network_id = match req.network_id {
         Some(nid) => {
             validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
-            Some(nid)
+            nid
         }
         None => match network_id {
-            Some(nid) => Some(nid),
+            Some(nid) => nid,
+            // 自动探测不中且请求未显式指定子网：IP 必须归属子网
+            //（ips.network_id NOT NULL），不再放行 NULL
             None => {
-                // 自动探测不中且请求未显式指定网段：与导入侧
-                // validate_ip_in_room 同口径——房间绑定了网段时 IP
-                // 必须落在其中（422），仅未绑定任何网段的房间放行
-                // network_id = NULL
-                let room_has_networks: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM room_networks WHERE room_id = $1)",
-                )
-                .bind(room_id)
-                .fetch_one(&mut *tx)
-                .await?;
-                if room_has_networks {
-                    return Err(AppError::Validation(
-                        msg("server.import_export.ip_not_in_room_subnet")
-                            .with("ip", &req.ip_address),
-                    ));
-                }
-                None
+                return Err(AppError::Validation(
+                    msg("server.ip.network_required").with("ip", &req.ip_address),
+                ));
             }
         },
     };
@@ -397,18 +385,15 @@ pub async fn create_device_ip<P: DbProvider>(
 
     tx.commit().await?;
 
-    let (network_name, network_region, network_region_id): (Option<String>, Option<String>, Option<Uuid>) = match network_id {
-        Some(nid) => sqlx::query_as(
-            "SELECT nc.name, nr.name, nc.network_region_id FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
-        )
-        .bind(nid)
-        .fetch_optional(&state.pool()?.get_conn())
-        .await?
-        .map_or((None, None, None), |(name, region, region_id)| {
-            (Some(name), Some(region), Some(region_id))
-        }),
-        None => (None, None, None),
-    };
+    let (network_name, network_region, network_region_id): (Option<String>, Option<String>, Option<Uuid>) = sqlx::query_as(
+        "SELECT nc.name, nr.name, nc.network_region_id FROM network_cidrs nc LEFT JOIN network_regions nr ON nc.network_region_id = nr.id WHERE nc.id = $1",
+    )
+    .bind(network_id)
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?
+    .map_or((None, None, None), |(name, region, region_id)| {
+        (Some(name), Some(region), Some(region_id))
+    });
 
     let mapping = IpDetail {
         id: ip_id,
@@ -981,7 +966,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
         id,
         device_interface_id: interface_id,
         device_id,
-        network_id: Some(req_network_id),
+        network_id: req_network_id,
         network_region_id: None,
         network_name: Some(network.name.clone()),
         network_region: Some(network.network_region.clone()),
@@ -1138,35 +1123,48 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             }
         };
 
-        // 显式指定网段时与单条路径（create_device_ip）保持一致：
-        // 校验网段属于设备所在房间，防止跨房间挂载
-        if ip_req.network_id.is_some() {
-            let room_id: Option<Uuid> =
-                match sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
-                    .bind(device_id)
-                    .fetch_optional(tx.as_mut())
-                    .await
-                {
-                    Ok(room_id) => room_id,
-                    Err(err) => {
-                        log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
-                        duplicate_errors.push(
-                            msg("server.ip.batch_record_query_failed").with("index", index + 1),
-                        );
-                        continue;
-                    }
+        // 网段归属校验：IP 必须归属子网（ips.network_id NOT NULL），
+        // 未显式指定的记录直接报错；显式指定时与单条路径（create_device_ip）
+        // 保持一致：校验子网属于设备所在房间，防止跨房间挂载
+        let network_id = match ip_req.network_id {
+            Some(nid) => {
+                let room_id: Option<Uuid> =
+                    match sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
+                        .bind(device_id)
+                        .fetch_optional(tx.as_mut())
+                        .await
+                    {
+                        Ok(room_id) => room_id,
+                        Err(err) => {
+                            log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                            duplicate_errors.push(
+                                msg("server.ip.batch_record_query_failed").with("index", index + 1),
+                            );
+                            continue;
+                        }
+                    };
+                let network_check = match room_id {
+                    Some(rid) => validate_network_in_room(tx.as_mut(), rid, Some(nid)).await,
+                    // 设备不存在时无所属房间，网段归属校验必然不通过
+                    None => Err(AppError::Validation(msg("server.network.not_in_room"))),
                 };
-            let network_check = match room_id {
-                Some(rid) => validate_network_in_room(tx.as_mut(), rid, ip_req.network_id).await,
-                // 设备不存在时无所属房间，网段归属校验必然不通过
-                None => Err(AppError::Validation(msg("server.network.not_in_room"))),
-            };
-            if let Err(err) = network_check {
-                log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
-                duplicate_errors.push(msg("server.network.not_in_room").with("index", index + 1));
+                if let Err(err) = network_check {
+                    log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                    duplicate_errors
+                        .push(msg("server.network.not_in_room").with("index", index + 1));
+                    continue;
+                }
+                nid
+            }
+            None => {
+                duplicate_errors.push(
+                    msg("server.ip.network_required")
+                        .with("index", index + 1)
+                        .with("ip", &ip_req.ip_address),
+                );
                 continue;
             }
-        }
+        };
 
         let interface_id = match ip_req.device_interface_id {
             Some(iid) => {
@@ -1228,7 +1226,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
         )
         .bind(*id)
         .bind(interface_id)
-        .bind(ip_req.network_id)
+        .bind(network_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
         .bind(&ip_req.description)
@@ -1250,7 +1248,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             id: *id,
             device_interface_id: interface_id,
             device_id,
-            network_id: ip_req.network_id,
+            network_id,
             network_region_id: ip_req
                 .network_id
                 .and_then(|nid| network_names.get(&nid))
@@ -1396,7 +1394,7 @@ mod tests {
 
     #[test]
     fn test_find_available_ipv4_excludes_network_and_broadcast() {
-        // /24 网段应排除网络地址与广播地址
+        // /24 子网应排除网络地址与广播地址
         let available = find_available_ips_in_cidr("192.168.1.0/24", None, &HashSet::new(), None);
         assert_eq!(available.len(), 254, "/24 应有 254 个可用地址");
         assert_eq!(available.first().map(String::as_str), Some("192.168.1.1"));

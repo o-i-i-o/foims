@@ -1,4 +1,4 @@
-//! 业务资源模块（网络/空间/设备/链路/IP 等）。
+//! 业务资源模块（子网/空间/设备/链路/IP 等）。
 
 pub mod cabinets;
 pub mod cable_link;

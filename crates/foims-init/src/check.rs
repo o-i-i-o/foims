@@ -16,7 +16,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "password_history",
         "encryption_keys",
         "system_configs",
-        // 网络
+        // 子网
         "network_regions",
         "network_cidrs",
         "room_networks",
@@ -705,6 +705,43 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), foims_com
         }
     }
 
+    // 非空约束契约：归属关系列漂移为可空说明库结构落后于当前 DDL
+    //（本项目无迁移框架，需按 AGENTS.md 手工执行 ALTER 后重试）。
+    // 与列宽契约同口径独立执行一次，避免随表数量重复扫描
+    for (nn_table, nn_column) in get_required_not_null_columns() {
+        let nullable: Option<String> = match sqlx::query_scalar(
+            sqlx::AssertSqlSafe(format!(
+                "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{nn_table}' AND column_name = '{nn_column}'"
+            )),
+        )
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                return Err(foims_common::msg("server.init.db.column_check_failed")
+                    .with("table", nn_table)
+                    .with("column", nn_column)
+                    .with("error", e))
+            }
+        };
+
+        match nullable.as_deref() {
+            // 列不存在交由上方必需列清单报告，此处跳过
+            None => {}
+            Some("NO") => {}
+            Some(actual) => {
+                return Err(foims_common::msg("server.init.db.column_check_failed")
+                    .with("table", nn_table)
+                    .with("column", nn_column)
+                    .with(
+                        "error",
+                        format!("非空约束不符：期望 NOT NULL，实际 {actual}"),
+                    ));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -733,6 +770,19 @@ pub fn get_required_column_widths() -> Vec<(&'static str, &'static str, i32)> {
         ("devices", "snmp_username", 128),
         ("devices", "snmp_auth_password", 255),
         ("devices", "snmp_priv_password", 255),
+    ]
+}
+
+/// 非空约束契约：`(表名, 列名)`，期望 `information_schema.columns.is_nullable`
+/// 为 'NO'。仅登记承载强制归属关系的列：此类列漂移为可空后，写入路径
+/// 可能产生无法归属的孤儿数据。清单与 `schema/tables/` 的 DDL 保持同步。
+#[must_use]
+pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
+    vec![
+        // IP 必须挂载在网口下（网口删除级联删除 IP）
+        ("ips", "device_interface_id"),
+        // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）
+        ("ips", "network_id"),
     ]
 }
 
