@@ -35,25 +35,8 @@ FOIMS（组织 IT 信息管理系统）是一个基于 Rust 和现代 Web 技术
 - **定时任务**: 内置 cron 调度（数据库备份、日志清理、MAC 同步、令牌清理等）。
 - **通知系统**: 站内通知与邮件通知（SMTP），及时告警 IP/MAC 变更。
 - **证书管理**: 自签名证书/CA 生成、导入、清点与下载，配合 nginx TLS 部署。
-- **服务管理**: 网页端一键注册/重启 systemd 服务。
-- **国际化**: 前后端均支持中英双语切换。
-
-## 🏗️ 技术栈
-
-**后端 (Backend)**
-- **语言**: Rust (Edition 2024)，工作区拆分为 11 个成员 crate
-- **Web 框架**: Axum 0.8 + Tower HTTP
-- **数据库**: PostgreSQL (via SQLx)
-- **认证**: JSON Web Token、bcrypt、TOTP、LDAP (ldap3)、OIDC (openidconnect)
-- **协议采集**: async-snmp (SNMP v1/v2c/v3)
-- **证书**: rcgen / x509-parser
-- **工具**: Tokio, Serde, Tracing, Lettre (Email), rust-i18n
-
-**前端 (Frontend)**
-- **架构**: 原生 ES Modules + HTML5 + CSS3，无构建步骤，即改即用
-- **模块化**: 按业务域拆分 JS 模块，模态页 (modals) 独立 HTML
-- **国际化**: `web/static/i18n/` 下 zh/en 双语言包
-- **质量工具链**: ESLint + Stylelint + Prettier + htmlhint + Jest + Lighthouse（仅用于开发期校验，见 [web/package.json](web/package.json)）
+- **服务管理**: 网页端一键重启 systemd 服务。
+- **国际化**: 前后端多语言支持，目前实现了中文与英文。
 
 ## 🧭 架构概览
 
@@ -75,10 +58,10 @@ FOIMS（组织 IT 信息管理系统）是一个基于 Rust 和现代 Web 技术
 ## 📦 安装与部署
 
 ### 前置要求
-- **Rust**: 最新稳定版（推荐通过 rustup 安装）
-- **PostgreSQL**: 版本 12 或更高
+- **Rust**: 1.87 或更高（推荐通过 rust官方命令安装
+- **PostgreSQL**: 版本 16 或更高
 - **OpenSSL**: 开发库 (libssl-dev，邮件组件 native-tls 依赖)
-- **nginx**: 版本 ≥ 1.25.1（h2c 上游代理；如需 HTTP/3 还需编译 QUIC 支持）
+- **nginx**: 版本 ≥ 1.28.1（h2c 上游代理；如需 HTTP/3 还需编译 QUIC 支持）
 - **系统**: Linux（推荐 Debian 11+ 或 Ubuntu 24.04+）
 
 ### 1. 获取代码与配置
@@ -119,7 +102,7 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 
 ### 4. 初始化系统
 
-- 首次访问会进入初始化向导页面，按提示完成建表并创建管理员账号
+- 首次访问需要修改配置文件 `config.toml` 中的 `init.enabled` 为 `true`，会进入初始化向导页面，按提示完成建表并创建管理员账号
 - 完成初始化后使用该账号登录，建议立即修改密码并在个人设置中启用 2FA
 
 ### 5. 生产环境部署
@@ -135,24 +118,8 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
    - 后端 UDS 路径需与 nginx upstream 一致（默认 `/run/foims/api.sock`）
 
 3. **注册 systemd 服务**
-   - 推荐在 Web 界面「系统设置」中点击注册服务（自动写入 `/etc/systemd/system/foims.service`）
-   - 也可手动编写服务单元，示例：
-     ```ini
-     # /etc/systemd/system/foims.service
-     [Unit]
-     Description=FOIMS - Organization IT Information Management System
-     After=network.target postgresql.service
+   - 通过安装deb包或手动将 `foims.service` 到 `/etc/systemd/system/foims.service`注册为服务运行
 
-     [Service]
-     Type=simple
-     User=root
-     WorkingDirectory=/opt/foims
-     ExecStart=/opt/foims/foims
-     Restart=always
-
-     [Install]
-     WantedBy=multi-user.target
-     ```
 
 4. **启用并启动**
    ```bash
@@ -165,124 +132,6 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 ## 🔧 配置说明
 
 配置文件为 TOML 格式（搜索路径见上文），完整字段与注释见 [config.toml.example](config.toml.example)。
-
-### 数据库配置
-
-```toml
-[database]
-host = "localhost"
-port = 5432
-database = "foims"
-username = "username"
-password = "password"
-max_connections = 20            # 以下连接池参数均有合理默认值，可按需覆盖
-```
-
-### 服务器配置
-
-```toml
-[server]
-public_url = "localhost/"       # 用于拼接外部链接
-page_timeout = 30               # 页面无操作超时（分钟），应大于 access_token_expiry
-cors_allowed_origins = []       # 允许的 CORS 来源
-
-[server.listen]
-uds_path = "/tmp/foims-dev.sock" # UDS socket 路径（生产用 /run/foims/api.sock）
-uds_group = "www-data"           # socket 属组，须与 nginx worker 属组一致
-serve_static = false             # 是否由 axum 托管静态文件（推荐 false，由 nginx 托管）
-```
-
-### 认证配置 (JWT)
-
-```toml
-[jwt]
-secret = "CHANGE_ME_TO_RANDOM_32_PLUS_CHARS"  # openssl rand -base64 48 生成
-access_token_expiry = "15m"                   # 短效令牌
-refresh_token_expiry = "7d"                   # 长效续期令牌
-```
-
-### 速率限制配置
-
-```toml
-[rate_limit]
-enabled = true
-ip_limit = 1000                 # 每 window_secs 单 IP 请求数
-user_limit = 200                # 每 window_secs 单用户请求数
-login_limit = 5                 # 每 window_secs 登录尝试数
-window_secs = 60
-email_limit = 5                 # 每 email_window_secs 邮件发送数
-email_window_secs = 3600
-```
-
-### 国际化配置
-
-```toml
-[i18n]
-log_language = "en"             # 控制台日志语言（zh / en）
-supported_languages = ["zh", "en"]
-```
-
-### SNMP 采集配置
-
-```toml
-[snmp]
-timeout_secs = 5
-retries = 3
-lldp_timeout_secs = 30
-mac_scan_timeout_secs = 10
-```
-
-> SMTP 邮件、通知、密码策略等运行时设置在 Web 界面「系统设置」中配置，无需写入配置文件。
-
-## 📂 项目结构
-
-```
-foims/
-├── src/                          # 主程序（二进制 foims）
-│   ├── routes/                   # API 路由与静态文件服务
-│   ├── system/                   # 系统配置、证书管理、定时任务执行器
-│   ├── log/                      # 操作/登录日志、通知、日志转发
-│   ├── i18n/                     # 后端日志语言资源 (zh.yml / en.yml)
-│   ├── utils/                    # 限流等中间件工具
-│   ├── app_state.rs              # 全局应用状态
-│   ├── shutdown.rs               # 优雅退出
-│   └── main.rs                   # 入口：UDS 监听与启动流程
-├── crates/                       # 工作区子 crate（按领域拆分）
-│   ├── foims-common/             # 响应/错误/配置/加密/连接池/限流等共享设施
-│   ├── foims-models/             # 全业务域请求/响应/行模型（唯一定义）
-│   ├── foims-auth/               # 登录/JWT/2FA/LDAP/SSO/fail2ban/SMTP/操作日志
-│   ├── foims-resource/           # 子网/机房/机柜/工位/设备/IP/线缆链路
-│   ├── foims-organization/       # 组织树/员工/组织模板
-│   ├── foims-visualization/      # 机房布局与拓扑计算
-│   ├── foims-data-management/    # CSV 导入导出/数据库备份
-│   ├── foims-scheduler/          # cron 调度基础设施
-│   ├── foims-init/               # 建库建表/结构校验/备份恢复/初始化向导
-│   └── foims-x509-management/    # X.509 证书管理（纯库）
-├── web/                          # 前端（原生 ESM，无构建步骤）
-│   └── static/
-│       ├── js/                   # ES Module 脚本
-│       │   ├── modules/          # 按业务域拆分的功能模块
-│       │   ├── utils/            # 工具函数（apiClient、resourceLoader 等）
-│       │   ├── app.js            # 主应用脚本
-│       │   └── login.js          # 登录页脚本
-│       ├── css/                  # 样式（base/components/layouts/modals/pages）
-│       ├── i18n/                 # 前端语言包 (zh.json / en.json)
-│       ├── modals/               # 各域模态页 HTML
-│       ├── index.html            # 登录页
-│       ├── init_index.html       # 初始化向导页
-│       └── main.html             # 主应用页
-├── deploy/                       # 部署样例
-│   ├── nginx/                    # nginx 生产/调试配置
-│   └── fail2ban/                 # OS 层 fail2ban 配置
-├── scripts/                      # 运维脚本（init-pgsql.sh、SQL 增量脚本）
-├── docs/                         # 文档（code-style.md、审计报告）
-├── test/                         # API/构建 Shell 脚本
-├── tests/                        # Rust 集成测试（前端一致性校验等）
-├── .trae/ web/.trae/             # 前后端代码风格指南
-├── Cargo.toml                    # 工作区与主 crate 定义
-├── config.toml.example           # 配置样例
-└── LICENSE / NOTICE              # GPL-3.0 许可证与第三方组件清单
-```
 
 ## 🚀 快速开始
 
@@ -301,26 +150,6 @@ foims/
 - **前端风格指南**: [web/.trae/rules/frontend-style-guide.md](web/.trae/rules/frontend-style-guide.md)
 - **后端风格指南**: [.trae/rules/backend-style-guide.md](.trae/rules/backend-style-guide.md)
 - **部署样例**: [deploy/](deploy/)（nginx、fail2ban）
-
-## 🔍 常见问题
-
-### Q: 如何解决自签名证书警告？
-A: 推荐生产环境使用 certbot 申请有效证书；也可在「系统设置 → 证书管理」生成/导入证书后部署到 nginx（证书由 nginx 加载，更换后 `systemctl reload nginx`）。开发环境可将自签名证书加入浏览器信任列表。
-
-### Q: 如何备份数据？
-A: 通过「系统设置」的数据库备份功能，或使用 PostgreSQL 的 `pg_dump` 工具；也可配置定时任务自动备份。
-
-### Q: 如何恢复数据？
-A: 通过「系统设置」的备份恢复功能，或初始化向导中的备份恢复入口。
-
-### Q: 如何配置邮件通知？
-A: 在「系统设置」的 SMTP 配置中填写邮件服务器信息并测试连接。
-
-### Q: 如何接入企业已有账号体系？
-A: 在「系统设置」中配置 LDAP 服务器或 OIDC 单点登录 (SSO)；外部账号登录同样支持强制 2FA 策略。
-
-### Q: 如何启用双因素认证？
-A: 在个人设置页面启用，使用认证器应用扫描二维码并输入验证码。
 
 ## 🐛 故障排查
 
