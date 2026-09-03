@@ -172,7 +172,7 @@
             </div>
           </article>
           
-          <!-- 原 data-tab="ip-manager" 无对应 tab 且 resources 区无 IP 列表,修正为直接跳转 ip 区 -->
+          <!-- 跳转 ip 区 -->
           <article class="dashboard-card" data-nav="ip">
             <header class="dashboard-card-header">
               <h3><span class="card-icon">🔗</span><span data-i18n="dashboard.recent_ips">Recent IP Assignments</span></h3>
@@ -180,6 +180,19 @@
             </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-ips-list">
+                <li class="loading-item"><span class="skeleton"></span></li>
+                <li class="loading-item"><span class="skeleton"></span></li>
+                <li class="loading-item"><span class="skeleton"></span></li>
+              </ul>
+            </div>
+          </article>
+          <article class="dashboard-card" data-nav="logs">
+            <header class="dashboard-card-header">
+              <h3><span class="card-icon">📋</span><span data-i18n="dashboard.recent_logs">Recent Activity</span></h3>
+              <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
+            </header>
+            <div class="dashboard-card-body">
+              <ul class="top-list" id="top-logs-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
                 <li class="loading-item"><span class="skeleton"></span></li>
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -208,20 +221,6 @@
             </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-cabinets-list">
-                <li class="loading-item"><span class="skeleton"></span></li>
-                <li class="loading-item"><span class="skeleton"></span></li>
-                <li class="loading-item"><span class="skeleton"></span></li>
-              </ul>
-            </div>
-          </article>
-          
-          <article class="dashboard-card" data-nav="logs">
-            <header class="dashboard-card-header">
-              <h3><span class="card-icon">📋</span><span data-i18n="dashboard.recent_logs">Recent Activity</span></h3>
-              <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
-            </header>
-            <div class="dashboard-card-body">
-              <ul class="top-list" id="top-logs-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
                 <li class="loading-item"><span class="skeleton"></span></li>
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -461,7 +460,7 @@
                 <th data-i18n="common.index" class="index-column">序号</th>
                 <th data-i18n="ip.location">Location</th>
                 <th class="sortable th-searchable" data-sort="device_name">
-                  <span data-i18n="common.name">Name</span>
+                  <span data-i18n="common.device">Device</span>
                   <button type="button" class="th-search-toggle" data-i18n-aria-label="common.search" aria-label="Search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
