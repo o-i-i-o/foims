@@ -750,6 +750,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/certificate/{kind}/{file_stem}",
             delete(certificate::delete),
         )
+        .route(
+            "/api/system/certificate/{kind}/{file_stem}/apply",
+            post(certificate::apply),
+        )
         // 语言设置
         .route("/api/system/languages", get(get_supported_languages))
         .route("/api/system/language", put(update_language_setting))

@@ -8,8 +8,8 @@ use foims_common::msg;
 use crate::error::CertManagerError;
 use crate::listing::CertKind;
 
-/// 校验文件基础名（不含扩展名，删除操作按 stem 删除 .pem 与 .key）
-fn validate_stem(stem: &str) -> Result<(), CertManagerError> {
+/// 校验文件基础名（不含扩展名，删除/应用操作按 stem 定位 .pem 与 .key）
+pub(crate) fn validate_stem(stem: &str) -> Result<(), CertManagerError> {
     let valid = !stem.is_empty()
         && !stem.contains('/')
         && !stem.contains('\\')

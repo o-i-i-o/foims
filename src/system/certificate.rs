@@ -19,9 +19,9 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use foims_common::msg;
 use foims_x509_management::{
-    CaStatus, CertKind, GenerateCaRequest, GenerateCertRequest, ca_status, delete_certificate,
-    generate_ca, generate_certificate, import_ca, import_certificate, list_certificates,
-    read_ca_cert_pem, set_ca_cert_only,
+    CaStatus, CertKind, GenerateCaRequest, GenerateCertRequest, apply_certificate_to_nginx,
+    ca_status, delete_certificate, generate_ca, generate_certificate, import_ca,
+    import_certificate, list_certificates, read_ca_cert_pem, set_ca_cert_only,
 };
 
 use crate::app_state::AppState;
@@ -301,5 +301,44 @@ pub async fn delete(
     Ok(foims_common::ok_json(
         (),
         "server.certificate.delete_succeeded",
+    ))
+}
+
+/// 应用证书到 nginx 配置：把该证书的证书/私钥路径整体替换进
+/// nginx 的 foims.conf（不自动重启服务，由前端提示用户重启生效）
+pub async fn apply(
+    State(state): State<Arc<AppState>>,
+    meta: RequestMeta,
+    _admin: AdminUser,
+    Path((kind, file_stem)): Path<(String, String)>,
+) -> Result<Response, AppError> {
+    let cert_kind = CertKind::parse(&kind)
+        .ok_or_else(|| AppError::Validation(msg("server.certificate.kind_invalid")))?;
+
+    let result = apply_certificate_to_nginx(cert_kind, &file_stem).await?;
+
+    let updated: Vec<String> = result
+        .updated
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let details = serde_json::json!({
+        "kind": kind,
+        "file_stem": file_stem,
+        "updated": updated,
+    });
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update",
+        "certificate",
+        None,
+        &details,
+    )
+    .await;
+
+    Ok(foims_common::ok_json(
+        (),
+        "server.certificate.apply_succeeded",
     ))
 }

@@ -14,6 +14,7 @@ mod error;
 mod generate;
 mod import;
 mod listing;
+mod nginx;
 mod transfer;
 
 pub use ca::{
@@ -24,6 +25,7 @@ pub use error::CertManagerError;
 pub use generate::{GenerateCertRequest, generate_certificate};
 pub use import::import_certificate;
 pub use listing::{CertFileInfo, CertKind, CertificateInventory, list_certificates};
+pub use nginx::apply_certificate_to_nginx;
 pub use transfer::delete_certificate;
 
 /// 生成的自签名证书目录

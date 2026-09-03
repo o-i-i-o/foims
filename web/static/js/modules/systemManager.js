@@ -1217,6 +1217,32 @@ function renderCertTable(items) {
 
     const actions = tr.querySelector(".cert-actions-cell");
 
+    // 应用：把该证书的证书/私钥路径整体替换进 nginx 的 foims.conf
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.className = "btn btn-primary btn-sm";
+    applyBtn.textContent = t("cert.apply_title");
+    applyBtn.addEventListener("click", async () => {
+      const confirmed = await showConfirm(t("cert.apply_confirm", { file: info.file_stem }));
+      if (!confirmed) {
+        return;
+      }
+      try {
+        const result = await apiPost(
+          `/api/system/certificate/${info.kind}/${encodeURIComponent(info.file_stem)}/apply`
+        );
+        if (result.success) {
+          showToast(result.message, "success");
+        } else {
+          showToast(result.message, "error");
+        }
+      } catch (error) {
+        console.error("应用证书失败:", error);
+        showToast(t("cert.apply_failed"), "error");
+      }
+    });
+    actions.appendChild(applyBtn);
+
     // 证书仅用于程序运行（HTTPS/nginx），不提供下载；删除按钮直接操作服务器文件
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
