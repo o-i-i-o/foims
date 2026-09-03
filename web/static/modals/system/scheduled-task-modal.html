@@ -25,7 +25,7 @@
         <div class="form-group">
           <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
           <input type="text" id="scheduled-task-cron" name="scheduled_task_cron" value="0 */6 * * *" required>
-          <small class="hint-text" data-i18n="scheduled_tasks.cron_hint">e.g., "0 */6 * * *" runs every 6 hours</small>
+          <small class="hint-text"><a href="#" id="cron-examples-link" data-i18n="scheduled_tasks.cron_hint_link">View cron expression examples</a></small>
         </div>
         <div id="scheduled-task-config-section">
           <div class="form-row">
@@ -38,9 +38,9 @@
           </div>
           <div class="form-row">
             <div class="form-group hidden" id="mac-sync-network-config">
-              <label for="scheduled-task-subnet-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span><span class="required">*</span></label>
+              <label for="scheduled-task-subnet-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span></label>
               <select id="scheduled-task-subnet-id" name="scheduled_task_subnet_id">
-                <option value="" data-i18n="scheduled_tasks.config_fields.select_network">Select Network</option>
+                <option value="" data-i18n="scheduled_tasks.config_fields.all_networks">All Subnets</option>
               </select>
             </div>
           </div>

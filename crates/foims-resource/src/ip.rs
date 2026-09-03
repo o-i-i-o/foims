@@ -465,35 +465,57 @@ struct ObservedMacRow {
 async fn sync_switch_macs(
     pool: &sqlx::PgPool,
     device_id: Uuid,
-    subnet_id: Uuid,
+    subnet_id: Option<Uuid>,
 ) -> Result<MacSyncResult, AppError> {
     let mut tx = pool.begin().await?;
 
-    let network_exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
-            .bind(subnet_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    if let Some(subnet_id) = subnet_id {
+        let network_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
+                .bind(subnet_id)
+                .fetch_one(&mut *tx)
+                .await?;
 
-    if !network_exists {
-        return Err(AppError::Validation(msg("server.network.not_found")));
+        if !network_exists {
+            return Err(AppError::Validation(msg("server.network.not_found")));
+        }
     }
 
-    // 一次性取出观测数据与网口快照
-    let observed: Vec<ObservedMacRow> = sqlx::query_as(
-        r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
-                  i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
-                  di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
-          FROM device_macs sm
-          INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
-          INNER JOIN device_interfaces di ON i.device_interface_id = di.id
-          INNER JOIN devices dv ON di.device_id = dv.id
-          WHERE sm.device_id = $1",
-    )
-    .bind(device_id)
-    .bind(subnet_id)
-    .fetch_all(&mut *tx)
-    .await?;
+    // subnet_id 为 None（全部子网）时不对 ips.subnet_id 过滤；
+    // ips.ip_address 全局唯一，同一观测行至多命中一条 IP 记录
+    let observed: Vec<ObservedMacRow> = match subnet_id {
+        Some(subnet_id) => {
+            sqlx::query_as(
+                r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
+                      i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
+                      di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
+              FROM device_macs sm
+              INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
+              INNER JOIN device_interfaces di ON i.device_interface_id = di.id
+              INNER JOIN devices dv ON di.device_id = dv.id
+              WHERE sm.device_id = $1",
+            )
+            .bind(device_id)
+            .bind(subnet_id)
+            .fetch_all(&mut *tx)
+            .await?
+        }
+        None => {
+            sqlx::query_as(
+                r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
+                      i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
+                      di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
+              FROM device_macs sm
+              INNER JOIN ips i ON sm.ip_address = i.ip_address
+              INNER JOIN device_interfaces di ON i.device_interface_id = di.id
+              INNER JOIN devices dv ON di.device_id = dv.id
+              WHERE sm.device_id = $1",
+            )
+            .bind(device_id)
+            .fetch_all(&mut *tx)
+            .await?
+        }
+    };
 
     if observed.is_empty() {
         let total_macs: i64 =
@@ -706,27 +728,52 @@ pub async fn pull_ip_details<P: DbProvider>(
             )
                 .into_response());
         }
-        return Ok(foims_common::ok_json(
-            Vec::<IpDetail>::new(),
-            "server.ip.no_managed_ips",
-        ));
+        // 指定子网与全部子网两种口径的空匹配文案区分
+        let empty_message = if req.subnet_id.is_some() {
+            msg("server.ip.no_managed_ips")
+        } else {
+            msg("server.ip.no_managed_ips_all")
+        };
+        return Ok(foims_common::ok_json(Vec::<IpDetail>::new(), empty_message));
     }
 
-    let results: Vec<IpDetail> = sqlx::query_as::<_, IpDetail>(
-        r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
-           nc.network_region_id AS network_region_id,
-           nc.name AS network_name, nr.name AS network_region,
-           host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
-           m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-           FROM ips m
-           JOIN device_interfaces di ON m.device_interface_id = di.id
-           LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
-           LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-           WHERE m.subnet_id = $1",
-    )
-    .bind(req.subnet_id)
-    .fetch_all(&state.pool()?.get_conn())
-    .await?;
+    // 全部子网模式返回该设备名下的全部 IP 行，避免全量返回所有子网
+    let results: Vec<IpDetail> = match req.subnet_id {
+        Some(subnet_id) => {
+            sqlx::query_as::<_, IpDetail>(
+                r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
+                   nc.network_region_id AS network_region_id,
+                   nc.name AS network_name, nr.name AS network_region,
+                   host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
+                   m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
+                   FROM ips m
+                   JOIN device_interfaces di ON m.device_interface_id = di.id
+                   LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
+                   LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+                   WHERE m.subnet_id = $1",
+            )
+            .bind(subnet_id)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
+        }
+        None => {
+            sqlx::query_as::<_, IpDetail>(
+                r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
+                   nc.network_region_id AS network_region_id,
+                   nc.name AS network_name, nr.name AS network_region,
+                   host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
+                   m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
+                   FROM ips m
+                   JOIN device_interfaces di ON m.device_interface_id = di.id
+                   LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
+                   LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
+                   WHERE di.device_id = $1",
+            )
+            .bind(req.device_id)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?
+        }
+    };
 
     // 同步结果以 key + 计数参数返回，由前端按语言翻译汇总文案
     let message =
@@ -745,7 +792,7 @@ pub async fn pull_ip_details<P: DbProvider>(
 pub async fn pull_ip_details_internal(
     pool: &sqlx::PgPool,
     device_id: Uuid,
-    subnet_id: Uuid,
+    subnet_id: Option<Uuid>,
 ) -> Result<(), String> {
     let result = sync_switch_macs(pool, device_id, subnet_id)
         .await
@@ -755,7 +802,12 @@ pub async fn pull_ip_details_internal(
         })?;
 
     if result.switch_macs_empty {
-        return Err("server.ip.no_managed_ips".to_string());
+        // 指定子网与全部子网两种口径的空匹配文案区分
+        return Err(if subnet_id.is_some() {
+            "server.ip.no_managed_ips".to_string()
+        } else {
+            "server.ip.no_managed_ips_all".to_string()
+        });
     }
 
     Ok(())

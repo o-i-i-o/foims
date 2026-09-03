@@ -158,7 +158,8 @@ pub struct AutoAssignIpRequest {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PullIpDetailsRequest {
     pub device_id: Uuid,
-    pub subnet_id: Uuid,
+    /// None 表示全部子网：同步时不限定 ips.subnet_id（前端“全部子网”选项）
+    pub subnet_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -369,14 +370,20 @@ mod tests {
             "subnet_id": Uuid::new_v4()
         }))?;
         assert!(pull.validate().is_ok());
+
+        // subnet_id 缺省即全部子网，同样合法
+        let pull_all: PullIpDetailsRequest =
+            serde_json::from_value(serde_json::json!({ "device_id": Uuid::new_v4() }))?;
+        assert!(pull_all.validate().is_ok());
+        assert_eq!(pull_all.subnet_id, None);
         Ok(())
     }
 
     #[test]
     fn test_pull_request_missing_fields_rejected() {
-        // device_id / subnet_id 均为必填，缺失时反序列化失败
+        // device_id 必填，缺失时反序列化失败
         let result: Result<PullIpDetailsRequest, _> =
-            serde_json::from_value(serde_json::json!({ "device_id": Uuid::new_v4() }));
+            serde_json::from_value(serde_json::json!({ "subnet_id": Uuid::new_v4() }));
         assert!(result.is_err());
     }
 

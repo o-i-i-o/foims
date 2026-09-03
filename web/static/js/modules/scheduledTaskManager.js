@@ -73,6 +73,11 @@ function bindTaskModalEvents() {
   document
     .getElementById("scheduled-task-form")
     ?.addEventListener("submit", handleScheduledTaskSubmit);
+  // cron 示例链接：在任务模态框之上叠加打开示例表格（modalLoader 按打开顺序自动叠放层级）
+  document.getElementById("cron-examples-link")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    openModal("cron-examples-modal");
+  });
 }
 
 async function handleTaskTypeChange(e) {
@@ -105,8 +110,9 @@ function populateDeviceSelect() {
 }
 
 function populateNetworkSelect() {
+  // 空值选项即“全部子网”：不选具体子网时同步该设备的全部子网
   return fillSelect("scheduled-task-subnet-id", "/api/resources/networks", {
-    placeholderKey: "scheduled_tasks.config_fields.select_network",
+    placeholderKey: "scheduled_tasks.config_fields.all_networks",
     itemToLabel: (net) => net.name || net.id,
     errorLabelKey: "common.subnet"
   });
@@ -293,12 +299,13 @@ async function saveScheduledTask() {
 
   if (taskType === "mac_sync") {
     const deviceId = document.getElementById("scheduled-task-device-id").value;
+    // 子网可缺省：空值表示全部子网，仅设备必选
     const subnetId = document.getElementById("scheduled-task-subnet-id").value;
-    if (!deviceId || !subnetId) {
+    if (!deviceId) {
       showToast(t("scheduled_tasks.required_fields"), "warning");
       return;
     }
-    config = { device_id: deviceId, subnet_id: subnetId };
+    config = subnetId ? { device_id: deviceId, subnet_id: subnetId } : { device_id: deviceId };
   } else if (taskType === "log_cleanup") {
     const keepDays = parseInt(document.getElementById("scheduled-task-keep-days").value, 10) || 30;
     config = { days: keepDays };

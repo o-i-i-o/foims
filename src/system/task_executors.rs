@@ -175,20 +175,21 @@ impl TaskExecutor for MacSyncTaskExecutor {
             .get("device_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
+        // subnet_id 可选：缺省（含旧配置缺失/损坏）时同步该设备的全部子网
         let subnet_id = ctx
             .config
             .get("subnet_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
 
-        match (device_id, subnet_id) {
-            (Some(device_id), Some(subnet_id)) => {
+        match device_id {
+            Some(device_id) => {
                 foims_resource::ip::pull_ip_details_internal(&ctx.pool, device_id, subnet_id)
                     .await
                     .map(|()| "server.task.mac_sync_completed".to_string())
                     .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))
             }
-            _ => Err(SchedulerError::Validation(msg(
+            None => Err(SchedulerError::Validation(msg(
                 "server.task.mac_sync_missing_config",
             ))),
         }

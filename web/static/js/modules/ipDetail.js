@@ -90,7 +90,7 @@ async function loadDevicesForPullMac() {
   });
 }
 
-// 加载网段列表到拉取MAC模态框
+// 加载网段列表到拉取MAC模态框（空值选项即“全部子网”）
 async function loadNetworksForPullMac() {
   let result = null;
   try {
@@ -109,18 +109,18 @@ async function loadNetworksForPullMac() {
 
   const networks = result.success && result.data ? (result.data?.items ?? []) : null;
   if (networks === null) {
-    // success=false 或无 data 时与原实现一致：仅保留占位项
-    await fillSelect("pull-mac-network-select", null, { placeholderKey: "ip.select_network" });
+    // success=false 或无 data 时与原实现一致：仅保留选项
+    await fillSelect("pull-mac-network-select", null, { placeholderKey: "ip.all_networks" });
     return;
   }
   if (networks.length === 0) {
-    await fillSelect("pull-mac-network-select", null, { placeholderKey: "ip.no_network_data" });
+    await fillSelect("pull-mac-network-select", null, { placeholderKey: "ip.all_networks" });
     return;
   }
 
   await fillSelect("pull-mac-network-select", null, {
     items: networks,
-    placeholderKey: "ip.select_network",
+    placeholderKey: "ip.all_networks",
     itemToLabel: (network) => `${network.name} (${network.ipv4_cidr || network.ipv6_cidr || "-"})`
   });
 }
@@ -156,11 +156,6 @@ async function pullIpMacData() {
   const networkSelect = document.getElementById("pull-mac-network-select");
   const subnetId = networkSelect ? networkSelect.value : "";
 
-  if (!subnetId) {
-    showToast(t("ip.select_network_first"), "warning");
-    return;
-  }
-
   const btn = document.getElementById("pull-ip-btn");
   const originalText = btn.textContent;
 
@@ -168,10 +163,13 @@ async function pullIpMacData() {
     btn.innerHTML = `<span class="loading"></span> ${t("ip.pulling")}`;
     btn.disabled = true;
 
-    const result = await apiPost("/api/resources/ip/pull", {
-      device_id: deviceId,
-      subnet_id: subnetId
-    });
+    // 子网可缺省：空值表示全部子网，后端不做 ips.subnet_id 过滤
+    const payload = { device_id: deviceId };
+    if (subnetId) {
+      payload.subnet_id = subnetId;
+    }
+
+    const result = await apiPost("/api/resources/ip/pull", payload);
 
     if (result.success) {
       showToast(result.message || t("ip.pull_mac_success"), "success");
