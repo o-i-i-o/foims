@@ -131,6 +131,13 @@ header.ip-level-bar {
   margin-left: 2px;
 }
 
+/* 复选框字段：覆盖 .nc-field label 的块级样式，保持复选框与文字同行垂直居中 */
+.nc-field .checkbox-label {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0;
+}
+
 /* ===== 输入控件：.nc-input 基样式统一由 components/forms.css 提供 ===== */
 
 /* ===== 操作按钮区域 ===== */
