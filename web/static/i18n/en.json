@@ -1091,7 +1091,7 @@
     "col_remaining": "Days Remaining",
     "subject_alt_names": "Subject Alt Names (SAN)",
     "san_placeholder": "IPs or domains, comma-separated",
-    "san_hint": "Comma-separated IP addresses or domain names; the public URL host is added automatically",
+    "san_hint": "The public URL host is added automatically",
     "import_hint": "Encrypted private keys are not supported; provide an unencrypted PEM key",
     "delete_confirm": "Delete certificate {{file}}? Both certificate and key will be removed.",
     "delete_failed": "Failed to delete certificate",

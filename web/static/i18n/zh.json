@@ -1091,7 +1091,7 @@
     "col_remaining": "剩余天数",
     "subject_alt_names": "主题备用名称(SAN)",
     "san_placeholder": "IP 或域名，逗号分隔",
-    "san_hint": "多个 IP 或域名用英文逗号分隔；系统会自动加入服务器公共 URL 的主机名",
+    "san_hint": "系统会自动加入服务器公共 URL 的主机名",
     "import_hint": "不支持加密私钥，请提供未加密的 PEM 私钥",
     "delete_confirm": "确定要删除证书 {{file}} 吗？证书与私钥将一并删除。",
     "delete_failed": "删除证书失败",
