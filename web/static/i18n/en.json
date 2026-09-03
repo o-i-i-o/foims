@@ -1105,7 +1105,6 @@
     "ca_import": "Import CA",
     "ca_generate_confirm": "Generating a new root CA overwrites the existing one; certificates issued by the old CA will no longer chain. Continue?",
     "ca_none": "No root CA configured",
-    "ca_has_key": "Private key available (can issue certificates)",
     "ca_no_key": "Certificate only (for terminal trust export)",
     "ca_cert_file": "CA Certificate File (PEM format)",
     "ca_key_file": "CA Private Key File (PEM format)",
@@ -1125,6 +1124,10 @@
     "ca_source_root": "Generated",
     "ca_source_imported": "Imported",
     "ca_no_key_label": "no key, cannot sign",
+    "ca_key_ok_label": "has key, can sign",
+    "ca_col_id": "CA ID",
+    "ca_col_type": "CA Type",
+    "ca_col_key": "Private Key",
     "ca_required": "Select an issuing CA"
   },
   "language": {

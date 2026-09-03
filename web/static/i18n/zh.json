@@ -1105,7 +1105,6 @@
     "ca_import": "导入CA",
     "ca_generate_confirm": "生成新的根 CA 将覆盖现有 CA，旧 CA 签发的证书将不再被新链信任。确定继续吗？",
     "ca_none": "尚未配置根 CA",
-    "ca_has_key": "已具备私钥（可签发证书）",
     "ca_no_key": "仅有证书（仅供终端信任导出）",
     "ca_cert_file": "CA 证书文件（PEM 格式）",
     "ca_key_file": "CA 私钥文件（PEM 格式）",
@@ -1125,6 +1124,10 @@
     "ca_source_root": "自生成",
     "ca_source_imported": "导入",
     "ca_no_key_label": "无私钥，不可签发",
+    "ca_key_ok_label": "具备私钥，可签发",
+    "ca_col_id": "CA 标识",
+    "ca_col_type": "CA 类型",
+    "ca_col_key": "私钥",
     "ca_required": "请选择签发 CA"
   },
   "language": {

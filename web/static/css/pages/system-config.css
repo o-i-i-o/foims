@@ -280,18 +280,24 @@ dl.config-field,
   margin-bottom: 8px;
 }
 
-.cert-ca-status {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  font-size: 13px;
-  color: var(--color-text);
-  margin-bottom: 8px;
+/* CA 私钥徽章：具备私钥（可签发）/ 无私钥（不可签发） */
+.ca-key-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.cert-ca-missing {
-  color: var(--color-text-secondary, #6b7280);
+.ca-key-ok {
+  color: #2e7d32;
+  background: rgb(46 125 50 / 12%);
+}
+
+.ca-key-missing {
+  color: #6b7280;
+  background: rgb(107 114 128 / 12%);
 }
 
 .cert-ca-help {

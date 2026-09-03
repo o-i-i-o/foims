@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01370">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01370">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01370">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01370">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01370">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01370">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01370">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01370">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01370">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01370">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01370">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01370">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01370">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01371">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01371">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01371">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01371">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01371">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01371">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01371">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01371">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01371">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01371">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01371">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01371">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01371">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -794,23 +794,39 @@
               <div class="cert-section">
                 <div class="cert-section-header">
                   <h4 class="cert-section-title" data-i18n="cert.ca_section">Site Root CA</h4>
+                  <details class="cert-ca-help">
+                   <summary data-i18n="cert.ca_help_title">How to trust the site root CA</summary>
+                   <div class="cert-ca-help-body">
+                    <p data-i18n="cert.ca_help_windows">Windows: run "certutil -addstore -f Root foims-root-ca.crt" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox will all trust it after a browser restart.</p>
+                    <p data-i18n="cert.ca_help_linux">Debian/Ubuntu: sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates; RHEL/Fedora: sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ &amp;&amp; sudo update-ca-trust extract (the file must be PEM with .crt extension).</p>
+                    <p data-i18n="cert.ca_help_chrome">Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "FOIMS-RootCA" -i foims-root-ca.crt (requires libnss3-tools/nss-tools).</p>
+                    <p data-i18n="cert.ca_help_firefox">Linux Firefox uses its own certificate store: import the CA manually under Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates, or configure the p11-kit trust module via enterprise policy.</p>
+                    <p data-i18n="cert.ca_help_note">Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and automatically falls back to TCP - this is expected behavior.</p>
+                   </div>
+                 </details>
                   <div class="cert-manager-actions">
                     <button type="button" id="ca-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.ca_generate_title">Generate Root CA</button>
                     <button type="button" id="ca-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_import_title">Import CA</button>
                     <button type="button" id="ca-download-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_download">Download CA (PEM)</button>
                   </div>
                 </div>
-                <div id="cert-ca-status" class="cert-ca-status"></div>
-                <details class="cert-ca-help">
-                  <summary data-i18n="cert.ca_help_title">How to trust the site root CA</summary>
-                  <div class="cert-ca-help-body">
-                    <p data-i18n="cert.ca_help_windows">Windows: run "certutil -addstore -f Root foims-root-ca.crt" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox will all trust it after a browser restart.</p>
-                    <p data-i18n="cert.ca_help_linux">Debian/Ubuntu: sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates; RHEL/Fedora: sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ &amp;&amp; sudo update-ca-trust extract (the file must be PEM with .crt extension).</p>
-                    <p data-i18n="cert.ca_help_chrome">Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "FOIMS-RootCA" -i foims-root-ca.crt (requires libnss3-tools/nss-tools).</p>
-                    <p data-i18n="cert.ca_help_firefox">Linux Firefox uses its own certificate store: import the CA manually under Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates, or configure the p11-kit trust module via enterprise policy.</p>
-                    <p data-i18n="cert.ca_help_note">Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and automatically falls back to TCP - this is expected behavior.</p>
-                  </div>
-                </details>
+                <div class="table-container cert-table-container">
+                  <table id="ca-list-table" class="data-table" aria-label="CAs">
+                    <thead>
+                      <tr>
+                        <th data-i18n="cert.ca_col_id">CA ID</th>
+                        <th data-i18n="cert.ca_col_type">CA Type</th>
+                        <th data-i18n="cert.col_subject">Subject (CN)</th>
+                        <th data-i18n="cert.col_validity">Validity</th>
+                        <th data-i18n="cert.col_remaining">Days Remaining</th>
+                        <th data-i18n="cert.ca_col_key">Private Key</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="empty-row"><td colspan="6" class="text-center" data-i18n="common.no_data">No data available</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div class="cert-section">
@@ -1383,6 +1399,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01370"></script>
+  <script type="module" src="/static/js/app.js?v=01371"></script>
 </body>
 </html>

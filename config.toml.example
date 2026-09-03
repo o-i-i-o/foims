@@ -40,6 +40,7 @@ uds_group = "www-data"
 # 是否由 axum 托管静态文件
 # - false（推荐）：静态文件由 nginx 直接服务，axum 仅 API
 # - true：axum 同时托管静态文件和 API（不推荐，与 nginx 重复）
+# - axum托管静态文件仅供开发测试，功能可能存在异常或缺失，生产环境请确保nginx托管
 serve_static = false
 
 [jwt]

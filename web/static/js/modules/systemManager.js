@@ -1265,34 +1265,48 @@ export async function loadCertificateInventory() {
       ...(result.data.imported || []).map((info) => decorateCertItem(info, "imported"))
     ];
     renderCertTable(merged);
-    renderCaStatus(result.data.ca);
+    // CA 池（根 CA + 导入 CA）以表格展示，样式与证书列表一致
+    renderCaTable(lastCaList);
   } catch (error) {
     console.error("加载证书列表失败:", error);
   }
 }
 
-// 渲染站点根 CA 状态（无 CA 时提示未配置）
-function renderCaStatus(ca) {
-  const container = elementCache.get("cert-ca-status");
-  if (!container) {
+// 渲染 CA 列表表格：根 CA 在前、导入 CA 在后，以"CA 类型"列区分；
+// 私钥列标识该 CA 能否签发证书（无私钥的 CA 仅供终端信任导出）
+function renderCaTable(cas) {
+  const tbody = document.querySelector("#ca-list-table tbody");
+  if (!tbody) {
     return;
   }
 
-  if (!ca || !ca.available) {
-    container.innerHTML = `<span class="cert-ca-missing">${t("cert.ca_none")}</span>`;
+  if (!cas || cas.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("common.no_data")}</td></tr>`;
     return;
   }
 
-  const days = ca.days_remaining;
-  const daysText = certDaysText(days);
-  const daysClass = certDaysClass(days);
-  const keyText = ca.has_key ? t("cert.ca_has_key") : t("cert.ca_no_key");
+  tbody.innerHTML = "";
+  cas.forEach((ca) => {
+    const tr = document.createElement("tr");
 
-  container.innerHTML = `
-    <span class="cert-ca-field"><strong>${escapeHtml(ca.subject_cn || "-")}</strong></span>
-    <span class="cert-ca-field">${formatCertValidity(ca)}</span>
-    <span class="cert-ca-field ${daysClass}">${t("cert.col_remaining")}: ${daysText}</span>
-    <span class="cert-ca-field">${keyText}</span>`;
+    const days = ca.days_remaining;
+    const daysText = certDaysText(days);
+    const daysClass = certDaysClass(days);
+    const sourceClass = ca.source === "root" ? "cert-type-generated" : "cert-type-imported";
+    const sourceText = ca.source === "root" ? t("cert.ca_source_root") : t("cert.ca_source_imported");
+    const keyClass = ca.has_key ? "ca-key-ok" : "ca-key-missing";
+    const keyText = ca.has_key ? t("cert.ca_key_ok_label") : t("cert.ca_no_key_label");
+
+    tr.innerHTML = `
+      <td title="${escapeHtml(ca.id)}">${escapeHtml(ca.id)}</td>
+      <td><span class="cert-type-badge ${sourceClass}">${escapeHtml(sourceText)}</span></td>
+      <td>${escapeHtml(ca.name || "-")}</td>
+      <td>${formatCertValidity(ca)}</td>
+      <td class="${daysClass}">${daysText}</td>
+      <td><span class="ca-key-badge ${keyClass}">${escapeHtml(keyText)}</span></td>`;
+
+    tbody.appendChild(tr);
+  });
 }
 
 // 下载站点根 CA（仅 PEM 格式；CA 证书是公开数据）
