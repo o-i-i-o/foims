@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn 旋转规范化_钳到0至360() {
+    fn 旋转取整_负角回绕_正角钳位() {
         assert_eq!(pos(0.0, 0.0, 1.0, 1.0, 359.6).rotation_i32(), 360);
         assert_eq!(
             pos(0.0, 0.0, 1.0, 1.0, 400.0).rotation_i32(),
@@ -507,8 +507,8 @@ mod tests {
         );
         assert_eq!(
             pos(0.0, 0.0, 1.0, 1.0, -5.0).rotation_i32(),
-            0,
-            "负旋转钳为 0"
+            355,
+            "负角规范化为等价正角（与 rotation_i32 的写库回读约定一致）"
         );
         assert_eq!(pos(0.0, 0.0, 1.0, 1.0, 0.4).rotation_i32(), 0);
     }

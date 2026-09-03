@@ -2100,6 +2100,11 @@
         "type_invalid": "Room type must be one of: office, lobby, reception, data_center, telecom_closet, other"
       }
     },
+    "services": {
+      "not_registered": "Service not registered: {{unit}} not found in system service directories",
+      "op_failed": "Service operation failed: {{unit}} {{op}}: {{detail}}",
+      "systemctl_missing": "systemctl is not installed; cannot manage system services"
+    },
     "smtp": {
       "build_failed": "Failed to build email",
       "config_retrieved": "SMTP configuration retrieved",

@@ -2100,6 +2100,11 @@
         "type_invalid": "房间类型必须是 office、lobby、reception、data_center、telecom_closet 或 other"
       }
     },
+    "services": {
+      "not_registered": "未注册服务：系统服务目录中未找到 {{unit}}",
+      "op_failed": "服务操作失败：{{unit}} {{op}}：{{detail}}",
+      "systemctl_missing": "系统未安装 systemctl，无法管理系统服务"
+    },
     "smtp": {
       "build_failed": "邮件构建失败",
       "config_retrieved": "SMTP配置获取成功",

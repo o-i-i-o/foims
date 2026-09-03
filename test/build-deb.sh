@@ -1,26 +1,49 @@
 #!/bin/bash
+# FOIMS DEB 打包脚本（Debian 规范）
+#
+# 用法：bash test/build-deb.sh
+# 产物：target/foims_<版本>_<架构>.deb
+#
+# 设计约束：
+#   - 仅打包不安装：dpkg-deb --root-owner-group 归一化属主，全程无需 root，
+#     可在 CI 与普通用户环境直接运行
+#   - systemd 单元唯一来源为 deploy/services/foims.service，本脚本不再内嵌副本
+#   - web 目录仅打包 static/（package.json、tests、eslint 等开发工具链文件不进包）
 
-set -e
+set -euo pipefail
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "错误：请以 root 权限运行此脚本" >&2
+# 路径推导：脚本位于 test/，项目根为其上一级目录（不再硬编码绝对路径）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEBPAK_DIR="$PROJECT_DIR/target/debpak"
+BINARY_NAME="foims"
+SERVICE_SRC="$PROJECT_DIR/deploy/services/foims.service"
+
+# 前置检查
+for cmd in cargo dpkg-deb; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "错误：缺少必要命令 $cmd" >&2
+        exit 1
+    fi
+done
+if [ ! -f "$SERVICE_SRC" ]; then
+    echo "错误：缺少服务文件 $SERVICE_SRC" >&2
     exit 1
 fi
 
-SCRIPT_DIR="/root/ipma"
-PROJECT_DIR="/root/ipma"
-DEBPAK_DIR="$PROJECT_DIR/debpak"
-BINARY_NAME="foims"
-
-# 从 Cargo.toml 读取版本号
-VERSION=$(grep -m1 '^version = "' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-ARCH="amd64"
+# 从根 Cargo.toml 读取版本号（首个 version 赋值行即主程序版本）
+VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$PROJECT_DIR/Cargo.toml" | head -n1)
+if [ -z "$VERSION" ]; then
+    echo "错误：无法从 Cargo.toml 解析版本号" >&2
+    exit 1
+fi
+ARCH="$(dpkg --print-architecture)"
 DEB_NAME="foims_${VERSION}_${ARCH}.deb"
 
 echo "=== FOIMS DEB 打包脚本 (Debian 规范) ==="
 echo "项目目录: $PROJECT_DIR"
 echo "打包目录: $DEBPAK_DIR"
-echo "版本: $VERSION"
+echo "版本: $VERSION  架构: $ARCH"
 
 cd "$PROJECT_DIR"
 
@@ -29,7 +52,7 @@ echo "1. 编译 release 版本..."
 cargo build --release
 
 if [ ! -f "target/release/$BINARY_NAME" ]; then
-    echo "错误: 编译失败，找不到二进制文件"
+    echo "错误: 编译失败，找不到二进制文件" >&2
     exit 1
 fi
 
@@ -55,36 +78,39 @@ echo ""
 echo "4. 复制二进制文件..."
 cp -f "target/release/$BINARY_NAME" "$DEBPAK_DIR/usr/bin/"
 chmod 755 "$DEBPAK_DIR/usr/bin/$BINARY_NAME"
-strip "$DEBPAK_DIR/usr/bin/$BINARY_NAME"
+# strip 可选（最小化环境可能未装 binutils）
+if command -v strip >/dev/null 2>&1; then
+    strip "$DEBPAK_DIR/usr/bin/$BINARY_NAME"
+fi
 
 echo ""
 echo "5. 复制资源文件..."
-if [ -d "web" ]; then
-    cp -r web "$DEBPAK_DIR/opt/foims/"
-    # 删除开发配置文件
-    rm -f "$DEBPAK_DIR/opt/foims/web/.eslintrc.json"
-    rm -f "$DEBPAK_DIR/opt/foims/web/.editorconfig"
-    # 设置 web 目录权限
+# 仅打包 web/static：后端与 nginx 均只消费该目录，
+# 其余（package.json/tests/lint 配置/.trae）为开发工具链文件
+if [ -d "web/static" ]; then
+    mkdir -p "$DEBPAK_DIR/opt/foims/web"
+    cp -r web/static "$DEBPAK_DIR/opt/foims/web/"
     find "$DEBPAK_DIR/opt/foims/web" -type d -exec chmod 755 {} \;
     find "$DEBPAK_DIR/opt/foims/web" -type f -exec chmod 644 {} \;
 fi
-if [ -d "templates" ]; then
-    cp -r templates "$DEBPAK_DIR/opt/foims/"
-    # 设置 templates 目录权限
-    find "$DEBPAK_DIR/opt/foims/templates" -type d -exec chmod 755 {} \;
-    find "$DEBPAK_DIR/opt/foims/templates" -type f -exec chmod 644 {} \;
-fi
 
-# 复制配置文件到 /etc/foims/
+# 复制配置文件到 /etc/foims/（conffile，升级时 dpkg 保留本地修改）
 if [ -f "config.toml" ]; then
     cp config.toml "$DEBPAK_DIR/etc/foims/config.toml"
     chmod 640 "$DEBPAK_DIR/etc/foims/config.toml"
 fi
 
 # 复制初始化脚本
-if [ -d "scripts" ]; then
+if [ -d "scripts" ] && ls scripts/*.sh >/dev/null 2>&1; then
     cp scripts/*.sh "$DEBPAK_DIR/usr/share/foims/scripts/"
     chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh
+fi
+
+# 复制部署说明（nginx/fail2ban 配置与服务文件供运维参考）
+if [ -d "deploy" ]; then
+    mkdir -p "$DEBPAK_DIR/usr/share/foims/deploy"
+    cp -r deploy/nginx deploy/services deploy/fail2ban "$DEBPAK_DIR/usr/share/foims/deploy/"
+    find "$DEBPAK_DIR/usr/share/foims/deploy" -type f -exec chmod 644 {} \;
 fi
 
 echo ""
@@ -126,49 +152,12 @@ polkit.addRule(function(action, subject) {
 EOF
 
 echo ""
-echo "7. 创建 systemd service 文件..."
-cat > "$DEBPAK_DIR/usr/lib/systemd/system/foims.service" << 'EOF'
-[Unit]
-Description=IP Management Application
-Documentation=man:foims(1)
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=foims
-Group=foims
-WorkingDirectory=/opt/foims
-ExecStart=/usr/bin/foims
-Restart=always
-RestartSec=5s
-
-# 允许绑定低端口 (80, 443)
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-
-# 安全加固
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/foims /var/log/foims /etc/foims
-PrivateTmp=true
-ProtectKernelTunables=true
-ProtectControlGroups=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-
-# 资源限制
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-EOF
+echo "7. 安装 systemd service 文件（来源 deploy/services/foims.service）..."
+cp "$SERVICE_SRC" "$DEBPAK_DIR/usr/lib/systemd/system/foims.service"
 
 echo ""
 echo "8. 创建 DEBIAN/control 文件..."
 mkdir -p "$DEBPAK_DIR/DEBIAN"
-
-INSTALLED_SIZE=$(du -sk "$DEBPAK_DIR" | cut -f1)
 
 cat > "$DEBPAK_DIR/DEBIAN/control" << EOF
 Package: foims
@@ -176,14 +165,15 @@ Version: $VERSION
 Section: net
 Priority: optional
 Architecture: $ARCH
-Maintainer: FOIMS Team <admin@example.com>
-Installed-Size: $INSTALLED_SIZE
+Maintainer: oi-io <boss@oi-io.cc>
+Installed-Size: 0
 Depends: libc6 (>= 2.31), adduser
 Recommends: postgresql
 Suggests: nginx
 Homepage: https://github.com/example/foims
-Description: IP Management Application
- A comprehensive IP address management system with web interface.
+Description: Organization IT Information Management System
+ FOIMS - Organization IT Information Management System based on Rust
+ Axum and PostgreSQL, with web interface.
  Features include:
   - IP allocation and tracking
   - Switch management with SNMP support
@@ -240,8 +230,9 @@ case "$1" in
             chmod 640 /etc/foims/config.toml
         fi
 
-        # 重载并启用 systemd
+        # 重载 systemd 并启用服务
         if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload
             deb-systemd-helper enable foims.service >/dev/null || true
             deb-systemd-invoke start foims.service >/dev/null || true
         fi
@@ -254,7 +245,6 @@ case "$1" in
         echo "postinst called with unknown argument \`$1'" >&2
         ;;
 esac
-systemctl daemon-reload
 
 exit 0
 EOF
@@ -331,31 +321,26 @@ echo "14. 创建文档文件..."
 cat > "$DEBPAK_DIR/usr/share/doc/foims/copyright" << 'EOF'
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: foims
-Upstream-Contact: FOIMS Team <admin@example.com>
+Upstream-Contact: oi-io <boss@oi-io.cc>
 Source: https://github.com/example/foims
 
 Files: *
-Copyright: 2024 FOIMS Team
-License: MIT
+Copyright: 2024-2026 oi-io
+License: GPL-3.0-or-later
 
-License: MIT
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+License: GPL-3.0-or-later
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
  .
- The above copyright notice and this permission notice shall be included in all
- copies or substantial portions of the Software.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
  .
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- SOFTWARE.
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <https://www.gnu.org/licenses/>.
 EOF
 
 # 创建 changelog（Debian 格式）
@@ -363,9 +348,9 @@ cat > "$DEBPAK_DIR/usr/share/doc/foims/changelog" << EOF
 foims ($VERSION) stable; urgency=medium
 
   * Release version $VERSION
-  * IP Management Application with web interface
+  * Organization IT Information Management System with web interface
 
- -- FOIMS Team <admin@example.com>  $(date -R)
+ -- oi-io <boss@oi-io.cc>  $(date -R)
 EOF
 gzip -9 -n "$DEBPAK_DIR/usr/share/doc/foims/changelog"
 
@@ -377,15 +362,16 @@ fi
 echo ""
 echo "15. 创建 man 手册页..."
 cat > "$DEBPAK_DIR/usr/share/man/man1/foims.1" << EOF
-.TH FOIMS 1 "$(date +'%B %Y')" "foims $VERSION" "IP Management Application"
+.TH FOIMS 1 "$(date +'%B %Y')" "foims $VERSION" "Organization IT Information Management System"
 .SH NAME
-foims \- IP Management Application
+foims \- Organization IT Information Management System
 .SH SYNOPSIS
 .B foims
 .RI [ options ]
 .SH DESCRIPTION
 .B foims
-is a comprehensive IP address management system with web interface.
+is an organization IT information management system based on Rust
+Axum and PostgreSQL, with a web interface.
 .PP
 Features include:
 .IP \(bu 2
@@ -413,6 +399,9 @@ Application resources directory.
 .TP
 .I /var/log/foims/
 Log files directory.
+.TP
+.I /usr/share/foims/deploy/
+Reference nginx/systemd/fail2ban deployment configurations.
 .SH SERVICE
 The application runs as a systemd service:
 .PP
@@ -424,10 +413,9 @@ systemctl status foims
 .RE
 .fi
 .SH AUTHOR
-FOIMS Team <admin@example.com>
+oi-io <boss@oi-io.cc>
 .SH "SEE ALSO"
-.BR systemd (1),
-.BR postgresql (1)
+.BR systemd (1)
 EOF
 gzip -9 -n "$DEBPAK_DIR/usr/share/man/man1/foims.1"
 
@@ -449,7 +437,6 @@ EOF
 
 echo ""
 echo "17. 设置文件权限..."
-# 精细设置权限，避免递归
 chmod 755 "$DEBPAK_DIR/usr/bin/$BINARY_NAME"
 chmod 755 "$DEBPAK_DIR/DEBIAN/preinst"
 chmod 755 "$DEBPAK_DIR/DEBIAN/postinst"
@@ -490,8 +477,8 @@ chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/rules.d/foims.rules"
 chmod 644 "$DEBPAK_DIR/usr/share/lintian/overrides/foims"
 
 # 确保脚本文件可执行
-if [ -d "$DEBPAK_DIR/usr/share/foims/scripts" ]; then
-    chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts"/*.sh
+if [ -d "$DEBPAK_DIR/usr/share/foims/scripts" ] && ls "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh >/dev/null 2>&1; then
+    chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh
 fi
 
 echo ""
@@ -501,22 +488,25 @@ sed -i "s/^Installed-Size:.*/Installed-Size: $INSTALLED_SIZE/" "$DEBPAK_DIR/DEBI
 
 echo ""
 echo "19. 构建 DEB 包..."
-dpkg-deb --root-owner-group --build "$DEBPAK_DIR" "$PROJECT_DIR/$DEB_NAME"
+dpkg-deb --root-owner-group --build "$DEBPAK_DIR" "$PROJECT_DIR/target/$DEB_NAME"
 
 echo ""
 echo "=== 打包完成 ==="
-echo "DEB 包: $PROJECT_DIR/$DEB_NAME"
-ls -lh "$PROJECT_DIR/$DEB_NAME"
+echo "DEB 包: $PROJECT_DIR/target/$DEB_NAME"
+ls -lh "$PROJECT_DIR/target/$DEB_NAME"
 
 echo ""
 echo "验证 DEB 包..."
-lintian "$PROJECT_DIR/$DEB_NAME" --tag-display-limit 0 || true
+dpkg-deb --info "$PROJECT_DIR/target/$DEB_NAME"
+if command -v lintian >/dev/null 2>&1; then
+    lintian "$PROJECT_DIR/target/$DEB_NAME" --tag-display-limit 0 || true
+else
+    echo "提示：未安装 lintian，跳过静态检查"
+fi
 
 rm -rf "$DEBPAK_DIR"
 echo "已删除临时目录: $DEBPAK_DIR"
 
-
 echo ""
-echo "安装命令: sudo dpkg -i $DEB_NAME"
-echo "查看信息: dpkg -I $DEB_NAME"
-echo "查看内容: dpkg -c $DEB_NAME"
+echo "安装命令: sudo dpkg -i target/$DEB_NAME"
+echo "查看内容: dpkg -c target/$DEB_NAME"

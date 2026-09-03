@@ -12,6 +12,7 @@
 //!   ├── foims-scheduler       定时任务调度
 //!   ├── foims-init            数据库初始化与校验
 //!   ├── foims-x509-management    证书管理
+//!   ├── foims-services       systemd 服务管理（foims/nginx）
 //!   ├── foims-models          领域模型（请求/响应/行模型）
 //!   └── foims-common          共享基础设施（响应/错误/配置/加密/连接池/限流/网络工具）
 //! ```

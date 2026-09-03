@@ -88,7 +88,7 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -97,10 +97,9 @@ jobs:
           target: x86_64-unknown-linux-gnu
           components: rustfmt, clippy
 
+      # 仓库根即 Cargo workspace（members 含 crates/*），无需额外 workspaces 配置
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: foims -> ./foims
 
       - name: 检查代码格式
         run: cargo fmt --check
@@ -114,10 +113,9 @@ jobs:
       - name: 构建项目
         run: cargo build --release --verbose
 
+      # 打包脚本 test/build-deb.sh 无需 root：产物输出至 target/foims_<版本>_<架构>.deb
       - name: 构建 DEB 安装包
-        run: |
-          chmod +x build-deb.sh
-          ./build-deb.sh
+        run: bash test/build-deb.sh
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -125,7 +123,7 @@ jobs:
           name: foims-ubuntu-build
           path: |
             target/release/foims
-            foims_*.deb
+            target/foims_*.deb
           retention-days: 30
 
   release:
@@ -134,10 +132,6 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-
-    defaults:
-      run:
-        working-directory: .
 
     steps:
       - uses: actions/checkout@v4
@@ -155,16 +149,12 @@ jobs:
 
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: foims -> ./foims
 
       - name: 构建发布版本
         run: cargo build --release --verbose
 
       - name: 构建 DEB 安装包
-        run: |
-          chmod +x build-deb.sh
-          ./build-deb.sh
+        run: bash test/build-deb.sh
 
       - name: 获取版本号
         id: version
@@ -173,7 +163,7 @@ jobs:
       - name: 打包发布文件
         run: |
           mkdir -p release
-          cp foims_*.deb release/
+          cp target/foims_*.deb release/
           cp target/release/foims release/
           tar -czvf foims-${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz release/
           rm -rf release

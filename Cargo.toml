@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/foims-common", "crates/foims-init", "crates/foims-visualization", "crates/foims-data-management", "crates/foims-scheduler", "crates/foims-models", "crates/foims-auth", "crates/foims-organization", "crates/foims-resource", "crates/foims-x509-management"]
+members = [".", "crates/foims-common", "crates/foims-init", "crates/foims-visualization", "crates/foims-data-management", "crates/foims-scheduler", "crates/foims-models", "crates/foims-auth", "crates/foims-organization", "crates/foims-resource", "crates/foims-x509-management", "crates/foims-services"]
 resolver = "2"
 
 [workspace.package]
@@ -86,7 +86,7 @@ config = { version = "0.15.25", features = ["toml"] }
 
 [package]
 name = "foims"
-version = "0.20.6"
+version = "0.20.7"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"
@@ -104,6 +104,7 @@ foims-auth = { path = "crates/foims-auth" }
 foims-organization = { path = "crates/foims-organization" }
 foims-resource = { path = "crates/foims-resource" }
 foims-x509-management = { path = "crates/foims-x509-management" }
+foims-services = { path = "crates/foims-services" }
 
 # Workspace dependencies (使用共享版本)
 axum = { workspace = true }

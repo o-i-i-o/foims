@@ -1,0 +1,59 @@
+# FOIMS 生产环境 systemd 服务单元
+#
+# 使用方式：
+#   1. DEB 包安装时由 test/build-deb.sh 自动安装到 /usr/lib/systemd/system/
+#   2. 手动部署：sudo cp deploy/services/foims.service /etc/systemd/system/foims.service
+#      sudo systemctl daemon-reload && sudo systemctl enable --now foims
+#
+# 路径约定（与 test/build-deb.sh 打包布局一致）：
+#   二进制   /usr/bin/foims
+#   静态资源 /opt/foims/web（static_files.rs 搜索路径第一位）
+#   配置     /etc/foims/config.toml（CONFIG_PATHS 最高优先级）
+#
+# UDS 监听路径需三方一致：config.toml [server.listen] uds_path、
+#   本单元的 RuntimeDirectory=foims、deploy/nginx/foims.conf 的 upstream。
+#   生产推荐 /run/foims/api.sock（目录由 RuntimeDirectory 自动创建）。
+# nginx 进程需能读写该 socket：config.toml uds_group 与下方 SupplementaryGroups
+#   保持一致（Debian 系 nginx 以 www-data 运行，RHEL 系为 nginx）。
+
+[Unit]
+Description=FOIMS - Organization IT Information Management System
+Documentation=man:foims(1)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=foims
+Group=foims
+# 允许 foims 进程将 UDS 的属组改为 nginx 运行组（与 uds_group 配置一致）
+SupplementaryGroups=www-data
+WorkingDirectory=/opt/foims
+ExecStart=/usr/bin/foims
+Restart=always
+RestartSec=5s
+
+# UDS 目录：systemd 启动时自动创建 /run/foims（属主 foims:foims），
+# ProtectSystem=strict 下运行时目录仍可写，无需加入 ReadWritePaths
+RuntimeDirectory=foims
+RuntimeDirectoryMode=0755
+
+# 允许绑定低端口 (80, 443)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/foims /var/log/foims /etc/foims
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# 资源限制
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

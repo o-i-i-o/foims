@@ -1,0 +1,18 @@
+[package]
+name = "foims-services"
+version = "0.1.0"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Services - systemd 服务管理（foims / nginx）"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# Workspace crates
+foims-common = { path = "../foims-common" }
+
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

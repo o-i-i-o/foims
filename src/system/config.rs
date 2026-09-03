@@ -21,6 +21,8 @@ use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::config::{Config, I18nConfig, ServerConfig};
 use foims_common::{log_error, log_info, log_warn, msg};
+use foims_services::ManagedService;
+use foims_services::systemd::systemctl_global;
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
@@ -264,8 +266,6 @@ pub async fn update_system_config(
 }
 
 pub async fn trigger_service_restart() -> Result<Response, AppError> {
-    let service_name = "foims.service";
-
     let is_running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
         .await
         .unwrap_or(false);
@@ -276,36 +276,28 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
     );
 
     if is_running_as_service {
-        let check_output = Command::new("systemctl")
-            .args(["show", "foims.service", "--property=ActiveState"])
-            .output()
-            .await;
-
-        let is_active = match check_output {
-            Ok(output) => {
-                let status = String::from_utf8_lossy(&output.stdout);
-                status.contains("ActiveState=active")
-            }
-            Err(_) => true,
-        };
-
-        log_info!("log.system.service_state", active = is_active);
+        // 预检服务注册状态：未注册直接向调用方报「未注册服务」，
+        // 不做独立进程重启等回退
+        ManagedService::Foims.require_unit_file().await?;
 
         // 在后台延迟执行 systemctl restart：若直接 await，成功重启会杀死本进程导致响应不可达。
-        // 先返回响应，由后台任务触发重启；若 systemctl 因权限等原因未能终止进程，则回退到进程退出方式。
-        let service_name_owned = service_name.to_string();
+        // 先返回响应，由后台任务触发重启。
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            log_info!("log.system.systemctl_restart", service = service_name_owned);
-            let _ = Command::new("systemctl")
-                .arg("restart")
-                .arg(&service_name_owned)
-                .output()
-                .await;
-            // 给 systemctl 一点时间终止本进程；若仍存活则主动退出（systemd Restart=always 会拉起）
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            log_info!("log.system.systemctl_exit_fallback");
-            std::process::exit(0);
+            log_info!("log.system.systemctl_restart", service = "foims.service");
+            match ManagedService::Foims.restart().await {
+                Ok(()) => {
+                    // 给 systemctl 一点时间终止本进程；若仍存活则主动退出（systemd Restart=always 会拉起）
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    log_info!("log.system.systemctl_exit_fallback");
+                    std::process::exit(0);
+                }
+                // 重启命令失败（权限不足等）：保持服务运行并记录错误，
+                // 不再盲目 exit(0)（否则健康进程被误杀且无诊断信息）
+                Err(e) => {
+                    log_error!("log.system.systemctl_restart_failed", error = e);
+                }
+            }
         });
 
         Ok(foims_common::ok_json(
@@ -325,18 +317,22 @@ pub async fn restart_application(
     trigger_service_restart().await
 }
 
+/// 是否以 systemd 服务方式运行。
+///
+/// 仅认 systemd 自身的运行痕迹（INVOCATION_ID / cgroup 归属）；
+/// 「单元文件存在」不代表本进程由 systemd 拉起，不作为判据。
 fn check_if_running_as_service() -> bool {
     if std::env::var("INVOCATION_ID").is_ok() {
         return true;
     }
 
-    if let Ok(pid) = std::fs::read_to_string("/proc/self/cgroup")
-        && (pid.contains("systemd") || pid.contains(".service"))
+    if let Ok(cgroup) = std::fs::read_to_string("/proc/self/cgroup")
+        && (cgroup.contains("systemd") || cgroup.contains(".service"))
     {
         return true;
     }
 
-    std::path::Path::new("/etc/systemd/system/foims.service").exists()
+    false
 }
 
 async fn restart_standalone_process() -> Result<Response, AppError> {
@@ -974,63 +970,38 @@ pub async fn get_service_status() -> Result<Response, AppError> {
     let running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
         .await
         .unwrap_or(false);
-    let service_file_exists = tokio::fs::try_exists("/etc/systemd/system/foims.service")
-        .await
-        .unwrap_or(false);
 
-    let (active, status, enabled, uptime_seconds) = if running_as_service {
-        let active_output = Command::new("systemctl")
-            .args(["show", "foims.service", "--property=ActiveState"])
-            .output()
-            .await;
+    // 注册状态经 foims-services 在全部标准 systemd 目录中探测
+    // （DEB 包装到 /usr/lib/systemd/system，注册端点写入 /etc/systemd/system）
+    let unit_file = ManagedService::Foims.unit_file().await;
+    let service_file_exists = unit_file.is_some();
 
-        let active = match active_output {
-            Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                stdout.contains("ActiveState=active")
+    // 状态查询为探测语义：查询失败记录告警并返回默认字段，
+    // 由 registered 字段如实反映注册状态
+    let (active, status, enabled, uptime_seconds) = if service_file_exists {
+        match ManagedService::Foims.status().await {
+            Ok(st) => {
+                // 先取借用值再移动 status_text，避免部分移动后继续借用
+                let active = st.is_active();
+                let enabled = st.is_enabled();
+                let status = st.status_text;
+                let uptime_seconds = if active {
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let start_time = START_TIME.load(Ordering::SeqCst);
+                    Some(now.saturating_sub(start_time))
+                } else {
+                    None
+                };
+                (active, status, enabled, uptime_seconds)
             }
-            Err(_) => false,
-        };
-
-        let status_output = Command::new("systemctl")
-            .args(["show", "foims.service", "--property=StatusText"])
-            .output()
-            .await;
-
-        let status = match status_output {
-            Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let status_text = stdout.trim().strip_prefix("StatusText=");
-                status_text.map(|s| s.to_string())
+            Err(e) => {
+                log_warn!("log.system.service_status_query_failed", error = e);
+                (false, None, false, None)
             }
-            Err(_) => None,
-        };
-
-        let enabled_output = Command::new("systemctl")
-            .args(["is-enabled", "foims.service"])
-            .output()
-            .await;
-
-        let enabled = match enabled_output {
-            Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                stdout.trim() == "enabled"
-            }
-            Err(_) => false,
-        };
-
-        let uptime_seconds = if active {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let start_time = START_TIME.load(Ordering::SeqCst);
-            Some(now.saturating_sub(start_time))
-        } else {
-            None
-        };
-
-        (active, status, enabled, uptime_seconds)
+        }
     } else {
         (false, None, false, None)
     };
@@ -1090,21 +1061,13 @@ WantedBy=multi-user.target
             AppError::Internal(msg("server.system.service_file_write_failed").with("error", e))
         })?;
 
-    let daemon_reload = Command::new("systemctl")
-        .arg("daemon-reload")
-        .output()
-        .await;
-
-    if let Err(e) = daemon_reload {
+    // daemon-reload 与 enable 经 foims-services 统一执行；
+    // 失败记录告警但不中断注册流程（单元文件已落盘，可手动补执行）
+    if let Err(e) = systemctl_global("daemon-reload").await {
         log_warn!("log.system.daemon_reload_failed", error = e);
     }
 
-    let enable_output = Command::new("systemctl")
-        .args(["enable", "foims.service"])
-        .output()
-        .await;
-
-    if let Err(e) = enable_output {
+    if let Err(e) = ManagedService::Foims.enable().await {
         log_warn!("log.system.service_enable_failed", error = e);
     }
 

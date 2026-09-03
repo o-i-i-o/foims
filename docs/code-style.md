@@ -30,6 +30,8 @@ foims（bin/lib）             应用组装层：路由装配/系统管理/日�
 ├── crates/foims-init            建库建表/校验/备份恢复
 ├── crates/foims-visualization   拓扑与布局计算
 ├── crates/foims-data-management CSV 导入导出
+├── crates/foims-x509-management 证书管理
+├── crates/foims-services        systemd 服务管理（foims/nginx）
 └── crates/foims-scheduler       定时任务
 ```
 

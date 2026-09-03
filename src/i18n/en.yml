@@ -214,10 +214,11 @@ log:
     restart_script_spawn_failed: "Failed to spawn restart script: {{error}}"
     restart_triggered: "Service restart triggered (as service: {{as_service}})"
     service_enable_failed: "Failed to enable service: {{error}}"
-    service_state: "Current service state: active={{active}}"
+    service_status_query_failed: "Failed to query service status: {{error}}"
     standalone_restart: "Not running as a service, restarting standalone process"
     systemctl_exit_fallback: "systemctl did not terminate the process, restarting via exit"
     systemctl_restart: "Running systemctl restart {{service}}"
+    systemctl_restart_failed: "systemctl restart failed; service keeps running: {{error}}"
   task:
     overlap_skipped: "Previous task run has not finished; skipping this tick: {{{name}}}"
     backup_completed: "Backup completed: {{path}} ({{size_mb}} MB)"

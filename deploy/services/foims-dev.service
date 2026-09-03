@@ -1,0 +1,34 @@
+# FOIMS 开发环境 systemd 服务单元（项目目录直跑）
+#
+# 与 deploy/nginx/foims-dev.conf 配套：UDS /tmp/foims-dev.sock、
+# 静态资源直接指向项目 web 目录，改前端代码无需复制部署。
+#
+# 使用方式（先按实际项目路径调整 WorkingDirectory / ExecStart /
+# FOIMS_WEB_DIR / User，再执行）：
+#   sudo cp deploy/services/foims-dev.service /etc/systemd/system/foims-dev.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now foims-dev
+#
+# 注意：
+#   - 配置搜索优先级为 /etc/foims > /opt/foims > 当前目录，
+#     开发机请勿在 /etc/foims 放置配置，确保走项目内 config.toml
+#   - 代码更新后需 systemctl restart foims-dev（或删掉 Restart 改手动启停）
+#   - 本单元面向开发调试，不做安全加固；生产部署请使用 foims.service
+
+[Unit]
+Description=FOIMS 开发服务（项目目录直跑）
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# 项目约定后端以 root 运行测试（见 AGENTS.md「版本与测试」）
+User=root
+WorkingDirectory=/media/oi-io/AA709DF48A7AD5C2/foims
+ExecStart=/media/oi-io/AA709DF48A7AD5C2/foims/target/release/foims
+# 静态资源指向项目 web 目录，跳过 /opt、/usr 部署目录搜索
+Environment=FOIMS_WEB_DIR=/media/oi-io/AA709DF48A7AD5C2/foims/web
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
