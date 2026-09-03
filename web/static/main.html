@@ -766,6 +766,7 @@
                     <span class="icon">⏱️</span>
                     <span data-i18n="config.session_settings">Session Settings</span>
                   </div>
+                  <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
                 </header>
                 <div class="config-row">
                   <div class="config-field">
@@ -779,7 +780,6 @@
                     <span class="hint-text" data-i18n="config.public_url_desc">Server public URL for reset links and notifications</span>
                   </div>
                 </div>
-                <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </section>
             </form>
 
@@ -901,6 +901,8 @@
                   <label class="config-switch">
                     <input type="checkbox" id="ldap-enabled" aria-label="Enable LDAP authentication" data-i18n-aria-label="ldap.enabled">
                     <span data-i18n="ldap.enabled">Enable LDAP Authentication</span>
+                    <button type="button" id="test-ldap-btn" class="btn btn-secondary btn-sm" data-i18n="ldap.test_connection">Test Connection</button>
+                    <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                   </label>
                 </header>
                 <div class="config-row">
@@ -939,10 +941,6 @@
                     </select>
                   </div>
                 </div>
-                <div class="config-actions">
-                  <button type="button" id="test-ldap-btn" class="btn btn-secondary btn-sm" data-i18n="ldap.test_connection">Test Connection</button>
-                  <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
-                </div>
               </section>
             </form>
 
@@ -956,6 +954,8 @@
                   <label class="config-switch">
                     <input type="checkbox" id="sso-enabled" aria-label="Enable SSO authentication" data-i18n-aria-label="sso.enabled">
                     <span data-i18n="sso.enabled">Enable SSO Authentication</span>
+                    <button type="button" id="test-sso-btn" class="btn btn-secondary btn-sm" data-i18n="sso.test_connection">Test Connection</button>
+                    <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                   </label>
                 </header>
                 <div class="config-row">
@@ -989,10 +989,6 @@
                     </select>
                   </div>
                 </div>
-                <div class="config-actions">
-                  <button type="button" id="test-sso-btn" class="btn btn-secondary btn-sm" data-i18n="sso.test_connection">Test Connection</button>
-                  <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
-                </div>
               </section>
             </form>
           </div>
@@ -1007,6 +1003,10 @@
                     <span class="icon">📧</span>
                     <span data-i18n="smtp.server_settings">SMTP Server Settings</span>
                   </div>
+                  <label>
+                    <button id="test-smtp-btn" type="button" class="btn btn-secondary" data-i18n="smtp.test_connection">Test Connection</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
+                  </label>
                 </header>
                 <div class="config-row">
                   <div class="config-field">
@@ -1042,8 +1042,6 @@
                     </select>
                   </div>
                 </div>
-                <button id="test-smtp-btn" type="button" class="btn btn-secondary" data-i18n="smtp.test_connection">Test Connection</button>
-                <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
               </section>
             </form>
             
@@ -1054,6 +1052,7 @@
                     <span class="icon">🔔</span>
                     <span data-i18n="notification.mac_change_settings">MAC Address Change Notification</span>
                   </div>
+                  <button id="save-notification-settings-btn" type="button" class="btn btn-primary" data-i18n="common.save">Save Settings</button>
                 </header>
                 <div class="config-row">
                   <div class="config-field">
@@ -1061,9 +1060,6 @@
                     <div id="notification-users-list" class="users-checkbox-list"></div>
                     <p class="config-hint" data-i18n="notification.recipients_hint">Select users who will receive email notifications when MAC address changes are detected.</p>
                   </div>
-                </div>
-                <div class="config-actions">
-                  <button id="save-notification-settings-btn" type="button" class="btn btn-primary" data-i18n="common.save">Save Settings</button>
                 </div>
               </section>
             </div>
