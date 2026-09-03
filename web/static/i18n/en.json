@@ -691,6 +691,44 @@
     "uptime_minutes": "{{count}}m",
     "uptime_seconds": "{{count}}s"
   },
+  "services": {
+    "title": "Service Management",
+    "help": "Jointly manage the FOIMS backend (foims.service) and the reverse proxy (nginx.service) systemd services. Service registration is done by the deployer (DEB package install or manual unit deployment), not from this page; unregistered services require the unit file to be installed on the server first.",
+    "col_service": "Service",
+    "col_unit": "systemd Unit",
+    "col_status": "Status",
+    "col_enabled": "Autostart",
+    "col_uptime": "Uptime",
+    "name_foims": "FOIMS Backend",
+    "name_nginx": "nginx Reverse Proxy",
+    "run_mode_label": "Run mode",
+    "mode_service": "System service",
+    "mode_standalone": "Standalone process (not managed by systemd; service operations do not affect this process)",
+    "status_active": "Running",
+    "status_inactive": "Stopped",
+    "status_failed": "Failed",
+    "status_unregistered": "Not registered",
+    "enabled_on": "Enabled",
+    "enabled_off": "Disabled",
+    "uptime_unavailable": "-",
+    "op_start": "Start",
+    "op_stop": "Stop",
+    "op_restart": "Restart",
+    "op_reload": "Reload",
+    "op_enable": "Enable Autostart",
+    "op_disable": "Disable Autostart",
+    "op_done": "{{name}}: {{op}} operation executed",
+    "confirm_stop": "Stop {{name}} ({{unit}})? {{extra}}",
+    "confirm_stop_foims_extra": "Once stopped, the backend API of this management UI becomes unavailable; run systemctl start foims.service on the server to recover.",
+    "confirm_stop_nginx_extra": "Once stopped, the system is no longer reachable via the web.",
+    "confirm_restart": "Restart {{name}} ({{unit}})? The service will be briefly unavailable during restart.",
+    "restart_sent": "Restart command sent; the page will refresh automatically once the service recovers",
+    "restart_recovered": "Service recovered",
+    "restart_timeout": "Timed out waiting for the service to recover; refresh the page manually to check its status",
+    "stop_done_foims": "foims stop command sent; the backend API of this management UI is now unavailable. Run systemctl start foims.service on the server to recover",
+    "load_failed": "Failed to load service status",
+    "unregistered_hint": "Unit file not found in standard systemd directories; install it on the server first (DEB package or manually deploy the unit file under deploy/services)"
+  },
   "security": {
     "status_unknown": "Unknown",
     "status_active": "Active",
@@ -1986,7 +2024,12 @@
       "not_found": "Notification not found",
       "recipients_parse_failed": "Failed to parse notification recipients config: {{error}}",
       "settings_retrieved": "Notification settings retrieved",
-      "settings_updated": "Notification settings updated"
+      "settings_updated": "Notification settings updated",
+      "snmp_trap": {
+        "title": "SNMP Trap/Inform",
+        "body": "Received {{version}} {{kind}} from {{source}}, trap OID: {{trap_oid}}",
+        "body_varbinds": "Received {{version}} {{kind}} from {{source}}, trap OID: {{trap_oid}}; varbinds: {{varbinds}}"
+      }
     },
     "org_template": {
       "already_exists": "Template name already exists",
@@ -2115,7 +2158,11 @@
     "services": {
       "not_registered": "Service not registered: {{unit}} not found in system service directories",
       "op_failed": "Service operation failed: {{unit}} {{op}}: {{detail}}",
-      "systemctl_missing": "systemctl is not installed; cannot manage system services"
+      "systemctl_missing": "systemctl is not installed; cannot manage system services",
+      "status_retrieved": "Service status retrieved",
+      "op_success": "Service operation executed: {{unit}} {{op}}",
+      "unknown_service": "Unknown service: {{service}}",
+      "unknown_op": "Unsupported service operation: {{op}}"
     },
     "smtp": {
       "build_failed": "Failed to build email",
@@ -2167,10 +2214,6 @@
       "restart_script_create_failed": "Failed to create restart script",
       "script_chmod_failed": "Failed to set script permissions",
       "serialize_failed": "Serialization failed",
-      "service_file_write_failed": "Failed to write service file",
-      "service_registered": "Service registered and started",
-      "service_start_failed": "Failed to start service",
-      "service_status_retrieved": "Service status retrieved",
       "session_timeout_retrieved": "Session timeout configuration retrieved",
       "session_timeout_updated": "Session timeout configuration updated",
       "validation": {

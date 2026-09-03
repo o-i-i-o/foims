@@ -31,8 +31,8 @@ pub struct AppState {
     pub pool: Option<DbPool>,
     pub jwt_utils: JwtUtils,
     pub task_registry: Arc<TaskRegistry>,
-    /// 优雅关闭信号：register_service 等业务路径可请求本进程优雅退出
-    /// （让位 systemd），与 OS 信号共用同一关闭流程。
+    /// 优雅关闭信号：serve 失败等进程内业务路径可请求本进程优雅退出，
+    /// 与 OS 信号共用同一关闭流程。
     pub shutdown: ShutdownSignal,
     /// 请求限流器：预鉴权中间件按 IP 计数；已认证请求由鉴权中间件之后
     /// 的钩子经 `charge_user` 补记用户维度桶（见 routes/mod.rs）。

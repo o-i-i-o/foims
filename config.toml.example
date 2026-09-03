@@ -81,3 +81,25 @@ timeout_secs = 5
 retries = 3
 lldp_timeout_secs = 30
 mac_scan_timeout_secs = 10
+
+# SNMP Trap/Inform 接收：常驻 UDP 监听，收到的消息写入「日志-通知」页面
+[snmp.trap]
+# 是否启用接收（默认 false）
+enabled = false
+# UDP 监听地址；标准 trap 端口 162 需要 root 权限，可用 1162 等非特权端口
+bind_addr = "0.0.0.0:162"
+# v1/v2c community 白名单；留空表示接受任意 community（仅建议内网环境）
+communities = []
+# 同一来源地址的通知冷却窗口（秒）：窗口内的后续 trap 只记服务日志，
+# 不重复写站内通知，防止 trap 风暴刷爆通知列表；0 表示不冷却
+cooldown_secs = 30
+# v3 USM 用户（接收 v3 trap/inform 时配置；不配置则拒绝全部 v3 通知）
+# 认证协议 auth_protocol：md5 / sha1 / sha224 / sha256 / sha384 / sha512
+# 加密协议 priv_protocol：des / 3des / aes128 / aes192 / aes256（须与认证协议配套）
+# 注意：密码以明文保存在配置文件中，请确保配置文件权限（建议 600）
+# [[snmp.trap.users]]
+# username = "trapuser"
+# auth_protocol = "sha256"
+# auth_password = "authpass123"
+# priv_protocol = "aes128"
+# priv_password = "privpass123"

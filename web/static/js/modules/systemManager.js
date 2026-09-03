@@ -40,8 +40,9 @@ export function initSystemTabs() {
           loadSystemInfo();
           loadSystemConfig();
         } else if (tabId === "system-config") {
-          // 证书/LDAP/SSO 配置随子标签激活加载（含刷新后程序化恢复子标签的场景）
+          // 证书/服务/LDAP/SSO 配置随子标签激活加载（含刷新后程序化恢复子标签的场景）
           loadSystemConfig();
+          loadServicesStatus();
           loadCertificateInventory();
           loadLdapConfig();
           loadSsoConfig();
@@ -148,6 +149,7 @@ export function initSystemTabs() {
   }
 
   initCertificateManager();
+  initServicesCard();
 
   systemContainer.dataset.eventsInitialized = "true";
 }
@@ -316,6 +318,224 @@ export async function loadSystemConfig() {
   } catch (error) {
     console.error("加载系统配置失败:", error);
   }
+}
+
+// ==================== 服务管理（foims / nginx 共同管理，服务注册由部署方完成） ====================
+
+// 操作按钮在途标志：请求期间重复提交直接忽略（防双击重复下发 systemctl 操作）
+let servicesOpInFlight = false;
+
+// 拉取并渲染 foims / nginx 两个服务的状态
+function loadServicesStatus() {
+  apiGet("/api/system/services")
+    .then((result) => {
+      if (result.success && Array.isArray(result.data)) {
+        renderServicesTable(result.data);
+      }
+    })
+    .catch((error) => {
+      console.error("加载服务状态失败:", error);
+      showToast(t("services.load_failed"), "error");
+    });
+}
+
+// 渲染服务状态表格：每行一个受管服务（foims / nginx）
+function renderServicesTable(items) {
+  const tbody = document.querySelector("#services-table tbody");
+  if (!tbody) {
+    return;
+  }
+
+  if (!items || items.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("common.no_data")}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = "";
+  items.forEach((item) => {
+    tbody.appendChild(buildServiceRow(item));
+  });
+}
+
+// 组装单个服务行：状态徽章按 registered / active_state 分级，
+// 操作按钮按当前状态禁用无意义项（如运行中禁用「启动」）
+function buildServiceRow(item) {
+  const tr = document.createElement("tr");
+  const nameText = t(`services.name_${item.name}`);
+
+  // foims 行附带运行模式说明（系统服务 / 独立进程）
+  const runModeHtml =
+    item.name === "foims"
+      ? `<div class="svc-run-mode">${escapeHtml(t("services.run_mode_label"))}: ${escapeHtml(
+          item.running_as_service ? t("services.mode_service") : t("services.mode_standalone")
+        )}</div>`
+      : "";
+
+  // 状态徽章：未注册 / 运行中 / 失败 / 已停止，title 展示原始 state 与 StatusText
+  let badgeClass;
+  let badgeText;
+  let badgeTitle = `${item.active_state || "-"} / ${item.sub_state || "-"}`;
+  if (!item.registered) {
+    badgeClass = "svc-unregistered";
+    badgeText = t("services.status_unregistered");
+    badgeTitle = t("services.unregistered_hint");
+  } else if (item.active) {
+    badgeClass = "svc-active";
+    badgeText = t("services.status_active");
+  } else if (item.active_state === "failed") {
+    badgeClass = "svc-failed";
+    badgeText = t("services.status_failed");
+  } else {
+    badgeClass = "svc-inactive";
+    badgeText = t("services.status_inactive");
+  }
+  if (item.status_text) {
+    badgeTitle = `${badgeTitle}\n${item.status_text}`;
+  }
+
+  const enabledCell = item.registered
+    ? `<span class="svc-badge ${item.enabled ? "svc-active" : "svc-inactive"}">${escapeHtml(
+        item.enabled ? t("services.enabled_on") : t("services.enabled_off")
+      )}</span>`
+    : `<span class="svc-unregistered-hint">${t("services.uptime_unavailable")}</span>`;
+
+  const uptimeCell =
+    item.name === "foims" && item.active && item.uptime_seconds
+      ? escapeHtml(formatUptime(item.uptime_seconds))
+      : t("services.uptime_unavailable");
+
+  let actionsHtml;
+  if (!item.registered) {
+    actionsHtml = `<span class="svc-unregistered-hint">${escapeHtml(t("services.unregistered_hint"))}</span>`;
+  } else {
+    const opButton = (op, buttonClass, disabled) =>
+      `<button type="button" class="btn ${buttonClass}" data-svc-op data-service="${escapeHtml(item.name)}" data-op="${op}"${disabled ? " disabled" : ""}>${escapeHtml(t(`services.op_${op}`))}</button>`;
+    actionsHtml = [
+      opButton("start", "btn-primary btn-sm", item.active),
+      opButton("stop", "btn-danger btn-sm", !item.active),
+      opButton("restart", "btn-secondary btn-sm", false),
+      item.reload_supported ? opButton("reload", "btn-secondary btn-sm", !item.active) : "",
+      opButton("enable", "btn-secondary btn-sm", item.enabled),
+      opButton("disable", "btn-secondary btn-sm", !item.enabled)
+    ].join("");
+  }
+
+  tr.innerHTML = `
+    <td><div>${escapeHtml(nameText)}</div>${runModeHtml}</td>
+    <td>${escapeHtml(item.unit)}</td>
+    <td><span class="svc-badge ${badgeClass}" title="${escapeHtml(badgeTitle)}">${escapeHtml(badgeText)}</span></td>
+    <td>${enabledCell}</td>
+    <td>${uptimeCell}</td>
+    <td class="svc-actions-cell">${actionsHtml}</td>`;
+
+  return tr;
+}
+
+// 服务卡片一次性事件绑定：刷新按钮 + 表格内操作按钮事件委托
+function initServicesCard() {
+  const refreshBtn = elementCache.get("services-refresh-btn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", loadServicesStatus);
+  }
+
+  const servicesTable = elementCache.get("services-table");
+  if (servicesTable) {
+    servicesTable.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-svc-op]");
+      if (!btn || btn.disabled) {
+        return;
+      }
+      executeServiceOp(btn.dataset.service, btn.dataset.op);
+    });
+  }
+}
+
+// 执行服务管理操作；停止/重启需二次确认，
+// foims 重启/停止有专门的后续处理（轮询恢复 / 提示后端不可用）
+async function executeServiceOp(service, op) {
+  if (servicesOpInFlight) {
+    return;
+  }
+
+  const name = t(`services.name_${service}`);
+  const unit = service === "foims" ? "foims.service" : "nginx.service";
+
+  if (op === "stop") {
+    const extraKey =
+      service === "foims" ? "services.confirm_stop_foims_extra" : "services.confirm_stop_nginx_extra";
+    const confirmed = await showConfirm(
+      t("services.confirm_stop", { name, unit, extra: t(extraKey) })
+    );
+    if (!confirmed) {
+      return;
+    }
+  } else if (op === "restart") {
+    const confirmed = await showConfirm(t("services.confirm_restart", { name, unit }));
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  servicesOpInFlight = true;
+  try {
+    const result = await apiPost(
+      `/api/system/services/${encodeURIComponent(service)}/${encodeURIComponent(op)}`,
+      {}
+    );
+
+    if (!result.success) {
+      showToast(result.message, "error");
+      return;
+    }
+
+    if (service === "foims" && op === "restart") {
+      // 后端先响应再延迟重启本进程：轮询等待恢复后自动刷新页面
+      showToast(t("services.restart_sent"), "info");
+      waitForFoimsRecovery();
+      return;
+    }
+    if (service === "foims" && op === "stop") {
+      showToast(t("services.stop_done_foims"), "warning");
+      loadServicesStatus();
+      return;
+    }
+
+    showToast(t("services.op_done", { name, op: t(`services.op_${op}`) }), "success");
+    loadServicesStatus();
+  } catch (error) {
+    console.error("服务操作失败:", error);
+    showToast(`${t("common.operation_failed")}: ${error.message}`, "error");
+  } finally {
+    servicesOpInFlight = false;
+  }
+}
+
+// foims 重启后的恢复轮询：重启窗口期连接失败属预期，继续轮询；
+// 恢复 active 后刷新页面，超时则提示手动刷新
+function waitForFoimsRecovery() {
+  const deadline = Date.now() + 40000;
+  const timer = setInterval(() => {
+    if (Date.now() > deadline) {
+      clearInterval(timer);
+      showToast(t("services.restart_timeout"), "warning");
+      return;
+    }
+    apiGet("/api/system/services")
+      .then((result) => {
+        const foims =
+          result.success && Array.isArray(result.data)
+            ? result.data.find((item) => item.name === "foims")
+            : null;
+        if (foims && foims.active) {
+          clearInterval(timer);
+          showToast(t("services.restart_recovered"), "success");
+          setTimeout(() => location.reload(), 800);
+        }
+      })
+      .catch(() => {
+        // 重启窗口期后端不可达：保持轮询
+      });
+  }, 2000);
 }
 
 // 加载SMTP配置（未配置是正常业务状态：后端返回 200 + configured=false）

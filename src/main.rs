@@ -327,7 +327,7 @@ fn configure_app_services(
             config.init.enabled,
             Arc::new(|| {
                 Box::pin(async move {
-                    foims::system::config::trigger_service_restart()
+                    foims::system::services::trigger_service_restart()
                         .await
                         .map_err(|e| e.to_string())?;
                     Ok(())
@@ -486,6 +486,18 @@ async fn main() -> std::io::Result<()> {
         foims_auth::app_fail2ban::start_cleanup_task(db_pool.get_conn());
     }
     foims_common::log_info!("system.fail2ban_cleanup_started");
+
+    // SNMP Trap/Inform 接收：常驻 UDP 监听，收到的消息写入站内通知
+    // （日志-通知页面展示）。初始化模式无连接池，跳过启动
+    if config.snmp.trap.enabled
+        && let Some(db_pool) = pool.as_ref()
+    {
+        foims_resource::start_trap_receiver(
+            db_pool.get_conn(),
+            config.snmp.trap.clone(),
+            shutdown.subscribe(),
+        );
+    }
 
     let mut running_scheduler: Option<RunningScheduler> = None;
 

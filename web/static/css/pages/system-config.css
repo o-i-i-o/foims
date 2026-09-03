@@ -52,7 +52,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-md);
   padding-bottom: var(--space-sm);
   border-bottom: 1px solid var(--color-border-light);
 }
@@ -314,6 +313,59 @@ dl.config-field,
 .cert-ca-help-body p {
   margin: 6px 0;
   line-height: 1.6;
+}
+
+/* ==================== 服务管理卡片（foims / nginx 共同管理） ==================== */
+
+/* 服务名下方的运行模式说明（仅 foims 行展示） */
+.svc-run-mode {
+  font-size: 12px;
+  color: var(--color-text-secondary, #6b7280);
+  margin-top: 2px;
+}
+
+/* 状态 / 自启徽章：与证书类型徽章同规格 */
+.svc-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.svc-active {
+  color: #2e7d32;
+  background: rgb(46 125 50 / 12%);
+}
+
+.svc-inactive {
+  color: #6b7280;
+  background: rgb(107 114 128 / 12%);
+}
+
+.svc-failed {
+  color: #c62828;
+  background: rgb(198 40 40 / 12%);
+}
+
+.svc-unregistered {
+  color: #e65100;
+  background: rgb(230 81 0 / 12%);
+}
+
+.svc-actions-cell {
+  white-space: nowrap;
+}
+
+.svc-actions-cell .btn {
+  margin-right: 6px;
+}
+
+/* 未注册服务的操作列提示文案 */
+.svc-unregistered-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary, #6b7280);
 }
 
 /* ==================== 关于卡片：开源组件清单模态框 ==================== */

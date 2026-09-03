@@ -12,7 +12,7 @@ use crate::error::{ServicesError, ServicesResult, not_registered, op_failed, sys
 
 /// systemd 单元文件搜索目录（按加载优先级从高到低）。
 ///
-/// - `/etc/systemd/system`：管理员手工安装（register-service 端点写入处）
+/// - `/etc/systemd/system`：运维手动部署位置
 /// - `/run/systemd/system`：运行时生成的单元
 /// - `/usr/lib/systemd/system`：DEB 包安装位置（test/build-deb.sh）
 /// - `/lib/systemd/system`：非合并 usr 系统的发行版单元目录
@@ -54,16 +54,6 @@ pub async fn require_unit_file(unit: &str) -> ServicesResult<PathBuf> {
     find_unit_file(unit)
         .await
         .ok_or_else(|| not_registered(unit))
-}
-
-/// 执行不携带单元参数的 systemctl 子命令（如 daemon-reload）。
-pub async fn systemctl_global(op: &str) -> ServicesResult<()> {
-    let output = Command::new("systemctl")
-        .arg(op)
-        .output()
-        .await
-        .map_err(|e| classify_spawn_error(e, op, ""))?;
-    check_output(op, "", &output)
 }
 
 /// 执行携带单元参数的 systemctl 子命令（如 restart nginx.service）。

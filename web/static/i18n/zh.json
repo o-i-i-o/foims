@@ -691,6 +691,44 @@
     "uptime_minutes": "{{count}}分钟",
     "uptime_seconds": "{{count}}秒"
   },
+  "services": {
+    "title": "服务管理",
+    "help": "共同管理 FOIMS 后端（foims.service）与反向代理（nginx.service）两个 systemd 服务。服务注册由部署方完成（DEB 包安装或手动部署单元文件），本页面不做注册；未注册的服务需先在服务器上安装单元文件。",
+    "col_service": "服务",
+    "col_unit": "systemd 单元",
+    "col_status": "状态",
+    "col_enabled": "开机自启",
+    "col_uptime": "运行时长",
+    "name_foims": "FOIMS 后端",
+    "name_nginx": "nginx 反向代理",
+    "run_mode_label": "运行模式",
+    "mode_service": "系统服务",
+    "mode_standalone": "独立进程（未由 systemd 托管，服务操作不影响本进程）",
+    "status_active": "运行中",
+    "status_inactive": "已停止",
+    "status_failed": "失败",
+    "status_unregistered": "未注册",
+    "enabled_on": "已启用",
+    "enabled_off": "已禁用",
+    "uptime_unavailable": "-",
+    "op_start": "启动",
+    "op_stop": "停止",
+    "op_restart": "重启",
+    "op_reload": "重载",
+    "op_enable": "启用自启",
+    "op_disable": "禁用自启",
+    "op_done": "{{name}}：{{op}} 操作已执行",
+    "confirm_stop": "确定停止 {{name}}（{{unit}}）？{{extra}}",
+    "confirm_stop_foims_extra": "停止后本管理界面的后端 API 将不可用，需在服务器上执行 systemctl start foims.service 恢复。",
+    "confirm_stop_nginx_extra": "停止后将无法通过 Web 访问系统。",
+    "confirm_restart": "确定重启 {{name}}（{{unit}}）？重启期间服务会短暂不可用。",
+    "restart_sent": "重启命令已发送，服务恢复后将自动刷新页面",
+    "restart_recovered": "服务已恢复",
+    "restart_timeout": "等待服务恢复超时，请手动刷新页面查看状态",
+    "stop_done_foims": "foims 服务停止命令已发送，管理界面后端 API 将不可用，恢复需在服务器上执行 systemctl start foims.service",
+    "load_failed": "加载服务状态失败",
+    "unregistered_hint": "标准 systemd 目录中不存在单元文件，请先在服务器上安装（DEB 包或手动部署 deploy/services 下的单元文件）"
+  },
   "security": {
     "status_unknown": "未知",
     "status_active": "启用",
@@ -1986,7 +2024,12 @@
       "not_found": "通知不存在",
       "recipients_parse_failed": "通知收件人配置解析失败: {{error}}",
       "settings_retrieved": "通知设置获取成功",
-      "settings_updated": "通知设置更新成功"
+      "settings_updated": "通知设置更新成功",
+      "snmp_trap": {
+        "title": "SNMP Trap/Inform",
+        "body": "接收到来自 {{source}} 的 {{version}} {{kind}} 消息，Trap OID：{{trap_oid}}",
+        "body_varbinds": "接收到来自 {{source}} 的 {{version}} {{kind}} 消息，Trap OID：{{trap_oid}}；变量绑定：{{varbinds}}"
+      }
     },
     "org_template": {
       "already_exists": "模板名称已存在",
@@ -2115,7 +2158,11 @@
     "services": {
       "not_registered": "未注册服务：系统服务目录中未找到 {{unit}}",
       "op_failed": "服务操作失败：{{unit}} {{op}}：{{detail}}",
-      "systemctl_missing": "系统未安装 systemctl，无法管理系统服务"
+      "systemctl_missing": "系统未安装 systemctl，无法管理系统服务",
+      "status_retrieved": "服务状态获取成功",
+      "op_success": "服务操作已执行：{{unit}} {{op}}",
+      "unknown_service": "未知的服务：{{service}}",
+      "unknown_op": "不支持的服务操作：{{op}}"
     },
     "smtp": {
       "build_failed": "邮件构建失败",
@@ -2167,10 +2214,6 @@
       "restart_script_create_failed": "创建重启脚本失败",
       "script_chmod_failed": "设置脚本权限失败",
       "serialize_failed": "序列化失败",
-      "service_file_write_failed": "写入服务文件失败",
-      "service_registered": "服务注册并启动成功",
-      "service_start_failed": "启动服务失败",
-      "service_status_retrieved": "服务状态获取成功",
       "session_timeout_retrieved": "会话超时配置获取成功",
       "session_timeout_updated": "会话超时配置更新成功",
       "validation": {

@@ -235,6 +235,62 @@ impl Default for RateLimitConfig {
     }
 }
 
+/// SNMP Trap/Inform 接收的 v3 USM 用户凭据。
+///
+/// `auth_protocol` 为空表示 noAuth，`priv_protocol` 为空表示 noPriv；
+/// 配置加密协议时必须同时配置认证协议。
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct SnmpTrapUsmUser {
+    pub username: String,
+    #[serde(default)]
+    pub auth_protocol: String,
+    #[serde(default)]
+    pub auth_password: String,
+    #[serde(default)]
+    pub priv_protocol: String,
+    #[serde(default)]
+    pub priv_password: String,
+}
+
+/// SNMP Trap/Inform 接收配置。
+///
+/// - `communities`：v1/v2c community 白名单，空列表表示接受任意 community；
+/// - `users`：v3 USM 用户表，为空时拒绝全部 v3 通知；
+/// - `cooldown_secs`：同一来源地址的通知冷却窗口，窗口内只记服务日志不重复写站内通知。
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct SnmpTrapConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_trap_bind_addr")]
+    pub bind_addr: String,
+    #[serde(default)]
+    pub communities: Vec<String>,
+    #[serde(default)]
+    pub users: Vec<SnmpTrapUsmUser>,
+    #[serde(default = "default_trap_cooldown_secs")]
+    pub cooldown_secs: u64,
+}
+
+fn default_trap_bind_addr() -> String {
+    "0.0.0.0:162".to_string()
+}
+
+const fn default_trap_cooldown_secs() -> u64 {
+    30
+}
+
+impl Default for SnmpTrapConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_addr: default_trap_bind_addr(),
+            communities: Vec::new(),
+            users: Vec::new(),
+            cooldown_secs: default_trap_cooldown_secs(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct SnmpConfig {
     #[serde(default = "default_snmp_timeout")]
@@ -245,6 +301,9 @@ pub struct SnmpConfig {
     pub lldp_timeout_secs: u64,
     #[serde(default = "default_mac_scan_timeout")]
     pub mac_scan_timeout_secs: u64,
+    /// Trap/Inform 接收配置（缺省关闭）
+    #[serde(default)]
+    pub trap: SnmpTrapConfig,
 }
 
 const fn default_snmp_timeout() -> u64 {
@@ -270,6 +329,7 @@ impl Default for SnmpConfig {
             retries: default_snmp_retries(),
             lldp_timeout_secs: default_lldp_timeout(),
             mac_scan_timeout_secs: default_mac_scan_timeout(),
+            trap: SnmpTrapConfig::default(),
         }
     }
 }

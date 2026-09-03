@@ -9,11 +9,11 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use tokio::process::Command;
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
+use crate::system::services::trigger_service_restart;
 use foims_auth::smtp::{
     SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
 };
@@ -21,8 +21,6 @@ use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::config::{Config, I18nConfig, ServerConfig};
 use foims_common::{log_error, log_info, log_warn, msg};
-use foims_services::ManagedService;
-use foims_services::systemd::systemctl_global;
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
@@ -103,6 +101,11 @@ pub fn init_start_time() {
     record_start_time();
 }
 
+/// 本进程启动时刻（UNIX 秒），供系统信息与服务状态计算运行时长。
+pub fn start_time() -> u64 {
+    START_TIME.load(Ordering::SeqCst)
+}
+
 async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = foims_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
@@ -134,7 +137,7 @@ pub async fn get_system_info(
         }
     };
 
-    // saturating_sub 防时钟回拨下溢（与 get_service_status 的 uptime 口径一致）
+    // saturating_sub 防时钟回拨下溢（与服务状态 uptime 口径一致）
     let uptime = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -265,144 +268,8 @@ pub async fn update_system_config(
     ))
 }
 
-pub async fn trigger_service_restart() -> Result<Response, AppError> {
-    let is_running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
-        .await
-        .unwrap_or(false);
-
-    log_info!(
-        "log.system.restart_triggered",
-        as_service = is_running_as_service
-    );
-
-    if is_running_as_service {
-        // 预检服务注册状态：未注册直接向调用方报「未注册服务」，
-        // 不做独立进程重启等回退
-        ManagedService::Foims.require_unit_file().await?;
-
-        // 在后台延迟执行 systemctl restart：若直接 await，成功重启会杀死本进程导致响应不可达。
-        // 先返回响应，由后台任务触发重启。
-        tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            log_info!("log.system.systemctl_restart", service = "foims.service");
-            match ManagedService::Foims.restart().await {
-                Ok(()) => {
-                    // 给 systemctl 一点时间终止本进程；若仍存活则主动退出（systemd Restart=always 会拉起）
-                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                    log_info!("log.system.systemctl_exit_fallback");
-                    std::process::exit(0);
-                }
-                // 重启命令失败（权限不足等）：保持服务运行并记录错误，
-                // 不再盲目 exit(0)（否则健康进程被误杀且无诊断信息）
-                Err(e) => {
-                    log_error!("log.system.systemctl_restart_failed", error = e);
-                }
-            }
-        });
-
-        Ok(foims_common::ok_json(
-            (),
-            "server.system.restart_command_sent",
-        ))
-    } else {
-        log_info!("log.system.standalone_restart");
-        restart_standalone_process().await
-    }
-}
-
-pub async fn restart_application(
-    _admin: foims_auth::extractor::AdminUser,
-) -> Result<Response, AppError> {
-    log_info!("log.system.restart_requested");
-    trigger_service_restart().await
-}
-
-/// 是否以 systemd 服务方式运行。
-///
-/// 仅认 systemd 自身的运行痕迹（INVOCATION_ID / cgroup 归属）；
-/// 「单元文件存在」不代表本进程由 systemd 拉起，不作为判据。
-fn check_if_running_as_service() -> bool {
-    if std::env::var("INVOCATION_ID").is_ok() {
-        return true;
-    }
-
-    if let Ok(cgroup) = std::fs::read_to_string("/proc/self/cgroup")
-        && (cgroup.contains("systemd") || cgroup.contains(".service"))
-    {
-        return true;
-    }
-
-    false
-}
-
-async fn restart_standalone_process() -> Result<Response, AppError> {
-    let exe_path = std::env::current_exe()
-        .map_err(|e| AppError::Internal(msg("server.system.exe_path_failed").with("error", e)))?;
-
-    let exe_path_str = exe_path
-        .to_str()
-        .ok_or_else(|| AppError::Internal(msg("server.system.exe_path_invalid")))?;
-
-    let working_dir = std::env::current_dir()
-        .map_err(|e| AppError::Internal(msg("server.system.workdir_failed").with("error", e)))?;
-
-    let working_dir_str = working_dir
-        .to_str()
-        .ok_or_else(|| AppError::Internal(msg("server.system.workdir_invalid")))?;
-
-    let restart_script = r#"#!/bin/bash
-sleep 3
-cd "$1"
-exec "$2"
-"#;
-
-    // 随机文件名 + create_new 原子创建（0700）：避免固定路径被本地低权用户
-    // 预置符号链接劫持为任意文件写入/执行（security-review I-5）
-    let script_path = format!("/tmp/foims_restart_{}.sh", Uuid::new_v4());
-    {
-        // tokio::fs::OpenOptions 在 Unix 上原生提供 mode()
-        let mut opts = tokio::fs::OpenOptions::new();
-        opts.mode(0o700).write(true).create_new(true);
-        let mut file = opts.open(&script_path).await.map_err(|e| {
-            AppError::Internal(msg("server.system.restart_script_create_failed").with("error", e))
-        })?;
-        use tokio::io::AsyncWriteExt;
-        file.write_all(restart_script.as_bytes())
-            .await
-            .map_err(|e| {
-                AppError::Internal(
-                    msg("server.system.restart_script_create_failed").with("error", e),
-                )
-            })?;
-    }
-
-    let script_path_owned = script_path.clone();
-    // 脚本已 0700 可执行，直接 spawn；退出前清理。
-    // spawn 失败意味着重启流程无法继续：保持服务运行并返回错误，
-    // 不再无条件 exit(0)（否则 standalone 模式服务直接下线）
-    if let Err(e) = Command::new("nohup")
-        .arg(&script_path)
-        .arg(working_dir_str)
-        .arg(exe_path_str)
-        .spawn()
-    {
-        log_warn!("log.system.restart_script_spawn_failed", error = e);
-        return Err(AppError::Internal(
-            msg("server.system.restart_script_spawn_failed").with("error", e),
-        ));
-    }
-
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let _ = tokio::fs::remove_file(&script_path_owned).await;
-        std::process::exit(0);
-    });
-
-    Ok(foims_common::ok_json(
-        (),
-        "server.system.restart_command_sent",
-    ))
-}
+// foims 服务重启（含独立进程模式回退）与服务管理接口已迁移至
+// system/services.rs：本模块仅保留配置读写与系统信息查询
 
 pub async fn disable_init_mode(
     State(state): State<Arc<AppState>>,
@@ -955,157 +822,9 @@ pub async fn update_password_policy(
     ))
 }
 
-#[derive(Debug, Serialize)]
-pub struct ServiceStatus {
-    pub registered: bool,
-    pub running_as_service: bool,
-    pub service_file_exists: bool,
-    pub active: bool,
-    pub status: Option<String>,
-    pub enabled: bool,
-    pub uptime_seconds: Option<u64>,
-}
-
-pub async fn get_service_status() -> Result<Response, AppError> {
-    let running_as_service = tokio::task::spawn_blocking(check_if_running_as_service)
-        .await
-        .unwrap_or(false);
-
-    // 注册状态经 foims-services 在全部标准 systemd 目录中探测
-    // （DEB 包装到 /usr/lib/systemd/system，注册端点写入 /etc/systemd/system）
-    let unit_file = ManagedService::Foims.unit_file().await;
-    let service_file_exists = unit_file.is_some();
-
-    // 状态查询为探测语义：查询失败记录告警并返回默认字段，
-    // 由 registered 字段如实反映注册状态
-    let (active, status, enabled, uptime_seconds) = if service_file_exists {
-        match ManagedService::Foims.status().await {
-            Ok(st) => {
-                // 先取借用值再移动 status_text，避免部分移动后继续借用
-                let active = st.is_active();
-                let enabled = st.is_enabled();
-                let status = st.status_text;
-                let uptime_seconds = if active {
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    let start_time = START_TIME.load(Ordering::SeqCst);
-                    Some(now.saturating_sub(start_time))
-                } else {
-                    None
-                };
-                (active, status, enabled, uptime_seconds)
-            }
-            Err(e) => {
-                log_warn!("log.system.service_status_query_failed", error = e);
-                (false, None, false, None)
-            }
-        }
-    } else {
-        (false, None, false, None)
-    };
-
-    Ok(foims_common::ok_json(
-        ServiceStatus {
-            registered: service_file_exists,
-            running_as_service,
-            service_file_exists,
-            active,
-            status,
-            enabled,
-            uptime_seconds,
-        },
-        "server.system.service_status_retrieved",
-    ))
-}
-
-pub async fn register_service(
-    State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
-) -> Result<Response, AppError> {
-    let exe_path = std::env::current_exe()
-        .map_err(|e| AppError::Internal(msg("server.system.exe_path_failed").with("error", e)))?;
-    let exe_path_str = exe_path
-        .to_str()
-        .ok_or_else(|| AppError::Internal(msg("server.system.exe_path_invalid")))?;
-
-    let working_dir = std::env::current_dir()
-        .map_err(|e| AppError::Internal(msg("server.system.workdir_failed").with("error", e)))?;
-    let working_dir_str = working_dir
-        .to_str()
-        .ok_or_else(|| AppError::Internal(msg("server.system.workdir_invalid")))?;
-
-    let service_content = format!(
-        r#"[Unit]
-Description=FOIMS - Organization IT Information Management System
-After=network.target postgresql.service
-
-[Service]
-Type=simple
-WorkingDirectory={}
-ExecStart={}
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-"#,
-        working_dir_str, exe_path_str
-    );
-
-    let service_path = "/etc/systemd/system/foims.service";
-    tokio::fs::write(service_path, service_content)
-        .await
-        .map_err(|e| {
-            AppError::Internal(msg("server.system.service_file_write_failed").with("error", e))
-        })?;
-
-    // daemon-reload 与 enable 经 foims-services 统一执行；
-    // 失败记录告警但不中断注册流程（单元文件已落盘，可手动补执行）
-    if let Err(e) = systemctl_global("daemon-reload").await {
-        log_warn!("log.system.daemon_reload_failed", error = e);
-    }
-
-    if let Err(e) = ManagedService::Foims.enable().await {
-        log_warn!("log.system.service_enable_failed", error = e);
-    }
-
-    // 让位流程：单元文件带 Restart=always，而当前独立进程仍持有 UDS，
-    // 立即 systemctl start 会让新实例 bind 失败并进入崩溃重启循环。
-    // 因此注册完成后：
-    // 1. 由分离的 shell 延迟执行 systemctl start（分离进程不受本进程退出影响）；
-    // 2. 本进程随后经现有 shutdown 通道优雅退出并释放 UDS；
-    // 3. 新实例接管端口；即使首启与退出窗口重叠，Restart=always 兜底重试。
-    let start_spawn = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg("sleep 5 && systemctl start foims.service")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
-
-    if let Err(e) = start_spawn {
-        log_warn!("log.system.service_start_schedule_failed", error = e);
-        return Err(AppError::Internal(
-            msg("server.system.service_start_failed").with("error", e),
-        ));
-    }
-    log_info!("log.system.service_start_scheduled");
-
-    // 响应先行返回，随后触发本进程优雅退出（由 systemd Restart=always 拉起新实例）
-    let shutdown_for_handover = state.shutdown.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        log_info!("log.system.service_handover_shutdown");
-        shutdown_for_handover.request_shutdown();
-    });
-
-    Ok(foims_common::ok_json(
-        serde_json::json!({ "handover": "systemd" }),
-        "server.system.service_registered",
-    ))
-}
+// ==================== 服务管理 ====================
+// foims / nginx 的状态查询与管理操作见 system/services.rs
+// （GET /api/system/services、POST /api/system/services/{service}/{op}）
 
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();

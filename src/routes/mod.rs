@@ -25,17 +25,17 @@ use crate::log::{get_login_logs, get_operation_logs};
 use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_notification_settings,
-    get_page_timeout_config, get_password_policy, get_service_status, get_session_timeout_config,
-    get_smtp_config, get_supported_languages, get_system_config, get_system_info, register_service,
-    restart_application, restore_config, send_system_email, test_smtp_connection as test_smtp,
-    update_language_setting, update_notification_settings, update_page_timeout_config,
-    update_password_policy, update_session_timeout_config, update_smtp_config,
-    update_system_config,
+    get_page_timeout_config, get_password_policy, get_session_timeout_config, get_smtp_config,
+    get_supported_languages, get_system_config, get_system_info, restore_config, send_system_email,
+    test_smtp_connection as test_smtp, update_language_setting, update_notification_settings,
+    update_page_timeout_config, update_password_policy, update_session_timeout_config,
+    update_smtp_config, update_system_config,
 };
 use crate::system::scheduled_task::{
     create_scheduled_task, delete_scheduled_task, get_scheduled_task, get_scheduled_tasks,
     get_task_logs, run_scheduled_task_now, toggle_scheduled_task, update_scheduled_task,
 };
+use crate::system::services::{get_services_status, service_operation};
 use foims_common::AppError;
 use foims_common::AppJson;
 
@@ -686,13 +686,15 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // 系统管理路由
         // 系统信息
         .route("/api/system/info", get(get_system_info))
-        // 服务状态
-        .route("/api/system/service-status", get(get_service_status))
-        .route("/api/system/register-service", post(register_service))
+        // 服务管理（foims / nginx 共同管理；服务注册由部署方完成，
+        // 程序不做注册，未注册服务操作直接报错）
+        .route("/api/system/services", get(get_services_status))
+        .route(
+            "/api/system/services/{service}/{op}",
+            post(service_operation),
+        )
         // 仪表盘统计
         .route("/api/system/dashboard-stats", get(get_dashboard_stats))
-        // 重启应用系统
-        .route("/api/system/restart-application", post(restart_application))
         // 关闭初始化模式
         .route("/api/system/disable-init", post(disable_init_mode))
         // SMTP配置
