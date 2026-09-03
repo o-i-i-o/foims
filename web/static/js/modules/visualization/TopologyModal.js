@@ -268,7 +268,7 @@ export class TopologyModal {
             <tr>
               <td>${escapeHtml(m.mac_address || "")}</td>
               <td>${escapeHtml(m.vlan_id != null ? String(m.vlan_id) : "")}</td>
-              <td>${escapeHtml(m.port_name || m.interface_name || "")}</td>
+              <td>${escapeHtml(m.interface ?? "")}</td>
             </tr>`
             )
             .join("")}
@@ -294,9 +294,9 @@ export class TopologyModal {
             .map(
               (n) => `
             <tr>
-              <td>${escapeHtml(n.local_port || n.local_interface || "")}</td>
-              <td>${escapeHtml(n.system_name || n.neighbor_name || "")}</td>
-              <td>${escapeHtml(n.neighbor_port || n.remote_interface || "")}</td>
+              <td>${escapeHtml(n.local_port || "")}</td>
+              <td>${escapeHtml(n.neighbor_sys_name || "")}</td>
+              <td>${escapeHtml(n.neighbor_port_desc || n.neighbor_port_id || "")}</td>
             </tr>`
             )
             .join("")}

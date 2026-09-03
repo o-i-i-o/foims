@@ -174,7 +174,7 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                     WHERE (a_endpoint_type='{endpoint_type}' AND a_endpoint_id = OLD.id)
                        OR (b_endpoint_type='{endpoint_type}' AND b_endpoint_id = OLD.id)
                 ) THEN
-                    RAISE EXCEPTION '{label} % 被 cable_links 引用，不能删除', OLD.id;
+                    RAISE EXCEPTION 'ERR_CABLE_LINK_REFERENCE: {label} % 被 cable_links 引用，不能删除', OLD.id;
                 END IF;
                 RETURN OLD;
             END;

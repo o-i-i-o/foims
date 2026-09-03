@@ -298,7 +298,7 @@ pub async fn delete_net_outlet<P: DbProvider>(
         .map_err(|e| {
             if let sqlx::Error::Database(db_err) = &e {
                 let db_msg = db_err.message();
-                if db_msg.contains("cable_links") {
+                if db_msg.contains("ERR_CABLE_LINK_REFERENCE") {
                     return AppError::Validation(msg("server.net_outlet.linked_by_cable"));
                 }
             }

@@ -57,9 +57,11 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
       const pagination = data.total !== undefined ? data : null;
       const tableBody = document.querySelector("#users-table tbody");
 
-      // 空列表且当前页大于 1：删除后页码越界，回退上一页重载（分页控件随重载正常渲染）
-      if (users.length === 0 && page > 1) {
-        loadUsersData(page - 1);
+      // 空列表且当前页大于 1：删除后页码越界，按 total_pages 一步回退
+      //（与 room/networks 等列表模块一致，避免极端情况连环请求）
+      const totalPages = data.total_pages || Math.ceil((data.total || 0) / USER_PAGE_SIZE);
+      if (users.length === 0 && page > 1 && totalPages > 0 && page > totalPages) {
+        loadUsersData(totalPages);
         return;
       }
 
@@ -175,8 +177,6 @@ export async function openUserModal(userId) {
     passwordConfirmInput.required = true;
   }
 }
-
-window.openUserModal = openUserModal;
 
 // 加载用户数据
 async function loadUserData(userId) {

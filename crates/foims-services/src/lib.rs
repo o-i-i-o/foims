@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn 空StatusText应视为未设置() {
+    fn 空status_text应视为未设置() {
         let output = "ActiveState=inactive\nSubState=dead\nUnitFileState=disabled\nStatusText=\n";
         let status = ServiceStatus::from_show_output(output);
         assert!(!status.is_active());

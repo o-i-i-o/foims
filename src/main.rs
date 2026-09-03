@@ -25,7 +25,7 @@ use foims::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use foims::system::config::init_start_time;
 use foims::system::task_executors::{
     BackupTaskExecutor, IpStatusSyncTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor,
-    TokenCleanupTaskExecutor, TokenUsageCleanupTaskExecutor,
+    TokenCleanupTaskExecutor,
 };
 use foims::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
@@ -436,13 +436,15 @@ async fn main() -> std::io::Result<()> {
     let config = match Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
-            let _ = foims::log::setup_logging(None);
+            let _ = tokio::task::block_in_place(|| foims::log::setup_logging(None));
             foims_common::log_error!("system.config_load_failed", error = e);
             std::process::exit(1);
         }
     };
 
-    let log_files = foims::log::setup_logging(config.i18n.as_ref());
+    // 日志系统初始化含同步文件 IO（目录创建/文件打开），与其他同步
+    // 文件操作同口径移出 async 上下文
+    let log_files = tokio::task::block_in_place(|| foims::log::setup_logging(config.i18n.as_ref()));
 
     foims_common::log_info!("log.output_to", path = log_files.join(", "));
     foims_common::log_info!("system.start");
@@ -505,7 +507,6 @@ async fn main() -> std::io::Result<()> {
         let mut registry = TaskRegistry::new();
         registry.register(Box::new(BackupTaskExecutor));
         registry.register(Box::new(TokenCleanupTaskExecutor));
-        registry.register(Box::new(TokenUsageCleanupTaskExecutor));
         registry.register(Box::new(LogCleanupTaskExecutor));
         registry.register(Box::new(MacSyncTaskExecutor));
         registry.register(Box::new(IpStatusSyncTaskExecutor));
@@ -544,17 +545,6 @@ async fn main() -> std::io::Result<()> {
                     .await
                 {
                     foims_common::log_error!("system.register_token_cleanup_job_failed", error = e);
-                }
-                if let Err(e) = state
-                    .add_system_job(
-                        "system_usage_cleanup",
-                        "0 0 2 * * *",
-                        "token_usage_cleanup",
-                        serde_json::json!({}),
-                    )
-                    .await
-                {
-                    foims_common::log_error!("system.register_usage_cleanup_job_failed", error = e);
                 }
                 // IP 状态按 last_seen 新鲜度自动翻转（默认判停阈值 30 天），支撑仪表盘活性分布
                 if let Err(e) = state

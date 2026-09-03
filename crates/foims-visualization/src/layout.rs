@@ -120,6 +120,15 @@ pub async fn save_layout(
             .filter(|item| item.element_type == "door")
             .collect();
 
+        // element_layouts 每房间每类型仅一行（UNIQUE(room_id, element_type)）：
+        // 同一请求携带多个同类型元素会被 ON CONFLICT 静默折叠为最后一个，
+        // 显式拒绝而非丢数据
+        if element_items.len() > 1 {
+            return Err(VisualizationError::Validation(msg(
+                "server.visualization.duplicate_element_type",
+            )));
+        }
+
         // 归属校验（与 cabinet 分支同型）：全部工位必须属于该房间，
         // 防止跨房间工位被 UPSERT 进当前房间布局（重复 id 去重后再比对）
         let workstation_ids: std::collections::HashSet<Uuid> =
@@ -139,6 +148,24 @@ pub async fn save_layout(
                     "server.visualization.workstation_ids_invalid",
                 )));
             }
+        }
+
+        // 全量覆盖语义：保存请求即该房间布局的完整期望状态，
+        // 未出现在请求中的既有布局行删除（否则画布上已移除的元素
+        // 保存后仍会在下次读取时复活为幽灵元素）
+        if workstation_ids.is_empty() {
+            sqlx::query("DELETE FROM workstation_layouts WHERE room_id = $1")
+                .bind(room_id)
+                .execute(&mut *tx)
+                .await?;
+        } else {
+            sqlx::query(
+                "DELETE FROM workstation_layouts WHERE room_id = $1 AND workstation_id != ANY($2)",
+            )
+            .bind(room_id)
+            .bind(&workstation_ids)
+            .execute(&mut *tx)
+            .await?;
         }
 
         for item in &workstation_items {
@@ -164,6 +191,14 @@ pub async fn save_layout(
             .bind(item.position.rotation_i32())
             .execute(&mut *tx)
             .await?;
+        }
+
+        // 全量覆盖：未随请求提交的门元素布局一并移除（同上）
+        if element_items.is_empty() {
+            sqlx::query("DELETE FROM element_layouts WHERE room_id = $1 AND element_type = 'door'")
+                .bind(room_id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         for item in &element_items {
@@ -216,6 +251,27 @@ pub async fn save_layout(
             return Err(VisualizationError::Validation(msg(
                 "server.visualization.cabinet_ids_invalid",
             )));
+        }
+
+        // 全量覆盖语义：本房间未随请求提交的机柜布局行删除
+        //（cabinet_layouts 无 room_id，经 cabinets 归属限定作用域）
+        if cabinet_ids.is_empty() {
+            sqlx::query(
+                "DELETE FROM cabinet_layouts cl USING cabinets c
+                 WHERE cl.cabinet_id = c.id AND c.room_id = $1",
+            )
+            .bind(room_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "DELETE FROM cabinet_layouts cl USING cabinets c
+                 WHERE cl.cabinet_id = c.id AND c.room_id = $1 AND cl.cabinet_id != ANY($2)",
+            )
+            .bind(room_id)
+            .bind(&cabinet_ids)
+            .execute(&mut *tx)
+            .await?;
         }
 
         for item in &req.layout {
@@ -398,15 +454,42 @@ pub async fn get_room_cabinets_with_positions(
     .fetch_all(pool)
     .await?;
 
+    // 机位与布局批量查询（ANY($1)）后内存分组，替代每机柜 2 次查询的 N+1
+    let cabinet_ids: Vec<Uuid> = cabinets.iter().map(|(id, _, _, _, _)| *id).collect();
+    let all_positions =
+        sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>)>(
+            "SELECT id, name, cabinet_id, start_u, end_u, description FROM positions WHERE cabinet_id = ANY($1) ORDER BY start_u",
+        )
+        .bind(&cabinet_ids)
+        .fetch_all(pool)
+        .await?;
+    let mut positions_by_cabinet: std::collections::HashMap<Uuid, Vec<_>> =
+        std::collections::HashMap::new();
+    for row in all_positions {
+        positions_by_cabinet
+            .entry(row.2.unwrap_or(row.0))
+            .or_default()
+            .push(row);
+    }
+
+    let all_layouts = sqlx::query_as::<_, (Uuid, i32, i32, i32, i32, i32)>(
+        "SELECT cabinet_id, x, y, width, height, rotation FROM cabinet_layouts WHERE cabinet_id = ANY($1)",
+    )
+    .bind(&cabinet_ids)
+    .fetch_all(pool)
+    .await?;
+    let layout_by_cabinet: std::collections::HashMap<Uuid, (i32, i32, i32, i32, i32)> =
+        all_layouts
+            .into_iter()
+            .map(|(id, x, y, w, h, r)| (id, (x, y, w, h, r)))
+            .collect();
+
     let mut result = Vec::new();
     for (cab_id, cab_name, cab_room_id, capacity, cab_desc) in &cabinets {
-        let positions = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, i32, i32, Option<String>)>(
-            "SELECT id, name, cabinet_id, start_u, end_u, description FROM positions WHERE cabinet_id = $1 ORDER BY start_u",
-        )
-        .bind(cab_id)
-        .fetch_all(pool)
-    .await
-    ?;
+        let positions = positions_by_cabinet
+            .get(cab_id)
+            .cloned()
+            .unwrap_or_default();
 
         let pos_items: Vec<serde_json::Value> = positions
             .iter()
@@ -422,12 +505,7 @@ pub async fn get_room_cabinets_with_positions(
             })
             .collect();
 
-        let layout = sqlx::query_as::<_, (i32, i32, i32, i32, i32)>(
-            "SELECT x, y, width, height, rotation FROM cabinet_layouts WHERE cabinet_id = $1",
-        )
-        .bind(cab_id)
-        .fetch_optional(pool)
-        .await?;
+        let layout = layout_by_cabinet.get(cab_id).copied();
 
         let layout_json = layout.map(|(x, y, w, h, r)| serde_json::json!({"x": x, "y": y, "width": w, "height": h, "rotation": r}));
 

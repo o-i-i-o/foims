@@ -12,13 +12,32 @@ function detectBrowserLanguage() {
   return browserLang.startsWith("zh") ? "zh" : "en";
 }
 
+// 浏览器禁用存储（"阻止所有 Cookie"/存储策略）时 localStorage 访问抛
+// SecurityError：读写均需防护，失败时回退内存态（与 helpers.js 同口径）
+function readSavedLanguage() {
+  try {
+    return localStorage.getItem("language");
+  } catch (error) {
+    console.warn("读取语言偏好失败，使用浏览器语言:", error);
+    return null;
+  }
+}
+
+function persistLanguage(lang) {
+  try {
+    localStorage.setItem("language", lang);
+  } catch (error) {
+    console.warn("保存语言偏好失败（存储被禁用），仅保留在内存中:", error);
+  }
+}
+
 function getInitialLanguage() {
-  const savedLang = localStorage.getItem("language");
+  const savedLang = readSavedLanguage();
   if (savedLang && SUPPORTED_LANGUAGES.includes(savedLang)) {
     return savedLang;
   }
   const browserLang = detectBrowserLanguage();
-  localStorage.setItem("language", browserLang);
+  persistLanguage(browserLang);
   return browserLang;
 }
 
@@ -104,7 +123,7 @@ export async function initI18n() {
         }
 
         this.language = lang;
-        localStorage.setItem("language", lang);
+        persistLanguage(lang);
         document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
         this.updatePageTranslations();
         this.updateLanguageSelector();
@@ -180,7 +199,7 @@ export async function initI18n() {
       t: (key) => key,
       async changeLanguage(lang) {
         this.language = lang;
-        localStorage.setItem("language", lang);
+        persistLanguage(lang);
       },
       getCurrentLanguage() {
         return this.language;
@@ -209,7 +228,7 @@ export function changeLanguage(lang) {
 
 export function getCurrentLanguage() {
   if (!i18nInstance) {
-    return localStorage.getItem("language") === "en" ? "en" : "zh";
+    return readSavedLanguage() === "en" ? "en" : "zh";
   }
   return i18nInstance.getCurrentLanguage();
 }

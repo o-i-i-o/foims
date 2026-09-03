@@ -14,7 +14,6 @@ pub fn get_required_tables() -> Vec<&'static str> {
         // 用户与系统
         "users",
         "password_history",
-        "encryption_keys",
         "system_configs",
         // 子网
         "network_regions",
@@ -51,7 +50,6 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "task_logs",
         "login_logs",
         "revoked_tokens",
-        "token_usage",
         "notifications",
         "scheduled_tasks",
         "workstation_layouts",
@@ -93,16 +91,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     columns.insert(
         "password_history",
         vec!["id", "user_id", "password_hash", "created_at"],
-    );
-    columns.insert(
-        "encryption_keys",
-        vec![
-            "id",
-            "key_name",
-            "encryption_key",
-            "created_at",
-            "updated_at",
-        ],
     );
     columns.insert(
         "network_regions",
@@ -453,18 +441,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         vec!["id", "token_hash", "user_id", "revoked_at", "expiry"],
     );
     columns.insert(
-        "token_usage",
-        vec![
-            "id",
-            "token_hash",
-            "user_id",
-            "ip_address",
-            "user_agent",
-            "request_path",
-            "created_at",
-        ],
-    );
-    columns.insert(
         "notifications",
         vec![
             "id",
@@ -594,7 +570,6 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
 pub fn get_required_views() -> Vec<&'static str> {
     vec![
         "ip_with_details",
-        "mac_comparison",
         "devices_with_details",
         "net_outlets_with_details",
         "patch_panels_with_details",
@@ -794,6 +769,9 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         // 同一对设备之间只允许一条逻辑连接（链路聚合）：
         // 表达式部分索引，物理连线同设备对允许多条故不纳入
         ("uq_topology_connections_logical", "topology_connections"),
+        // 物理连线同一设备对 + 端口组合（含 NULL 端口）唯一：
+        // 兜底手动创建路径的并发判重窗口（devices.rs 建表后补建）
+        ("uq_topology_connections_physical", "topology_connections"),
         // 同一对端点之间只允许一条跳接线路（cable_links.rs 建表后补建）
         ("uq_cable_links_endpoint_pair", "cable_links"),
         // 同一网段地址（v4/v6）全域唯一（network.rs 部分唯一索引）
@@ -808,5 +786,8 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         // IP 地址全域唯一（ips.rs 建表约束 UNIQUE(ip_address)）：
         // 单条创建与批量导入的并发去重均依赖该唯一索引兜底
         ("uq_ips_ip_address", "ips"),
+        // 同房间设备名唯一（devices.rs 建表后补建）：
+        // 兜底创建/更新/导入路径的并发判重窗口
+        ("uq_devices_room_name", "devices"),
     ]
 }

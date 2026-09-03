@@ -230,6 +230,17 @@ pub async fn create_device<P: DbProvider>(
         if !exists {
             return Err(AppError::NotFound(msg("server.workstation.not_found")));
         }
+        // 房间一致性预检（与 trg_validate_device_room_consistency 同口径，
+        // 预检返回 422，触发器仅兜底并发窗口）
+        let ws_room: Uuid = sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
+            .bind(ws_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        if ws_room != req.room_id {
+            return Err(AppError::Validation(msg(
+                "server.device.workstation_room_mismatch",
+            )));
+        }
     }
 
     if let Some(pos_id) = req.position_id {
@@ -240,6 +251,17 @@ pub async fn create_device<P: DbProvider>(
                 .await?;
         if !exists {
             return Err(AppError::NotFound(msg("server.position.not_found")));
+        }
+        let pos_room: Uuid = sqlx::query_scalar(
+            "SELECT c.room_id FROM positions p JOIN cabinets c ON c.id = p.cabinet_id WHERE p.id = $1",
+        )
+        .bind(pos_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if pos_room != req.room_id {
+            return Err(AppError::Validation(msg(
+                "server.device.position_room_mismatch",
+            )));
         }
     }
 
@@ -357,7 +379,16 @@ pub async fn create_device<P: DbProvider>(
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发同房间同名设备由 uq_devices_room_name 兜底，映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.device.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     // 应用网卡配置（网卡 → 网口 → IP），未提供时自动生成默认可管理网卡+网口
     let cards = req.cards.unwrap_or_default();
@@ -592,6 +623,58 @@ pub async fn update_device<P: DbProvider>(
         )));
     }
 
+    // 房间一致性预检（与 trg_validate_device_room_consistency 同口径，
+    // 预检返回 422，触发器仅兜底并发窗口）
+    let resolved_room_id = req.room_id.unwrap_or(current_room_id);
+    if let Some(ws_id) = resolved_workstation_id {
+        let ws_room: Uuid = sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
+            .bind(ws_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        if ws_room != resolved_room_id {
+            return Err(AppError::Validation(msg(
+                "server.device.workstation_room_mismatch",
+            )));
+        }
+    }
+    if let Some(pos_id) = resolved_position_id {
+        let pos_room: Uuid = sqlx::query_scalar(
+            "SELECT c.room_id FROM positions p JOIN cabinets c ON c.id = p.cabinet_id WHERE p.id = $1",
+        )
+        .bind(pos_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if pos_room != resolved_room_id {
+            return Err(AppError::Validation(msg(
+                "server.device.position_room_mismatch",
+            )));
+        }
+    }
+
+    // 变更房间且未随请求重提网卡配置时，校验存量 IP 均落在新房间绑定的
+    // 子网内（不变量：设备 IP 必须归属其所在房间绑定的子网）
+    if resolved_room_id != current_room_id && req.cards.is_none() {
+        let stale_ip_count: i64 = sqlx::query_scalar(
+            r"SELECT COUNT(*)
+               FROM ips i
+               JOIN device_interfaces di ON di.id = i.device_interface_id
+               WHERE di.device_id = $1
+                 AND NOT EXISTS (
+                    SELECT 1 FROM room_networks rn
+                    WHERE rn.room_id = $2 AND rn.subnet_id = i.subnet_id
+                 )",
+        )
+        .bind(id)
+        .bind(resolved_room_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if stale_ip_count > 0 {
+            return Err(AppError::Validation(
+                msg("server.device.ip_subnet_not_in_new_room").with("count", stale_ip_count),
+            ));
+        }
+    }
+
     let now = Utc::now();
 
     // 双层 Option 文本字段：Some(Some(v)) 设置新值（加密列存密文）、
@@ -668,7 +751,16 @@ pub async fn update_device<P: DbProvider>(
     .bind(now)
     .bind(id)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发同房间同名设备由 uq_devices_room_name 兜底，映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.device.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     // Handle network config replacement if cards are provided
     if let Some(cards) = &req.cards {

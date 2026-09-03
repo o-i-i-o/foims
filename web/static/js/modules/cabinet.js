@@ -18,6 +18,9 @@ import {
 
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { elementCache } from "../utils/helpers.js";
+
+// 列表/详情加载失败的统一提示文案（避免同一字面量多处重复）
+const cabinetLoadFailedMsg = (message) => `${t("cabinet.load_failed")}: ${message || ""}`;
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
@@ -248,7 +251,12 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
     if (requestSeq !== cabinetRequestSeq) {
       return; // 已有更新的请求,丢弃过期响应
     }
-    const data = result.success ? result.data : { items: [], total: 0 };
+    // 接口失败时提示并中止，不再静默渲染空数据（与 networks.js 口径一致）
+    if (!result.success) {
+      showToast(cabinetLoadFailedMsg(result.message), "error");
+      return;
+    }
+    const data = result.data || { items: [], total: 0 };
     const cabinets = data.items || data;
 
     // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
@@ -385,7 +393,7 @@ export async function editCabinet(id) {
     if (result.success) {
       openCabinetModal(result.data);
     } else {
-      showToast(`${t("cabinet.load_failed")}: ${result.message}`, "error");
+      showToast(cabinetLoadFailedMsg(result.message), "error");
     }
   } catch (error) {
     handleError(error, t("cabinet.load_failed"));

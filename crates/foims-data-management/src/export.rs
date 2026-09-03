@@ -16,13 +16,15 @@ use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use foims_common::{log_warn, msg};
 use serde_json::Value;
-use sqlx::AssertSqlSafe;
-use sqlx::PgConnection;
+use sqlx::{AssertSqlSafe, Connection, PgConnection};
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use zip::{ZipWriter, write::FileOptions};
 
-/// devices 表中密文存储、导出时需解密的凭据列。
+/// devices 表中密文存储的凭据列：导出时一律置空（redact），
+/// 不以明文或密文形式离开本实例——密文跨实例密钥不同无法解密，
+/// 明文导出则把 SNMP 口令暴露在 ZIP 文件里。列头保留以维持表结构
+/// 匹配，导入端空值落 NULL（如需迁移凭据请在新实例手工补录）。
 const DEVICE_SECRET_COLUMNS: &[&str] =
     &["snmp_community", "snmp_auth_password", "snmp_priv_password"];
 
@@ -488,21 +490,16 @@ fn write_table_csv(
     Ok(bytes)
 }
 
-/// 解密设备行中的 SNMP 凭据字段（空值跳过）。
-async fn decrypt_device_secrets<P: DataProvider>(provider: &P, row: &mut Value) -> DataResult<()> {
+/// 置空设备行中的 SNMP 凭据字段（导出脱敏，空值跳过）。
+async fn redact_device_secrets(row: &mut Value) {
     let Some(obj) = row.as_object_mut() else {
-        return Ok(());
+        return;
     };
     for col in DEVICE_SECRET_COLUMNS {
-        if let Some(Value::String(encrypted)) = obj.get(*col).cloned() {
-            if encrypted.is_empty() {
-                continue;
-            }
-            let plain = provider.decrypt_password(&encrypted).await?;
-            obj.insert((*col).to_string(), Value::String(plain));
+        if obj.contains_key(*col) {
+            obj.insert((*col).to_string(), Value::String(String::new()));
         }
     }
-    Ok(())
 }
 
 /// 按模块导出业务数据为 CSV（ZIP 打包）。
@@ -520,7 +517,14 @@ pub async fn export_csv<P: DataProvider>(
 
     let pool = provider.pool()?;
     let mut conn = pool.acquire().await.map_err(DataError::from)?;
-    let ctx = load_name_context(&mut conn).await?;
+    // 全程单事务（REPEATABLE READ 只读）：名称上下文与各表行数据取自
+    // 同一快照，避免导出期间并发写入造成跨表引用错位
+    let mut tx = conn.begin().await.map_err(DataError::from)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(DataError::from)?;
+    let ctx = load_name_context(&mut tx).await?;
 
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     for module in selected {
@@ -528,17 +532,19 @@ pub async fn export_csv<P: DataProvider>(
             let spec = crate::spec::find_spec(table).ok_or_else(|| {
                 DataError::Internal(msg("server.import_export.spec_missing").with("table", table))
             })?;
-            let mut rows = fetch_table_rows(&mut conn, table).await?;
-            // 设备凭据列密文 → 明文，跨实例导入时由对方重新加密
+            let mut rows = fetch_table_rows(&mut tx, table).await?;
+            // 设备凭据列脱敏置空：凭据不随导出文件离开本实例
             if *table == "devices" {
                 for row in &mut rows {
-                    decrypt_device_secrets(&provider, row).await?;
+                    redact_device_secrets(row).await;
                 }
             }
             let csv_data = write_table_csv(spec, &rows, &ctx)?;
             files.push((format!("{table}.csv"), csv_data));
         }
     }
+
+    tx.commit().await.map_err(DataError::from)?;
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let zip_data = tokio::task::spawn_blocking(move || zip_files(files))
@@ -561,22 +567,40 @@ pub async fn download_template(type_param: Query<HashMap<String, String>>) -> Da
         .unwrap_or_else(|| "all".to_string());
     let selected = resolve_modules(&export_type)?;
 
-    let files: Vec<(String, Vec<u8>)> = selected
-        .iter()
-        .flat_map(|m| m.tables.iter())
-        .filter_map(|table| {
-            let spec = TABLE_SPECS.iter().find(|s| s.table == *table)?;
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    for module in selected.iter() {
+        for table in module.tables {
+            let Some(spec) = TABLE_SPECS.iter().find(|s| s.table == *table) else {
+                // 规格缺失属模块/表清单与 TABLE_SPECS 漂移，留痕排查
+                foims_common::log_warn!("log.import_export.template_spec_missing", table = table);
+                continue;
+            };
             let mut out = Cursor::new(Vec::new());
             // BOM 写入失败按无模板处理（内存写入不会失败）
             if out.write_all(&[0xEF, 0xBB, 0xBF]).is_err() {
-                return None;
+                continue;
             }
             let mut writer = csv::Writer::from_writer(out);
-            writer.write_record(headers(spec)).ok()?;
-            let bytes = writer.into_inner().ok()?.into_inner();
-            Some((format!("{table}.csv"), bytes))
-        })
-        .collect();
+            if let Err(e) = writer.write_record(headers(spec)) {
+                foims_common::log_warn!(
+                    "log.import_export.template_write_failed",
+                    table = table,
+                    error = e
+                );
+                continue;
+            }
+            match writer.into_inner() {
+                Ok(inner) => files.push((format!("{table}.csv"), inner.into_inner())),
+                Err(e) => {
+                    foims_common::log_warn!(
+                        "log.import_export.template_write_failed",
+                        table = table,
+                        error = e
+                    );
+                }
+            }
+        }
+    }
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     let zip_data = zip_files(files)?;

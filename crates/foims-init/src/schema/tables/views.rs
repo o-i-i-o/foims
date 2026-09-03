@@ -52,27 +52,6 @@ const VIEWS: &[(&str, &str)] = &[
     ",
     ),
     (
-        "mac_comparison",
-        r"
-        CREATE VIEW mac_comparison AS
-        SELECT
-            sm.device_id,
-            sdv.name AS device_name,
-            host(sm.ip_address) AS ip_address,
-            sm.mac_address AS snmp_mac,
-            di.mac_address AS managed_mac,
-            CASE
-                WHEN i.id IS NULL OR di.id IS NULL OR di.mac_address IS NULL THEN 'unmanaged'
-                WHEN sm.mac_address = di.mac_address THEN 'match'
-                ELSE 'mismatch'
-            END AS comparison_result
-        FROM device_macs sm
-        JOIN devices sdv ON sm.device_id = sdv.id
-        LEFT JOIN ips i ON sm.ip_address = i.ip_address
-        LEFT JOIN device_interfaces di ON i.device_interface_id = di.id AND di.device_id = sm.device_id
-    ",
-    ),
-    (
         "devices_with_details",
         r"
         CREATE VIEW devices_with_details AS

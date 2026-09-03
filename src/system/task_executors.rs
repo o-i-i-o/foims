@@ -17,13 +17,13 @@ pub(crate) fn data_error_message(e: foims_data_management::DataError) -> AppMess
     }
 }
 
-/// 天数类任务（log_cleanup / token_usage_cleanup / ip_status_sync）days 的
+/// 天数类任务（log_cleanup / ip_status_sync）days 的
 /// 合法区间（1..=3650，约 10 年）。与 scheduled_task.rs 的创建/更新校验口径一致：
 /// i64 → i32 直接 `as` 截断会把超大值变成负数（SQL 阈值落到未来导致
 /// 全表误删）或 0（清空全部审计日志），必须先做范围校验。
 const DAYS_CONFIG_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
 
-/// 解析天数类任务（log_cleanup / token_usage_cleanup / ip_status_sync）的
+/// 解析天数类任务（log_cleanup / ip_status_sync）的
 /// days 配置，越界或缺失时的处理：缺失回落默认 30 天，越界返回校验错误。
 fn parse_days_config(config: &serde_json::Value) -> Result<i32, SchedulerError> {
     let days = config
@@ -104,34 +104,6 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
             })?;
         log_debug!("log.task.token_cleanup_completed", count = count);
         Ok("server.task.token_cleanup_completed".to_string())
-    }
-}
-
-/// Token 使用记录清理任务执行器
-pub struct TokenUsageCleanupTaskExecutor;
-
-#[async_trait]
-impl TaskExecutor for TokenUsageCleanupTaskExecutor {
-    fn task_type(&self) -> &str {
-        "token_usage_cleanup"
-    }
-
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let days = parse_days_config(&ctx.config)?;
-
-        let count = foims_auth::utils::cleanup_old_token_usage(&ctx.pool, days)
-            .await
-            .map_err(|e| {
-                SchedulerError::Execution(
-                    msg("server.task.token_usage_cleanup_failed").with("error", e),
-                )
-            })?;
-        log_info!(
-            "log.task.token_usage_cleanup_completed",
-            count = count,
-            days = days
-        );
-        Ok("server.task.token_usage_cleanup_completed".to_string())
     }
 }
 

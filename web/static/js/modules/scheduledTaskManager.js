@@ -311,7 +311,8 @@ async function saveScheduledTask() {
     config = { days: keepDays };
   } else if (taskType === "ip_status_sync") {
     // 判停阈值下限为 1 天：0 会在下一轮把全部地址判停
-    const staleDays = parseInt(document.getElementById("scheduled-task-stale-days").value, 10) || 30;
+    const staleDays =
+      parseInt(document.getElementById("scheduled-task-stale-days").value, 10) || 30;
     if (staleDays < 1) {
       showToast(t("scheduled_tasks.config_fields.stale_days_invalid"), "warning");
       return;
@@ -413,9 +414,12 @@ async function deleteScheduledTask(id) {
     if (response.success) {
       showToast(t("scheduled_tasks.delete_success"), "success");
       await loadScheduledTasks();
+    } else {
+      showToast(`${t("scheduled_tasks.delete_failed")}: ${response.message || ""}`, "error");
     }
   } catch (error) {
     console.error("Failed to delete task:", error);
+    showToast(t("scheduled_tasks.delete_failed"), "error");
   }
 }
 
@@ -432,13 +436,15 @@ async function viewTaskLogs(taskName) {
 
   try {
     const response = await apiGet(
-      `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&limit=50`
+      `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(taskName)}&page=1&page_size=50`
     );
     if (!response.success) {
+      showToast(`${t("common.load_failed")}: ${response.message || ""}`, "error");
       return;
     }
 
-    const logs = response.data || [];
+    // 后端为固定五键分页响应（items/total/page/page_size/total_pages）
+    const logs = response.data?.items || [];
     if (logs.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5" class="no-data">${t("common.no_data")}</td></tr>`;
       return;

@@ -13,7 +13,7 @@ export const goToStep = (stepNum) => {
   document.querySelectorAll(".step-panel").forEach((panel) => {
     panel.classList.remove("active");
   });
-  document.querySelector(`.step-panel[data-step="${stepNum}"]`).classList.add("active");
+  document.querySelector(`.step-panel[data-step="${stepNum}"]`)?.classList.add("active");
   document.querySelectorAll(".step").forEach((step) => {
     const stepData = parseInt(step.dataset.step);
     if (stepData < stepNum) {
@@ -40,6 +40,9 @@ let errorHideTimer = null;
  */
 export const showError = (message) => {
   const errorElement = document.getElementById("error-message");
+  if (!errorElement) {
+    return;
+  }
   errorElement.textContent = message;
   errorElement.hidden = false;
   if (errorHideTimer) {
@@ -52,11 +55,11 @@ export const showError = (message) => {
 };
 
 export const showLoading = () => {
-  document.getElementById("loading").hidden = false;
+  document.getElementById("loading")?.removeAttribute("hidden");
 };
 
 export const hideLoading = () => {
-  document.getElementById("loading").hidden = true;
+  document.getElementById("loading")?.setAttribute("hidden", "");
 };
 
 /**
@@ -68,16 +71,16 @@ export const setInitMode = (mode) => {
   document.querySelectorAll(".init-tab").forEach((tab) => {
     tab.classList.remove("active");
   });
-  document.querySelector(`.init-tab[data-mode="${mode}"]`).classList.add("active");
+  document.querySelector(`.init-tab[data-mode="${mode}"]`)?.classList.add("active");
 
   const createPanel = document.getElementById("create-panel");
   const importPanel = document.getElementById("import-panel");
 
   if (mode === "create") {
-    createPanel.hidden = false;
-    importPanel.hidden = true;
+    if (createPanel) createPanel.hidden = false;
+    if (importPanel) importPanel.hidden = true;
   } else {
-    createPanel.hidden = true;
-    importPanel.hidden = false;
+    if (createPanel) createPanel.hidden = true;
+    if (importPanel) importPanel.hidden = false;
   }
 };

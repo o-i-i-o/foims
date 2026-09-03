@@ -215,7 +215,7 @@ fn validate_network_update(req: &NetworkUpdate) -> Result<(), ValidationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use validator::{Validate, ValidationError};
+    use validator::Validate;
 
     #[test]
     fn test_region_create_valid() -> Result<(), serde_json::Error> {

@@ -353,6 +353,25 @@ function generateIpAddresses(cidr) {
     // 计算网络地址
     const ipParts = ip.split(".").map(Number);
 
+    // 计算网络地址：CIDR 基址可能不是网络地址（如 10.0.0.77/24），
+    // 先按前缀长度掩码，否则 IP 网格会越过子网边界展示相邻网段地址
+    const prefix = parseInt(parts[1], 10);
+    let mask = (0xffffffff << (32 - prefix)) >>> 0;
+    if (prefix <= 0) {
+      mask = 0;
+    } else if (prefix >= 32) {
+      mask = 0xffffffff;
+    }
+    const ipInt =
+      (((ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3]) >>> 0) >>> 0;
+    const networkInt = (ipInt & mask) >>> 0;
+    const networkParts = [
+      (networkInt >>> 24) & 255,
+      (networkInt >>> 16) & 255,
+      (networkInt >>> 8) & 255,
+      networkInt & 255
+    ];
+
     // 计算总IP数量
     const totalIps = calculateTotalIps(cidr);
 
@@ -361,8 +380,8 @@ function generateIpAddresses(cidr) {
     const maxDisplayIps = Math.min(totalIps, 256); // 最多显示256个IP
 
     for (let i = 1; i <= maxDisplayIps; i++) {
-      // 简单实现：递增最后一位IP地址
-      const newIpParts = [...ipParts];
+      // 从网络地址起递增（进位传播到高位字节）
+      const newIpParts = [...networkParts];
       let carry = i;
 
       for (let j = 3; j >= 0 && carry > 0; j--) {
@@ -438,7 +457,7 @@ function renderIpBlocks(ipAddresses, ipStatusMap) {
       const statusClass = ipBlockStatusClass(isUsed, status);
       const tooltipText = `${escapeHtml(ip)} (${ipStateText(isUsed, status)})`;
       return `
-      <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${isUsed ? status : "unused"}" title="${tooltipText}">
+      <div class="ip-block ${statusClass}" data-ip="${escapeHtml(ip)}" data-status="${escapeHtml(isUsed ? status : "unused")}" title="${tooltipText}">
         <span class="ip-label">${ip.split(".").pop()}</span>
       </div>
     `;
@@ -884,7 +903,7 @@ function bindIPv4Events(modalContainer, network, networkIps, subnetId) {
         );
         if (refreshIpResult.success) {
           const allIps =
-            refreshIpResult.data.data || refreshIpResult.data?.items || refreshIpResult.data || [];
+            refreshIpResult.data?.data || refreshIpResult.data?.items || refreshIpResult.data || [];
           const isIPv6 = (ip) => ip.ip_address.includes(":");
           const refreshedNetworkIps = allIps.filter(
             (ip) => ip.subnet_id === subnetId && !isIPv6(ip)
@@ -968,7 +987,7 @@ function bindIPv6Events(modalContainer, network, networkIps, subnetId) {
         );
         if (refreshIpResult.success) {
           const allIps =
-            refreshIpResult.data.data || refreshIpResult.data?.items || refreshIpResult.data || [];
+            refreshIpResult.data?.data || refreshIpResult.data?.items || refreshIpResult.data || [];
           const isIPv6 = (ip) => ip.ip_address.includes(":");
           const refreshedNetworkIps = allIps.filter(
             (ip) => ip.subnet_id === subnetId && isIPv6(ip)

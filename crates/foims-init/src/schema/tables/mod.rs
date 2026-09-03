@@ -9,7 +9,6 @@ mod device_templates;
 mod devices;
 mod element;
 mod employees;
-mod encryption;
 mod indexes;
 mod ips;
 mod logs;
@@ -35,7 +34,6 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 无外键依赖的基础表
     users::create(pool).await?;
-    encryption::create(pool).await?;
     system::create(pool).await?;
     org_templates::create(pool).await?;
     device_templates::create(pool).await?;

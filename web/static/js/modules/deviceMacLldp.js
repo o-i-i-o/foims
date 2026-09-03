@@ -2,7 +2,7 @@
 
 import { apiGet, apiPost } from "../utils/apiClient.js";
 
-import { escapeHtml, showToast } from "../utils/ui.js";
+import { debounce, escapeHtml, showToast } from "../utils/ui.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
@@ -39,8 +39,6 @@ async function viewArpTable(deviceId) {
   });
 
   let isFirstLoad = true;
-  let ipv4SearchHandler = null;
-  let ipv6SearchHandler = null;
 
   const loadArpData = async () => {
     const loadingEl = modal.querySelector("#arp-loading");
@@ -104,31 +102,25 @@ async function viewArpTable(deviceId) {
           const ipv4Search = modal.querySelector("#ipv4-search");
           const ipv6Search = modal.querySelector("#ipv6-search");
 
-          ipv4SearchHandler = () => {
+          // MAC 表可达数千行，搜索按 300ms 防抖（复用 utils/ui.js 的
+          // debounce，与 organization/networks/ipDetail 同口径），
+          // 避免每次按键全量重建两表
+          const ipv4SearchHandler = () => {
             const filtered = filterEntries(ipv4Entries, ipv4Search.value);
             const container = modal.querySelector("#ipv4-table-container");
             container.innerHTML = renderMacTable(filtered, "ipv4");
             bindCollapseEvents(container);
           };
 
-          ipv6SearchHandler = () => {
+          const ipv6SearchHandler = () => {
             const filtered = filterEntries(ipv6Entries, ipv6Search.value);
             const container = modal.querySelector("#ipv6-table-container");
             container.innerHTML = renderMacTable(filtered, "ipv6");
             bindCollapseEvents(container);
           };
 
-          // MAC 表可达数千行，搜索按 300ms 防抖，避免每次按键全量重建两表
-          const debounceInput = (handler) => {
-            let timer = null;
-            return () => {
-              clearTimeout(timer);
-              timer = setTimeout(handler, 300);
-            };
-          };
-
-          ipv4Search.addEventListener("input", debounceInput(ipv4SearchHandler));
-          ipv6Search.addEventListener("input", debounceInput(ipv6SearchHandler));
+          ipv4Search.addEventListener("input", debounce(ipv4SearchHandler, 300));
+          ipv6Search.addEventListener("input", debounce(ipv6SearchHandler, 300));
 
           syncBtn.addEventListener("click", syncMacData);
 

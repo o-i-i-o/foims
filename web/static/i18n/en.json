@@ -1319,7 +1319,8 @@
     "execution_time": "Execution Time",
     "duration": "Duration(ms)",
     "details": "Details",
-    "cron_invalid": "Invalid cron expression: expected 5 fields (minute hour day month weekday) or 6 fields (with seconds); each field only supports numbers, ranges, lists, steps and asterisk"
+    "cron_invalid": "Invalid cron expression: expected 5 fields (minute hour day month weekday) or 6 fields (with seconds); each field only supports numbers, ranges, lists, steps and asterisk",
+    "delete_failed": "Failed to delete scheduled task"
   },
   "viz": {
     "no_room_layout_data": "No room layout data in the database",
@@ -1779,7 +1780,10 @@
         "mac_format": "Invalid MAC address format",
         "interface_length": "Interface name must be at most 50 characters"
       },
-      "workstation_position_exclusive": "Workstation and cabinet position cannot both be specified"
+      "workstation_position_exclusive": "Workstation and cabinet position cannot both be specified",
+      "position_room_mismatch": "Device room does not match the room of the selected position",
+      "workstation_room_mismatch": "Device room does not match the room of the selected workstation",
+      "ip_subnet_not_in_new_room": "{{count}} existing IP(s) of this device are not in subnets bound to the new room; migrate them or update the NIC config first"
     },
     "device_template": {
       "deleted": "Device template deleted successfully",
@@ -2152,7 +2156,8 @@
         "start_u_range": "Start U position must be between 1 and 48",
         "u_order_invalid": "Start U position cannot be greater than end U position"
       },
-      "cabinet_required": "Position must belong to a cabinet, please specify the cabinet"
+      "cabinet_required": "Position must belong to a cabinet, please specify the cabinet",
+      "u_range_overlap": "Position U range overlaps an existing position"
     },
     "room": {
       "children_synced": "Room children synced successfully",
@@ -2173,7 +2178,9 @@
       "validation": {
         "name_length": "Room name must be 1 to 50 characters",
         "type_invalid": "Room type must be one of: office, lobby, reception, data_center, telecom_closet, other"
-      }
+      },
+      "has_devices": "Room has associated devices and cannot be deleted",
+      "subnet_in_use_by_device_ip": "{{count}} device IP(s) in this room belong to subnets being removed; migrate or delete them first"
     },
     "services": {
       "not_registered": "Service not registered: {{unit}} not found in system service directories",
@@ -2285,8 +2292,6 @@
       "toggled": "Scheduled task status toggled",
       "token_cleanup_completed": "Expired tokens cleaned",
       "token_cleanup_failed": "Token cleanup failed",
-      "token_usage_cleanup_completed": "Token usage records cleaned",
-      "token_usage_cleanup_failed": "Token usage cleanup failed",
       "type_unknown": "Unknown task type: {{task_type}}",
       "type_unsupported": "Unsupported task type: {{task_type}} (allowed: {{allowed}})",
       "updated": "Scheduled task updated",
@@ -2350,7 +2355,8 @@
       "logical_connection_exists": "A logical connection already exists between these devices",
       "connection_duplicate": "An identical connection already exists",
       "position_invalid": "Invalid layout coordinates",
-      "workstation_ids_invalid": "Contains workstations that do not belong to this room"
+      "workstation_ids_invalid": "Contains workstations that do not belong to this room",
+      "duplicate_element_type": "Only one layout element of each type is allowed per room; do not submit duplicates"
     },
     "workstation": {
       "created": "Workstation created successfully",

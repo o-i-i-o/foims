@@ -302,8 +302,16 @@ function initButtonEventBindings() {
 function initGlobalClickHandlers() {
   document.addEventListener("click", (e) => {
     handleModalCloseClick(e);
-    handleUsageButtonClick(e);
-    handleEditDeleteClick(e);
+    // 异步处理器内部有动态 import（发版后旧模块 404/网络闪断会 reject），
+    // 吞掉并提示，避免 unhandled rejection 且用户点击无任何反馈
+    handleUsageButtonClick(e).catch((error) => {
+      console.error("处理使用情况按钮点击失败:", error);
+      showToast(t("common.load_failed"), "error");
+    });
+    handleEditDeleteClick(e).catch((error) => {
+      console.error("处理编辑/删除按钮点击失败:", error);
+      showToast(t("common.load_failed"), "error");
+    });
   });
 }
 

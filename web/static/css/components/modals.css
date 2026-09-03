@@ -53,10 +53,6 @@
   max-width: 90vw;
 }
 
-.modal.modal-flex {
-  display: flex;
-}
-
 .modal-header {
   padding: 0.75rem;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);

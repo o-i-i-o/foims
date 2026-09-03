@@ -80,13 +80,15 @@ pub async fn get_rooms<P: DbProvider>(
         // 搜索条件的 OR 组必须用括号包裹（对齐 workstation.rs/ip.rs 的写法），
         // 否则 AND 优先级更高，与 org_id/room_type 组合时命名称/房型的
         // 房间会绕过组织过滤
+        // 同一模式绑定 6 次（两个构建器 × 3 列），循环外克隆一次复用
         for builder in [&mut count_builder, &mut list_builder] {
+            let pattern = search_pattern.clone();
             builder.push(" WHERE (r.name ILIKE ");
-            builder.push_bind(search_pattern.clone());
+            builder.push_bind(pattern.clone());
             builder.push(" OR r.room_type ILIKE ");
-            builder.push_bind(search_pattern.clone());
+            builder.push_bind(pattern.clone());
             builder.push(" OR r.description ILIKE ");
-            builder.push_bind(search_pattern.clone());
+            builder.push_bind(pattern);
             builder.push(")");
         }
         has_where = true;
@@ -222,20 +224,20 @@ pub async fn create_room<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+
+    // 预检与写入同事务（与 update_room 同口径），避免预检-写入窗口
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE name = $1")
         .bind(&req.name)
-        .fetch_optional(&state.pool()?.get_conn())
+        .fetch_optional(&mut *tx)
         .await?;
 
     if existing_room.is_some() {
         return Err(AppError::Conflict(msg("server.room.name_exists")));
     }
-
-    let id = Uuid::new_v4();
-    let now = Utc::now();
-
-    // 房间与其子网关联必须在同一事务内写入，避免中途失败导致子网关联残缺
-    let mut tx = state.pool()?.get_conn().begin().await?;
 
     // 引用存在性校验：org_id 与 subnet_ids 非法引用返回校验错误，
     // 而非依赖 FK 约束的 500 兜底
@@ -643,6 +645,26 @@ pub async fn update_room<P: DbProvider>(
     })?;
 
     if let Some(subnet_ids) = &req.subnet_ids {
+        // 解绑子网前校验：本房间存量设备的 IP 若仍落在将被移除的子网上，
+        // 拒绝变更（不变量：设备 IP 必须归属其所在房间绑定的子网）
+        let stale_ip_count: i64 = sqlx::query_scalar(
+            r"SELECT COUNT(*)
+               FROM ips i
+               JOIN device_interfaces di ON di.id = i.device_interface_id
+               JOIN devices d ON d.id = di.device_id
+               WHERE d.room_id = $1
+                 AND i.subnet_id != ANY($2)",
+        )
+        .bind(id)
+        .bind(subnet_ids)
+        .fetch_one(&mut *tx)
+        .await?;
+        if stale_ip_count > 0 {
+            return Err(AppError::Validation(
+                msg("server.room.subnet_in_use_by_device_ip").with("count", stale_ip_count),
+            ));
+        }
+
         sqlx::query("DELETE FROM room_networks WHERE room_id = $1")
             .bind(id)
             .execute(&mut *tx)
@@ -733,6 +755,18 @@ pub async fn delete_room<P: DbProvider>(
 
     if net_outlet_count > 0 {
         return Err(AppError::Validation(msg("server.room.has_net_outlets")));
+    }
+
+    // 设备可直接挂在房间下（不经工位/机位），同样拦截：
+    // devices.room_id 为 ON DELETE RESTRICT，漏检会以 FK 500 收场
+    let device_count: i64 =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM devices WHERE room_id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+    if device_count > 0 {
+        return Err(AppError::Validation(msg("server.room.has_devices")));
     }
 
     sqlx::query("DELETE FROM rooms WHERE id = $1")
@@ -897,7 +931,7 @@ pub async fn sync_room_net_outlets<P: DbProvider>(
                 .map_err(|e| {
                     if let sqlx::Error::Database(db_err) = &e {
                         let msg_text = db_err.message();
-                        if msg_text.contains("cable_links") {
+                        if msg_text.contains("ERR_CABLE_LINK_REFERENCE") {
                             return AppError::Validation(msg("server.net_outlet.in_use"));
                         }
                     }

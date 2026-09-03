@@ -42,6 +42,17 @@ impl Default for Resolver {
     }
 }
 
+/// 构造引用缓存键：各段以长度前缀拼接。名称中允许出现 `|`/`/` 等
+/// 字符，裸分隔符拼接会使不同引用生成相同键（如 region="a|b",cidr="c"
+/// 与 region="a",cidr="b|c"），缓存命中后错引外键
+fn cache_key(parts: &[&str]) -> String {
+    parts
+        .iter()
+        .map(|p| format!("{}:{}", p.len(), p))
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
 impl Resolver {
     pub fn new() -> Self {
         Self {
@@ -120,7 +131,7 @@ impl Resolver {
                 let sql = format!("SELECT id::text FROM {ref_table} WHERE {name_col} = $1");
                 self.cached_lookup(
                     conn,
-                    format!("byname|{ref_table}|{value}"),
+                    cache_key(&["byname", ref_table, &value]),
                     sql,
                     vec![value],
                 )
@@ -136,7 +147,7 @@ impl Resolver {
                 }
                 self.cached_lookup(
                     conn,
-                    format!("cidr|{region}|{value}"),
+                    cache_key(&["cidr", &region, &value]),
                     r"SELECT c.id::text
                        FROM network_cidrs c
                        JOIN network_regions r ON r.id = c.network_region_id
@@ -152,7 +163,7 @@ impl Resolver {
                 };
                 self.cached_lookup(
                     conn,
-                    format!("roomscoped|{ref_table}|{room}|{name}"),
+                    cache_key(&["roomscoped", ref_table, room, name]),
                     // 表名来自静态规格白名单
                     format!(
                         r"SELECT t.id::text
@@ -169,7 +180,7 @@ impl Resolver {
                 };
                 self.cached_lookup(
                     conn,
-                    format!("position|{room}|{cabinet}|{position}"),
+                    cache_key(&["position", room, cabinet, position]),
                     r"SELECT p.id::text
                        FROM positions p
                        JOIN cabinets c ON c.id = p.cabinet_id
@@ -194,7 +205,7 @@ impl Resolver {
                     .map_err(|_| bad(&device))?;
                 self.cached_lookup(
                     conn,
-                    format!("nic|{device_id}|{value}"),
+                    cache_key(&["nic", &device_id, &value]),
                     r"SELECT id::text FROM device_nics
                        WHERE device_id = $1 AND name = $2"
                         .to_string(),
@@ -210,7 +221,7 @@ impl Resolver {
                     .map_err(|_| bad(&device))?;
                 self.cached_lookup(
                     conn,
-                    format!("iface|{device_id}|{value}"),
+                    cache_key(&["iface", &device_id, &value]),
                     r"SELECT id::text FROM device_interfaces
                        WHERE device_id = $1 AND name = $2"
                         .to_string(),
@@ -228,7 +239,7 @@ impl Resolver {
                     .map_err(|_| miss(&value))?;
                 self.cached_lookup(
                     conn,
-                    format!("iface|{device_id}|{port}"),
+                    cache_key(&["iface", &device_id, port]),
                     r"SELECT id::text FROM device_interfaces
                        WHERE device_id = $1 AND name = $2"
                         .to_string(),
@@ -310,7 +321,7 @@ impl Resolver {
         if path.is_empty() {
             return Err(bad());
         }
-        if let Some(hit) = self.cache.get(&format!("orgpath|{path}")) {
+        if let Some(hit) = self.cache.get(&cache_key(&["orgpath", path])) {
             return Ok(hit.clone());
         }
         let mut parent: Option<String> = None;
@@ -337,7 +348,8 @@ impl Resolver {
         let Some(result) = parent else {
             return Err(bad());
         };
-        self.cache.insert(format!("orgpath|{path}"), result.clone());
+        self.cache
+            .insert(cache_key(&["orgpath", path]), result.clone());
         Ok(result)
     }
 
@@ -350,7 +362,7 @@ impl Resolver {
         };
         self.cached_lookup(
             conn,
-            format!("device|{room}|{device}"),
+            cache_key(&["device", room, device]),
             r"SELECT d.id::text
                FROM devices d JOIN rooms r ON r.id = d.room_id
                WHERE r.name = $1 AND d.name = $2"
@@ -548,14 +560,19 @@ pub async fn interface_owner(
 }
 
 /// 房间名查询（错误信息上下文用，查不到返回空串）。
+/// 查不到返回空串属正常分支；DB 故障留痕（不伪装成"房间不存在"）
 pub async fn room_name_of(conn: &mut PgConnection, room_id: &str) -> String {
-    sqlx::query_scalar::<_, String>("SELECT name FROM rooms WHERE id = $1::uuid")
+    match sqlx::query_scalar::<_, String>("SELECT name FROM rooms WHERE id = $1::uuid")
         .bind(room_id)
         .fetch_optional(conn)
         .await
-        .ok()
-        .flatten()
-        .unwrap_or_default()
+    {
+        Ok(row) => row.unwrap_or_default(),
+        Err(e) => {
+            foims_common::log_warn!("log.import_export.room_name_lookup_failed", error = e);
+            String::new()
+        }
+    }
 }
 
 /// 房间绑定的全部网段文本（ipv4_cidr/ipv6_cidr 交替列表）。

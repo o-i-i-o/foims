@@ -510,6 +510,10 @@ export async function initVisualization() {
       loadModule("TopologyModal", "/static/js/modules/visualization/TopologyModal.js")
     ]);
 
+    // 先置初始化标志再绑定事件：绑定中途任一元素缺失抛错时，
+    // 重进页面不会对同一元素重复绑定（tab 点击触发多份数据加载）
+    visualizationInitialized = true;
+
     initTabSwitching();
 
     const callbacks = createVisualizationCallbacks();
@@ -568,8 +572,6 @@ export async function initVisualization() {
     if (savedVizTabBtn && !savedVizTabBtn.classList.contains("active")) {
       savedVizTabBtn.click();
     }
-
-    visualizationInitialized = true;
   } catch (error) {
     console.error("初始化可视化模块失败:", error);
   }

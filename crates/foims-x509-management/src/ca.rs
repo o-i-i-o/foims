@@ -153,6 +153,42 @@ async fn write_ca_cert_atomic(target: &Path, cert_pem: &[u8]) -> Result<(), Cert
     }
 }
 
+/// 生成路径专用：create_new 独占写入目标文件。
+/// 不走临时文件 + rename——rename 是覆盖语义，两个并发生成会以
+/// 「B 证书 + A 私钥」错配收场；create_new 使后到者直接 Conflict，
+/// 且任何时刻都不可能出现被覆盖一半的证书文件。
+async fn write_ca_cert_exclusive(target: &Path, cert_pem: &[u8]) -> Result<(), CertManagerError> {
+    use tokio::io::AsyncWriteExt;
+
+    let mut file = match tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)
+        .await
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(CertManagerError::Conflict(msg(
+                "server.certificate.ca_already_exists",
+            )));
+        }
+        Err(e) => {
+            return Err(CertManagerError::Internal(
+                msg("server.certificate.write_failed").with("error", e),
+            ));
+        }
+    };
+
+    let write_result: std::io::Result<()> = async {
+        file.write_all(cert_pem).await?;
+        file.sync_all().await
+    }
+    .await;
+    write_result.map_err(|e| {
+        CertManagerError::Internal(msg("server.certificate.write_failed").with("error", e))
+    })
+}
+
 fn ca_key_path() -> PathBuf {
     Path::new(CA_DIR).join(CA_KEY_FILE)
 }
@@ -170,9 +206,17 @@ fn valid_ca_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// 读取 CA 证书 PEM；不存在时返回 None
+/// 读取 CA 证书 PEM；不存在时返回 None。
+/// IO/权限故障与「无 CA」不可混淆：留痕后再按无证书处理
 async fn read_ca_cert() -> Option<Vec<u8>> {
-    tokio::fs::read(ca_cert_path()).await.ok()
+    match tokio::fs::read(ca_cert_path()).await {
+        Ok(data) => Some(data),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            foims_common::log_warn!("log.certificate.ca_read_failed", error = e);
+            None
+        }
+    }
 }
 
 /// 校验证书是 CA（BasicConstraints CA:TRUE）、处于有效期内；
@@ -420,10 +464,10 @@ pub async fn generate_ca(req: GenerateCaRequest) -> Result<PathBuf, CertManagerE
         )
     })??;
 
-    // 先写证书后写私钥：证书写失败时目录仍为空（一致性最好）；
-    // 私钥写失败至多留下"仅证书不可签发"的一致状态（cert-only 语义），
-    // 不会出现"新 key + 旧 cert"的错配；证书走临时文件 + rename 原子写
-    write_ca_cert_atomic(&ca_cert_path(), generation.0.as_bytes()).await?;
+    // 先写证书后写私钥：create_new 独占创建使并发生成/已存在直接
+    // Conflict；私钥写失败至多留下"仅证书不可签发"的一致状态
+    //（cert-only），不会出现"新 key + 旧 cert"的错配
+    write_ca_cert_exclusive(&ca_cert_path(), generation.0.as_bytes()).await?;
     write_key_file(&ca_key_path(), &generation.1).await?;
 
     Ok(ca_cert_path())
@@ -647,9 +691,27 @@ pub(crate) async fn load_ca_material_by_id(id: Option<&str>) -> Option<(String, 
     } else {
         return None;
     };
-    let cert = tokio::fs::read_to_string(cert_path).await.ok()?;
-    let key = tokio::fs::read_to_string(key_path).await.ok()?;
+    let cert = read_pem_or_none(&cert_path, "cert").await?;
+    let key = read_pem_or_none(&key_path, "key").await?;
     Some((cert, key))
+}
+
+/// 读取 PEM 文件：缺失返回 None；其他 IO 故障留痕后同样返回 None
+///（签发路径按「物料不可用」处理，但权限/磁盘故障不能伪装成 404）
+async fn read_pem_or_none(path: &Path, kind: &str) -> Option<String> {
+    match tokio::fs::read_to_string(path).await {
+        Ok(data) => Some(data),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            foims_common::log_warn!(
+                "log.certificate.ca_material_read_failed",
+                kind = kind,
+                path = path.display().to_string(),
+                error = e
+            );
+            None
+        }
+    }
 }
 
 /// 按 CA 标识检查证书文件是否存在（生成证书时区分"CA 不存在"与"无私钥"）

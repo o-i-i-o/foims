@@ -264,8 +264,9 @@ impl SchedulerState {
 
 /// 派发到期的用户任务：逐任务查库取到期集合，带按任务 id 的重叠保护，
 /// 执行后写审计日志并前移 next_run_at/last_run_at/last_result。
-/// 预检与更新非原子（无行锁），由重叠保护与 next_run_at 前移共同兜底：
-/// 派发器自身单实例顺序执行，并发面仅为“立即执行”按钮，其路径有独立咨询锁。
+/// 执行前以与「立即执行」路径相同的咨询锁互斥并复核到期（due 列表是
+/// 执行前的快照，慢任务期间下一轮派发可能已处理同一任务）；
+/// task_logs 与状态前移在锁事务内原子提交。
 async fn dispatch_due_user_tasks(
     pool: sqlx::PgPool,
     registry: TaskRegistryRef,
@@ -307,75 +308,147 @@ async fn dispatch_due_user_tasks(
             log_warn!("log.task.overlap_skipped", name = task.name);
             continue;
         }
+        // 占位成功即创建 Drop 守卫（与系统 job 同款，panic 安全）：
+        // 执行器 panic 时标志随之释放，任务不会静默停摆
+        let _guard = SyncRunningGuard(flag);
 
-        let started_at = Utc::now();
-        let ctx = TaskContext {
-            pool: pool.clone(),
-            config: task.config.clone(),
-            db_config: db_config.clone(),
-        };
-        let result = registry.execute(&task.task_type, &ctx).await;
-        let (status, details) = match &result {
-            Ok(message) => ("success", serde_json::json!({ "message": message })),
-            Err(e) => (
-                "failed",
-                serde_json::json!({ "error": error_message(e).log_string() }),
-            ),
-        };
-
-        // 前移 next_run_at：失败时同样前移，避免故障任务每分钟重试刷屏
-        let next_run = match tokio::task::spawn_blocking({
-            let cron_expr = task.cron_expression.clone();
-            move || calculate_next_run(&cron_expr)
-        })
-        .await
-        {
-            Ok(Ok(next)) => Some(next),
-            Ok(Err(e)) => {
-                log_error!(
-                    "log.task.next_run_update_failed",
-                    name = task.name,
-                    error = error_message(&e).log_string()
-                );
-                None
-            }
-            Err(e) => {
-                log_error!("log.task.next_run_calc_task_failed", error = e);
-                None
-            }
-        };
-
-        if let Err(e) = sqlx::query(
-            "UPDATE scheduled_tasks SET last_run_at = $1, next_run_at = COALESCE($2, next_run_at), last_result = $3 WHERE id = $4",
-        )
-        .bind(started_at)
-        .bind(next_run)
-        .bind(status)
-        .bind(task.id)
-        .execute(&pool)
-        .await
-        {
-            log_error!("log.task.next_run_update_failed", name = task.name, error = e);
+        if let Err(e) = dispatch_single_task(&pool, &registry, &db_config, task).await {
+            log_error!("log.task.dispatch_failed", error = e);
         }
-
-        log_task_execution(&pool, &task.name, status, &details.to_string(), started_at).await;
-
-        if status == "success" {
-            log_info!(
-                "log.task.completed",
-                name = task.name,
-                result = details["message"].as_str().unwrap_or_default()
-            );
-        } else {
-            log_error!(
-                "log.task.failed",
-                name = task.name,
-                error = details["error"].as_str().unwrap_or_default()
-            );
-        }
-
-        flag.store(false, Ordering::Release);
     }
+}
+
+/// 与「立即执行」路径（src/system/scheduled_task.rs）相同键派生的任务咨询锁键，
+/// 保证手动触发与到期派发对同一任务互斥
+fn task_advisory_lock_key(id: uuid::Uuid) -> i64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    id.hash(&mut hasher);
+    hasher.finish() as i64
+}
+
+/// 派发单个到期任务：咨询锁 → 到期复核 → 执行 → 双写（同事务原子提交）。
+/// 任一步失败回滚（next_run_at 不前移，下轮派发重试）。
+async fn dispatch_single_task(
+    pool: &sqlx::PgPool,
+    registry: &TaskRegistryRef,
+    db_config: &DatabaseConfig,
+    task: crate::models::ScheduledTask,
+) -> Result<(), sqlx::Error> {
+    let mut lock_tx = pool.begin().await?;
+    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
+        .bind(task_advisory_lock_key(task.id))
+        .fetch_one(&mut *lock_tx)
+        .await?;
+    if !locked {
+        // 任务正被「立即执行」或上一轮派发执行
+        log_warn!("log.task.overlap_skipped", name = task.name);
+        return Ok(());
+    }
+
+    // 到期复核：due 列表是派发前的快照，锁等待期间 next_run_at 可能已被
+    // 并发路径前移；已处理/被停用的任务直接跳过
+    let still_due: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM scheduled_tasks
+          WHERE id = $1 AND enabled = true
+            AND next_run_at IS NOT NULL AND next_run_at <= NOW())",
+    )
+    .bind(task.id)
+    .fetch_one(&mut *lock_tx)
+    .await?;
+    if !still_due {
+        return Ok(());
+    }
+
+    let started_at = Utc::now();
+    let ctx = TaskContext {
+        pool: pool.clone(),
+        config: task.config.clone(),
+        db_config: db_config.clone(),
+    };
+    let result = registry.execute(&task.task_type, &ctx).await;
+    let end_time = Utc::now();
+    let duration = i32::try_from((end_time - started_at).num_milliseconds()).unwrap_or(i32::MAX);
+    let (status, details) = match &result {
+        Ok(message) => (
+            "success",
+            serde_json::json!({ "message": message, "task_type": task.task_type }),
+        ),
+        Err(e) => (
+            "failed",
+            serde_json::json!({
+                "error": error_message(e).log_string(),
+                "task_type": task.task_type
+            }),
+        ),
+    };
+
+    // 前移 next_run_at：失败时同样前移，避免故障任务每分钟重试刷屏；
+    // cron 解析失败按 1 小时退避推进（保留过期旧值会每分钟重新触发）
+    let next_run = match tokio::task::spawn_blocking({
+        let cron_expr = task.cron_expression.clone();
+        move || calculate_next_run(&cron_expr)
+    })
+    .await
+    {
+        Ok(Ok(next)) => Some(next),
+        Ok(Err(e)) => {
+            log_error!(
+                "log.task.next_run_update_failed",
+                name = task.name,
+                error = error_message(&e).log_string()
+            );
+            None
+        }
+        Err(e) => {
+            log_error!("log.task.next_run_calc_task_failed", error = e);
+            None
+        }
+    };
+    let effective_next_run = next_run.unwrap_or(started_at + chrono::Duration::hours(1));
+
+    // task_logs 与状态前移是与本次执行同源的业务双写：与锁同事务提交，
+    // 任一失败整体回滚
+    sqlx::query(
+        r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(&task.name)
+    .bind(status)
+    .bind(sqlx::types::Json(details.clone()))
+    .bind(started_at)
+    .bind(end_time)
+    .bind(duration)
+    .execute(&mut *lock_tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE scheduled_tasks SET last_run_at = $1, next_run_at = $2, last_result = $3 WHERE id = $4",
+    )
+    .bind(started_at)
+    .bind(effective_next_run)
+    .bind(status)
+    .bind(task.id)
+    .execute(&mut *lock_tx)
+    .await?;
+
+    lock_tx.commit().await?;
+
+    if status == "success" {
+        log_info!(
+            "log.task.completed",
+            name = task.name,
+            result = details["message"].as_str().unwrap_or_default()
+        );
+    } else {
+        log_error!(
+            "log.task.failed",
+            name = task.name,
+            error = details["error"].as_str().unwrap_or_default()
+        );
+    }
+    Ok(())
 }
 
 /// 运行中的调度器

@@ -1,11 +1,16 @@
-import { t } from "./i18n.js";
+import { getCurrentLanguage, t } from "./i18n.js";
+
+// 日期格式化跟随界面语言（否则浏览器默认区域可能与界面语言不一致）
+function locale() {
+  return getCurrentLanguage() === "zh" ? "zh-CN" : "en-US";
+}
 
 export function formatDateTime(dateStr) {
   if (!dateStr) {
     return "-";
   }
   const date = new Date(dateStr);
-  return date.toLocaleString();
+  return date.toLocaleString(locale());
 }
 
 export function getStatusText(status) {
@@ -87,7 +92,7 @@ export function formatTime(timestamp) {
   if (diff < 86400000) {
     return t("time.hours_ago", { count: Math.floor(diff / 3600000) });
   }
-  return date.toLocaleDateString();
+  return date.toLocaleDateString(locale());
 }
 
 export function getOperationTypeText(action) {

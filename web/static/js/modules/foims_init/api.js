@@ -72,6 +72,9 @@ export const checkPostgreSQL = async () => {
 
     const pgStatusElement = document.getElementById("pg-status");
     const nextButton = document.querySelector('.step-panel[data-step="1"] .btn-success');
+    if (!pgStatusElement || !nextButton) {
+      return;
+    }
 
     if (result.installed && result.running) {
       pgStatusElement.innerHTML = `
@@ -125,9 +128,11 @@ export const checkDatabaseStatus = async () => {
     // success 但 data 为 null 视同失败：进入 else 分支按失败提示，不读取空对象
     if (result.success && result.data) {
       const dbStatus = result.data;
-      state.dbStatus = dbStatus;
       const dbStatusElement = document.getElementById("db-status");
       const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+      if (!dbStatusElement || !nextButton) {
+        return;
+      }
 
       dbStatusElement.className = "status-container";
 
@@ -182,9 +187,13 @@ export const handleInitModeSubmit = async (e) => {
   e.preventDefault();
 
   const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+  const verificationInput = document.getElementById("verification-step2");
+  if (!nextButton || !verificationInput) {
+    return;
+  }
   nextButton.disabled = true;
 
-  const verificationCode = document.getElementById("verification-step2").value;
+  const verificationCode = verificationInput.value;
   if (!verificationCode) {
     showError(t("init.enter_captcha"));
     nextButton.disabled = false;

@@ -405,9 +405,11 @@ export async function loadNotificationsData(
     const data = result.data || { items: [], total: 0 };
     const notifications = data.items || data;
 
-    // 空列表且当前页大于 1：说明删除后页码越界，回退到上一页重载（分页控件随重载正常渲染）
-    if (notifications.length === 0 && page > 1) {
-      loadNotificationsData(filterStatus, page - 1, sortBy, sortOrder);
+    // 空列表且当前页大于 1：删除后页码越界，按 total_pages 一步回退
+    //（与其他列表模块一致，避免极端情况连环请求）
+    const totalPages = data.total_pages || 0;
+    if (notifications.length === 0 && page > 1 && totalPages > 0 && page > totalPages) {
+      loadNotificationsData(filterStatus, totalPages, sortBy, sortOrder);
       return;
     }
 

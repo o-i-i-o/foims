@@ -210,12 +210,12 @@ pub fn detect_user_language_from_parts(parts: &Parts) -> String {
     "zh".to_string()
 }
 
-/// login_logs.user_agent / token_usage.user_agent 列宽（VARCHAR(255)）
+/// login_logs.user_agent 列宽（VARCHAR(255)）
 const USER_AGENT_MAX_CHARS: usize = 255;
 
 /// 从 axum 请求 parts 中获取 User-Agent
 ///
-/// 按字符数截断到 255 以内（对齐 login_logs/token_usage 的 VARCHAR(255)，
+/// 按字符数截断到 255 以内（对齐 login_logs 的 VARCHAR(255)，
 /// 防止超长 UA 直写数据库报错丢日志；按 chars 截断避免切断多字节字符）
 #[must_use]
 pub fn get_user_agent_from_parts(parts: &Parts) -> String {

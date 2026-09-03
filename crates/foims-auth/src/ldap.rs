@@ -450,8 +450,8 @@ pub(crate) async fn complete_external_login<P: AuthProvider>(
         status: external.status,
         two_factor_enabled: external.two_factor_enabled,
         two_factor_verified: true,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        created_at: external.created_at,
+        updated_at: external.updated_at,
     };
 
     build_login_response(user, login_tokens, meta.is_secure)

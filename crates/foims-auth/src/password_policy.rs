@@ -8,7 +8,6 @@ use chrono::Utc;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use foims_common::log_warn;
 use foims_common::{AppError, msg};
 
 /// 密码策略配置
@@ -196,34 +195,36 @@ pub async fn validate_password(
     Ok(())
 }
 
-/// 记录密码历史（保留最近 history_count*2 条，防表膨胀）
-pub async fn record_history(pool: &PgPool, user_id: Uuid, password_hash: &str) {
+/// 记录密码历史（保留最近 history_count*2 条，防表膨胀）。
+///
+/// 写入在调用方传入的事务连接上执行：与密码变更同事务提交/回滚，
+/// 保证「新密码生效 ⇔ 历史已记录」，失败时整体回滚并向上传播。
+pub async fn record_history(
+    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
+    user_id: Uuid,
+    password_hash: &str,
+) -> Result<(), sqlx::Error> {
     let policy = load(pool).await;
     let keep = (policy.history_count.max(1) as i64) * 2;
 
-    if let Err(e) =
-        sqlx::query("INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)")
-            .bind(user_id)
-            .bind(password_hash)
-            .execute(pool)
-            .await
-    {
-        log_warn!("log.user.password_history_write_failed", error = e);
-        return;
-    }
+    sqlx::query("INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)")
+        .bind(user_id)
+        .bind(password_hash)
+        .execute(&mut *conn)
+        .await?;
 
-    if let Err(e) = sqlx::query(
+    sqlx::query(
         "DELETE FROM password_history WHERE user_id = $1 AND id NOT IN (
             SELECT id FROM password_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
         )",
     )
     .bind(user_id)
     .bind(keep)
-    .execute(pool)
-    .await
-    {
-        log_warn!("log.user.password_history_prune_failed", error = e);
-    }
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
 }
 
 /// 密码是否已过有效期（策略关闭或用户无记录时返回 false）

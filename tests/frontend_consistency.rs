@@ -47,7 +47,7 @@ fn collect_files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
 }
 
 fn extract_matches(pattern: &str, haystack: &str) -> BTreeSet<String> {
-    let re = Regex::new(pattern).expect("非法正则");
+    let re = Regex::new(pattern).unwrap_or_else(|e| panic!("非法正则: {e}"));
     re.captures_iter(haystack)
         .map(|c| c[1].to_string())
         .collect()
@@ -94,7 +94,7 @@ fn js_referenced_dom_ids_must_exist() {
     let js_files = all_js_files();
 
     // 1. 收集全部 id 定义：HTML 静态文件 + JS 模板字符串中的 id="…"
-    let id_re = Regex::new(r#"id="([A-Za-z0-9_-]+)""#).expect("非法正则");
+    let id_re = Regex::new(r#"id="([A-Za-z0-9_-]+)""#).unwrap_or_else(|e| panic!("非法正则: {e}"));
     let mut defined: BTreeSet<String> = BTreeSet::new();
     for path in &html_files {
         let content = fs::read_to_string(path).unwrap_or_default();
@@ -137,7 +137,7 @@ fn js_referenced_dom_ids_must_exist() {
     }
 
     // 排除十六进制色值（"#fff"、"#0d47a1" 等字符串与 #id 选择器同形）
-    let hex_color = Regex::new("^[0-9a-fA-F]{3,8}$").expect("非法正则");
+    let hex_color = Regex::new("^[0-9a-fA-F]{3,8}$").unwrap_or_else(|e| panic!("非法正则: {e}"));
     referenced.retain(|id| !hex_color.is_match(id));
 
     let dangling: Vec<String> = referenced.difference(&defined).cloned().collect();
@@ -154,8 +154,8 @@ fn registry_files_must_exist_and_keys_match_root_ids() {
     let static_root = web_static();
 
     let modal_loader = read_file(&["js", "utils", "modalLoader.js"]);
-    let modal_registry_re =
-        Regex::new(r#""([\w-]+)":\s*"(/static/modals/[^"]+)""#).expect("非法正则");
+    let modal_registry_re = Regex::new(r#""([\w-]+)":\s*"(/static/modals/[^"]+)""#)
+        .unwrap_or_else(|e| panic!("非法正则: {e}"));
     for cap in modal_registry_re.captures_iter(&modal_loader) {
         let key = cap[1].to_string();
         let path = cap[2].to_string();
@@ -195,10 +195,10 @@ fn registry_files_must_exist_and_keys_match_root_ids() {
 
 #[test]
 fn i18n_keys_must_be_consistent_and_referenced_keys_exist() {
-    let zh: serde_json::Value =
-        serde_json::from_str(&read_file(&["i18n", "zh.json"])).expect("zh.json 解析失败");
-    let en: serde_json::Value =
-        serde_json::from_str(&read_file(&["i18n", "en.json"])).expect("en.json 解析失败");
+    let zh: serde_json::Value = serde_json::from_str(&read_file(&["i18n", "zh.json"]))
+        .unwrap_or_else(|e| panic!("zh.json 解析失败: {e}"));
+    let en: serde_json::Value = serde_json::from_str(&read_file(&["i18n", "en.json"]))
+        .unwrap_or_else(|e| panic!("en.json 解析失败: {e}"));
 
     let mut zh_keys = BTreeSet::new();
     flatten_json_keys(&zh, "", &mut zh_keys);
@@ -271,7 +271,7 @@ fn dynamically_loaded_module_names_must_be_registered() {
             r#"PRELOAD_MODULES = \[([^\]]*)\]"#,
             r#"schedulePreload\(\s*\[([^\]]*)\]"#,
         ] {
-            let re = Regex::new(pat).expect("非法正则");
+            let re = Regex::new(pat).unwrap_or_else(|e| panic!("非法正则: {e}"));
             for cap in re.captures_iter(&content) {
                 used.extend(extract_matches(r#""([\w-]+)""#, &cap[1]));
             }
@@ -305,7 +305,7 @@ fn asset_versions_must_be_uniform() {
     )
     .into_iter()
     .next()
-    .expect("resourceLoader.js 中未找到 MODULE_VERSION");
+    .unwrap_or_else(|| panic!("resourceLoader.js 中未找到 MODULE_VERSION"));
 
     for entry in ["main.html", "index.html", "init_index.html"] {
         let content = read_file(&[entry]);

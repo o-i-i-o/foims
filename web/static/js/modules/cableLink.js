@@ -79,7 +79,12 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
     if (requestSeq !== cableLinkRequestSeq) {
       return; // 已有更新的请求,丢弃过期响应
     }
-    const data = result.success ? result.data : { items: [], total: 0 };
+    // 接口失败时提示并中止，不再静默渲染空数据（与 networks.js 口径一致）
+    if (!result.success) {
+      showToast(`${t("cable_link.load_failed")}: ${result.message}`, "error");
+      return;
+    }
+    const data = result.data || { items: [], total: 0 };
     const items = data.items || data;
     lastLoadedItems = Array.isArray(items) ? items : [];
 

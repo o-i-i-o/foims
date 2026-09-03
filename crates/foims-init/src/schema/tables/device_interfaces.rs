@@ -24,7 +24,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             port_type VARCHAR(20) NOT NULL DEFAULT 'access' CHECK (port_type IN (
                 'access', 'trunk', 'hybrid', 'uplink', 'stack', 'console'
             )),
-            status VARCHAR(20) NOT NULL DEFAULT 'up',
+            status VARCHAR(20) NOT NULL DEFAULT 'up'
+                CONSTRAINT chk_device_interfaces_status CHECK (status IN ('up', 'down', 'admin-down')),
             speed VARCHAR(20),
             trunk_id INTEGER,
             device_managed BOOLEAN NOT NULL DEFAULT FALSE,

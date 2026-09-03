@@ -180,6 +180,9 @@ export class NetworkCardManager {
   }
 
   renderRegionOptions(select) {
+    if (!select) {
+      return;
+    }
     const keep = select.value;
     let html = `<option value="">${this.regionPlaceholder()}</option>`;
     const included = new Set();
@@ -505,13 +508,19 @@ export class NetworkCardManager {
       }
     });
 
-    // 自动分配：从所选网段取第一个未使用的 IP 填入地址框
-    element.querySelector(".auto-assign-ip-btn")?.addEventListener("click", async () => {
+    // 自动分配：从所选网段取第一个未使用的 IP 填入地址框。
+    // 请求期间禁用按钮：连点时慢的旧响应后到会覆盖新分配的结果
+    element.querySelector(".auto-assign-ip-btn")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
       const subnetId = networkSelect?.value;
       if (!subnetId) {
         showToast(t("device.auto_assign_select_network"), "warning");
         return;
       }
+      if (btn.disabled) {
+        return;
+      }
+      btn.disabled = true;
       try {
         const result = await apiGet(`/api/resources/ip/available/${encodeURIComponent(subnetId)}`);
         const first = result.success ? (result.data?.available_ips || [])[0] : null;
@@ -524,6 +533,8 @@ export class NetworkCardManager {
       } catch (error) {
         console.error("自动分配IP失败:", error);
         showToast(t("device.auto_assign_failed"), "error");
+      } finally {
+        btn.disabled = false;
       }
     });
 

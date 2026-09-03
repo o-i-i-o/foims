@@ -532,7 +532,7 @@
 /* MAC 表空数据提示 */
 .mac-table-empty {
   text-align: center;
-  color: #666;
+  color: var(--color-text-secondary);
   padding: 20px;
 }
 
@@ -543,10 +543,10 @@
 
 /* MAC 表可点击的网段分组标题行（点击折叠/展开组内明细） */
 .network-group-header {
-  background: #f5f5f5;
+  background: var(--color-bg-hover);
   padding: 8px 12px;
   font-weight: 700;
-  border-left: 3px solid #4caf50;
+  border-left: 3px solid var(--color-success);
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -566,14 +566,14 @@
 }
 
 .mac-group-table th {
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border-dark);
   padding: 6px;
   text-align: left;
-  background: #fafafa;
+  background: var(--color-bg);
 }
 
 .mac-group-table td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border-dark);
   padding: 6px;
 }
 
@@ -591,7 +591,7 @@
 }
 
 .lldp-table th {
-  border: 1px solid var(--color-border-dark, #ddd);
+  border: 1px solid var(--color-border-dark, var(--color-border-dark));
   padding: 12px 10px;
   font-weight: 600;
 }
@@ -611,13 +611,13 @@
 }
 
 .lldp-table td {
-  border: 1px solid var(--color-border-dark, #ddd);
+  border: 1px solid var(--color-border-dark, var(--color-border-dark));
   padding: 10px;
 }
 
 .lldp-table td.lldp-index {
   text-align: center;
-  color: var(--color-text-muted, #888);
+  color: var(--color-text-muted, var(--color-text-muted));
   padding: 10px 8px;
 }
 
@@ -636,7 +636,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9em;
-  color: var(--color-text-secondary, #666);
+  color: var(--color-text-secondary, var(--color-text-secondary));
 }
 
 /* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
@@ -645,11 +645,11 @@
 }
 
 .mac-lldp-text-muted {
-  color: #666;
+  color: var(--color-text-secondary);
   margin-bottom: 10px;
 }
 
 .mac-lldp-text-syncing {
   margin-top: 10px;
-  color: #666;
+  color: var(--color-text-secondary);
 }

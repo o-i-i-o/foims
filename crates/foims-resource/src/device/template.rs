@@ -132,10 +132,14 @@ pub async fn update_device_template<P: DbProvider>(
         )));
     }
 
+    // 预检与写入放同一事务：该路径是设备模板唯一不在事务内的更新入口，
+    // 与 create 路径对齐，消除预检-写入窗口
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
     let existing: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM device_templates WHERE id = $1")
             .bind(id)
-            .fetch_optional(&state.pool()?.get_conn())
+            .fetch_optional(&mut *tx)
             .await?;
     if existing.is_none() {
         return Err(AppError::NotFound(msg("server.device_template.not_found")));
@@ -146,7 +150,7 @@ pub async fn update_device_template<P: DbProvider>(
     )
     .bind(&req.name)
     .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
+    .fetch_one(&mut *tx)
     .await?;
     if name_conflict {
         return Err(AppError::Conflict(msg(
@@ -163,8 +167,19 @@ pub async fn update_device_template<P: DbProvider>(
     .bind(&req.model)
     .bind(&req.description)
     .bind(id)
-    .execute(&state.pool()?.get_conn())
-    .await?;
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        // 并发重名兜底：device_templates.name 唯一冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.device_template.name_exists"));
+        }
+        AppError::from(e)
+    })?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({ "template_id": id.to_string(), "name": req.name });
     log_op_best_effort(

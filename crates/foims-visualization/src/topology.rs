@@ -766,7 +766,18 @@ pub async fn create_topology_connection(
         .bind(req.target_device_port_id)
         .bind(&req.label)
         .fetch_one(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| {
+            // 并发窗口兜底：物理连线唯一索引（设备对+端口组合）冲突映射为 409
+            if let sqlx::Error::Database(ref db_err) = e
+                && db_err.is_unique_violation()
+            {
+                return VisualizationError::Conflict(msg(
+                    "server.visualization.connection_duplicate",
+                ));
+            }
+            VisualizationError::from(e)
+        })?;
         new_id = row.0;
     }
 
@@ -846,9 +857,14 @@ pub async fn auto_discover_all_topology(
         }
     }
 
-    sqlx::query("DELETE FROM topology_connections WHERE auto_discovered = TRUE")
-        .execute(pool)
-        .await?;
+    // 仅清理历史遗留的自动发现「物理」连线（迁移兜底）：CSV 导入同样
+    // 写 auto_discovered 列，无条件删除会把导入的逻辑连线（含级联的
+    // 成员端口）一并清空
+    sqlx::query(
+        "DELETE FROM topology_connections WHERE auto_discovered = TRUE AND connection_type = 'physical'",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(AutoDiscoverResult {
         added_nodes,

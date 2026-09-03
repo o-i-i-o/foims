@@ -125,7 +125,11 @@ async function initResourcePreloading() {
     { delay: 2000, priority: "low" }
   );
 
-  lazyLoad("dashboard", { when: "idle" });
+  // 预加载失败可接受（进入面板时会再按需加载并提示），
+  // 但需吞掉 rejection 避免 unhandled rejection
+  lazyLoad("dashboard", { when: "idle" }).catch((error) => {
+    console.warn("预加载 dashboard 失败:", error);
+  });
 
   // idle 分批预热全部模态框 HTML 进内存缓存，首开任意弹框零网络等待
   prefetchModalsOnIdle();

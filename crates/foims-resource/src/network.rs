@@ -36,6 +36,21 @@ fn map_network_unique_violation(e: sqlx::Error, name: &str) -> AppError {
     AppError::from(e)
 }
 
+/// 网段/区域 CIDR 写路径咨询锁键（固定键：重叠校验是全局性的，
+/// 需跨区域串行）
+const NETWORK_CIDR_WRITE_ADVISORY_LOCK_KEY: i64 = 7_132_341_928_754_110;
+
+/// 网段/区域 CIDR 写路径串行化：重叠校验（CIDR && CIDR）与「网段必须
+/// 落在区域范围内」检查均无排他约束兜底，并发请求会基于各自快照同时
+/// 通过检查。以固定键咨询锁互斥所有网段写（管理端低频操作，可接受）
+async fn acquire_network_cidr_write_lock(conn: &mut sqlx::PgConnection) -> Result<(), AppError> {
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(NETWORK_CIDR_WRITE_ADVISORY_LOCK_KEY)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 /// 校验新 CIDR 与既有同行网段不重叠（包含/被包含均视为冲突），
 /// IPv4/IPv6 分别处理；`exclude_id` 用于更新时排除自身。
 async fn ensure_cidr_not_overlapping(
@@ -334,6 +349,7 @@ pub async fn create_network<P: DbProvider>(
     // 区域加载、重名/重复 CIDR/重叠校验与写入包进同一事务：
     // 校验与 INSERT 原子生效，缩小并发创建重叠网段的窗口
     let mut tx = state.pool()?.get_conn().begin().await?;
+    acquire_network_cidr_write_lock(&mut tx).await?;
 
     let network_region = sqlx::query_as::<_, NetworkRegion>(
         "SELECT id, name, description,
@@ -567,6 +583,7 @@ pub async fn update_network<P: DbProvider>(
     // 存在性/区域/重名/重复 CIDR/重叠/越界校验与写入包进同一事务：
     // 各项校验与 UPDATE 原子生效，缩小并发创建重叠网段的窗口
     let mut tx = state.pool()?.get_conn().begin().await?;
+    acquire_network_cidr_write_lock(&mut tx).await?;
 
     let existing_network =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_cidrs WHERE id = $1")
@@ -1157,6 +1174,9 @@ pub async fn update_network_region<P: DbProvider>(
 
     // 预检、写入与更新后复查放同一事务，任一失败整体回滚
     let mut tx = state.pool()?.get_conn().begin().await?;
+    // 与网段写互斥：并发「收缩区域 + 在该区域建网段」会基于各自快照
+    // 同时通过检查，产生落在区域范围外的网段
+    acquire_network_cidr_write_lock(&mut tx).await?;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")
@@ -1227,7 +1247,9 @@ pub async fn update_network_region<P: DbProvider>(
                     req.ipv4_cidrs.as_deref().unwrap_or_default(),
                 )
             {
-                tx.rollback().await.ok();
+                if let Err(e) = tx.rollback().await {
+                    log_error!("log.network.region_update_rollback_failed", error = e);
+                }
                 return Err(AppError::Validation(
                     msg("server.common.invalid_param").with("param", "ipv4_cidrs"),
                 ));
@@ -1238,7 +1260,9 @@ pub async fn update_network_region<P: DbProvider>(
                     req.ipv6_cidrs.as_deref().unwrap_or_default(),
                 )
             {
-                tx.rollback().await.ok();
+                if let Err(e) = tx.rollback().await {
+                    log_error!("log.network.region_update_rollback_failed", error = e);
+                }
                 return Err(AppError::Validation(
                     msg("server.common.invalid_param").with("param", "ipv6_cidrs"),
                 ));
@@ -1284,6 +1308,7 @@ pub async fn delete_network_region<P: DbProvider>(
     // 存在性/占用检查与 DELETE 包进同一事务，避免检查后被并发创建
     // 的网段绕过（并发下以 FK 500 收场的 TOCTOU）
     let mut tx = state.pool()?.get_conn().begin().await?;
+    acquire_network_cidr_write_lock(&mut tx).await?;
 
     let existing: Option<Uuid> =
         sqlx::query_scalar::<_, Uuid>("SELECT id FROM network_regions WHERE id = $1")

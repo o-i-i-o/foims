@@ -405,9 +405,20 @@ pub async fn login<P: AuthProvider>(
 
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
-        (Uuid, String, String, String, String, bool, bool, String),
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            String,
+            bool,
+            bool,
+            String,
+            chrono::DateTime<Utc>,
+            chrono::DateTime<Utc>,
+        ),
     >(
-        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, auth_provider FROM users WHERE username = $1 OR email = $1",
+        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, auth_provider, created_at, updated_at FROM users WHERE username = $1 OR email = $1",
     )
     .bind(login_identifier)
     .fetch_optional(&conn)
@@ -429,8 +440,18 @@ pub async fn login<P: AuthProvider>(
         }
     };
 
-    let (id, username, password_hash, email, role, status, two_factor_enabled, auth_provider) =
-        user_row;
+    let (
+        id,
+        username,
+        password_hash,
+        email,
+        role,
+        status,
+        two_factor_enabled,
+        auth_provider,
+        created_at,
+        updated_at,
+    ) = user_row;
 
     // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
     //（以邮箱登录的请求同样受 DB username 维度封禁约束）
@@ -568,8 +589,8 @@ pub async fn login<P: AuthProvider>(
         status,
         two_factor_enabled,
         two_factor_verified: true,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at,
+        updated_at,
     };
 
     if let Err(e) = log_login(
@@ -643,9 +664,11 @@ pub async fn login_with_email_code<P: AuthProvider>(
             Option<String>,
             Option<DateTime<Utc>>,
             String,
+            DateTime<Utc>,
+            DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider FROM users WHERE email = $1",
+        "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider, created_at, updated_at FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(&conn)
@@ -666,8 +689,19 @@ pub async fn login_with_email_code<P: AuthProvider>(
         }
     };
 
-    let (id, username, email, role, status, two_factor_enabled, code, expiry, auth_provider) =
-        user_row;
+    let (
+        id,
+        username,
+        email,
+        role,
+        status,
+        two_factor_enabled,
+        code,
+        expiry,
+        auth_provider,
+        created_at,
+        updated_at,
+    ) = user_row;
 
     // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
     //（按邮箱登录的请求同样受 DB username 维度封禁约束）
@@ -810,8 +844,8 @@ pub async fn login_with_email_code<P: AuthProvider>(
         status,
         two_factor_enabled,
         two_factor_verified: true,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at,
+        updated_at,
     };
 
     if let Err(e) = log_login(
@@ -924,9 +958,20 @@ pub async fn login_with_two_factor<P: AuthProvider>(
 
     let user_row = match sqlx::query_as::<
         sqlx::Postgres,
-        (Uuid, String, String, String, String, bool, bool, Option<String>),
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            String,
+            bool,
+            bool,
+            Option<String>,
+            DateTime<Utc>,
+            DateTime<Utc>,
+        ),
     >(
-        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, two_factor_secret FROM users WHERE username = $1",
+        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, two_factor_secret, created_at, updated_at FROM users WHERE username = $1",
     )
     .bind(login_identifier)
     .fetch_optional(&conn)
@@ -960,7 +1005,18 @@ pub async fn login_with_two_factor<P: AuthProvider>(
         }
     };
 
-    let (id, username, password_hash, email, role, status, two_factor_enabled, secret) = user_row;
+    let (
+        id,
+        username,
+        password_hash,
+        email,
+        role,
+        status,
+        two_factor_enabled,
+        secret,
+        created_at,
+        updated_at,
+    ) = user_row;
 
     // 防「换标识」绕过：命中 DB 记录后对 DB 用户名键复查封禁
     if crate::app_fail2ban::is_user_banned(&username) {
@@ -1165,8 +1221,8 @@ pub async fn login_with_two_factor<P: AuthProvider>(
         status,
         two_factor_enabled,
         two_factor_verified: true,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at,
+        updated_at,
     };
 
     if let Err(e) = log_login(
@@ -1600,14 +1656,17 @@ pub async fn reset_password<P: AuthProvider>(
             .execute(&mut *tx)
             .await?;
 
-            tx.commit().await?;
-
+            // 密码写入与历史记录同事务提交，避免「密码已生效但历史缺失」
             crate::password_policy::record_history(
                 &state.pool()?.get_conn(),
+                &mut tx,
                 user_id,
                 &hashed_password,
             )
-            .await;
+            .await
+            .map_err(AppError::from)?;
+
+            tx.commit().await?;
 
             Ok(foims_common::ok_json(
                 (),
@@ -1668,15 +1727,22 @@ pub async fn change_password<P: AuthProvider>(
 
     let hashed_password = hash_password(&req.new_password).await?;
 
+    // 密码写入与历史记录同事务提交，避免「密码已生效但历史缺失」
+    let mut tx = conn.begin().await?;
+
     sqlx::query(
         "UPDATE users SET password_hash = $1, tokens_invalidated_at = NOW(), password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
     )
     .bind(&hashed_password)
     .bind(user_id)
-    .execute(&conn)
+    .execute(&mut *tx)
     .await?;
 
-    crate::password_policy::record_history(&conn, user_id, &hashed_password).await;
+    crate::password_policy::record_history(&conn, &mut tx, user_id, &hashed_password)
+        .await
+        .map_err(AppError::from)?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({ "username": auth.username });
     log_op_best_effort(
@@ -2015,6 +2081,8 @@ pub(crate) struct ExternalUser {
     pub(crate) role: String,
     pub(crate) status: bool,
     pub(crate) two_factor_enabled: bool,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
 }
 
 /// 外部认证（LDAP/SSO）用户查找或自动建户：
@@ -2035,16 +2103,28 @@ pub(crate) async fn find_or_create_external_user(
         )));
     }
 
-    if let Some(row) =
-        sqlx::query_as::<sqlx::Postgres, (Uuid, String, String, String, bool, bool, String)>(
-            "SELECT id, username, email, role, status, two_factor_enabled, auth_provider
-               FROM users WHERE username = $1",
-        )
-        .bind(username)
-        .fetch_optional(conn)
-        .await?
+    if let Some(row) = sqlx::query_as::<
+        sqlx::Postgres,
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            bool,
+            bool,
+            String,
+            DateTime<Utc>,
+            DateTime<Utc>,
+        ),
+    >(
+        "SELECT id, username, email, role, status, two_factor_enabled, auth_provider, created_at, updated_at
+           FROM users WHERE username = $1",
+    )
+    .bind(username)
+    .fetch_optional(conn)
+    .await?
     {
-        let (id, db_username, mut db_email, role, status, two_factor_enabled, auth_provider) = row;
+        let (id, db_username, mut db_email, role, status, two_factor_enabled, auth_provider, created_at, updated_at) = row;
         if auth_provider != provider {
             return Err(AppError::Conflict(msg("server.auth.provider_mismatch")));
         }
@@ -2071,6 +2151,8 @@ pub(crate) async fn find_or_create_external_user(
             role,
             status,
             two_factor_enabled,
+            created_at,
+            updated_at,
         });
     }
 
@@ -2095,10 +2177,22 @@ pub(crate) async fn find_or_create_external_user(
         .map(String::from)
         .unwrap_or_else(|| format!("{username}@{provider}.invalid"));
 
-    let inserted = sqlx::query_as::<sqlx::Postgres, (Uuid, String, String, String, bool, bool)>(
+    let inserted = sqlx::query_as::<
+        sqlx::Postgres,
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            bool,
+            bool,
+            DateTime<Utc>,
+            DateTime<Utc>,
+        ),
+    >(
         "INSERT INTO users (username, password_hash, email, role, status, auth_provider)
          VALUES ($1, $2, $3, $4, TRUE, $5)
-         RETURNING id, username, email, role, status, two_factor_enabled",
+         RETURNING id, username, email, role, status, two_factor_enabled, created_at, updated_at",
     )
     .bind(username)
     .bind(&password_hash)
@@ -2109,7 +2203,7 @@ pub(crate) async fn find_or_create_external_user(
     .await;
 
     match inserted {
-        Ok((id, username, email, role, status, two_factor_enabled)) => {
+        Ok((id, username, email, role, status, two_factor_enabled, created_at, updated_at)) => {
             foims_common::log_info!(
                 "log.auth.external_user_created",
                 username = username,
@@ -2122,20 +2216,31 @@ pub(crate) async fn find_or_create_external_user(
                 role,
                 status,
                 two_factor_enabled,
+                created_at,
+                updated_at,
             })
         }
         Err(e) => {
             // 邮箱已被其他账户占用：退化为占位邮箱重试，避免阻断登录
             if e.to_string().contains("users_email_key") {
                 let placeholder = format!("{username}@{provider}.invalid");
-                let (id, username, email, role, status, two_factor_enabled) =
+                let (id, username, email, role, status, two_factor_enabled, created_at, updated_at) =
                     sqlx::query_as::<
                         sqlx::Postgres,
-                        (Uuid, String, String, String, bool, bool),
+                        (
+                            Uuid,
+                            String,
+                            String,
+                            String,
+                            bool,
+                            bool,
+                            DateTime<Utc>,
+                            DateTime<Utc>,
+                        ),
                     >(
                         "INSERT INTO users (username, password_hash, email, role, status, auth_provider)
                          VALUES ($1, $2, $3, $4, TRUE, $5)
-                         RETURNING id, username, email, role, status, two_factor_enabled",
+                         RETURNING id, username, email, role, status, two_factor_enabled, created_at, updated_at",
                     )
                     .bind(username)
                     .bind(&password_hash)
@@ -2156,6 +2261,8 @@ pub(crate) async fn find_or_create_external_user(
                     role,
                     status,
                     two_factor_enabled,
+                    created_at,
+                    updated_at,
                 });
             }
             Err(e.into())
@@ -2387,7 +2494,10 @@ async fn dummy_bcrypt_verify(password: &str) {
     });
     let password = password.to_string();
     let hash = hash.clone();
-    let _ = tokio::task::spawn_blocking(move || verify(&password, &hash)).await;
+    // 校验结果本身无业务意义（诱饵哈希），仅对任务崩溃留痕
+    if let Err(e) = tokio::task::spawn_blocking(move || verify(&password, &hash)).await {
+        foims_common::log_warn!("log.auth.dummy_verify_task_failed", error = e);
+    }
 }
 
 pub(crate) async fn log_login(

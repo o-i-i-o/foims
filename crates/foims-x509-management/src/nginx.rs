@@ -23,6 +23,52 @@ pub struct NginxApplyResult {
     pub updated: Vec<PathBuf>,
 }
 
+/// 临时文件 + rename 原子写入配置：截断式直写在进程崩溃/磁盘满时会
+/// 留下半截 foims.conf，nginx 下次 reload 失败（与 ca.rs 原子写同口径）
+async fn write_conf_atomic(conf: &Path, content: &str) -> Result<(), CertManagerError> {
+    use tokio::io::AsyncWriteExt;
+
+    let tmp_path = PathBuf::from(format!(
+        "{}.{}.{}.tmp",
+        conf.display(),
+        std::process::id(),
+        chrono::Utc::now().timestamp_micros()
+    ));
+    let write_err = |e: std::io::Error| {
+        CertManagerError::Internal(
+            msg("server.certificate.nginx_conf_write_failed").with("error", e),
+        )
+    };
+
+    let mut file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp_path)
+        .await
+        .map_err(write_err)?;
+
+    let write_result: std::io::Result<()> = async {
+        file.write_all(content.as_bytes()).await?;
+        file.sync_all().await
+    }
+    .await;
+
+    if let Err(e) = write_result {
+        if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
+            foims_common::log_warn!("log.certificate.conf_tmp_remove_failed", error = remove_err);
+        }
+        return Err(write_err(e));
+    }
+
+    if let Err(e) = tokio::fs::rename(&tmp_path, conf).await {
+        if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
+            foims_common::log_warn!("log.certificate.conf_tmp_remove_failed", error = remove_err);
+        }
+        return Err(write_err(e));
+    }
+    Ok(())
+}
+
 /// 将证书对（{stem}.pem + {stem}.key）的路径整体替换进候选 foims.conf。
 ///
 /// 证书与私钥文件必须同时存在（nginx 两者都需要）；候选文件仅存在其一
@@ -70,11 +116,7 @@ pub async fn apply_certificate_to_nginx(
         })?;
         let (new_content, count) = replace_cert_directives(&content, &cert_path, &key_path);
         if count > 0 {
-            tokio::fs::write(&conf, new_content).await.map_err(|e| {
-                CertManagerError::Internal(
-                    msg("server.certificate.nginx_conf_write_failed").with("error", e),
-                )
-            })?;
+            write_conf_atomic(&conf, &new_content).await?;
             updated.push(conf);
         }
         replaced += count;

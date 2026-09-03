@@ -34,25 +34,30 @@ pub async fn delete_certificate(kind: CertKind, file_stem: &str) -> Result<(), C
     let cert_path = std::path::Path::new(kind.dir()).join(format!("{file_stem}.pem"));
     let key_path = std::path::Path::new(kind.dir()).join(format!("{file_stem}.key"));
 
-    if !cert_path.exists() && !key_path.exists() {
+    let cert_exists = tokio::fs::try_exists(&cert_path).await.unwrap_or(false);
+    let key_exists = tokio::fs::try_exists(&key_path).await.unwrap_or(false);
+    if !cert_exists && !key_exists {
         return Err(CertManagerError::NotFound(msg(
             "server.certificate.not_found",
         )));
     }
 
-    if cert_path.exists() {
-        tokio::fs::remove_file(&cert_path).await.map_err(|e| {
-            CertManagerError::Internal(
-                msg("server.certificate.delete_failed").with("error", e.to_string()),
-            )
-        })?;
+    let delete_err = |e: std::io::Error| {
+        CertManagerError::Internal(
+            msg("server.certificate.delete_failed").with("error", e.to_string()),
+        )
+    };
+    // 先删私钥（敏感残留优先清除）；删除幂等可重试，中途失败留下的
+    // 一侧由下次删除按未完成对继续清理
+    if key_exists {
+        tokio::fs::remove_file(&key_path)
+            .await
+            .map_err(delete_err)?;
     }
-    if key_path.exists() {
-        tokio::fs::remove_file(&key_path).await.map_err(|e| {
-            CertManagerError::Internal(
-                msg("server.certificate.delete_failed").with("error", e.to_string()),
-            )
-        })?;
+    if cert_exists {
+        tokio::fs::remove_file(&cert_path)
+            .await
+            .map_err(delete_err)?;
     }
 
     Ok(())

@@ -166,7 +166,16 @@ pub async fn create_employee<P: DbProvider>(
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发重名兜底：预检与写入之间仍有窗口，唯一冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.employee.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     tx.commit().await?;
 
@@ -257,7 +266,16 @@ pub async fn update_employee<P: DbProvider>(
     .bind(Utc::now())
     .bind(id)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发重名兜底：预检与写入之间仍有窗口，唯一冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.employee.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     tx.commit().await?;
 

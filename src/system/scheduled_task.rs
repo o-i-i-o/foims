@@ -17,6 +17,7 @@ use crate::app_state::AppState;
 use foims_auth::extractor::AdminUser;
 use foims_common::AppError;
 use foims_common::AppJson;
+use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{log_warn, msg};
 use foims_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
 
@@ -24,7 +25,6 @@ use foims_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTas
 const ALLOWED_TASK_TYPES: &[&str] = &[
     "backup",
     "token_cleanup",
-    "token_usage_cleanup",
     "log_cleanup",
     "mac_sync",
     "ip_status_sync",
@@ -44,14 +44,14 @@ fn validate_task_type(task_type: &str) -> Result<(), AppError> {
 }
 
 /// 需要校验 days 配置的任务（与 task_executors.rs 执行期校验口径一致）
-const DAYS_CONFIG_TASK_TYPES: &[&str] = &["log_cleanup", "token_usage_cleanup", "ip_status_sync"];
+const DAYS_CONFIG_TASK_TYPES: &[&str] = &["log_cleanup", "ip_status_sync"];
 
 /// 天数类任务 days 合法区间（1..=3650）：越界值在执行器处会被拒绝，
 /// 创建/更新时同步校验，避免落库后任务每次执行都失败
 const DAYS_CONFIG_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
 
-/// 校验天数类任务（log_cleanup / token_usage_cleanup / ip_status_sync）的 days 配置：
-/// days < 1 会清空全部审计日志/使用记录（或立即判停全部地址），超大值会被执行器按截断拒绝
+/// 校验天数类任务（log_cleanup / ip_status_sync）的 days 配置：
+/// days < 1 会清空全部审计日志（或立即判停全部地址），超大值会被执行器按截断拒绝
 fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<(), AppError> {
     if !DAYS_CONFIG_TASK_TYPES.contains(&task_type) {
         return Ok(());
@@ -370,23 +370,6 @@ pub async fn run_scheduled_task_now(
         ),
     };
 
-    if let Err(e) = sqlx::query(
-        r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)",
-    )
-    .bind(Uuid::new_v4())
-    .bind(&task_name)
-    .bind(status)
-    .bind(sqlx::types::Json(details))
-    .bind(start_time)
-    .bind(end_time)
-    .bind(duration)
-    .execute(&conn)
-    .await
-    {
-        log_warn!("log.task.log_record_failed", error = e);
-    }
-
     let cron_expr = task.cron_expression.clone();
     let next_run_at =
         match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr)).await {
@@ -401,30 +384,57 @@ pub async fn run_scheduled_task_now(
             }
         };
 
-    let update_query = if let Some(next_run) = next_run_at {
-        sqlx::query(
-            "UPDATE scheduled_tasks SET last_run_at = $1, next_run_at = $2, last_result = $3, updated_at = $1 WHERE id = $4"
-        )
-        .bind(start_time)
-        .bind(next_run)
-        .bind(result.as_ref().ok())
-        .bind(id)
-    } else {
-        sqlx::query(
-            "UPDATE scheduled_tasks SET last_run_at = $1, last_result = $2, updated_at = $1 WHERE id = $3"
-        )
-        .bind(start_time)
-        .bind(result.as_ref().ok())
-        .bind(id)
-    };
+    // cron 解析失败时按 1 小时退避推进 next_run_at：保留过期的旧值会让
+    // 任务每分钟重新触发并刷屏（与调度路径同口径）
+    let effective_next_run = next_run_at.unwrap_or(start_time + chrono::Duration::hours(1));
 
-    if let Err(e) = update_query.execute(&conn).await {
-        log_warn!("log.task.update_result_failed", error = e);
+    // 日志写入与状态更新（last_run_at/next_run_at/last_result）是与本次
+    // 执行同源的业务双写，与 advisory lock 同事务提交：两者原子生效，
+    // 提交同时释放锁；任一失败整体回滚（last_run_at 不前进，留痕于日志）
+    let mut write_err: Option<sqlx::Error> = None;
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(&task_name)
+    .bind(status)
+    .bind(sqlx::types::Json(details))
+    .bind(start_time)
+    .bind(end_time)
+    .bind(duration)
+    .execute(&mut *lock_tx)
+    .await
+    {
+        write_err = Some(e);
     }
 
-    // 提交事务以释放 advisory lock
-    if let Err(e) = lock_tx.commit().await {
-        log_warn!("log.task.lock_release_failed", error = e);
+    if write_err.is_none()
+        && let Err(e) = sqlx::query(
+            "UPDATE scheduled_tasks SET last_run_at = $1, next_run_at = $2, last_result = $3, updated_at = $1 WHERE id = $4",
+        )
+        .bind(start_time)
+        .bind(effective_next_run)
+        .bind(result.as_ref().ok())
+        .bind(id)
+        .execute(&mut *lock_tx)
+        .await
+    {
+        write_err = Some(e);
+    }
+
+    match write_err {
+        None => {
+            if let Err(e) = lock_tx.commit().await {
+                log_warn!("log.task.lock_release_failed", error = e);
+            }
+        }
+        Some(e) => {
+            log_warn!("log.task.run_result_write_failed", error = e);
+            if let Err(re) = lock_tx.rollback().await {
+                log_warn!("log.task.run_result_rollback_failed", error = re);
+            }
+        }
     }
 
     Ok(foims_common::ok_json(
@@ -443,33 +453,43 @@ pub async fn get_task_logs(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let task_name = query.get("task_name").cloned();
-    // 钳制 1..=1000：负值/0 在 PG 中等价于无 LIMIT（全表返回），
-    // 超大值可被用于拉取全量日志
-    let limit: i64 = query
-        .get("limit")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(100)
-        .clamp(1, 1000);
+    // 与其它列表端点同口径：page/page_size 钳制（1..=1000），
+    // 响应为固定五键 items/total/page/page_size/total_pages
+    let pagination = Pagination::from_query(&query);
+    let page_size = pagination.page_size;
+    let offset = pagination.offset;
     let conn = state.pool()?.get_conn();
 
-    let logs = if let Some(name) = task_name {
-        sqlx::query_as::<_, TaskLog>(
-            "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs WHERE task_name = $1 ORDER BY start_time DESC LIMIT $2"
+    let (total, logs) = if let Some(name) = &task_name {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM task_logs WHERE task_name = $1")
+            .bind(name)
+            .fetch_one(&conn)
+            .await?;
+        let logs = sqlx::query_as::<_, TaskLog>(
+            "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs WHERE task_name = $1 ORDER BY start_time DESC LIMIT $2 OFFSET $3",
         )
-        .bind(&name)
-        .bind(limit)
+        .bind(name)
+        .bind(page_size)
+        .bind(offset)
         .fetch_all(&conn)
-        .await
-        ?
+        .await?;
+        (total, logs)
     } else {
-        sqlx::query_as::<_, TaskLog>(
-            "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1"
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM task_logs")
+            .fetch_one(&conn)
+            .await?;
+        let logs = sqlx::query_as::<_, TaskLog>(
+            "SELECT id, task_name, status, details, start_time, end_time, duration FROM task_logs ORDER BY start_time DESC LIMIT $1 OFFSET $2",
         )
-        .bind(limit)
+        .bind(page_size)
+        .bind(offset)
         .fetch_all(&conn)
-        .await
-        ?
+        .await?;
+        (total, logs)
     };
 
-    Ok(foims_common::ok_json(logs, "server.task.logs_retrieved"))
+    Ok(foims_common::ok_json(
+        paged_response(logs, total, &pagination),
+        "server.task.logs_retrieved",
+    ))
 }

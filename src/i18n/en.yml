@@ -5,6 +5,7 @@ log:
   visualization:
     connection_member_side_invalid: "Skipped connection member with invalid side: {{side}} (connection {{connection}})"
   auth:
+    dummy_verify_task_failed: "Dummy password verify task failed: {{error}}"
     external_user_created: "External auth user created: {{username}} ({{provider}})"
     external_email_conflict: "External auth email conflict, using placeholder: {{username}} -> {{email}}"
     check_revoke_failed: "Failed to check token revocation: {{error}}"
@@ -105,6 +106,9 @@ log:
     tx_rollback_failed: "Failed to rollback transaction for {{file}}: {{error}}"
   import_export:
     export_ref_missing: "Failed to resolve name for reference {{id}} during export; cell left empty/placeholder"
+    room_name_lookup_failed: "Failed to look up room name during import validation: {{error}}"
+    template_spec_missing: "Import template skipped unknown table (spec drift, check spec.rs): {{table}}"
+    template_write_failed: "Failed to write import template table, skipped: {{table}}: {{error}}"
   init:
     config_tmp_chmod_failed: "Failed to set permissions on the config temp file: {{{error}}}"
     config_tmp_remove_failed: "Failed to remove the config temp file: {{{error}}}"
@@ -174,9 +178,12 @@ log:
     check_ipv6_duplicate_failed: "Database query failed while checking IPv6 network duplication: {{error}}"
     created: "Network {{name}} created, ID: {{id}}"
     deleted: "Network deleted, ID: {{id}}"
+    region_update_rollback_failed: "Failed to roll back network region update: {{error}}"
     updated: "Network {{name}} updated, ID: {{id}}"
   operation:
     record_failed: "Failed to record operation log: {{error}}"
+  organization:
+    org_type_resolve_failed: "Failed to resolve organization type (falling back to type path): {{error}}"
   output_to: "Log output to: {{path}}"
   rate_limit:
     blocked: "Request blocked by rate limit: method={{method}}, path={{path}}, ip={{ip}}, user_id={{user_id}}, strict={{is_strict}}, email={{is_email}}, retry_after={{retry_after}}s"
@@ -203,6 +210,7 @@ log:
     not_configured_password: "SMTP configuration not set, please enter the password"
     query_failed: "Failed to query SMTP configuration: {{error}}"
     recipients_empty: "Email recipient list is empty, skipping MAC change email"
+    recipients_parse_failed: "Failed to parse notification recipients, treated as empty: {{error}}"
     recipients_query_failed: "Failed to query email recipient configuration: {{error}}"
   system:
     db_check_failed: "Database connection check failed: {{error}}"
@@ -219,6 +227,7 @@ log:
   services:
     op_executed: "Service management operation executed: {{unit}} {{op}}"
   task:
+    dispatch_failed: "Failed to dispatch user task: {{error}}"
     overlap_skipped: "Previous task run has not finished; skipping this tick: {{{name}}}"
     backup_completed: "Backup completed: {{path}} ({{size_mb}} MB)"
     completed: "Task {{name}} completed: {{result}}"
@@ -230,17 +239,17 @@ log:
     next_run_calc_failed: "Failed to calculate next run time: {{error}}"
     next_run_calc_task_failed: "Next run time calculation task failed: {{error}}"
     next_run_update_failed: "Failed to update next run time of task {{name}}: {{error}}"
+    run_result_rollback_failed: "Failed to roll back task run result: {{error}}"
+    run_result_write_failed: "Failed to write task run result: {{error}}"
     running: "Running scheduled task {{name}} ({{task_type}})"
     scheduler_started: "Cron scheduler started successfully"
     shutdown_completed: "Scheduler shut down"
     shutdown_failed: "Failed to shut down scheduler: {{error}}"
     sync_failed: "Failed to sync user tasks: {{error}}"
     token_cleanup_completed: "Cleaned {{count}} expired tokens"
-    token_usage_cleanup_completed: "Cleaned {{count}} token_usage records older than {{days}} days"
     update_result_failed: "Failed to update scheduled task result: {{error}}"
   token:
     revoked_cleaned: "Cleaned {{count}} expired revoked tokens"
-    usage_cleaned: "Cleaned {{count}} token usage records older than {{days}} days"
   user:
     password_history_write_failed: "Failed to write password history: {{error}}"
     password_history_prune_failed: "Failed to prune password history: {{error}}"
@@ -283,7 +292,6 @@ system:
   ready: "System startup complete, waiting for requests..."
   register_backup_job_failed: "Failed to register backup scheduled job: {{error}}"
   register_token_cleanup_job_failed: "Failed to register token cleanup scheduled job: {{error}}"
-  register_usage_cleanup_job_failed: "Failed to register token usage cleanup scheduled job: {{error}}"
   scheduler_create_failed: "Failed to create scheduler: {{error}}"
   scheduler_shutdown_timeout: "Scheduler shutdown timed out: {{error}}"
   scheduler_start_failed: "Failed to start scheduler: {{error}}"

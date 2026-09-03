@@ -17,6 +17,7 @@ use foims_auth::meta::{RequestMeta, log_op_best_effort};
 use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::DbProvider;
+use foims_common::log_warn;
 use foims_common::msg;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_models::{
@@ -666,7 +667,12 @@ pub async fn create_organization<P: DbProvider>(
         },
     )
     .await
-    .unwrap_or_else(|_| req.type_path.clone());
+    .unwrap_or_else(|e| {
+        // 展示回退合理，但 DB/解析错误必须留痕（模板层级与存量
+        // type_path 不一致等问题否则完全不可见）
+        log_warn!("log.organization.org_type_resolve_failed", error = e);
+        req.type_path.clone()
+    });
 
     let details = serde_json::json!({
         "name": req.name,
@@ -775,7 +781,16 @@ pub async fn update_organization<P: DbProvider>(
     .bind(now)
     .bind(id)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发重名兜底：同级重名预检与写入之间仍有窗口，唯一冲突映射为 409
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.organization.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     tx.commit().await?;
 

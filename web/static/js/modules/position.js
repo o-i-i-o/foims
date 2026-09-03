@@ -120,7 +120,8 @@ export async function openCabinetPositionModal(position = null) {
     roomSelect.innerHTML = `<option value="">${t("cabinet_position.select_room")}</option>`;
 
     try {
-      const result = await apiGet("/api/resources/cabinets");
+      // page_size=1000（后端上限）：默认 20/页会把第 21 个及之后的机柜静默截断
+      const result = await apiGet("/api/resources/cabinets?page_size=1000");
       if (result.success && result.data) {
         const cabinets = result.data.items ?? [];
         const roomMap = new Map();
@@ -150,7 +151,7 @@ export async function openCabinetPositionModal(position = null) {
 
     if (roomId) {
       try {
-        const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}`);
+        const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}&page_size=1000`);
         if (result.success && result.data) {
           const cabinets = result.data.items ?? [];
           cabinets.forEach((cabinet) => {

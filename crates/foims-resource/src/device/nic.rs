@@ -383,7 +383,19 @@ pub async fn apply_network_config(
                 .bind(now)
                 .bind(now)
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .map_err(|e| {
+                    // 与其他并发路径（单条创建/自动分配/导入）之间的判重窗口
+                    // 由 ips.ip_address 唯一索引兜底，映射为 409
+                    if let sqlx::Error::Database(ref db_err) = e
+                        && db_err.is_unique_violation()
+                    {
+                        return AppError::Conflict(
+                            msg("server.ip.already_exists").with("ip", &ip.ip_address),
+                        );
+                    }
+                    AppError::from(e)
+                })?;
             }
         }
     }

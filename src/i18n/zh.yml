@@ -5,6 +5,7 @@ log:
   visualization:
     connection_member_side_invalid: "连线成员 side 非法已跳过: {{side}} (连线 {{connection}})"
   auth:
+    dummy_verify_task_failed: "诱饵口令校验任务失败: {{error}}"
     external_user_created: "外部认证自动建户: {{username}} ({{provider}})"
     external_email_conflict: "外部认证用户邮箱已被占用，使用占位邮箱: {{username}} -> {{email}}"
     check_revoke_failed: "检查令牌撤销状态失败: {{error}}"
@@ -105,6 +106,9 @@ log:
     tx_rollback_failed: "回滚 {{file}} 事务失败: {{error}}"
   import_export:
     export_ref_missing: "导出时引用 {{id}} 的名称解析失败，单元格输出为空/占位"
+    room_name_lookup_failed: "导入校验查询房间名失败: {{error}}"
+    template_spec_missing: "导入模板生成跳过未知表（规格清单漂移，请排查 spec.rs）: {{table}}"
+    template_write_failed: "导入模板生成写表失败，已跳过: {{table}}: {{error}}"
   init:
     config_tmp_chmod_failed: "设置配置临时文件权限失败: {{{error}}}"
     config_tmp_remove_failed: "清理配置临时文件失败: {{{error}}}"
@@ -174,9 +178,12 @@ log:
     check_ipv6_duplicate_failed: "检查IPv6网段重复时数据库查询失败: {{error}}"
     created: "网络 {{name}} 创建成功, ID: {{id}}"
     deleted: "网络删除成功, ID: {{id}}"
+    region_update_rollback_failed: "区域更新回滚失败: {{error}}"
     updated: "网络 {{name}} 更新成功, ID: {{id}}"
   operation:
     record_failed: "记录操作日志失败: {{error}}"
+  organization:
+    org_type_resolve_failed: "解析组织类型失败（回退为层级路径展示）: {{error}}"
   output_to: "日志输出到: {{path}}"
   rate_limit:
     blocked: "请求被速率限制拦截: method={{method}}，path={{path}}，ip={{ip}}，user_id={{user_id}}，strict={{is_strict}}，email={{is_email}}，retry_after={{retry_after}}s"
@@ -203,6 +210,7 @@ log:
     not_configured_password: "SMTP配置未设置，请填写密码"
     query_failed: "查询SMTP配置失败: {{error}}"
     recipients_empty: "邮件收件人列表为空，跳过MAC变更邮件通知"
+    recipients_parse_failed: "通知收件人配置解析失败，已按空列表处理: {{error}}"
     recipients_query_failed: "查询邮件收件人配置失败: {{error}}"
   system:
     db_check_failed: "数据库连接检查失败: {{error}}"
@@ -219,6 +227,7 @@ log:
   services:
     op_executed: "执行服务管理操作: {{unit}} {{op}}"
   task:
+    dispatch_failed: "派发用户任务失败: {{error}}"
     overlap_skipped: "任务上一轮尚未结束，跳过本轮执行: {{{name}}}"
     backup_completed: "备份成功: {{path}}（{{size_mb}} MB）"
     completed: "任务 {{name}} 执行完成: {{result}}"
@@ -230,17 +239,17 @@ log:
     next_run_calc_failed: "计算下次运行时间失败: {{error}}"
     next_run_calc_task_failed: "计算下次运行时间任务失败: {{error}}"
     next_run_update_failed: "更新任务 {{name}} 的下次执行时间失败: {{error}}"
+    run_result_rollback_failed: "任务执行结果回滚失败: {{error}}"
+    run_result_write_failed: "任务执行结果写入失败: {{error}}"
     running: "开始执行定时任务 {{name}} ({{task_type}})"
     scheduler_started: "定时任务调度器启动成功"
     shutdown_completed: "调度器已关闭"
     shutdown_failed: "关闭调度器失败: {{error}}"
     sync_failed: "同步用户任务失败: {{error}}"
     token_cleanup_completed: "清理了 {{count}} 个过期token"
-    token_usage_cleanup_completed: "清理了 {{count}} 条{{days}}天前的token_usage记录"
     update_result_failed: "更新定时任务执行结果失败: {{error}}"
   token:
     revoked_cleaned: "已清理 {{count}} 个过期撤销令牌"
-    usage_cleaned: "已清理 {{count}} 条超过 {{days}} 天的令牌使用记录"
   user:
     password_history_write_failed: "写入密码历史失败: {{error}}"
     password_history_prune_failed: "清理密码历史失败: {{error}}"
@@ -283,7 +292,6 @@ system:
   ready: "系统启动完成，等待请求..."
   register_backup_job_failed: "注册备份定时任务失败: {{error}}"
   register_token_cleanup_job_failed: "注册Token清理定时任务失败: {{error}}"
-  register_usage_cleanup_job_failed: "注册Token使用记录清理定时任务失败: {{error}}"
   scheduler_create_failed: "创建调度器失败: {{error}}"
   scheduler_shutdown_timeout: "调度器关闭超时: {{error}}"
   scheduler_start_failed: "启动调度器失败: {{error}}"

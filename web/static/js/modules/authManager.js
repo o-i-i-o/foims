@@ -234,22 +234,12 @@ export const checkLoginStatus = async () => {
   }
 
   try {
-    const response = await fetch("/api/auth/me", {
-      credentials: "include"
-    });
+    // 统一经 ApiClient（401 单飞刷新 + 自动重试 + 错误归一），
+    // 不再绕过统一客户端裸 fetch（与其余请求同口径）
+    const result = await apiGet("/api/auth/me");
 
-    if (response.ok) {
-      const result = await response.json();
-      if (result.success) {
-        return;
-      }
-    }
-
-    if (response.status === 401) {
-      const refreshed = await refreshToken();
-      if (refreshed) {
-        return;
-      }
+    if (result.success) {
+      return;
     }
 
     redirectToLogin();

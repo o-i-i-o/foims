@@ -304,10 +304,6 @@
   display: none;
 }
 
-.form-group input.error {
-  border-bottom-color: #dc2626;
-}
-
 /* 密码可见性切换 */
 .toggle-password {
   position: absolute;

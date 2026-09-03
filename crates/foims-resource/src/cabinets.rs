@@ -131,36 +131,44 @@ pub async fn get_cabinets<P: DbProvider>(
         (total, cabinets)
     };
 
-    let mut cabinets_with_networks = Vec::new();
+    // 机位数与房间名批量查询（ANY($1)）后内存组装，
+    // 替代逐行 2 次查询的 N+1 模式（room.rs 批量写法同口径）
+    let cabinet_ids: Vec<Uuid> = cabinets.iter().map(|c| c.id).collect();
+    let position_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT cabinet_id, COUNT(*) FROM positions WHERE cabinet_id = ANY($1) GROUP BY cabinet_id",
+    )
+    .bind(&cabinet_ids)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    let position_count_map: std::collections::HashMap<Uuid, i64> =
+        position_counts.into_iter().collect();
+    let room_names: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT DISTINCT r.id, r.name FROM rooms r JOIN cabinets c ON c.room_id = r.id WHERE c.id = ANY($1)",
+    )
+    .bind(&cabinet_ids)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    let room_name_map: std::collections::HashMap<Uuid, String> = room_names.into_iter().collect();
 
-    for cabinet in cabinets {
-        let position_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM positions WHERE cabinet_id = $1")
-                .bind(cabinet.id)
-                .fetch_one(&state.pool()?.get_conn())
-                .await?;
-
-        let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
-            .bind(cabinet.room_id)
-            .fetch_optional(&state.pool()?.get_conn())
-            .await?;
-
-        let cabinet_with_networks = CabinetWithNetworks {
-            id: cabinet.id,
-            name: cabinet.name,
-            room_id: cabinet.room_id,
-            room_name,
-            capacity: cabinet.capacity,
-            position_count,
-            positions: None,
-            patch_panels: None,
-            description: cabinet.description,
-            created_at: cabinet.created_at,
-            updated_at: cabinet.updated_at,
-        };
-
-        cabinets_with_networks.push(cabinet_with_networks);
-    }
+    let cabinets_with_networks = cabinets
+        .into_iter()
+        .map(|cabinet| {
+            let cabinet_id = cabinet.id;
+            CabinetWithNetworks {
+                room_name: room_name_map.get(&cabinet.room_id).cloned(),
+                position_count: position_count_map.get(&cabinet_id).copied().unwrap_or(0),
+                id: cabinet.id,
+                name: cabinet.name,
+                room_id: cabinet.room_id,
+                capacity: cabinet.capacity,
+                positions: None,
+                patch_panels: None,
+                description: cabinet.description,
+                created_at: cabinet.created_at,
+                updated_at: cabinet.updated_at,
+            }
+        })
+        .collect();
 
     Ok(foims_common::ok_json(
         paged_response(cabinets_with_networks, total, &pagination),
@@ -179,7 +187,17 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
         )));
     };
 
-    let subnet_id_filter = query.get("subnet_id").and_then(|s| Uuid::parse_str(s).ok());
+    // 显式拒绝非法 UUID 而非静默退化为全量列表（与 room_id 过滤同口径）
+    let subnet_id_filter = match query.get("subnet_id") {
+        Some(s) => Some(Uuid::parse_str(s).map_err(|e| {
+            AppError::Validation(
+                msg("server.common.invalid_param")
+                    .with("param", "subnet_id")
+                    .with("error", e),
+            )
+        })?),
+        None => None,
+    };
 
     let cabinets = if let Some(subnet_id) = subnet_id_filter {
         // 归属校验：提供的网段必须属于路径中的区域，防止跨区域越权枚举
@@ -664,6 +682,10 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             )));
         }
 
+        // U 位重叠预检：返回 422 而非触发器 P0001 的 500
+        crate::position::ensure_no_u_overlap(&mut tx, Some(id), item.start_u, item.end_u, item.id)
+            .await?;
+
         if let Some(item_id) = item.id {
             // 归属校验：仅允许更新当前机柜下的机位，
             // 携带其他机柜的 id 时按未找到处理，避免跨父资源静默搬移
@@ -679,7 +701,17 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             .bind(item_id)
             .bind(id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .map_err(|e| {
+                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+                if let sqlx::Error::Database(ref db_err) = e
+                    && db_err.code().as_deref() == Some("P0001")
+                    && db_err.message().contains("U位范围重叠")
+                {
+                    return AppError::Validation(msg("server.position.u_range_overlap"));
+                }
+                AppError::from(e)
+            })?;
             if updated.rows_affected() == 0 {
                 return Err(AppError::NotFound(msg("server.cabinet.not_found")));
             }
@@ -697,7 +729,17 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             .bind(now)
             .bind(now)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .map_err(|e| {
+                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+                if let sqlx::Error::Database(ref db_err) = e
+                    && db_err.code().as_deref() == Some("P0001")
+                    && db_err.message().contains("U位范围重叠")
+                {
+                    return AppError::Validation(msg("server.position.u_range_overlap"));
+                }
+                AppError::from(e)
+            })?;
         }
     }
 

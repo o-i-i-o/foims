@@ -125,7 +125,8 @@ export class TopologyDataManager {
     try {
       const result = await this.apiGet(`/api/resources/devices/${deviceId}/macs`);
       if (result.success) {
-        return result.data?.items ?? [];
+        // 该端点返回裸数组（deviceMacLldp.js 同口径判读），分页形态仅作兼容兜底
+        return Array.isArray(result.data) ? result.data : (result.data?.items ?? []);
       }
       this._notifyLoadFailure(result.message, "获取MAC表");
       return [];
@@ -139,7 +140,8 @@ export class TopologyDataManager {
     try {
       const result = await this.apiGet(`/api/resources/devices/${deviceId}/lldp-neighbors`);
       if (result.success) {
-        return result.data?.items ?? [];
+        // 同上：裸数组响应
+        return Array.isArray(result.data) ? result.data : (result.data?.items ?? []);
       }
       this._notifyLoadFailure(result.message, "获取LLDP邻居");
       return [];

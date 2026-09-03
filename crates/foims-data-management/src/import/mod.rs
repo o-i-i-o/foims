@@ -31,6 +31,131 @@ use std::io::Read;
 pub(crate) const DEVICE_SECRET_COLUMNS: &[&str] =
     &["snmp_community", "snmp_auth_password", "snmp_priv_password"];
 
+/// 枚举列白名单：`(表, 列, 大小写不敏感, 允许值)`。与建表 CHECK 约束及
+/// API 白名单同步维护——CHECK 违反整批回滚且只有通用文案，导入在入库前
+/// 按列拦截；大小写不敏感列（room_type，约束值为大写）先规范化再入库，
+/// 与 API 的 to_uppercase 同口径。
+const ENUM_WHITELISTS: &[(&str, &str, bool, &[&str])] = &[
+    (
+        "devices",
+        "device_type",
+        false,
+        &[
+            "desktop",
+            "laptop",
+            "printer",
+            "server",
+            "network_device",
+            "switch",
+            "camera",
+            "phone",
+            "other",
+        ],
+    ),
+    ("devices", "snmp_version", false, &["v1", "v2c", "v3"]),
+    (
+        "device_templates",
+        "device_type",
+        false,
+        &[
+            "desktop",
+            "laptop",
+            "printer",
+            "server",
+            "network_device",
+            "switch",
+            "camera",
+            "phone",
+            "other",
+        ],
+    ),
+    (
+        "rooms",
+        "room_type",
+        true,
+        &[
+            "OFFICE",
+            "LOBBY",
+            "RECEPTION",
+            "DATA_CENTER",
+            "TELECOM_CLOSET",
+            "OTHER",
+        ],
+    ),
+    ("employees", "gender", false, &["male", "female", "unknown"]),
+    (
+        "device_nics",
+        "card_type",
+        false,
+        &["pcie", "onboard", "usb", "virtual", "wwan", "wifi", "other"],
+    ),
+    (
+        "device_interfaces",
+        "physical_type",
+        false,
+        &[
+            "rj45",
+            "sfp",
+            "sfp_plus",
+            "sfp28",
+            "qsfp_plus",
+            "qsfp28",
+            "wifi",
+            "virtual",
+            "other",
+        ],
+    ),
+    (
+        "device_interfaces",
+        "interface_role",
+        false,
+        &["management", "business", "loopback", "uplink", "other"],
+    ),
+    (
+        "device_interfaces",
+        "port_type",
+        false,
+        &["access", "trunk", "hybrid", "uplink", "stack", "console"],
+    ),
+    (
+        "device_interfaces",
+        "status",
+        false,
+        &["up", "down", "admin-down"],
+    ),
+    (
+        "cable_links",
+        "a_endpoint_type",
+        false,
+        &["net_outlet", "device_interface", "patch_panel"],
+    ),
+    (
+        "cable_links",
+        "b_endpoint_type",
+        false,
+        &["net_outlet", "device_interface", "patch_panel"],
+    ),
+    (
+        "cable_links",
+        "link_type",
+        false,
+        &["ethernet", "fiber", "console"],
+    ),
+    ("ips", "status", false, &["active", "inactive", "reserved"]),
+    (
+        "topology_connections",
+        "connection_type",
+        false,
+        &["physical", "logical"],
+    ),
+    (
+        "topology_connection_members",
+        "side",
+        false,
+        &["source", "target"],
+    ),
+];
+
 pub async fn import_csv<P: DataProvider>(
     provider: P,
     mut payload: Multipart,
@@ -345,7 +470,30 @@ async fn resolve_row<P: DataProvider>(
                             .with("reason", reason),
                     ));
                 }
-                values.insert(db_col.to_string(), Some(raw));
+                // 枚举白名单：按列拦截非法取值（大小写不敏感列先规范化）
+                if let Some((_, _, case_insensitive, allowed)) = ENUM_WHITELISTS
+                    .iter()
+                    .find(|(t, c, _, _)| *t == spec.table && *c == *db_col)
+                {
+                    let normalized = if *case_insensitive {
+                        raw.to_uppercase()
+                    } else {
+                        raw.clone()
+                    };
+                    if !allowed.contains(&normalized.as_str()) {
+                        return Err(DataError::Validation(
+                            msg("server.import_export.field_invalid")
+                                .with("table", spec.table)
+                                .with("row", row.row_no)
+                                .with("column", db_col)
+                                .with("value", &raw)
+                                .with("reason", format!("取值必须是 {}", allowed.join("/"))),
+                        ));
+                    }
+                    values.insert(db_col.to_string(), Some(normalized));
+                } else {
+                    values.insert(db_col.to_string(), Some(raw));
+                }
             }
             Col::Ref { csv, db, target } => {
                 let raw = row.cells.get(*csv).cloned().unwrap_or_default();
@@ -369,6 +517,15 @@ async fn resolve_row<P: DataProvider>(
                 values.insert(db.to_string(), Some(id));
             }
         }
+    }
+
+    // ip_version 由地址自动推导（与 API 的 detect_ip_version 同口径）：
+    // CSV 提供的手工值可能与地址族不一致，落库后破坏按版本过滤的查询
+    if spec.table == "ips"
+        && let Some(Some(addr)) = values.get("ip_address")
+    {
+        let version: i16 = if addr.contains(':') { 6 } else { 4 };
+        values.insert("ip_version".to_string(), Some(version.to_string()));
     }
 
     // 设备凭据列明文 → 本实例密文

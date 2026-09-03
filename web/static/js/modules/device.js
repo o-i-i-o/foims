@@ -29,6 +29,7 @@ import {
 } from "../utils/resources.js";
 import { loadModule } from "../utils/resourceLoader.js";
 import { toggleSnmpConfig, testSnmpConnection, getDeviceInfoFromSnmp } from "./deviceSnmp.js";
+import { showConfirm } from "../utils/confirm.js";
 import { manageUnifiedDevicePorts } from "./unifiedDevicePorts.js";
 import { viewArpTable, viewLldpNeighbors } from "./deviceMacLldp.js";
 
@@ -92,7 +93,12 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
     if (requestSeq !== deviceRequestSeq) {
       return; // 已有更新的请求,丢弃过期响应
     }
-    const data = result.success ? result.data : { items: [], total: 0 };
+    // 接口失败时提示并中止，不再静默渲染空数据（与 networks.js 口径一致）
+    if (!result.success) {
+      showToast(`${t("device.load_failed")}: ${result.message}`, "error");
+      return;
+    }
+    const data = result.data || { items: [], total: 0 };
     const devices = data.items || data;
 
     // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
@@ -495,7 +501,6 @@ async function editDeviceTemplate(id) {
 }
 
 async function deleteDeviceTemplate(id, name) {
-  const { default: showConfirm } = await import("../utils/confirm.js");
   const confirmed = await showConfirm(t("common.confirm_delete", { name: name || "" }));
   if (!confirmed) {
     return;

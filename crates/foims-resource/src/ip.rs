@@ -112,7 +112,7 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
         next(builder, &mut first);
         builder
             .push("position_id = ANY(")
-            .push_bind(filters.position_ids.clone())
+            .push_bind(&filters.position_ids)
             .push("))");
     }
 }
@@ -615,11 +615,28 @@ async fn sync_switch_macs(
 
         match iface.old_mac.as_deref() {
             None | Some("") => {
-                sqlx::query("UPDATE device_interfaces SET mac_address = $1 WHERE id = $2")
-                    .bind(&iface.new_mac)
-                    .bind(iface_id)
-                    .execute(&mut *tx)
-                    .await?;
+                // 写入带 NOT EXISTS 守卫：预检（SELECT 判冲突）与 UPDATE 之间
+                // 存在窗口，并发同步观测到同一 MAC 时以原子条件更新兜底
+                let written = sqlx::query(
+                    r"UPDATE device_interfaces SET mac_address = $1
+                       WHERE id = $2
+                         AND NOT EXISTS (
+                            SELECT 1 FROM device_interfaces di2
+                            WHERE di2.mac_address = $1
+                              AND di2.device_id != $3
+                              AND di2.id != $2
+                         )",
+                )
+                .bind(&iface.new_mac)
+                .bind(iface_id)
+                .bind(iface.device_id)
+                .execute(&mut *tx)
+                .await?;
+                if written.rows_affected() == 0 {
+                    log_warn!("log.ip.mac_conflict", mac = iface.new_mac, ip = "");
+                    skipped_count += iface.observed_ip_ids.len();
+                    continue;
+                }
                 updated_count += iface.observed_ip_ids.len();
                 log_info!(
                     "log.ip.mac_written",
@@ -631,11 +648,27 @@ async fn sync_switch_macs(
                 unchanged_count += iface.observed_ip_ids.len();
             }
             Some(old) => {
-                sqlx::query("UPDATE device_interfaces SET mac_address = $1 WHERE id = $2")
-                    .bind(&iface.new_mac)
-                    .bind(iface_id)
-                    .execute(&mut *tx)
-                    .await?;
+                // 同上：写入带 NOT EXISTS 守卫兜底并发窗口
+                let written = sqlx::query(
+                    r"UPDATE device_interfaces SET mac_address = $1
+                       WHERE id = $2
+                         AND NOT EXISTS (
+                            SELECT 1 FROM device_interfaces di2
+                            WHERE di2.mac_address = $1
+                              AND di2.device_id != $3
+                              AND di2.id != $2
+                         )",
+                )
+                .bind(&iface.new_mac)
+                .bind(iface_id)
+                .bind(iface.device_id)
+                .execute(&mut *tx)
+                .await?;
+                if written.rows_affected() == 0 {
+                    log_warn!("log.ip.mac_conflict", mac = iface.new_mac, ip = "");
+                    skipped_count += iface.observed_ip_ids.len();
+                    continue;
+                }
                 updated_count += iface.observed_ip_ids.len();
 
                 if let Some(ws_id) = iface.workstation_id {
@@ -939,6 +972,15 @@ pub async fn auto_assign_ip<P: DbProvider>(
     let description = req.description.clone();
 
     let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // 同子网自动分配串行化：READ COMMITTED 下两个并发请求会基于各自的
+    // 快照计算出同一个「最小可用 IP」，后提交方撞唯一索引被误报为
+    // 冲突（明明还有大量空闲地址）。咨询锁使「取占用集→计算→插入」
+    // 整体与同子网的其他自动分配互斥
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 5417723))")
+        .bind(req_subnet_id.to_string())
+        .execute(&mut *tx)
+        .await?;
 
     let room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM devices WHERE id = $1")
         .bind(device_id)

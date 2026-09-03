@@ -8,6 +8,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 import { showToast, handleError, escapeHtml, debounce } from "../utils/ui.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
+import { showConfirm } from "../utils/confirm.js";
 import { iconButton, getIcon } from "../utils/icons.js";
 import { elementCache } from "../utils/helpers.js";
 import { ORG_ICON_GROUPS, renderOrgIcon, DEFAULT_ORG_ICON } from "../config/org-icons.js";
@@ -537,9 +538,7 @@ export async function editOrganization(id) {
 }
 
 export async function deleteOrganization(id, name) {
-  const confirmed = await import("../utils/confirm.js").then((m) =>
-    m.showConfirm(t("organization.delete_confirm", { name }))
-  );
+  const confirmed = await showConfirm(t("organization.delete_confirm", { name }));
   if (!confirmed) {
     return;
   }
@@ -713,9 +712,7 @@ async function openEmployeeEditModal(orgId, employee) {
 
 /** 删除员工（工位管理人的员工引用会自动解绑） */
 async function deleteEmployee(employee) {
-  const confirmed = await import("../utils/confirm.js").then((m) =>
-    m.showConfirm(t("employee.delete_confirm", { name: employee.name }))
-  );
+  const confirmed = await showConfirm(t("employee.delete_confirm", { name: employee.name }));
   if (!confirmed) {
     return;
   }
@@ -974,7 +971,7 @@ async function openTemplateEditor(template = null) {
         }
         try {
           const templates = await getTemplates();
-          const template = templates.find((t) => t.name === quickFill.value);
+          const template = templates.find((tpl) => tpl.name === quickFill.value);
           if (template) {
             loadMappingIntoTree(treeContainer, template.levels, template.icons || {});
           }
@@ -1311,9 +1308,7 @@ async function populateQuickFillFromDB(select) {
 }
 
 async function deleteTemplate(id, name) {
-  const confirmed = await import("../utils/confirm.js").then((m) =>
-    m.showConfirm(t("org_template.delete_confirm", { name }))
-  );
+  const confirmed = await showConfirm(t("org_template.delete_confirm", { name }));
   if (!confirmed) {
     return;
   }

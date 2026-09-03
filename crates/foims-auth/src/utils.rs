@@ -935,25 +935,3 @@ pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, 
 
     Ok(deleted_count)
 }
-
-pub async fn cleanup_old_token_usage(
-    pool: &sqlx::PgPool,
-    days_to_keep: i32,
-) -> Result<u64, sqlx::Error> {
-    let result =
-        sqlx::query("DELETE FROM token_usage WHERE created_at < NOW() - INTERVAL '1 day' * $1")
-            .bind(days_to_keep)
-            .execute(pool)
-            .await?;
-
-    let deleted_count = result.rows_affected();
-    if deleted_count > 0 {
-        foims_common::log_info!(
-            "log.token.usage_cleaned",
-            count = deleted_count,
-            days = days_to_keep
-        );
-    }
-
-    Ok(deleted_count)
-}

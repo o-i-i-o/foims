@@ -154,7 +154,7 @@ pub async fn sync_cabinet_patch_panels<P: DbProvider>(
                 .map_err(|e| {
                     if let sqlx::Error::Database(db_err) = &e {
                         let msg_text = db_err.message();
-                        if msg_text.contains("cable_links") {
+                        if msg_text.contains("ERR_CABLE_LINK_REFERENCE") {
                             return AppError::Validation(msg("server.patch_panel.in_use"));
                         }
                     }

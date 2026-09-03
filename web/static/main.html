@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01375">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01375">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01375">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01375">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01375">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01375">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01375">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01375">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01375">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01375">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01375">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01375">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01375">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01377">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01377">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01377">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01377">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01377">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01377">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01377">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01377">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01377">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01377">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01377">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01377">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01377">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -465,7 +465,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
                   <div class="th-search-popover">
-                    <input type="text" id="ip-device-name-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search...">
+                    <input type="text" id="ip-device-name-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." aria-label="Search device name" data-i18n-aria-label="common.search">
                   </div>
                 </th>
                 <th class="sortable col-center th-searchable" data-sort="device_type">
@@ -474,7 +474,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
                   <div class="th-search-popover">
-                    <input type="text" id="ip-device-type-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search...">
+                    <input type="text" id="ip-device-type-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." aria-label="Search device type" data-i18n-aria-label="common.search">
                   </div>
                 </th>
                 <th class="sortable th-searchable" data-sort="network_name">
@@ -483,7 +483,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
                   <div class="th-search-popover">
-                    <input type="text" id="ip-network-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search...">
+                    <input type="text" id="ip-network-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." aria-label="Search subnet" data-i18n-aria-label="common.search">
                   </div>
                 </th>
                 <th class="sortable th-searchable" data-sort="ip_address">
@@ -492,7 +492,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
                   <div class="th-search-popover">
-                    <input type="text" id="ip-address-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search...">
+                    <input type="text" id="ip-address-filter" class="form-control form-control-sm" data-i18n-placeholder="common.search_placeholder" placeholder="Search..." aria-label="Search IP address" data-i18n-aria-label="common.search">
                   </div>
                 </th>
                 <th class="sortable th-inline-action" data-sort="mac_address">
@@ -827,15 +827,15 @@
                 <div class="cert-section-header">
                   <h4 class="cert-section-title" data-i18n="cert.ca_section">Site Root CA</h4>
                   <details class="cert-ca-help">
-                   <summary data-i18n="cert.ca_help_title">How to trust the site root CA</summary>
-                   <div class="cert-ca-help-body">
-                    <p data-i18n="cert.ca_help_windows">Windows: run "certutil -addstore -f Root foims-root-ca.crt" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox will all trust it after a browser restart.</p>
-                    <p data-i18n="cert.ca_help_linux">Debian/Ubuntu: sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates; RHEL/Fedora: sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ &amp;&amp; sudo update-ca-trust extract (the file must be PEM with .crt extension).</p>
-                    <p data-i18n="cert.ca_help_chrome">Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "FOIMS-RootCA" -i foims-root-ca.crt (requires libnss3-tools/nss-tools).</p>
-                    <p data-i18n="cert.ca_help_firefox">Linux Firefox uses its own certificate store: import the CA manually under Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates, or configure the p11-kit trust module via enterprise policy.</p>
-                    <p data-i18n="cert.ca_help_note">Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and automatically falls back to TCP - this is expected behavior.</p>
-                   </div>
-                 </details>
+                    <summary data-i18n="cert.ca_help_title">How to trust the site root CA</summary>
+                    <div class="cert-ca-help-body">
+                      <p data-i18n="cert.ca_help_windows">Windows: run "certutil -addstore -f Root foims-root-ca.crt" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox will all trust it after a browser restart.</p>
+                      <p data-i18n="cert.ca_help_linux">Debian/Ubuntu: sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates; RHEL/Fedora: sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ &amp;&amp; sudo update-ca-trust extract (the file must be PEM with .crt extension).</p>
+                      <p data-i18n="cert.ca_help_chrome">Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "FOIMS-RootCA" -i foims-root-ca.crt (requires libnss3-tools/nss-tools).</p>
+                      <p data-i18n="cert.ca_help_firefox">Linux Firefox uses its own certificate store: import the CA manually under Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates, or configure the p11-kit trust module via enterprise policy.</p>
+                      <p data-i18n="cert.ca_help_note">Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and automatically falls back to TCP - this is expected behavior.</p>
+                    </div>
+                  </details>
                   <div class="cert-manager-actions">
                     <button type="button" id="ca-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.ca_generate_title">Generate Root CA</button>
                     <button type="button" id="ca-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_import_title">Import CA</button>
@@ -897,12 +897,14 @@
                     <span class="icon">🗂️</span>
                     <span data-i18n="ldap.title">LDAP Configuration</span>
                   </div>
-                  <label class="config-switch">
-                    <input type="checkbox" id="ldap-enabled" aria-label="Enable LDAP authentication" data-i18n-aria-label="ldap.enabled">
-                    <span data-i18n="ldap.enabled">Enable LDAP Authentication</span>
+                  <div class="config-switch">
+                    <label for="ldap-enabled">
+                      <input type="checkbox" id="ldap-enabled" aria-label="Enable LDAP authentication" data-i18n-aria-label="ldap.enabled">
+                      <span data-i18n="ldap.enabled">Enable LDAP Authentication</span>
+                    </label>
                     <button type="button" id="test-ldap-btn" class="btn btn-secondary btn-sm" data-i18n="ldap.test_connection">Test Connection</button>
                     <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
-                  </label>
+                  </div>
                 </header>
                 <div class="config-row">
                   <div class="config-field">
@@ -950,12 +952,14 @@
                     <span class="icon">🔐</span>
                     <span data-i18n="sso.title">SSO Configuration (OIDC)</span>
                   </div>
-                  <label class="config-switch">
-                    <input type="checkbox" id="sso-enabled" aria-label="Enable SSO authentication" data-i18n-aria-label="sso.enabled">
-                    <span data-i18n="sso.enabled">Enable SSO Authentication</span>
+                  <div class="config-switch">
+                    <label for="sso-enabled">
+                      <input type="checkbox" id="sso-enabled" aria-label="Enable SSO authentication" data-i18n-aria-label="sso.enabled">
+                      <span data-i18n="sso.enabled">Enable SSO Authentication</span>
+                    </label>
                     <button type="button" id="test-sso-btn" class="btn btn-secondary btn-sm" data-i18n="sso.test_connection">Test Connection</button>
                     <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
-                  </label>
+                  </div>
                 </header>
                 <div class="config-row">
                   <div class="config-field">
@@ -1002,10 +1006,10 @@
                     <span class="icon">📧</span>
                     <span data-i18n="smtp.server_settings">SMTP Server Settings</span>
                   </div>
-                  <label>
+                  <div class="config-card-header-actions">
                     <button id="test-smtp-btn" type="button" class="btn btn-secondary" data-i18n="smtp.test_connection">Test Connection</button>
                     <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
-                  </label>
+                  </div>
                 </header>
                 <div class="config-row">
                   <div class="config-field">
@@ -1055,7 +1059,7 @@
                 </header>
                 <div class="config-row">
                   <div class="config-field">
-                    <label data-i18n="notification.email_recipients">Email Recipients for MAC Change Notifications</label>
+                    <span class="group-label" data-i18n="notification.email_recipients">Email Recipients for MAC Change Notifications</span>
                     <div id="notification-users-list" class="users-checkbox-list"></div>
                     <p class="config-hint" data-i18n="notification.recipients_hint">Select users who will receive email notifications when MAC address changes are detected.</p>
                   </div>
@@ -1427,6 +1431,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01375"></script>
+  <script type="module" src="/static/js/app.js?v=01377"></script>
 </body>
 </html>

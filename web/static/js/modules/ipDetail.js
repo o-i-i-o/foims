@@ -314,6 +314,10 @@ export async function loadIpMacData(
       return { total, page: pageNum, total_pages };
     }
 
+    // 接口失败时提示并中止，不再静默保留旧表格（与 networks.js 口径一致）
+    if (requestSeq === ipListRequestSeq) {
+      showToast(`${t("ip.load_failed")}: ${result.message}`, "error");
+    }
     return null;
   } catch (error) {
     console.error("加载IP数据失败:", error);

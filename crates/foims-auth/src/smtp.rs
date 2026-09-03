@@ -329,7 +329,14 @@ pub async fn send_mac_change_email(
     {
         Ok(Some(recips)) => {
             // 收件人以 JSON 数组形式存储（与 system/config.rs update_notification_settings 写入格式一致）
-            serde_json::from_str::<Vec<Uuid>>(&recips).unwrap_or_default()
+            match serde_json::from_str::<Vec<Uuid>>(&recips) {
+                Ok(ids) => ids,
+                Err(e) => {
+                    // 配置损坏时降级为空列表（跳过发送），但必须留痕而非静默吞掉
+                    log_error!("log.smtp.recipients_parse_failed", error = e);
+                    Vec::new()
+                }
+            }
         }
         Ok(None) => {
             log_warn!("log.smtp.no_recipients_configured");

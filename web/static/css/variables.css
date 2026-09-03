@@ -89,6 +89,13 @@
   /* tooltip 高于任意层级的模态（模态内联 z-index 基准 1050、每层 +50），仅低于 toast */
   --z-tooltip: 3000;
   --z-toast: 9999;
+  --color-warning-dark: #e0a800;
+  --color-status-success-text: #2e7d32;
+  --color-status-info-text: #1565c0;
+  --color-status-danger-text: #c62828;
+  --color-status-warning-text: #e65100;
+  --color-status-neutral-text: #6b7280;
+  --color-orange: #fd7e14;
   --color-bg-hover: #f0f0f0;
   --color-bg-secondary: #f0f0f0;
 

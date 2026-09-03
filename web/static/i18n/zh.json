@@ -1319,7 +1319,8 @@
     "execution_time": "执行时间",
     "duration": "耗时(ms)",
     "details": "详情",
-    "cron_invalid": "Cron 表达式格式不正确：应为 5 段（分 时 日 月 周）或 6 段（含秒），各段仅支持数字、范围、列表、步进与星号"
+    "cron_invalid": "Cron 表达式格式不正确：应为 5 段（分 时 日 月 周）或 6 段（含秒），各段仅支持数字、范围、列表、步进与星号",
+    "delete_failed": "删除定时任务失败"
   },
   "viz": {
     "no_room_layout_data": "数据库中没有房间布局数据",
@@ -1779,7 +1780,10 @@
         "mac_format": "MAC 地址格式无效",
         "interface_length": "接口名长度不能超过 50 字符"
       },
-      "workstation_position_exclusive": "工位和机位不能同时指定"
+      "workstation_position_exclusive": "工位和机位不能同时指定",
+      "position_room_mismatch": "设备所属机房与机位所在机房不一致",
+      "workstation_room_mismatch": "设备所属机房与工位所在机房不一致",
+      "ip_subnet_not_in_new_room": "设备现有 {{count}} 个 IP 不属于新房间绑定的子网，请先迁移或调整网卡配置"
     },
     "device_template": {
       "deleted": "设备模板删除成功",
@@ -2152,7 +2156,8 @@
         "start_u_range": "起始U位必须在1到48之间",
         "u_order_invalid": "起始 U 位置不能大于结束 U 位置"
       },
-      "cabinet_required": "机位必须隶属机柜，请指定所属机柜"
+      "cabinet_required": "机位必须隶属机柜，请指定所属机柜",
+      "u_range_overlap": "机位 U 位范围与既有机位重叠"
     },
     "room": {
       "children_synced": "房间子项同步成功",
@@ -2173,7 +2178,9 @@
       "validation": {
         "name_length": "房间名称长度必须在1到50个字符之间",
         "type_invalid": "房间类型必须是 office、lobby、reception、data_center、telecom_closet 或 other"
-      }
+      },
+      "has_devices": "该房间已被设备关联，无法删除",
+      "subnet_in_use_by_device_ip": "该房间内仍有 {{count}} 个设备 IP 属于将被移除的子网，请先迁移或删除"
     },
     "services": {
       "not_registered": "未注册服务：系统服务目录中未找到 {{unit}}",
@@ -2285,8 +2292,6 @@
       "toggled": "切换定时任务状态成功",
       "token_cleanup_completed": "已清理过期token",
       "token_cleanup_failed": "Token清理失败",
-      "token_usage_cleanup_completed": "已清理token使用记录",
-      "token_usage_cleanup_failed": "Token使用记录清理失败",
       "type_unknown": "未知的任务类型: {{task_type}}",
       "type_unsupported": "不支持的任务类型: {{task_type}}（允许: {{allowed}}）",
       "updated": "更新定时任务成功",
@@ -2350,7 +2355,8 @@
       "logical_connection_exists": "该设备对之间已存在逻辑连接",
       "connection_duplicate": "已存在相同的连线",
       "position_invalid": "布局坐标无效",
-      "workstation_ids_invalid": "包含不属于当前房间的工位"
+      "workstation_ids_invalid": "包含不属于当前房间的工位",
+      "duplicate_element_type": "同一房间每种布局元素只允许一个，请勿重复提交"
     },
     "workstation": {
       "created": "工位创建成功",

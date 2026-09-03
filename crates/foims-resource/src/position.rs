@@ -144,6 +144,34 @@ pub async fn get_positions<P: DbProvider>(
     ))
 }
 
+/// U 位区间重叠预检（与 trg_check_position_overlap 触发器同口径）：
+/// 预检返回 422；并发窗口由触发器兜底，触发 P0001 的语句统一在
+/// map_err 中映射为校验错误
+pub(crate) async fn ensure_no_u_overlap(
+    conn: &mut sqlx::PgConnection,
+    cabinet_id: Option<Uuid>,
+    start_u: i32,
+    end_u: i32,
+    exclude_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    let overlap: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM positions
+           WHERE cabinet_id IS NOT DISTINCT FROM $1
+             AND ($4::uuid IS NULL OR id != $4)
+             AND start_u <= $3 AND end_u >= $2",
+    )
+    .bind(cabinet_id)
+    .bind(start_u)
+    .bind(end_u)
+    .bind(exclude_id)
+    .fetch_one(conn)
+    .await?;
+    if overlap > 0 {
+        return Err(AppError::Validation(msg("server.position.u_range_overlap")));
+    }
+    Ok(())
+}
+
 /// 创建机位（同机柜内名称唯一，检查与写入在同一事务内）。
 pub async fn create_cabinet_position<P: DbProvider>(
     State(state): State<Arc<P>>,
@@ -182,6 +210,9 @@ pub async fn create_cabinet_position<P: DbProvider>(
         return Err(AppError::Conflict(msg("server.position.name_exists")));
     }
 
+    // U 位重叠预检：返回 422 而非触发器 P0001 的 500
+    ensure_no_u_overlap(&mut tx, Some(cabinet_id), req.start_u, req.end_u, None).await?;
+
     let id = Uuid::new_v4();
     let now = Utc::now();
 
@@ -200,11 +231,17 @@ pub async fn create_cabinet_position<P: DbProvider>(
     .execute(&mut *tx)
     .await
     .map_err(|e| {
-        // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409
-        if let sqlx::Error::Database(ref db_err) = e
-            && db_err.is_unique_violation()
-        {
-            return AppError::Conflict(msg("server.position.name_exists"));
+        // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409；
+        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+        if let sqlx::Error::Database(ref db_err) = e {
+            if db_err.is_unique_violation() {
+                return AppError::Conflict(msg("server.position.name_exists"));
+            }
+            if db_err.code().as_deref() == Some("P0001")
+                && db_err.message().contains("U位范围重叠")
+            {
+                return AppError::Validation(msg("server.position.u_range_overlap"));
+            }
         }
         AppError::from(e)
     })?;
@@ -358,6 +395,31 @@ pub async fn update_cabinet_position<P: DbProvider>(
         }
     }
 
+    // U 位重叠预检（以最终生效的机柜与区间为口径）：
+    // 返回 422 而非触发器 P0001 的 500
+    {
+        let (cur_cabinet_id, cur_start_u, cur_end_u): (Option<Uuid>, i32, i32) =
+            sqlx::query_as("SELECT cabinet_id, start_u, end_u FROM positions WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let final_cabinet_id = if req.cabinet_id.is_some() {
+            req.cabinet_id.flatten()
+        } else {
+            cur_cabinet_id
+        };
+        let final_start_u = req.start_u.unwrap_or(cur_start_u);
+        let final_end_u = req.end_u.unwrap_or(cur_end_u);
+        ensure_no_u_overlap(
+            &mut tx,
+            final_cabinet_id,
+            final_start_u,
+            final_end_u,
+            Some(id),
+        )
+        .await?;
+    }
+
     sqlx::query(
         "UPDATE positions SET
          name = COALESCE($1, name),
@@ -379,11 +441,16 @@ pub async fn update_cabinet_position<P: DbProvider>(
     .execute(&mut *tx)
     .await
     .map_err(|e| {
-        // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409
-        if let sqlx::Error::Database(ref db_err) = e
-            && db_err.is_unique_violation()
-        {
-            return AppError::Conflict(msg("server.position.name_exists"));
+        // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409；
+        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+        if let sqlx::Error::Database(ref db_err) = e {
+            if db_err.is_unique_violation() {
+                return AppError::Conflict(msg("server.position.name_exists"));
+            }
+            if db_err.code().as_deref() == Some("P0001") && db_err.message().contains("U位范围重叠")
+            {
+                return AppError::Validation(msg("server.position.u_range_overlap"));
+            }
         }
         AppError::from(e)
     })?;

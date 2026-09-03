@@ -384,7 +384,19 @@ pub async fn update_device_interface<P: DbProvider>(
     }
     builder.push(" WHERE id = ").push_bind(interface_id);
 
-    let result = builder.build().execute(&state.pool()?.get_conn()).await?;
+    let result = builder
+        .build()
+        .execute(&state.pool()?.get_conn())
+        .await
+        .map_err(|e| {
+            // 并发重名兜底：device_interfaces UNIQUE(device_id, name) 冲突映射为 409
+            if let sqlx::Error::Database(ref db_err) = e
+                && db_err.is_unique_violation()
+            {
+                return AppError::Conflict(msg("server.device.interface.name_exists"));
+            }
+            AppError::from(e)
+        })?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(msg("server.device.interface.not_found")));
     }
@@ -441,6 +453,12 @@ pub async fn delete_device_interface<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.device.interface.not_found")));
     }
 
+    let device_id: Uuid =
+        sqlx::query_scalar("SELECT device_id FROM device_interfaces WHERE id = $1")
+            .bind(interface_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
     // 先删除相关的 IP 地址
     sqlx::query("DELETE FROM ips WHERE device_interface_id = $1")
         .bind(interface_id)
@@ -463,11 +481,13 @@ pub async fn delete_device_interface<P: DbProvider>(
         .execute(&mut *tx)
         .await?;
 
-    // 清理不再被引用的网卡
+    // 清理不再被引用的网卡（限定本设备：全局清理会顺带影响其他设备
+    // 并发操作留下的待清理网卡，作用域应收敛到本次删除的设备）
     sqlx::query(
-        "DELETE FROM device_nics WHERE id NOT IN (
-            SELECT nic_id FROM device_interfaces WHERE nic_id IS NOT NULL)",
+        "DELETE FROM device_nics WHERE device_id = $1 AND id NOT IN (
+            SELECT nic_id FROM device_interfaces WHERE nic_id IS NOT NULL AND device_id = $1)",
     )
+    .bind(device_id)
     .execute(&mut *tx)
     .await?;
 

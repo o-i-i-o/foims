@@ -331,6 +331,9 @@ function loadServicesStatus() {
     .then((result) => {
       if (result.success && Array.isArray(result.data)) {
         renderServicesTable(result.data);
+      } else if (!result.success) {
+        // success:false 与网络异常同口径提示，不再静默保留旧状态
+        showToast(`${t("services.load_failed")}: ${result.message}`, "error");
       }
     })
     .catch((error) => {
@@ -364,12 +367,13 @@ function buildServiceRow(item) {
   const nameText = t(`services.name_${item.name}`);
 
   // foims 行附带运行模式说明（系统服务 / 独立进程）
-  const runModeHtml =
-    item.name === "foims"
-      ? `<div class="svc-run-mode">${escapeHtml(t("services.run_mode_label"))}: ${escapeHtml(
-          item.running_as_service ? t("services.mode_service") : t("services.mode_standalone")
-        )}</div>`
-      : "";
+  let runModeHtml = "";
+  if (item.name === "foims") {
+    const modeText = item.running_as_service
+      ? t("services.mode_service")
+      : t("services.mode_standalone");
+    runModeHtml = `<div class="svc-run-mode">${escapeHtml(t("services.run_mode_label"))}: ${escapeHtml(modeText)}</div>`;
+  }
 
   // 状态徽章：未注册 / 运行中 / 失败 / 已停止，title 展示原始 state 与 StatusText
   let badgeClass;
@@ -393,11 +397,14 @@ function buildServiceRow(item) {
     badgeTitle = `${badgeTitle}\n${item.status_text}`;
   }
 
-  const enabledCell = item.registered
-    ? `<span class="svc-badge ${item.enabled ? "svc-active" : "svc-inactive"}">${escapeHtml(
-        item.enabled ? t("services.enabled_on") : t("services.enabled_off")
-      )}</span>`
-    : `<span class="svc-unregistered-hint">${t("services.uptime_unavailable")}</span>`;
+  let enabledCell;
+  if (item.registered) {
+    const enabledBadgeClass = item.enabled ? "svc-active" : "svc-inactive";
+    const enabledText = item.enabled ? t("services.enabled_on") : t("services.enabled_off");
+    enabledCell = `<span class="svc-badge ${enabledBadgeClass}">${escapeHtml(enabledText)}</span>`;
+  } else {
+    enabledCell = `<span class="svc-unregistered-hint">${t("services.uptime_unavailable")}</span>`;
+  }
 
   const uptimeCell =
     item.name === "foims" && item.active && item.uptime_seconds
@@ -408,8 +415,10 @@ function buildServiceRow(item) {
   if (!item.registered) {
     actionsHtml = `<span class="svc-unregistered-hint">${escapeHtml(t("services.unregistered_hint"))}</span>`;
   } else {
-    const opButton = (op, buttonClass, disabled) =>
-      `<button type="button" class="btn ${buttonClass}" data-svc-op data-service="${escapeHtml(item.name)}" data-op="${op}"${disabled ? " disabled" : ""}>${escapeHtml(t(`services.op_${op}`))}</button>`;
+    const opButton = (op, buttonClass, disabled) => {
+      const label = t(`services.op_${op}`);
+      return `<button type="button" class="btn ${buttonClass}" data-svc-op data-service="${escapeHtml(item.name)}" data-op="${op}"${disabled ? " disabled" : ""}>${escapeHtml(label)}</button>`;
+    };
     actionsHtml = [
       opButton("start", "btn-primary btn-sm", item.active),
       opButton("stop", "btn-danger btn-sm", !item.active),
@@ -462,7 +471,9 @@ async function executeServiceOp(service, op) {
 
   if (op === "stop") {
     const extraKey =
-      service === "foims" ? "services.confirm_stop_foims_extra" : "services.confirm_stop_nginx_extra";
+      service === "foims"
+        ? "services.confirm_stop_foims_extra"
+        : "services.confirm_stop_nginx_extra";
     const confirmed = await showConfirm(
       t("services.confirm_stop", { name, unit, extra: t(extraKey) })
     );
@@ -795,7 +806,8 @@ export async function loadNotificationSettings() {
   try {
     // 用户列表与通知设置互不依赖，并行加载
     const [usersResult, settingsResult] = await Promise.all([
-      apiGet("/api/users"),
+      // page_size=1000（后端上限）：默认 20/页会漏掉第 21 个及之后的可选收件人
+      apiGet("/api/users?page_size=1000"),
       apiGet("/api/system/notification/settings")
     ]);
 
@@ -1539,7 +1551,8 @@ function renderCaTable(cas) {
     const daysText = certDaysText(days);
     const daysClass = certDaysClass(days);
     const sourceClass = ca.source === "root" ? "cert-type-generated" : "cert-type-imported";
-    const sourceText = ca.source === "root" ? t("cert.ca_source_root") : t("cert.ca_source_imported");
+    const sourceText =
+      ca.source === "root" ? t("cert.ca_source_root") : t("cert.ca_source_imported");
     const keyClass = ca.has_key ? "ca-key-ok" : "ca-key-missing";
     const keyText = ca.has_key ? t("cert.ca_key_ok_label") : t("cert.ca_no_key_label");
 

@@ -36,7 +36,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "org_templates",
         "organizations",
         "employees",
-        "encryption_keys",
         "device_templates",
         "net_outlets",
         "patch_panels",
@@ -51,7 +50,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "topology_connections",
         "cabinet_layouts",
         "system_configs",
-        "scheduled_tasks",
+        // scheduled_tasks 例外：全部手动 UPDATE 已显式设置 updated_at，
+        // 调度路径（next_run_at/last_run_at 前移）刻意不刷新——挂触发器
+        // 会把"配置变更时间"语义破坏为每 5 分钟跳动
     ];
 
     for table in &tables_with_updated_at {

@@ -69,7 +69,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 同一对设备之间只允许一条逻辑连接（链路聚合）：以表达式部分索引
     // 兜底并发下的 check-then-insert（清单见 check.rs 必需索引）。
-    // 物理连线同一对设备允许多条（不同端口组合），故仅对 logical 生效
+    // 物理连线同一对设备允许多条，但同一端口组合（含 NULL 端口，
+    // NULLS NOT DISTINCT）只允许一条
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS uq_topology_connections_logical
            ON topology_connections (
@@ -77,6 +78,22 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
              GREATEST(source_device_id, target_device_id)
            )
            WHERE connection_type = 'logical'",
+    )
+    .execute(pool)
+    .await?;
+
+    // 物理连线去重兜底：同一设备对 + 端口组合唯一（NULL 端口视为相等），
+    // 填补手动创建路径 check-then-insert 的并发窗口
+    sqlx::query(
+        r"CREATE UNIQUE INDEX IF NOT EXISTS uq_topology_connections_physical
+           ON topology_connections (
+             LEAST(source_device_id, target_device_id),
+             GREATEST(source_device_id, target_device_id),
+             source_device_port_id,
+             target_device_port_id
+           )
+           NULLS NOT DISTINCT
+           WHERE connection_type = 'physical'",
     )
     .execute(pool)
     .await?;

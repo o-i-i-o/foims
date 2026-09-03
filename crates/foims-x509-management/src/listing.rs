@@ -148,11 +148,20 @@ async fn scan_dir(dir: &str) -> Result<Vec<CertFileInfo>, CertManagerError> {
     let mut infos = Vec::with_capacity(cert_files.len());
     for (stem, cert_filename, _) in cert_files {
         let cert_path = Path::new(dir).join(&cert_filename);
-        let metadata = tokio::fs::read(&cert_path)
-            .await
-            .ok()
-            .and_then(|data| parse_cert_metadata(&data))
-            .unwrap_or_default();
+        let metadata = match tokio::fs::read(&cert_path).await {
+            Ok(data) => parse_cert_metadata(&data).unwrap_or_default(),
+            // 目录扫描与读取之间的竞态（并发删除）按无元数据降级；
+            // 其他 IO 故障留痕，不在列表中静默伪装成「无 CN/有效期」
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+            Err(e) => {
+                foims_common::log_warn!(
+                    "log.certificate.cert_read_failed",
+                    path = cert_path.display().to_string(),
+                    error = e
+                );
+                Default::default()
+            }
+        };
 
         let key_filename = if key_stems.contains(&stem) {
             Some(format!("{stem}.key"))

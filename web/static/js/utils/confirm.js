@@ -63,6 +63,11 @@ export function showConfirm(message, options = {}) {
     confirmResolve = resolve;
 
     openModal("confirm-modal").then((modal) => {
+      // openModal 竞态守卫：openModal 完成时上一个确认框可能已被
+      // 新调用替换，晚到的旧回调不得覆写新确认框的文案
+      if (confirmResolve !== resolve) {
+        return;
+      }
       if (!modal) {
         // 模板加载失败时直接返回取消，避免调用方永久挂起
         confirmResolve = null;

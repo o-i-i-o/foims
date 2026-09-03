@@ -162,7 +162,7 @@ class LoginManager {
 
     // 绑定 Tabs 事件
     this.dom.tabs.forEach((tab) => {
-      tab.addEventListener("click", (e) => this.handleTabClick(e.target));
+      tab.addEventListener("click", (e) => this.handleTabClick(e.currentTarget));
     });
 
     // 绑定表单提交事件
@@ -181,7 +181,7 @@ class LoginManager {
     this.dom.forgotPasswordError = document.getElementById("forgot-password-error");
     this.dom.forgotPasswordSuccess = document.getElementById("forgot-password-success");
 
-    this.dom.forgotPasswordLink.addEventListener("click", (e) => {
+    this.dom.forgotPasswordLink?.addEventListener("click", (e) => {
       e.preventDefault();
       openModal("forgot-password-modal");
     });
@@ -786,6 +786,9 @@ class LoginManager {
     const formData = new FormData(e.target);
     const email = formData.get("email");
     const btn = e.target.querySelector('button[type="submit"]');
+    if (!btn) {
+      return;
+    }
 
     const originalText = btn.textContent;
     btn.disabled = true;

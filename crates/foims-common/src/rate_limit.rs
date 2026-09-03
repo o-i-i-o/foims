@@ -362,21 +362,6 @@ pub fn start_cleanup_task(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::StatusCode;
-    use axum::http::request::Parts;
-
-    /// 构造带请求头的 Parts
-    fn parts_with_headers(headers: &[(&str, &str)]) -> Parts {
-        let mut builder = axum::http::Request::builder();
-        for (name, value) in headers {
-            builder = builder.header(*name, *value);
-        }
-        let Ok(req) = builder.body(()) else {
-            panic!("构造测试请求失败");
-        };
-        let (parts, _payload) = req.into_parts();
-        parts
-    }
 
     // ---------- 滑动窗口条目 ----------
 

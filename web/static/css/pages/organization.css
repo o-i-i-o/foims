@@ -131,7 +131,7 @@
 
 .org-node-type-badge[data-type="headquarters"] {
   background: rgb(102 126 234 / 15%);
-  color: #5568d3;
+  color: var(--color-primary-hover);
 }
 
 .org-node-type-badge[data-type="building"] {
@@ -176,7 +176,7 @@
 
 .org-node-type-badge[data-type="cabinet_position"] {
   background: rgb(253 126 20 / 10%);
-  color: #fd7e14;
+  color: var(--color-orange);
 }
 
 .org-node-desc {
@@ -212,7 +212,7 @@
 
 .btn-add-child:hover {
   background: var(--color-success);
-  color: #fff;
+  color: var(--color-bg-white);
 }
 
 /* 树节点图标按钮形态：无边框、透明底，与全局 icon-btn 风格统一 */
@@ -413,7 +413,7 @@
   font-size: var(--font-size-xs);
   font-weight: 600;
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-bg-white);
   flex-shrink: 0;
   letter-spacing: 1px;
 }

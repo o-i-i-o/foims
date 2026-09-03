@@ -83,9 +83,7 @@ export class SVGRenderer {
       `${t("viz.manager_label")}: ${workstation.manager || t("viz.no_manager")}`
     ];
     if (ipDetail && (ipDetail.network_name || ipDetail.network_region)) {
-      const netParts = [ipDetail.network_region, ipDetail.network_name]
-        .filter(Boolean)
-        .join(" / ");
+      const netParts = [ipDetail.network_region, ipDetail.network_name].filter(Boolean).join(" / ");
       tooltipLines.splice(2, 0, `${t("viz.network_label")}: ${netParts}`);
     }
     group.dataset.tooltip = tooltipLines.join("\n");

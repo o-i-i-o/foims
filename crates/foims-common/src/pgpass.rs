@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn pgpass文件_按DatabaseConfig创建() {
+    fn pgpass文件_按database_config创建() {
         let config = DatabaseConfig {
             host: "h1".to_string(),
             port: 5433,

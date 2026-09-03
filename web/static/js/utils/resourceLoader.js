@@ -5,7 +5,7 @@ const preloadedModules = new Set();
 /* 版本号仅用于 CSS / 模态框 HTML 等经 fetch 加载的资源的缓存穿透；
    JS 模块动态 import 一律使用无版本号 URL —— 与静态 import 保持同一 URL 空间，
    避免同一模块因 URL 不同产生双实例、双份独立状态 */
-export const MODULE_VERSION = "01375";
+export const MODULE_VERSION = "01377";
 
 export function withVersion(path) {
   if (!path) {
@@ -144,7 +144,11 @@ export function schedulePreload(moduleNames, options = {}) {
       preloadModules(moduleNames);
     } else {
       moduleNames.forEach((name) => {
-        lazyLoad(name, { delay: 0, when: "idle" });
+        // 预加载失败可接受（真正使用时再按需加载并报错），
+        // 但 rejection 必须吞掉，否则产生 unhandled rejection
+        lazyLoad(name, { delay: 0, when: "idle" }).catch((error) => {
+          console.warn(`预加载模块 ${name} 失败:`, error);
+        });
       });
     }
   };

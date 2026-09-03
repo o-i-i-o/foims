@@ -52,7 +52,7 @@ pub async fn get_users<P: AuthProvider>(
         _ => "ORDER BY created_at DESC",
     };
 
-    let search_pattern = format!("%{search}%");
+    let search_pattern = foims_common::net::escape_like(&search);
     let conn = state.pool()?.get_conn();
 
     let (total, users) = if search.is_empty() {
@@ -131,8 +131,11 @@ pub async fn create_user<P: AuthProvider>(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
+    // 用户写入与密码历史同事务：避免「用户已建但历史缺失」弱化重复使用检查
+    let mut tx = conn.begin().await?;
+
     let insert_result = sqlx::query(
-        "INSERT INTO users (id, username, password_hash, email, role, status, created_at, updated_at) 
+        "INSERT INTO users (id, username, password_hash, email, role, status, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
@@ -143,7 +146,7 @@ pub async fn create_user<P: AuthProvider>(
     .bind(true)
     .bind(now)
     .bind(now)
-    .execute(&conn)
+    .execute(&mut *tx)
     .await;
 
     if let Err(e) = insert_result {
@@ -167,7 +170,16 @@ pub async fn create_user<P: AuthProvider>(
     }
 
     // 等保密码策略：记录密码历史（供后续改密时的重复使用检查）
-    crate::password_policy::record_history(&conn, id, &hashed_password).await;
+    crate::password_policy::record_history(
+        &state.pool()?.get_conn(),
+        &mut tx,
+        id,
+        &hashed_password,
+    )
+    .await
+    .map_err(AppError::from)?;
+
+    tx.commit().await?;
 
     let details = json!({"username": req.username, "email": req.email, "role": req.role});
     log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;

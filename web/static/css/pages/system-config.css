@@ -239,12 +239,12 @@ dl.config-field,
 }
 
 .cert-days-warning {
-  color: #e65100;
+  color: var(--color-status-warning-text);
   font-weight: 600;
 }
 
 .cert-days-expired {
-  color: #c62828;
+  color: var(--color-status-danger-text);
   font-weight: 700;
 }
 
@@ -259,12 +259,12 @@ dl.config-field,
 }
 
 .cert-type-generated {
-  color: #1565c0;
+  color: var(--color-status-info-text);
   background: rgb(21 101 192 / 12%);
 }
 
 .cert-type-imported {
-  color: #2e7d32;
+  color: var(--color-status-success-text);
   background: rgb(46 125 50 / 12%);
 }
 
@@ -290,12 +290,12 @@ dl.config-field,
 }
 
 .ca-key-ok {
-  color: #2e7d32;
+  color: var(--color-status-success-text);
   background: rgb(46 125 50 / 12%);
 }
 
 .ca-key-missing {
-  color: #6b7280;
+  color: var(--color-status-neutral-text);
   background: rgb(107 114 128 / 12%);
 }
 
@@ -335,22 +335,22 @@ dl.config-field,
 }
 
 .svc-active {
-  color: #2e7d32;
+  color: var(--color-status-success-text);
   background: rgb(46 125 50 / 12%);
 }
 
 .svc-inactive {
-  color: #6b7280;
+  color: var(--color-status-neutral-text);
   background: rgb(107 114 128 / 12%);
 }
 
 .svc-failed {
-  color: #c62828;
+  color: var(--color-status-danger-text);
   background: rgb(198 40 40 / 12%);
 }
 
 .svc-unregistered {
-  color: #e65100;
+  color: var(--color-status-warning-text);
   background: rgb(230 81 0 / 12%);
 }
 

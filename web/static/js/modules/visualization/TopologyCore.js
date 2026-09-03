@@ -210,12 +210,20 @@ export class TopologyCore {
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.code === "Space" && !e.target.closest("input, select, textarea")) {
+      // 仅在拓扑容器可见时接管空格键（拖拽平移手势）：document 级监听
+      // 会影响其他页面的空格滚动/按钮激活；同时排除按钮等交互元素
+      const topologyVisible =
+        this.container.isConnected && this.container.getBoundingClientRect().width > 0;
+      if (
+        e.code === "Space" &&
+        topologyVisible &&
+        !e.target.closest("input, select, textarea, button, [contenteditable]")
+      ) {
         e.preventDefault();
         this.isSpaceDown = true;
         this.container.classList.add("panning");
       }
-      if (e.code === "Escape") {
+      if (e.code === "Escape" && topologyVisible) {
         this._cancelConnection();
       }
     });

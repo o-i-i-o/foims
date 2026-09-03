@@ -13,16 +13,16 @@
 .port-group {
   flex: 1;
   min-width: 250px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border-dark);
   border-radius: var(--radius-lg, 8px);
   padding: 15px;
-  background-color: #f9f9f9;
+  background-color: var(--color-bg);
 }
 
 .port-group h4 {
   margin-top: 0;
   margin-bottom: 15px;
-  color: var(--color-text, #333);
+  color: var(--color-text, var(--color-text));
   font-size: 14px;
   font-weight: 700;
 }
@@ -43,7 +43,7 @@
 .port-item {
   width: 40px;
   height: 40px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border-dark);
   border-radius: var(--radius-sm, 4px);
   background-color: var(--color-bg-white);
   display: flex;
@@ -53,7 +53,7 @@
   cursor: pointer;
   position: relative;
   transition: all var(--transition-fast, 0.15s ease);
-  color: var(--color-text, #333);
+  color: var(--color-text, var(--color-text));
 }
 
 .port-item:hover {
@@ -79,13 +79,13 @@
 
 /* NIC 接口项用蓝色调区分（仍沿用 .port-item 的方块样式） */
 .port-item.nic-interface {
-  border-color: #2196f3;
-  background-color: #f0f7ff;
+  border-color: var(--color-blue);
+  background-color: var(--color-info-bg);
 }
 
 .port-item.nic-interface:hover {
-  border-color: #1976d2;
-  background-color: #e3f2fd;
+  border-color: var(--color-blue);
+  background-color: var(--color-info-bg);
 }
 
 /* ============ 端口悬停提示 ============ */
@@ -94,7 +94,7 @@
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  background-color: var(--color-text, #333);
+  background-color: var(--color-text, var(--color-text));
   color: var(--color-bg-white);
   padding: 5px 10px;
   border-radius: var(--radius-sm, 4px);
@@ -120,7 +120,7 @@
   transform: translateX(-50%);
   border-width: 5px;
   border-style: solid;
-  border-color: var(--color-text, #333) transparent transparent transparent;
+  border-color: var(--color-text, var(--color-text)) transparent transparent transparent;
 }
 
 /* 层叠模态框的层级由 js/utils/modalLoader.js 按打开顺序写内联 z-index，此处不再定义 */
@@ -129,7 +129,7 @@
 .port-groups-container .empty-message {
   text-align: center;
   padding: 20px;
-  color: var(--color-text-muted, #666);
+  color: var(--color-text-muted, var(--color-text-secondary));
   width: 100%;
 }
 
@@ -137,8 +137,8 @@
 .port-conflict-summary {
   margin-bottom: 16px;
   padding: 12px 14px;
-  background: #fff8e1;
-  border: 1px solid #ffe082;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: 8px;
   font-size: 13px;
   color: #7a5d00;
@@ -169,17 +169,17 @@
 
 .port-conflict-row .conflict-port-number {
   font-weight: 600;
-  color: #333;
+  color: var(--color-text);
 }
 
 .port-conflict-row .conflict-port-detail {
-  color: #888;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .port-conflict-row .conflict-select {
   padding: 4px 8px;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 12px;
   background: var(--color-bg-white);
@@ -192,11 +192,4 @@
   flex-wrap: wrap;
   padding-top: 8px;
   border-top: 1px solid #e9ecef;
-}
-
-/* ============ 响应式 ============ */
-@media (width <= 768px) {
-  .port-grid {
-    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-  }
 }

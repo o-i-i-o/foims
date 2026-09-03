@@ -45,15 +45,6 @@
   flex: 0 0 auto;
 }
 
-.content-section h2 {
-  margin-bottom: var(--space-lg);
-  color: var(--color-text);
-  font-size: 1.5rem;
-  font-weight: 600;
-  padding-bottom: var(--space-sm);
-  border-bottom: 2px solid var(--color-border-light);
-}
-
 .tabs {
   display: flex;
   background: var(--color-bg);

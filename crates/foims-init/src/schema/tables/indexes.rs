@@ -29,8 +29,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_login_logs_created_at ON login_logs(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_revoked_tokens_token_hash ON revoked_tokens(token_hash)",
         "CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expiry ON revoked_tokens(expiry)",
-        "CREATE INDEX IF NOT EXISTS idx_token_usage_token_hash ON token_usage(token_hash)",
-        "CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled)",
         "CREATE INDEX IF NOT EXISTS idx_rooms_org_id ON rooms(org_id)",

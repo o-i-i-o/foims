@@ -1,4 +1,4 @@
-//! 令牌表（撤销/使用记录）结构创建。
+//! 令牌撤销表（revoked_tokens）结构创建。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -13,18 +13,5 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS token_usage (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            token_hash VARCHAR(255) NOT NULL,
-            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-            ip_address VARCHAR(50) NOT NULL,
-            user_agent VARCHAR(255),
-            request_path VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )",
-    )
-    .execute(pool)
-    .await
-    .map(|_| ())
+    Ok(())
 }
