@@ -1284,7 +1284,8 @@
       "mac_sync": "MAC地址同步",
       "token_cleanup": "Token清理",
       "backup": "数据库备份",
-      "log_cleanup": "日志清理"
+      "log_cleanup": "日志清理",
+      "ip_status_sync": "IP状态同步"
     },
     "config_fields": {
       "device": "设备",
@@ -1292,7 +1293,10 @@
       "network": "子网",
       "select_network": "选择子网",
       "keep_days": "保留天数",
-      "keep_days_hint": "删除指定天数之前的日志，0表示删除全部"
+      "keep_days_hint": "删除指定天数之前的日志，0表示删除全部",
+      "stale_days": "判停天数",
+      "stale_days_hint": "IP 超过指定天数未观测到即标记为停用，重新观测到会自动恢复活跃",
+      "stale_days_invalid": "判停天数必须大于等于 1"
     },
     "cron_hint": "例如: \"0 */6 * * *\" 表示每6小时执行一次",
     "logs_title": "任务执行日志",
@@ -2241,6 +2245,8 @@
       "deleted": "删除定时任务成功",
       "executed": "执行定时任务成功",
       "list_retrieved": "获取定时任务列表成功",
+      "ip_status_sync_completed": "IP状态同步完成",
+      "ip_status_sync_failed": "IP状态同步失败",
       "log_cleanup_completed": "已清理日志记录",
       "log_cleanup_days_invalid": "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志",
       "logs_retrieved": "获取任务日志成功",

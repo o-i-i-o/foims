@@ -580,12 +580,16 @@ async fn sync_switch_macs(
             continue;
         }
 
-        // 观测到的 IP 行刷新 last_seen（updated_at 由触发器维护）
-        sqlx::query("UPDATE ips SET last_seen = $1 WHERE id = ANY($2)")
-            .bind(now)
-            .bind(&iface.observed_ip_ids)
-            .execute(&mut *tx)
-            .await?;
+        // 观测到的 IP 行刷新 last_seen，并即时把先前判为停用的地址恢复活跃
+        // （reserved 为人工保留语义，自动化不触碰；updated_at 由触发器维护）
+        sqlx::query(
+            "UPDATE ips SET last_seen = $1, status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END
+             WHERE id = ANY($2)",
+        )
+        .bind(now)
+        .bind(&iface.observed_ip_ids)
+        .execute(&mut *tx)
+        .await?;
 
         match iface.old_mac.as_deref() {
             None | Some("") => {
@@ -653,6 +657,35 @@ async fn sync_switch_macs(
         switch_macs_empty: false,
         total_macs_on_switch: 0,
     })
+}
+
+/// 按 last_seen 新鲜度同步 IP 状态（供 ip_status_sync 定时任务调用）：
+/// 超过 stale_days 未观测到的 active 地址翻转为 inactive，
+/// 反向（inactive 且仍在阈值内）作为兜底恢复，保证两侧口径一致。
+/// reserved 为人工保留语义，自动化不触碰。返回（转停用数, 恢复活跃数）。
+pub async fn sync_ip_status_by_staleness(
+    pool: &sqlx::PgPool,
+    stale_days: i32,
+) -> Result<(u64, u64), sqlx::Error> {
+    let stale = sqlx::query(
+        "UPDATE ips SET status = 'inactive'
+         WHERE status = 'active' AND last_seen < NOW() - make_interval(days => $1)",
+    )
+    .bind(stale_days)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    let recovered = sqlx::query(
+        "UPDATE ips SET status = 'active'
+         WHERE status = 'inactive' AND last_seen >= NOW() - make_interval(days => $1)",
+    )
+    .bind(stale_days)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok((stale, recovered))
 }
 
 pub async fn pull_ip_details<P: DbProvider>(

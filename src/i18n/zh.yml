@@ -223,6 +223,7 @@ log:
     backup_completed: "备份成功: {{path}}（{{size_mb}} MB）"
     completed: "任务 {{name}} 执行完成: {{result}}"
     failed: "任务 {{name}} 执行失败: {{error}}"
+    ip_status_sync_completed: "IP状态同步完成：{{stale}} 个地址转为停用，{{recovered}} 个恢复活跃（判停阈值 {{days}} 天）"
     lock_release_failed: "释放任务锁失败: {{error}}"
     log_cleanup_completed: "清理了 {{count}} 条{{days}}天前的日志记录"
     log_record_failed: "记录任务日志失败: {{error}}"

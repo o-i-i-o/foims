@@ -17,20 +17,20 @@ pub(crate) fn data_error_message(e: foims_data_management::DataError) -> AppMess
     }
 }
 
-/// 清理类任务 days 的合法区间（1..=3650，约 10 年）。
-/// 与 scheduled_task.rs 的创建/更新校验口径一致：
+/// 天数类任务（log_cleanup / token_usage_cleanup / ip_status_sync）days 的
+/// 合法区间（1..=3650，约 10 年）。与 scheduled_task.rs 的创建/更新校验口径一致：
 /// i64 → i32 直接 `as` 截断会把超大值变成负数（SQL 阈值落到未来导致
 /// 全表误删）或 0（清空全部审计日志），必须先做范围校验。
-const CLEANUP_DAYS_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
+const DAYS_CONFIG_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
 
-/// 解析清理类任务（log_cleanup / token_usage_cleanup）的 days 配置，
-/// 越界或缺失时的处理：缺失回落默认 30 天，越界返回校验错误。
-fn parse_cleanup_days(config: &serde_json::Value) -> Result<i32, SchedulerError> {
+/// 解析天数类任务（log_cleanup / token_usage_cleanup / ip_status_sync）的
+/// days 配置，越界或缺失时的处理：缺失回落默认 30 天，越界返回校验错误。
+fn parse_days_config(config: &serde_json::Value) -> Result<i32, SchedulerError> {
     let days = config
         .get("days")
         .and_then(serde_json::Value::as_i64)
         .unwrap_or(30);
-    if !CLEANUP_DAYS_RANGE.contains(&days) {
+    if !DAYS_CONFIG_RANGE.contains(&days) {
         return Err(SchedulerError::Validation(
             msg("server.common.invalid_param").with("param", "days (1-3650)"),
         ));
@@ -117,7 +117,7 @@ impl TaskExecutor for TokenUsageCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let days = parse_cleanup_days(&ctx.config)?;
+        let days = parse_days_config(&ctx.config)?;
 
         let count = foims_auth::utils::cleanup_old_token_usage(&ctx.pool, days)
             .await
@@ -145,7 +145,7 @@ impl TaskExecutor for LogCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let days = parse_cleanup_days(&ctx.config)?;
+        let days = parse_days_config(&ctx.config)?;
 
         let deleted = foims_data_management::clear_logs_core(&ctx.pool, days, "all")
             .await
@@ -191,6 +191,79 @@ impl TaskExecutor for MacSyncTaskExecutor {
             _ => Err(SchedulerError::Validation(msg(
                 "server.task.mac_sync_missing_config",
             ))),
+        }
+    }
+}
+
+/// IP 状态同步任务执行器：按 last_seen 新鲜度自动翻转 active/inactive，
+/// 使仪表盘 IP 状态分布反映地址观测活性。days 为判停阈值（1..=3650，默认 30）。
+pub struct IpStatusSyncTaskExecutor;
+
+#[async_trait]
+impl TaskExecutor for IpStatusSyncTaskExecutor {
+    fn task_type(&self) -> &str {
+        "ip_status_sync"
+    }
+
+    /// 每日例行运行且多数轮次无翻转，例行成功日志降为 debug 避免刷屏
+    fn debug_routine_logs(&self) -> bool {
+        true
+    }
+
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+        let days = parse_days_config(&ctx.config)?;
+
+        let (stale, recovered) = foims_resource::ip::sync_ip_status_by_staleness(&ctx.pool, days)
+            .await
+            .map_err(|e| {
+                SchedulerError::Execution(msg("server.task.ip_status_sync_failed").with("error", e))
+            })?;
+
+        log_debug!(
+            "log.task.ip_status_sync_completed",
+            stale = stale,
+            recovered = recovered,
+            days = days
+        );
+        Ok("server.task.ip_status_sync_completed".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn days配置_缺失回落默认30() {
+        assert_eq!(
+            parse_days_config(&serde_json::json!({})).map_err(|_| ()),
+            Ok(30)
+        );
+        assert_eq!(
+            parse_days_config(&serde_json::json!({"other": 1})).map_err(|_| ()),
+            Ok(30)
+        );
+    }
+
+    #[test]
+    fn days配置_区间内合法() {
+        assert_eq!(
+            parse_days_config(&serde_json::json!({"days": 1})).map_err(|_| ()),
+            Ok(1)
+        );
+        assert_eq!(
+            parse_days_config(&serde_json::json!({"days": 3650})).map_err(|_| ()),
+            Ok(3650)
+        );
+    }
+
+    #[test]
+    fn days配置_越界拒绝() {
+        for bad in [0, -1, 3651, i64::MAX] {
+            assert!(
+                parse_days_config(&serde_json::json!({ "days": bad })).is_err(),
+                "days={bad} 应被拒绝"
+            );
         }
     }
 }

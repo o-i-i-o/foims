@@ -1284,7 +1284,8 @@
       "mac_sync": "MAC Address Sync",
       "token_cleanup": "Token Cleanup",
       "backup": "Database Backup",
-      "log_cleanup": "Log Cleanup"
+      "log_cleanup": "Log Cleanup",
+      "ip_status_sync": "IP Status Sync"
     },
     "config_fields": {
       "device": "Device",
@@ -1292,7 +1293,10 @@
       "network": "Subnet",
       "select_network": "Select Subnet",
       "keep_days": "Keep Days",
-      "keep_days_hint": "Delete logs older than specified days, 0 means delete all"
+      "keep_days_hint": "Delete logs older than specified days, 0 means delete all",
+      "stale_days": "Stale Days",
+      "stale_days_hint": "IPs not observed for the specified days are marked inactive; they recover automatically once seen again",
+      "stale_days_invalid": "Stale days must be >= 1"
     },
     "cron_hint": "e.g., \"0 */6 * * *\" runs every 6 hours",
     "logs_title": "Task Execution Logs",
@@ -2241,6 +2245,8 @@
       "deleted": "Scheduled task deleted",
       "executed": "Scheduled task executed",
       "list_retrieved": "Scheduled task list retrieved",
+      "ip_status_sync_completed": "IP status sync completed",
+      "ip_status_sync_failed": "IP status sync failed",
       "log_cleanup_completed": "Log records cleaned",
       "log_cleanup_days_invalid": "The days of log_cleanup task must be >= 1; clearing all logs is forbidden",
       "logs_retrieved": "Task logs retrieved",

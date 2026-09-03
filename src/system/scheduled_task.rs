@@ -27,6 +27,7 @@ const ALLOWED_TASK_TYPES: &[&str] = &[
     "token_usage_cleanup",
     "log_cleanup",
     "mac_sync",
+    "ip_status_sync",
 ];
 
 /// 校验任务类型是否在白名单内
@@ -42,21 +43,21 @@ fn validate_task_type(task_type: &str) -> Result<(), AppError> {
     }
 }
 
-/// 需要校验 days 配置的清理类任务（与 task_executors.rs 执行期校验口径一致）
-const CLEANUP_TASK_TYPES: &[&str] = &["log_cleanup", "token_usage_cleanup"];
+/// 需要校验 days 配置的任务（与 task_executors.rs 执行期校验口径一致）
+const DAYS_CONFIG_TASK_TYPES: &[&str] = &["log_cleanup", "token_usage_cleanup", "ip_status_sync"];
 
-/// 清理类任务 days 合法区间（1..=3650）：越界值在执行器处会被拒绝，
+/// 天数类任务 days 合法区间（1..=3650）：越界值在执行器处会被拒绝，
 /// 创建/更新时同步校验，避免落库后任务每次执行都失败
-const CLEANUP_DAYS_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
+const DAYS_CONFIG_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
 
-/// 校验清理类任务（log_cleanup / token_usage_cleanup）的 days 配置：
-/// days < 1 会清空全部审计日志/使用记录，超大值会被执行器按截断拒绝
+/// 校验天数类任务（log_cleanup / token_usage_cleanup / ip_status_sync）的 days 配置：
+/// days < 1 会清空全部审计日志/使用记录（或立即判停全部地址），超大值会被执行器按截断拒绝
 fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<(), AppError> {
-    if !CLEANUP_TASK_TYPES.contains(&task_type) {
+    if !DAYS_CONFIG_TASK_TYPES.contains(&task_type) {
         return Ok(());
     }
     if let Some(days) = config.get("days").and_then(serde_json::Value::as_i64)
-        && !CLEANUP_DAYS_RANGE.contains(&days)
+        && !DAYS_CONFIG_RANGE.contains(&days)
     {
         return Err(AppError::Validation(
             msg("server.common.invalid_param").with("param", "days (1-3650)"),

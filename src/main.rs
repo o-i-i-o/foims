@@ -24,8 +24,8 @@ use foims::routes::static_files::get_web_dir;
 use foims::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use foims::system::config::init_start_time;
 use foims::system::task_executors::{
-    BackupTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor, TokenCleanupTaskExecutor,
-    TokenUsageCleanupTaskExecutor,
+    BackupTaskExecutor, IpStatusSyncTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor,
+    TokenCleanupTaskExecutor, TokenUsageCleanupTaskExecutor,
 };
 use foims::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
@@ -508,6 +508,7 @@ async fn main() -> std::io::Result<()> {
         registry.register(Box::new(TokenUsageCleanupTaskExecutor));
         registry.register(Box::new(LogCleanupTaskExecutor));
         registry.register(Box::new(MacSyncTaskExecutor));
+        registry.register(Box::new(IpStatusSyncTaskExecutor));
         registry
     });
 
@@ -554,6 +555,21 @@ async fn main() -> std::io::Result<()> {
                     .await
                 {
                     foims_common::log_error!("system.register_usage_cleanup_job_failed", error = e);
+                }
+                // IP 状态按 last_seen 新鲜度自动翻转（默认判停阈值 30 天），支撑仪表盘活性分布
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_ip_status_sync",
+                        "0 30 3 * * *",
+                        "ip_status_sync",
+                        serde_json::json!({ "days": 30 }),
+                    )
+                    .await
+                {
+                    foims_common::log_error!(
+                        "system.register_ip_status_sync_job_failed",
+                        error = e
+                    );
                 }
 
                 match state.start().await {

@@ -84,6 +84,9 @@ async function handleTaskTypeChange(e) {
   document
     .getElementById("log-cleanup-config")
     ?.classList.toggle("hidden", taskType !== "log_cleanup");
+  document
+    .getElementById("ip-status-sync-config")
+    ?.classList.toggle("hidden", taskType !== "ip_status_sync");
 
   if (isMacSync) {
     // 选项就绪后再返回，编辑场景的调用方依赖此时序回显选中值
@@ -224,6 +227,8 @@ async function editScheduledTask(id) {
       document.getElementById("scheduled-task-subnet-id").value = task.config.subnet_id || "";
     } else if (task.task_type === "log_cleanup" && task.config) {
       document.getElementById("scheduled-task-keep-days").value = task.config.days || 30;
+    } else if (task.task_type === "ip_status_sync" && task.config) {
+      document.getElementById("scheduled-task-stale-days").value = task.config.days || 30;
     }
   } catch (error) {
     console.error("Failed to load task:", error);
@@ -297,6 +302,14 @@ async function saveScheduledTask() {
   } else if (taskType === "log_cleanup") {
     const keepDays = parseInt(document.getElementById("scheduled-task-keep-days").value, 10) || 30;
     config = { days: keepDays };
+  } else if (taskType === "ip_status_sync") {
+    // 判停阈值下限为 1 天：0 会在下一轮把全部地址判停
+    const staleDays = parseInt(document.getElementById("scheduled-task-stale-days").value, 10) || 30;
+    if (staleDays < 1) {
+      showToast(t("scheduled_tasks.config_fields.stale_days_invalid"), "warning");
+      return;
+    }
+    config = { days: staleDays };
   }
 
   const data = {

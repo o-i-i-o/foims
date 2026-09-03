@@ -223,6 +223,7 @@ log:
     backup_completed: "Backup completed: {{path}} ({{size_mb}} MB)"
     completed: "Task {{name}} completed: {{result}}"
     failed: "Task {{name}} failed: {{error}}"
+    ip_status_sync_completed: "IP status sync completed: {{stale}} addresses marked inactive, {{recovered}} restored to active (stale threshold {{days}} days)"
     lock_release_failed: "Failed to release task lock: {{error}}"
     log_cleanup_completed: "Cleaned {{count}} log records older than {{days}} days"
     log_record_failed: "Failed to record task log: {{error}}"
