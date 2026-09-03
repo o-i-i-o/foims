@@ -1,6 +1,6 @@
 [package]
 name = "foims-models"
-version = "0.2.6"
+version = "0.2.7"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Domain Models - shared request/response and database row models"

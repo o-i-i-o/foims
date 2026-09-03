@@ -38,7 +38,7 @@ fn validate_coord(value: f64) -> Result<(), validator::ValidationError> {
 }
 
 /// 校验旋转角：必须为有限数且在 -360..=360 内
-/// （落库前经 `rotation_i32` 规范化为 0..=360 的等价正角，保存与回读一致）。
+/// （落库前经 `rotation_i32` 钳位到 0..=360，保存与回读一致）。
 fn validate_rotation(value: f64) -> Result<(), validator::ValidationError> {
     if value.is_finite() && value.abs() <= ROTATION_LIMIT {
         Ok(())
@@ -95,15 +95,10 @@ impl Position {
         self.height.round().clamp(0.0, i32::MAX as f64) as i32
     }
 
-    /// 旋转取整：负角规范化为等价正角（-90 → 270），保证写库与回读一致；
-    /// 正角钳制到 0..=360（360 与 0 为同一朝向，保留原值便于回显比对）。
+    /// 旋转取整：钳位到 0..=360（负角与超上限角一律收敛到有效区间，
+    /// 落库前经本方法规范化，写库与回读一致）。
     pub fn rotation_i32(&self) -> i32 {
-        let rounded = self.rotation.round() as i32;
-        if rounded < 0 {
-            rounded.rem_euclid(360)
-        } else {
-            rounded.min(360)
-        }
+        (self.rotation.round() as i32).clamp(0, 360)
     }
 }
 

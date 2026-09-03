@@ -1518,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "foims-models"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "chrono",
  "foims-common",
@@ -1596,7 +1596,7 @@ dependencies = [
 
 [[package]]
 name = "foims-visualization"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "axum",
  "foims-auth",
