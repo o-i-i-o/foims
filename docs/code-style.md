@@ -290,6 +290,3 @@ id/注册表/i18n 键/版本号四类一致性校验已固化为 Rust 集成测�
 | 前端下拉 | `fillSelect(selectId, url, { placeholderKey, filter, itemToLabel })` |
 | 前端表格 | `renderTable` + `appendPaginationToTable` + `createSortState` |
 | 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network.js"` |
-
-## 5. 国际化（i18n）特别约定
-小版本号为5的倍数时全局校验一次语言键（如 0.19.5）。
