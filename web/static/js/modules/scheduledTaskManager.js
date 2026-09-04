@@ -78,6 +78,13 @@ function bindTaskModalEvents() {
     e.preventDefault();
     openModal("cron-examples-modal");
   });
+  // 任一字段输入即刷新表达式预览，并清除该字段的历史标红
+  CRON_FIELD_DEFS.forEach((def) => {
+    document.getElementById(def.id)?.addEventListener("input", (e) => {
+      e.target.classList.remove("cron-field-invalid");
+      updateCronPreview();
+    });
+  });
 }
 
 async function handleTaskTypeChange(e) {
@@ -197,7 +204,7 @@ async function openCreateScheduledTaskModal() {
   );
   document.getElementById("scheduled-task-form").reset();
   document.getElementById("scheduled-task-id").value = "";
-  document.getElementById("scheduled-task-cron").value = "0 */6 * * *";
+  setCronFieldValues(["0", "*/6", "*", "*", "*"]);
   document.getElementById("scheduled-task-enabled").checked = true;
   handleTaskTypeChange({ target: { value: "mac_sync" } });
 }
@@ -222,7 +229,12 @@ async function editScheduledTask(id) {
     document.getElementById("scheduled-task-id").value = task.id;
     document.getElementById("scheduled-task-name").value = task.name;
     document.getElementById("scheduled-task-type").value = task.task_type;
-    document.getElementById("scheduled-task-cron").value = task.cron_expression;
+    // 兼容历史 6 段（含秒）表达式：新表单不含秒位，去掉秒段后回填
+    const cronFields = (task.cron_expression || "").trim().split(/\s+/);
+    if (cronFields.length === 6) {
+      cronFields.shift();
+    }
+    setCronFieldValues(cronFields);
     document.getElementById("scheduled-task-enabled").checked = task.enabled;
 
     // 等待选项填充完成后再回显选中值（fillSelect 为异步填充）
@@ -241,24 +253,84 @@ async function editScheduledTask(id) {
   }
 }
 
-// cron 单字段基础合法性：数字、范围（可带步进）、星号（可带步进），列表按逗号拆分逐段校验
-const CRON_FIELD_PATTERN = /^(\*|\d+|\d+-\d+)(\/\d+)?$/;
+// cron 五字段定义：标准 Linux cron 顺序（分 时 日 月 星期），min/max 为取值边界；
+// 日字段额外支持 L（当月最后一天，后端解析器与触发库 croner 均支持）
+const CRON_FIELD_DEFS = [
+  { id: "scheduled-task-cron-minute", min: 0, max: 59 },
+  { id: "scheduled-task-cron-hour", min: 0, max: 23 },
+  { id: "scheduled-task-cron-day", min: 1, max: 31, allowLastDay: true },
+  { id: "scheduled-task-cron-month", min: 1, max: 12 },
+  { id: "scheduled-task-cron-weekday", min: 0, max: 7 }
+];
 
-function isValidCronField(field) {
-  if (field === "") {
+// 单段语法：*、数字、区间 a-b，均可带 /步进；逗号列表由调用方拆段逐个校验
+const CRON_SEGMENT_PATTERN = /^(\*|\d+|\d+-\d+)(\/\d+)?$/;
+
+// 单字段合法性：逐段校验语法，数值端点须落在该字段边界内，区间还须起点≤终点
+function isValidCronFieldValue(value, field) {
+  if (!value) {
     return false;
   }
-  return field.split(",").every((part) => CRON_FIELD_PATTERN.test(part));
+  return value.split(",").every((part) => {
+    if (field.allowLastDay && part === "L") {
+      return true;
+    }
+    if (!CRON_SEGMENT_PATTERN.test(part)) {
+      return false;
+    }
+    const [base, step] = part.split("/");
+    // 步长必须为正整数：0 步长会被后端拒绝（除零防护）
+    if (step !== undefined && Number(step) < 1) {
+      return false;
+    }
+    if (base === "*") {
+      return true;
+    }
+    const bounds = base.split("-").map(Number);
+    if (bounds.some((n) => n < field.min || n > field.max)) {
+      return false;
+    }
+    return bounds.length < 2 || bounds[0] <= bounds[1];
+  });
 }
 
-// 前端基础校验：仅做结构性检查（5 段"分 时 日 月 周"或 6 段"含秒"），
-// 语义合法性（如 2 月 30 日）仍由后端判定
-function validateCronExpression(expr) {
-  const fields = expr.trim().split(/\s+/);
-  if (fields.length !== 5 && fields.length !== 6) {
-    return false;
+function getCronExpression() {
+  return CRON_FIELD_DEFS.map((def) => document.getElementById(def.id)?.value.trim() ?? "").join(" ");
+}
+
+function updateCronPreview() {
+  const preview = document.getElementById("scheduled-task-cron-preview");
+  if (preview) {
+    preview.textContent = getCronExpression();
   }
-  return fields.every(isValidCronField);
+}
+
+function setCronFieldValues(fields) {
+  CRON_FIELD_DEFS.forEach((def, i) => {
+    const input = document.getElementById(def.id);
+    if (input) {
+      // 缺失段回退为通配，避免半截表达式产生空输入
+      input.value = fields[i] ?? "*";
+    }
+  });
+  updateCronPreview();
+}
+
+// 逐字段校验并标红非法输入（cron-field-invalid）：全部合法时返回拼接后的表达式，否则返回 null
+function validateCronFields() {
+  let allValid = true;
+  const parts = [];
+  CRON_FIELD_DEFS.forEach((def) => {
+    const input = document.getElementById(def.id);
+    const value = input ? input.value.trim() : "";
+    const valid = isValidCronFieldValue(value, def);
+    input?.classList.toggle("cron-field-invalid", !valid);
+    if (!valid) {
+      allValid = false;
+    }
+    parts.push(value);
+  });
+  return allValid ? parts.join(" ") : null;
 }
 
 // 提交在途标志：请求未返回前拦截重复提交（双击/回车），防止重复创建同名任务
@@ -281,16 +353,16 @@ async function saveScheduledTask() {
   const id = document.getElementById("scheduled-task-id").value;
   const name = document.getElementById("scheduled-task-name").value.trim();
   const taskType = document.getElementById("scheduled-task-type").value;
-  const cronExpression = document.getElementById("scheduled-task-cron").value.trim();
   const enabled = document.getElementById("scheduled-task-enabled").checked;
 
-  if (!name || !taskType || !cronExpression) {
+  if (!name || !taskType) {
     showToast(t("scheduled_tasks.required_fields"), "warning");
     return;
   }
 
-  // cron 结构非法时提前拦截：后端对创建仅告警落库，任务会静默永不执行
-  if (!validateCronExpression(cronExpression)) {
+  // cron 逐字段校验，非法时提前拦截：后端对创建仅告警落库，任务会静默永不执行
+  const cronExpression = validateCronFields();
+  if (!cronExpression) {
     showToast(t("scheduled_tasks.cron_invalid"), "warning");
     return;
   }

@@ -6,7 +6,7 @@
       <button type="button" class="close" data-modal-id="cron-examples-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
-      <p class="hint-text" data-i18n="scheduled_tasks.cron_examples.format_note">Field order: second minute hour day month weekday (Sunday = 0). Supports values, comma lists, ranges and steps.</p>
+      <p class="hint-text" data-i18n="scheduled_tasks.cron_examples.format_note">Field order: minute hour day month weekday (Sunday = 0). Supports values, comma lists, ranges and steps; the day field also supports L (last day of month).</p>
       <table class="data-table">
         <thead>
           <tr>
@@ -16,44 +16,36 @@
         </thead>
         <tbody>
           <tr>
-            <td><code>0 0/5 * * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.every_5_minutes">Every 5 minutes</td>
+            <td><code>* * * * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.every_1_minute">Every 1 minute</td>
           </tr>
           <tr>
-            <td><code>0 0,30 * * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.every_30_minutes">Every 30 minutes</td>
+            <td><code>*/10 * * * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.every_10_minutes">Every 10 minutes</td>
           </tr>
           <tr>
-            <td><code>0 0/15 6-23 * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.every_15_min_6_23">Every 15 minutes from 06:00 to 23:00</td>
+            <td><code>0 */1 * * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.every_1_hour">Every 1 hour</td>
           </tr>
           <tr>
-            <td><code>0 0 2 * * 0,6</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.weekend_2am">Saturdays and Sundays at 02:00</td>
+            <td><code>30 21 * * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.nightly_21_30">Every night at 21:30</td>
           </tr>
           <tr>
-            <td><code>0 0 9-18 * * 1-5</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.workday_9_18">Weekdays from 09:00 to 18:00 on the hour</td>
+            <td><code>3,15 * * * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.minute_3_and_15">At minutes 3 and 15 of every hour</td>
           </tr>
           <tr>
-            <td><code>0 0 0 1 * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.monthly_first_day">First day of every month at midnight</td>
+            <td><code>3,15 8-11 * * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.minute_3_15_8_to_11">At minutes 3 and 15 from 08:00 to 11:00</td>
           </tr>
           <tr>
-            <td><code>0 0 0 * * 1</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.monday_midnight">Every Monday at midnight</td>
+            <td><code>0 0 L * *</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.last_day_of_month">On the last day of every month</td>
           </tr>
           <tr>
-            <td><code>0 0 0 * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.daily_midnight">Every day at midnight</td>
-          </tr>
-          <tr>
-            <td><code>0 0 2,10,14,18 * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.four_times_daily">Every day at 02:00, 10:00, 14:00 and 18:00</td>
-          </tr>
-          <tr>
-            <td><code>0 0 2 1 1,4,7,10 *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.quarterly_first_day">First day of each quarter at 02:00</td>
+            <td><code>0 0 * * 0</code></td>
+            <td data-i18n="scheduled_tasks.cron_examples.sunday_midnight">Every Sunday at 00:00</td>
           </tr>
         </tbody>
       </table>

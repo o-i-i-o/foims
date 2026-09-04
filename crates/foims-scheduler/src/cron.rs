@@ -1,7 +1,7 @@
 //! Cron 表达式解析与下次执行时间计算。
 
 use crate::error::{SchedulerError, SchedulerResult};
-use chrono::{Datelike, Timelike, Utc};
+use chrono::{Datelike, NaiveDate, Timelike, Utc};
 use foims_common::msg;
 
 /// 计算循环的最大分钟步数（约 366 天）
@@ -61,6 +61,7 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
             // 星期编号与实际触发库 croner 及 POSIX cron 对齐：周日=0
             minute_base.weekday().num_days_from_sunday() as i32,
         );
+        let year = minute_base.year();
 
         if matches_cron_field(cron_parts[1], min, (0, 59))?
             && matches_cron_field(cron_parts[2], hour, (0, 23))?
@@ -68,6 +69,8 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
             && matches_day_and_weekday(
                 cron_parts[3],
                 &normalize_weekday_field(cron_parts[5]),
+                year,
+                month,
                 day,
                 weekday,
             )?
@@ -101,18 +104,51 @@ pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::Date
 fn matches_day_and_weekday(
     day_field: &str,
     weekday_field: &str,
+    year: i32,
+    month: i32,
     day: i32,
     weekday: i32,
 ) -> SchedulerResult<bool> {
     let day_restricted = day_field != "*";
     let weekday_restricted = weekday_field != "*";
     match (day_restricted, weekday_restricted) {
-        (true, true) => Ok(matches_cron_field(day_field, day, (1, 31))?
+        (true, true) => Ok(matches_day_of_month(day_field, year, month, day)?
             && matches_cron_field(weekday_field, weekday, (0, 7))?),
-        (true, false) => matches_cron_field(day_field, day, (1, 31)),
+        (true, false) => matches_day_of_month(day_field, year, month, day),
         (false, true) => matches_cron_field(weekday_field, weekday, (0, 7)),
         (false, false) => Ok(true),
     }
+}
+
+/// 日字段匹配，在通用语法之上支持 `L`（当月最后一天，croner 同名扩展）：
+/// 逗号列表逐段判定，独立的 `L` 段按当月实际天数命中，其余段走通用匹配。
+/// 月上下文必不可少：同一天号在不同月份的"最后一天"不同（如 2 月 vs 1 月）。
+fn matches_day_of_month(field: &str, year: i32, month: i32, day: i32) -> SchedulerResult<bool> {
+    if !field.contains('L') {
+        return matches_cron_field(field, day, (1, 31));
+    }
+    for part in field.split(',') {
+        if part == "L" {
+            if day == last_day_of_month(year, month) {
+                return Ok(true);
+            }
+        } else if matches_cron_field(part, day, (1, 31))? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// 当月最后一天：取下月 1 日的前一天（平闰年由 chrono 处理）
+fn last_day_of_month(year: i32, month: i32) -> i32 {
+    let (next_year, next_month) = if month >= 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    NaiveDate::from_ymd_opt(next_year, next_month as u32, 1)
+        .and_then(|date| date.pred_opt())
+        .map_or(0, |date| date.day() as i32)
 }
 
 /// 星期字段归一化：值 7 为周日的传统别名（croner 将其归一为 0），
@@ -460,16 +496,16 @@ mod tests {
     #[test]
     fn 日与星期同时受限_按且语义判定() {
         // 1 日且周一：day=1/weekday=1（周日=0 体系）同时满足才命中
-        assert!(matches_day_and_weekday("1", "1", 1, 1).unwrap_or(false));
+        assert!(matches_day_and_weekday("1", "1", 2026, 9, 1, 1).unwrap_or(false));
         // day 命中但 weekday 不命中 → 不触发
-        assert!(!matches_day_and_weekday("1", "1", 1, 2).unwrap_or(true));
+        assert!(!matches_day_and_weekday("1", "1", 2026, 9, 1, 2).unwrap_or(true));
         // 反之亦然
-        assert!(!matches_day_and_weekday("1", "1", 2, 1).unwrap_or(true));
+        assert!(!matches_day_and_weekday("1", "1", 2026, 9, 2, 1).unwrap_or(true));
         // 仅一个受限时按该字段
-        assert!(matches_day_and_weekday("*", "1", 15, 1).unwrap_or(false));
-        assert!(matches_day_and_weekday("15", "*", 15, 3).unwrap_or(false));
+        assert!(matches_day_and_weekday("*", "1", 2026, 9, 15, 1).unwrap_or(false));
+        assert!(matches_day_and_weekday("15", "*", 2026, 9, 15, 3).unwrap_or(false));
         // 均通配恒命中
-        assert!(matches_day_and_weekday("*", "*", 15, 3).unwrap_or(false));
+        assert!(matches_day_and_weekday("*", "*", 2026, 9, 15, 3).unwrap_or(false));
     }
 
     /// 星期 7 归一为 0（周日别名，与 croner 一致）
@@ -491,19 +527,41 @@ mod tests {
     #[test]
     fn 前端示例表格表达式_均可计算下次执行时间() {
         for expr in [
-            "0 0/5 * * * *",
-            "0 0,30 * * * *",
-            "0 0/15 6-23 * * *",
-            "0 0 2 * * 0,6",
-            "0 0 9-18 * * 1-5",
-            "0 0 0 1 * *",
-            "0 0 0 * * 1",
-            "0 0 0 * * *",
-            "0 0 2,10,14,18 * * *",
-            "0 0 2 1 1,4,7,10 *",
+            "* * * * *",
+            "*/10 * * * *",
+            "0 */1 * * *",
+            "30 21 * * *",
+            "3,15 * * * *",
+            "3,15 8-11 * * *",
+            "0 0 L * *",
+            "0 0 * * 0",
         ] {
             calculate_next_run(expr)
                 .unwrap_or_else(|e| panic!("示例表达式 {expr} 应解析成功: {e}"));
         }
+    }
+
+    /// 日字段 `L`（当月最后一天，与 croner 同名扩展语义一致）：
+    /// 整表达式须命中当月实际最后一天；列表混用时任一命中即触发
+    #[test]
+    fn 日字段L_命中当月最后一天() {
+        let next =
+            calculate_next_run("0 0 L * *").unwrap_or_else(|e| panic!("L 表达式应解析成功: {e}"));
+        assert_eq!(next.second(), 0);
+        assert_eq!(
+            next.day() as i32,
+            last_day_of_month(next.year(), next.month() as i32),
+            "L 应命中 {} 年 {} 月最后一天",
+            next.year(),
+            next.month()
+        );
+
+        // 列表混用：普通值或 L 任一命中
+        assert!(matches_day_of_month("1,L", 2026, 9, 30).unwrap_or(false));
+        assert!(matches_day_of_month("1,L", 2026, 9, 1).unwrap_or(false));
+        assert!(!matches_day_of_month("1,L", 2026, 9, 15).unwrap_or(true));
+        // 2 月：L 随平闰年落到 28/29
+        assert!(matches_day_of_month("L", 2026, 2, 28).unwrap_or(false));
+        assert!(matches_day_of_month("L", 2028, 2, 29).unwrap_or(false));
     }
 }

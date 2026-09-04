@@ -22,10 +22,35 @@
             <option value="ip_status_sync" data-i18n="scheduled_tasks.task_types.ip_status_sync">IP Status Sync</option>
           </select>
         </div>
-        <div class="form-group">
-          <label for="scheduled-task-cron"><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
-          <input type="text" id="scheduled-task-cron" name="scheduled_task_cron" value="0 */6 * * *" required>
-          <small class="hint-text"><a href="#" id="cron-examples-link" data-i18n="scheduled_tasks.cron_hint_link">View cron expression examples</a></small>
+        <div class="form-group cron-field-group">
+          <label><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
+          <!-- 标准 Linux cron 五段格式：分 时 日 月 星期，提交时以空格拼成完整表达式 -->
+          <div class="cron-field-row" id="scheduled-task-cron-fields">
+            <div class="cron-field">
+              <input type="text" id="scheduled-task-cron-minute" name="scheduled_task_cron_minute" value="0" required data-i18n-title="scheduled_tasks.cron_fields.minute">
+              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.minute">分</span>
+            </div>
+            <div class="cron-field">
+              <input type="text" id="scheduled-task-cron-hour" name="scheduled_task_cron_hour" value="*/6" required data-i18n-title="scheduled_tasks.cron_fields.hour">
+              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.hour">时</span>
+            </div>
+            <div class="cron-field">
+              <input type="text" id="scheduled-task-cron-day" name="scheduled_task_cron_day" value="*" required data-i18n-title="scheduled_tasks.cron_fields.day">
+              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.day">日</span>
+            </div>
+            <div class="cron-field">
+              <input type="text" id="scheduled-task-cron-month" name="scheduled_task_cron_month" value="*" required data-i18n-title="scheduled_tasks.cron_fields.month">
+              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.month">月</span>
+            </div>
+            <div class="cron-field">
+              <input type="text" id="scheduled-task-cron-weekday" name="scheduled_task_cron_weekday" value="*" required data-i18n-title="scheduled_tasks.cron_fields.weekday">
+              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.weekday">星期</span>
+            </div>
+          </div>
+          <small class="hint-text cron-preview-hint">
+            <span data-i18n="scheduled_tasks.cron_preview">Expression preview</span>:
+            <code id="scheduled-task-cron-preview">0 */6 * * *</code>
+            <a href="#" id="cron-examples-link" data-i18n="scheduled_tasks.cron_hint_link">View cron expression examples</a></small>
         </div>
         <div id="scheduled-task-config-section">
           <div class="form-row">

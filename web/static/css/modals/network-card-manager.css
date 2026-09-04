@@ -140,11 +140,6 @@ header.ip-level-bar {
 
 /* ===== 输入控件：.nc-input 基样式统一由 components/forms.css 提供 ===== */
 
-/* ===== 操作按钮区域 ===== */
-.network-card-actions {
-  margin-top: var(--space-sm);
-}
-
 /* ===== 响应式 ===== */
 @media (width <= 768px) {
   .nc-fields {

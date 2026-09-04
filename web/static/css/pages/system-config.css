@@ -463,3 +463,67 @@ dl.config-field,
   accent-color: var(--color-primary);
   cursor: pointer;
 }
+
+/* ==================== 定时任务 Cron 五字段输入 ==================== */
+/* 标准 Linux cron 五段（分 时 日 月 星期）：横排等分输入框，下挂字段名。
+   选择器带 .cron-field-group 前缀抬升特异性，覆盖 modals.css 的
+   .modal .form-group label/input 横排规则（label 定宽居中、input flex:1） */
+.modal .form-group.cron-field-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.modal .form-group.cron-field-group > label {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding-top: 0;
+}
+
+.cron-field-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-sm);
+  width: 100%;
+  margin-top: var(--space-xs);
+}
+
+.modal .form-group.cron-field-group .cron-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modal .form-group.cron-field-group .cron-field input {
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.cron-field-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+/* 提交校验失败的字段标红（输入即清除） */
+.cron-field input.cron-field-invalid {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-danger-bg);
+}
+
+.cron-preview-hint {
+  font-style: normal;
+  align-self: flex-start;
+}
+
+.cron-preview-hint code {
+  font-family: var(--font-mono);
+  color: var(--color-text-light);
+  background-color: var(--control-bg-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}

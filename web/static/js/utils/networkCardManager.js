@@ -65,7 +65,6 @@ export const INTERFACE_ROLES = [
 export class NetworkCardManager {
   constructor() {
     this.containerId = "device-network-cards-container";
-    this.addBtnId = "add-network-card-btn";
     /** 当前房间上下文（设备表单房间下拉的值） */
     this.roomId = null;
     /** 房间配置的可选网段（NetworkInfo 数组） */
@@ -83,7 +82,6 @@ export class NetworkCardManager {
     /** 遗留数据：不属于当前房间的区域/网段，保留显示并标记 */
     this.legacyRegions = new Map();
     this.legacyNetworks = new Map();
-    this.addHandler = null;
   }
 
   getContainer() {
@@ -255,21 +253,8 @@ export class NetworkCardManager {
     }
     container.innerHTML = "";
     this.resetLegacyData();
-    this.bindAddButton();
     await this.addCard();
     return true;
-  }
-
-  bindAddButton() {
-    const btn = document.getElementById(this.addBtnId);
-    if (!btn) {
-      return;
-    }
-    if (this.addHandler) {
-      btn.removeEventListener("click", this.addHandler);
-    }
-    this.addHandler = () => this.addCard();
-    btn.addEventListener("click", this.addHandler);
   }
 
   async addCard(cardData = null) {
@@ -294,7 +279,7 @@ export class NetworkCardManager {
         <h3 id="${uid}-title" class="level-badge level-card">${t(T_KEY_NETWORK_CARD)}</h3>
         <div class="level-actions">
           ${iconButton({ icon: "trash", label: t("device.delete_network_card"), cls: "btn-danger remove-card-btn" })}
-          ${iconButton({ icon: "plus", label: t("device.add_network_port"), cls: "btn-success add-port-btn" })}
+          ${iconButton({ icon: "plus", label: t("device.add_network_card"), cls: "btn-success add-card-btn" })}
         </div>
       </header>
       <input type="hidden" class="card-id" value="${escapeHtml(cardData.id || "")}" />
@@ -320,11 +305,7 @@ export class NetworkCardManager {
 
   async bindCardEvents(card, cardData = {}) {
     card.querySelector(".remove-card-btn")?.addEventListener("click", () => this.removeCard(card));
-    card.querySelector(".add-port-btn")?.addEventListener("click", async () => {
-      const port = this.createPortElement();
-      await this.bindPortEvents(port);
-      card.appendChild(port);
-    });
+    card.querySelector(".add-card-btn")?.addEventListener("click", () => this.addCard());
 
     const ports = cardData.ports || [];
     if (ports.length > 0) {
@@ -360,7 +341,7 @@ export class NetworkCardManager {
         <h3 id="${uid}-title" class="level-badge level-port">${t(T_KEY_NETWORK_PORT)}</h3>
         <div class="level-actions">
           ${iconButton({ icon: "trash", label: t("device.delete_network_port"), cls: "btn-danger remove-port-btn" })}
-          ${iconButton({ icon: "plus", label: t("ip.add_ip"), cls: "btn-success add-ip-btn" })}
+          ${iconButton({ icon: "plus", label: t("device.add_network_port"), cls: "btn-success add-port-btn" })}
         </div>
       </header>
       <input type="hidden" class="port-id" value="${escapeHtml(portData.id || "")}" />
@@ -401,11 +382,14 @@ export class NetworkCardManager {
 
   async bindPortEvents(port, portData = {}) {
     port.querySelector(".remove-port-btn")?.addEventListener("click", () => this.removePort(port));
-    port.querySelector(".add-ip-btn")?.addEventListener("click", async () => {
-      const ipsContainer = port.querySelector(".port-ips-container");
-      const ipRow = await this.createIpRowElement();
-      await this.bindIpRowEvents(ipRow);
-      ipsContainer.appendChild(ipRow.element);
+    port.querySelector(".add-port-btn")?.addEventListener("click", async () => {
+      const card = port.closest(".network-card-item");
+      if (!card) {
+        return;
+      }
+      const newPort = this.createPortElement();
+      await this.bindPortEvents(newPort);
+      card.appendChild(newPort);
     });
 
     const ipsContainer = port.querySelector(".port-ips-container");
@@ -446,6 +430,7 @@ export class NetworkCardManager {
         <h3 id="${uid}-title" class="level-badge level-ip">IP</h3>
         <div class="level-actions">
           ${iconButton({ icon: "trash", label: t("ip.delete_ip"), cls: "btn-danger remove-ip-btn" })}
+          ${iconButton({ icon: "plus", label: t("ip.add_ip"), cls: "btn-success add-ip-btn" })}
         </div>
       </header>
       <div class="nc-fields">
@@ -484,6 +469,17 @@ export class NetworkCardManager {
     element
       .querySelector(".remove-ip-btn")
       ?.addEventListener("click", () => this.removeIp(element));
+
+    element.querySelector(".add-ip-btn")?.addEventListener("click", async () => {
+      const port = element.closest(".nc-port-item");
+      const ipsContainer = port?.querySelector(".port-ips-container");
+      if (!ipsContainer) {
+        return;
+      }
+      const newRow = this.createIpRowElement();
+      await this.bindIpRowEvents(newRow);
+      ipsContainer.appendChild(newRow.element);
+    });
 
     const regionSelect = element.querySelector(".ip-region");
     const networkSelect = element.querySelector(".ip-network");
@@ -599,7 +595,6 @@ export class NetworkCardManager {
     }
     container.innerHTML = "";
     this.resetLegacyData();
-    this.bindAddButton();
 
     // 仅加载设备模态框托管的网口（device_managed=0 的 SNMP/端口模态框
     // 网口不在设备表单展示）；空网卡（板卡）整体跳过
