@@ -671,8 +671,6 @@ function buildIPv4Content(network, networkIps, _subnetId) {
       </div>
     </div>
 
-    <p class="text-muted">${t("network.capacity_note")}</p>
-
     <div class="usage-controls">
       <div class="filter-controls">
         <label>${t("common.filter")}: </label>

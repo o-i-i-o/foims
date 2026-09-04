@@ -8,7 +8,8 @@
  *   功能空间：大厅 / 前台 / 办公室 / 机房 / 弱电井 / 工位 / 机柜 / 机位
  *
  * 模板 icons JSONB 中存储图标 key（如 "group"）；历史数据中的 emoji 值
- * 由 renderOrgIcon 兼容渲染为文本。
+ * 由 renderOrgIcon 兼容渲染为文本。每个 key 通过 ORG_ICON_COLORS 注入
+ * 语义配色（树节点、模板编辑器、图标选择面板统一生效）。
  */
 
 import { escapeHtml } from "../utils/helpers.js";
@@ -116,6 +117,40 @@ export const ORG_ICONS = {
 };
 
 /**
+ * 图标 key → 语义配色（引用主题 CSS 变量）。
+ * 与类型徽章（org-node-type-badge[data-type]）的配色体系对齐：
+ * 业务组织层级统一主色，物理地点蓝/青色系，功能空间按既有徽章语义色。
+ */
+export const ORG_ICON_COLORS = {
+  // 业务组织层级
+  group: "var(--color-primary)",
+  division: "var(--color-primary)",
+  subsidiary: "var(--color-primary)",
+  center: "var(--color-primary)",
+  department: "var(--color-primary)",
+  team: "var(--color-success)",
+  person: "var(--color-success)",
+  // 物理地点层级
+  region: "var(--color-blue)",
+  city: "var(--color-blue)",
+  campus: "var(--color-success-alt)",
+  building: "var(--color-blue)",
+  floor: "var(--color-info)",
+  zone: "var(--color-info)",
+  // 功能空间
+  hall: "var(--color-warning-text)",
+  reception: "var(--color-warning-text)",
+  office: "var(--color-success)",
+  data_center: "var(--color-danger)",
+  telecom_closet: "var(--color-ipv6)",
+  workstation: "var(--color-secondary)",
+  cabinet: "var(--color-ipv6)",
+  cabinet_position: "var(--color-orange)",
+  // 通用默认：中性灰
+  org: "var(--color-text-muted)"
+};
+
+/**
  * 图标分组（选择面板展示）。
  * groupKey 为分组标题 i18n 键，icons 为 [{ key, labelKey }]。
  */
@@ -162,18 +197,24 @@ export const ORG_ICON_GROUPS = [
 /** 默认图标 key */
 export const DEFAULT_ORG_ICON = "org";
 
+/** 用语义配色外壳包裹 SVG（颜色为内置常量，非用户输入） */
+function wrapIcon(key, svg) {
+  const color = ORG_ICON_COLORS[key] || ORG_ICON_COLORS[DEFAULT_ORG_ICON];
+  return `<span class="org-icon" style="color:${color}">${svg}</span>`;
+}
+
 /**
  * 渲染图标值为 HTML。
- * 已知 key 渲染 SVG；历史 emoji 值原样文本输出；空值用默认图标。
+ * 已知 key 渲染带语义配色的 SVG；历史 emoji 值原样文本输出；空值用默认图标。
  * @param {string} value 图标值（key 或历史 emoji）
  * @returns {string} HTML 片段
  */
 export function renderOrgIcon(value) {
   if (value && ORG_ICONS[value]) {
-    return ORG_ICONS[value];
+    return wrapIcon(value, ORG_ICONS[value]);
   }
   if (value) {
     return `<span class="org-icon-legacy">${escapeHtml(value)}</span>`;
   }
-  return ORG_ICONS[DEFAULT_ORG_ICON];
+  return wrapIcon(DEFAULT_ORG_ICON, ORG_ICONS[DEFAULT_ORG_ICON]);
 }

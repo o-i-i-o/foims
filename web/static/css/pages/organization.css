@@ -112,6 +112,35 @@
   height: 1.25em;
 }
 
+/* 图标语义配色外壳（颜色由 renderOrgIcon 内联注入） */
+.org-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* 树节点图标底衬：以图标自身颜色生成浅色圆角背景，SVG 缩放至底衬内 */
+.org-node-icon .org-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.org-node-icon .org-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 历史 emoji 与 SVG 图标共用底衬，保持行内视觉尺寸一致 */
+.org-node-icon .org-icon-legacy {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
 .org-node-name {
   font-weight: 500;
   color: var(--color-text);
