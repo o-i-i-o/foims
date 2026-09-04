@@ -169,18 +169,26 @@ pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Re
 }
 
 pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
-    // init 关闭后重启属危险端点，与建库/删库等端点同口径拒绝
-    if !ctx.init_enabled() {
+    // 重启端点仅在「初始化刚完成」后放行一次：init 模式开启期间与关闭后
+    // 均拒绝，避免被滥用为任意重启入口
+    if !ctx.consume_restart_arm() {
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
     foims_common::log_info!("log.init.restart_requested");
-    (ctx.restart_fn)()
+    let mode = (ctx.restart_fn)()
         .await
         .map_err(|e| InitError::Internal(msg("server.init.restart_failed").with("error", e)))?;
+
+    // 纯 systemd 重启；未注册单元（程序并非以服务运行）不下发重启，
+    // 由前端展示完整页面引导用户手动重启完成初始化
+    let (message, restart_mode) = match mode {
+        crate::context::RestartMode::Systemd => ("server.init.restart_command_sent", "systemd"),
+        crate::context::RestartMode::Manual => ("server.init.manual_restart_required", "manual"),
+    };
     Ok(json_ok(serde_json::json!({
         "success": true,
-        "message": "server.init.restart_command_sent",
-        "data": null,
+        "message": message,
+        "data": { "restart_mode": restart_mode },
     })))
 }
 

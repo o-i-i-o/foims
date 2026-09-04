@@ -12,7 +12,7 @@ import { showToast, escapeHtml } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
 import { translateServerMessage } from "../../utils/apiClient.js";
 import { state } from "./state.js";
-import { goToStep, showError, showLoading, hideLoading } from "./ui.js";
+import { goToStep, showError, showLoading, hideLoading, showManualRestartGuide } from "./ui.js";
 
 // 各检查步骤共用的兜底错误文案键
 const T_KEY_UNKNOWN_ERROR = "init.unknown_error";
@@ -315,14 +315,26 @@ export const handleAdminAccountSubmit = async (e) => {
     if (result.success) {
       goToStep(4);
       setTimeout(async () => {
+        // 初始化已完成：重启为纯 systemd 重启；后端检测到未注册单元时
+        // 不执行重启（restart_mode = manual），前端切换为手动重启指引页
+        let restartMode = "systemd";
         try {
-          await fetch("/api/init/restart", {
+          const response = await fetch("/api/init/restart", {
             method: "POST",
             headers: { "Content-Type": "application/json" }
           });
+          const restartResult = await parseJsonResponse(response);
+          if (restartResult?.data?.restart_mode === "manual") {
+            restartMode = "manual";
+          }
         } catch (error) {
-          // 跳转前尽力通知登出，失败不阻断跳转
-          console.warn("best-effort logout failed:", error);
+          // 重启请求失败视为重启未发生：按手动重启引导，不自动跳转
+          console.warn("init restart request failed:", error);
+          restartMode = "manual";
+        }
+        if (restartMode === "manual") {
+          showManualRestartGuide();
+          return;
         }
         setTimeout(() => {
           window.location.href = "/main.html";

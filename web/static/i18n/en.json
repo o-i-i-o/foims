@@ -1453,6 +1453,8 @@
     "done_title": "Initialization Complete!",
     "done_desc": "The FOIMS system has been initialized successfully.",
     "restarting": "The system is restarting, please wait...",
+    "manual_restart": "The program is not running as a service; please restart it manually to complete initialization.",
+    "manual_restart_hint": "Once restarted, refresh this page to log in.",
     "login_system": "Log In",
     "processing": "Processing...",
     "empty_response": "The server returned an empty response",
@@ -1891,6 +1893,7 @@
       "pgsql_not_installed": "PostgreSQL is not installed. Please install PostgreSQL first",
       "pgsql_running": "PostgreSQL is running and the connection is successful",
       "restart_command_sent": "Restart command sent, the service is restarting",
+      "manual_restart_required": "The program is not running as a service; please restart it manually to complete initialization",
       "restart_failed": "Failed to restart the service",
       "validation": {
         "email_invalid": "Please enter a valid email address",

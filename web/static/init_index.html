@@ -10,10 +10,10 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01378">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01378">
-    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01378">
-    <script type="module" src="/static/js/modules/foims_init/index.js?v=01378"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01379">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01379">
+    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01379">
+    <script type="module" src="/static/js/modules/foims_init/index.js?v=01379"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -165,9 +165,15 @@
                         <h2 data-i18n="init.done_title">初始化完成!</h2>
                         <div class="success-icon">✓</div>
                         <p data-i18n="init.done_desc">FOIMS 系统已成功初始化。</p>
-                        <p data-i18n="init.restarting">系统正在重启，请稍候...</p>
-                        <div class="form-actions">
-                            <a href="/main.html" class="btn btn-primary" data-i18n="init.login_system">登录系统</a>
+                        <!-- systemd 重启分支：已注册单元，重启命令已下发 -->
+                        <p id="init-restarting" data-i18n="init.restarting">系统正在重启，请稍候...</p>
+                        <!-- 手动重启分支：未注册 systemd 单元，后端不下发重启 -->
+                        <div id="init-manual-restart" hidden>
+                            <p data-i18n="init.manual_restart">程序没有以服务运行，请手动重启程序完成初始化。</p>
+                            <p class="manual-restart-hint" data-i18n="init.manual_restart_hint">重启完成后，刷新页面即可登录系统。</p>
+                        </div>
+                        <div class="form-actions" id="init-login-actions">
+                            <a href="/main.html" class="btn btn-primary" id="init-login-btn" data-i18n="init.login_system">登录系统</a>
                         </div>
                     </div>
                 </div>

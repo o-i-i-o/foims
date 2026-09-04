@@ -630,6 +630,12 @@
   margin-bottom: 8px;
 }
 
+/* 手动重启指引的辅助说明行（弱化展示） */
+.init-success .manual-restart-hint {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
 .init-success .form-actions {
   justify-content: center;
   border-top: none;

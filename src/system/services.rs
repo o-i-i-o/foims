@@ -43,7 +43,8 @@ pub struct ServiceStatusItem {
     pub status_text: Option<String>,
     /// 是否支持 reload（单元需声明 ExecReload）
     pub reload_supported: bool,
-    /// 服务运行时长（仅 foims：以本进程启动时间计算）
+    /// 服务运行时长（秒）：foims 按本进程启动时间、nginx 按 systemd
+    /// 上次进入 active 的时刻计算
     pub uptime_seconds: Option<u64>,
 }
 
@@ -101,7 +102,7 @@ async fn build_status_item(svc: ManagedService) -> ServiceStatusItem {
 
     // 状态查询为探测语义：查询失败记录告警并返回默认字段，
     // 由 registered 字段如实反映注册状态
-    let status = if registered {
+    let systemd_status = if registered {
         match svc.status().await {
             Ok(st) => Some(st),
             Err(e) => {
@@ -113,43 +114,49 @@ async fn build_status_item(svc: ManagedService) -> ServiceStatusItem {
         None
     };
 
-    let (active, active_state, sub_state, enabled, unit_file_state, status_text) = match status {
-        Some(st) => {
-            // 先取借用值再逐字段移动，避免部分移动后继续借用
-            let active = st.is_active();
-            let enabled = st.is_enabled();
-            (
-                active,
-                st.active_state,
-                st.sub_state,
-                enabled,
-                st.unit_file_state,
-                st.status_text,
-            )
-        }
-        None => (
-            false,
-            String::new(),
-            String::new(),
-            false,
-            String::new(),
-            None,
-        ),
-    };
+    // 非 foims 服务的运行时长：按 systemd 上次进入 active 的时刻计算
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let systemd_uptime = systemd_status
+        .as_ref()
+        .and_then(|st| st.uptime_seconds_since(now_secs));
+
+    let (active, active_state, sub_state, enabled, unit_file_state, status_text) =
+        match systemd_status {
+            Some(st) => {
+                // 先取借用值再逐字段移动，避免部分移动后继续借用
+                let active = st.is_active();
+                let enabled = st.is_enabled();
+                (
+                    active,
+                    st.active_state,
+                    st.sub_state,
+                    enabled,
+                    st.unit_file_state,
+                    st.status_text,
+                )
+            }
+            None => (
+                false,
+                String::new(),
+                String::new(),
+                false,
+                String::new(),
+                None,
+            ),
+        };
 
     let is_foims = svc == ManagedService::Foims;
-    // 运行时长按本进程启动时间计算：能响应本请求即进程存活，
-    // 与 systemd 单元是否 active 无关（独立进程运行时单元 inactive 也应展示）
-    let uptime_seconds = if is_foims && start_time() > 0 {
-        Some(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                .saturating_sub(start_time()),
-        )
+    // 运行时长（秒）：
+    // - foims：systemd 单元 active 时按本进程启动时间计算——单元未运行说明
+    //   本进程并非由该单元托管，此时不展示运行时长；
+    // - 其他服务（nginx）：采用上方 systemd 计算的时长
+    let uptime_seconds = if is_foims {
+        (active && start_time() > 0).then(|| now_secs.saturating_sub(start_time()))
     } else {
-        None
+        systemd_uptime
     };
 
     ServiceStatusItem {

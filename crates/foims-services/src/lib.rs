@@ -14,6 +14,7 @@
 
 use std::path::PathBuf;
 
+use chrono::{Local, NaiveDateTime, TimeZone};
 use serde::Serialize;
 
 pub mod error;
@@ -88,12 +89,18 @@ impl ManagedService {
         }
     }
 
-    /// 查询服务状态（active / enabled / StatusText 等）。
+    /// 查询服务状态（active / enabled / StatusText / 上次进入 active 的时刻）。
     pub async fn status(self) -> ServicesResult<ServiceStatus> {
         self.require_unit_file().await?;
         let output = systemd::systemctl_show(
             self.unit_name(),
-            &["ActiveState", "SubState", "UnitFileState", "StatusText"],
+            &[
+                "ActiveState",
+                "SubState",
+                "UnitFileState",
+                "StatusText",
+                "ActiveEnterTimestamp",
+            ],
         )
         .await?;
         Ok(ServiceStatus::from_show_output(&output))
@@ -189,6 +196,8 @@ pub struct ServiceStatus {
     pub unit_file_state: String,
     /// StatusText：单元自定义状态描述（未设置为 None）
     pub status_text: Option<String>,
+    /// ActiveEnterTimestamp 解析出的本机时区 UNIX 秒（缺失或不可解析为 None）
+    pub active_enter_epoch: Option<i64>,
 }
 
 impl ServiceStatus {
@@ -198,6 +207,7 @@ impl ServiceStatus {
         let mut sub_state = String::new();
         let mut unit_file_state = String::new();
         let mut status_text = None;
+        let mut active_enter_timestamp: Option<String> = None;
 
         for line in output.lines() {
             let Some((key, value)) = line.split_once('=') else {
@@ -208,6 +218,9 @@ impl ServiceStatus {
                 "SubState" => sub_state = value.to_string(),
                 "UnitFileState" => unit_file_state = value.to_string(),
                 "StatusText" if !value.is_empty() => status_text = Some(value.to_string()),
+                "ActiveEnterTimestamp" if !value.is_empty() => {
+                    active_enter_timestamp = Some(value.to_string());
+                }
                 _ => {}
             }
         }
@@ -217,6 +230,7 @@ impl ServiceStatus {
             sub_state,
             unit_file_state,
             status_text,
+            active_enter_epoch: active_enter_timestamp.and_then(|ts| parse_local_timestamp(&ts)),
         }
     }
 
@@ -229,6 +243,29 @@ impl ServiceStatus {
     pub fn is_enabled(&self) -> bool {
         self.unit_file_state.starts_with("enabled")
     }
+
+    /// 服务运行时长（秒）：以 `now_secs` 距上次进入 active（ActiveEnterTimestamp）
+    /// 的墙钟时长计；时间戳缺失或时钟异常（早于 1970）返回 None。
+    pub fn uptime_seconds_since(&self, now_secs: u64) -> Option<u64> {
+        let started = u64::try_from(self.active_enter_epoch?).ok()?;
+        Some(now_secs.saturating_sub(started))
+    }
+}
+
+/// 解析 systemd 时间戳（如 "Fri 2026-09-04 12:20:31 CST"）为本机时区 UNIX 秒。
+///
+/// 末尾时区缩写不参与解析：systemd 输出的时刻即本机时区墙钟，
+/// 由 chrono Local 按系统时区（含夏令时历史）还原为绝对时刻。
+fn parse_local_timestamp(timestamp: &str) -> Option<i64> {
+    // 取前 3 段（星期 日期 时间），丢弃尾部时区缩写
+    let naive_part = timestamp
+        .split_whitespace()
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let naive = NaiveDateTime::parse_from_str(&naive_part, "%a %Y-%m-%d %H:%M:%S").ok()?;
+    let started = Local.from_local_datetime(&naive).earliest()?;
+    Some(started.timestamp())
 }
 
 #[cfg(test)]
@@ -269,20 +306,46 @@ mod tests {
     #[test]
     fn show输出解析应提取各属性() {
         let output = "ActiveState=active\nSubState=running\n\
-                      UnitFileState=enabled\nStatusText=FOIMS 运行中\n";
-        let status = ServiceStatus::from_show_output(output);
+                      UnitFileState=enabled\nStatusText=FOIMS 运行中\n\
+                      ActiveEnterTimestamp=Fri 2026-09-04 12:20:31 CST\n";
+        let status = ServiceStatus::from_show_output(&output);
         assert!(status.is_active());
         assert!(status.is_enabled());
         assert_eq!(status.sub_state, "running");
         assert_eq!(status.status_text.as_deref(), Some("FOIMS 运行中"));
+        // 时间戳可解析（具体值随测试机时区变化，只断言成功）
+        assert!(status.active_enter_epoch.is_some());
     }
 
     #[test]
     fn 空status_text应视为未设置() {
         let output = "ActiveState=inactive\nSubState=dead\nUnitFileState=disabled\nStatusText=\n";
-        let status = ServiceStatus::from_show_output(output);
+        let status = ServiceStatus::from_show_output(&output);
         assert!(!status.is_active());
         assert!(!status.is_enabled());
         assert!(status.status_text.is_none());
+        // 单元从未运行过：无进入 active 的时刻
+        assert!(status.active_enter_epoch.is_none());
+        assert!(status.uptime_seconds_since(1_000_000).is_none());
+    }
+
+    #[test]
+    fn 运行时长应为当前时刻减去进入active时刻() {
+        let status = ServiceStatus {
+            active_state: "active".to_string(),
+            sub_state: "running".to_string(),
+            unit_file_state: "enabled".to_string(),
+            status_text: None,
+            active_enter_epoch: Some(1_000_000),
+        };
+        assert_eq!(status.uptime_seconds_since(1_000_100), Some(100));
+        // 时刻早于启动（时钟回拨）：按 0 处理
+        assert_eq!(status.uptime_seconds_since(999_999), Some(0));
+        // 缺少启动时刻：None
+        let no_ts = ServiceStatus {
+            active_enter_epoch: None,
+            ..status
+        };
+        assert_eq!(no_ts.uptime_seconds_since(1_000_100), None);
     }
 }

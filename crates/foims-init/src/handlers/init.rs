@@ -133,6 +133,8 @@ pub async fn init_system(
         ));
     }
     ctx.disable_init();
+    // 武装一次性重启许可：重启端点仅对刚完成初始化的请求放行一次
+    ctx.arm_restart();
 
     foims_common::log_info!("log.init.system_initialized", username = req.username);
 

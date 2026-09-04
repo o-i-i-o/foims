@@ -1453,6 +1453,8 @@
     "done_title": "初始化完成!",
     "done_desc": "FOIMS 系统已成功初始化。",
     "restarting": "系统正在重启，请稍候...",
+    "manual_restart": "程序没有以服务运行，请手动重启程序完成初始化。",
+    "manual_restart_hint": "重启完成后，刷新页面即可登录系统。",
     "login_system": "登录系统",
     "processing": "正在处理...",
     "empty_response": "服务器返回了空响应",
@@ -1891,6 +1893,7 @@
       "pgsql_not_installed": "PostgreSQL 未安装，请先安装 PostgreSQL",
       "pgsql_running": "PostgreSQL 正在运行，连接成功",
       "restart_command_sent": "服务重启命令已发送，服务正在重启",
+      "manual_restart_required": "程序没有以服务运行，请手动重启程序完成初始化",
       "restart_failed": "重启服务失败",
       "validation": {
         "email_invalid": "请输入有效的邮箱地址",

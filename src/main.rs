@@ -327,10 +327,19 @@ fn configure_app_services(
             config.init.enabled,
             Arc::new(|| {
                 Box::pin(async move {
+                    // 未注册 systemd 单元：程序并非以服务方式运行，
+                    // 不下发重启，交由用户手动重启完成初始化
+                    if foims_services::ManagedService::Foims
+                        .unit_file()
+                        .await
+                        .is_none()
+                    {
+                        return Ok(foims_init::context::RestartMode::Manual);
+                    }
                     foims::system::services::trigger_service_restart()
                         .await
                         .map_err(|e| e.to_string())?;
-                    Ok(())
+                    Ok(foims_init::context::RestartMode::Systemd)
                 })
             }),
         ));

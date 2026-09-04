@@ -397,9 +397,10 @@ function buildServiceRow(item) {
     enabledCell = `<span class="svc-unregistered-hint">${t("services.uptime_unavailable")}</span>`;
   }
 
-  // 运行时长仅 foims 提供（按后端本进程启动时间计算，与 systemd 单元状态无关）
+  // 运行时长：foims 按后端进程启动时间、nginx 按 systemd 进入 active 的
+  // 时刻计算，是否提供由后端决定（未提供显示 "-"）
   const uptimeCell =
-    item.name === "foims" && item.uptime_seconds != null
+    item.uptime_seconds != null
       ? escapeHtml(formatUptime(item.uptime_seconds))
       : t("services.uptime_unavailable");
 

@@ -30,6 +30,26 @@ export const goToStep = (stepNum) => {
 };
 
 /**
+ * 切换到手动重启指引视图：后端检测到程序未注册为 systemd 服务时不执行重启，
+ * 初始化实际已完成，完整展示手动重启指引并隐藏自动跳转与登录入口
+ * （重启前主应用路由尚未挂载，登录必然不可用）。
+ */
+export const showManualRestartGuide = () => {
+  const restarting = document.getElementById("init-restarting");
+  const manual = document.getElementById("init-manual-restart");
+  const loginActions = document.getElementById("init-login-actions");
+  if (restarting) {
+    restarting.hidden = true;
+  }
+  if (manual) {
+    manual.hidden = false;
+  }
+  if (loginActions) {
+    loginActions.hidden = true;
+  }
+};
+
+/**
  * showError 共用的自动隐藏定时器：新调用会取消上一次的隐藏计时，
  * 避免第一条的定时器提前隐藏紧接着显示的第二条提示
  */
