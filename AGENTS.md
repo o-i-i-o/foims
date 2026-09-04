@@ -29,5 +29,5 @@
 - 每次代码更新后 bump `Cargo.toml` 版本号（规则 `0.x.yy`，`yy>=99` 时进位）；
   前端资源同步 bump `main.html` 的 `?v=` 与 `resourceLoader.js` 的 `MODULE_VERSION`。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
-- 测试：`cargo build --release && sudo ./target/release/foims`
+- 测试：`cargo build --release && sudo systemctl restart foims`
   （运行需 root 监听端口）；测试用户 admin / admin123。

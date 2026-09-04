@@ -478,11 +478,10 @@ pub async fn get_room_cabinets_with_positions(
     .bind(&cabinet_ids)
     .fetch_all(pool)
     .await?;
-    let layout_by_cabinet: std::collections::HashMap<Uuid, (i32, i32, i32, i32, i32)> =
-        all_layouts
-            .into_iter()
-            .map(|(id, x, y, w, h, r)| (id, (x, y, w, h, r)))
-            .collect();
+    let layout_by_cabinet: std::collections::HashMap<Uuid, (i32, i32, i32, i32, i32)> = all_layouts
+        .into_iter()
+        .map(|(id, x, y, w, h, r)| (id, (x, y, w, h, r)))
+        .collect();
 
     let mut result = Vec::new();
     for (cab_id, cab_name, cab_room_id, capacity, cab_desc) in &cabinets {

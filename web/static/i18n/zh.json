@@ -701,9 +701,6 @@
     "col_uptime": "运行时长",
     "name_foims": "FOIMS",
     "name_nginx": "NGINX",
-    "run_mode_label": "运行模式",
-    "mode_service": "系统服务",
-    "mode_standalone": "独立进程（未由 systemd 托管，服务操作不影响本进程）",
     "status_active": "运行中",
     "status_inactive": "已停止",
     "status_failed": "失败",
@@ -2227,8 +2224,6 @@
       "config_updated": "配置更新成功",
       "config_write_failed": "配置文件写入失败",
       "dashboard_stats_retrieved": "仪表盘统计获取成功",
-      "exe_path_failed": "获取可执行文件路径失败",
-      "exe_path_invalid": "无法将可执行文件路径转换为字符串",
       "info_retrieved": "系统信息获取成功",
       "init_mode_api_forbidden": "禁止通过API修改初始化模式状态，请直接编辑配置文件",
       "init_mode_restore_forbidden": "禁止通过API恢复配置启用初始化模式，请直接编辑配置文件",
@@ -2238,18 +2233,13 @@
       "page_timeout_retrieved": "页面超时配置获取成功",
       "page_timeout_updated": "页面超时配置更新成功",
       "restart_command_sent": "服务重启命令已发送，服务正在重启",
-      "restart_script_create_failed": "创建重启脚本失败",
-      "script_chmod_failed": "设置脚本权限失败",
       "serialize_failed": "序列化失败",
       "session_timeout_retrieved": "会话超时配置获取成功",
       "session_timeout_updated": "会话超时配置更新成功",
       "validation": {
         "language_length": "语言代码长度必须在2到5个字符之间"
       },
-      "workdir_failed": "获取工作目录失败",
-      "workdir_invalid": "无法将工作目录路径转换为字符串",
-      "password_policy_updated": "密码策略已更新",
-      "restart_script_spawn_failed": "重启脚本启动失败"
+      "password_policy_updated": "密码策略已更新"
     },
     "task": {
       "backup_completed": "备份成功",

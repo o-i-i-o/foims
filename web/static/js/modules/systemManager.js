@@ -366,15 +366,6 @@ function buildServiceRow(item) {
   const tr = document.createElement("tr");
   const nameText = t(`services.name_${item.name}`);
 
-  // foims 行附带运行模式说明（系统服务 / 独立进程）
-  let runModeHtml = "";
-  if (item.name === "foims") {
-    const modeText = item.running_as_service
-      ? t("services.mode_service")
-      : t("services.mode_standalone");
-    runModeHtml = `<div class="svc-run-mode">${escapeHtml(t("services.run_mode_label"))}: ${escapeHtml(modeText)}</div>`;
-  }
-
   // 状态徽章：未注册 / 运行中 / 失败 / 已停止，title 展示原始 state 与 StatusText
   let badgeClass;
   let badgeText;
@@ -406,8 +397,9 @@ function buildServiceRow(item) {
     enabledCell = `<span class="svc-unregistered-hint">${t("services.uptime_unavailable")}</span>`;
   }
 
+  // 运行时长仅 foims 提供（按后端本进程启动时间计算，与 systemd 单元状态无关）
   const uptimeCell =
-    item.name === "foims" && item.active && item.uptime_seconds
+    item.name === "foims" && item.uptime_seconds != null
       ? escapeHtml(formatUptime(item.uptime_seconds))
       : t("services.uptime_unavailable");
 
@@ -430,7 +422,7 @@ function buildServiceRow(item) {
   }
 
   tr.innerHTML = `
-    <td><div>${escapeHtml(nameText)}</div>${runModeHtml}</td>
+    <td>${escapeHtml(nameText)}</td>
     <td>${escapeHtml(item.unit)}</td>
     <td><span class="svc-badge ${badgeClass}" title="${escapeHtml(badgeTitle)}">${escapeHtml(badgeText)}</span></td>
     <td>${enabledCell}</td>

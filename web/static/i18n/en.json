@@ -701,9 +701,6 @@
     "col_uptime": "Uptime",
     "name_foims": "FOIMS",
     "name_nginx": "NGINX",
-    "run_mode_label": "Run mode",
-    "mode_service": "System service",
-    "mode_standalone": "Standalone process (not managed by systemd; service operations do not affect this process)",
     "status_active": "Running",
     "status_inactive": "Stopped",
     "status_failed": "Failed",
@@ -2227,8 +2224,6 @@
       "config_updated": "Configuration updated",
       "config_write_failed": "Failed to write configuration file",
       "dashboard_stats_retrieved": "Dashboard statistics retrieved",
-      "exe_path_failed": "Failed to get executable path",
-      "exe_path_invalid": "Cannot convert executable path to a string",
       "info_retrieved": "System information retrieved",
       "init_mode_api_forbidden": "Modifying init mode via API is forbidden; edit the config file directly",
       "init_mode_restore_forbidden": "Restoring config with init mode enabled via API is forbidden; edit the config file directly",
@@ -2238,18 +2233,13 @@
       "page_timeout_retrieved": "Page timeout configuration retrieved",
       "page_timeout_updated": "Page timeout configuration updated",
       "restart_command_sent": "Service restart command sent, service is restarting",
-      "restart_script_create_failed": "Failed to create restart script",
-      "script_chmod_failed": "Failed to set script permissions",
       "serialize_failed": "Serialization failed",
       "session_timeout_retrieved": "Session timeout configuration retrieved",
       "session_timeout_updated": "Session timeout configuration updated",
       "validation": {
         "language_length": "Language code must be 2 to 5 characters"
       },
-      "workdir_failed": "Failed to get working directory",
-      "workdir_invalid": "Cannot convert working directory path to a string",
-      "password_policy_updated": "Password policy updated",
-      "restart_script_spawn_failed": "Failed to spawn restart script"
+      "password_policy_updated": "Password policy updated"
     },
     "task": {
       "backup_completed": "Backup completed",

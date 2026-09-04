@@ -317,13 +317,6 @@ dl.config-field,
 
 /* ==================== 服务管理卡片（foims / nginx 共同管理） ==================== */
 
-/* 服务名下方的运行模式说明（仅 foims 行展示） */
-.svc-run-mode {
-  font-size: 12px;
-  color: var(--color-text-secondary, #6b7280);
-  margin-top: 2px;
-}
-
 /* 状态 / 自启徽章：与证书类型徽章同规格 */
 .svc-badge {
   display: inline-block;

@@ -5,7 +5,8 @@
 #
 # 使用方式（先按实际项目路径调整 WorkingDirectory / ExecStart /
 # FOIMS_WEB_DIR / User，再执行）：
-#   sudo cp deploy/services/foims-dev.service /etc/systemd/system/foims-dev.service
+#   sudo cp deploy/services/foims-dev.service /etc/systemd/system/foims.service
+# 测试时也使用foims作为服务名称，减少生产代码冗余
 #   sudo systemctl daemon-reload && sudo systemctl enable --now foims-dev
 #
 # 注意：
