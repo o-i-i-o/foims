@@ -1,6 +1,5 @@
 {
   "app": {
-    "title": "组织IT信息系统",
     "load_failed": "应用程序加载失败",
     "refresh_or_contact": "请刷新页面重试，或联系管理员。",
     "refresh_page": "刷新页面"
@@ -51,7 +50,6 @@
     "all": "全部",
     "saving": "保存中...",
     "deleting": "删除中...",
-    "syncing": "同步中...",
     "yes": "是",
     "no": "否",
     "unknown": "未知",
@@ -68,7 +66,6 @@
     "delete_confirm": "确定要删除吗？",
     "delete_failed": "删除失败",
     "processing": "处理中...",
-    "unknown_error": "未知错误",
     "page": "页",
     "page_size": "每页条数",
     "goto": "跳至",
@@ -94,7 +91,6 @@
     "unknown": "未知"
   },
   "device": {
-    "port_number_required": "请填写端口号",
     "port_save_failed": "端口保存失败",
     "port_add_success": "端口添加成功",
     "port_update_success": "端口更新成功",
@@ -104,7 +100,6 @@
     "port_sync_failed": "端口同步失败",
     "fetching_snmp": "获取中...",
     "snmp_no_ports": "未获取到端口信息",
-    "port_group_other": "其他",
     "sync_added": "新增",
     "sync_overwritten": "覆盖",
     "sync_skipped": "跳过",
@@ -119,7 +114,6 @@
     "conflict_skip_all": "全部跳过",
     "conflict_overwrite_all": "全部覆盖",
     "conflict_confirm": "确认",
-    "nic_managed_by_device_modal": "网口由设备编辑模态框管理",
     "name": "设备名称",
     "device_type": "设备类型",
     "brand": "品牌",
@@ -157,16 +151,12 @@
     "snmp_priv_password": "加密密码",
     "test_snmp": "测试SNMP",
     "get_snmp_info": "从SNMP获取信息",
-    "port_groups": "端口组",
     "port_detail": "端口详情",
     "add_port": "添加端口",
-    "port_number": "端口号",
-    "port_name": "端口名称",
     "port_type": "端口类型",
     "speed": "速率",
     "trunk_id": "Trunk ID",
     "trunk_id_hint": "Trunk/Hybrid 端口的 Native VLAN ID，其他类型留空",
-    "get_snmp_ports": "从SNMP获取端口",
     "ports": "端口",
     "unified_ports": "设备端口",
     "add_device_port": "添加设备端口",
@@ -237,19 +227,11 @@
     "interface_role_other": "其他",
     "no_device_ports": "暂无设备端口数据",
     "cabinet_position": "机位",
-    "switch": "交换机",
     "ip_address": "IP地址",
     "mac_address": "MAC地址",
     "ip_list": "IP地址列表",
     "delete_network_card": "删除此网卡",
     "delete_network_port": "删除此网口",
-    "no_ports": "暂无端口数据",
-    "no_snmp_config": "该设备未配置SNMP信息，无法获取端口数据",
-    "load_ports_failed": "加载端口数据失败",
-    "port_save_refresh_failed": "端口保存成功，但刷新数据失败，请手动刷新",
-    "port_submit_failed": "提交端口表单失败",
-    "port_sync_success": "端口同步成功",
-    "sync_ports_from_snmp": "从SNMP获取端口",
     "search_ip_mac": "搜索IP或MAC地址...",
     "loading_mac_table": "正在加载MAC表...",
     "load_mac_failed": "加载MAC表失败",
@@ -330,7 +312,6 @@
     "edit": "编辑房间",
     "add": "添加房间",
     "keep_one_network": "至少需要保留一个子网配置",
-    "select_option": "选择选项",
     "delete_success": "房间删除成功",
     "type_lobby": "大厅",
     "type_reception": "前台",
@@ -340,11 +321,7 @@
   "time": {
     "just_now": "刚刚",
     "minutes_ago": "{{count}}分钟前",
-    "hours_ago": "{{count}}小时前",
-    "day": "天",
-    "hour": "小时",
-    "minute": "分钟",
-    "second": "秒"
+    "hours_ago": "{{count}}小时前"
   },
   "auth": {
     "logout": "退出登录",
@@ -411,7 +388,6 @@
     "ldap_password_placeholder": "请输入LDAP密码",
     "sso_hint": "跳转到企业统一认证平台完成登录",
     "ca_download": "下载本站根证书",
-    "ca_download_pem": "PEM",
     "captcha": "验证码",
     "captcha_refresh": "点击刷新验证码",
     "captcha_required": "请输入验证码"
@@ -427,7 +403,6 @@
     "top_networks": "子网列表",
     "recent_ips": "最近IP分配",
     "top_rooms": "房间列表",
-    "no_device_data": "暂无设备数据",
     "top_cabinets": "机柜列表",
     "recent_logs": "最近活动",
     "view_all": "查看全部 →",
@@ -508,8 +483,7 @@
     "region_delete_success": "网络区域删除成功",
     "region_save_success": "网络区域保存成功",
     "save_success": "子网保存成功",
-    "select_segment": "选择子网",
-    "capacity_note": "容量按整个子网扣除网络地址与广播地址统计；/31、/32 无传统意义可用地址；图示仅展示部分地址（大子网仅展示首个 /24）"
+    "select_segment": "选择子网"
   },
   "organization": {
     "add": "新增组织",
@@ -679,7 +653,6 @@
     "config_save_failed": "系统配置保存失败",
     "config_saved_restart_needed": "配置已更新，需要重启应用系统以使配置生效",
     "about": "关于",
-    "project_url": "项目地址",
     "author": "作者",
     "contact": "联系方式",
     "app_fail2ban_ip": "IP 地址",
@@ -693,7 +666,6 @@
   },
   "services": {
     "title": "服务管理",
-    "help": "共同管理 FOIMS 后端（foims.service）与反向代理（nginx.service）两个 systemd 服务。服务注册由部署方完成（DEB 包安装或手动部署单元文件）。",
     "col_service": "服务",
     "col_unit": "systemd 单元",
     "col_status": "状态",
@@ -963,7 +935,6 @@
     "days_required": "请输入有效的保留天数（输入 0 表示删除全部）"
   },
   "notifications": {
-    "all": "全部通知",
     "unread": "未读",
     "read": "已读",
     "mark_all_read": "标记已读",
@@ -1034,7 +1005,6 @@
     "data_management": "数据管理",
     "download_template": "下载模板",
     "import_result": "导入结果",
-    "result_item": "表 {{table}}：新增 {{inserted}} 行，更新 {{updated}} 行",
     "instructions": "说明:",
     "database_management": "数据库管理",
     "db_export": "数据库导出",
@@ -1042,19 +1012,6 @@
     "db_export_hint1": "导出为PostgreSQL SQL文件",
     "db_export_hint2": "包含完整的数据库结构和数据",
     "db_export_hint3": "可用于迁移或灾难恢复",
-    "download_template_failed": "下载模板失败",
-    "importing": "正在导入数据，请稍候...",
-    "import_success": "数据导入完成",
-    "import_failed": "数据导入失败",
-    "invalid_file_type": "仅支持 .zip 或 .csv 文件，且文件内容须与扩展名一致",
-    "file_too_large": "文件大小超过 50MB 限制",
-    "export_failed": "导出失败",
-    "export_db_failed": "导出数据库失败",
-    "export_db_success": "数据库导出成功",
-    "backup_failed": "备份配置失败",
-    "restore_success": "配置恢复成功",
-    "restore_failed": "配置恢复失败",
-    "restore_error": "恢复配置失败",
     "csv_import": "CSV 数据导入（按模块）",
     "import_csv": "导入 CSV",
     "csv_export": "CSV 数据导出（按模块）",
@@ -1085,7 +1042,6 @@
     "disable_confirm": "确定要禁用双因素认证吗？",
     "open_modal_failed": "无法打开2FA模态框",
     "modal_load_failed": "2FA模态框加载失败",
-    "admin_only": "权限不足，只有管理员可以为其他用户操作2FA",
     "fetch_config_failed": "获取2FA配置失败",
     "fetch_config_network": "获取2FA配置失败，请检查网络连接",
     "enable_success": "双因素认证已成功启用！",
@@ -1157,7 +1113,6 @@
     "ca_help_note": "请导入根 CA（而非站点证书）；证书必须包含 SAN（浏览器忽略 CN）。私有 CA 场景下 Chrome 的 HTTP/3（QUIC）不使用本地信任锚，会自动回退 TCP，属正常现象。",
     "ca_download": "下载CA",
     "ca_select": "签发 CA",
-    "ca_select_hint": "证书强制由所选 CA 签发（站点根 CA 或导入 CA），请先生成或导入 CA",
     "ca_source_root": "自生成",
     "ca_source_imported": "导入",
     "ca_no_key_label": "无私钥，不可签发",
@@ -1186,7 +1141,6 @@
   },
   "net_outlet": {
     "name": "信息点名称",
-    "add": "添加信息点",
     "name_required": "请填写信息点名称",
     "name_duplicate": "信息点名称「{{name}}」重复（信息点名称在所有房间内唯一）"
   },
@@ -1573,12 +1527,10 @@
       "dir_create_failed": "创建备份目录失败",
       "dir_read_failed": "读取备份目录失败",
       "dump_empty": "导出的 SQL 文件为空",
-      "file_permission_failed": "设置备份文件权限失败",
       "file_write_failed": "写入备份文件失败",
       "pg_dump_exec_failed": "执行 pg_dump 失败",
       "pg_dump_failed": "pg_dump 执行失败",
-      "pg_dump_task_failed": "pg_dump 任务失败",
-      "pgpass_permission_failed": "设置 .pgpass 权限失败"
+      "pg_dump_task_failed": "pg_dump 任务失败"
     },
     "cabinet": {
       "created": "机柜创建成功",
@@ -1655,7 +1607,10 @@
       "organization_length": "组织长度不能超过 64 字符",
       "san_invalid": "没有可用的 SAN，且通用名称无法作为 SAN，无法生成证书",
       "ca_already_exists": "站点根 CA 已存在，重复生成会废止此前签发的全部证书，如确需更换请先删除",
-      "ca_expired": "签发 CA 已过期或剩余有效期不足，无法签发新证书"
+      "ca_expired": "签发 CA 已过期或剩余有效期不足，无法签发新证书",
+      "organizational_unit_length": "组织单位（OU）长度不能超过 64 字符",
+      "state_length": "州/省长度不能超过 64 字符",
+      "locality_length": "城市长度不能超过 64 字符"
     },
     "common": {
       "cipher_init_failed": "创建加密器失败",
@@ -1748,7 +1703,6 @@
         "link_local_forbidden": "不允许连接链路本地地址",
         "lldp_fetch_failed": "获取LLDP邻居失败: {{error}}",
         "loopback_forbidden": "不允许连接回环地址",
-        "metadata_endpoint_forbidden": "不允许连接云元数据端点",
         "multicast_forbidden": "不允许连接组播地址",
         "not_configured": "该设备未配置SNMP",
         "ports_fetch_failed": "获取设备端口信息失败: {{error}}",
@@ -1799,7 +1753,6 @@
       "not_found": "设备模板未找到",
       "updated": "设备模板更新成功",
       "validation": {
-        "device_type_length": "设备类型不能为空",
         "name_length": "模板名称不能为空且不超过100个字符"
       }
     },
@@ -1821,35 +1774,7 @@
       "disabled_ban_rejected": "fail2ban 未启用，手动封禁不会生效，请先启用"
     },
     "data-management": {
-      "chunk_read_failed": "读取文件块失败",
-      "file_read_failed": "读取文件失败",
-      "file_too_large": "文件大小超过 {{limit}}MB 限制",
-      "no_file_selected": "请选择要导入的文件",
-      "zip_create_failed": "创建ZIP文件失败",
-      "zip_entry_read_failed": "读取ZIP文件项失败",
-      "zip_finish_failed": "完成ZIP文件失败",
-      "zip_write_failed": "写入ZIP文件失败",
-      "unknown_export_type": "不支持的导出类型: {{type}}",
-      "csv_build_failed": "生成CSV失败",
-      "csv_parse_failed": "CSV 解析失败（第 {{line}} 行）: {{error}}",
-      "invalid_file_type": "仅支持 .zip 或 .csv 文件，且文件内容须与扩展名一致",
-      "invalid_zip_entry": "ZIP 内包含不支持的条目: {{name}}（仅允许扁平的 表名.csv）",
-      "duplicate_table": "ZIP 内表 {{table}} 的 CSV 文件重复",
-      "unrecognized_header": "无法识别 CSV 表头：与任何业务表的列都不匹配",
-      "header_mismatch": "表 {{table}} 的 CSV 表头与预期列不一致",
-      "no_csv_files": "ZIP 内未找到 CSV 文件",
-      "no_data_rows": "CSV 文件只有表头，没有数据行",
-      "spec_missing": "表 {{table}} 缺少导入导出规格定义",
-      "name_resolve_failed": "导出时解析名称引用失败: {{id}}",
-      "required_field_missing": "表 {{table}} 第 {{row}} 行的 {{column}} 为必填项",
-      "field_invalid": "表 {{table}} 第 {{row}} 行的 {{column}} 值无效（{{value}}）: {{reason}}",
-      "name_contains_separator": "表 {{table}} 第 {{row}} 行的 {{column}} 不允许包含 \"/\"（该名称用于路径引用）",
-      "invalid_ref_format": "表 {{table}} 第 {{row}} 行的 {{column}} 引用格式无效: {{value}}",
-      "ref_not_found": "导入中止：表 {{table}} 第 {{row}} 行的 {{column}} 引用的资源不存在（{{value}}），请先导入对应的上游数据",
-      "unknown_endpoint_type": "未知的线路端点类型: {{type}}",
-      "duplicate_key": "表 {{table}} 第 {{row}} 行的业务键与前面的行重复",
-      "ip_not_in_room_subnet": "导入中止：IP {{ip}} 不属于设备所在房间 {{room}} 绑定的子网",
-      "import_success": "数据导入成功"
+      "field_invalid": "表 {{table}} 第 {{row}} 行的 {{column}} 值无效（{{value}}）: {{reason}}"
     },
     "init": {
       "admin_create_failed": "创建管理员用户失败",
@@ -1876,7 +1801,6 @@
         "imported": "数据库导入成功",
         "pg_dump_exec_failed": "执行pg_dump失败",
         "pg_dump_task_failed": "pg_dump任务失败",
-        "pgpass_chmod_failed": "设置 .pgpass 权限失败",
         "pgsql_connect_failed": "连接PostgreSQL失败",
         "psql_exec_failed": "执行psql失败",
         "psql_task_failed": "psql任务失败",
@@ -1948,7 +1872,6 @@
       "no_physical_interface": "设备没有可用的物理接口，请先创建接口或指定 device_interface_id",
       "validation": {
         "ip_address_invalid": "请输入有效的IP地址",
-        "status_length": "状态长度不能超过20个字符",
         "ip_version_invalid": "IP 版本仅支持 4 或 6",
         "status_invalid": "IP 状态非法"
       }
@@ -1963,7 +1886,7 @@
       "totp_code_replayed": "TOTP验证码重放",
       "user_not_found": "用户未找到",
       "ldap_auth_failed": "LDAP认证失败",
-      "sso_login": "SSO登录"
+      "password_expired": "密码已过期"
     },
     "logs": {
       "cleared": "成功清理 {{count}} 条日志记录",
@@ -2007,7 +1930,6 @@
       "created": "子网创建成功",
       "deleted": "子网删除成功",
       "fetched": "子网获取成功",
-      "in_use_by_cabinet": "无法删除子网：该子网已被机柜通过房间间接关联，请先解除关联关系",
       "in_use_by_ip": "无法删除子网：该子网已被IP关联，请先解除占用",
       "in_use_by_room": "无法删除子网：该子网已被房间关联，请先解除关联关系",
       "ipv4_cidr_exists": "IPv4子网已存在，子网不能重复",
@@ -2040,7 +1962,9 @@
         "dns_count": "DNS服务器数量不能超过5个",
         "dns_invalid": "DNS服务器地址格式无效，IPv4/IPv6 列表内每条都必须是对应版本的合法地址",
         "name_length": "子网名称长度必须在1到50个字符之间",
-        "region_name_length": "网络区域名称长度必须在1到20个字符之间"
+        "region_name_length": "网络区域名称长度必须在1到20个字符之间",
+        "cidr_format": "CIDR 格式无效或地址族不匹配",
+        "gateway_format": "网关地址格式无效或地址族不匹配"
       }
     },
     "notification": {
@@ -2270,7 +2194,6 @@
       "ip_status_sync_completed": "IP状态同步完成",
       "ip_status_sync_failed": "IP状态同步失败",
       "log_cleanup_completed": "已清理日志记录",
-      "log_cleanup_days_invalid": "log_cleanup 任务的 days 必须 >= 1，禁止清空全部日志",
       "logs_retrieved": "获取任务日志成功",
       "mac_sync_completed": "MAC同步成功",
       "mac_sync_missing_config": "MAC同步任务需要配置device_id（子网可选，缺省同步全部子网）",
@@ -2399,7 +2322,6 @@
       "issuer_invalid": "Issuer地址不合法",
       "discovery_failed": "OIDC发现文档获取失败",
       "redirect_uri_invalid": "回调地址不合法",
-      "host_header_missing": "请求缺少Host头，无法推导回调地址",
       "state_invalid": "SSO状态校验失败，请重新发起登录",
       "code_missing": "SSO回调缺少授权码",
       "exchange_failed": "授权码换取令牌失败",
@@ -2463,7 +2385,8 @@
       "zip_create_failed": "创建压缩包失败",
       "zip_entry_read_failed": "读取压缩包条目失败",
       "zip_finish_failed": "压缩包收尾失败",
-      "zip_write_failed": "写入压缩包失败"
+      "zip_write_failed": "写入压缩包失败",
+      "import_success": "数据导入成功"
     }
   },
   "ldap": {

@@ -1,6 +1,5 @@
 {
   "app": {
-    "title": "Organization IT Information Management System",
     "load_failed": "Application failed to load",
     "refresh_or_contact": "Please refresh the page or contact the administrator.",
     "refresh_page": "Refresh Page"
@@ -51,7 +50,6 @@
     "all": "All",
     "saving": "Saving...",
     "deleting": "Deleting...",
-    "syncing": "Syncing...",
     "yes": "Yes",
     "no": "No",
     "unknown": "Unknown",
@@ -68,7 +66,6 @@
     "delete_confirm": "Are you sure you want to delete this?",
     "delete_failed": "Delete failed",
     "processing": "Processing...",
-    "unknown_error": "Unknown error",
     "page": "page",
     "page_size": "Rows per page",
     "goto": "Go to",
@@ -94,7 +91,6 @@
     "unknown": "Unknown"
   },
   "device": {
-    "port_number_required": "Port number is required",
     "port_save_failed": "Failed to save port",
     "port_add_success": "Port added",
     "port_update_success": "Port updated",
@@ -104,7 +100,6 @@
     "port_sync_failed": "Port sync failed",
     "fetching_snmp": "Fetching...",
     "snmp_no_ports": "No ports retrieved",
-    "port_group_other": "Other",
     "sync_added": "Added",
     "sync_overwritten": "Overwritten",
     "sync_skipped": "Skipped",
@@ -119,7 +114,6 @@
     "conflict_skip_all": "Skip all",
     "conflict_overwrite_all": "Overwrite all",
     "conflict_confirm": "Confirm",
-    "nic_managed_by_device_modal": "Network interfaces are managed by the device edit modal",
     "name": "Device Name",
     "device_type": "Device Type",
     "brand": "Brand",
@@ -157,16 +151,12 @@
     "snmp_priv_password": "Privacy Password",
     "test_snmp": "Test SNMP",
     "get_snmp_info": "Get Info from SNMP",
-    "port_groups": "Port Groups",
     "port_detail": "Port Detail",
     "add_port": "Add Port",
-    "port_number": "Port Number",
-    "port_name": "Port Name",
     "port_type": "Port Type",
     "speed": "Speed",
     "trunk_id": "Trunk ID",
     "trunk_id_hint": "Native VLAN ID for trunk/hybrid ports; leave empty for other types",
-    "get_snmp_ports": "Get Ports from SNMP",
     "ports": "Ports",
     "unified_ports": "Device Ports",
     "add_device_port": "Add Device Port",
@@ -237,19 +227,11 @@
     "interface_role_other": "Other",
     "no_device_ports": "No device port data",
     "cabinet_position": "Cabinet Position",
-    "switch": "Switch",
     "ip_address": "IP Address",
     "mac_address": "MAC Address",
     "ip_list": "IP Address List",
     "delete_network_card": "Remove this network card",
     "delete_network_port": "Remove this network port",
-    "no_ports": "No port data",
-    "no_snmp_config": "This device has no SNMP configuration, unable to fetch port data",
-    "load_ports_failed": "Failed to load port data",
-    "port_save_refresh_failed": "Port saved successfully, but data refresh failed. Please refresh manually.",
-    "port_submit_failed": "Failed to submit port form",
-    "port_sync_success": "Ports synced successfully",
-    "sync_ports_from_snmp": "Fetch ports from SNMP",
     "search_ip_mac": "Search IP or MAC address...",
     "loading_mac_table": "Loading MAC table...",
     "load_mac_failed": "Failed to load MAC table",
@@ -330,7 +312,6 @@
     "edit": "Edit Room",
     "add": "Add Room",
     "keep_one_network": "At least one subnet configuration must be kept",
-    "select_option": "Select an option",
     "delete_success": "Room deleted successfully",
     "type_lobby": "Lobby",
     "type_reception": "Reception",
@@ -340,11 +321,7 @@
   "time": {
     "just_now": "Just now",
     "minutes_ago": "{{count}} minutes ago",
-    "hours_ago": "{{count}} hours ago",
-    "day": "d",
-    "hour": "h",
-    "minute": "m",
-    "second": "s"
+    "hours_ago": "{{count}} hours ago"
   },
   "auth": {
     "logout": "Logout",
@@ -411,7 +388,6 @@
     "ldap_password_placeholder": "Enter LDAP password",
     "sso_hint": "You will be redirected to the enterprise identity platform to sign in",
     "ca_download": "Download site root CA",
-    "ca_download_pem": "PEM",
     "captcha": "Captcha",
     "captcha_refresh": "Click to refresh captcha",
     "captcha_required": "Please enter the captcha"
@@ -427,7 +403,6 @@
     "top_networks": "Top Subnets",
     "recent_ips": "Recent IP Assignments",
     "top_rooms": "Top Rooms",
-    "no_device_data": "No device data",
     "top_cabinets": "Top Cabinets",
     "recent_logs": "Recent Activity",
     "view_all": "View All →",
@@ -508,8 +483,7 @@
     "region_delete_success": "Network region deleted successfully",
     "region_save_success": "Network region saved successfully",
     "save_success": "Subnet saved successfully",
-    "select_segment": "Select subnet",
-    "capacity_note": "Capacity counts the whole CIDR minus network and broadcast addresses; /31 and /32 have no conventional usable addresses; the visualization shows only a subset (first /24 for large subnets)"
+    "select_segment": "Select subnet"
   },
   "organization": {
     "add": "Add Organization",
@@ -679,7 +653,6 @@
     "config_save_failed": "Failed to save system configuration",
     "config_saved_restart_needed": "Configuration updated. The application must be restarted for it to take effect.",
     "about": "About",
-    "project_url": "Project URL",
     "author": "Author",
     "contact": "Contact",
     "app_fail2ban_ip": "IP Address",
@@ -693,7 +666,6 @@
   },
   "services": {
     "title": "Service Management",
-    "help": "Jointly manage the FOIMS backend (foims.service) and the reverse proxy (nginx.service) systemd services. Service registration is done by the deployer (DEB package install or manual unit deployment), not from this page; unregistered services require the unit file to be installed on the server first.",
     "col_service": "Service",
     "col_unit": "systemd Unit",
     "col_status": "Status",
@@ -963,7 +935,6 @@
     "days_required": "Please enter a valid number of days to retain (0 deletes all)"
   },
   "notifications": {
-    "all": "All Notifications",
     "unread": "Unread",
     "read": "Read",
     "mark_all_read": "Mark All Read",
@@ -1034,7 +1005,6 @@
     "data_management": "Data Management",
     "download_template": "Download Template",
     "import_result": "Import Result",
-    "result_item": "Table {{table}}: {{inserted}} inserted, {{updated}} updated",
     "instructions": "Instructions:",
     "database_management": "Database Management",
     "db_export": "Database Export",
@@ -1042,19 +1012,6 @@
     "db_export_hint1": "Exports as PostgreSQL SQL file",
     "db_export_hint2": "Contains complete database structure and data",
     "db_export_hint3": "Can be used for migration or disaster recovery",
-    "download_template_failed": "Failed to download template",
-    "importing": "Importing data, please wait...",
-    "import_success": "Data import completed",
-    "import_failed": "Data import failed",
-    "invalid_file_type": "Only .zip or .csv files are supported, and the content must match the extension",
-    "file_too_large": "File exceeds the 50MB limit",
-    "export_failed": "Export failed",
-    "export_db_failed": "Database export failed",
-    "export_db_success": "Database exported successfully",
-    "backup_failed": "Failed to back up configuration",
-    "restore_success": "Configuration restored",
-    "restore_failed": "Configuration restore failed",
-    "restore_error": "Failed to restore configuration",
     "csv_import": "CSV Data Import (by module)",
     "import_csv": "Import CSV",
     "csv_export": "CSV Data Export (by module)",
@@ -1085,7 +1042,6 @@
     "disable_confirm": "Are you sure you want to disable two-factor authentication?",
     "open_modal_failed": "Unable to open 2FA modal",
     "modal_load_failed": "Failed to load 2FA modal",
-    "admin_only": "Insufficient permissions. Only an administrator can manage 2FA for other users.",
     "fetch_config_failed": "Failed to fetch 2FA configuration",
     "fetch_config_network": "Failed to fetch 2FA configuration. Please check your network connection.",
     "enable_success": "Two-factor authentication enabled successfully!",
@@ -1157,7 +1113,6 @@
     "ca_help_note": "Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and falls back to TCP automatically - expected behavior.",
     "ca_download": "Download CA",
     "ca_select": "Issuing CA",
-    "ca_select_hint": "Certificates are always issued by the selected CA (site root CA or an imported CA); generate or import a CA first",
     "ca_source_root": "Generated",
     "ca_source_imported": "Imported",
     "ca_no_key_label": "no key, cannot sign",
@@ -1186,7 +1141,6 @@
   },
   "net_outlet": {
     "name": "Network Outlet Name",
-    "add": "Add Network Outlet",
     "name_required": "Outlet name is required",
     "name_duplicate": "Outlet name \"{{name}}\" is duplicated (outlet names must be unique across all rooms)"
   },
@@ -1573,12 +1527,10 @@
       "dir_create_failed": "Failed to create backup directory",
       "dir_read_failed": "Failed to read backup directory",
       "dump_empty": "Exported SQL file is empty",
-      "file_permission_failed": "Failed to set backup file permissions",
       "file_write_failed": "Failed to write backup file",
       "pg_dump_exec_failed": "Failed to execute pg_dump",
       "pg_dump_failed": "pg_dump failed",
-      "pg_dump_task_failed": "pg_dump task failed",
-      "pgpass_permission_failed": "Failed to set .pgpass permissions"
+      "pg_dump_task_failed": "pg_dump task failed"
     },
     "cabinet": {
       "created": "Cabinet created successfully",
@@ -1655,7 +1607,10 @@
       "organization_length": "Organization must not exceed 64 characters",
       "san_invalid": "No valid SAN entries and the common name cannot serve as a SAN; cannot generate the certificate",
       "ca_already_exists": "Site root CA already exists; regenerating would revoke all previously issued certificates. Delete it first if replacement is intended",
-      "ca_expired": "The issuing CA has expired or has less than one day of validity; cannot issue new certificates"
+      "ca_expired": "The issuing CA has expired or has less than one day of validity; cannot issue new certificates",
+      "organizational_unit_length": "Organizational unit (OU) must not exceed 64 characters",
+      "state_length": "State/province must not exceed 64 characters",
+      "locality_length": "City/locality must not exceed 64 characters"
     },
     "common": {
       "cipher_init_failed": "Failed to create cipher",
@@ -1748,7 +1703,6 @@
         "link_local_forbidden": "Connecting to link-local addresses is not allowed",
         "lldp_fetch_failed": "Failed to fetch LLDP neighbors: {{error}}",
         "loopback_forbidden": "Connecting to loopback addresses is not allowed",
-        "metadata_endpoint_forbidden": "Connecting to cloud metadata endpoints is not allowed",
         "multicast_forbidden": "Connecting to multicast addresses is not allowed",
         "not_configured": "SNMP is not configured on this device",
         "ports_fetch_failed": "Failed to fetch device port info: {{error}}",
@@ -1799,7 +1753,6 @@
       "not_found": "Device template not found",
       "updated": "Device template updated successfully",
       "validation": {
-        "device_type_length": "Device type is required",
         "name_length": "Template name is required and must not exceed 100 characters"
       }
     },
@@ -1821,35 +1774,7 @@
       "disabled_ban_rejected": "fail2ban is disabled; manual bans would not take effect. Enable it first"
     },
     "data-management": {
-      "chunk_read_failed": "Failed to read file chunk",
-      "file_read_failed": "Failed to read file",
-      "file_too_large": "File exceeds the {{limit}}MB limit",
-      "no_file_selected": "Please select a file to import",
-      "zip_create_failed": "Failed to create ZIP file",
-      "zip_entry_read_failed": "Failed to read ZIP entry",
-      "zip_finish_failed": "Failed to finalize ZIP file",
-      "zip_write_failed": "Failed to write ZIP file",
-      "unknown_export_type": "Unsupported export type: {{type}}",
-      "csv_build_failed": "Failed to build CSV",
-      "csv_parse_failed": "CSV parse failed (line {{line}}): {{error}}",
-      "invalid_file_type": "Only .zip or .csv files are supported, and the content must match the extension",
-      "invalid_zip_entry": "Unsupported entry in ZIP: {{name}} (only flat table-name CSV files are allowed)",
-      "duplicate_table": "Duplicate CSV file for table {{table}} in ZIP",
-      "unrecognized_header": "Unrecognized CSV header: does not match any business table",
-      "header_mismatch": "CSV header for table {{table}} does not match the expected columns",
-      "no_csv_files": "No CSV files found in ZIP",
-      "no_data_rows": "CSV file has a header but no data rows",
-      "spec_missing": "Missing import/export spec for table {{table}}",
-      "name_resolve_failed": "Failed to resolve name reference during export: {{id}}",
-      "required_field_missing": "Column {{column}} is required (table {{table}}, row {{row}})",
-      "field_invalid": "Invalid value for {{column}} in table {{table}} row {{row}} ({{value}}): {{reason}}",
-      "name_contains_separator": "Column {{column}} in table {{table}} row {{row}} must not contain \"/\" (used in path references)",
-      "invalid_ref_format": "Invalid reference format for {{column}} in table {{table}} row {{row}}: {{value}}",
-      "ref_not_found": "Import aborted: resource referenced by {{column}} in table {{table}} row {{row}} does not exist ({{value}}); import upstream data first",
-      "unknown_endpoint_type": "Unknown cable endpoint type: {{type}}",
-      "duplicate_key": "Business key of row {{row}} in table {{table}} duplicates an earlier row",
-      "ip_not_in_room_subnet": "Import aborted: IP {{ip}} does not belong to the subnets bound to its device's room {{room}}",
-      "import_success": "Data imported successfully"
+      "field_invalid": "Invalid value for {{column}} in table {{table}} row {{row}} ({{value}}): {{reason}}"
     },
     "init": {
       "admin_create_failed": "Failed to create the admin user",
@@ -1876,7 +1801,6 @@
         "imported": "Database imported successfully",
         "pg_dump_exec_failed": "Failed to execute pg_dump",
         "pg_dump_task_failed": "pg_dump task failed",
-        "pgpass_chmod_failed": "Failed to set .pgpass permissions",
         "pgsql_connect_failed": "Failed to connect to PostgreSQL",
         "psql_exec_failed": "Failed to execute psql",
         "psql_task_failed": "psql task failed",
@@ -1948,7 +1872,6 @@
       "no_physical_interface": "Device has no available physical interface; create one first or specify device_interface_id",
       "validation": {
         "ip_address_invalid": "Please enter a valid IP address",
-        "status_length": "Status must not exceed 20 characters",
         "ip_version_invalid": "IP version must be 4 or 6",
         "status_invalid": "Invalid IP status"
       }
@@ -1963,7 +1886,7 @@
       "totp_code_replayed": "TOTP code replayed",
       "user_not_found": "User not found",
       "ldap_auth_failed": "LDAP authentication failed",
-      "sso_login": "SSO login"
+      "password_expired": "Password expired"
     },
     "logs": {
       "cleared": "Successfully cleared {{count}} log records",
@@ -2007,7 +1930,6 @@
       "created": "Subnet created successfully",
       "deleted": "Subnet deleted successfully",
       "fetched": "Subnets fetched successfully",
-      "in_use_by_cabinet": "Cannot delete subnet: indirectly referenced by cabinets through rooms, remove the association first",
       "in_use_by_ip": "Cannot delete subnet: the subnet still has associated IPs, release them first",
       "in_use_by_room": "Cannot delete subnet: referenced by rooms, remove the association first",
       "ipv4_cidr_exists": "IPv4 subnet already exists, subnets must be unique",
@@ -2040,7 +1962,9 @@
         "dns_count": "No more than 5 DNS servers",
         "dns_invalid": "Invalid DNS server address: each entry in the IPv4/IPv6 list must be a valid address of that version",
         "name_length": "Subnet name must be 1 to 50 characters",
-        "region_name_length": "Network region name must be 1 to 20 characters"
+        "region_name_length": "Network region name must be 1 to 20 characters",
+        "cidr_format": "Invalid CIDR format or address family mismatch",
+        "gateway_format": "Invalid gateway address format or address family mismatch"
       }
     },
     "notification": {
@@ -2270,7 +2194,6 @@
       "ip_status_sync_completed": "IP status sync completed",
       "ip_status_sync_failed": "IP status sync failed",
       "log_cleanup_completed": "Log records cleaned",
-      "log_cleanup_days_invalid": "The days of log_cleanup task must be >= 1; clearing all logs is forbidden",
       "logs_retrieved": "Task logs retrieved",
       "mac_sync_completed": "MAC sync completed",
       "mac_sync_missing_config": "MAC sync task requires device_id (subnet optional; defaults to all subnets)",
@@ -2399,7 +2322,6 @@
       "issuer_invalid": "Invalid issuer URL",
       "discovery_failed": "Failed to fetch the OIDC discovery document",
       "redirect_uri_invalid": "Invalid redirect URI",
-      "host_header_missing": "Missing Host header; cannot derive the redirect URI",
       "state_invalid": "SSO state validation failed; please start the sign-in again",
       "code_missing": "SSO callback is missing the authorization code",
       "exchange_failed": "Failed to exchange the authorization code for tokens",
@@ -2463,7 +2385,8 @@
       "zip_create_failed": "Failed to create archive",
       "zip_entry_read_failed": "Failed to read archive entry",
       "zip_finish_failed": "Failed to finalize archive",
-      "zip_write_failed": "Failed to write archive"
+      "zip_write_failed": "Failed to write archive",
+      "import_success": "Data imported successfully"
     }
   },
   "ldap": {
