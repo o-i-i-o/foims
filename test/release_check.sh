@@ -45,6 +45,9 @@ main() {
     echo "   项目: foims (IP/MAC 地址管理系统)"
     echo "────────────────────────────────────"
 
+cd ..
+
+
     if [ ! -f "Cargo.toml" ]; then
         echo "  ${RED}❌ 错误${NC}: 未找到 Cargo.toml，当前目录: $(pwd)"
         ERROR_COUNT=$((ERROR_COUNT + 1))
