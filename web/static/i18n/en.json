@@ -1476,7 +1476,8 @@
     "db_create_success": "Database created successfully",
     "db_create_existed": "Database already exists",
     "db_create_next_hint": "Click \"Test Connection\" to continue.",
-    "db_create_fail_title": "Database Creation Failed"
+    "db_create_fail_title": "Database Creation Failed",
+    "db_test_fail_hint": "Please check your input; if the target database does not exist, click \"Create Database\"."
   },
   "server": {
     "auth": {

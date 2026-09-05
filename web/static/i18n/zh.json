@@ -1476,7 +1476,8 @@
     "db_create_success": "数据库创建成功",
     "db_create_existed": "数据库已存在",
     "db_create_next_hint": "请点击「连接测试」进入下一步。",
-    "db_create_fail_title": "创建数据库失败"
+    "db_create_fail_title": "创建数据库失败",
+    "db_test_fail_hint": "请检查输入是否正确；若目标数据库不存在，可点击「创建数据库」。"
   },
   "server": {
     "auth": {
