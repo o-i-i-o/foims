@@ -162,16 +162,16 @@ jobs:
 
       - name: 打包发布文件
         run: |
-          mkdir -p release
-          cp target/foims_*.deb release/
-          cp target/release/foims release/
-          tar -czvf foims-${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz release/
-          rm -rf release
+          VERSION=${{ steps.version.outputs.VERSION }}
+          ARCH=$(dpkg --print-architecture)
+          tar -czf "foims_${VERSION}_${ARCH}.tar.gz" -C target/release foims
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: foims-*.tar.gz
+          files: |
+            foims_*.tar.gz
+            target/foims_*.deb
           generate_release_notes: true
           draft: false
         env:
