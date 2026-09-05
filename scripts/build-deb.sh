@@ -1,7 +1,7 @@
 #!/bin/bash
 # FOIMS DEB 打包脚本（Debian 规范）
 #
-# 用法：bash test/build-deb.sh
+# 用法：bash scripts/build-deb.sh
 # 产物：target/foims_<版本>_<架构>.deb
 #
 # 设计约束：
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-# 路径推导：脚本位于 test/，项目根为其上一级目录（不再硬编码绝对路径）
+# 路径推导：脚本位于 scripts/，项目根为其上一级目录（不再硬编码绝对路径）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEBPAK_DIR="$PROJECT_DIR/target/debpak"
@@ -100,13 +100,20 @@ fi
 # 配置文件打包（conffile，升级时 dpkg 保留本地修改）：
 # 以 config.toml.example 副本去除示例后缀进包——本地 config.toml 可能
 # 含真实数据库连接信息，绝不直接打包；JWT 密钥由本脚本生成随机
-# 32 字符（纯字母数字，TOML 与 sed 分隔符安全）替换示例占位符
+# 32 字符（纯字母数字前缀 + 字母数字，TOML 与 sed 分隔符安全）替换示例占位符
 if [ ! -f "config.toml.example" ]; then
     echo "错误：缺少 config.toml.example" >&2
     exit 1
 fi
 cp config.toml.example "$DEBPAK_DIR/etc/foims/config.toml"
-JWT_SECRET="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+# 随机串管道各段均消费至 EOF（head 定长读文件后正常退出，base64/tr/cut
+# 读完上游才退出）：不存在提前退出的消费者，set -o pipefail 下不会触发
+# SIGPIPE。此前 "tr | head -c" 组合中 head 拿满即退出，tr 继续写入收到
+# Broken pipe，竞态性地使整条管道失败（CI 实测复现）
+RAW_SECRET="$(head -c 64 /dev/urandom | base64 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-28)"
+# 固定前缀补齐大小写/数字/特殊字符四类，避免首启即触发弱密钥告警；
+# 28 位随机字母数字（约 166 位熵）承载全部强度
+JWT_SECRET="A1a!${RAW_SECRET}"
 if [ "${#JWT_SECRET}" -ne 32 ]; then
     echo "错误：生成 JWT 随机密钥失败" >&2
     exit 1

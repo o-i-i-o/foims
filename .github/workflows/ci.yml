@@ -113,9 +113,9 @@ jobs:
       - name: 构建项目
         run: cargo build --release --verbose
 
-      # 打包脚本 test/build-deb.sh 无需 root：产物输出至 target/foims_<版本>_<架构>.deb
+      # 打包脚本 scripts/build-deb.sh 无需 root：产物输出至 target/foims_<版本>_<架构>.deb
       - name: 构建 DEB 安装包
-        run: bash test/build-deb.sh
+        run: bash scripts/build-deb.sh
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -154,7 +154,7 @@ jobs:
         run: cargo build --release --verbose
 
       - name: 构建 DEB 安装包
-        run: bash test/build-deb.sh
+        run: bash scripts/build-deb.sh
 
       - name: 获取版本号
         id: version

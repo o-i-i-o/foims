@@ -10,7 +10,7 @@
 //! 「直接拉起二进制 / pkill / 降级轮询」等不当回退。
 //!
 //! 服务注册不由本程序完成：foims 单元文件随 DEB 包安装
-//! （test/build-deb.sh）或由运维手动部署，nginx 单元文件由发行版包提供。
+//! （scripts/build-deb.sh）或由运维手动部署，nginx 单元文件由发行版包提供。
 
 use std::path::PathBuf;
 

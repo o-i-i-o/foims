@@ -1,11 +1,11 @@
 # FOIMS 生产环境 systemd 服务单元
 #
 # 使用方式：
-#   1. DEB 包安装时由 test/build-deb.sh 自动安装到 /usr/lib/systemd/system/
+#   1. DEB 包安装时由 scripts/build-deb.sh 自动安装到 /usr/lib/systemd/system/
 #   2. 手动部署：sudo cp deploy/services/foims.service /etc/systemd/system/foims.service
 #      sudo systemctl daemon-reload && sudo systemctl enable --now foims
 #
-# 路径约定（与 test/build-deb.sh 打包布局一致）：
+# 路径约定（与 scripts/build-deb.sh 打包布局一致）：
 #   二进制   /usr/bin/foims
 #   静态资源 /opt/foims/web（static_files.rs 搜索路径第一位）
 #   配置     /etc/foims/config.toml（CONFIG_PATHS 最高优先级）
