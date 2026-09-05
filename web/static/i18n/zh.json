@@ -890,7 +890,8 @@
       "sync_children": "同步子项",
       "sync_net_outlets": "同步信息点",
       "sync_patch_panels": "同步配线架",
-      "sync_positions": "同步机位"
+      "sync_positions": "同步机位",
+      "change_password": "修改密码"
     },
     "resource_types": {
       "user": "用户",
@@ -916,7 +917,10 @@
       "device_template": "设备模板",
       "net_outlet": "信息点",
       "org_template": "组织模板",
-      "organization": "组织"
+      "organization": "组织",
+      "certificate": "证书",
+      "certificate_ca": "根 CA",
+      "employee": "员工"
     },
     "view_detail_failed": "查看详情失败",
     "detail_title": "操作日志详情",

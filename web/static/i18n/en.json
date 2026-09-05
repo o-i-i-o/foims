@@ -890,7 +890,8 @@
       "sync_children": "Sync Children",
       "sync_net_outlets": "Sync Network Outlets",
       "sync_patch_panels": "Sync Patch Panels",
-      "sync_positions": "Sync Positions"
+      "sync_positions": "Sync Positions",
+      "change_password": "Change Password"
     },
     "resource_types": {
       "user": "User",
@@ -916,7 +917,10 @@
       "device_template": "Device Template",
       "net_outlet": "Network Outlet",
       "org_template": "Org Template",
-      "organization": "Organization"
+      "organization": "Organization",
+      "certificate": "Certificate",
+      "certificate_ca": "Root CA",
+      "employee": "Employee"
     },
     "view_detail_failed": "Failed to view details",
     "detail_title": "Operation Log Details",

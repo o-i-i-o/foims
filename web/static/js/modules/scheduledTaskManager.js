@@ -295,7 +295,9 @@ function isValidCronFieldValue(value, field) {
 }
 
 function getCronExpression() {
-  return CRON_FIELD_DEFS.map((def) => document.getElementById(def.id)?.value.trim() ?? "").join(" ");
+  return CRON_FIELD_DEFS.map((def) => document.getElementById(def.id)?.value.trim() ?? "").join(
+    " "
+  );
 }
 
 function updateCronPreview() {
