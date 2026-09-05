@@ -349,6 +349,16 @@ fn configure_app_services(
             .route("/api/init/db", post(foims_init::init_db))
             .route("/api/init/db/clear", post(foims_init::clear_database))
             .route("/api/init/db/create", post(foims_init::create_database_api))
+            // 数据库配置页（第 2 步）：连接测试充当下一步（通过后写盘
+            // 并切换内存连接），provision 按页面输入幂等建库
+            .route(
+                "/api/init/db/test-connection",
+                post(foims_init::test_db_connection),
+            )
+            .route(
+                "/api/init/db/provision",
+                post(foims_init::provision_database),
+            )
             // import（无文件）与 create 共用同一 handler：原 import_database_api
             //             是 create 的逐行重复且无任何导入动作
             .route("/api/init/db/import", post(foims_init::create_database_api))

@@ -35,7 +35,7 @@ pub async fn init_system(
         return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config()).await {
         Ok(p) => p,
         Err(e) => {
             return Err(InitError::Internal(e));
@@ -148,7 +148,7 @@ pub async fn init_db(State(ctx): State<Arc<InitContext>>) -> Result<Response, In
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    let pool = match ensure_database_and_schema(&ctx.db_config()).await {
         Ok(p) => p,
         Err(e) => {
             return Err(InitError::Internal(e));

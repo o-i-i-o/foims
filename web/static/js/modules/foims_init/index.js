@@ -9,6 +9,8 @@ import { goToStep, setInitMode } from "./ui.js";
 import {
   checkPostgreSQL,
   checkDatabaseStatus,
+  handleDbConfigSubmit,
+  handleDbCreate,
   handleInitModeSubmit,
   handleAdminAccountSubmit,
   getVerificationCode
@@ -26,7 +28,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 渲染的状态块（PostgreSQL 检查 / 数据库状态）需要重新拉取才能换语言。
   window.addEventListener("languagechange", () => {
     checkPostgreSQL();
-    if (state.currentStep >= 2) {
+    if (state.currentStep >= 3) {
       checkDatabaseStatus();
     }
   });
@@ -46,6 +48,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       getVerificationCode();
     });
   });
+
+  // 第 2 步：数据库配置页（连接测试充当下一步 + 创建数据库）
+  document.getElementById("db-config-form")?.addEventListener("submit", handleDbConfigSubmit);
+  document.getElementById("db-create-btn")?.addEventListener("click", handleDbCreate);
 
   document.getElementById("init-mode-form")?.addEventListener("submit", handleInitModeSubmit);
   document
@@ -70,8 +76,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document
     .querySelector('.step-panel[data-step="1"] .btn-success')
     ?.addEventListener("click", () => {
+      // PostgreSQL 检查通过：进入数据库配置页（第 2 步），
+      // 连接信息由用户在页面填写，不再直接探测默认配置
       goToStep(2);
-      checkDatabaseStatus();
     });
 
   await checkPostgreSQL();

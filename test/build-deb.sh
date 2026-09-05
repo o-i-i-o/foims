@@ -9,6 +9,10 @@
 #     可在 CI 与普通用户环境直接运行
 #   - systemd 单元唯一来源为 deploy/services/foims.service，本脚本不再内嵌副本
 #   - web 目录仅打包 static/（package.json、tests、eslint 等开发工具链文件不进包）
+#   - 配置文件以 config.toml.example 副本为基础打包（去除 .example 后缀）：
+#     仓库/开发机的本地 config.toml 可能含真实数据库连接信息，不进包；
+#     数据库连接要素由安装后的初始化向导在页面填写并回写配置文件；
+#     JWT 密钥由本脚本生成随机 32 字符替换示例占位符
 
 set -euo pipefail
 
@@ -70,7 +74,6 @@ mkdir -p "$DEBPAK_DIR/usr/lib/systemd/system"
 mkdir -p "$DEBPAK_DIR/usr/share/doc/foims"
 mkdir -p "$DEBPAK_DIR/usr/share/man/man1"
 mkdir -p "$DEBPAK_DIR/usr/share/lintian/overrides"
-mkdir -p "$DEBPAK_DIR/usr/share/foims/scripts"
 mkdir -p "$DEBPAK_DIR/usr/share/polkit-1/actions"
 mkdir -p "$DEBPAK_DIR/usr/share/polkit-1/rules.d"
 
@@ -94,17 +97,29 @@ if [ -d "web/static" ]; then
     find "$DEBPAK_DIR/opt/foims/web" -type f -exec chmod 644 {} \;
 fi
 
-# 复制配置文件到 /etc/foims/（conffile，升级时 dpkg 保留本地修改）
-if [ -f "config.toml" ]; then
-    cp config.toml "$DEBPAK_DIR/etc/foims/config.toml"
-    chmod 640 "$DEBPAK_DIR/etc/foims/config.toml"
+# 配置文件打包（conffile，升级时 dpkg 保留本地修改）：
+# 以 config.toml.example 副本去除示例后缀进包——本地 config.toml 可能
+# 含真实数据库连接信息，绝不直接打包；JWT 密钥由本脚本生成随机
+# 32 字符（纯字母数字，TOML 与 sed 分隔符安全）替换示例占位符
+if [ ! -f "config.toml.example" ]; then
+    echo "错误：缺少 config.toml.example" >&2
+    exit 1
 fi
-
-# 复制初始化脚本
-if [ -d "scripts" ] && ls scripts/*.sh >/dev/null 2>&1; then
-    cp scripts/*.sh "$DEBPAK_DIR/usr/share/foims/scripts/"
-    chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh
+cp config.toml.example "$DEBPAK_DIR/etc/foims/config.toml"
+JWT_SECRET="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+if [ "${#JWT_SECRET}" -ne 32 ]; then
+    echo "错误：生成 JWT 随机密钥失败" >&2
+    exit 1
 fi
+sed -i "s|^secret = \"CHANGE_ME_TO_RANDOM_32_PLUS_CHARS\"|secret = \"$JWT_SECRET\"|" \
+    "$DEBPAK_DIR/etc/foims/config.toml"
+# 占位符未被替换说明示例文件结构变化（占位符行改名/删除），必须失败退出，
+# 否则包内配置会带着公开示例密钥进入生产
+if grep -q "CHANGE_ME_TO_RANDOM_32_PLUS_CHARS" "$DEBPAK_DIR/etc/foims/config.toml"; then
+    echo "错误：JWT 密钥占位符替换失败，请检查 config.toml.example 的 [jwt] secret 行" >&2
+    exit 1
+fi
+chmod 640 "$DEBPAK_DIR/etc/foims/config.toml"
 
 # 复制部署说明（nginx/fail2ban 配置与服务文件供运维参考）
 if [ -d "deploy" ]; then
@@ -465,8 +480,6 @@ chmod 755 "$DEBPAK_DIR/usr/share/man"
 chmod 755 "$DEBPAK_DIR/usr/share/man/man1"
 chmod 755 "$DEBPAK_DIR/usr/share/lintian"
 chmod 755 "$DEBPAK_DIR/usr/share/lintian/overrides"
-chmod 755 "$DEBPAK_DIR/usr/share/foims"
-chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts"
 chmod 755 "$DEBPAK_DIR/usr/share/polkit-1"
 chmod 755 "$DEBPAK_DIR/usr/share/polkit-1/actions"
 chmod 755 "$DEBPAK_DIR/usr/share/polkit-1/rules.d"
@@ -475,11 +488,6 @@ chmod 755 "$DEBPAK_DIR/usr/share/polkit-1/rules.d"
 chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/actions/cc.example.foims.policy"
 chmod 644 "$DEBPAK_DIR/usr/share/polkit-1/rules.d/foims.rules"
 chmod 644 "$DEBPAK_DIR/usr/share/lintian/overrides/foims"
-
-# 确保脚本文件可执行
-if [ -d "$DEBPAK_DIR/usr/share/foims/scripts" ] && ls "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh >/dev/null 2>&1; then
-    chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/"*.sh
-fi
 
 echo ""
 echo "18. 更新 Installed-Size..."

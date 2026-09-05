@@ -16,14 +16,15 @@ use crate::error::{InitError, ok_json};
 use crate::operations::{backup_database, create_database, drop_all_tables, drop_database};
 use crate::schema::create_tables;
 use crate::types::{CreateDatabaseRequest, CreateDatabaseResponse};
-use crate::utils::{PgPassFile, url_encode_component};
+use crate::utils::PgPassFile;
 use crate::verification::verify_code;
 
 /// 备份并删除现有数据库（有数据时先备份），为重建做准备。
 ///
 /// 返回备份文件路径（未发生备份时为 `None`）。
 async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>, InitError> {
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    let db_config = ctx.db_config();
+    let pool = match ensure_database_and_schema(&db_config).await {
         Ok(p) => p,
         Err(e) => {
             return Err(InitError::Internal(e));
@@ -35,7 +36,7 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
 
     if has_data {
         foims_common::log_info!("log.init.db.not_empty_backing_up");
-        let backup_file = match backup_database(&ctx.db_config).await {
+        let backup_file = match backup_database(&db_config).await {
             Ok(file) => {
                 foims_common::log_info!("log.init.db.backup_done_dropping");
                 Some(file)
@@ -47,7 +48,7 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
 
         drop(pool);
 
-        if let Err(e) = drop_database(&ctx.db_config).await {
+        if let Err(e) = drop_database(&db_config).await {
             return Err(InitError::Internal(e));
         }
 
@@ -56,13 +57,7 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
         drop(pool);
 
         // 密码做 URL 编码后再拼连接串：含 @ : / 等字符时裸拼会导致连接失败（I-8）
-        let postgres_url = format!(
-            "postgres://{}:{}@{}:{}/postgres",
-            url_encode_component(&ctx.db_config.username),
-            url_encode_component(&ctx.db_config.password),
-            ctx.db_config.host,
-            ctx.db_config.port
-        );
+        let postgres_url = crate::utils::build_pg_url(&db_config, "postgres");
         let postgres_pool = match PgPool::connect(&postgres_url).await {
             Ok(p) => p,
             Err(e) => {
@@ -74,7 +69,7 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
 
         let db_exists: bool =
             match sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
-                .bind(&ctx.db_config.database)
+                .bind(&db_config.database)
                 .fetch_one(&postgres_pool)
                 .await
             {
@@ -88,7 +83,7 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
 
         if db_exists {
             foims_common::log_info!("log.init.db.empty_db_recreating");
-            if let Err(e) = drop_database(&ctx.db_config).await {
+            if let Err(e) = drop_database(&db_config).await {
                 return Err(InitError::Internal(e));
             }
         }
@@ -100,11 +95,12 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
 /// 重建数据库并建表（备份与删库由 [`backup_and_drop_for_rebuild`] 完成），
 /// 返回指向新库的连接池。
 async fn recreate_database_with_tables(ctx: &InitContext) -> Result<PgPool, InitError> {
-    if let Err(e) = create_database(&ctx.db_config).await {
+    let db_config = ctx.db_config();
+    if let Err(e) = create_database(&db_config).await {
         return Err(InitError::Internal(e));
     }
 
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    let pool = match ensure_database_and_schema(&db_config).await {
         Ok(p) => p,
         Err(e) => {
             return Err(InitError::Internal(e));
@@ -248,31 +244,34 @@ pub async fn import_database_from_file(
 
     let backup_file = backup_and_drop_for_rebuild(&ctx).await?;
 
-    if let Err(e) = create_database(&ctx.db_config).await {
+    let db_config = ctx.db_config();
+    if let Err(e) = create_database(&db_config).await {
         return Err(InitError::Internal(e));
     }
 
-    let db_config = ctx.db_config.clone();
+    // db_config 需在任务闭包外继续使用（建池验证导入结构），
+    // 克隆一份交由阻塞任务独占
+    let db_config_for_task = db_config.clone();
     let sql_path_clone = sql_path.clone();
     let output = tokio::task::spawn_blocking(move || {
         let pgpass = PgPassFile::create(
-            &db_config.host,
-            db_config.port,
-            &db_config.database,
-            &db_config.username,
-            &db_config.password,
+            &db_config_for_task.host,
+            db_config_for_task.port,
+            &db_config_for_task.database,
+            &db_config_for_task.username,
+            &db_config_for_task.password,
         )
         .map_err(InitError::Internal)?;
 
         std::process::Command::new("psql")
             .arg("-h")
-            .arg(&db_config.host)
+            .arg(&db_config_for_task.host)
             .arg("-p")
-            .arg(db_config.port.to_string())
+            .arg(db_config_for_task.port.to_string())
             .arg("-U")
-            .arg(&db_config.username)
+            .arg(&db_config_for_task.username)
             .arg("-d")
-            .arg(&db_config.database)
+            .arg(&db_config_for_task.database)
             // 语句级失败立即中止并以非零码退出（psql 默认遇错继续且退出码为 0，
             // 半成品恢复会被误报成功）；--single-transaction 将整个脚本包在
             // 单个事务内，任一语句失败整体回滚，避免删库后留下残缺结构
@@ -297,7 +296,7 @@ pub async fn import_database_from_file(
         ));
     }
 
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    let pool = match ensure_database_and_schema(&db_config).await {
         Ok(p) => p,
         Err(e) => {
             return Err(InitError::Internal(e));
@@ -338,7 +337,8 @@ pub async fn clear_database(
         return Err(InitError::Validation(e));
     }
 
-    let pool = match ensure_database_and_schema(&ctx.db_config).await {
+    let db_config = ctx.db_config();
+    let pool = match ensure_database_and_schema(&db_config).await {
         Ok(p) => p,
         Err(e) => {
             return Err(InitError::Internal(e));
@@ -351,7 +351,7 @@ pub async fn clear_database(
     let has_data = check_has_data(&pool).await?;
     if has_data {
         foims_common::log_info!("log.init.db.not_empty_backing_up");
-        if let Err(e) = backup_database(&ctx.db_config).await {
+        if let Err(e) = backup_database(&db_config).await {
             return Err(InitError::Internal(e));
         }
         foims_common::log_info!("log.init.db.backup_done_dropping");

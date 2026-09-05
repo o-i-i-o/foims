@@ -10,10 +10,10 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01384">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01384">
-    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01384">
-    <script type="module" src="/static/js/modules/foims_init/index.js?v=01384"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01385">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01385">
+    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01385">
+    <script type="module" src="/static/js/modules/foims_init/index.js?v=01385"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -36,14 +36,18 @@
                 </div>
                 <div class="step" data-step="2">
                     <span class="step-number">2</span>
-                    <span class="step-label" data-i18n="init.step_db_init">数据库初始化</span>
+                    <span class="step-label" data-i18n="init.step_db_config">数据库配置</span>
                 </div>
                 <div class="step" data-step="3">
                     <span class="step-number">3</span>
-                    <span class="step-label" data-i18n="init.step_admin">管理员账户</span>
+                    <span class="step-label" data-i18n="init.step_db_init">数据库初始化</span>
                 </div>
                 <div class="step" data-step="4">
                     <span class="step-number">4</span>
+                    <span class="step-label" data-i18n="init.step_admin">管理员账户</span>
+                </div>
+                <div class="step" data-step="5">
+                    <span class="step-number">5</span>
                     <span class="step-label" data-i18n="init.step_done">初始化完成</span>
                 </div>
             </div>
@@ -64,6 +68,47 @@
                 </div>
 
                 <div class="step-panel" data-step="2">
+                    <h2 data-i18n="init.db_config_title">数据库配置</h2>
+                    <!-- 显隐由 JS 切换 hidden 属性：展示连接测试 / 建库结果 -->
+                    <div id="db-config-status" class="status-container" hidden></div>
+                    <form id="db-config-form" class="init-form">
+                        <div class="form-group">
+                            <label for="db-type" data-i18n="init.db_type">数据库类型:</label>
+                            <!-- 下拉框为未来扩展预留，当前仅支持 PostgreSQL（默认选中） -->
+                            <select id="db-type" name="db_type">
+                                <option value="pgsql" selected>PostgreSQL</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="db-host" data-i18n="init.db_host">服务器地址:</label>
+                            <input type="text" id="db-host" name="host" placeholder="localhost" data-i18n-placeholder="init.db_host_placeholder" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="db-port" data-i18n="init.db_port">端口:</label>
+                            <input type="number" id="db-port" name="port" placeholder="5432" min="1" max="65535" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="db-name" data-i18n="init.db_name">数据库名:</label>
+                            <input type="text" id="db-name" name="database" placeholder="foims" data-i18n-placeholder="init.db_name_placeholder" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="db-username" data-i18n="init.db_username">用户名:</label>
+                            <input type="text" id="db-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="db-password" data-i18n="init.db_password">密码:</label>
+                            <input type="password" id="db-password" name="password" autocomplete="new-password" required>
+                        </div>
+                        <p class="help-text" data-i18n="init.db_config_help">「连接测试」验证通过后自动保存配置并进入下一步；目标数据库不存在时可先点击「创建数据库」。</p>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
+                            <button type="button" class="btn btn-primary" id="db-create-btn" data-i18n="init.db_create_btn">创建数据库</button>
+                            <button type="submit" class="btn btn-success" data-i18n="init.db_test_btn">连接测试</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="step-panel" data-step="3">
                     <h2 data-i18n="init.step_db_init">数据库初始化</h2>
                     <div id="db-status" class="status-container">
                         <div class="status-loading">
@@ -126,7 +171,7 @@
                     </form>
                 </div>
 
-                <div class="step-panel" data-step="3">
+                <div class="step-panel" data-step="4">
                     <h2 data-i18n="init.admin_create_title">管理员账户创建</h2>
                     <form id="admin-account-form" class="init-form">
                         <div class="form-group">
@@ -160,7 +205,7 @@
                     </form>
                 </div>
 
-                <div class="step-panel" data-step="4">
+                <div class="step-panel" data-step="5">
                     <div class="init-success">
                         <h2 data-i18n="init.done_title">初始化完成!</h2>
                         <div class="success-icon">✓</div>

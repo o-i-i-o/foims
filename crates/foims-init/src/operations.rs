@@ -5,7 +5,7 @@ use sqlx::PgPool;
 
 use crate::config::get_backup_dir;
 use crate::types::DatabaseConfig;
-use crate::utils::{PgPassFile, url_encode_component};
+use crate::utils::{PgPassFile, build_pg_url};
 
 /// 校验标识符（数据库名）：非空且仅允许字母、数字和下划线。
 pub fn validate_identifier(name: &str) -> Result<(), AppMessage> {
@@ -20,6 +20,114 @@ pub fn validate_identifier(name: &str) -> Result<(), AppMessage> {
 
 pub fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+/// 数据库连接失败分类：面向用户的处置指引不同，配置页据此反馈。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectFailureKind {
+    /// 服务器不可达：地址、端口或防火墙问题
+    Unreachable,
+    /// 认证被拒：用户不存在或密码错误
+    AuthRejected,
+    /// 目标数据库不存在或无权访问
+    DatabaseMissing,
+    /// 其他未归类错误
+    Other,
+}
+
+impl ConnectFailureKind {
+    /// 回传前端的消息 key（错误详情只入日志，I-7）
+    #[must_use]
+    pub fn message_key(self) -> &'static str {
+        match self {
+            ConnectFailureKind::Unreachable => "server.init.db.test.unreachable",
+            ConnectFailureKind::AuthRejected => "server.init.db.test.auth_failed",
+            ConnectFailureKind::DatabaseMissing => "server.init.db.test.database_missing",
+            ConnectFailureKind::Other => "server.init.db.test.failed",
+        }
+    }
+}
+
+/// 按错误文本归类连接失败（PostgreSQL 标准错误消息为英文，
+/// 以小写匹配保证大小写不敏感）。
+///
+/// 单独抽出文本分类便于用标准错误消息样本做单测：
+/// sqlx 的 Database 错误变体无法在测试中直接构造。
+fn classify_connect_text(text: &str) -> ConnectFailureKind {
+    let text = text.to_ascii_lowercase();
+    // "does not exist" 类：先区分角色（认证类）与数据库（库缺失类）
+    if text.contains("does not exist") {
+        if text.contains("database") {
+            return ConnectFailureKind::DatabaseMissing;
+        }
+        if text.contains("role") {
+            return ConnectFailureKind::AuthRejected;
+        }
+    }
+    // 认证类：密码错误 / SCRAM 握手失败 / pg_hba 拒绝
+    if text.contains("authentication") || text.contains("password") || text.contains("pg_hba") {
+        return ConnectFailureKind::AuthRejected;
+    }
+    // 不可达类：连接拒绝 / 超时 / DNS 解析失败 / 网络不可达 / 连接被重置
+    if text.contains("refused")
+        || text.contains("timeout")
+        || text.contains("timed out")
+        || text.contains("lookup")
+        || text.contains("unreachable")
+        || text.contains("reset")
+        || text.contains("broken pipe")
+    {
+        return ConnectFailureKind::Unreachable;
+    }
+    ConnectFailureKind::Other
+}
+
+/// 归类 sqlx 连接错误（连接串含凭据，调用方只可把分类结果回传客户端）
+#[must_use]
+pub fn classify_pg_connect_error(error: &sqlx::Error) -> ConnectFailureKind {
+    classify_connect_text(&error.to_string())
+}
+
+/// CREATE DATABASE 失败分类
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateDbFailureKind {
+    /// 当前用户无 CREATEDB 权限
+    NoPrivilege,
+    /// 目标库已被并发创建（查询时不存在、创建时已存在）
+    AlreadyExists,
+    Other,
+}
+
+impl CreateDbFailureKind {
+    /// 回传前端的消息 key
+    #[must_use]
+    pub fn message_key(self) -> &'static str {
+        match self {
+            CreateDbFailureKind::NoPrivilege => "server.init.db.provision.no_privilege",
+            CreateDbFailureKind::AlreadyExists => "server.init.db.provision.exists",
+            CreateDbFailureKind::Other => "server.init.db.create_failed",
+        }
+    }
+}
+
+#[must_use]
+pub fn classify_create_db_error(error: &sqlx::Error) -> CreateDbFailureKind {
+    let text = error.to_string().to_ascii_lowercase();
+    if text.contains("permission denied") || text.contains("not permitted") {
+        return CreateDbFailureKind::NoPrivilege;
+    }
+    if text.contains("already exists") {
+        return CreateDbFailureKind::AlreadyExists;
+    }
+    CreateDbFailureKind::Other
+}
+
+/// create_database 的结果：区分「本次新建」与「已存在跳过」，
+/// 供配置页向用户反馈不同文案
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateOutcome {
+    Created,
+    AlreadyExists,
 }
 
 pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessage> {
@@ -140,15 +248,7 @@ pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessa
 pub async fn drop_database(config: &DatabaseConfig) -> Result<(), AppMessage> {
     validate_identifier(&config.database)?;
 
-    let postgres_url = format!(
-        "postgres://{}:{}@{}:{}/postgres",
-        url_encode_component(&config.username),
-        url_encode_component(&config.password),
-        config.host,
-        config.port
-    );
-
-    let postgres_pool = PgPool::connect(&postgres_url)
+    let postgres_pool = PgPool::connect(&build_pg_url(config, "postgres"))
         .await
         .map_err(|e| msg("server.init.db.pgsql_connect_failed").with("error", e))?;
 
@@ -178,20 +278,21 @@ pub async fn drop_database(config: &DatabaseConfig) -> Result<(), AppMessage> {
     Ok(())
 }
 
-pub async fn create_database(config: &DatabaseConfig) -> Result<(), AppMessage> {
+/// 创建目标数据库（不触碰实例上的其他数据库）。
+///
+/// - 已存在时幂等跳过（`AlreadyExists`）；
+/// - 连接 postgres 系统库失败按 [`classify_pg_connect_error`] 分类，
+///   CREATE DATABASE 失败按 [`classify_create_db_error`] 分类，
+///   配页页据此给出精确反馈。
+pub async fn create_database(config: &DatabaseConfig) -> Result<CreateOutcome, AppMessage> {
     validate_identifier(&config.database)?;
 
-    let postgres_url = format!(
-        "postgres://{}:{}@{}:{}/postgres",
-        url_encode_component(&config.username),
-        url_encode_component(&config.password),
-        config.host,
-        config.port
-    );
-
-    let postgres_pool = PgPool::connect(&postgres_url)
+    let postgres_pool = PgPool::connect(&build_pg_url(config, "postgres"))
         .await
-        .map_err(|e| msg("server.init.db.pgsql_connect_failed").with("error", e))?;
+        .map_err(|e| {
+            let kind = classify_pg_connect_error(&e);
+            msg(kind.message_key()).with("error", e)
+        })?;
 
     let db_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
@@ -203,7 +304,7 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<(), AppMessage> 
     if db_exists {
         foims_common::log_info!("log.init.db.exists_skip_create", name = config.database);
         postgres_pool.close().await;
-        return Ok(());
+        return Ok(CreateOutcome::AlreadyExists);
     }
 
     sqlx::query(sqlx::AssertSqlSafe(format!(
@@ -212,11 +313,19 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<(), AppMessage> 
     )))
     .execute(&postgres_pool)
     .await
-    .map_err(|e| msg("server.init.db.create_failed").with("error", e))?;
+    .map_err(|e| {
+        // AlreadyExists 是「查询时不存在、创建时被并发创建」的竞态：
+        // 幂等语义下与 AlreadyExists 等价
+        let kind = classify_create_db_error(&e);
+        if kind == CreateDbFailureKind::AlreadyExists {
+            foims_common::log_warn!("log.init.db.create_race_exists", error = e);
+        }
+        msg(kind.message_key()).with("error", e)
+    })?;
 
     postgres_pool.close().await;
     foims_common::log_info!("log.init.db.created", name = config.database);
-    Ok(())
+    Ok(CreateOutcome::Created)
 }
 
 pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
@@ -327,5 +436,132 @@ mod tests {
     fn 标识符引用_内部双引号翻倍转义() {
         assert_eq!(quote_ident("a\"b"), "\"a\"\"b\"");
         assert_eq!(quote_ident("\""), "\"\"\"\"");
+    }
+
+    /// 连接错误文本按 PostgreSQL 标准消息样本归类
+    #[test]
+    fn 连接错误分类_标准消息样本() {
+        // 认证类：密码错误 / 角色不存在 / pg_hba 拒绝
+        for text in [
+            "error returned from database: password authentication failed for user \"foims\"",
+            "FATAL: password authentication failed for user \"foims\"",
+            "FATAL: role \"foims\" does not exist",
+            "FATAL: no pg_hba.conf entry for host \"127.0.0.1\", user \"foims\", database \"postgres\"",
+        ] {
+            assert_eq!(
+                classify_connect_text(text),
+                ConnectFailureKind::AuthRejected,
+                "文本: {text}"
+            );
+        }
+
+        // 库缺失类
+        for text in [
+            "FATAL: database \"foims\" does not exist",
+            "error returned from database: database \"foims_prod\" does not exist",
+        ] {
+            assert_eq!(
+                classify_connect_text(text),
+                ConnectFailureKind::DatabaseMissing,
+                "文本: {text}"
+            );
+        }
+
+        // 不可达类：拒绝 / 超时 / DNS / 网络不可达 / 连接重置
+        for text in [
+            "Connection refused (os error 111)",
+            "io error: connection reset by peer",
+            "timeout: connection timed out",
+            "failed to lookup address information: Name or service not known",
+            "Network is unreachable (os error 101)",
+            "broken pipe",
+        ] {
+            assert_eq!(
+                classify_connect_text(text),
+                ConnectFailureKind::Unreachable,
+                "文本: {text}"
+            );
+        }
+
+        // 未归类
+        assert_eq!(
+            classify_connect_text("some unexpected failure"),
+            ConnectFailureKind::Other
+        );
+
+        // 大小写不敏感
+        assert_eq!(
+            classify_connect_text("FATAL: PASSWORD AUTHENTICATION FAILED"),
+            ConnectFailureKind::AuthRejected
+        );
+    }
+
+    /// sqlx::Error::Io 经 classify_pg_connect_error 同样正确归类
+    #[test]
+    fn 连接错误分类_io错误归类不可达() {
+        let io_err = std::io::Error::new(
+            std::io::ErrorKind::ConnectionRefused,
+            "Connection refused (os error 111)",
+        );
+        assert_eq!(
+            classify_pg_connect_error(&sqlx::Error::Io(io_err)),
+            ConnectFailureKind::Unreachable
+        );
+    }
+
+    /// 各分类对应固定的回传消息 key
+    #[test]
+    fn 连接错误分类_消息key映射() {
+        assert_eq!(
+            ConnectFailureKind::Unreachable.message_key(),
+            "server.init.db.test.unreachable"
+        );
+        assert_eq!(
+            ConnectFailureKind::AuthRejected.message_key(),
+            "server.init.db.test.auth_failed"
+        );
+        assert_eq!(
+            ConnectFailureKind::DatabaseMissing.message_key(),
+            "server.init.db.test.database_missing"
+        );
+        assert_eq!(
+            ConnectFailureKind::Other.message_key(),
+            "server.init.db.test.failed"
+        );
+    }
+
+    /// CREATE DATABASE 失败文本按标准消息样本归类
+    #[test]
+    fn 建库错误分类_标准消息样本() {
+        let io_err = std::io::Error::other("ERROR: permission denied to create database");
+        assert_eq!(
+            classify_create_db_error(&sqlx::Error::Io(io_err)),
+            CreateDbFailureKind::NoPrivilege
+        );
+
+        let io_err = std::io::Error::other("ERROR: database \"foims\" already exists");
+        assert_eq!(
+            classify_create_db_error(&sqlx::Error::Io(io_err)),
+            CreateDbFailureKind::AlreadyExists
+        );
+
+        let io_err = std::io::Error::other("ERROR: source database is being accessed");
+        assert_eq!(
+            classify_create_db_error(&sqlx::Error::Io(io_err)),
+            CreateDbFailureKind::Other
+        );
+
+        assert_eq!(
+            CreateDbFailureKind::NoPrivilege.message_key(),
+            "server.init.db.provision.no_privilege"
+        );
+        assert_eq!(
+            CreateDbFailureKind::AlreadyExists.message_key(),
+            "server.init.db.provision.exists"
+        );
+        assert_eq!(
+            CreateDbFailureKind::Other.message_key(),
+            "server.init.db.create_failed"
+        );
     }
 }

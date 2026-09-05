@@ -14,8 +14,8 @@ health_check_interval_secs = 30
 
 [server]
 # 兼容性字段（保留用于公共 URL 解析，不再用于实际监听）
-host = "127.0.0.1"
-host_ipv6 = ""
+host = "0.0.0.0"
+host_ipv6 = "::"
 public_url = "localhost/"
 # 页面无操作超时时间（分钟）：用户无操作超过此时间后强制重新登录
 # 建议设置为 30-60 分钟，应大于 access_token_expiry
@@ -54,7 +54,7 @@ access_token_expiry = "15m"
 refresh_token_expiry = "7d"
 
 [init]
-enabled = false
+enabled = true
 
 [i18n]
 # 控制台日志语言（缺省 "en"），取值须属于 supported_languages

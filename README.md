@@ -76,17 +76,15 @@ cp config.toml.example config.toml   # 开发环境用当前目录；生产环�
 
 ### 2. 准备数据库
 
-使用初始化脚本（自动创建用户与数据库）：
+保持 `config.toml` 中 `[init] enabled = true`，首次启动后访问初始化向导：
+完成 PostgreSQL 检查后在「数据库配置」页填写连接信息，可点击「创建数据库」
+自动建库（要求该用户已存在且具有 CREATEDB 权限），再通过「连接测试」进入
+后续流程。
 
-```bash
-PG_PASSWORD=your_password ./scripts/init-pgsql.sh
-```
-
-或手动执行：
+也可跳过页面建库，手动在 PostgreSQL 中预先创建（此后连接测试直接通过）：
 
 ```sql
-CREATE USER foims WITH PASSWORD 'your_password';
-CREATE DATABASE foims OWNER foims;
+CREATE USER foims WITH PASSWORD 'your_password' CREATEDB;
 ```
 
 ### 3. 构建与运行（开发调试）

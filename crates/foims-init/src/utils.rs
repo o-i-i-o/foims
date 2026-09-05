@@ -17,6 +17,20 @@ pub fn url_encode_component(s: &str) -> String {
     result
 }
 
+/// 构造 PostgreSQL 连接串：用户名/密码/库名统一 URL 编码，
+/// 含 @ : / 等字符时裸拼会导致误报（I-8）；host 保持原样以支持
+/// IPv6 字面量（[::1] 形式，与既有各探测端点口径一致）
+pub fn build_pg_url(config: &crate::types::DatabaseConfig, database: &str) -> String {
+    format!(
+        "postgres://{}:{}@{}:{}/{}",
+        url_encode_component(&config.username),
+        url_encode_component(&config.password),
+        config.host,
+        config.port,
+        url_encode_component(database)
+    )
+}
+
 /// pgpass 临时文件：复用 foims-common 的唯一定义
 pub use foims_common::pgpass::PgPassFile;
 
@@ -67,6 +81,32 @@ mod tests {
     fn url编码_多字节字符按utf8字节编码() {
         // “中文” 的 UTF-8 字节为 E4 B8 AD E6 96 87
         assert_eq!(url_encode_component("中文"), "%E4%B8%AD%E6%96%87");
+    }
+
+    #[test]
+    fn 连接串构造_特殊字符凭据被编码() {
+        let cfg = crate::types::DatabaseConfig {
+            host: "127.0.0.1".to_string(),
+            port: 5432,
+            database: "ignored".to_string(),
+            username: "u@ser".to_string(),
+            password: "p:ss/w".to_string(),
+            max_connections: 10,
+            min_connections: 5,
+            acquire_timeout_secs: 15,
+            idle_timeout_secs: 60,
+            max_lifetime_secs: 1800,
+            query_timeout_secs: 30,
+            health_check_interval_secs: 30,
+        };
+        assert_eq!(
+            build_pg_url(&cfg, "postgres"),
+            "postgres://u%40ser:p%3Ass%2Fw@127.0.0.1:5432/postgres"
+        );
+        assert_eq!(
+            build_pg_url(&cfg, "my/db"),
+            "postgres://u%40ser:p%3Ass%2Fw@127.0.0.1:5432/my%2Fdb"
+        );
     }
 
     #[test]

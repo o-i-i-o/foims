@@ -3,6 +3,7 @@
  *
  * 封装初始化过程中的全部网络请求与流程编排：
  *   - PostgreSQL 检查
+ *   - 数据库配置（连接测试充当下一步 / 创建数据库）
  *   - 数据库状态检查
  *   - 数据库创建 / 导入
  *   - 管理员账户创建
@@ -112,7 +113,7 @@ export const checkPostgreSQL = async () => {
   }
 };
 
-/** 检查数据库连接与表结构状态，渲染第二步状态并控制「下一步」按钮。 */
+/** 检查数据库连接与表结构状态，渲染第三步状态并控制「下一步」按钮。 */
 export const checkDatabaseStatus = async () => {
   showLoading();
 
@@ -129,7 +130,7 @@ export const checkDatabaseStatus = async () => {
     if (result.success && result.data) {
       const dbStatus = result.data;
       const dbStatusElement = document.getElementById("db-status");
-      const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+      const nextButton = document.querySelector('.step-panel[data-step="3"] .btn-success');
       if (!dbStatusElement || !nextButton) {
         return;
       }
@@ -182,11 +183,166 @@ export const checkDatabaseStatus = async () => {
   }
 };
 
-/** 第二步表单提交：根据初始化方式新建或导入数据库。 */
+/**
+ * 渲染数据库配置页（第 2 步）的状态反馈块。
+ * @param {"success"|"error"} kind 状态类别
+ * @param {string} titleKey 标题文案键
+ * @param {string} detail 详述文案（已翻译）
+ */
+const renderDbConfigStatus = (kind, titleKey, detail) => {
+  const statusElement = document.getElementById("db-config-status");
+  if (!statusElement) {
+    return;
+  }
+  const icon = kind === "success" ? "✓" : "✗";
+  // 失败时附加通用操作指引：分类文案已含指引的（如库不存在）重复展示无害，
+  // 未归类的失败（Other）也能得到下一步提示
+  const hint = kind === "error" ? `<p>${t("init.db_test_fail_hint")}</p>` : "";
+  statusElement.innerHTML = `
+        <div class="status-${kind}">${icon}</div>
+        <h3>${t(titleKey)}</h3>
+        <p>${escapeHtml(detail)}</p>
+        ${hint}
+    `;
+  statusElement.className = "status-container";
+  statusElement.classList.add(`status-${kind}`);
+  statusElement.hidden = false;
+};
+
+/** 从数据库配置表单收集请求体；字段缺失时返回 null 并提示。 */
+const collectDbConfigPayload = () => {
+  const form = document.getElementById("db-config-form");
+  if (!form) {
+    return null;
+  }
+  const formData = new FormData(form);
+  const payload = {
+    type: "pgsql",
+    host: (formData.get("host") || "").toString().trim(),
+    port: (formData.get("port") || "").toString().trim(),
+    database: (formData.get("database") || "").toString().trim(),
+    username: (formData.get("username") || "").toString().trim(),
+    password: (formData.get("password") || "").toString()
+  };
+  if (
+    !payload.host ||
+    !payload.port ||
+    !payload.database ||
+    !payload.username ||
+    !payload.password
+  ) {
+    showError(t("init.db_fill_required"));
+    return null;
+  }
+  return payload;
+};
+
+/** 数据库配置页在途标志：连接测试 / 建库请求期间重复提交直接忽略 */
+let dbConfigSubmitting = false;
+
+/**
+ * 第 2 步「连接测试」：充当下一步按钮。
+ * 成功 -> 后端已写入配置并切换连接，进入第 3 步（表创建流程）；
+ * 失败 -> 按错误分类提示「检查输入或点击创建数据库」。
+ */
+export const handleDbConfigSubmit = async (e) => {
+  e.preventDefault();
+  if (dbConfigSubmitting) {
+    return;
+  }
+
+  const payload = collectDbConfigPayload();
+  if (!payload) {
+    return;
+  }
+
+  dbConfigSubmitting = true;
+  showLoading();
+
+  try {
+    const response = await fetch("/api/init/db/test-connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await parseJsonResponse(response);
+    hideLoading();
+
+    if (result.success) {
+      showToast(t("init.db_test_pass"));
+      goToStep(3);
+      checkDatabaseStatus();
+    } else {
+      renderDbConfigStatus(
+        "error",
+        "init.db_test_fail_title",
+        result.message || t(T_KEY_UNKNOWN_ERROR)
+      );
+    }
+  } catch (error) {
+    hideLoading();
+    showError(`${t("init.network_error")}: ${error.message}`);
+  } finally {
+    dbConfigSubmitting = false;
+  }
+};
+
+/**
+ * 第 2 步「创建数据库」：按页面输入以幂等方式创建目标数据库。
+ * 成功（含已存在）-> 提示点击「连接测试」进入下一流程；
+ * 失败 -> 按错误分类反馈（不可达 / 认证失败 / 无权限等）。
+ */
+export const handleDbCreate = async () => {
+  if (dbConfigSubmitting) {
+    return;
+  }
+
+  const payload = collectDbConfigPayload();
+  if (!payload) {
+    return;
+  }
+
+  dbConfigSubmitting = true;
+  showLoading();
+
+  try {
+    const response = await fetch("/api/init/db/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await parseJsonResponse(response);
+    hideLoading();
+
+    if (result.success) {
+      const created = result.data ? result.data.created !== false : true;
+      renderDbConfigStatus(
+        "success",
+        created ? "init.db_create_success" : "init.db_create_existed",
+        t("init.db_create_next_hint")
+      );
+    } else {
+      renderDbConfigStatus(
+        "error",
+        "init.db_create_fail_title",
+        result.message || t(T_KEY_UNKNOWN_ERROR)
+      );
+    }
+  } catch (error) {
+    hideLoading();
+    showError(`${t("init.network_error")}: ${error.message}`);
+  } finally {
+    dbConfigSubmitting = false;
+  }
+};
+
+/** 第三步表单提交：根据初始化方式新建或导入数据库。 */
 export const handleInitModeSubmit = async (e) => {
   e.preventDefault();
 
-  const nextButton = document.querySelector('.step-panel[data-step="2"] .btn-success');
+  const nextButton = document.querySelector('.step-panel[data-step="3"] .btn-success');
   const verificationInput = document.getElementById("verification-step2");
   if (!nextButton || !verificationInput) {
     return;
@@ -230,7 +386,7 @@ export const handleInitModeSubmit = async (e) => {
           }
           showToast(message);
           setTimeout(() => {
-            goToStep(3);
+            goToStep(4);
           }, 1000);
         } else {
           showError(`${t("init.operation_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
@@ -257,7 +413,7 @@ export const handleInitModeSubmit = async (e) => {
       }
       showToast(message);
       setTimeout(() => {
-        goToStep(3);
+        goToStep(4);
       }, 1000);
     } else {
       showError(`${t("init.operation_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
@@ -273,7 +429,7 @@ export const handleInitModeSubmit = async (e) => {
 // 管理员账户提交在途标志：请求期间重复提交直接忽略（防双击重复创建）
 let adminAccountSubmitting = false;
 
-/** 第三步表单提交：创建管理员账户并触发系统重启。 */
+/** 第四步表单提交：创建管理员账户并触发系统重启。 */
 export const handleAdminAccountSubmit = async (e) => {
   e.preventDefault();
   if (adminAccountSubmitting) {
@@ -313,7 +469,7 @@ export const handleAdminAccountSubmit = async (e) => {
     hideLoading();
 
     if (result.success) {
-      goToStep(4);
+      goToStep(5);
       setTimeout(async () => {
         // 初始化已完成：重启为纯 systemd 重启；后端检测到未注册单元时
         // 不执行重启（restart_mode = manual），前端切换为手动重启指引页

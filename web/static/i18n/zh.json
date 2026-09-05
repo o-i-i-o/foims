@@ -1456,7 +1456,27 @@
     "create_db_li_tables": "自动创建所有必需的数据表",
     "create_db_li_schema": "建立正确的表结构和关系",
     "create_db_li_backup": "如数据库已有数据，将自动备份后重建",
-    "import_db_desc": "从 SQL 备份文件恢复数据库，适用于数据迁移或恢复。"
+    "import_db_desc": "从 SQL 备份文件恢复数据库，适用于数据迁移或恢复。",
+    "step_db_config": "数据库配置",
+    "db_config_title": "数据库配置",
+    "db_type": "数据库类型:",
+    "db_host": "服务器地址:",
+    "db_host_placeholder": "localhost",
+    "db_port": "端口:",
+    "db_name": "数据库名:",
+    "db_name_placeholder": "foims",
+    "db_username": "用户名:",
+    "db_password": "密码:",
+    "db_create_btn": "创建数据库",
+    "db_test_btn": "连接测试",
+    "db_config_help": "「连接测试」验证通过后自动保存配置并进入下一步；目标数据库不存在时可先点击「创建数据库」。",
+    "db_fill_required": "请完整填写数据库连接信息",
+    "db_test_pass": "数据库连接成功，配置已保存",
+    "db_test_fail_title": "连接测试失败",
+    "db_create_success": "数据库创建成功",
+    "db_create_existed": "数据库已存在",
+    "db_create_next_hint": "请点击「连接测试」进入下一步。",
+    "db_create_fail_title": "创建数据库失败"
   },
   "server": {
     "auth": {
@@ -1819,7 +1839,20 @@
         "temp_dir_create_failed": "创建临时目录失败",
         "terminate_failed": "断开数据库连接失败",
         "verification_field_too_large": "验证码字段超过10MB限制",
-        "write_file_failed": "写入文件失败"
+        "write_file_failed": "写入文件失败",
+        "config_write_failed": "数据库配置写入配置文件失败",
+        "test": {
+          "passed": "数据库连接成功",
+          "failed": "数据库连接测试失败",
+          "unreachable": "无法连接数据库服务器，请检查地址、端口与防火墙设置",
+          "auth_failed": "数据库认证失败：用户不存在或密码错误",
+          "database_missing": "目标数据库不存在或无权访问，请先点击「创建数据库」"
+        },
+        "provision": {
+          "created": "数据库创建成功，请点击「连接测试」进入下一步",
+          "exists": "数据库已存在，无需重复创建，请点击「连接测试」进入下一步",
+          "no_privilege": "当前用户无创建数据库权限（需 CREATEDB），请由数据库管理员授权或手动创建"
+        }
       },
       "disabled": "系统初始化已在配置中禁用",
       "password_hash_failed": "密码哈希错误",
@@ -1843,7 +1876,14 @@
         "lock_failed": "无法访问验证码",
         "missing": "缺少验证码"
       },
-      "pgsql_connect_failed": "连接PostgreSQL失败"
+      "pgsql_connect_failed": "连接PostgreSQL失败",
+      "dbcfg": {
+        "type_unsupported": "暂不支持该数据库类型，当前仅支持 PostgreSQL",
+        "host_invalid": "服务器地址不能为空且长度不超过 255",
+        "port_invalid": "端口必须为 1-65535 之间的数字",
+        "username_invalid": "用户名不能为空且长度不超过 63",
+        "password_invalid": "密码不能为空且长度不超过 256"
+      }
     },
     "ip": {
       "already_assigned": "IP地址已被分配，请重试",

@@ -4,20 +4,14 @@ use foims_common::{AppMessage, msg};
 use sqlx::PgPool;
 
 use crate::types::DatabaseConfig;
-use crate::utils::url_encode_component;
+use crate::utils::build_pg_url;
 
 use crate::operations::{quote_ident, validate_identifier};
 
 pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPool, AppMessage> {
     validate_identifier(&config.database)?;
 
-    let postgres_url = format!(
-        "postgres://{}:{}@{}:{}/postgres",
-        url_encode_component(&config.username),
-        url_encode_component(&config.password),
-        config.host,
-        config.port
-    );
+    let postgres_url = build_pg_url(config, "postgres");
 
     let postgres_pool = PgPool::connect(&postgres_url)
         .await
@@ -44,14 +38,7 @@ pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPoo
 
     postgres_pool.close().await;
 
-    let db_url = format!(
-        "postgres://{}:{}@{}:{}/{}",
-        url_encode_component(&config.username),
-        url_encode_component(&config.password),
-        config.host,
-        config.port,
-        url_encode_component(&config.database)
-    );
+    let db_url = build_pg_url(config, &config.database);
 
     let pool = PgPool::connect(&db_url)
         .await

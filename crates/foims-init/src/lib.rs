@@ -20,13 +20,13 @@ pub use context::InitContext;
 pub use error::InitError;
 
 pub use types::{
-    BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, DatabaseConfig, InitRequest,
-    VERIFICATION_CODE_EXPIRY_SECS, VerificationCode,
+    BCRYPT_COST, CreateDatabaseRequest, CreateDatabaseResponse, DatabaseConfig,
+    DatabaseSetupRequest, InitRequest, VERIFICATION_CODE_EXPIRY_SECS, VerificationCode,
 };
 
 pub use verification::{get_verification_code, verify_code};
 
-pub use config::{get_backup_dir, update_config_enabled};
+pub use config::{get_backup_dir, update_config_database, update_config_enabled};
 
 pub use check::{
     check_has_data, check_required_tables_exist, get_required_tables, get_table_columns,
@@ -35,13 +35,16 @@ pub use check::{
 
 pub use connection::ensure_database_and_schema;
 
-pub use operations::{backup_database, create_database, drop_all_tables, drop_database};
+pub use operations::{
+    CreateOutcome, backup_database, create_database, drop_all_tables, drop_database,
+};
 
 pub use schema::create_tables;
 
 pub use handlers::{
     check_db_status, check_init_status, check_pgsql, clear_database, create_database_api,
-    import_database_from_file, init_db, init_system, restart_program,
+    import_database_from_file, init_db, init_system, provision_database, restart_program,
+    test_db_connection,
 };
 
 /// 统一 API 响应结构（由 foims-common 提供，保持原有路径兼容）。

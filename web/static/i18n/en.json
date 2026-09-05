@@ -1456,7 +1456,27 @@
     "create_db_li_tables": "Automatically create all required tables",
     "create_db_li_schema": "Establish correct schema and relations",
     "create_db_li_backup": "Existing data will be backed up before rebuild",
-    "import_db_desc": "Restore database from a SQL backup file, suitable for migration or recovery."
+    "import_db_desc": "Restore database from a SQL backup file, suitable for migration or recovery.",
+    "step_db_config": "Database Configuration",
+    "db_config_title": "Database Configuration",
+    "db_type": "Database Type:",
+    "db_host": "Host:",
+    "db_host_placeholder": "localhost",
+    "db_port": "Port:",
+    "db_name": "Database Name:",
+    "db_name_placeholder": "foims",
+    "db_username": "Username:",
+    "db_password": "Password:",
+    "db_create_btn": "Create Database",
+    "db_test_btn": "Test Connection",
+    "db_config_help": "Once \"Test Connection\" passes, the settings are saved automatically and you can proceed; if the target database does not exist, click \"Create Database\" first.",
+    "db_fill_required": "Please fill in all database connection fields",
+    "db_test_pass": "Database connection succeeded, settings saved",
+    "db_test_fail_title": "Connection Test Failed",
+    "db_create_success": "Database created successfully",
+    "db_create_existed": "Database already exists",
+    "db_create_next_hint": "Click \"Test Connection\" to continue.",
+    "db_create_fail_title": "Database Creation Failed"
   },
   "server": {
     "auth": {
@@ -1819,7 +1839,20 @@
         "temp_dir_create_failed": "Failed to create the temporary directory",
         "terminate_failed": "Failed to terminate database connections",
         "verification_field_too_large": "The verification code field exceeds the 10MB limit",
-        "write_file_failed": "Failed to write the file"
+        "write_file_failed": "Failed to write the file",
+        "config_write_failed": "Failed to write database settings to the config file",
+        "test": {
+          "passed": "Database connection succeeded",
+          "failed": "Database connection test failed",
+          "unreachable": "Cannot reach the database server, please check the address, port and firewall",
+          "auth_failed": "Database authentication failed: user does not exist or wrong password",
+          "database_missing": "Target database does not exist or access is denied, please click \"Create Database\" first"
+        },
+        "provision": {
+          "created": "Database created successfully, click \"Test Connection\" to continue",
+          "exists": "Database already exists, no need to create it again, click \"Test Connection\" to continue",
+          "no_privilege": "The current user has no permission to create databases (CREATEDB required), ask the database administrator to grant it or create it manually"
+        }
       },
       "disabled": "System initialization is disabled in the configuration",
       "password_hash_failed": "Password hashing failed",
@@ -1843,7 +1876,14 @@
         "lock_failed": "Unable to access the verification code",
         "missing": "Verification code is missing"
       },
-      "pgsql_connect_failed": "Failed to connect to PostgreSQL"
+      "pgsql_connect_failed": "Failed to connect to PostgreSQL",
+      "dbcfg": {
+        "type_unsupported": "Unsupported database type, only PostgreSQL is supported currently",
+        "host_invalid": "Host is required and must be at most 255 characters",
+        "port_invalid": "Port must be a number between 1 and 65535",
+        "username_invalid": "Username is required and must be at most 63 characters",
+        "password_invalid": "Password is required and must be at most 256 characters"
+      }
     },
     "ip": {
       "already_assigned": "IP address already assigned, please retry",
