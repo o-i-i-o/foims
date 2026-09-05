@@ -13,6 +13,10 @@
 #     仓库/开发机的本地 config.toml 可能含真实数据库连接信息，不进包；
 #     数据库连接要素由安装后的初始化向导在页面填写并回写配置文件；
 #     JWT 密钥由本脚本生成随机 32 字符替换示例占位符
+#   - nginx 生产配置安装到 /etc/nginx/conf.d/foims.conf（conffile），
+#     Depends 强制 nginx >= 1.28.1（h2c 上游与 HTTP/3）；
+#     TLS 证书由 postinst 用 openssl 在安装时自签生成（不预置于包内，
+#     避免证书随时间过期；已存在且未过期则跳过）
 
 set -euo pipefail
 
@@ -70,6 +74,7 @@ mkdir -p "$DEBPAK_DIR/usr/bin"
 mkdir -p "$DEBPAK_DIR/opt/foims"
 mkdir -p "$DEBPAK_DIR/var/log/foims"
 mkdir -p "$DEBPAK_DIR/etc/foims"
+mkdir -p "$DEBPAK_DIR/etc/nginx/conf.d"
 mkdir -p "$DEBPAK_DIR/usr/lib/systemd/system"
 mkdir -p "$DEBPAK_DIR/usr/share/doc/foims"
 mkdir -p "$DEBPAK_DIR/usr/share/man/man1"
@@ -127,6 +132,17 @@ if grep -q "CHANGE_ME_TO_RANDOM_32_PLUS_CHARS" "$DEBPAK_DIR/etc/foims/config.tom
     exit 1
 fi
 chmod 640 "$DEBPAK_DIR/etc/foims/config.toml"
+
+# nginx 配置安装到 /etc/nginx/conf.d/（conffile，升级时 dpkg 保留本地修改）。
+# TLS 证书路径指向 /etc/ssl/foims-certs/default_cert.*，由 postinst 用
+# openssl 在安装时自签生成（安装时生成而非打包时预置，避免包内证书
+# 随时间过期）
+if [ ! -f "deploy/nginx/foims.conf" ]; then
+    echo "错误：缺少 deploy/nginx/foims.conf" >&2
+    exit 1
+fi
+cp deploy/nginx/foims.conf "$DEBPAK_DIR/etc/nginx/conf.d/foims.conf"
+chmod 644 "$DEBPAK_DIR/etc/nginx/conf.d/foims.conf"
 
 # 复制部署说明（nginx/fail2ban 配置与服务文件供运维参考）
 if [ -d "deploy" ]; then
@@ -189,9 +205,8 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: oi-io <boss@oi-io.cc>
 Installed-Size: 0
-Depends: libc6 (>= 2.31), adduser
-Recommends: postgresql
-Suggests: nginx
+Depends: libc6 (>= 2.31), adduser, nginx (>= 1.28.1), postgresql (>= 15)
+Recommends: fail2ban
 Homepage: https://github.com/example/foims
 Description: Organization IT Information Management System
  FOIMS - Organization IT Information Management System based on Rust
@@ -246,10 +261,45 @@ case "$1" in
         install -d -o foims -g foims -m 755 /opt/foims
         install -d -o foims -g foims -m 755 /etc/foims
 
+        # 证书目录：服务用户 foims 需在运行期（证书管理页）写入生成，
+        # 750 仅属组可见；nginx master 以 root 读取私钥不受影响
+        install -d -o foims -g foims -m 750 /etc/ssl/foims-ca
+        install -d -o foims -g foims -m 750 /etc/ssl/foims-certs
+
         # 设置配置文件权限
         if [ -f /etc/foims/config.toml ]; then
             chown foims:foims /etc/foims/config.toml
             chmod 640 /etc/foims/config.toml
+        fi
+
+        # nginx 默认证书：已存在且剩余 ≥1 天（checkend 86400 秒）则幂等跳过，
+        # 否则安装时自签生成（安装时生成而非打包预置，避免包内证书随时间
+        # 过期）。openssl 失败时 set -e 使安装失败：HTTPS 栈无证书不可用，
+        # 静默降级会掩盖问题
+        FOIMS_CERT=/etc/ssl/foims-certs/default_cert.pem
+        FOIMS_KEY=/etc/ssl/foims-certs/default_cert.key
+        if [ -f "$FOIMS_CERT" ] && [ -f "$FOIMS_KEY" ] \
+            && openssl x509 -checkend 86400 -noout -in "$FOIMS_CERT" >/dev/null 2>&1; then
+            echo "nginx 默认证书已存在且有效，跳过生成"
+        else
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+                -keyout "$FOIMS_KEY" -out "$FOIMS_CERT" -days 3650 \
+                -subj "/O=FOIMS/CN=$(hostname)" \
+                -addext "subjectAltName=DNS:$(hostname),DNS:localhost,IP:127.0.0.1,IP:::1"
+            chmod 644 "$FOIMS_CERT"
+            chmod 600 "$FOIMS_KEY"
+        fi
+
+        # nginx 配置校验并重载：配置错误同样使安装失败（conffile 已由 dpkg
+        # 就位；本地管理员删除该文件时跳过校验，尊重现场裁剪）
+        if [ -f /etc/nginx/conf.d/foims.conf ] && command -v nginx >/dev/null 2>&1; then
+            nginx -t || {
+                echo "错误：nginx 配置校验失败（/etc/nginx/conf.d/foims.conf）" >&2
+                exit 1
+            }
+            if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx; then
+                systemctl reload nginx || true
+            fi
         fi
 
         # 重载 systemd 并启用服务
@@ -314,6 +364,9 @@ case "$1" in
         # 删除数据目录
         rm -rf /opt/foims/*
 
+        # 删除证书物料（站点根 CA 与全部生成/导入证书，purge 语义为彻底清除）
+        rm -rf /etc/ssl/foims-ca /etc/ssl/foims-certs /etc/ssl/foims-import-certs /etc/ssl/foims-import-cas
+
         # 删除用户
         if getent passwd foims > /dev/null; then
             deluser --system foims || true
@@ -336,6 +389,7 @@ echo ""
 echo "13. 创建 conffiles 文件..."
 cat > "$DEBPAK_DIR/DEBIAN/conffiles" << 'EOF'
 /etc/foims/config.toml
+/etc/nginx/conf.d/foims.conf
 EOF
 
 echo ""
@@ -416,6 +470,13 @@ Show version information and exit.
 .I /etc/foims/config.toml
 Configuration file.
 .TP
+.I /etc/nginx/conf.d/foims.conf
+nginx reverse proxy configuration (installed as a conffile).
+.TP
+.I /etc/ssl/foims-certs/
+TLS certificates managed by the built-in certificate manager
+(default_cert.pem/.key is generated at install time by the postinst).
+.TP
 .I /opt/foims/
 Application resources directory.
 .TP
@@ -476,6 +537,8 @@ chmod 755 "$DEBPAK_DIR/var/log"
 chmod 755 "$DEBPAK_DIR/var/log/foims"
 chmod 755 "$DEBPAK_DIR/etc"
 chmod 755 "$DEBPAK_DIR/etc/foims"
+chmod 755 "$DEBPAK_DIR/etc/nginx"
+chmod 755 "$DEBPAK_DIR/etc/nginx/conf.d"
 chmod 755 "$DEBPAK_DIR/usr"
 chmod 755 "$DEBPAK_DIR/usr/lib"
 chmod 755 "$DEBPAK_DIR/usr/lib/systemd"
