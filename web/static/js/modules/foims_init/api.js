@@ -17,6 +17,10 @@ import { goToStep, showError, showLoading, hideLoading, showManualRestartGuide }
 
 // 各检查步骤共用的兜底错误文案键
 const T_KEY_UNKNOWN_ERROR = "init.unknown_error";
+const T_KEY_NETWORK_ERROR = "init.network_error";
+
+// 全部 fetch 共用的 JSON 请求头（本文件 8 处请求，抽常量避免字面量重复）
+const JSON_HEADERS = { "Content-Type": "application/json" };
 
 /**
  * 翻译服务端返回的 error 字段（后端约定为 i18n key）。
@@ -65,7 +69,7 @@ export const checkPostgreSQL = async () => {
   try {
     const response = await fetch("/api/init/check-pgsql", {
       method: "GET",
-      headers: { "Content-Type": "application/json" }
+      headers: JSON_HEADERS
     });
 
     const result = await parseJsonResponse(response);
@@ -109,7 +113,7 @@ export const checkPostgreSQL = async () => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
   }
 };
 
@@ -120,7 +124,7 @@ export const checkDatabaseStatus = async () => {
   try {
     const response = await fetch("/api/init/db-status", {
       method: "GET",
-      headers: { "Content-Type": "application/json" }
+      headers: JSON_HEADERS
     });
 
     const result = await parseJsonResponse(response);
@@ -179,7 +183,7 @@ export const checkDatabaseStatus = async () => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
   }
 };
 
@@ -262,7 +266,7 @@ export const handleDbConfigSubmit = async (e) => {
   try {
     const response = await fetch("/api/init/db/test-connection", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(payload)
     });
 
@@ -282,7 +286,7 @@ export const handleDbConfigSubmit = async (e) => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
   } finally {
     dbConfigSubmitting = false;
   }
@@ -309,7 +313,7 @@ export const handleDbCreate = async () => {
   try {
     const response = await fetch("/api/init/db/provision", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(payload)
     });
 
@@ -332,7 +336,7 @@ export const handleDbCreate = async () => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
   } finally {
     dbConfigSubmitting = false;
   }
@@ -399,7 +403,7 @@ export const handleInitModeSubmit = async (e) => {
 
     const response = await fetch(apiEndpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(requestBody)
     });
 
@@ -421,7 +425,7 @@ export const handleInitModeSubmit = async (e) => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
     nextButton.disabled = false;
   }
 };
@@ -461,7 +465,7 @@ export const handleAdminAccountSubmit = async (e) => {
 
     const response = await fetch("/api/init", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(initConfig)
     });
 
@@ -477,7 +481,7 @@ export const handleAdminAccountSubmit = async (e) => {
         try {
           const response = await fetch("/api/init/restart", {
             method: "POST",
-            headers: { "Content-Type": "application/json" }
+            headers: JSON_HEADERS
           });
           const restartResult = await parseJsonResponse(response);
           if (restartResult?.data?.restart_mode === "manual") {
@@ -501,7 +505,7 @@ export const handleAdminAccountSubmit = async (e) => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
   } finally {
     adminAccountSubmitting = false;
   }
@@ -519,7 +523,7 @@ export const getVerificationCode = async () => {
   try {
     const response = await fetch("/api/init/verification-code", {
       method: "GET",
-      headers: { "Content-Type": "application/json" }
+      headers: JSON_HEADERS
     });
 
     const result = await parseJsonResponse(response);
@@ -532,7 +536,7 @@ export const getVerificationCode = async () => {
     }
   } catch (error) {
     hideLoading();
-    showError(`${t("init.network_error")}: ${error.message}`);
+    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
   } finally {
     captchaButtons.forEach((btn) => {
       btn.disabled = false;
