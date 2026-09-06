@@ -7,8 +7,8 @@
 //!
 //! 服务注册不由本程序完成（DEB 包安装或运维手动部署单元文件）；
 //! 未注册的服务操作一律返回「未注册服务」错误，不做回退。
-//! foims 重启为自重启特例：先返回响应，由后台延迟执行 systemctl restart，
-//! 避免重启本进程导致响应不可达。
+//! stop / restart 会切断当前请求的响应通道（foims 进程退出、nginx 断开
+//! 经其代理的连接），统一先返回响应再由后台延迟执行。
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -78,6 +78,12 @@ pub async fn service_operation(
     // 由 trigger_service_restart 先返回响应再后台延迟执行
     if svc == ManagedService::Foims && op == ServiceOp::Restart {
         return trigger_service_restart().await;
+    }
+
+    // 其余 stop / restart 同样会切断响应通道（foims 停止即进程退出；
+    // nginx 重启/停止会断开正经过其代理的本请求连接），先返回响应再后台执行
+    if matches!(op, ServiceOp::Stop | ServiceOp::Restart) {
+        return trigger_deferred_service_op(svc, op).await;
     }
 
     log_info!(
@@ -177,7 +183,8 @@ async fn build_status_item(svc: ManagedService) -> ServiceStatusItem {
 /// 重启 foims 服务（systemctl restart，后台延迟执行的自重启特例）。
 ///
 /// 先校验单元已注册（未注册直接报「未注册服务」，无回退），再由后台
-/// 延迟执行 `systemctl restart foims`。响应先行返回，避免重启导致响应不可达。
+/// 延迟执行 `systemctl restart --no-block foims`。响应先行返回，避免重启
+/// 导致响应不可达。
 pub async fn trigger_service_restart() -> Result<Response, AppError> {
     // 预检服务注册状态：未注册直接向调用方报「未注册服务」，
     // 不做独立进程重启等回退
@@ -185,28 +192,82 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
 
     log_info!("log.system.restart_triggered");
 
-    // 在后台延迟执行 systemctl restart：若直接 await，成功重启会杀死本进程导致响应不可达。
-    // 先返回响应，由后台任务触发重启。
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        log_info!("log.system.systemctl_restart", service = "foims.service");
-        match ManagedService::Foims.restart().await {
-            Ok(()) => {
-                // 给 systemctl 一点时间终止本进程；若仍存活则主动退出（systemd Restart=always 会拉起）
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                log_info!("log.system.systemctl_exit_fallback");
-                std::process::exit(0);
-            }
-            // 重启命令失败（权限不足等）：保持服务运行并记录错误，
-            // 不再盲目 exit(0)（否则健康进程被误杀且无诊断信息）
-            Err(e) => {
-                log_error!("log.system.systemctl_restart_failed", error = e);
-            }
-        }
-    });
+    spawn_deferred_op(ManagedService::Foims, ServiceOp::Restart);
 
     Ok(foims_common::ok_json(
         (),
         "server.system.restart_command_sent",
     ))
+}
+
+/// 延迟执行 foims / nginx 的 stop 与 restart（先返回响应，后台执行）。
+///
+/// 同步执行时操作会切断当前请求的响应通道：foims 停止即本进程退出；
+/// nginx 重启/停止会断开正经过其代理的本请求连接。此处先预检注册状态，
+/// 再交由后台任务延迟执行，响应立即返回「命令已发送」。
+async fn trigger_deferred_service_op(
+    svc: ManagedService,
+    op: ServiceOp,
+) -> Result<Response, AppError> {
+    // 预检服务注册状态：未注册直接向调用方报「未注册服务」，不做回退
+    svc.require_unit_file().await?;
+
+    log_info!(
+        "log.services.op_deferred",
+        unit = svc.unit_name(),
+        op = op.as_str()
+    );
+
+    spawn_deferred_op(svc, op);
+
+    Ok(foims_common::ok_json(
+        (),
+        msg("server.services.op_deferred")
+            .with("unit", svc.unit_name())
+            .with("op", op.as_str()),
+    ))
+}
+
+/// 在后台任务中延迟执行服务操作；执行结果只记日志，不再影响已返回的响应。
+fn spawn_deferred_op(svc: ManagedService, op: ServiceOp) {
+    // 延迟执行：让响应先经 nginx 送达客户端，再切断连接
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        log_info!(
+            "log.services.op_executed",
+            unit = svc.unit_name(),
+            op = op.as_str()
+        );
+
+        // foims 自重启用 restart_self：客户端进程与本服务同处一个 cgroup，
+        // systemd 停止服务阶段的 cgroup 清理会将其信号终止，
+        // 阻塞等待只会误报失败，受理结果由该封装按退出码判定
+        let result = if svc == ManagedService::Foims && op == ServiceOp::Restart {
+            svc.restart_self().await
+        } else {
+            svc.execute(op).await
+        };
+
+        match result {
+            Ok(()) => {
+                if svc == ManagedService::Foims && op == ServiceOp::Restart {
+                    // 给 systemctl 一点时间终止本进程；若仍存活则主动退出
+                    // （systemd Restart=always 会拉起）
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    log_info!("log.system.systemctl_exit_fallback");
+                    std::process::exit(0);
+                }
+            }
+            // 后台执行失败（权限不足等）：响应已返回、服务仍在运行，
+            // 记录错误供排查，无法再向调用方报错
+            Err(e) => {
+                log_error!(
+                    "log.services.op_background_failed",
+                    unit = svc.unit_name(),
+                    op = op.as_str(),
+                    error = e
+                );
+            }
+        }
+    });
 }

@@ -124,6 +124,16 @@ impl ManagedService {
         systemd::systemctl_op("restart", self.unit_name()).await
     }
 
+    /// 自重启本服务对应的单元（restart --no-block）。
+    ///
+    /// systemctl 客户端与本服务同处一个 cgroup：任务受理后 systemd 停止
+    /// 服务会将其信号终止，故此封装将信号终止视为受理成功，仅在任务被
+    /// 拒绝（非零退出码）时报告失败。
+    pub async fn restart_self(self) -> ServicesResult<()> {
+        self.require_unit_file().await?;
+        systemd::systemctl_restart_self(self.unit_name()).await
+    }
+
     /// 重载服务配置（单元需声明 ExecReload；nginx 支持，foims 不支持）。
     pub async fn reload(self) -> ServicesResult<()> {
         self.require_unit_file().await?;

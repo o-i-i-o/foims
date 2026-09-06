@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01385">
-  <link rel="stylesheet" href="/static/css/base/reset.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01385">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01385">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01385">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01385">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01385">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01385">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01385">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01385">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01385">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01385">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01385">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01385">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01387">
+  <link rel="stylesheet" href="/static/css/base/reset.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01387">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01387">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01387">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01387">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01387">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01387">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01387">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/charts.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01387">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01387">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01387">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01387">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01387">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -1066,6 +1066,65 @@
                 </div>
               </section>
             </div>
+
+            <form id="snmp-trap-config-form">
+              <section class="config-card">
+                <header class="config-card-header">
+                  <div class="config-card-title">
+                    <span class="icon">📡</span>
+                    <span data-i18n="snmp_trap.title">SNMP Trap Receiver</span>
+                  </div>
+                  <div class="config-switch">
+                    <label for="snmp-trap-enabled">
+                      <input type="checkbox" id="snmp-trap-enabled" aria-label="Enable SNMP trap receiver" data-i18n-aria-label="snmp_trap.enabled">
+                      <span data-i18n="snmp_trap.enabled">Enable Receiver</span>
+                    </label>
+                    <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
+                  </div>
+                </header>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="snmp-trap-bind-addr" data-i18n="snmp_trap.bind_addr">Listen Address</label>
+                    <input type="text" id="snmp-trap-bind-addr" placeholder="0.0.0.0:162" data-i18n-placeholder="snmp_trap.bind_addr_placeholder" aria-label="Trap listen address" data-i18n-aria-label="snmp_trap.bind_addr">
+                    <span class="hint-text" data-i18n="snmp_trap.bind_addr_desc">UDP host:port; port 162 requires root, unprivileged ports like 1162 also work</span>
+                  </div>
+                  <div class="config-field">
+                    <label for="snmp-trap-cooldown" data-i18n="snmp_trap.cooldown_secs">Cooldown Window (seconds)</label>
+                    <input type="number" id="snmp-trap-cooldown" min="0" max="86400" placeholder="30" aria-label="Cooldown window in seconds" data-i18n-aria-label="snmp_trap.cooldown_secs">
+                    <span class="hint-text" data-i18n="snmp_trap.cooldown_desc">Subsequent notifications from the same source within the window are logged only</span>
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label for="snmp-trap-communities" data-i18n="snmp_trap.communities">v1/v2c Community Whitelist</label>
+                    <input type="text" id="snmp-trap-communities" placeholder="public" data-i18n-placeholder="snmp_trap.communities_placeholder" autocomplete="off" aria-label="Community whitelist" data-i18n-aria-label="snmp_trap.communities">
+                    <span class="hint-text" data-i18n="snmp_trap.communities_desc">Comma separated; empty accepts any community (intranet only)</span>
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <span class="group-label" data-i18n="snmp_trap.users">v3 USM Users</span>
+                    <div class="table-container snmp-trap-users-container">
+                      <table id="snmp-trap-users-table" class="data-table" aria-label="SNMP trap v3 USM users">
+                        <thead>
+                          <tr>
+                            <th data-i18n="snmp_trap.username">Username</th>
+                            <th data-i18n="snmp_trap.auth_protocol">Auth Protocol</th>
+                            <th data-i18n="snmp_trap.auth_password">Auth Password</th>
+                            <th data-i18n="snmp_trap.priv_protocol">Privacy Protocol</th>
+                            <th data-i18n="snmp_trap.priv_password">Privacy Password</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                    <button type="button" id="snmp-trap-add-user-btn" class="btn btn-secondary btn-sm" data-i18n="snmp_trap.add_user">Add User</button>
+                    <p class="config-hint" data-i18n="snmp_trap.users_desc">v3 notifications are rejected when no user is configured; a privacy protocol must be paired with an auth protocol; received traps go to Logs - Notifications.</p>
+                  </div>
+                </div>
+              </section>
+            </form>
           </div>
         </div>
 
@@ -1431,6 +1490,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01385"></script>
+  <script type="module" src="/static/js/app.js?v=01387"></script>
 </body>
 </html>

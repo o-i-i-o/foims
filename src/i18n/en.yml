@@ -222,10 +222,10 @@ log:
     restart_triggered: "Service restart triggered"
     service_status_query_failed: "Failed to query service status: {{error}}"
     systemctl_exit_fallback: "systemctl did not terminate the process, restarting via exit"
-    systemctl_restart: "Running systemctl restart {{service}}"
-    systemctl_restart_failed: "systemctl restart failed; service keeps running: {{error}}"
   services:
     op_executed: "Service management operation executed: {{unit}} {{op}}"
+    op_deferred: "Service operation deferred to background (response returned first): {{unit}} {{op}}"
+    op_background_failed: "Background service operation failed: {{unit}} {{op}}: {{error}}"
   task:
     dispatch_failed: "Failed to dispatch user task: {{error}}"
     overlap_skipped: "Previous task run has not finished; skipping this tick: {{{name}}}"

@@ -67,7 +67,7 @@ FOIMS（组织 IT 信息管理系统）是一个基于 Rust 和现代 Web 技术
 ### 1. 获取代码与配置
 
 ```bash
-git clone https://gitee.com/oi-io0/foims.git
+git clone https://github.com/o-i-i-o/foims.git
 cd foims
 cp config.toml.example config.toml   # 开发环境用当前目录；生产环境放 /etc/foims/config.toml
 ```
@@ -145,8 +145,6 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 
 - **代码风格规范**: [docs/code-style.md](docs/code-style.md)（前后端唯一权威来源）
 - **协作与构建说明**: [AGENTS.md](AGENTS.md)
-- **前端风格指南**: [web/.trae/rules/frontend-style-guide.md](web/.trae/rules/frontend-style-guide.md)
-- **后端风格指南**: [.trae/rules/backend-style-guide.md](.trae/rules/backend-style-guide.md)
 - **部署样例**: [deploy/](deploy/)（nginx、fail2ban）
 
 ## 🐛 故障排查
@@ -201,7 +199,7 @@ Copyright (c) 2025-2026 oi-io <boss@oi-io.cc>
 ## 📞 支持
 
 如果您在使用过程中遇到问题，请通过以下方式寻求支持：
-- 提交 Issue 到 Gitee 仓库
+- 提交 Issue 到 Github 仓库
 - QQ 群：1107983881
 - 发送邮件到 boss@oi-io.cc
 - 如果此程序对您有帮助，请考虑捐赠支持

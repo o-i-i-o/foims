@@ -49,6 +49,7 @@ export function initSystemTabs() {
         } else if (tabId === "system-notification") {
           loadSmtpConfig();
           loadNotificationSettings();
+          loadSnmpTrapConfig();
         } else if (tabId === "data-management") {
           loadLogsStats();
           loadLogForwarding();
@@ -106,6 +107,19 @@ export function initSystemTabs() {
       e.preventDefault();
       await saveSmtpConfig();
     });
+  }
+
+  const snmpTrapConfigForm = elementCache.get("snmp-trap-config-form");
+  if (snmpTrapConfigForm) {
+    snmpTrapConfigForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await saveSnmpTrapConfig();
+    });
+  }
+
+  const snmpTrapAddUserBtn = elementCache.get("snmp-trap-add-user-btn");
+  if (snmpTrapAddUserBtn) {
+    snmpTrapAddUserBtn.addEventListener("click", addSnmpTrapUserRow);
   }
 
   const ldapConfigForm = elementCache.get("ldap-config-form");
@@ -452,8 +466,10 @@ function initServicesCard() {
   }
 }
 
-// 执行服务管理操作；停止/重启需二次确认，
-// foims 重启/停止有专门的后续处理（轮询恢复 / 提示后端不可用）
+// 执行服务管理操作；停止/重启需二次确认。
+// 后端对 stop / restart 采用「先返回响应、后台延迟执行」：成功响应仅代表
+// 命令已送达（操作会切断当前请求连接，无法同步等待执行结果），
+// 重启由前端轮询确认恢复，停止则提示服务器侧恢复方式
 async function executeServiceOp(service, op) {
   if (servicesOpInFlight) {
     return;
@@ -492,15 +508,20 @@ async function executeServiceOp(service, op) {
       return;
     }
 
-    if (service === "foims" && op === "restart") {
-      // 后端先响应再延迟重启本进程：轮询等待恢复后自动刷新页面
+    if (op === "restart") {
+      // 后端先响应再延迟重启：轮询等待服务恢复后刷新
       showToast(t("services.restart_sent"), "info");
-      waitForFoimsRecovery();
+      waitForServiceRecovery(service);
       return;
     }
-    if (service === "foims" && op === "stop") {
-      showToast(t("services.stop_done_foims"), "warning");
-      loadServicesStatus();
+    if (op === "stop") {
+      // 服务即将停止，状态刷新必然失败：仅提示恢复方式
+      showToast(
+        service === "foims"
+          ? t("services.stop_done_foims")
+          : t("services.stop_sent_nginx"),
+        "warning"
+      );
       return;
     }
 
@@ -514,9 +535,10 @@ async function executeServiceOp(service, op) {
   }
 }
 
-// foims 重启后的恢复轮询：重启窗口期连接失败属预期，继续轮询；
-// 恢复 active 后刷新页面，超时则提示手动刷新
-function waitForFoimsRecovery() {
+// 服务重启后的恢复轮询：重启窗口期连接失败属预期，继续轮询；
+// 恢复 active 后 foims 刷新整页（重建会话状态），nginx 仅刷新服务状态表；
+// 超时则提示手动刷新
+function waitForServiceRecovery(service) {
   const deadline = Date.now() + 40000;
   const timer = setInterval(() => {
     if (Date.now() > deadline) {
@@ -526,14 +548,18 @@ function waitForFoimsRecovery() {
     }
     apiGet("/api/system/services")
       .then((result) => {
-        const foims =
+        const target =
           result.success && Array.isArray(result.data)
-            ? result.data.find((item) => item.name === "foims")
+            ? result.data.find((item) => item.name === service)
             : null;
-        if (foims && foims.active) {
+        if (target && target.active) {
           clearInterval(timer);
           showToast(t("services.restart_recovered"), "success");
-          setTimeout(() => location.reload(), 800);
+          if (service === "foims") {
+            setTimeout(() => location.reload(), 800);
+          } else {
+            loadServicesStatus();
+          }
         }
       })
       .catch(() => {
@@ -635,6 +661,284 @@ export async function testSmtpConnection() {
   } catch (error) {
     console.error("测试SMTP连接失败:", error);
     showToast(`${t("smtp.test_error")}: ${error.message}`, "error");
+  }
+}
+
+// ==================== SNMP Trap 接收配置（通知管理页卡片） ====================
+
+// 与后端一致的密码掩码：*** 表示沿用磁盘上已保存的密码
+const SNMP_TRAP_PASSWORD_MASK = "***";
+
+// 后端 trap.rs 接受的协议取值（认证 / 加密），与设备 SNMP 弹窗的取值集不同
+const SNMP_TRAP_AUTH_PROTOCOLS = ["md5", "sha", "sha224", "sha256", "sha384", "sha512"];
+const SNMP_TRAP_PRIV_PROTOCOLS = ["des", "3des", "aes128", "aes192", "aes256"];
+
+// 最近一次加载的 SNMP 基础参数（超时/重试等与 trap 无关的字段）：
+// PUT /api/system/config 会整体替换 snmp 段，保存时原样带回避免丢配置
+let currentSnmpBaseConfig = null;
+
+// 加载 Trap 配置（经系统配置接口读取，密码已由后端脱敏为 ***）
+export async function loadSnmpTrapConfig() {
+  try {
+    const result = await apiGet("/api/system/config");
+    if (!result.success || !result.data?.snmp) {
+      return;
+    }
+    const snmp = result.data.snmp;
+    const trap = snmp.trap || {};
+    currentSnmpBaseConfig = {
+      timeout_secs: snmp.timeout_secs ?? 5,
+      retries: snmp.retries ?? 3,
+      lldp_timeout_secs: snmp.lldp_timeout_secs ?? 30,
+      mac_scan_timeout_secs: snmp.mac_scan_timeout_secs ?? 10
+    };
+    elementCache.setChecked("snmp-trap-enabled", Boolean(trap.enabled));
+    elementCache.setValue("snmp-trap-bind-addr", trap.bind_addr || "0.0.0.0:162");
+    elementCache.setValue("snmp-trap-cooldown", String(trap.cooldown_secs ?? 30));
+    elementCache.setValue("snmp-trap-communities", (trap.communities || []).join(", "));
+    renderSnmpTrapUsers(trap.users || []);
+  } catch (error) {
+    console.error("加载SNMP Trap配置失败:", error);
+  }
+}
+
+// 渲染 USM 用户表：无用户时展示空态行（拒绝全部 v3 通知）
+function renderSnmpTrapUsers(users) {
+  const tbody = document.querySelector("#snmp-trap-users-table tbody");
+  if (!tbody) {
+    return;
+  }
+  tbody.innerHTML = "";
+  users.forEach((user) => tbody.appendChild(buildSnmpTrapUserRow(user)));
+  showSnmpTrapUsersEmptyRow();
+}
+
+// 无用户行时补空态行（删空最后一行后同样触发）
+function showSnmpTrapUsersEmptyRow() {
+  const tbody = document.querySelector("#snmp-trap-users-table tbody");
+  if (tbody && !tbody.querySelector("tr:not(.empty-row)")) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6" class="text-center">${t("snmp_trap.no_users")}</td></tr>`;
+  }
+}
+
+// 密码输入框：后端回传 *** 表示已配置，输入框保持留空并以占位符提示沿用
+function buildSnmpTrapPasswordInput(className, maskedValue) {
+  const input = document.createElement("input");
+  input.type = "password";
+  input.className = className;
+  input.autocomplete = "new-password";
+  if (maskedValue === SNMP_TRAP_PASSWORD_MASK) {
+    input.dataset.hasValue = "1";
+    input.placeholder = t("snmp_trap.password_configured");
+  } else {
+    input.placeholder = t("snmp_trap.password_placeholder");
+  }
+  return input;
+}
+
+// 协议下拉：空选项表示不启用（noAuth / noPriv），取值集与后端解析一致
+function buildSnmpTrapProtocolSelect(className, protocols, value, noneOptionKey) {
+  const select = document.createElement("select");
+  select.className = className;
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent = t(noneOptionKey);
+  select.appendChild(noneOption);
+  protocols.forEach((protocol) => {
+    const option = document.createElement("option");
+    option.value = protocol;
+    option.textContent = protocol.toUpperCase();
+    select.appendChild(option);
+  });
+  // 存量值大小写归一（后端解析大小写不敏感）；无法识别的取值回落为不启用
+  select.value = (value || "").toLowerCase();
+  return select;
+}
+
+// 组装单个 USM 用户行（user 为 null 时生成待填写的空行）
+function buildSnmpTrapUserRow(user) {
+  const tr = document.createElement("tr");
+
+  const usernameInput = document.createElement("input");
+  usernameInput.type = "text";
+  usernameInput.className = "trap-user-username";
+  usernameInput.autocomplete = "off";
+  usernameInput.placeholder = t("snmp_trap.username");
+  usernameInput.value = user?.username || "";
+
+  const authSelect = buildSnmpTrapProtocolSelect(
+    "trap-user-auth-protocol",
+    SNMP_TRAP_AUTH_PROTOCOLS,
+    user?.auth_protocol,
+    "snmp_trap.no_auth"
+  );
+  const privSelect = buildSnmpTrapProtocolSelect(
+    "trap-user-priv-protocol",
+    SNMP_TRAP_PRIV_PROTOCOLS,
+    user?.priv_protocol,
+    "snmp_trap.no_priv"
+  );
+
+  const appendCell = (element) => {
+    const td = document.createElement("td");
+    td.appendChild(element);
+    tr.appendChild(td);
+  };
+  appendCell(usernameInput);
+  appendCell(authSelect);
+  appendCell(buildSnmpTrapPasswordInput("trap-user-auth-password", user?.auth_password));
+  appendCell(privSelect);
+  appendCell(buildSnmpTrapPasswordInput("trap-user-priv-password", user?.priv_password));
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "btn btn-danger btn-sm";
+  deleteBtn.textContent = t("common.delete");
+  deleteBtn.addEventListener("click", () => {
+    tr.remove();
+    showSnmpTrapUsersEmptyRow();
+  });
+  appendCell(deleteBtn);
+
+  return tr;
+}
+
+// 追加一个空用户行（移除空态行）
+function addSnmpTrapUserRow() {
+  const tbody = document.querySelector("#snmp-trap-users-table tbody");
+  if (!tbody) {
+    return;
+  }
+  tbody.querySelector("tr.empty-row")?.remove();
+  tbody.appendChild(buildSnmpTrapUserRow(null));
+}
+
+// 收集并校验用户表；校验失败提示后返回 null
+function collectSnmpTrapUsers() {
+  const users = [];
+  const seenUsernames = new Set();
+  const rows = document.querySelectorAll("#snmp-trap-users-table tbody tr:not(.empty-row)");
+  for (const row of rows) {
+    const username = row.querySelector(".trap-user-username")?.value.trim() || "";
+    const authProtocol = row.querySelector(".trap-user-auth-protocol")?.value || "";
+    const privProtocol = row.querySelector(".trap-user-priv-protocol")?.value || "";
+    if (!username) {
+      showToast(t("snmp_trap.username_required"), "warning");
+      return null;
+    }
+    if (seenUsernames.has(username)) {
+      showToast(t("snmp_trap.duplicate_username", { username }), "warning");
+      return null;
+    }
+    seenUsernames.add(username);
+    // USM 无 noAuth + priv 组合：加密必须与认证配套（与后端校验一致）
+    if (privProtocol && !authProtocol) {
+      showToast(t("snmp_trap.priv_requires_auth", { username }), "warning");
+      return null;
+    }
+    // 读取单个密码框的提交值：留空且有已配置标记时回传掩码由后端沿用磁盘值；
+    // 配置了协议时密码必填，且新输入须满足 RFC 3414 的 8 字符下限，
+    // 否则该用户会在服务重启时被接收器跳过。校验失败返回 null。
+    const readPassword = (input, protocol) => {
+      if (!input) {
+        return "";
+      }
+      if (input.value !== "") {
+        if (protocol && input.value.length < 8) {
+          showToast(t("snmp_trap.password_too_short", { username }), "warning");
+          return null;
+        }
+        return input.value;
+      }
+      if (input.dataset.hasValue === "1") {
+        return SNMP_TRAP_PASSWORD_MASK;
+      }
+      if (protocol) {
+        showToast(t("snmp_trap.password_required", { username }), "warning");
+        return null;
+      }
+      return "";
+    };
+    const authPassword = readPassword(row.querySelector(".trap-user-auth-password"), authProtocol);
+    if (authPassword === null) {
+      return null;
+    }
+    const privPassword = readPassword(row.querySelector(".trap-user-priv-password"), privProtocol);
+    if (privPassword === null) {
+      return null;
+    }
+    users.push({
+      username,
+      auth_protocol: authProtocol,
+      auth_password: authPassword,
+      priv_protocol: privProtocol,
+      priv_password: privPassword
+    });
+  }
+  return users;
+}
+
+// 保存 Trap 配置（在途标志防重复提交；Trap 接收器随服务启动，保存后需重启生效）
+let snmpTrapConfigSaving = false;
+
+async function saveSnmpTrapConfig() {
+  if (snmpTrapConfigSaving) {
+    return;
+  }
+
+  const bindAddr = elementCache.getValue("snmp-trap-bind-addr").trim();
+  // host:port，host 为 IPv4/主机名或方括号 IPv6；端口 1-65535
+  const bindMatch = bindAddr.match(/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/);
+  const bindPort = bindMatch ? parseInt(bindMatch[1], 10) : 0;
+  if (!bindMatch || bindPort < 1 || bindPort > 65535) {
+    showToast(t("snmp_trap.invalid_bind_addr"), "warning");
+    return;
+  }
+
+  const cooldown = Math.min(
+    Math.max(parseInt(elementCache.getValue("snmp-trap-cooldown"), 10) || 0, 0),
+    86400
+  );
+
+  const communities = elementCache
+    .getValue("snmp-trap-communities")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const users = collectSnmpTrapUsers();
+  if (users === null) {
+    return;
+  }
+
+  snmpTrapConfigSaving = true;
+  try {
+    const snmp = {
+      ...currentSnmpBaseConfig,
+      trap: {
+        enabled: elementCache.getChecked("snmp-trap-enabled"),
+        bind_addr: bindAddr,
+        communities,
+        users,
+        cooldown_secs: cooldown
+      }
+    };
+
+    const result = await apiPut("/api/system/config", { snmp });
+    if (result.success) {
+      showToast(t("snmp_trap.save_success"), "success");
+      showToast(t("system.config_saved_restart_needed"), "warning");
+      sessionStorage.setItem("configUpdated", "true");
+      // 重新加载以刷新密码占位符（后端对新密码返回 ***）
+      await loadSnmpTrapConfig();
+    } else {
+      showToast(`${t("snmp_trap.save_failed")}: ${result.message}`, "error");
+    }
+  } catch (error) {
+    console.error("保存SNMP Trap配置失败:", error);
+    showToast(`${t("snmp_trap.save_error")}: ${error.message}`, "error");
+  } finally {
+    snmpTrapConfigSaving = false;
   }
 }
 

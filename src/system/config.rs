@@ -19,7 +19,7 @@ use foims_auth::smtp::{
 };
 use foims_common::AppError;
 use foims_common::AppJson;
-use foims_common::config::{Config, I18nConfig, ServerConfig};
+use foims_common::config::{Config, I18nConfig, ServerConfig, SnmpTrapUsmUser};
 use foims_common::{log_error, log_info, log_warn, msg};
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
@@ -106,6 +106,41 @@ pub fn start_time() -> u64 {
     START_TIME.load(Ordering::SeqCst)
 }
 
+/// SNMP Trap v3 USM 用户密码的脱敏掩码（与数据库密码/JWT 密钥的 "***" 口径一致）
+const SNMP_TRAP_SECRET_MASK: &str = "***";
+
+/// 脱敏配置中的 SNMP Trap v3 USM 用户密码（非空替换为掩码，空保持空）。
+/// 用于配置读取响应、更新响应与配置备份，避免明文凭据回传浏览器。
+fn mask_snmp_trap_secrets(config: &mut Config) {
+    for user in &mut config.snmp.trap.users {
+        if !user.auth_password.is_empty() {
+            user.auth_password = SNMP_TRAP_SECRET_MASK.to_string();
+        }
+        if !user.priv_password.is_empty() {
+            user.priv_password = SNMP_TRAP_SECRET_MASK.to_string();
+        }
+    }
+}
+
+/// 将请求/备份中携带掩码的 USM 用户密码还原为磁盘配置中的真实密码
+/// （按用户名匹配；磁盘上无同名用户时置空，新增用户的密码不应携带掩码）。
+fn restore_snmp_trap_secrets(incoming: &mut [SnmpTrapUsmUser], disk: &[SnmpTrapUsmUser]) {
+    for user in incoming {
+        if user.auth_password == SNMP_TRAP_SECRET_MASK {
+            user.auth_password = disk
+                .iter()
+                .find(|d| d.username == user.username)
+                .map_or_else(String::new, |d| d.auth_password.clone());
+        }
+        if user.priv_password == SNMP_TRAP_SECRET_MASK {
+            user.priv_password = disk
+                .iter()
+                .find(|d| d.username == user.username)
+                .map_or_else(String::new, |d| d.priv_password.clone());
+        }
+    }
+}
+
 async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = foims_common::config::get_config_file_path();
     log_info!("log.config.save_start", path = config_path);
@@ -174,6 +209,7 @@ pub async fn get_system_config(
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
+    mask_snmp_trap_secrets(&mut config);
     Ok(foims_common::ok_json(
         config,
         "server.system.config_retrieved",
@@ -239,7 +275,10 @@ pub async fn update_system_config(
     }
 
     if let Some(snmp) = req.snmp {
-        new_config.snmp = snmp;
+        // 防止脱敏掩码覆写真实密码：掩码密码按用户名还原为磁盘值
+        let mut snmp_config = snmp;
+        restore_snmp_trap_secrets(&mut snmp_config.trap.users, &new_config.snmp.trap.users);
+        new_config.snmp = snmp_config;
     }
 
     // 落盘前校验：拒绝写入启动校验无法通过的配置（防持久化自伤）
@@ -261,6 +300,7 @@ pub async fn update_system_config(
     let mut masked = new_config;
     masked.database.password = "***".to_string();
     masked.jwt.secret = "***".to_string();
+    mask_snmp_trap_secrets(&mut masked);
 
     Ok(foims_common::ok_json(
         masked,
@@ -324,6 +364,7 @@ pub async fn backup_config(
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
+    mask_snmp_trap_secrets(&mut config);
     let config_json = serde_json::to_string_pretty(&config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
     })?;
@@ -380,6 +421,11 @@ pub async fn restore_config(
     if new_config.jwt.secret == "***" {
         new_config.jwt.secret = current_config.jwt.secret.clone();
     }
+    // 备份文件中的 USM 密码同为掩码：还原为磁盘真实密码
+    restore_snmp_trap_secrets(
+        &mut new_config.snmp.trap.users,
+        &current_config.snmp.trap.users,
+    );
 
     // 落盘前校验（与 update_system_config 同口径）：备份文件可能缺校验字段
     // 或被篡改，直接写入会导致重启后服务永久无法启动

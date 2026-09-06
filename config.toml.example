@@ -30,13 +30,16 @@ cors_allowed_origins = []
 # - 调试时手动启动 axum 即可，无需安装 systemd 服务
 #   示例：sudo FOIMS_WEB_DIR=/path/to/foims/web ./target/release/foims
 # - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 性能优于 HTTP/1.1
+
 [server.listen]
 # UDS socket 文件路径，需与 nginx upstream 配置一致
 # 调试：/tmp/foims-dev.sock（避免权限问题）
 # 生产：/run/foims/api.sock（systemd RuntimeDirectory 管理）
-uds_path = "/tmp/foims-dev.sock"
-# UDS socket 属组（须为反代 worker 进程的属组；Debian/Ubuntu nginx 为 www-data）
+uds_path = "/run/foims/api.sock"
+
+# UDS socket 属组（须为反代 worker 进程的属组；Debian/Ubuntu nginx 为 www-data 或 nginx）
 uds_group = "www-data"
+
 # 是否由 axum 托管静态文件
 # - false（推荐）：静态文件由 nginx 直接服务，axum 仅 API
 # - true：axum 同时托管静态文件和 API（不推荐，与 nginx 重复）
@@ -47,6 +50,7 @@ serve_static = false
 # 请替换为随机生成的 32 字符以上密钥（含大小写字母、数字、特殊字符）
 # 可使用 openssl rand -base64 48 生成
 secret = "CHANGE_ME_TO_RANDOM_32_PLUS_CHARS"
+
 # Access Token 有效期：建议 5-15 分钟，短有效期减少被盗用风险
 # 前端自动刷新间隔应设为此值的 50%（如 15min -> 7min）
 access_token_expiry = "15m"
@@ -84,12 +88,15 @@ mac_scan_timeout_secs = 10
 
 # SNMP Trap/Inform 接收：常驻 UDP 监听，收到的消息写入「日志-通知」页面
 [snmp.trap]
-# 是否启用接收（默认 false）
-enabled = false
+# 是否启用接收（默认 true）
+enabled = true
+
 # UDP 监听地址；标准 trap 端口 162 需要 root 权限，可用 1162 等非特权端口
 bind_addr = "0.0.0.0:162"
+
 # v1/v2c community 白名单；留空表示接受任意 community（仅建议内网环境）
 communities = []
+
 # 同一来源地址的通知冷却窗口（秒）：窗口内的后续 trap 只记服务日志，
 # 不重复写站内通知，防止 trap 风暴刷爆通知列表；0 表示不冷却
 cooldown_secs = 30

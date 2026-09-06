@@ -66,6 +66,36 @@ pub async fn systemctl_op(op: &str, unit: &str) -> ServicesResult<()> {
     check_output(op, unit, &output)
 }
 
+/// 以 --no-block 提交 restart 任务并确认提交结果（本服务自重启专用）。
+///
+/// systemctl 客户端进程与本服务同处一个 cgroup：任务被 systemd 受理后，
+/// 停止服务阶段的 cgroup 清理会将其信号终止——这代表重启已生效，不视为
+/// 失败；仅当客户端正常退出且退出码非零（任务被拒绝，如权限不足）时才
+/// 报告错误。为防客户端异常滞留，最多等待 2 秒。
+pub async fn systemctl_restart_self(unit: &str) -> ServicesResult<()> {
+    let mut child = Command::new("systemctl")
+        .args(["restart", "--no-block", unit])
+        .spawn()
+        .map_err(|e| classify_spawn_error(e, "restart", unit))?;
+    match tokio::time::timeout(std::time::Duration::from_secs(2), child.wait()).await {
+        // 客户端正常退出：按退出码判定受理结果
+        Ok(Ok(status)) if status.code().is_some() => {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(op_failed(
+                    unit,
+                    "restart",
+                    &format!("exit status {}", status.code().unwrap_or_default()),
+                ))
+            }
+        }
+        // 客户端被信号终止（停止服务时的 cgroup 清理，重启已生效）
+        // 或超时未退出：均按任务已受理处理，进程退出兜底由调用方负责
+        _ => Ok(()),
+    }
+}
+
 /// 查询单元属性（systemctl show），返回标准输出原始文本（key=value 行）。
 pub async fn systemctl_show(unit: &str, properties: &[&str]) -> ServicesResult<String> {
     let property_arg = properties.join(",");

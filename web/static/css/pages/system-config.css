@@ -149,6 +149,42 @@ dl.config-field,
   color: var(--color-text-muted);
 }
 
+/* SNMP Trap v3 USM 用户表：fixed 布局按列宽分配，行内输入控件按列宽自适应，
+   防止 6 列控件以默认尺寸（~170px/列）撑破卡片产生横向滚动 */
+.snmp-trap-users-container .data-table {
+  table-layout: fixed;
+}
+
+.snmp-trap-users-container th:nth-child(1) {
+  width: 20%;
+}
+
+.snmp-trap-users-container th:nth-child(2),
+.snmp-trap-users-container th:nth-child(4) {
+  width: 15%;
+}
+
+.snmp-trap-users-container th:nth-child(3),
+.snmp-trap-users-container th:nth-child(5) {
+  width: 20%;
+}
+
+.snmp-trap-users-container th:nth-child(6) {
+  width: 10%;
+}
+
+.snmp-trap-users-container td input,
+.snmp-trap-users-container td select {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.snmp-trap-users-container td:last-child {
+  text-align: center;
+}
+
+
 .config-actions {
   display: flex;
   gap: var(--space-md);
