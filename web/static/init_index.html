@@ -10,10 +10,10 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01389">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01389">
-    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01389">
-    <script type="module" src="/static/js/modules/foims_init/index.js?v=01389"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01390">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01390">
+    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01390">
+    <script type="module" src="/static/js/modules/foims_init/index.js?v=01390"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -89,11 +89,11 @@
                         </div>
                         <div class="form-group">
                             <label for="db-name" data-i18n="init.db_name">数据库名:</label>
-                            <input type="text" id="db-name" name="database" placeholder="foims" data-i18n-placeholder="init.db_name_placeholder" required>
+                            <input type="text" id="db-name" name="database" placeholder="foims" data-i18n-placeholder="init.db_name_placeholder" required autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="db-username" data-i18n="init.db_username">用户名:</label>
-                            <input type="text" id="db-username" name="username" required>
+                            <input type="text" id="db-username" name="username" required autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label for="db-password" data-i18n="init.db_password">密码:</label>
@@ -176,7 +176,7 @@
                     <form id="admin-account-form" class="init-form">
                         <div class="form-group">
                             <label for="admin-username" data-i18n="init.username">用户名:</label>
-                            <input type="text" id="admin-username" name="username" value="admin" required>
+                            <input type="text" id="admin-username" name="username" value="admin" required autocomplete="username">
                         </div>
                         <div class="form-group">
                             <label for="admin-password" data-i18n="init.password">密码:</label>
@@ -188,7 +188,7 @@
                         </div>
                         <div class="form-group">
                             <label for="admin-email" data-i18n="init.email">邮箱:</label>
-                            <input type="email" id="admin-email" name="email" placeholder="admin@example.com" required>
+                            <input type="email" id="admin-email" name="email" placeholder="admin@example.com" required autocomplete="email">
                         </div>
                         <div class="form-group">
                             <label for="verification" data-i18n="init.console_captcha">控制台验证码:</label>

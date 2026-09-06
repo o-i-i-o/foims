@@ -86,7 +86,7 @@ config = { version = "0.15.25", features = ["toml"] }
 
 [package]
 name = "foims"
-version = "0.20.28"
+version = "0.20.29"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"
