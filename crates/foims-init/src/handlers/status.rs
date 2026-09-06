@@ -175,6 +175,9 @@ pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Resp
 }
 
 pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
+    // 第一步仅探测「客户端已安装 + 服务已监听」：凭据级连接测试属于
+    // 第二步「数据库配置」的连接测试（db_config::test_db_connection），
+    // 此处携带凭据连接会在初始化场景（用户/库尚未就绪）误报未运行
     let installed = match tokio::process::Command::new("which")
         .arg("psql")
         .status()
@@ -195,29 +198,35 @@ pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response
         })));
     }
 
-    // 密码做 URL 编码后再拼连接串：含 @ : / 等字符时裸拼会导致误报（I-8）
+    // pg_isready 与 psql 同属 postgresql-client：不带凭据、不做认证，
+    // 仅探测服务器是否接受连接（地址/端口取当前连接配置）
     let cfg = ctx.db_config();
-    let url = crate::utils::build_pg_url(&cfg, "postgres");
-
-    match PgPool::connect(&url).await {
-        Ok(_) => Ok(json_ok(serde_json::json!({
-            "installed": true,
-            "running": true,
-            "message": "server.init.pgsql_running"
-        }))),
+    let running = match tokio::process::Command::new("pg_isready")
+        .arg("-h")
+        .arg(&cfg.host)
+        .arg("-p")
+        .arg(cfg.port.to_string())
+        .status()
+        .await
+    {
+        Ok(s) => s.success(),
         Err(e) => {
-            // 错误串可能含连接串片段（host/用户名），只入日志不回传（I-7）
-            let error_str = e.to_string();
-            foims_common::log_warn!("log.init.pgsql_connect_failed", error = error_str);
-            let running = !error_str.contains("connect")
-                && !error_str.contains("timeout")
-                && !error_str.contains("refused");
-
-            Ok(json_ok(serde_json::json!({
-                "installed": true,
-                "running": running,
-                "error": "server.init.pgsql_connect_failed"
-            })))
+            foims_common::log_warn!("log.init.pgisready_check_failed", error = e);
+            false
         }
+    };
+
+    if !running {
+        return Ok(json_ok(serde_json::json!({
+            "installed": true,
+            "running": false,
+            "error": "server.init.pgsql_not_running"
+        })));
     }
+
+    Ok(json_ok(serde_json::json!({
+        "installed": true,
+        "running": true,
+        "message": "server.init.pgsql_running"
+    })))
 }

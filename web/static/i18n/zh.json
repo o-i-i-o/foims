@@ -1894,7 +1894,8 @@
       "password_hash_failed": "密码哈希错误",
       "password_hash_task_failed": "密码哈希任务失败",
       "pgsql_not_installed": "PostgreSQL 未安装，请先安装 PostgreSQL",
-      "pgsql_running": "PostgreSQL 正在运行，连接成功",
+      "pgsql_not_running": "PostgreSQL 服务未运行，请先启动 PostgreSQL",
+      "pgsql_running": "PostgreSQL 已安装并正在运行",
       "restart_command_sent": "服务重启命令已发送，服务正在重启",
       "manual_restart_required": "程序没有以服务运行，请手动重启程序完成初始化",
       "restart_failed": "重启服务失败",
@@ -1912,7 +1913,6 @@
         "lock_failed": "无法访问验证码",
         "missing": "缺少验证码"
       },
-      "pgsql_connect_failed": "连接PostgreSQL失败",
       "dbcfg": {
         "type_unsupported": "暂不支持该数据库类型，当前仅支持 PostgreSQL",
         "host_invalid": "服务器地址不能为空且长度不超过 255",

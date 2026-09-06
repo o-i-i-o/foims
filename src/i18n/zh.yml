@@ -103,7 +103,7 @@ log:
   init:
     config_tmp_chmod_failed: "设置配置临时文件权限失败: {{{error}}}"
     config_tmp_remove_failed: "清理配置临时文件失败: {{{error}}}"
-    pgsql_connect_failed: "连接 PostgreSQL 失败: {{{error}}}"
+    pgisready_check_failed: "检查 pg_isready 运行状态失败"
     admin_create_failed: "创建管理员用户失败"
     creating_admin: "正在创建管理员用户"
     db:

@@ -103,7 +103,7 @@ log:
   init:
     config_tmp_chmod_failed: "Failed to set permissions on the config temp file: {{{error}}}"
     config_tmp_remove_failed: "Failed to remove the config temp file: {{{error}}}"
-    pgsql_connect_failed: "Failed to connect to PostgreSQL: {{{error}}}"
+    pgisready_check_failed: "Failed to check pg_isready status"
     admin_create_failed: "Failed to create the admin user"
     creating_admin: "Creating admin user"
     db:

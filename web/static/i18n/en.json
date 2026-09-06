@@ -1894,7 +1894,8 @@
       "password_hash_failed": "Password hashing failed",
       "password_hash_task_failed": "Password hashing task failed",
       "pgsql_not_installed": "PostgreSQL is not installed. Please install PostgreSQL first",
-      "pgsql_running": "PostgreSQL is running and the connection is successful",
+      "pgsql_not_running": "The PostgreSQL service is not running. Please start it first",
+      "pgsql_running": "PostgreSQL is installed and running",
       "restart_command_sent": "Restart command sent, the service is restarting",
       "manual_restart_required": "The program is not running as a service; please restart it manually to complete initialization",
       "restart_failed": "Failed to restart the service",
@@ -1912,7 +1913,6 @@
         "lock_failed": "Unable to access the verification code",
         "missing": "Verification code is missing"
       },
-      "pgsql_connect_failed": "Failed to connect to PostgreSQL",
       "dbcfg": {
         "type_unsupported": "Unsupported database type, only PostgreSQL is supported currently",
         "host_invalid": "Host is required and must be at most 255 characters",
