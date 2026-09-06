@@ -24,6 +24,8 @@
   margin: 1.75rem auto;
   padding: 0;
   border-radius: var(--radius-xl);
+  /* 裁剪头部渐变/底部背景，使圆角真正可见（否则 header 直角盖住圆角） */
+  overflow: hidden;
   width: 100%;
   max-width: 640px;
   box-shadow:
