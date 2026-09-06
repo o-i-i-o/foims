@@ -1,5 +1,26 @@
+
+[package]
+name = "foims"
+version = "0.20.31"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"
+license = "GPL-3.0-or-later"
 [workspace]
-members = [".", "crates/foims-common", "crates/foims-init", "crates/foims-visualization", "crates/foims-data-management", "crates/foims-scheduler", "crates/foims-models", "crates/foims-auth", "crates/foims-organization", "crates/foims-resource", "crates/foims-x509-management", "crates/foims-services"]
+members = [
+    ".",
+    "crates/foims-auth",
+    "crates/foims-common",
+    "crates/foims-data-management",
+    "crates/foims-init",
+    "crates/foims-models",
+    "crates/foims-organization",
+    "crates/foims-resource",
+    "crates/foims-scheduler",
+    "crates/foims-services",
+    "crates/foims-visualization",
+    "crates/foims-x509-management",
+]
 resolver = "2"
 
 [workspace.package]
@@ -19,123 +40,113 @@ unreachable = "warn"
 allow_attributes = "warn"
 
 [workspace.dependencies]
-# Axum
-axum = { version = "0.8.9", features = ["macros", "multipart", "ws", "http2"] }
-tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
-axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
-
-# SQLx
-sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
-
-# Serialization
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-
-# Validation
-validator = { version = "0.21.0", features = ["derive"] }
-
-# CSV and ZIP
-csv = "1.4.0"
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
-
-# Async
-tokio = { version = "1.53.1", features = ["full"] }
-
-# Date/Time
-chrono = { version = "0.4.45", features = ["serde"] }
-
-# UUID
-uuid = { version = "1.26.0", features = ["v4", "serde"] }
-
-# Logging
-tracing = "0.1.44"
 
 # Crypto (AES)
 aes-gcm = "0.11.1"
-hex = "0.4.3"
-base64 = "0.23.1"
-
-# Error handling
-thiserror = "2.0.20"
+arc-swap = "1.9.2"
 
 # Async trait
 async-trait = "0.1.92"
-
-# Cron scheduler
-tokio-cron-scheduler = "0.15.1"
+# Axum
+axum = { version = "0.8.9", features = ["macros", "multipart", "ws", "http2"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
+base64 = "0.23.1"
 
 # 密码哈希 / 随机数 / TOML 序列化 / 日志时间格式化（多 crate 共享）
 bcrypt = "0.19.3"
-rand = "0.10.2"
-toml = "1.1.5"
+
+# Date/Time
+chrono = { version = "0.4.45", features = ["serde"] }
+config = { version = "0.15.25", features = ["toml"] }
+
+# CSV and ZIP
+csv = "1.4.0"
+dashmap = "6.2.1"
+hex = "0.4.3"
+
+# 网络 / 哈希 / 并发表 / 配置加载（主程序与 foims-common 共享）
+ipnetwork = "0.21.1"
 
 # JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
-openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
-totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
+openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+rand = "0.10.2"
+
+# Serialization
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+
+# SQLx
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
+
+# Error handling
+thiserror = "2.0.20"
 time = "0.3.55"
 
-# 网络 / 哈希 / 并发表 / 配置加载（主程序与 foims-common 共享）
-ipnetwork = "0.21.1"
-sha2 = "0.11.0"
-dashmap = "6.2.1"
-arc-swap = "1.9.2"
-config = { version = "0.15.25", features = ["toml"] }
+# Async
+tokio = { version = "1.53.1", features = ["full"] }
 
-[package]
-name = "foims"
-version = "0.20.31"
-edition.workspace = true
-authors = ["oi-io <boss@oi-io.cc>"]
-description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"
-license = "GPL-3.0-or-later"
+# Cron scheduler
+tokio-cron-scheduler = "0.15.1"
+toml = "1.1.5"
+totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
+tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
+
+# Logging
+tracing = "0.1.44"
+
+# UUID
+uuid = { version = "1.26.0", features = ["v4", "serde"] }
+
+# Validation
+validator = { version = "0.21.0", features = ["derive"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[features]
+default = []
 
 [dependencies]
-# Workspace crates
-foims-common = { path = "crates/foims-common" }
-foims-init = { path = "crates/foims-init" }
-foims-visualization = { path = "crates/foims-visualization" }
-foims-data-management = { path = "crates/foims-data-management" }
-foims-scheduler = { path = "crates/foims-scheduler" }
-foims-models = { path = "crates/foims-models" }
-foims-auth = { path = "crates/foims-auth" }
-foims-organization = { path = "crates/foims-organization" }
-foims-resource = { path = "crates/foims-resource" }
-foims-x509-management = { path = "crates/foims-x509-management" }
-foims-services = { path = "crates/foims-services" }
+async-trait = { workspace = true }
 
 # Workspace dependencies (使用共享版本)
 axum = { workspace = true }
-tower-http = { workspace = true }
 axum-extra = { workspace = true }
-sqlx = { workspace = true }
+chrono = { workspace = true }
+config = { workspace = true }
+foims-auth = { path = "crates/foims-auth" }
+# Workspace crates
+foims-common = { path = "crates/foims-common" }
+foims-data-management = { path = "crates/foims-data-management" }
+foims-init = { path = "crates/foims-init" }
+foims-models = { path = "crates/foims-models" }
+foims-organization = { path = "crates/foims-organization" }
+foims-resource = { path = "crates/foims-resource" }
+foims-scheduler = { path = "crates/foims-scheduler" }
+foims-services = { path = "crates/foims-services" }
+foims-visualization = { path = "crates/foims-visualization" }
+foims-x509-management = { path = "crates/foims-x509-management" }
+
+rust-i18n = "4.2.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
-validator = { workspace = true }
-tokio = { workspace = true }
-chrono = { workspace = true }
-uuid = { workspace = true }
-tracing = { workspace = true }
+sqlx = { workspace = true }
 thiserror = { workspace = true }
-async-trait = { workspace = true }
-toml = { workspace = true }
 time = { workspace = true }
-config = { workspace = true }
-
+tokio = { workspace = true }
+toml = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
 # 主程序特有依赖
 
 tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
-
-rust-i18n = "4.2.1"
-
-
-[lints]
-workspace = true
+uuid = { workspace = true }
+validator = { workspace = true }
 
 [dev-dependencies]
 regex = "1"
 
-[features]
-default = []
+[lints]
+workspace = true
