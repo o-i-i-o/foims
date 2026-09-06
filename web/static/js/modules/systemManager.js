@@ -517,9 +517,7 @@ async function executeServiceOp(service, op) {
     if (op === "stop") {
       // 服务即将停止，状态刷新必然失败：仅提示恢复方式
       showToast(
-        service === "foims"
-          ? t("services.stop_done_foims")
-          : t("services.stop_sent_nginx"),
+        service === "foims" ? t("services.stop_done_foims") : t("services.stop_sent_nginx"),
         "warning"
       );
       return;

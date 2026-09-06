@@ -1391,7 +1391,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.20.27"
+version = "0.20.28"
 dependencies = [
  "async-trait",
  "axum",
