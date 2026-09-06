@@ -4,108 +4,187 @@ Copyright (c) 2025-2026 oi-io <boss@oi-io.cc>
 本作品以 GNU General Public License v3（GPL-3.0-or-later）授权，全文见 LICENSE 文件。
 
 This product includes software developed by third parties.
-The following is a list of the open source components used in this project,
-verified against Cargo.lock / cargo metadata. License full texts are provided
-in the third-party-licenses/ directory.
+The following is a list of the open source components used in this project.
+清单以 cargo-cyclonedx 生成的 CycloneDX SBOM 为准（生成方式见文末），
+SBOM 快照存于 docs/sbom/。License full texts are provided in the
+third-party-licenses/ directory.
 
 ================================================================================
-Rust 依赖（Cargo 直接依赖）
+Rust 依赖（workspace 全部 crate 的直接依赖，39 项外部组件，
+经 cargo-cyclonedx 0.5.9 对 Cargo.lock 全量解析核对）
 ================================================================================
 
-Axum Web Framework
+Web 框架与 HTTP 中间件
   - axum (MIT)
   - axum-extra (MIT)
-  - tower (MIT)
   - tower-http (MIT)
+  - tower (MIT，经 axum 引入)
+  - http (MIT OR Apache-2.0)
   https://github.com/tokio-rs/axum
+  https://github.com/tower-rs/tower-http
 
-SQLx PostgreSQL Driver
-  - sqlx (Apache-2.0 OR MIT)
+数据库访问
+  - sqlx (MIT OR Apache-2.0)
   https://github.com/launchbadge/sqlx
 
 序列化与校验
-  - serde (Apache-2.0 OR MIT)
-  - serde_json (Apache-2.0 OR MIT)
+  - serde (MIT OR Apache-2.0)
+  - serde_json (MIT OR Apache-2.0)
   - validator (MIT)
-  - regex (Apache-2.0 OR MIT，传递依赖)
+  - regex (MIT OR Apache-2.0，传递依赖)
+  https://github.com/serde-rs/serde
+  https://github.com/Keats/validator
 
-加密
+加密与凭据
   - bcrypt (MIT)
   - jsonwebtoken (MIT)
-  - sha2 (Apache-2.0 OR MIT)
-  - aes-gcm (Apache-2.0 OR MIT)
-  - hex (Apache-2.0 OR MIT)
+  - sha2 (MIT OR Apache-2.0)
+  - aes-gcm (MIT OR Apache-2.0)
+  - aes / cipher (MIT OR Apache-2.0，经 aes-gcm 引入)
+  - hex (MIT OR Apache-2.0)
+  https://github.com/Keats/rust-bcrypt
+  https://github.com/Keats/jsonwebtoken
+  https://github.com/RustCrypto
 
 日志
   - tracing (MIT)
   - tracing-subscriber (MIT)
+  - log (MIT OR Apache-2.0)
+  https://github.com/tokio-rs/tracing
 
-异步运行时
+异步运行时与调度
   - tokio (MIT)
-  - futures-util (Apache-2.0 OR MIT)
-  - async-trait (Apache-2.0 OR MIT)
-  - tokio-cron-scheduler (Apache-2.0 OR MIT)
+  - futures-util (MIT OR Apache-2.0，传递依赖)
+  - async-trait (MIT OR Apache-2.0)
+  - tokio-cron-scheduler (MIT OR Apache-2.0)
+  https://github.com/tokio-rs/tokio
+  https://github.com/dtolnay/async-trait
+  https://github.com/mvniekerk/tokio-cron-scheduler
 
 网络工具
-  - ipnetwork (Apache-2.0 OR MIT)
-  - macaddr (Apache-2.0 OR MIT)
-  - pnet (Apache-2.0 OR MIT)
-  - async-snmp (Apache-2.0 OR MIT)
+  - ipnetwork (MIT OR Apache-2.0)
+  - async-snmp (MIT OR Apache-2.0)
+  https://github.com/achanda/ipnetwork
+  https://github.com/lukeod/async-snmp
 
 配置
-  - config (Apache-2.0 OR MIT)
-  - toml (Apache-2.0 OR MIT)
+  - config (MIT OR Apache-2.0)
+  - toml (MIT OR Apache-2.0)
+  https://github.com/rust-cli/config-rs
+  https://github.com/toml-rs/toml
 
 通用工具
-  - thiserror (Apache-2.0 OR MIT)
-  - chrono (Apache-2.0 OR MIT)
-  - time (Apache-2.0 OR MIT)
+  - thiserror (MIT OR Apache-2.0)
+  - chrono (MIT OR Apache-2.0)
+  - time (MIT OR Apache-2.0)
   - uuid (Apache-2.0 OR MIT)
   - csv (Unlicense OR MIT)
   - zip (MIT)
-  - base64 (Apache-2.0 OR MIT)
-  - rand (Apache-2.0 OR MIT)
+  - base64 (MIT OR Apache-2.0)
+  - rand (MIT OR Apache-2.0)
   - dashmap (MIT)
-  - arc-swap (Apache-2.0 OR MIT)
+  - arc-swap (MIT OR Apache-2.0)
+  https://github.com/dtolnay/thiserror
+  https://github.com/chronotope/chrono
+  https://github.com/uuid-rs/uuid
+  https://github.com/BurntSushi/rust-csv
+  https://github.com/zip-rs/zip2
+  https://github.com/xacrimon/dashmap
 
 邮件
   - lettre (MIT)
-  https://github.com/lettre/lettre
+  https://lettre.rs
 
 双因素认证
   - totp-rs (MIT)
+  https://github.com/constantoine/totp-rs
 
 外部认证（LDAP / OIDC 单点登录）
   - ldap3 (MIT OR Apache-2.0)
   - openidconnect (MIT)
+  https://github.com/inejge/ldap3
+  https://github.com/ramosbugs/openidconnect-rs
 
 证书管理（X.509 生成 / 解析）
   - rcgen (MIT OR Apache-2.0)
   - x509-parser (MIT OR Apache-2.0)
   - pem (MIT)
+  https://github.com/rustls/rcgen
+  https://github.com/rusticata/x509-parser
+
+TLS（传递依赖）
+  - rustls (MIT OR Apache-2.0)
+  - ring (ISC，经 rustls 引入)
+  https://github.com/rustls/rustls
+
+压缩与其他传递依赖
+  - flate2 (MIT)
+  - bytes (MIT)
+  https://github.com/rust-lang/flate2-rs
+  https://github.com/tokio-rs/bytes
 
 国际化
   - rust-i18n (MIT)
+  - ICU 组件族 icu_* (Unicode-3.0，经国际化数据引入)
+  https://github.com/longbridge/rust-i18n
 
-主要传递依赖（TLS / 压缩等，来自 Cargo.lock）
-  - rustls (Apache-2.0 OR MIT)
-  - flate2 (MIT)
-  - bytes (MIT)
-  - http (MIT OR Apache-2.0)
-  - aes / cipher (Apache-2.0 OR MIT)
-  - log (MIT OR Apache-2.0)
+================================================================================
+传递依赖许可证分布（SBOM 全量统计，共 481 个组件；
+双许可组件按满足其一即可计，同组件可在多行出现）
+================================================================================
+
+  MIT                 430  third-party-licenses/MIT.txt
+  Apache-2.0          326  third-party-licenses/Apache-2.0.txt
+  Unicode-3.0          19  third-party-licenses/Unicode-3.0.txt
+  Unlicense            12  third-party-licenses/Unlicense.txt
+  BSD-3-Clause         11  third-party-licenses/BSD-3-Clause.txt
+  Zlib                  8  third-party-licenses/Zlib.txt
+  ISC                   8  third-party-licenses/ISC.txt
+  0BSD                  2  third-party-licenses/0BSD.txt
+  CC0-1.0               2  https://creativecommons.org/publicdomain/zero/1.0/legalcode
+  BSL-1.0               2  third-party-licenses/BSL-1.0.txt
+  MIT-0                 1  third-party-licenses/MIT-0.txt
+  CDLA-Permissive-2.0   1  https://cdla.dev/permissive-2-0
+  BSD-2-Clause          1  third-party-licenses/BSD-2-Clause.txt
 
 ================================================================================
 第三方许可证全文
 ================================================================================
 
-  third-party-licenses/MIT.txt         MIT License 全文
-  third-party-licenses/Apache-2.0.txt  Apache License 2.0 全文
-  third-party-licenses/Unlicense.txt   Unlicense 全文
+  third-party-licenses/MIT.txt           MIT License 全文
+  third-party-licenses/MIT-0.txt         MIT No Attribution 全文
+  third-party-licenses/Apache-2.0.txt    Apache License 2.0 全文
+  third-party-licenses/Unlicense.txt     Unlicense 全文
+  third-party-licenses/BSD-2-Clause.txt  BSD 2-Clause 全文
+  third-party-licenses/BSD-3-Clause.txt  BSD 3-Clause 全文
+  third-party-licenses/ISC.txt           ISC License 全文
+  third-party-licenses/Zlib.txt          zlib License 全文
+  third-party-licenses/0BSD.txt          BSD Zero Clause 全文
+  third-party-licenses/BSL-1.0.txt       Boost Software License 1.0 全文
+  third-party-licenses/Unicode-3.0.txt   Unicode License V3 全文
 
-GPLv3 兼容性说明：本项目按 GPL-3.0-or-later 分发；上述 MIT / Apache-2.0 /
-Unlicense 授权的组件均允许与 GPLv3 组合分发（Apache-2.0 与 GPLv3 的兼容性
-以各组件版权声明为准，详见 Apache-2.0.txt 第 4 条及 GPLv3 第 7 条）。
+  CC0-1.0 与 CDLA-Permissive-2.0 全文分别见上方官方链接
+  （仅 constant_time_eq / tiny-keccak / webpki-roots 三个数据或工具组件涉及）。
+
+GPLv3 兼容性说明：本项目按 GPL-3.0-or-later 分发；上述全部许可证
+（MIT / MIT-0 / Apache-2.0 / Unlicense / BSD-2-Clause / BSD-3-Clause /
+ISC / zlib / 0BSD / BSL-1.0 / Unicode-3.0 / CC0-1.0 /
+CDLA-Permissive-2.0）均为 FSF 认可的 GPLv3 兼容许可。
+Apache-2.0 与 GPLv3 的兼容性以各组件版权声明为准，详见 Apache-2.0.txt
+第 4 条及 GPLv3 第 7 条。
+
+================================================================================
+SBOM（软件物料清单）
+================================================================================
+
+依赖清单与许可证以 CycloneDX 格式 SBOM 为权威数据源，生成方式：
+
+  cargo install cargo-cyclonedx
+  cargo cyclonedx --all --format json
+
+主程序（foims 二进制）SBOM 快照：docs/sbom/foims-<版本>.cdx.json
+（随版本更新重新生成；workspace 各 crate 亦有同名 .cdx.json，均为
+生成产物，不入库）。
 
 ================================================================================
 
