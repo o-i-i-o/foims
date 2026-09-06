@@ -21,29 +21,6 @@ pub struct Room {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct RoomNetwork {
-    pub id: Uuid,
-    pub room_id: Uuid,
-    pub subnet_id: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct RoomNetworkDetail {
-    pub room_id: Uuid,
-    pub room_name: String,
-    pub room_type: String,
-    pub description: Option<String>,
-    pub subnet_id: Option<Uuid>,
-    pub network_name: Option<String>,
-    pub network_region: Option<String>,
-    pub network_region_id: Option<Uuid>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RoomWithNetworks {
     pub id: Uuid,

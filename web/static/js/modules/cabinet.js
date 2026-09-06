@@ -3,6 +3,7 @@ import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   renderTable,
   getElementValue,
   handleDelete,
@@ -16,8 +17,9 @@ import {
   openSimpleListModal
 } from "../utils/ui.js";
 
+import { formatDateTime } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
-import { elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache } from "../utils/helpers.js";
 
 // 列表/详情加载失败的统一提示文案（避免同一字面量多处重复）
 const cabinetLoadFailedMsg = (message) => `${t("cabinet.load_failed")}: ${message || ""}`;
@@ -230,7 +232,7 @@ export const cabinetPatchPanelsManager = new CabinetPatchPanelsManager();
 // ==========================================
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
-let cabinetRequestSeq = 0;
+const cabinetSeq = createSeqGuard();
 
 const tableState = createSortState("name", "asc");
 let currentPage = 1;
@@ -238,7 +240,7 @@ let currentPageSize = DEFAULT_PAGE_SIZE;
 
 // 加载机柜数据
 export async function loadCabinetsData(page = currentPage, sortBy = null, sortOrder = null) {
-  const requestSeq = ++cabinetRequestSeq;
+  const requestSeq = cabinetSeq.next();
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -248,7 +250,7 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
     const result = await apiGet(
       `/api/resources/cabinets?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
-    if (requestSeq !== cabinetRequestSeq) {
+    if (!cabinetSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     // 接口失败时提示并中止，不再静默渲染空数据（与 networks.js 口径一致）
@@ -259,16 +261,9 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
     const data = result.data || { items: [], total: 0 };
     const cabinets = data.items || data;
 
-    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
-    // 回退到最后一页重新加载，避免停留在空页无法翻回
-    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
-    if (
-      Array.isArray(cabinets) &&
-      cabinets.length === 0 &&
-      page > 1 &&
-      totalPages > 0 &&
-      page > totalPages
-    ) {
+    // 删除末页最后一条后当前页可能越界：回退到最后一页重新加载（共享判定）
+    const totalPages = retreatToLastPage(cabinets, page, data, currentPageSize);
+    if (totalPages) {
       return loadCabinetsData(totalPages);
     }
 
@@ -289,7 +284,7 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
         { field: "description", render: (v) => escapeHtml(v) || "-" },
         {
           field: "created_at",
-          render: (v) => new Date(v).toLocaleString(),
+          render: (v) => formatDateTime(v),
           className: "col-center"
         },
         {

@@ -1,37 +1,11 @@
 //! 定时任务数据模型。
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+/// scheduled_tasks / task_logs 行模型真身定义在 foims-models（数据模型层），
+/// 此处 re-export 保持 `foims_scheduler::ScheduledTask` 等旧调用路径稳定
+pub use foims_models::{ScheduledTask, TaskLog};
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct ScheduledTask {
-    pub id: uuid::Uuid,
-    pub name: String,
-    pub task_type: String,
-    pub cron_expression: String,
-    pub enabled: bool,
-    pub config: serde_json::Value,
-    pub last_run_at: Option<DateTime<Utc>>,
-    pub next_run_at: Option<DateTime<Utc>>,
-    pub last_result: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct TaskLog {
-    pub id: uuid::Uuid,
-    pub task_name: String,
-    pub status: String,
-    pub details: serde_json::Value,
-    pub start_time: DateTime<Utc>,
-    pub end_time: Option<DateTime<Utc>>,
-    pub duration: Option<i32>,
-}
-
-/// 数据库连接配置（复用 foims-data-management 的定义）
-pub use foims_data_management::DatabaseConfig;
+/// 数据库连接配置（真身定义在 foims-common）
+pub use foims_common::config::DatabaseConfig;
 
 /// 任务执行上下文
 pub struct TaskContext {
@@ -43,6 +17,7 @@ pub struct TaskContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{DateTime, Utc};
 
     /// 构造固定时间戳，保证序列化输出可精确断言
     fn fixed_time() -> DateTime<Utc> {

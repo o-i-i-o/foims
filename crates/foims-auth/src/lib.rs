@@ -7,6 +7,7 @@
 pub mod app_fail2ban;
 pub mod captcha;
 pub mod extractor;
+pub mod jwt;
 pub mod ldap;
 pub mod login;
 pub mod meta;
@@ -15,7 +16,6 @@ pub mod provider;
 pub mod smtp;
 pub mod sso;
 pub mod user;
-pub mod utils;
 
 // 供主程序直接引用的常用提取器（完整集合见 extractor 模块）
 pub use extractor::AdminOrAuditorUser;

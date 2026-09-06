@@ -4,7 +4,12 @@ import {
   loadVisualizationRoomsForSelect,
   getOrgSubtreeIds
 } from "../../utils/resources.js";
-import { elementCache, setActiveSubtab, getActiveSubtab } from "../../utils/helpers.js";
+import {
+  createSeqGuard,
+  elementCache,
+  setActiveSubtab,
+  getActiveSubtab
+} from "../../utils/helpers.js";
 import { editWorkstation } from "../workstation.js";
 import { editCabinet } from "../cabinet.js";
 import { editCabinetPosition } from "../position.js";
@@ -313,17 +318,17 @@ function fillTopologyConnectionDeviceOptions(selectEl, excludeId) {
 
 // 端口下拉请求代次：快速切换设备时旧响应晚到会向新设备的选择框
 // 追加过期端口选项，提交出 port_id 与 device_id 不匹配的组合
-let topologyPortsRequestSeq = 0;
+const topologyPortsSeq = createSeqGuard();
 
 async function loadTopologyConnectionPorts(selectEl, deviceId) {
-  const requestSeq = ++topologyPortsRequestSeq;
+  const requestSeq = topologyPortsSeq.next();
   selectEl.innerHTML = "";
   if (!deviceId) {
     return;
   }
   try {
     const result = await apiGet(`/api/resources/devices/${deviceId}/interfaces?page_size=200`);
-    if (!result.success || requestSeq !== topologyPortsRequestSeq) {
+    if (!result.success || !topologyPortsSeq.isCurrent(requestSeq)) {
       return;
     }
     const ports = result.data?.items ?? [];

@@ -2,6 +2,7 @@ import { apiGet, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   renderTable,
   getElementValue,
   handleFormSubmit,
@@ -18,7 +19,7 @@ import {
 import { openModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
-import { elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache } from "../utils/helpers.js";
 import {
   loadRoomsForSelect,
   loadDeviceTemplatesForSelect,
@@ -34,7 +35,7 @@ import { manageUnifiedDevicePorts } from "./unifiedDevicePorts.js";
 import { viewArpTable, viewLldpNeighbors } from "./deviceMacLldp.js";
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
-let deviceRequestSeq = 0;
+const deviceSeq = createSeqGuard();
 
 const tableState = createSortState("name", "asc");
 let currentPage = 1;
@@ -80,7 +81,7 @@ function maskToNull(value) {
 let deviceTableClickHandler = null;
 
 export async function loadDevicesData(page = currentPage, sortBy = null, sortOrder = null) {
-  const requestSeq = ++deviceRequestSeq;
+  const requestSeq = deviceSeq.next();
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -90,7 +91,7 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
     const result = await apiGet(
       `/api/resources/devices?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
-    if (requestSeq !== deviceRequestSeq) {
+    if (!deviceSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     // 接口失败时提示并中止，不再静默渲染空数据（与 networks.js 口径一致）
@@ -101,16 +102,9 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
     const data = result.data || { items: [], total: 0 };
     const devices = data.items || data;
 
-    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
-    // 回退到最后一页重新加载，避免停留在空页无法翻回
-    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
-    if (
-      Array.isArray(devices) &&
-      devices.length === 0 &&
-      page > 1 &&
-      totalPages > 0 &&
-      page > totalPages
-    ) {
+    // 删除末页最后一条后当前页可能越界：回退到最后一页重新加载（共享判定）
+    const totalPages = retreatToLastPage(devices, page, data, currentPageSize);
+    if (totalPages) {
       return loadDevicesData(totalPages);
     }
 

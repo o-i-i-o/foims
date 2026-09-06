@@ -3,7 +3,7 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
-use crate::utils::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
+use crate::jwt::{JwtClaims, extract_cookie_from_parts, extract_token_from_parts};
 use foims_common::net::is_secure_from_parts;
 use foims_common::{AppError, msg};
 

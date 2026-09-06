@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use async_snmp::VarBind;
 use async_snmp::notification::{Notification, NotificationReceiver, ReceivedNotification};
-use async_snmp::v3::{AuthProtocol, AuthoritativeEngine, PrivProtocol, UsmUser};
+use async_snmp::v3::{AuthoritativeEngine, UsmUser};
 use dashmap::DashMap;
 use foims_common::config::{SnmpTrapConfig, SnmpTrapUsmUser};
 use foims_common::{log_error, log_info, log_warn};
@@ -128,48 +128,22 @@ async fn build_receiver(config: &SnmpTrapConfig) -> Result<NotificationReceiver,
     builder.build().await.map_err(|e| e.to_string())
 }
 
-/// 解析认证协议配置字符串。
-fn parse_auth_protocol(value: &str) -> Option<AuthProtocol> {
-    match value.to_ascii_lowercase().as_str() {
-        "md5" => Some(AuthProtocol::Md5),
-        "sha" | "sha1" => Some(AuthProtocol::Sha1),
-        "sha224" => Some(AuthProtocol::Sha224),
-        "sha256" => Some(AuthProtocol::Sha256),
-        "sha384" => Some(AuthProtocol::Sha384),
-        "sha512" => Some(AuthProtocol::Sha512),
-        _ => None,
-    }
-}
-
-/// 解析加密协议配置字符串。
-fn parse_priv_protocol(value: &str) -> Option<PrivProtocol> {
-    match value.to_ascii_lowercase().as_str() {
-        "des" => Some(PrivProtocol::Des),
-        "3des" | "des3" => Some(PrivProtocol::Des3),
-        "aes" | "aes128" => Some(PrivProtocol::Aes128),
-        "aes192" => Some(PrivProtocol::Aes192Blumenthal),
-        "aes256" => Some(PrivProtocol::Aes256Blumenthal),
-        _ => None,
-    }
-}
+// 认证/加密协议字符串解析复用 device::snmp 的唯一定义
+//（库内 FromStr 别名表 + AES-192/256 Blumenthal 旧别名，覆盖范围
+// 为本模块旧手写解析表的超集），不再各自维护匹配表
+use crate::device::snmp::{parse_auth_protocol, parse_priv_protocol};
 
 /// 按配置构建 USM 用户；配置非法时返回错误说明，调用方跳过该用户继续。
 fn build_usm_user(config: &SnmpTrapUsmUser) -> Result<UsmUser, String> {
     let auth = if config.auth_protocol.is_empty() {
         None
     } else {
-        Some(
-            parse_auth_protocol(&config.auth_protocol)
-                .ok_or_else(|| format!("未知认证协议 {}", config.auth_protocol))?,
-        )
+        Some(parse_auth_protocol(&config.auth_protocol)?)
     };
     let privacy = if config.priv_protocol.is_empty() {
         None
     } else {
-        Some(
-            parse_priv_protocol(&config.priv_protocol)
-                .ok_or_else(|| format!("未知加密协议 {}", config.priv_protocol))?,
-        )
+        Some(parse_priv_protocol(&config.priv_protocol)?)
     };
 
     let user = UsmUser::new(config.username.clone());
@@ -339,26 +313,31 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_snmp::v3::{AuthProtocol, PrivProtocol};
     use async_snmp::{Value, oid};
 
     #[test]
     fn test_parse_auth_protocol() {
-        assert_eq!(parse_auth_protocol("SHA256"), Some(AuthProtocol::Sha256));
-        assert_eq!(parse_auth_protocol("sha"), Some(AuthProtocol::Sha1));
-        assert_eq!(parse_auth_protocol("md5"), Some(AuthProtocol::Md5));
-        assert_eq!(parse_auth_protocol("rc4"), None);
-        assert_eq!(parse_auth_protocol(""), None);
+        // 共享解析器返回 Result；.ok() 后与旧 Option 口径对齐断言
+        assert_eq!(
+            parse_auth_protocol("SHA256").ok(),
+            Some(AuthProtocol::Sha256)
+        );
+        assert_eq!(parse_auth_protocol("sha").ok(), Some(AuthProtocol::Sha1));
+        assert_eq!(parse_auth_protocol("md5").ok(), Some(AuthProtocol::Md5));
+        assert!(parse_auth_protocol("rc4").is_err());
+        assert!(parse_auth_protocol("").is_err());
     }
 
     #[test]
     fn test_parse_priv_protocol() {
-        assert_eq!(parse_priv_protocol("AES"), Some(PrivProtocol::Aes128));
+        assert_eq!(parse_priv_protocol("AES").ok(), Some(PrivProtocol::Aes128));
         assert_eq!(
-            parse_priv_protocol("aes256"),
+            parse_priv_protocol("aes256").ok(),
             Some(PrivProtocol::Aes256Blumenthal)
         );
-        assert_eq!(parse_priv_protocol("3des"), Some(PrivProtocol::Des3));
-        assert_eq!(parse_priv_protocol("chacha"), None);
+        assert_eq!(parse_priv_protocol("3des").ok(), Some(PrivProtocol::Des3));
+        assert!(parse_priv_protocol("chacha").is_err());
     }
 
     #[test]

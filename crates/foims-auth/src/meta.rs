@@ -18,7 +18,7 @@ use foims_common::net::{
     is_secure_from_parts,
 };
 
-use crate::utils::JwtClaims;
+use crate::jwt::JwtClaims;
 
 /// 审计外发钩子：(连接池, 消息) -> ()。由二进制 crate 注册。
 type ForwardFn = fn(PgPool, String);
@@ -88,16 +88,8 @@ pub async fn log_system_operation(
     pool: &sqlx::PgPool,
     params: OperationLogParams<'_>,
 ) -> Result<(), sqlx::Error> {
-    // 检查用户是否存在，不存在则使用 NULL
-    let valid_user_id = if let Some(uid) = params.user_id {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-            .bind(uid)
-            .fetch_one(pool)
-            .await?;
-        if exists { Some(uid) } else { None }
-    } else {
-        None
-    };
+    // 用户存在性校验复用 utils 的唯一定义，不存在则使用 NULL
+    let valid_user_id = crate::jwt::resolve_valid_user_id(pool, params.user_id).await?;
 
     sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")

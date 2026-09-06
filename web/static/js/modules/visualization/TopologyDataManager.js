@@ -1,6 +1,7 @@
 import { apiGet, apiPost, apiDelete } from "../../utils/apiClient.js";
 import { showToast } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
+import { fetchAllPages, notifyLoadFailure } from "../../utils/pagedFetch.js";
 
 export class TopologyDataManager {
   constructor() {
@@ -12,8 +13,7 @@ export class TopologyDataManager {
 
   /** 数据获取失败时的统一提示（请求异常或业务失败） */
   _notifyLoadFailure(error, what) {
-    console.error(`${what}失败:`, error);
-    this.showToast(t("viz.data_load_failed"), "error");
+    notifyLoadFailure(this.showToast, error, what);
   }
 
   async fetchTopologyNodes() {
@@ -152,45 +152,18 @@ export class TopologyDataManager {
   }
 
   /**
-   * 分页拉取全量列表：每页 1000 条，最多 5 页（5000 条）。
-   * 仍有后续页但已达上限时提示数据可能不完整（避免超 1000 条被静默截断）。
+   * 分页拉取全量列表（共享实现在 utils/pagedFetch.js）。
    * @param {string} path 不含分页参数的接口路径
    * @param {string} what 失败提示用途描述
    * @returns {Promise<Array>} 拉取到的条目（失败时为已获取的部分或空数组）
    */
   async _fetchAllPages(path, what) {
-    const MAX_PAGES = 5;
-    const PAGE_SIZE = 1000;
-    const items = [];
-    const sep = path.includes("?") ? "&" : "?";
-
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      let result;
-      try {
-        result = await this.apiGet(`${path}${sep}page=${page}&page_size=${PAGE_SIZE}`);
-      } catch (error) {
-        this._notifyLoadFailure(error, what);
-        break;
-      }
-      if (!result.success || !Array.isArray(result.data?.items)) {
-        if (!result.success) {
-          this._notifyLoadFailure(result.message, what);
-        }
-        break;
-      }
-
-      items.push(...result.data.items);
-
-      const totalPages = Number(result.data.total_pages) || 1;
-      if (page >= totalPages) {
-        break;
-      }
-      if (page === MAX_PAGES) {
-        // 还有后续页但已达拉取上限：提示数据可能不完整
-        this.showToast(t("viz.data_page_limit_exceeded"), "warning");
-      }
-    }
-    return items;
+    return fetchAllPages({
+      apiGet: this.apiGet,
+      showToast: this.showToast,
+      path,
+      what
+    });
   }
 
   async fetchAllDevices() {

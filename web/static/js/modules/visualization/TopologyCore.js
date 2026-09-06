@@ -1,19 +1,24 @@
+import { SVGCanvasBase } from "./svgCanvasBase.js";
 import { SVG_NS } from "./SVGCore.js";
 import { showToast } from "../../utils/ui.js";
 import { t } from "../../utils/i18n.js";
 
-export class TopologyCore {
+/**
+ * 拓扑画布：设备节点/房间机柜分组框的平移缩放、连线模式与容器整体拖动。
+ * 网格/标尺/viewBox/tooltip/坐标换算/吸附/选中共享实现在 SVGCanvasBase。
+ */
+export class TopologyCore extends SVGCanvasBase {
   constructor(containerId, callbacks = {}) {
-    this.container = document.getElementById(containerId);
-    this.svg = null;
+    // 拓扑标尺字号分母 150、节点默认宽 200（与既有绘制口径一致）
+    super(containerId, {
+      type: "topology",
+      callbacks,
+      defaultElementWidth: 200,
+      rulerFontDivisor: 150
+    });
+    this.gridPatternId = "topology-grid";
     this.connectionsGroup = null;
-    this.elementsGroup = null;
     this.tempConnectionGroup = null;
-    this.selectedElement = null;
-    this.isDragging = false;
-    this.hasMoved = false;
-    this.elementStartPos = { x: 0, y: 0 };
-    this.mouseStartPos = { x: 0, y: 0 };
     this.isPanning = false;
     this.panStart = { x: 0, y: 0 };
     this.viewBoxStart = { x: 0, y: 0 };
@@ -23,30 +28,8 @@ export class TopologyCore {
     this.isSpaceDown = false;
     this.isConnectionMode = false;
     this.connectionSource = null;
-    this.gridSize = 20;
-    this.callbacks = callbacks;
 
     this._init();
-  }
-
-  _init() {
-    this._initSVG();
-    this._initTooltip();
-    this._initEventListeners();
-  }
-
-  _initTooltip() {
-    const tooltipId = "visualization-tooltip-topology";
-    const existing = document.getElementById(tooltipId);
-    if (existing) {
-      this.tooltip = existing;
-      return;
-    }
-    const tooltip = document.createElement("div");
-    tooltip.id = tooltipId;
-    tooltip.className = "tooltip";
-    document.body.appendChild(tooltip);
-    this.tooltip = tooltip;
   }
 
   _initSVG() {
@@ -68,7 +51,7 @@ export class TopologyCore {
     bg.setAttribute("y", 0);
     bg.setAttribute("width", 3000);
     bg.setAttribute("height", 2000);
-    bg.setAttribute("fill", "url(#topology-grid)");
+    bg.setAttribute("fill", `url(#${this.gridPatternId})`);
     this.svg.appendChild(bg);
     // 背景矩形需随 viewBox 显式更新：百分比按容器像素而非 viewBox 解析，
     // 缩小视野（fitView/缩小）时会导致网格只覆盖画布局部
@@ -102,100 +85,6 @@ export class TopologyCore {
     // flex:1 随可用空间伸缩）控制：内联固定高度 calc(100vh - 200px) 会覆盖 flex
     // 布局，工具栏实际占高与 200px 不符时画布顶缘错位、底部溢出
     this.container.style.overflow = "hidden";
-  }
-
-  _createDefs() {
-    const defs = document.createElementNS(SVG_NS, "defs");
-    const pattern = document.createElementNS(SVG_NS, "pattern");
-    pattern.setAttribute("id", "topology-grid");
-    pattern.setAttribute("width", this.gridSize);
-    pattern.setAttribute("height", this.gridSize);
-    pattern.setAttribute("patternUnits", "userSpaceOnUse");
-    const path = document.createElementNS(SVG_NS, "path");
-    path.setAttribute("d", `M ${this.gridSize} 0 L 0 0 0 ${this.gridSize}`);
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "#e5e7eb");
-    path.setAttribute("stroke-width", "0.5");
-    pattern.appendChild(path);
-    defs.appendChild(pattern);
-    this.svg.appendChild(defs);
-  }
-
-  /**
-   * 按当前 viewBox 重绘主网格与坐标标注。
-   * 主网格间距为 gridSize 的 5 倍（100px），顶边/左边标注画布坐标，
-   * 配合设备/容器坐标输入框精确定位。
-   */
-  _renderGridRuler() {
-    if (!this.gridRulerGroup) {
-      return;
-    }
-    const vb = this.svg.viewBox.baseVal;
-    const group = this.gridRulerGroup;
-    group.innerHTML = "";
-    if (!vb.width || !vb.height) {
-      return;
-    }
-
-    const step = this.gridSize * 5;
-    // 标注字号随视口宽度缩放，缩放后保持可读
-    const fontSize = Math.max(9, Math.min(14, vb.width / 150));
-    const endX = vb.x + vb.width;
-    const endY = vb.y + vb.height;
-
-    for (let gx = Math.floor(vb.x / step) * step; gx <= endX; gx += step) {
-      const line = document.createElementNS(SVG_NS, "line");
-      line.setAttribute("x1", gx);
-      line.setAttribute("y1", vb.y);
-      line.setAttribute("x2", gx);
-      line.setAttribute("y2", endY);
-      line.setAttribute("class", "grid-major-line");
-      group.appendChild(line);
-
-      const label = document.createElementNS(SVG_NS, "text");
-      label.setAttribute("x", gx + 2);
-      label.setAttribute("y", vb.y + fontSize);
-      label.setAttribute("class", "grid-label");
-      label.setAttribute("font-size", fontSize);
-      label.textContent = gx;
-      group.appendChild(label);
-    }
-
-    for (let gy = Math.floor(vb.y / step) * step; gy <= endY; gy += step) {
-      const line = document.createElementNS(SVG_NS, "line");
-      line.setAttribute("x1", vb.x);
-      line.setAttribute("y1", gy);
-      line.setAttribute("x2", endX);
-      line.setAttribute("y2", gy);
-      line.setAttribute("class", "grid-major-line");
-      group.appendChild(line);
-
-      const label = document.createElementNS(SVG_NS, "text");
-      label.setAttribute("x", vb.x + 2);
-      label.setAttribute("y", gy - 2);
-      label.setAttribute("class", "grid-label");
-      label.setAttribute("font-size", fontSize);
-      label.textContent = gy;
-      group.appendChild(label);
-    }
-  }
-
-  /** 统一的 viewBox 更新入口：背景矩形同步铺满，rAF 节流重绘主网格与坐标标注（平移/缩放高频触发）。 */
-  setViewBox(x, y, width, height) {
-    this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
-    if (this.gridRect) {
-      this.gridRect.setAttribute("x", x);
-      this.gridRect.setAttribute("y", y);
-      this.gridRect.setAttribute("width", width);
-      this.gridRect.setAttribute("height", height);
-    }
-    if (this._gridRulerRaf) {
-      return;
-    }
-    this._gridRulerRaf = requestAnimationFrame(() => {
-      this._gridRulerRaf = 0;
-      this._renderGridRuler();
-    });
   }
 
   _initEventListeners() {
@@ -353,41 +242,6 @@ export class TopologyCore {
     }
 
     this._updateTooltip(e);
-  }
-
-  _updateTooltip(e) {
-    if (!this.tooltip) {
-      return;
-    }
-    const target = e.target.closest("[data-tooltip]");
-    if (!target || !target.dataset.tooltip) {
-      this._hideTooltip();
-      return;
-    }
-
-    this.tooltip.textContent = target.dataset.tooltip;
-    this.tooltip.classList.add("visible");
-
-    // 按鼠标在画布内的象限决定浮窗展开方向，使其始终朝画布内侧显示
-    const TOOLTIP_MARGIN = 12;
-    const canvasRect = this.container.getBoundingClientRect();
-    const onLeftHalf = e.clientX - canvasRect.left < canvasRect.width / 2;
-    const onTopHalf = e.clientY - canvasRect.top < canvasRect.height / 2;
-    const left = onLeftHalf
-      ? e.clientX + TOOLTIP_MARGIN
-      : e.clientX - this.tooltip.offsetWidth - TOOLTIP_MARGIN;
-    const top = onTopHalf
-      ? e.clientY + TOOLTIP_MARGIN
-      : e.clientY - this.tooltip.offsetHeight - TOOLTIP_MARGIN;
-
-    this.tooltip.style.left = `${Math.max(8, Math.min(left, window.innerWidth - this.tooltip.offsetWidth - 8))}px`;
-    this.tooltip.style.top = `${Math.max(8, Math.min(top, window.innerHeight - this.tooltip.offsetHeight - 8))}px`;
-  }
-
-  _hideTooltip() {
-    if (this.tooltip) {
-      this.tooltip.classList.remove("visible");
-    }
   }
 
   _handleMouseUp() {
@@ -562,39 +416,6 @@ export class TopologyCore {
     this.tempConnectionGroup.appendChild(line);
   }
 
-  _setElementPosition(element, x, y) {
-    const rect = element.querySelector("rect");
-    if (!rect) {
-      return;
-    }
-
-    const width = parseFloat(rect.getAttribute("width")) || 200;
-
-    rect.setAttribute("x", x);
-    rect.setAttribute("y", y);
-
-    element.querySelectorAll("text").forEach((text) => {
-      const relX = parseFloat(text.dataset.relX || 0);
-      const relY = parseFloat(text.dataset.relY || 0);
-      text.setAttribute("x", x + width / 2 + relX);
-      text.setAttribute("y", y + relY);
-    });
-
-    // 设备类型图标（相对节点左上角定位，随拖动平移）
-    element.querySelectorAll(".device-icon").forEach((icon) => {
-      const relX = parseFloat(icon.dataset.relX || 0);
-      const relY = parseFloat(icon.dataset.relY || 0);
-      icon.setAttribute("transform", `translate(${x + relX}, ${y + relY})`);
-    });
-
-    element.querySelectorAll(".port-anchor").forEach((anchor) => {
-      const relCx = parseFloat(anchor.dataset.relCx || 0);
-      const relCy = parseFloat(anchor.dataset.relCy || 0);
-      anchor.setAttribute("cx", x + relCx);
-      anchor.setAttribute("cy", y + relCy);
-    });
-  }
-
   /**
    * 开始容器拖动：按容器类型匹配组内全部设备节点并记录起始位置。
    * @returns {boolean} 是否成功进入容器拖动（无成员时返回 false 走默认点击逻辑）
@@ -678,42 +499,6 @@ export class TopologyCore {
         this.callbacks.onNodeDrag(null);
       }
     });
-  }
-
-  _snapElementToGrid(element) {
-    const rect = element.querySelector("rect");
-    if (!rect) {
-      return;
-    }
-    const x = parseFloat(rect.getAttribute("x"));
-    const y = parseFloat(rect.getAttribute("y"));
-    const snappedX = Math.round(x / this.gridSize) * this.gridSize;
-    const snappedY = Math.round(y / this.gridSize) * this.gridSize;
-    if (snappedX !== x || snappedY !== y) {
-      this._setElementPosition(element, snappedX, snappedY);
-    }
-  }
-
-  _selectElement(element) {
-    this._clearSelection();
-    this.selectedElement = element;
-    element.classList.add("selected");
-  }
-
-  _clearSelection() {
-    this.elementsGroup
-      .querySelectorAll(".selected")
-      .forEach((el) => el.classList.remove("selected"));
-    this.selectedElement = null;
-  }
-
-  _getSvgCoordinates(e) {
-    const pt = this.svg.createSVGPoint();
-    const rect = this.svg.getBoundingClientRect();
-    pt.x = e.clientX - rect.left;
-    pt.y = e.clientY - rect.top;
-    const ctm = this.svg.getScreenCTM().inverse();
-    return pt.matrixTransform(ctm);
   }
 
   /**

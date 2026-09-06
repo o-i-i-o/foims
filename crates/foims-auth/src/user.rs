@@ -10,9 +10,9 @@ use serde_json::json;
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::jwt::hash_password;
 use crate::meta::{RequestMeta, log_op_best_effort};
 use crate::provider::AuthProvider;
-use crate::utils::hash_password;
 use foims_common::AppJson;
 use foims_common::log_info;
 use foims_common::pagination::{Pagination, paged_response};

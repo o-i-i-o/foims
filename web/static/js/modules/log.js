@@ -1,3 +1,4 @@
+import { formatDateTime } from "../utils/formatter.js";
 // 日志和通知管理模块
 
 // ES模块导入
@@ -5,6 +6,7 @@ import { apiGet, apiPut } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   renderTable,
   appendPaginationToTable,
   escapeHtml,
@@ -16,7 +18,7 @@ import {
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import { showConfirm } from "../utils/confirm.js";
-import { setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
+import { createSeqGuard, getActiveSubtab, setActiveSubtab } from "../utils/helpers.js";
 import { openModal } from "../utils/modalLoader.js";
 
 const logSortStates = {
@@ -197,11 +199,11 @@ function initLogSearch() {
 }
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止快速切换日志类型后表格与状态错乱
-let logsRequestSeq = 0;
+const logsSeq = createSeqGuard();
 
 // 加载日志数据（支持搜索、排序和分页）
 export async function loadLogsData(logType = "operation", searchParams = {}) {
-  const requestSeq = ++logsRequestSeq;
+  const requestSeq = logsSeq.next();
   try {
     const {
       resource_type = "",
@@ -248,7 +250,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
     }
 
     const data = await apiGet(apiUrl);
-    if (requestSeq !== logsRequestSeq) {
+    if (!logsSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     const tableId = `${logType}-logs-table`;
@@ -294,7 +296,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
             const logData = encodeURIComponent(JSON.stringify(log));
 
             rowHtml += `
-              <td class="col-center col-time">${new Date(log.created_at).toLocaleString()}</td>
+              <td class="col-center col-time">${formatDateTime(log.created_at)}</td>
               <td class="col-operator">${escapeHtml(log.username) || "-"}</td>
               <td class="col-center">${escapeHtml(operationTypeText)}</td>
               <td class="col-center">${escapeHtml(resourceTypeText) || "-"}</td>
@@ -307,7 +309,7 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
           } else {
             const loginResultText = log.success ? t("common.success") : t("common.failed");
             rowHtml += `
-              <td class="col-center">${new Date(log.created_at).toLocaleString()}</td>
+              <td class="col-center">${formatDateTime(log.created_at)}</td>
               <td>${escapeHtml(log.username)}</td>
               <td>${escapeHtml(log.ip_address)}</td>
               <td>${escapeHtml(log.user_agent) || "-"}</td>
@@ -360,7 +362,7 @@ let notificationsFilterStatus = "all";
 let notificationsCurrentPage = 1;
 
 // 通知列表请求序号:旧响应晚到时放弃渲染,防止筛选/翻页并发后列表错乱
-let notificationsRequestSeq = 0;
+const notificationsSeq = createSeqGuard();
 
 export async function loadNotificationsData(
   filterStatus = notificationsFilterStatus,
@@ -368,7 +370,7 @@ export async function loadNotificationsData(
   sortBy = null,
   sortOrder = null
 ) {
-  const requestSeq = ++notificationsRequestSeq;
+  const requestSeq = notificationsSeq.next();
   notificationsFilterStatus = filterStatus;
   notificationsCurrentPage = page;
   try {
@@ -386,7 +388,7 @@ export async function loadNotificationsData(
     params.append("sort_order", notificationTableState.sortOrder);
 
     const result = await apiGet(`/api/notifications?${params.toString()}`);
-    if (requestSeq !== notificationsRequestSeq) {
+    if (!notificationsSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     const tbody = document.querySelector("#notifications-table tbody");
@@ -405,10 +407,9 @@ export async function loadNotificationsData(
     const data = result.data || { items: [], total: 0 };
     const notifications = data.items || data;
 
-    // 空列表且当前页大于 1：删除后页码越界，按 total_pages 一步回退
-    //（与其他列表模块一致，避免极端情况连环请求）
-    const totalPages = data.total_pages || 0;
-    if (notifications.length === 0 && page > 1 && totalPages > 0 && page > totalPages) {
+    // 空列表且当前页大于 1：删除后页码越界，按 total_pages 一步回退（共享判定）
+    const totalPages = retreatToLastPage(notifications, page, data, 20);
+    if (totalPages) {
       loadNotificationsData(filterStatus, totalPages, sortBy, sortOrder);
       return;
     }
@@ -419,7 +420,7 @@ export async function loadNotificationsData(
         const row = document.createElement("tr");
         row.innerHTML = `
           <td class="index-column">${startIndex + index + 1}</td>
-          <td class="col-center">${new Date(notification.created_at).toLocaleString()}</td>
+          <td class="col-center">${formatDateTime(notification.created_at)}</td>
           <td>${escapeHtml(translateServerKey(notification.title))}</td>
           <td>${escapeHtml(translateNotificationContent(notification.content))}</td>
           <td class="col-center">
@@ -564,7 +565,7 @@ async function showLogDetails(log) {
     }
   };
 
-  setText("#log-detail-time", new Date(log.created_at).toLocaleString());
+  setText("#log-detail-time", formatDateTime(log.created_at));
   setText("#log-detail-user", log.username || "-");
   setText("#log-detail-type", operationTypeText);
   setText("#log-detail-resource-type", resourceTypeText || "-");

@@ -16,7 +16,6 @@ use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppMessage, log_error, log_info, log_warn, msg};
 use foims_models::{ApiResponse, IpDetail, IpDetailCreate, IpDetailWithNames};
-use std::net::IpAddr;
 use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
@@ -846,15 +845,9 @@ pub async fn pull_ip_details_internal(
     Ok(())
 }
 
-pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
-    match IpAddr::from_str(ip) {
-        Ok(IpAddr::V6(_)) => Ok(6),
-        Ok(IpAddr::V4(_)) => Ok(4),
-        Err(e) => Err(AppError::Validation(
-            msg("server.ip.invalid_ip").with("ip", ip).with("error", e),
-        )),
-    }
-}
+// IP 版本推导（ips.ip_version 4/6）真身定义在 foims-common::net，
+// 与导入导出的行级校验共用同一口径
+pub use foims_common::net::detect_ip_version;
 
 pub fn find_available_ips_in_cidr(
     cidr_str: &str,

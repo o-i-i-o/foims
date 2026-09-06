@@ -52,18 +52,10 @@ pub async fn get_resource_options<P: DbProvider>(
 
     // 过滤参数非法 UUID 显式 422（与 net_outlet/patch_panel 口径一致），
     // 不再静默忽略退化为全量列表
-    let parse_filter = |key: &str, param: &str| -> Result<Option<Uuid>, AppError> {
-        match query.get(key) {
-            Some(v) if !v.is_empty() => Uuid::parse_str(v).map(Some).map_err(|_| {
-                AppError::Validation(msg("server.common.invalid_param").with("param", param))
-            }),
-            _ => Ok(None),
-        }
-    };
-    let room_id = parse_filter("room_id", "room_id")?;
-    let region_id = parse_filter("region_id", "region_id")?;
-    let cabinet_id = parse_filter("cabinet_id", "cabinet_id")?;
-    let workstation_id = parse_filter("workstation_id", "workstation_id")?;
+    let room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
+    let region_id = crate::helpers::parse_optional_uuid(&query, "region_id")?;
+    let cabinet_id = crate::helpers::parse_optional_uuid(&query, "cabinet_id")?;
+    let workstation_id = crate::helpers::parse_optional_uuid(&query, "workstation_id")?;
 
     // devices 资源的过滤参数互斥：room_id / cabinet_id / workstation_id
     // 同时给出多个时显式 422（并列罗列冲突参数），不再静默忽略其一

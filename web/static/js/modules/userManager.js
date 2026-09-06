@@ -2,6 +2,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   formatDateTime,
   appendPaginationToTable,
   escapeHtml,
@@ -13,7 +14,7 @@ import {
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
-import { elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
 // 角色显示（等保三权分立：admin/secadmin/auditor/user）
@@ -35,11 +36,11 @@ const USER_PAGE_SIZE = 20;
 const userTableState = createSortState("created_at", "desc");
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
-let usersRequestSeq = 0;
+const usersSeq = createSeqGuard();
 
 // 加载用户数据
 export async function loadUsersData(page = currentUserPage, sortBy = null, sortOrder = null) {
-  const requestSeq = ++usersRequestSeq;
+  const requestSeq = usersSeq.next();
   currentUserPage = page;
   if (sortBy) {
     userTableState.setSort(sortBy, sortOrder);
@@ -48,7 +49,7 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
     const response = await apiGet(
       `/api/users?page=${page}&page_size=${USER_PAGE_SIZE}&sort_by=${userTableState.sortBy}&sort_order=${userTableState.sortOrder}`
     );
-    if (requestSeq !== usersRequestSeq) {
+    if (!usersSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     if (response.success) {
@@ -57,10 +58,9 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
       const pagination = data.total !== undefined ? data : null;
       const tableBody = document.querySelector("#users-table tbody");
 
-      // 空列表且当前页大于 1：删除后页码越界，按 total_pages 一步回退
-      //（与 room/networks 等列表模块一致，避免极端情况连环请求）
-      const totalPages = data.total_pages || Math.ceil((data.total || 0) / USER_PAGE_SIZE);
-      if (users.length === 0 && page > 1 && totalPages > 0 && page > totalPages) {
+      // 空列表且当前页大于 1：删除后页码越界，按 total_pages 一步回退（共享判定）
+      const totalPages = retreatToLastPage(users, page, data, USER_PAGE_SIZE);
+      if (totalPages) {
         loadUsersData(totalPages);
         return;
       }

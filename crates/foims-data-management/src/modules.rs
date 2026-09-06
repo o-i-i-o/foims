@@ -74,11 +74,3 @@ pub const MODULES: &[ModuleDef] = &[
 pub fn find_module(name: &str) -> Option<&'static ModuleDef> {
     MODULES.iter().find(|m| m.name == name)
 }
-
-/// 表名所属的模块名（用于导入时校验表与模块的归属关系）。
-pub fn table_module(table: &str) -> Option<&'static str> {
-    MODULES
-        .iter()
-        .find(|m| m.tables.contains(&table))
-        .map(|m| m.name)
-}

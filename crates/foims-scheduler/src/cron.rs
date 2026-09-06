@@ -544,7 +544,7 @@ mod tests {
     /// 日字段 `L`（当月最后一天，与 croner 同名扩展语义一致）：
     /// 整表达式须命中当月实际最后一天；列表混用时任一命中即触发
     #[test]
-    fn 日字段L_命中当月最后一天() {
+    fn 日字段l_命中当月最后一天() {
         let next =
             calculate_next_run("0 0 L * *").unwrap_or_else(|e| panic!("L 表达式应解析成功: {e}"));
         assert_eq!(next.second(), 0);

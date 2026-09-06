@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 use axum::extract::State;
 use axum::response::Response;
+use foims_common::crypto::constant_time_eq;
 use foims_common::{AppMessage, msg};
 use rand::RngExt;
 use tracing::info;
@@ -50,17 +51,6 @@ fn generate_and_print_verification_code() -> VerificationCode {
     info!("======================================================================\n");
 
     VerificationCode::new(code)
-}
-
-fn constant_time_eq(a: &str, b: &str) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut result = 0u8;
-    for (x, y) in a.bytes().zip(b.bytes()) {
-        result |= x ^ y;
-    }
-    result == 0
 }
 
 pub fn verify_code(provided_code: &str) -> Result<(), AppMessage> {

@@ -20,6 +20,9 @@ use foims_common::DbProvider;
 use foims_common::{AppError, msg};
 use foims_models::{Employee, EmployeeCreate, EmployeeUpdate, is_valid_phone};
 
+// 空串转 None：crate 内唯一定义在 lib.rs
+use crate::blank_to_none;
+
 /// 员工基础查询列（含组织名联表）
 const EMPLOYEE_COLUMNS: &str = "e.id, e.org_id,
         o.name as org_name,
@@ -36,13 +39,6 @@ fn validate_phone(phone: &Option<String>) -> Result<(), AppError> {
         )));
     }
     Ok(())
-}
-
-/// 空串转 None（可空文本字段统一处理）
-fn blank_to_none(value: Option<String>) -> Option<String> {
-    value
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
 }
 
 /// 获取员工列表（可选 org_id / search 过滤，登录即可读，供下拉与模态框使用）。

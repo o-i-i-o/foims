@@ -1,7 +1,9 @@
+import { createSeqGuard } from "../utils/helpers.js";
 import { apiGet, apiPost } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   renderTable,
   formatDateTime,
   handleError,
@@ -37,7 +39,7 @@ const ipTableState = createSortState("updated_at", "desc");
 
 // 列表请求序号：翻页/排序/过滤共用同一加载函数，防抖只减少不消除并发，
 // 旧请求的宽过滤响应可能晚于新请求到达并覆盖表格，响应返回时序号不符则丢弃
-let ipListRequestSeq = 0;
+const ipListSeq = createSeqGuard();
 
 // 拉取MAC模态框的下拉元素 id（多处引用，抽为常量）
 const PULL_MAC_DEVICE_SELECT_ID = "pull-mac-device-select";
@@ -200,7 +202,7 @@ export async function loadIpMacData(
 
   // 捕获本次请求序号；响应（含异常路径）返回时序号已变化说明有更新的请求，
   // 本次结果一律丢弃，避免旧响应/旧错误覆盖新状态
-  const requestSeq = ++ipListRequestSeq;
+  const requestSeq = ipListSeq.next();
 
   try {
     const { device_name = "", device_type = "", network = "", ip_address = "" } = filters;
@@ -225,7 +227,7 @@ export async function loadIpMacData(
 
     const result = await apiGet(`/api/resources/ip?${params.toString()}`);
 
-    if (requestSeq !== ipListRequestSeq) {
+    if (!ipListSeq.isCurrent(requestSeq)) {
       return null;
     }
 
@@ -233,16 +235,9 @@ export async function loadIpMacData(
       const { items, total, page: respPage, total_pages } = result.data;
       const pageNum = respPage || 1;
 
-      // 删除末页最后一条后当前页可能越界（页码大于总页数且列表为空）：
-      // 回退到最后一页重新加载，避免停留在空页无法翻回
-      const totalPages = total_pages || Math.ceil((total || 0) / currentPageSize);
-      if (
-        Array.isArray(items) &&
-        items.length === 0 &&
-        pageNum > 1 &&
-        totalPages > 0 &&
-        pageNum > totalPages
-      ) {
+      // 删除末页最后一条后当前页可能越界：回退到最后一页重新加载（共享判定）
+      const totalPages = retreatToLastPage(items, pageNum, result.data, currentPageSize);
+      if (totalPages) {
         return loadIpMacData(filters, totalPages);
       }
 
@@ -315,14 +310,14 @@ export async function loadIpMacData(
     }
 
     // 接口失败时提示并中止，不再静默保留旧表格（与 networks.js 口径一致）
-    if (requestSeq === ipListRequestSeq) {
+    if (ipListSeq.isCurrent(requestSeq)) {
       showToast(`${t("ip.load_failed")}: ${result.message}`, "error");
     }
     return null;
   } catch (error) {
     console.error("加载IP数据失败:", error);
     // 已有更新的请求在途时，旧请求的失败不覆盖表格
-    if (requestSeq !== ipListRequestSeq) {
+    if (!ipListSeq.isCurrent(requestSeq)) {
       return null;
     }
     renderTable("#ip-table", {

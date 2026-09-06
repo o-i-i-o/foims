@@ -174,8 +174,9 @@ pub struct SnmpParamsLegacy {
     pub timeout_secs: u64,
 }
 
-/// 解析 SNMPv3 认证协议（复用库内 FromStr 别名表，错误文案保持中文）
-fn parse_auth_protocol(proto: &str) -> Result<AuthProtocol, String> {
+/// 解析 SNMPv3 认证协议（复用库内 FromStr 别名表，错误文案保持中文）。
+/// crate 内唯一定义，trap 接收器的 USM 用户构建同样复用
+pub(crate) fn parse_auth_protocol(proto: &str) -> Result<AuthProtocol, String> {
     proto
         .parse()
         .map_err(|_| format!("不支持的认证协议: {proto}"))
@@ -186,7 +187,8 @@ fn parse_auth_protocol(proto: &str) -> Result<AuthProtocol, String> {
 /// 0.18 起 AES-192/256 需显式选择密钥扩展（Blumenthal/Reeder）；
 /// 旧别名 AES-192/AES192、AES-256/AES256 沿用 0.17 的 Blumenthal 扩展
 /// 语义，保证存量配置行为不变；新别名（如 AES-256-CISCO）交给库解析。
-fn parse_priv_protocol(proto: &str) -> Result<PrivProtocol, String> {
+/// crate 内唯一定义，trap 接收器的 USM 用户构建同样复用
+pub(crate) fn parse_priv_protocol(proto: &str) -> Result<PrivProtocol, String> {
     match proto.to_ascii_uppercase().as_str() {
         "AES-192" | "AES192" => Ok(PrivProtocol::Aes192Blumenthal),
         "AES-256" | "AES256" => Ok(PrivProtocol::Aes256Blumenthal),

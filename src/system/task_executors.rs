@@ -97,7 +97,7 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let count = foims_auth::utils::cleanup_expired_revoked_tokens(&ctx.pool)
+        let count = foims_auth::jwt::cleanup_expired_revoked_tokens(&ctx.pool)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(msg("server.task.token_cleanup_failed").with("error", e))

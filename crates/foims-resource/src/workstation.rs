@@ -61,7 +61,6 @@ pub async fn get_workstations<P: DbProvider>(
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let search = query.get("search").cloned().unwrap_or_default();
-    let room_id = query.get("room_id").cloned();
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -74,12 +73,7 @@ pub async fn get_workstations<P: DbProvider>(
     let search_pattern = (!search.is_empty()).then(|| foims_common::net::escape_like(&search));
     // 过滤参数非法 UUID 显式 422（与 options.rs/patch_panel.rs 口径一致），
     // 不再静默忽略退化为全量列表；空串视为未提供
-    let parsed_room_id = match room_id.as_deref() {
-        Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
-            AppError::Validation(msg("server.common.invalid_param").with("param", "room_id"))
-        })?),
-        _ => None,
-    };
+    let parsed_room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
 
     // ORDER BY 白名单，未匹配时回落默认序，避免注入
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
@@ -149,16 +143,16 @@ pub async fn create_workstation<P: DbProvider>(
         return Err(AppError::Validation(msg("server.room.not_found")));
     }
 
-    let existing_workstation: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM workstations WHERE name = $1 AND room_id = $2",
+    crate::helpers::ensure_unique_name(
+        &mut *tx,
+        "workstations",
+        Some("room_id"),
+        Some(req.room_id),
+        &req.name,
+        None,
+        "server.workstation.name_exists",
     )
-    .bind(&req.name)
-    .bind(req.room_id)
-    .fetch_optional(&mut *tx)
     .await?;
-    if existing_workstation.is_some() {
-        return Err(AppError::Conflict(msg("server.workstation.name_exists")));
-    }
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -331,17 +325,16 @@ pub async fn update_workstation<P: DbProvider>(
                     .await?
             }
         };
-        let duplicate: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM workstations WHERE name = $1 AND room_id = $2 AND id != $3",
+        crate::helpers::ensure_unique_name(
+            &mut *tx,
+            "workstations",
+            Some("room_id"),
+            Some(effective_room_id),
+            name,
+            Some(id),
+            "server.workstation.name_exists",
         )
-        .bind(name)
-        .bind(effective_room_id)
-        .bind(id)
-        .fetch_optional(&mut *tx)
         .await?;
-        if duplicate.is_some() {
-            return Err(AppError::Conflict(msg("server.workstation.name_exists")));
-        }
     }
 
     // 三态更新（QueryBuilder 动态拼接，None 不进 SET）：

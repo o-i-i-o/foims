@@ -1547,8 +1547,6 @@
       "ip_banned": "登录尝试过于频繁，IP 已被封禁，请 {{seconds}} 秒后重试",
       "login_failed": "用户名或密码错误",
       "otpauth_url_failed": "生成otpauth URL失败",
-      "password_hash_failed": "密码哈希失败",
-      "password_hash_task_failed": "密码哈希任务失败",
       "password_verify_failed": "密码验证失败",
       "password_verify_task_failed": "密码验证任务失败",
       "qr_generate_task_failed": "QR码生成任务失败",
@@ -1694,7 +1692,9 @@
         "uuid_invalid": "无效的 UUID 参数",
         "ip_format": "IP 地址格式无效"
       },
-      "pgpass_write_failed": "写入 .pgpass 临时文件失败"
+      "pgpass_write_failed": "写入 .pgpass 临时文件失败",
+      "password_hash_failed": "密码哈希失败",
+      "password_hash_task_failed": "密码哈希任务失败"
     },
     "db": {
       "check_violation": "数据校验失败：{{message}}",

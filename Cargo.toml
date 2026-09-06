@@ -21,7 +21,7 @@ allow_attributes = "warn"
 [workspace.dependencies]
 # Axum
 axum = { version = "0.8.9", features = ["macros", "multipart", "ws", "http2"] }
-tower-http = { version = "0.7.0", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
+tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
 axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
 
 # SQLx
@@ -45,7 +45,7 @@ tokio = { version = "1.53.1", features = ["full"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 
 # UUID
-uuid = { version = "1.25.0", features = ["v4", "serde"] }
+uuid = { version = "1.26.0", features = ["v4", "serde"] }
 
 # Logging
 tracing = "0.1.44"
@@ -67,7 +67,7 @@ tokio-cron-scheduler = "0.15.1"
 # 密码哈希 / 随机数 / TOML 序列化 / 日志时间格式化（多 crate 共享）
 bcrypt = "0.19.3"
 rand = "0.10.2"
-toml = "1.1.4"
+toml = "1.1.5"
 
 # JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
@@ -86,7 +86,7 @@ config = { version = "0.15.25", features = ["toml"] }
 
 [package]
 name = "foims"
-version = "0.20.29"
+version = "0.20.31"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"

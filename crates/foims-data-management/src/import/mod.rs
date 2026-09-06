@@ -519,12 +519,13 @@ async fn resolve_row<P: DataProvider>(
         }
     }
 
-    // ip_version 由地址自动推导（与 API 的 detect_ip_version 同口径）：
+    // ip_version 由地址自动推导（与 API 的 detect_ip_version 同一实现）：
     // CSV 提供的手工值可能与地址族不一致，落库后破坏按版本过滤的查询
     if spec.table == "ips"
         && let Some(Some(addr)) = values.get("ip_address")
     {
-        let version: i16 = if addr.contains(':') { 6 } else { 4 };
+        let version: i16 = foims_common::net::detect_ip_version(addr)
+            .map_err(|e| DataError::Validation(e.message().clone()))?;
         values.insert("ip_version".to_string(), Some(version.to_string()));
     }
 

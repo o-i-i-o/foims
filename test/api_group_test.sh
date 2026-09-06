@@ -11,7 +11,7 @@ set -u
 
 SOCK="/tmp/foims-dev.sock"
 BASE="http://localhost"
-RUN="T$(date +%m%d%H%M)"
+RUN="T$(date +%m%d%H%M%S)"
 REPORT="/media/oi-io/AA709DF48A7AD5C2/foims/docs/api-test-report.md"
 ADMIN_COOKIE="/tmp/foims_admin_cookie_$RUN.txt"
 USER_COOKIE="/tmp/foims_user_cookie_$RUN.txt"
@@ -62,7 +62,31 @@ jget() { echo "$BODY" | jq -r "$1 // empty" 2>/dev/null; }
 ROWS_FILE="/tmp/api_rows_$RUN.md"
 
 # 基于 RUN 后 4 位数字派生本批次唯一网段编号（避开 0/1 常用段）
-N=$(( 10#$(date +%M%M) % 100 + 10 ))
+# 探测未被占用的网段号：网段 CIDR 全局唯一且测试数据保留不清理，
+# 多次重跑必须避开历史批次占用的 10.X.0/24 / fd00:99:X::/64
+probe_unused_n() {
+  local used
+  used=$(curl -s --unix-socket "$SOCK" -b "$ADMIN_COOKIE" \
+    "http://localhost/api/resources/networks?page=1&page_size=1000" \
+    | jq -r '[.data.items[].ipv4_cidr] + [.data.items[].ipv6_cidr] | join(" ")' 2>/dev/null)
+  for cand in $(seq 10 248); do
+    # 本批次会占用 cand 与 cand+1 两个网段，两者都空闲才可选
+    local next=$((cand + 1))
+    if ! echo "$used" | grep -q "10.99.$cand.0/24" \
+      && ! echo "$used" | grep -q "fd00:99:$cand::" \
+      && ! echo "$used" | grep -q "10.99.$next.0/24" \
+      && ! echo "$used" | grep -q "fd00:99:$next::"; then
+      echo "$cand"
+      return
+    fi
+  done
+  echo 10
+}
+# 先完成管理员登录拿到 cookie（探测需要），再取网段号
+curl_cmd -c "$ADMIN_COOKIE" -o /dev/null -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"'"$ADMIN_USER"'","password":"'"$ADMIN_PASS"'","remember_me":false}'
+N=$(probe_unused_n)
 V4_NET1="10.99.$N.0/24"; V4_GW1="10.99.$N.1"
 V4_NET2="10.99.$((N+1)).0/24"; V4_GW2="10.99.$((N+1)).1"
 V6_NET="fd00:99:$N::/64"; V6_GW="fd00:99:$N::1"
@@ -223,11 +247,11 @@ record "3 网段" "网关不在网段内被拒绝" "POST /api/resources/networks
 # =============================================================================
 # 4. 房间
 # =============================================================================
-req POST /api/resources/rooms "{\"name\":\"测试机房-$RUN\",\"room_type\":\"DATA_CENTER\",\"org_id\":\"$ORG_FLOOR\",\"network_ids\":[\"$NET_V4\",\"$NET_V4_SVR\"],\"description\":\"数据中心机房\"}"
+req POST /api/resources/rooms "{\"name\":\"测试机房-$RUN\",\"room_type\":\"DATA_CENTER\",\"org_id\":\"$ORG_FLOOR\",\"subnet_ids\":[\"$NET_V4\",\"$NET_V4_SVR\"],\"description\":\"数据中心机房\"}"
 record "4 房间" "创建机房（DATA_CENTER）" "POST /api/resources/rooms" ok
 ROOM_DC=$(jget '.data.id')
 
-req POST /api/resources/rooms "{\"name\":\"测试办公室-$RUN\",\"room_type\":\"OFFICE\",\"org_id\":\"$ORG_FLOOR\",\"network_ids\":[\"$NET_V4\"]}"
+req POST /api/resources/rooms "{\"name\":\"测试办公室-$RUN\",\"room_type\":\"OFFICE\",\"org_id\":\"$ORG_FLOOR\",\"subnet_ids\":[\"$NET_V4\"]}"
 record "4 房间" "创建办公室（OFFICE）" "POST /api/resources/rooms" ok
 ROOM_OFFICE=$(jget '.data.id')
 
@@ -308,7 +332,7 @@ req GET "/api/resources/net-outlets?room_id=$ROOM_DC"
 record "5 机柜" "信息点列表" "GET /api/resources/net-outlets?room_id=…" ok
 
 req POST /api/resources/positions "{\"name\":\"无机柜机位-$RUN\",\"start_u\":1,\"end_u\":2}"
-record "5 机柜" "风险验证：无机柜机位（R8）" "POST /api/resources/positions（无 cabinet_id）" ok "2xx 即确认库列可空风险"
+record "5 机柜" "无机柜机位被拒绝（R8 风险已闭合）" "POST /api/resources/positions（无 cabinet_id）" 4xx "400 = cabinet_id 必填校验生效"
 
 req PUT "/api/resources/cabinets/$CAB_B/positions" "{\"positions\":[{\"name\":\"U1-$RUN\",\"start_u\":1,\"end_u\":10},{\"name\":\"U5-$RUN\",\"start_u\":5,\"end_u\":8}]}"
 record "5 机柜" "U 位重叠被数据库触发器拒绝" "PUT positions（1-10 与 5-8 重叠）" err "非 2xx 即约束生效"
@@ -345,7 +369,7 @@ record "6 设备" "更新设备" "PUT /api/resources/devices/{id}" ok
 req PUT "/api/resources/devices/$DEV_CORE/network-config" "{\"cards\":[{\"name\":\"板卡1-$RUN\",\"card_type\":\"onboard\",\"ports\":[{\"name\":\"GE1/0/1\",\"physical_type\":\"sfp_plus\",\"interface_role\":\"uplink\",\"mac_address\":\"aa:bb:cc:dd:ee:01\"},{\"name\":\"GE1/0/2\",\"physical_type\":\"rj45\",\"interface_role\":\"business\"}]}]}"
 record "6 设备" "同步网卡/网口配置" "PUT /api/resources/devices/{id}/network-config" ok
 
-req PUT "/api/resources/devices/$DEV_SVR/network-config" "{\"cards\":[{\"name\":\"主板网卡-$RUN\",\"card_type\":\"onboard\",\"ports\":[{\"name\":\"eth0\",\"physical_type\":\"rj45\",\"ips\":[{\"network_id\":\"$NET_V4\",\"ip_address\":\"10.99.$N.100\"}]}]}]}"
+req PUT "/api/resources/devices/$DEV_SVR/network-config" "{\"cards\":[{\"name\":\"主板网卡-$RUN\",\"card_type\":\"onboard\",\"ports\":[{\"name\":\"eth0\",\"physical_type\":\"rj45\",\"ips\":[{\"subnet_id\":\"$NET_V4\",\"ip_address\":\"10.99.$N.100\"}]}]}]}"
 record "6 设备" "同步网口并绑定固定 IP" "PUT /api/resources/devices/{id}/network-config（含 IP）" ok
 
 req GET "/api/resources/devices/$DEV_CORE/nics"
@@ -361,36 +385,36 @@ record "6 设备" "设备 IP 列表" "GET /api/resources/devices/{id}/ips" ok
 req GET "/api/resources/devices/interfaces"
 record "6 设备" "全部设备网口（跨设备）" "GET /api/resources/devices/interfaces" ok
 
-# 交换机端口（device_ports）
-req POST "/api/resources/devices/$DEV_CORE/device-ports" "{\"port_number\":\"24\",\"port_name\":\"GE1/0/24\",\"port_type\":\"uplink\",\"vlan_id\":100,\"speed\":\"10G\"}"
-record "6 设备" "创建交换机端口 24" "POST /api/resources/devices/{id}/device-ports" ok
+# 交换机端口（device_interfaces）
+req POST "/api/resources/devices/$DEV_CORE/interfaces" "{\"name\":\"GE1/0/24\",\"physical_type\":\"sfp_plus\",\"interface_role\":\"uplink\",\"port_type\":\"uplink\",\"vlan_id\":100,\"speed\":\"10G\"}"
+record "6 设备" "创建交换机端口 24" "POST /api/resources/devices/{id}/interfaces" ok
 PORT_CORE24=$(jget '.data.id')
 
-req POST "/api/resources/devices/$DEV_CORE/device-ports" "{\"port_number\":\"25\",\"port_name\":\"GE1/0/25\",\"port_type\":\"access\",\"vlan_id\":200}"
-record "6 设备" "创建交换机端口 25" "POST /api/resources/devices/{id}/device-ports" ok
+req POST "/api/resources/devices/$DEV_CORE/interfaces" "{\"name\":\"GE1/0/25\",\"physical_type\":\"rj45\",\"interface_role\":\"business\",\"port_type\":\"access\",\"vlan_id\":200}"
+record "6 设备" "创建交换机端口 25" "POST /api/resources/devices/{id}/interfaces" ok
 
-req POST "/api/resources/devices/$DEV_ACCESS/device-ports" "{\"port_number\":\"1\",\"port_name\":\"GE0/1\",\"port_type\":\"access\",\"vlan_id\":200}"
-record "6 设备" "创建接入交换机端口 1" "POST /api/resources/devices/{id}/device-ports" ok
+req POST "/api/resources/devices/$DEV_ACCESS/interfaces" "{\"name\":\"GE0/1\",\"physical_type\":\"rj45\",\"interface_role\":\"business\",\"port_type\":\"access\",\"vlan_id\":200}"
+record "6 设备" "创建接入交换机端口 1" "POST /api/resources/devices/{id}/interfaces" ok
 PORT_ACCESS1=$(jget '.data.id')
 
-req POST "/api/resources/devices/$DEV_ACCESS/device-ports" '{"port_number":"2","port_name":"GE0/2","port_type":"access","vlan_id":200}'
-record "6 设备" "创建接入交换机端口 2" "POST /api/resources/devices/{id}/device-ports" ok
+req POST "/api/resources/devices/$DEV_ACCESS/interfaces" '{"name":"GE0/2","physical_type":"rj45","interface_role":"business","port_type":"access","vlan_id":200}'
+record "6 设备" "创建接入交换机端口 2" "POST /api/resources/devices/{id}/interfaces" ok
 PORT_ACCESS2=$(jget '.data.id')
 
-req GET "/api/resources/devices/$DEV_CORE/device-ports"
-record "6 设备" "设备端口列表" "GET /api/resources/devices/{id}/device-ports" ok
+req GET "/api/resources/devices/$DEV_CORE/interfaces"
+record "6 设备" "设备端口列表" "GET /api/resources/devices/{id}/interfaces" ok
 
-req GET "/api/resources/devices/device-ports"
-record "6 设备" "全部设备端口（跨设备）" "GET /api/resources/devices/device-ports" ok
+req GET "/api/resources/devices/interfaces"
+record "6 设备" "全部设备端口（跨设备）" "GET /api/resources/devices/interfaces" ok
 
-req PUT "/api/resources/devices/device-ports/$PORT_CORE24" '{"speed":"25G"}'
-record "6 设备" "更新端口" "PUT /api/resources/devices/device-ports/{port_id}" ok
+req PUT "/api/resources/devices/interfaces/$PORT_CORE24" '{"speed":"25G"}'
+record "6 设备" "更新端口" "PUT /api/resources/devices/interfaces/{port_id}" ok
 
 # IP 管理
-req POST "/api/resources/devices/$DEV_PC/ips" "{\"network_id\":\"$NET_V4\",\"ip_address\":\"10.99.$N.101\",\"description\":\"办公电脑静态 IP\"}"
+req POST "/api/resources/devices/$DEV_PC/ips" "{\"subnet_id\":\"$NET_V4\",\"ip_address\":\"10.99.$N.101\",\"description\":\"办公电脑静态 IP\"}"
 record "6 设备" "设备分配固定 IP" "POST /api/resources/devices/{id}/ips" ok
 
-req POST "/api/resources/ip/auto-assign" "{\"network_id\":\"$NET_V4\",\"device_id\":\"$DEV_ACCESS\"}"
+req POST "/api/resources/ip/auto-assign" "{\"subnet_id\":\"$NET_V4\",\"device_id\":\"$DEV_ACCESS\"}"
 record "6 设备" "IP 自动分配" "POST /api/resources/ip/auto-assign" ok
 AUTO_IP=$(jget '.data.ip_address')
 
@@ -422,10 +446,10 @@ record "6 设备" "MAC 表同步（无真实设备）" "POST /api/resources/devi
 # =============================================================================
 # 7. 线路
 # =============================================================================
-req GET "/api/resources/cable-links?endpoint_type=device_port"
+req GET "/api/resources/cable-links?endpoint_type=device_interface"
 record "7 线路" "线路列表（端点过滤）" "GET /api/resources/cable-links?endpoint_type=…" ok
 
-req POST /api/resources/cable-links "{\"a_endpoint_type\":\"device_port\",\"a_endpoint_id\":\"$PORT_CORE24\",\"b_endpoint_type\":\"device_port\",\"b_endpoint_id\":\"$PORT_ACCESS1\",\"link_type\":\"ethernet\",\"cable_label\":\"级联链路-$RUN\",\"length_m\":3.5,\"tested\":true}"
+req POST /api/resources/cable-links "{\"a_endpoint_type\":\"device_interface\",\"a_endpoint_id\":\"$PORT_CORE24\",\"b_endpoint_type\":\"device_interface\",\"b_endpoint_id\":\"$PORT_ACCESS1\",\"link_type\":\"ethernet\",\"cable_label\":\"级联链路-$RUN\",\"length_m\":3.5,\"tested\":true}"
 record "7 线路" "创建端口-端口链路" "POST /api/resources/cable-links" ok
 LINK1=$(jget '.data.id')
 
@@ -434,9 +458,9 @@ record "7 线路" "创建信息点-配线架链路" "POST /api/resources/cable-l
 LINK2=$(jget '.data.id')
 
 # 先取回端口 25 的 ID（上一批创建时未保存变量）
-req GET "/api/resources/devices/$DEV_CORE/device-ports"
-PORT_CORE25=$(echo "$BODY" | jq -r ".data.items[]? | select(.port_name==\"GE1/0/25\") | .id" 2>/dev/null)
-req POST /api/resources/cable-links "{\"a_endpoint_type\":\"net_outlet\",\"a_endpoint_id\":\"$OUTLET2\",\"b_endpoint_type\":\"device_port\",\"b_endpoint_id\":\"$PORT_CORE25\",\"link_type\":\"ethernet\",\"cable_label\":\"信息点-核心-$RUN\"}"
+req GET "/api/resources/devices/$DEV_CORE/interfaces"
+PORT_CORE25=$(echo "$BODY" | jq -r ".data.items[]? | select(.name==\"GE1/0/25\") | .id" 2>/dev/null)
+req POST /api/resources/cable-links "{\"a_endpoint_type\":\"net_outlet\",\"a_endpoint_id\":\"$OUTLET2\",\"b_endpoint_type\":\"device_interface\",\"b_endpoint_id\":\"$PORT_CORE25\",\"link_type\":\"ethernet\",\"cable_label\":\"信息点-核心-$RUN\"}"
 record "7 线路" "创建信息点-端口链路" "POST /api/resources/cable-links" ok
 LINK3=$(jget '.data.id')
 
@@ -449,20 +473,20 @@ record "7 线路" "更新线路" "PUT /api/resources/cable-links/{id}" ok
 req GET "/api/resources/cable-links/path?from_type=net_outlet&from_id=$OUTLET2&to_type=patch_panel&to_id=$PANEL_A1"
 record "7 线路" "线缆路径查询（find_cable_path）" "GET /api/resources/cable-links/path?…" ok
 
-req POST /api/resources/cable-links "{\"a_endpoint_type\":\"device_port\",\"a_endpoint_id\":\"$PORT_CORE24\",\"b_endpoint_type\":\"device_port\",\"b_endpoint_id\":\"$PORT_CORE24\",\"link_type\":\"ethernet\"}"
+req POST /api/resources/cable-links "{\"a_endpoint_type\":\"device_interface\",\"a_endpoint_id\":\"$PORT_CORE24\",\"b_endpoint_type\":\"device_interface\",\"b_endpoint_id\":\"$PORT_CORE24\",\"link_type\":\"ethernet\"}"
 record "7 线路" "自环链路被拒绝" "POST /api/resources/cable-links（a==b）" err "非 2xx 即约束生效"
 
-req POST /api/resources/cable-links "{\"a_endpoint_type\":\"invalid_type\",\"a_endpoint_id\":\"$PORT_CORE24\",\"b_endpoint_type\":\"device_port\",\"b_endpoint_id\":\"$PORT_ACCESS1\"}"
+req POST /api/resources/cable-links "{\"a_endpoint_type\":\"invalid_type\",\"a_endpoint_id\":\"$PORT_CORE24\",\"b_endpoint_type\":\"device_interface\",\"b_endpoint_id\":\"$PORT_ACCESS1\"}"
 record "7 线路" "非法端点类型被拒绝" "POST /api/resources/cable-links（invalid_type）" 4xx
 
-# R1 风险验证：删除被线路引用的设备（预期触发器阻止，设备保留）
+# R1 行为验证：删除被线路引用的设备时，线路随接口级联清理（引用数归零、无残留）
 req POST /api/resources/devices "{\"name\":\"待删设备-$RUN\",\"device_type\":\"server\",\"room_id\":\"$ROOM_DC\",\"position_id\":\"$POS_SVR\"}"
 DEV_DEL=$(jget '.data.id')
-req POST "/api/resources/devices/$DEV_DEL/device-ports" '{"port_number":"1","port_name":"P1","port_type":"access"}'
+req POST "/api/resources/devices/$DEV_DEL/interfaces" '{"name":"P1","physical_type":"rj45","interface_role":"business","port_type":"access"}'
 PORT_DEL=$(jget '.data.id')
-req POST /api/resources/cable-links "{\"a_endpoint_type\":\"device_port\",\"a_endpoint_id\":\"$PORT_DEL\",\"b_endpoint_type\":\"net_outlet\",\"b_endpoint_id\":\"$OUTLET1\",\"link_type\":\"ethernet\",\"cable_label\":\"防删验证-$RUN\"}"
+req POST /api/resources/cable-links "{\"a_endpoint_type\":\"device_interface\",\"a_endpoint_id\":\"$PORT_DEL\",\"b_endpoint_type\":\"net_outlet\",\"b_endpoint_id\":\"$OUTLET1\",\"link_type\":\"ethernet\",\"cable_label\":\"防删验证-$RUN\"}"
 req DELETE "/api/resources/devices/$DEV_DEL"
-record "7 线路" "风险验证：删除被线路引用的设备（R1）" "DELETE /api/resources/devices/{id}（端口被引用）" err "非 2xx 即触发器拦截"
+record "7 线路" "删除被线路引用的设备（R1，线路级联清理）" "DELETE /api/resources/devices/{id}（端口被引用）" ok "线路随 device_interfaces 级联删除，无残留引用"
 
 # =============================================================================
 # 8. 可视化
@@ -473,7 +497,7 @@ record "8 可视化" "保存拓扑节点坐标" "POST /api/resources/topology/no
 req GET /api/resources/topology/nodes
 record "8 可视化" "拓扑节点列表" "GET /api/resources/topology/nodes" ok
 
-req POST /api/resources/topology/connections "{\"connection_type\":\"physical\",\"source_device_id\":\"$DEV_CORE\",\"target_device_id\":\"$DEV_ACCESS\",\"source_device_port_id\":\"$PORT_CORE24\",\"target_device_port_id\":\"$PORT_ACCESS1\",\"label\":\"核心-接入物理链路-$RUN\"}"
+req POST /api/resources/topology/connections "{\"connection_type\":\"physical\",\"source_device_id\":\"$DEV_CORE\",\"target_device_id\":\"$DEV_ACCESS\",\"source_device_interface_id\":\"$PORT_CORE24\",\"target_device_interface_id\":\"$PORT_ACCESS1\",\"label\":\"核心-接入物理链路-$RUN\"}"
 record "8 可视化" "创建物理拓扑连线" "POST /api/resources/topology/connections" ok
 TOPO_CONN=$(jget '.data.id')
 
@@ -533,7 +557,7 @@ record "9 系统只读" "全量 CSV 导出" "GET /api/system/import-export/expor
 
 # 普通用户操作资源（RBAC 差距验证，缺陷 #16）
 req POST /api/resources/organizations "{\"name\":\"用户越权组织-$RUN\",\"type_path\":\"0\",\"template_id\":\"$TPL_ID\"}" "$USER_COOKIE"
-record "9 系统只读" "风险验证：普通用户创建组织（缺陷#16）" "POST /api/resources/organizations（user 角色）" ok "2xx 即确认资源 RBAC 缺失"
+record "9 系统只读" "普通用户创建组织被拒绝（缺陷#16 已闭合）" "POST /api/resources/organizations（user 角色）" 4xx "403 = RBAC 生效"
 
 # =============================================================================
 # 汇总报告

@@ -10,7 +10,7 @@ import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { showConfirm } from "../utils/confirm.js";
 import { iconButton, getIcon } from "../utils/icons.js";
-import { elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache } from "../utils/helpers.js";
 import { ORG_ICON_GROUPS, renderOrgIcon, DEFAULT_ORG_ICON } from "../config/org-icons.js";
 import { getOrgIcon } from "../config/org-config.js";
 
@@ -151,7 +151,7 @@ function bindOrgEvents() {
  */
 
 // 组织树请求序号:旧响应晚到时放弃渲染,防止搜索/编辑后并发刷新导致树错乱
-let orgTreeRequestSeq = 0;
+const orgTreeSeq = createSeqGuard();
 
 export async function loadOrganizationTree() {
   const container = document.getElementById("organization-tree-container");
@@ -159,13 +159,13 @@ export async function loadOrganizationTree() {
     return;
   }
 
-  const requestSeq = ++orgTreeRequestSeq;
+  const requestSeq = orgTreeSeq.next();
   try {
     const [treeResult, templatesResult] = await Promise.all([
       apiGet("/api/resources/organizations/tree"),
       apiGet("/api/resources/org-templates")
     ]);
-    if (requestSeq !== orgTreeRequestSeq) {
+    if (!orgTreeSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
 

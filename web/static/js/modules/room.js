@@ -3,6 +3,7 @@ import { apiGet, apiPost, apiPut } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   renderTable,
   getElementValue,
   handleDelete,
@@ -16,10 +17,11 @@ import {
   openSimpleListModal
 } from "../utils/ui.js";
 
+import { formatDateTime } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
-import { elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache } from "../utils/helpers.js";
 import { fillSelect, loadOrgsForSelect } from "../utils/resources.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
@@ -747,10 +749,10 @@ let currentPage = 1;
 let currentPageSize = DEFAULT_PAGE_SIZE;
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
-let roomsRequestSeq = 0;
+const roomsSeq = createSeqGuard();
 
 export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder = null) {
-  const requestSeq = ++roomsRequestSeq;
+  const requestSeq = roomsSeq.next();
   currentPage = page;
   if (sortBy) {
     tableState.setSort(sortBy, sortOrder);
@@ -760,7 +762,7 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
     const roomsData = await apiGet(
       `/api/resources/rooms?page=${page}&page_size=${currentPageSize}&sort_by=${tableState.sortBy}&sort_order=${tableState.sortOrder}`
     );
-    if (requestSeq !== roomsRequestSeq) {
+    if (!roomsSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     // 接口失败时提示并中止，不再静默渲染空数据
@@ -771,16 +773,9 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
     const data = roomsData.data || { items: [], total: 0 };
     const rooms = data.items || data;
 
-    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
-    // 回退到最后一页重新加载，避免停留在空页无法翻回
-    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentPageSize);
-    if (
-      Array.isArray(rooms) &&
-      rooms.length === 0 &&
-      page > 1 &&
-      totalPages > 0 &&
-      page > totalPages
-    ) {
+    // 删除末页最后一条后当前页可能越界：回退到最后一页重新加载（共享判定）
+    const totalPages = retreatToLastPage(rooms, page, data, currentPageSize);
+    if (totalPages) {
       return loadRoomsData(totalPages);
     }
 
@@ -827,7 +822,7 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
         { field: "description", render: (v) => escapeHtml(v) || "-" },
         {
           field: "created_at",
-          render: (v) => new Date(v).toLocaleString(),
+          render: (v) => formatDateTime(v),
           className: "col-center"
         },
         {

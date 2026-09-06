@@ -315,3 +315,23 @@ export function getActiveSubtab(pageId) {
     return null;
   }
 }
+
+/**
+ * 请求竞态守卫：列表请求前取号，响应返回后校验是否仍是最新请求，
+ * 过期响应直接放弃渲染（翻页/排序/筛选并发后防止表格与状态错乱）。
+ * 替代各列表模块各自维护的 `let xRequestSeq = 0` 三行样板。
+ */
+export function createSeqGuard() {
+  let current = 0;
+  return {
+    /** 开始一次新请求，返回本次序号 */
+    next() {
+      current += 1;
+      return current;
+    },
+    /** 序号是否仍是最新（过期响应返回 false） */
+    isCurrent(seq) {
+      return seq === current;
+    }
+  };
+}

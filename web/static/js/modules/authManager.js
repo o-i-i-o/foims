@@ -6,6 +6,7 @@ import { t } from "../utils/i18n.js";
 import { SessionManager } from "../utils/sessionManager.js";
 import { loadModal, openModal, closeModal } from "../utils/modalLoader.js";
 import { elementCache } from "../utils/helpers.js";
+import { activateTwoFactorView, hideLoginErrorBar, showLoginErrorBar } from "../loginView.js";
 
 const parseDuration = (durationStr) => {
   const match = durationStr.match(/^(\d+)([smhd])$/);
@@ -87,20 +88,9 @@ export const loginUser = (data, rememberMe) => {
 /** 待重试的外部登录 2FA 上下文（null 表示无待办） */
 let pendingExternalTwoFactor = null;
 
-/** 展示登录页错误条（复用本地登录的错误元素与样式） */
-const showLoginError = (message) => {
-  const errorEl = document.getElementById("login-error");
-  if (!errorEl) {
-    return;
-  }
-  errorEl.textContent = message;
-  errorEl.classList.add("show");
-};
-
-/** 隐藏登录页错误条 */
-const hideLoginError = () => {
-  document.getElementById("login-error")?.classList.remove("show");
-};
+// 错误条与 2FA 视图切换复用 loginView 共享实现（与 login.js 同一 DOM 行为）
+const showLoginError = showLoginErrorBar;
+const hideLoginError = hideLoginErrorBar;
 
 /**
  * 切换到动态码输入步骤（复用本地登录 2FA 视图与文案），暂存重试上下文
@@ -108,21 +98,9 @@ const hideLoginError = () => {
  * @returns {boolean} 视图存在且切换成功
  */
 const switchToExternalTwoFactorStep = (context) => {
-  const loginView = document.getElementById("login-view");
-  const twoFactorView = document.getElementById("two-factor-view");
-  const codeInput = document.getElementById("two-factor-code");
-  if (!loginView || !twoFactorView || !codeInput) {
-    return false;
-  }
-
   pendingExternalTwoFactor = context;
   hideLoginError();
-
-  loginView.classList.remove("active");
-  twoFactorView.classList.add("active");
-  codeInput.value = "";
-  codeInput.focus();
-  return true;
+  return activateTwoFactorView();
 };
 
 /**

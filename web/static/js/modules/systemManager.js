@@ -1,3 +1,4 @@
+import { formatDateTime, formatDate } from "../utils/formatter.js";
 import { apiRequest, apiGet, apiPut, apiPost } from "../utils/apiClient.js";
 
 import { showToast, escapeHtml } from "../utils/ui.js";
@@ -1224,8 +1225,8 @@ export async function loadSystemInfo() {
       setTextById(
         "system-time",
         systemInfo.timestamp
-          ? new Date(systemInfo.timestamp).toLocaleString()
-          : new Date().toLocaleString()
+          ? formatDateTime(systemInfo.timestamp)
+          : formatDateTime(new Date().toISOString())
       );
       setTextById("system-uptime", formatUptime(systemInfo.uptime_seconds || 0));
     }
@@ -1467,13 +1468,13 @@ export async function loadLogsStats() {
       if (stats.operation_logs?.oldest) {
         setTextById(
           "operation-logs-oldest",
-          `${t("logs.earliest_label")}: ${new Date(stats.operation_logs.oldest).toLocaleDateString()}`
+          `${t("logs.earliest_label")}: ${formatDate(stats.operation_logs.oldest)}`
         );
       }
       if (stats.login_logs?.oldest) {
         setTextById(
           "login-logs-oldest",
-          `${t("logs.earliest_label")}: ${new Date(stats.login_logs.oldest).toLocaleDateString()}`
+          `${t("logs.earliest_label")}: ${formatDate(stats.login_logs.oldest)}`
         );
       }
     }
@@ -1678,7 +1679,7 @@ function formatCertValidity(info) {
   if (!info.not_before || !info.not_after) {
     return "-";
   }
-  const fmt = (iso) => new Date(iso).toLocaleDateString();
+  const fmt = formatDate;
   return `${fmt(info.not_before)} ~ ${fmt(info.not_after)}`;
 }
 

@@ -25,7 +25,33 @@ pub struct OperationLog {
 
 // ==================== 定时任务模型 ====================
 
-pub use foims_scheduler::{ScheduledTask, TaskLog};
+/// scheduled_tasks 表行模型（真身定义，foims-scheduler 经 re-export 复用）
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct ScheduledTask {
+    pub id: Uuid,
+    pub name: String,
+    pub task_type: String,
+    pub cron_expression: String,
+    pub enabled: bool,
+    pub config: serde_json::Value,
+    pub last_run_at: Option<DateTime<Utc>>,
+    pub next_run_at: Option<DateTime<Utc>>,
+    pub last_result: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// task_logs 表行模型（真身定义，foims-scheduler 经 re-export 复用）
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct TaskLog {
+    pub id: Uuid,
+    pub task_name: String,
+    pub status: String,
+    pub details: serde_json::Value,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration: Option<i32>,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct ScheduledTaskCreate {

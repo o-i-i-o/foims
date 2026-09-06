@@ -7,6 +7,12 @@
 use serde::Deserialize;
 use validator::ValidationError;
 
+// 角色白名单与密码长度上限校验的真身定义在 foims-common::validation，
+// 此处再导出保持 `foims_models::validate_role` 等旧调用路径稳定
+pub use foims_common::validation::{
+    PASSWORD_MAX_BYTES, validate_password_max_bytes, validate_role,
+};
+
 // ==================== 验证函数 ====================
 
 pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationError> {
@@ -38,14 +44,6 @@ pub fn validate_room_type_string(room_type: &str) -> Result<(), ValidationError>
 
 pub fn validate_room_type_option(room_type: &&String) -> Result<(), ValidationError> {
     validate_room_type_string(room_type)
-}
-
-pub fn validate_role(role: &str) -> Result<(), ValidationError> {
-    match role {
-        // 等保三权分立：admin 系统管理员 / secadmin 安全管理员 / auditor 审计管理员 / user 普通用户
-        "admin" | "secadmin" | "auditor" | "user" => Ok(()),
-        _ => Err(ValidationError::new("server.user.validation.role_invalid")),
-    }
 }
 
 pub fn validate_role_option(role: &&String) -> Result<(), ValidationError> {
@@ -163,16 +161,6 @@ pub fn validate_vlan_id_option(vlan_id: i32) -> Result<(), ValidationError> {
         Ok(())
     } else {
         Err(ValidationError::new("vlan_id_range"))
-    }
-}
-
-/// 密码字节长度上限：bcrypt 仅使用前 72 字节，超长部分被静默截断——
-/// 前 72 字节相同的口令将得到等价哈希，必须在入库前拒绝（按字节计）。
-pub fn validate_password_max_bytes(password: &str) -> Result<(), ValidationError> {
-    if password.len() <= 72 {
-        Ok(())
-    } else {
-        Err(ValidationError::new("password_max_length"))
     }
 }
 

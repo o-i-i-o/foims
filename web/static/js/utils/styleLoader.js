@@ -1,4 +1,4 @@
-import { MODULE_VERSION } from "./resourceLoader.js";
+import { withVersion } from "./resourceLoader.js";
 
 const loadedStyles = new Set();
 const loadingStyles = new Map();
@@ -9,11 +9,6 @@ const PAGE_STYLES = {
   resources: ["/static/css/pages/visualization.css"],
   visualization: ["/static/css/pages/visualization.css"]
 };
-
-// 拼接资源版本号，与 main.html 静态资源的 ?v= 缓存穿透机制保持一致
-function withVersion(href) {
-  return href.includes("?") ? `${href}&v=${MODULE_VERSION}` : `${href}?v=${MODULE_VERSION}`;
-}
 
 async function loadStyle(href) {
   const url = withVersion(href);

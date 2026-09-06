@@ -3,6 +3,7 @@ import { apiGet } from "../utils/apiClient.js";
 
 import {
   showToast,
+  retreatToLastPage,
   renderTable,
   formatDateTime,
   getElementValue,
@@ -25,7 +26,7 @@ import { iconButton } from "../utils/icons.js";
 import { loadNetworkRegionOptions } from "../utils/resources.js";
 import { isValidIPv4, isValidIPv6, isIpInCidr } from "../utils/network.js";
 
-import { elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache } from "../utils/helpers.js";
 
 let currentNetworkRegionPage = 1;
 const NETWORK_REGION_PAGE_SIZE = 20;
@@ -33,7 +34,7 @@ let currentNetworkRegionPageSize = NETWORK_REGION_PAGE_SIZE;
 const networkRegionTableState = createSortState("created_at", "desc");
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
-let networkRegionsRequestSeq = 0;
+const networkRegionsSeq = createSeqGuard();
 
 // 加载网络区域数据并填充表格
 export async function loadNetworkRegionsData(
@@ -41,7 +42,7 @@ export async function loadNetworkRegionsData(
   sortBy = null,
   sortOrder = null
 ) {
-  const requestSeq = ++networkRegionsRequestSeq;
+  const requestSeq = networkRegionsSeq.next();
   currentNetworkRegionPage = page;
   if (sortBy) {
     networkRegionTableState.setSort(sortBy, sortOrder);
@@ -50,7 +51,7 @@ export async function loadNetworkRegionsData(
     const result = await apiGet(
       `/api/resources/network-regions?page=${page}&page_size=${currentNetworkRegionPageSize}&sort_by=${networkRegionTableState.sortBy}&sort_order=${networkRegionTableState.sortOrder}`
     );
-    if (requestSeq !== networkRegionsRequestSeq) {
+    if (!networkRegionsSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     // 接口失败时提示并中止，不再静默渲染空数据
@@ -61,17 +62,9 @@ export async function loadNetworkRegionsData(
     const data = result.data || { items: [], total: 0 };
     const items = data.items || data;
 
-    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
-    // 回退到最后一页重新加载，避免停留在空页无法翻回
-    const totalPages =
-      data.total_pages || Math.ceil((data.total || 0) / currentNetworkRegionPageSize);
-    if (
-      Array.isArray(items) &&
-      items.length === 0 &&
-      page > 1 &&
-      totalPages > 0 &&
-      page > totalPages
-    ) {
+    // 删除末页最后一条后当前页可能越界：回退到最后一页重新加载（共享判定）
+    const totalPages = retreatToLastPage(items, page, data, currentNetworkRegionPageSize);
+    if (totalPages) {
       return loadNetworkRegionsData(totalPages);
     }
 
@@ -151,7 +144,7 @@ let currentFilters = {
 const networkTableState = createSortState("created_at", "desc");
 
 // 列表请求序号:旧响应晚到时放弃渲染,防止翻页/排序并发后表格与状态错乱
-let networksRequestSeq = 0;
+const networksSeq = createSeqGuard();
 
 export async function loadNetworksData(
   page = currentNetworkPage,
@@ -159,7 +152,7 @@ export async function loadNetworksData(
   sortBy = null,
   sortOrder = null
 ) {
-  const requestSeq = ++networksRequestSeq;
+  const requestSeq = networksSeq.next();
   currentNetworkPage = page;
   currentFilters = filters;
   if (sortBy) {
@@ -189,7 +182,7 @@ export async function loadNetworksData(
 
     const url = `/api/resources/networks?${params.toString()}`;
     const result = await apiGet(url);
-    if (requestSeq !== networksRequestSeq) {
+    if (!networksSeq.isCurrent(requestSeq)) {
       return; // 已有更新的请求,丢弃过期响应
     }
     // 接口失败时提示并中止，不再静默渲染空数据
@@ -200,16 +193,9 @@ export async function loadNetworksData(
     const data = result.data || { items: [], total: 0 };
     const networks = data.items || data;
 
-    // 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
-    // 回退到最后一页重新加载，避免停留在空页无法翻回
-    const totalPages = data.total_pages || Math.ceil((data.total || 0) / currentNetworkPageSize);
-    if (
-      Array.isArray(networks) &&
-      networks.length === 0 &&
-      page > 1 &&
-      totalPages > 0 &&
-      page > totalPages
-    ) {
+    // 删除末页最后一条后当前页可能越界：回退到最后一页重新加载（共享判定）
+    const totalPages = retreatToLastPage(networks, page, data, currentNetworkPageSize);
+    if (totalPages) {
       return loadNetworksData(totalPages, filters);
     }
 
@@ -229,7 +215,7 @@ export async function loadNetworksData(
         { field: "ipv6_cidr", render: (v) => escapeHtml(v) || "-" },
         {
           field: "created_at",
-          render: (v) => new Date(v).toLocaleString(),
+          render: (v) => formatDateTime(v),
           className: "col-center"
         },
         {

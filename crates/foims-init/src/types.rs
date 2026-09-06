@@ -8,25 +8,16 @@ pub const BCRYPT_COST: u32 = 12;
 
 /// 密码字节长度上限：bcrypt 仅处理前 72 字节，超长部分被静默截断，
 /// 前 72 字节相同的口令将等价可登录，必须在入口拒绝
-pub const PASSWORD_MAX_BYTES: usize = 72;
+pub const PASSWORD_MAX_BYTES: usize = foims_common::validation::PASSWORD_MAX_BYTES;
 
-/// 密码字节长度校验（<=72 字节，multibyte 字符按 UTF-8 字节计）
+/// 密码字节长度校验（委托 foims-common 唯一定义）
 fn validate_password_bytes(password: &str) -> Result<(), validator::ValidationError> {
-    if password.len() <= PASSWORD_MAX_BYTES {
-        Ok(())
-    } else {
-        Err(validator::ValidationError::new("length"))
-    }
+    foims_common::validation::validate_password_max_bytes(password)
 }
 
-/// 初始管理员角色合法集合（等保三权分立：admin 系统管理员 / secadmin
-/// 安全管理员 / auditor 审计管理员 / user 普通用户，与 foims-models
-/// 的 validate_role 口径一致）
+/// 初始管理员角色校验（委托 foims-common 唯一定义：等保三权分立）
 fn validate_init_role(role: &str) -> Result<(), validator::ValidationError> {
-    match role {
-        "admin" | "user" | "secadmin" | "auditor" => Ok(()),
-        _ => Err(validator::ValidationError::new("role")),
-    }
+    foims_common::validation::validate_role(role)
 }
 
 #[derive(Debug, Clone)]

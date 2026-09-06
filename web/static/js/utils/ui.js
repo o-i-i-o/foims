@@ -158,6 +158,26 @@ export function debounce(func, wait) {
   };
 }
 
+/**
+ * 删除末页最后一条后当前页可能越界（page > total_pages 且列表为空）：
+ * 判断是否需要回退到最后一页重新加载，避免停留在空页无法翻回。
+ * @param {Array} items 当前页条目
+ * @param {number} page 当前页码
+ * @param {Object} data 分页响应（items/total/total_pages）
+ * @param {number} fallbackPageSize total_pages 缺失时按 total/pageSize 推算
+ * @returns {number|null} 需要回退时返回目标页码，否则返回 null
+ */
+export function retreatToLastPage(items, page, data, fallbackPageSize) {
+  if (!Array.isArray(items) || items.length !== 0 || page <= 1) {
+    return null;
+  }
+  const totalPages = data.total_pages || Math.ceil((data.total || 0) / fallbackPageSize);
+  if (totalPages > 0 && page > totalPages) {
+    return totalPages;
+  }
+  return null;
+}
+
 export function renderTable(container, dataOrOptions, renderFn, emptyMessage, colSpan) {
   const el = typeof container === "string" ? document.querySelector(container) : container;
 

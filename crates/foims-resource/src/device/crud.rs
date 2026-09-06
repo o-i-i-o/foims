@@ -27,19 +27,11 @@ pub async fn get_devices<P: DbProvider>(
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
     // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
-    let parse_uuid = |key: &str| -> Result<Option<Uuid>, AppError> {
-        match query.get(key) {
-            Some(v) if !v.is_empty() => Ok(Some(Uuid::parse_str(v).map_err(|_| {
-                AppError::Validation(msg("server.common.invalid_param").with("param", key))
-            })?)),
-            _ => Ok(None),
-        }
-    };
-    let workstation_id = parse_uuid("workstation_id")?;
-    let position_id = parse_uuid("position_id")?;
+    let workstation_id = crate::helpers::parse_optional_uuid(&query, "workstation_id")?;
+    let position_id = crate::helpers::parse_optional_uuid(&query, "position_id")?;
     let device_type = query.get("device_type").cloned();
-    let room_id = parse_uuid("room_id")?;
-    let cabinet_id = parse_uuid("cabinet_id")?;
+    let room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
+    let cabinet_id = crate::helpers::parse_optional_uuid(&query, "cabinet_id")?;
     let sort_by = query
         .get("sort_by")
         .cloned()

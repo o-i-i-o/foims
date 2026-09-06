@@ -1,3 +1,4 @@
+import { activateTwoFactorView, hideLoginErrorBar, showLoginErrorBar } from "./loginView.js";
 // 登录页面专用脚本
 //
 // 设计来源: example-files/animatedlogin.html 的双栏布局 + 动画角色
@@ -524,13 +525,8 @@ class LoginManager {
     this.currentState = this.State.TWO_FACTOR;
     this.clearError();
 
-    // 切换视图
-    this.dom.loginView.classList.remove("active");
-    this.dom.twoFactorView.classList.add("active");
-
-    // 聚焦输入
-    this.dom.twoFactorCodeInput.value = "";
-    this.dom.twoFactorCodeInput.focus();
+    // 视图切换与聚焦复用共享实现（与 authManager 的外部 2FA 重试同一行为）
+    activateTwoFactorView();
   }
 
   /**
@@ -748,15 +744,14 @@ class LoginManager {
   }
 
   showError(msg) {
-    this.dom.errorMsg.textContent = msg;
-    this.dom.errorMsg.classList.add("show");
+    // 错误条 DOM 操作复用共享实现
+    showLoginErrorBar(msg);
     // 触发角色摇头 + 难过表情动画
     this.triggerLoginError();
   }
 
   clearError() {
-    this.dom.errorMsg.textContent = "";
-    this.dom.errorMsg.classList.remove("show");
+    hideLoginErrorBar();
     // 恢复角色正常姿态
     this.recoverLoginError();
   }

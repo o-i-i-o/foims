@@ -9,7 +9,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 # Workspace crates
 foims-common = { path = "../foims-common" }
-foims-data-management = { path = "../foims-data-management" }
+foims-models = { path = "../foims-models" }
 
 sqlx = { workspace = true }
 serde = { workspace = true }

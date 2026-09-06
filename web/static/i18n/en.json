@@ -1547,8 +1547,6 @@
       "ip_banned": "Too many attempts, IP banned, retry in {{seconds}}s",
       "login_failed": "Invalid username or password",
       "otpauth_url_failed": "Failed to generate otpauth URL",
-      "password_hash_failed": "Password hashing failed",
-      "password_hash_task_failed": "Password hashing task failed",
       "password_verify_failed": "Password verification failed",
       "password_verify_task_failed": "Password verification task failed",
       "qr_generate_task_failed": "QR code generation task failed",
@@ -1694,7 +1692,9 @@
         "uuid_invalid": "Invalid UUID parameter",
         "ip_format": "Invalid IP address format"
       },
-      "pgpass_write_failed": "Failed to write .pgpass temp file"
+      "pgpass_write_failed": "Failed to write .pgpass temp file",
+      "password_hash_failed": "Password hashing failed",
+      "password_hash_task_failed": "Password hashing task failed"
     },
     "db": {
       "check_violation": "Check constraint failed: {{message}}",

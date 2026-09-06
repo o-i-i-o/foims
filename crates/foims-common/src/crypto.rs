@@ -15,6 +15,38 @@ use crate::{log_error, log_info, log_warn};
 
 const NONCE_SIZE: usize = 12;
 
+/// 恒定时间字符串比较（防时序侧信道）。
+///
+/// 长度不同直接返回 false：长度信息本身不属于敏感范围
+/// （foims-auth 与 foims-init 共用的唯一定义）。
+#[must_use]
+pub fn constant_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.bytes().zip(b.bytes()) {
+        result |= x ^ y;
+    }
+    result == 0
+}
+
+/// bcrypt 密码哈希（spawn_blocking 包裹，避免阻塞 tokio 工作线程）。
+///
+/// foims-auth 与 foims-init 共用的唯一定义；72 字节入口校验由
+/// `validation::validate_password_max_bytes` 在请求层完成。
+pub async fn hash_password(password: &str) -> Result<String, AppError> {
+    let password = password.to_string();
+    tokio::task::spawn_blocking(move || bcrypt::hash(&password, bcrypt::DEFAULT_COST))
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.common.password_hash_task_failed").with("error", e))
+        })?
+        .map_err(|err| {
+            AppError::Internal(msg("server.common.password_hash_failed").with("error", err))
+        })
+}
+
 /// 加密密钥加载/保存失败原因。
 ///
 /// 动态参数统一为 String（io::Error 不可克隆）：错误值需存入

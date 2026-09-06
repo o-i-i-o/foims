@@ -251,6 +251,114 @@ fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
     ip.is_loopback()
 }
 
+// ==================== IP/CIDR 纯函数工具 ====================
+//
+// 供 foims-resource（IP 资源域）与 foims-data-management（导入导出校验）
+// 共用，避免各 crate 手写掩码比较与地址族推导。
+
+/// 解析 inet 值（可选 /nn 后缀，按 PG 语义忽略掩码只取地址）。
+#[must_use]
+pub fn parse_inet(value: &str) -> Option<std::net::IpAddr> {
+    let addr = value.split('/').next()?;
+    addr.parse::<std::net::IpAddr>().ok()
+}
+
+/// 解析 cidr 值，返回 (网络地址, 前缀长度)。
+#[must_use]
+pub fn parse_cidr(value: &str) -> Option<(std::net::IpAddr, u8)> {
+    let (addr, prefix) = value.split_once('/')?;
+    let addr: std::net::IpAddr = addr.parse().ok()?;
+    let prefix: u8 = prefix.parse().ok()?;
+    let max = match addr {
+        std::net::IpAddr::V4(_) => 32,
+        std::net::IpAddr::V6(_) => 128,
+    };
+    if prefix > max {
+        return None;
+    }
+    Some((addr, prefix))
+}
+
+/// 地址是否属于子网（含网络地址与广播地址）。
+#[must_use]
+pub fn ip_in_cidr(ip: std::net::IpAddr, cidr_addr: std::net::IpAddr, prefix: u8) -> bool {
+    match (ip, cidr_addr) {
+        (std::net::IpAddr::V4(ip), std::net::IpAddr::V4(net)) => {
+            if prefix > 32 {
+                return false;
+            }
+            let mask = if prefix == 0 {
+                0
+            } else {
+                u32::MAX << (32 - prefix)
+            };
+            (u32::from(ip) & mask) == (u32::from(net) & mask)
+        }
+        (std::net::IpAddr::V6(ip), std::net::IpAddr::V6(net)) => {
+            if prefix > 128 {
+                return false;
+            }
+            let mask = if prefix == 0 {
+                0
+            } else {
+                u128::MAX << (128 - prefix)
+            };
+            (u128::from(ip) & mask) == (u128::from(net) & mask)
+        }
+        _ => false,
+    }
+}
+
+/// 由地址自动推导 IP 版本号（ips.ip_version 列 4/6；非法地址返回校验错误）
+pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
+    match ip.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V6(_)) => Ok(6),
+        Ok(std::net::IpAddr::V4(_)) => Ok(4),
+        Err(e) => Err(AppError::Validation(
+            msg("server.ip.invalid_ip").with("ip", ip).with("error", e),
+        )),
+    }
+}
+
+/// 判定请求是否来自本机（供仅限本机使用的端点做来源守卫）。
+///
+/// 判定要点：
+///   1. TCP 直连（extensions 携带 ConnectInfo）时以真实对端地址为准——
+///      X-Real-IP 是普通请求头，内网客户端可任意伪造，直接据此判定
+///      回环等于开放鉴权绕过；
+///   2. 仅当对端确为回环地址（本机直连，或经监听在同一台机器上的 nginx
+///      转发）或连接来自 UDS（无对端信息，由本机 nginx 代理）时，才采信
+///      X-Real-IP 头判定真实来源——nginx 以
+///      `proxy_set_header X-Real-IP $remote_addr;` 覆盖式写入，取自
+///      TCP 对端，客户端无法伪造。切勿改用 X-Forwarded-For：其经
+///      `$proxy_add_x_forwarded_for` 会保留客户端伪造的首段值；
+///   3. fail-close：无法判定来源时默认拒绝。
+#[must_use]
+pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
+    let peer_loopback = parts
+        .extensions
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|info| info.0.ip().is_loopback());
+
+    let header_ip = parts
+        .headers
+        .get("X-Real-IP")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok());
+
+    match peer_loopback {
+        // 回环对端：本机直连或经本机 nginx 转发，按 X-Real-IP 判定真实来源
+        //（无头时视为本机直连放行）
+        Some(true) => header_ip.is_none_or(|ip| ip.is_loopback()),
+        // 非回环对端：真实来源即对端，请求头不可信，直接拒绝
+        Some(false) => false,
+        // UDS：无对端信息，仅能依赖本机反代写入的 X-Real-IP 判定
+        None => header_ip.is_some_and(|ip| ip.is_loopback()),
+    }
+}
+
 // ==================== 单元测试 ====================
 
 #[cfg(test)]

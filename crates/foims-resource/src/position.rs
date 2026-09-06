@@ -64,16 +64,8 @@ pub async fn get_positions<P: DbProvider>(
     let pagination = Pagination::from_query(&query);
     let search = query.get("search").cloned().unwrap_or_default();
     // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
-    let parse_uuid = |key: &str| -> Result<Option<Uuid>, AppError> {
-        match query.get(key) {
-            Some(v) if !v.is_empty() => Ok(Some(Uuid::parse_str(v).map_err(|_| {
-                AppError::Validation(msg("server.common.invalid_param").with("param", key))
-            })?)),
-            _ => Ok(None),
-        }
-    };
-    let cabinet_id = parse_uuid("cabinet_id")?;
-    let room_id = parse_uuid("room_id")?;
+    let cabinet_id = crate::helpers::parse_optional_uuid(&query, "cabinet_id")?;
+    let room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -199,16 +191,18 @@ pub async fn create_cabinet_position<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.cabinet.not_found")));
     }
 
-    let existing_position: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2",
+    // 重名预检：同机柜内（UNIQUE(cabinet_id, name)）；cabinet_id 可空，
+    // 共享预检的 IS NOT DISTINCT FROM 与更新路径口径一致
+    crate::helpers::ensure_unique_name(
+        &mut *tx,
+        "positions",
+        Some("cabinet_id"),
+        req.cabinet_id,
+        &req.name,
+        None,
+        "server.position.name_exists",
     )
-    .bind(&req.name)
-    .bind(req.cabinet_id)
-    .fetch_optional(&mut *tx)
     .await?;
-    if existing_position.is_some() {
-        return Err(AppError::Conflict(msg("server.position.name_exists")));
-    }
 
     // U 位重叠预检：返回 422 而非触发器 P0001 的 500
     ensure_no_u_overlap(&mut tx, Some(cabinet_id), req.start_u, req.end_u, None).await?;
@@ -382,17 +376,18 @@ pub async fn update_cabinet_position<P: DbProvider>(
                     .await?
             }
         };
-        let duplicate: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM positions WHERE name = $1 AND cabinet_id IS NOT DISTINCT FROM $2 AND id != $3",
+        // 机柜列可空（cabinet_id IS NULL 的未归属机位），共享预检的
+        // IS NOT DISTINCT FROM 语义与原内联 SQL 一致
+        crate::helpers::ensure_unique_name(
+            &mut *tx,
+            "positions",
+            Some("cabinet_id"),
+            effective_cabinet_id,
+            name,
+            Some(id),
+            "server.position.name_exists",
         )
-        .bind(name)
-        .bind(effective_cabinet_id)
-        .bind(id)
-        .fetch_optional(&mut *tx)
         .await?;
-        if duplicate.is_some() {
-            return Err(AppError::Conflict(msg("server.position.name_exists")));
-        }
     }
 
     // U 位重叠预检（以最终生效的机柜与区间为口径）：

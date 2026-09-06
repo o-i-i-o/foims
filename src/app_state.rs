@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use foims_auth::jwt::JwtUtils;
 use foims_auth::provider::AuthProvider;
-use foims_auth::utils::JwtUtils;
 use foims_common::ArcSwap;
 use foims_common::SharedConfig;
 use foims_common::config::Config;

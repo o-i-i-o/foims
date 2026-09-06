@@ -9,8 +9,6 @@
 //!
 //! 解析时按段数切分，末段允许包含分隔符之外的全部内容。
 
-use std::net::IpAddr;
-
 /// 解析 "房间/名称"。
 pub fn split_room_scoped(value: &str) -> Option<(&str, &str)> {
     let (room, name) = value.split_once('/')?;
@@ -51,60 +49,14 @@ fn validate_segmented(head: &str, tail: &str) -> bool {
     !head.is_empty() && !tail.is_empty()
 }
 
-/// 解析 inet 值（可选 /nn 后缀，按 PG 语义忽略掩码只取地址）。
-pub fn parse_inet(value: &str) -> Option<IpAddr> {
-    let addr = value.split('/').next()?;
-    addr.parse::<IpAddr>().ok()
-}
-
-/// 解析 cidr 值，返回 (网络地址, 前缀长度)。
-pub fn parse_cidr(value: &str) -> Option<(IpAddr, u8)> {
-    let (addr, prefix) = value.split_once('/')?;
-    let addr: IpAddr = addr.parse().ok()?;
-    let prefix: u8 = prefix.parse().ok()?;
-    let max = match addr {
-        IpAddr::V4(_) => 32,
-        IpAddr::V6(_) => 128,
-    };
-    if prefix > max {
-        return None;
-    }
-    Some((addr, prefix))
-}
-
-/// 地址是否属于子网（含网络地址与广播地址）。
-pub fn ip_in_cidr(ip: IpAddr, cidr_addr: IpAddr, prefix: u8) -> bool {
-    match (ip, cidr_addr) {
-        (IpAddr::V4(ip), IpAddr::V4(net)) => {
-            if prefix > 32 {
-                return false;
-            }
-            let mask = if prefix == 0 {
-                0
-            } else {
-                u32::MAX << (32 - prefix)
-            };
-            (u32::from(ip) & mask) == (u32::from(net) & mask)
-        }
-        (IpAddr::V6(ip), IpAddr::V6(net)) => {
-            if prefix > 128 {
-                return false;
-            }
-            let mask = if prefix == 0 {
-                0
-            } else {
-                u128::MAX << (128 - prefix)
-            };
-            (u128::from(ip) & mask) == (u128::from(net) & mask)
-        }
-        _ => false,
-    }
-}
+// inet/cidr 解析与地址归属判断的真身定义在 foims-common::net，
+// 此处再导出保持 `crate::names::*` 调用路径稳定
+pub use foims_common::net::{ip_in_cidr, parse_cidr, parse_inet};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn 拆分房间内名称() {

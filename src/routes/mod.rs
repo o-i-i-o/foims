@@ -142,7 +142,7 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
 
     let allowed_roles = needs_admin_with_roles.unwrap_or(&["admin"]);
 
-    match req.extensions().get::<foims_auth::utils::JwtClaims>() {
+    match req.extensions().get::<foims_auth::jwt::JwtClaims>() {
         Some(claims) if allowed_roles.contains(&claims.role.as_str()) => next.run(req).await,
         Some(_) => (
             StatusCode::FORBIDDEN,
@@ -186,7 +186,7 @@ async fn charge_user_rate_limit_middleware(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    if let Some(claims) = req.extensions().get::<foims_auth::utils::JwtClaims>()
+    if let Some(claims) = req.extensions().get::<foims_auth::jwt::JwtClaims>()
         && let Err(e) = state.rate_limiter.charge_user(&claims.sub)
     {
         return e.into_response();

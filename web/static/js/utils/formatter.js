@@ -13,6 +13,15 @@ export function formatDateTime(dateStr) {
   return date.toLocaleString(locale());
 }
 
+/** 仅日期（跟随界面语言），供"最早记录时间"等日期级展示使用 */
+export function formatDate(dateStr) {
+  if (!dateStr) {
+    return "-";
+  }
+  const date = new Date(dateStr);
+  return date.toLocaleDateString(locale());
+}
+
 export function getStatusText(status) {
   const statusMap = {
     active: t("status.active"),

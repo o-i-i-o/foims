@@ -9,7 +9,6 @@ license = "GPL-3.0-or-later"
 [dependencies]
 # Workspace crates
 foims-common = { path = "../foims-common" }
-foims-scheduler = { path = "../foims-scheduler" }
 
 # Serialization
 serde = { workspace = true }

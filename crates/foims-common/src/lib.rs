@@ -11,7 +11,6 @@ mod error;
 mod json;
 mod log_i18n;
 mod msg;
-mod validation;
 
 pub mod config;
 pub mod crypto;
@@ -21,6 +20,7 @@ pub mod pagination;
 pub mod pgpass;
 pub mod provider;
 pub mod rate_limit;
+pub mod validation;
 
 pub use api::{ApiResponse, ok_json};
 pub use config::{ArcSwap, Config, SharedConfig};

@@ -29,7 +29,6 @@ pub async fn get_cabinets<P: DbProvider>(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    let room_id = query.get("room_id").cloned();
     let sort_by = query
         .get("sort_by")
         .cloned()
@@ -41,14 +40,7 @@ pub async fn get_cabinets<P: DbProvider>(
 
     let search_pattern = foims_common::net::escape_like(&search);
     // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
-    let parsed_room_id = room_id
-        .as_ref()
-        .map(|id| {
-            Uuid::parse_str(id).map_err(|_| {
-                AppError::Validation(msg("server.common.invalid_param").with("param", "room_id"))
-            })
-        })
-        .transpose()?;
+    let parsed_room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
 
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY c.name DESC",
@@ -261,16 +253,17 @@ pub async fn create_cabinet<P: DbProvider>(
         return Err(AppError::Validation(msg("server.room.not_found")));
     }
 
-    let existing_cabinet =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM cabinets WHERE name = $1 AND room_id = $2")
-            .bind(&req.name)
-            .bind(req.room_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-    if existing_cabinet.is_some() {
-        return Err(AppError::Conflict(msg("server.cabinet.name_exists")));
-    }
+    // 重名预检：同房间内（UNIQUE(room_id, name)）
+    crate::helpers::ensure_unique_name(
+        &mut *tx,
+        "cabinets",
+        Some("room_id"),
+        Some(req.room_id),
+        &req.name,
+        None,
+        "server.cabinet.name_exists",
+    )
+    .await?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -433,17 +426,16 @@ pub async fn update_cabinet<P: DbProvider>(
 
     // 重名预检：同房间内（UNIQUE(room_id, name)）名称冲突
     if let Some(name) = &req.name {
-        let duplicate: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2 AND id != $3",
+        crate::helpers::ensure_unique_name(
+            &mut *tx,
+            "cabinets",
+            Some("room_id"),
+            Some(effective_room_id),
+            name,
+            Some(id),
+            "server.cabinet.name_exists",
         )
-        .bind(name)
-        .bind(effective_room_id)
-        .bind(id)
-        .fetch_optional(&mut *tx)
         .await?;
-        if duplicate.is_some() {
-            return Err(AppError::Conflict(msg("server.cabinet.name_exists")));
-        }
     }
 
     let now = Utc::now();
@@ -668,19 +660,16 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
     }
 
     for item in items {
-        let existing: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM positions WHERE name = $1 AND cabinet_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+        crate::helpers::ensure_unique_name(
+            &mut *tx,
+            "positions",
+            Some("cabinet_id"),
+            Some(id),
+            &item.name,
+            item.id,
+            "server.cabinet.position_name_exists",
         )
-        .bind(&item.name)
-        .bind(id)
-        .bind(item.id)
-        .fetch_optional(&mut *tx)
         .await?;
-        if existing.is_some() {
-            return Err(AppError::Conflict(msg(
-                "server.cabinet.position_name_exists",
-            )));
-        }
 
         // U 位重叠预检：返回 422 而非触发器 P0001 的 500
         crate::position::ensure_no_u_overlap(&mut tx, Some(id), item.start_u, item.end_u, item.id)

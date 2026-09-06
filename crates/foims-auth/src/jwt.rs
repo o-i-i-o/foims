@@ -1,4 +1,4 @@
-//! 认证辅助工具。
+//! JWT 签发/验签、请求令牌提取与令牌黑名单。
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{Duration, Utc};
@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 use uuid::Uuid;
 
-use foims_common::{AppError, msg};
 use foims_common::{log_error, log_info, log_warn};
 
 static GLOBAL_TOKEN_CACHE: LazyLock<Arc<DashMap<String, TokenCacheValue>>> =
@@ -362,18 +361,9 @@ pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String
     (ip_address, user_agent)
 }
 
-// 异步密码哈希函数，使用 spawn_blocking 避免阻塞 tokio 线程
-pub async fn hash_password(password: &str) -> Result<String, AppError> {
-    let password = password.to_string();
-    tokio::task::spawn_blocking(move || bcrypt::hash(&password, bcrypt::DEFAULT_COST))
-        .await
-        .map_err(|e| {
-            AppError::Internal(msg("server.auth.password_hash_task_failed").with("error", e))
-        })?
-        .map_err(|err| {
-            AppError::Internal(msg("server.auth.password_hash_failed").with("error", err))
-        })
-}
+// 异步密码哈希（spawn_blocking + bcrypt）：真身定义在 foims-common::crypto，
+// 此处再导出保持 `foims_auth::jwt::hash_password` 调用路径稳定
+pub use foims_common::crypto::hash_password;
 
 #[cfg(test)]
 mod tests {
@@ -893,6 +883,23 @@ pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, 
     Ok(count > 0)
 }
 
+/// 校验用户存在性：存在返回 Some(uid)，不存在/未提供返回 None
+///（撤销令牌与操作日志写入共用，避免引用已删除用户导致 FK 报错）
+pub(crate) async fn resolve_valid_user_id(
+    pool: &sqlx::PgPool,
+    user_id: Option<Uuid>,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    if let Some(uid) = user_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(uid)
+            .fetch_one(pool)
+            .await?;
+        if exists { Ok(Some(uid)) } else { Ok(None) }
+    } else {
+        Ok(None)
+    }
+}
+
 pub async fn revoke_token(
     pool: &sqlx::PgPool,
     token: &str,
@@ -900,17 +907,7 @@ pub async fn revoke_token(
     expiry: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), sqlx::Error> {
     let token_hash = foims_common::net::generate_token_hash(token);
-
-    // 检查用户是否存在，不存在则使用 NULL
-    let valid_user_id = if let Some(uid) = user_id {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-            .bind(uid)
-            .fetch_one(pool)
-            .await?;
-        if exists { Some(uid) } else { None }
-    } else {
-        None
-    };
+    let valid_user_id = resolve_valid_user_id(pool, user_id).await?;
 
     sqlx::query("INSERT INTO revoked_tokens (token_hash, user_id, expiry) VALUES ($1, $2, $3)")
         .bind(&token_hash)

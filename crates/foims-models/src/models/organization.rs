@@ -83,23 +83,6 @@ pub struct OrganizationTreeNode {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OrganizationWithChildren {
-    pub id: Uuid,
-    pub name: String,
-    pub org_type: String,
-    pub parent_id: Option<Uuid>,
-    pub parent_name: Option<String>,
-    pub description: Option<String>,
-    pub template_id: Option<Uuid>,
-    pub level_index: i32,
-    pub children: Vec<Organization>,
-    pub child_count: i64,
-    pub room_count: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 /// 校验类型路径：非空、格式合法（点分隔的数字索引）且总长不超过 50
 ///（organizations.type_path 列为 VARCHAR(50)，超长直写数据库报错）
 pub fn validate_type_path(type_path: &str) -> Result<(), ValidationError> {

@@ -3,7 +3,7 @@
  * 处理全局事件绑定和委托
  */
 
-import { loadModule } from "../utils/resourceLoader.js";
+import { loadModule, schedulePreload } from "../utils/resourceLoader.js";
 import { t } from "../utils/i18n.js";
 import { showToast } from "../utils/ui.js";
 import { closeModal } from "../utils/modalLoader.js";
@@ -43,18 +43,6 @@ const DELETE_FUNCTIONS = {
  */
 const PRELOAD_MODULES = ["log", "systemManager"];
 
-/** idle 时预热日志/系统模块；事件绑定不再被模块加载阻塞 */
-function preloadModulesOnIdle() {
-  const run = () => {
-    Promise.allSettled(PRELOAD_MODULES.map((name) => loadModule(name)));
-  };
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(run, { timeout: 5000 });
-  } else {
-    setTimeout(run, 2000);
-  }
-}
-
 /** 懒加载模块：loadModule 内部有缓存与并发去重，重复调用无额外开销 */
 async function getModule(name) {
   return loadModule(name);
@@ -64,7 +52,7 @@ async function getModule(name) {
  * 初始化所有事件监听器
  */
 export function initEventListeners() {
-  preloadModulesOnIdle();
+  schedulePreload(PRELOAD_MODULES, { delay: 2000 });
   initButtonEventBindings();
   initGlobalClickHandlers();
 }

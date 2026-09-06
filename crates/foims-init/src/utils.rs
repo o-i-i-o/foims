@@ -1,21 +1,11 @@
 //! 初始化辅助工具。
 
+use foims_common::AppError;
 use foims_common::msg;
 
-pub fn url_encode_component(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for byte in s.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(byte as char);
-            }
-            _ => {
-                result.push_str(&format!("%{byte:02X}"));
-            }
-        }
-    }
-    result
-}
+// URL 百分号编码：真身定义在 foims-common::db，此处再导出保持
+// `foims_init::utils::url_encode_component` 调用路径稳定
+pub use foims_common::db::url_encode_component;
 
 /// 构造 PostgreSQL 连接串：用户名/密码/库名统一 URL 编码，
 /// 含 @ : / 等字符时裸拼会导致误报（I-8）；host 保持原样以支持
@@ -34,6 +24,8 @@ pub fn build_pg_url(config: &crate::types::DatabaseConfig, database: &str) -> St
 /// pgpass 临时文件：复用 foims-common 的唯一定义
 pub use foims_common::pgpass::PgPassFile;
 
+/// bcrypt 哈希委托 foims-common 唯一定义，仅保留 72 字节兜底守卫与
+/// InitError 错误类型映射
 pub async fn hash_password(password: &str) -> Result<String, crate::error::InitError> {
     // 防御性校验：bcrypt 仅处理前 72 字节，超长部分被静默截断；
     // 入口（InitRequest）已拦截，此处兜底防止绕过校验的调用路径
@@ -42,46 +34,19 @@ pub async fn hash_password(password: &str) -> Result<String, crate::error::InitE
             "server.init.validation.password_length",
         )));
     }
-    let password = password.to_string();
-    tokio::task::spawn_blocking(move || bcrypt::hash(&password, bcrypt::DEFAULT_COST))
-        .await
-        .map_err(|e| {
-            crate::error::InitError::Internal(
-                msg("server.init.password_hash_task_failed").with("error", e),
-            )
-        })?
-        .map_err(|err| {
-            crate::error::InitError::Internal(
-                msg("server.init.password_hash_failed").with("error", err),
-            )
-        })
+    match foims_common::crypto::hash_password(password).await {
+        Ok(hash) => Ok(hash),
+        Err(AppError::Internal(message)) => Err(crate::error::InitError::Internal(message)),
+        // 哈希路径只产生 Internal；其余变体兜底转换为 Internal 并保留 key
+        Err(other) => Err(crate::error::InitError::Internal(
+            msg("server.init.password_hash_failed").with("error", other.to_string()),
+        )),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn url编码_非保留字符原样保留() {
-        assert_eq!(url_encode_component("abcXYZ09"), "abcXYZ09");
-        assert_eq!(url_encode_component("a-b_c.d~e"), "a-b_c.d~e");
-        assert_eq!(url_encode_component(""), "");
-    }
-
-    #[test]
-    fn url编码_特殊字符转为百分号大写十六进制() {
-        assert_eq!(url_encode_component("a b"), "a%20b");
-        assert_eq!(url_encode_component("p@ss:word/?"), "p%40ss%3Aword%2F%3F");
-        assert_eq!(url_encode_component("a+b"), "a%2Bb");
-        assert_eq!(url_encode_component("100%"), "100%25");
-        assert_eq!(url_encode_component("a=b&c=d"), "a%3Db%26c%3Dd");
-    }
-
-    #[test]
-    fn url编码_多字节字符按utf8字节编码() {
-        // “中文” 的 UTF-8 字节为 E4 B8 AD E6 96 87
-        assert_eq!(url_encode_component("中文"), "%E4%B8%AD%E6%96%87");
-    }
 
     #[test]
     fn 连接串构造_特殊字符凭据被编码() {
@@ -153,5 +118,12 @@ mod tests {
             .await
             .unwrap_or_else(|e| panic!("哈希失败: {e}"));
         assert_ne!(hash, hash2);
+    }
+
+    #[tokio::test]
+    async fn 密码哈希_超长密码被兜底拦截() {
+        let long_password = "a".repeat(crate::types::PASSWORD_MAX_BYTES + 1);
+        let result = hash_password(&long_password).await;
+        assert!(result.is_err(), "超过 72 字节应被拒绝");
     }
 }

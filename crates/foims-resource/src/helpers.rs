@@ -8,6 +8,90 @@ use foims_common::AppError;
 use foims_common::msg;
 use foims_common::{log_error, log_info, log_warn};
 
+// ==================== 查询参数解析 ====================
+
+/// 解析可选 UUID 查询参数：缺省/空串返回 None，非法值返回 422。
+///
+/// 过滤参数不静默忽略非法值退化为全量列表（口径与 network.rs 一致）；
+/// 各资源列表 handler 统一走此唯一定义，不再各自内联闭包。
+pub(crate) fn parse_optional_uuid(
+    query: &std::collections::HashMap<String, String>,
+    key: &str,
+) -> Result<Option<Uuid>, AppError> {
+    match query.get(key) {
+        Some(v) if !v.is_empty() => Uuid::parse_str(v).map(Some).map_err(|_| {
+            AppError::Validation(msg("server.common.invalid_param").with("param", key))
+        }),
+        _ => Ok(None),
+    }
+}
+
+// ==================== 名称唯一性预检 ====================
+
+/// SQL 标识符（表名/列名）校验：仅允许字母数字与下划线。
+///
+/// 调用方只传入 crate 内静态字面量；此处运行时校验字符集作为
+/// 防御层，保证标识符无法携带引号/空白等注入载荷后内插进 SQL。
+fn validated_identifier(ident: &str) -> Result<&str, AppError> {
+    if !ident.is_empty() && ident.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        Ok(ident)
+    } else {
+        Err(AppError::Internal(
+            msg("server.error.internal").with("reason", format!("非法 SQL 标识符: {ident}")),
+        ))
+    }
+}
+
+/// 资源名唯一性预检（crate 内各资源 CRUD 与房间同步路径共用的唯一定义）。
+///
+/// SQL 形态：`SELECT id FROM {table} WHERE name = $1
+/// [AND {parent_col} IS NOT DISTINCT FROM $2]
+/// AND ($N::uuid IS NULL OR id != $N)`。
+/// - `parent_col = None` 表示名称全局唯一（如信息点）；
+/// - `IS NOT DISTINCT FROM` 兼容可空父列（如机位的 cabinet_id）与
+///   非空父列（工位/机柜的 room_id）两种语义；
+/// - `exclude_id = None` 为创建路径，`Some(id)` 为更新路径。
+///
+/// 表名/列名仅接受 crate 内静态字面量，经字符集校验后内插，
+/// 值一律参数绑定，无拼接注入面。
+pub(crate) async fn ensure_unique_name<'e, E>(
+    executor: E,
+    table: &'static str,
+    parent_col: Option<&'static str>,
+    parent_id: Option<Uuid>,
+    name: &str,
+    exclude_id: Option<Uuid>,
+    conflict_key: &str,
+) -> Result<(), AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT id FROM ");
+    builder.push(validated_identifier(table)?);
+    builder.push(" WHERE name = ");
+    builder.push_bind(name);
+    if let Some(col) = parent_col {
+        builder.push(" AND ");
+        builder.push(validated_identifier(col)?);
+        builder.push(" IS NOT DISTINCT FROM ");
+        builder.push_bind(parent_id);
+    }
+    builder.push(" AND (");
+    builder.push_bind(exclude_id);
+    builder.push("::uuid IS NULL OR id != ");
+    builder.push_bind(exclude_id);
+    builder.push(")");
+
+    let existing: Option<Uuid> = builder
+        .build_query_scalar()
+        .fetch_optional(executor)
+        .await?;
+    if existing.is_some() {
+        return Err(AppError::Conflict(msg(conflict_key)));
+    }
+    Ok(())
+}
+
 // ==================== 子网业务查询 ====================
 
 pub const NETWORK_QUERY: &str = r"
@@ -83,41 +167,6 @@ where
     }
 
     Ok(())
-}
-
-pub async fn get_room_id_by_workstation<'e, E>(
-    executor: E,
-    workstation_id: Uuid,
-) -> Result<Option<Uuid>, AppError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let room_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
-            .bind(workstation_id)
-            .fetch_optional(executor)
-            .await?
-            .flatten();
-
-    Ok(room_id)
-}
-
-pub async fn get_room_id_by_position<'e, E>(
-    executor: E,
-    position_id: Uuid,
-) -> Result<Option<Uuid>, AppError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let room_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT c.room_id FROM positions p LEFT JOIN cabinets c ON p.cabinet_id = c.id WHERE p.id = $1",
-    )
-    .bind(position_id)
-    .fetch_optional(executor)
-    .await?
-    .flatten();
-
-    Ok(room_id)
 }
 
 // ==================== 站内通知与 MAC 变更告警 ====================

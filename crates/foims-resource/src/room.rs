@@ -1175,17 +1175,16 @@ async fn validate_net_outlet_name(
     exclude_id: Option<Uuid>,
 ) -> Result<(), AppError> {
     // 信息点名称在所有房间范围内唯一（不再限定同一房间）
-    let existing: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM net_outlets WHERE name = $1 AND ($2::uuid IS NULL OR id != $2)",
+    crate::helpers::ensure_unique_name(
+        conn,
+        "net_outlets",
+        None,
+        None,
+        name,
+        exclude_id,
+        "server.net_outlet.name_exists",
     )
-    .bind(name)
-    .bind(exclude_id)
-    .fetch_optional(conn)
-    .await?;
-    if existing.is_some() {
-        return Err(AppError::Conflict(msg("server.net_outlet.name_exists")));
-    }
-    Ok(())
+    .await
 }
 
 async fn validate_workstation_name(
@@ -1194,18 +1193,16 @@ async fn validate_workstation_name(
     room_id: Uuid,
     exclude_id: Option<Uuid>,
 ) -> Result<(), AppError> {
-    let existing: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM workstations WHERE name = $1 AND room_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+    crate::helpers::ensure_unique_name(
+        conn,
+        "workstations",
+        Some("room_id"),
+        Some(room_id),
+        name,
+        exclude_id,
+        "server.workstation.name_exists",
     )
-    .bind(name)
-    .bind(room_id)
-    .bind(exclude_id)
-    .fetch_optional(conn)
-    .await?;
-    if existing.is_some() {
-        return Err(AppError::Conflict(msg("server.workstation.name_exists")));
-    }
-    Ok(())
+    .await
 }
 
 async fn validate_cabinet_name(
@@ -1214,16 +1211,14 @@ async fn validate_cabinet_name(
     room_id: Uuid,
     exclude_id: Option<Uuid>,
 ) -> Result<(), AppError> {
-    let existing: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM cabinets WHERE name = $1 AND room_id = $2 AND ($3::uuid IS NULL OR id != $3)",
+    crate::helpers::ensure_unique_name(
+        conn,
+        "cabinets",
+        Some("room_id"),
+        Some(room_id),
+        name,
+        exclude_id,
+        "server.cabinet.name_exists",
     )
-    .bind(name)
-    .bind(room_id)
-    .bind(exclude_id)
-    .fetch_optional(conn)
-    .await?;
-    if existing.is_some() {
-        return Err(AppError::Conflict(msg("server.cabinet.name_exists")));
-    }
-    Ok(())
+    .await
 }

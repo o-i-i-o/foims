@@ -8,7 +8,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
-use foims_scheduler::{TaskContext, TaskLog, calculate_next_run};
+use foims_scheduler::{TaskContext, calculate_next_run};
 use serde_json;
 use uuid::Uuid;
 use validator::Validate;
@@ -19,7 +19,7 @@ use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{log_warn, msg};
-use foims_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate};
+use foims_models::{ApiResponse, ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate, TaskLog};
 
 /// 允许通过 API 创建/更新的任务类型白名单（与 task_executors 中注册的类型保持一致）
 const ALLOWED_TASK_TYPES: &[&str] = &[

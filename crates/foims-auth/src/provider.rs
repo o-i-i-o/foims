@@ -7,7 +7,7 @@
 use foims_common::DbProvider;
 use foims_common::config::Config;
 
-use crate::utils::JwtUtils;
+use crate::jwt::JwtUtils;
 
 pub trait AuthProvider: DbProvider {
     /// JWT 签发与校验工具。
