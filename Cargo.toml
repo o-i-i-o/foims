@@ -1,7 +1,7 @@
 
 [package]
 name = "foims"
-version = "0.20.32"
+version = "0.20.33"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization IT Information Management System based on Rust Axum and PostgreSQL"
