@@ -99,7 +99,7 @@ tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace
 tracing = "0.1.44"
 
 # UUID
-uuid = { version = "1.26.0", features = ["v4", "serde"] }
+uuid = { version = "1.26.1", features = ["v4", "serde"] }
 
 # Validation
 validator = { version = "0.21.0", features = ["derive"] }
@@ -129,7 +129,7 @@ foims-services = { path = "crates/foims-services" }
 foims-visualization = { path = "crates/foims-visualization" }
 foims-x509-management = { path = "crates/foims-x509-management" }
 
-rust-i18n = "4.2.1"
+rust-i18n = "4.2.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
