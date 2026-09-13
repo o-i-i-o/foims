@@ -480,7 +480,8 @@ const waitForBackendRestart = async () => {
         }
       }
     } catch (error) {
-      // 服务重启窗口内连接失败属预期：继续下一轮
+      // 服务重启窗口内连接失败属预期：debug 记录后继续下一轮
+      console.debug("init restart probe failed:", error);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
