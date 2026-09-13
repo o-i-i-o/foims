@@ -17,6 +17,8 @@
 #     Depends 强制 nginx >= 1.28.1（h2c 上游与 HTTP/3）；
 #     TLS 证书由 postinst 用 openssl 在安装时自签生成（不预置于包内，
 #     避免证书随时间过期；已存在且未过期则跳过）
+#   - 初始化脚本 init-pgsql.sh 安装到 /usr/share/foims/scripts/（建库移交
+#     脚本后，向导第 2 步依赖它；白名单复制，打包工具自身不进包）
 
 set -euo pipefail
 
@@ -150,6 +152,17 @@ if [ -d "deploy" ]; then
     cp -r deploy/nginx deploy/services deploy/fail2ban "$DEBPAK_DIR/usr/share/foims/deploy/"
     find "$DEBPAK_DIR/usr/share/foims/deploy" -type f -exec chmod 644 {} \;
 fi
+
+# 复制初始化脚本（白名单）：向导第 2 步数据库配置页引导用户运行该脚本
+# 建角色与库（v0.20.24 曾因向导内置建库功能移除打包，v0.20.37 建库移交
+# 脚本后恢复）；缺失即失败退出，不带缺口发版
+if [ ! -f "scripts/init-pgsql.sh" ]; then
+    echo "错误：缺少 scripts/init-pgsql.sh（初始化向导依赖）" >&2
+    exit 1
+fi
+mkdir -p "$DEBPAK_DIR/usr/share/foims/scripts"
+cp scripts/init-pgsql.sh "$DEBPAK_DIR/usr/share/foims/scripts/"
+chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/init-pgsql.sh"
 
 echo ""
 echo "6. 创建 polkit 规则（允许 foims 用户重启服务）..."
@@ -485,6 +498,10 @@ Log files directory.
 .TP
 .I /usr/share/foims/deploy/
 Reference nginx/systemd/fail2ban deployment configurations.
+.TP
+.I /usr/share/foims/scripts/init-pgsql.sh
+PostgreSQL initialization script (creates the role and database
+required by the setup wizard; run it before step 2 of the wizard).
 .SH SERVICE
 The application runs as a systemd service:
 .PP
