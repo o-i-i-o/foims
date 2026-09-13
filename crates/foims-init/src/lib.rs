@@ -43,8 +43,7 @@ pub use schema::create_tables;
 
 pub use handlers::{
     check_db_status, check_init_status, check_pgsql, clear_database, create_database_api,
-    import_database_from_file, init_db, init_system, provision_database, restart_program,
-    test_db_connection,
+    import_database_from_file, init_db, init_system, restart_program, test_db_connection,
 };
 
 /// 统一 API 响应结构（由 foims-common 提供，保持原有路径兼容）。

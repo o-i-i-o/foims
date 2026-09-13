@@ -10,7 +10,6 @@ import {
   checkPostgreSQL,
   checkDatabaseStatus,
   handleDbConfigSubmit,
-  handleDbCreate,
   handleInitModeSubmit,
   handleAdminAccountSubmit,
   getVerificationCode
@@ -49,9 +48,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // 第 2 步：数据库配置页（连接测试充当下一步 + 创建数据库）
+  // 第 2 步：数据库配置页（连接测试充当下一步）
   document.getElementById("db-config-form")?.addEventListener("submit", handleDbConfigSubmit);
-  document.getElementById("db-create-btn")?.addEventListener("click", handleDbCreate);
 
   document.getElementById("init-mode-form")?.addEventListener("submit", handleInitModeSubmit);
   document

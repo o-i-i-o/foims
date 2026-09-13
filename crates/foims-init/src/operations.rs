@@ -99,12 +99,13 @@ pub enum CreateDbFailureKind {
 }
 
 impl CreateDbFailureKind {
-    /// 回传前端的消息 key
+    /// 回传前端的消息 key（建库入口已移交部署脚本，key 不再挂在
+    /// provision 命名空间下）
     #[must_use]
     pub fn message_key(self) -> &'static str {
         match self {
-            CreateDbFailureKind::NoPrivilege => "server.init.db.provision.no_privilege",
-            CreateDbFailureKind::AlreadyExists => "server.init.db.provision.exists",
+            CreateDbFailureKind::NoPrivilege => "server.init.db.test.no_privilege",
+            CreateDbFailureKind::AlreadyExists => "server.init.db.create_exists",
             CreateDbFailureKind::Other => "server.init.db.create_failed",
         }
     }
@@ -128,6 +129,22 @@ pub fn classify_create_db_error(error: &sqlx::Error) -> CreateDbFailureKind {
 pub enum CreateOutcome {
     Created,
     AlreadyExists,
+}
+
+/// 撤销数据库上默认授予 PUBLIC 的全部权限（CONNECT/TEMPORARY）。
+///
+/// PostgreSQL 建库时默认把 CONNECT 授予 PUBLIC，任意角色都能连接（登录）
+/// 新建库；撤销后仅所有者（页面输入的账号）可连接，消除「任意用户名都能
+/// 登录」的暴露面。所有者的隐式完整权限不受影响，pg_dump/psql/主应用等
+/// 以配置账号执行的流程均不受影响。
+pub async fn restrict_public_grants(pool: &PgPool, database: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "REVOKE ALL ON DATABASE {} FROM PUBLIC",
+        quote_ident(database)
+    )))
+    .execute(pool)
+    .await
+    .map(|_| ())
 }
 
 pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessage> {
@@ -303,6 +320,12 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<CreateOutcome, A
 
     if db_exists {
         foims_common::log_info!("log.init.db.exists_skip_create", name = config.database);
+        // 已存在的库同样尽力收紧 PUBLIC 授权（幂等）：当前账号为所有者时
+        // 生效；非所有者时必然失败，仅记录日志不改变「幂等跳过」语义，
+        // 后续连接测试的权限校验会拒绝无操作权限的账号
+        if let Err(e) = restrict_public_grants(&postgres_pool, &config.database).await {
+            foims_common::log_warn!("log.init.db.revoke_public_failed", error = e);
+        }
         postgres_pool.close().await;
         return Ok(CreateOutcome::AlreadyExists);
     }
@@ -322,6 +345,13 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<CreateOutcome, A
         }
         msg(kind.message_key()).with("error", e)
     })?;
+
+    // 新建库收紧 PUBLIC 授权按致命错误处理：刚建库的所有者执行 REVOKE
+    // 失败意味着实例状态异常，让配置页尽快反馈而非留下可被任意角色
+    // 连接的库继续初始化
+    restrict_public_grants(&postgres_pool, &config.database)
+        .await
+        .map_err(|e| msg("server.init.db.revoke_public_failed").with("error", e))?;
 
     postgres_pool.close().await;
     foims_common::log_info!("log.init.db.created", name = config.database);
@@ -553,11 +583,11 @@ mod tests {
 
         assert_eq!(
             CreateDbFailureKind::NoPrivilege.message_key(),
-            "server.init.db.provision.no_privilege"
+            "server.init.db.test.no_privilege"
         );
         assert_eq!(
             CreateDbFailureKind::AlreadyExists.message_key(),
-            "server.init.db.provision.exists"
+            "server.init.db.create_exists"
         );
         assert_eq!(
             CreateDbFailureKind::Other.message_key(),

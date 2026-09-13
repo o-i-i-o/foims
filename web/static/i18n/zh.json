@@ -1476,6 +1476,7 @@
     "password_mismatch": "两次输入的密码不一致",
     "init_failed": "系统初始化失败",
     "captcha_failed": "获取验证码失败",
+    "restart_timeout": "服务重启耗时超出预期，若页面未能打开请稍后手动刷新",
     "network_error": "网络错误",
     "unknown_error": "未知错误",
     "db_status_title": "数据库状态",
@@ -1502,17 +1503,12 @@
     "db_name_placeholder": "foims",
     "db_username": "用户名:",
     "db_password": "密码:",
-    "db_create_btn": "创建数据库",
     "db_test_btn": "连接测试",
-    "db_config_help": "「连接测试」验证通过后自动保存配置并进入下一步；目标数据库不存在时可先点击「创建数据库」。",
+    "db_config_help": "「连接测试」验证通过后自动保存配置并进入下一步；数据库与账号不存在时，请先运行部署脚本 scripts/init-pgsql.sh 创建。",
     "db_fill_required": "请完整填写数据库连接信息",
     "db_test_pass": "数据库连接成功，配置已保存",
     "db_test_fail_title": "连接测试失败",
-    "db_create_success": "数据库创建成功",
-    "db_create_existed": "数据库已存在",
-    "db_create_next_hint": "请点击「连接测试」进入下一步。",
-    "db_create_fail_title": "创建数据库失败",
-    "db_test_fail_hint": "请检查输入是否正确；若目标数据库不存在，可点击「创建数据库」。"
+    "db_test_fail_hint": "请检查输入是否正确；若目标数据库或账号不存在，请先运行部署脚本 scripts/init-pgsql.sh 创建。"
   },
   "server": {
     "auth": {
@@ -1851,6 +1847,7 @@
         "completed": "数据库初始化成功",
         "connect_failed": "连接数据库失败",
         "create_failed": "创建数据库失败",
+        "create_exists": "数据库已存在",
         "create_tables_failed": "创建表失败",
         "created": "数据库创建成功",
         "drop_failed": "删除数据库失败",
@@ -1865,6 +1862,7 @@
         "psql_exec_failed": "执行psql失败",
         "psql_task_failed": "psql任务失败",
         "query_failed": "数据库查询错误",
+        "revoke_public_failed": "撤销数据库 PUBLIC 访问授权失败",
         "schema_check_failed": "检查schema是否存在失败",
         "schema_create_failed": "创建schema失败",
         "sql_file_missing": "缺少SQL文件",
@@ -1882,12 +1880,8 @@
           "failed": "数据库连接测试失败",
           "unreachable": "无法连接数据库服务器，请检查地址、端口与防火墙设置",
           "auth_failed": "数据库认证失败：用户不存在或密码错误",
-          "database_missing": "目标数据库不存在或无权访问，请先点击「创建数据库」"
-        },
-        "provision": {
-          "created": "数据库创建成功，请点击「连接测试」进入下一步",
-          "exists": "数据库已存在，无需重复创建，请点击「连接测试」进入下一步",
-          "no_privilege": "当前用户无创建数据库权限（需 CREATEDB），请由数据库管理员授权或手动创建"
+          "database_missing": "目标数据库不存在或无权访问，请先运行部署脚本 scripts/init-pgsql.sh 创建数据库与账号",
+          "no_privilege": "该账号可连接目标数据库，但无权执行初始化操作：需为数据库所有者（或超级用户）且具有 CREATEDB 权限，请联系数据库管理员"
         }
       },
       "disabled": "系统初始化已在配置中禁用",

@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use crate::types::DatabaseConfig;
 use crate::utils::build_pg_url;
 
-use crate::operations::{quote_ident, validate_identifier};
+use crate::operations::{quote_ident, restrict_public_grants, validate_identifier};
 
 pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPool, AppMessage> {
     validate_identifier(&config.database)?;
@@ -33,6 +33,11 @@ pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPoo
         .execute(&postgres_pool)
         .await
         .map_err(|e| msg("server.init.db.create_failed").with("error", e))?;
+        // 补建路径同样收紧 PUBLIC 授权：失败仅记录日志，不阻断主流程
+        //（连接测试的权限校验与建库路径的致命校验已兜底）
+        if let Err(e) = restrict_public_grants(&postgres_pool, &config.database).await {
+            foims_common::log_warn!("log.init.db.revoke_public_failed", error = e);
+        }
         foims_common::log_info!("log.init.db.created", name = config.database);
     }
 
@@ -63,7 +68,10 @@ pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPoo
         {
             foims_common::log_warn!("log.init.db.grant_postgres_failed", error = e);
         }
-        if let Err(e) = sqlx::query("GRANT ALL ON SCHEMA public TO public")
+        // 仅授予 USAGE：把 CREATE 授予 PUBLIC 会让任意可连接用户在
+        // public schema 建表（PG14 及以下默认即如此），与「应用账号
+        // 独占目标库」的收紧原则冲突；建表权限由库所有者隐式持有
+        if let Err(e) = sqlx::query("GRANT USAGE ON SCHEMA public TO public")
             .execute(&pool)
             .await
         {

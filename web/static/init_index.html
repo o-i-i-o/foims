@@ -10,10 +10,10 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=01396">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01396">
-    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01396">
-    <script type="module" src="/static/js/modules/foims_init/index.js?v=01396"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=01399">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=01399">
+    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=01399">
+    <script type="module" src="/static/js/modules/foims_init/index.js?v=01399"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -69,7 +69,7 @@
 
                 <div class="step-panel" data-step="2">
                     <h2 data-i18n="init.db_config_title">数据库配置</h2>
-                    <!-- 显隐由 JS 切换 hidden 属性：展示连接测试 / 建库结果 -->
+                    <!-- 显隐由 JS 切换 hidden 属性：展示连接测试结果 -->
                     <div id="db-config-status" class="status-container" hidden></div>
                     <form id="db-config-form" class="init-form">
                         <div class="form-group">
@@ -99,10 +99,9 @@
                             <label for="db-password" data-i18n="init.db_password">密码:</label>
                             <input type="password" id="db-password" name="password" autocomplete="new-password" required>
                         </div>
-                        <p class="help-text" data-i18n="init.db_config_help">「连接测试」验证通过后自动保存配置并进入下一步；目标数据库不存在时可先点击「创建数据库」。</p>
+                        <p class="help-text" data-i18n="init.db_config_help">「连接测试」验证通过后自动保存配置并进入下一步；数据库与账号不存在时，请先运行部署脚本 scripts/init-pgsql.sh 创建。</p>
                         <div class="form-actions">
                             <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
-                            <button type="button" class="btn btn-primary" id="db-create-btn" data-i18n="init.db_create_btn">创建数据库</button>
                             <button type="submit" class="btn btn-success" data-i18n="init.db_test_btn">连接测试</button>
                         </div>
                     </form>

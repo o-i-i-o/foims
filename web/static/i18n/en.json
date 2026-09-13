@@ -1476,6 +1476,7 @@
     "password_mismatch": "The passwords entered do not match",
     "init_failed": "System initialization failed",
     "captcha_failed": "Failed to get verification code",
+    "restart_timeout": "Service restart is taking longer than expected; if this page does not load, please refresh manually later",
     "network_error": "Network error",
     "unknown_error": "Unknown error",
     "db_status_title": "Database Status",
@@ -1502,17 +1503,12 @@
     "db_name_placeholder": "foims",
     "db_username": "Username:",
     "db_password": "Password:",
-    "db_create_btn": "Create Database",
     "db_test_btn": "Test Connection",
-    "db_config_help": "Once \"Test Connection\" passes, the settings are saved automatically and you can proceed; if the target database does not exist, click \"Create Database\" first.",
+    "db_config_help": "Once \"Test Connection\" passes, the settings are saved automatically and you can proceed; if the database or account does not exist, run the deployment script scripts/init-pgsql.sh first.",
     "db_fill_required": "Please fill in all database connection fields",
     "db_test_pass": "Database connection succeeded, settings saved",
     "db_test_fail_title": "Connection Test Failed",
-    "db_create_success": "Database created successfully",
-    "db_create_existed": "Database already exists",
-    "db_create_next_hint": "Click \"Test Connection\" to continue.",
-    "db_create_fail_title": "Database Creation Failed",
-    "db_test_fail_hint": "Please check your input; if the target database does not exist, click \"Create Database\"."
+    "db_test_fail_hint": "Please check your input; if the target database or account does not exist, run the deployment script scripts/init-pgsql.sh first."
   },
   "server": {
     "auth": {
@@ -1850,7 +1846,8 @@
         "column_missing": "Table is missing a required column",
         "completed": "Database initialized successfully",
         "connect_failed": "Failed to connect to the database",
-        "create_failed": "Failed to create the database",
+        "create_failed": "Failed to create database",
+        "create_exists": "Database already exists",
         "create_tables_failed": "Failed to create tables",
         "created": "Database created successfully",
         "drop_failed": "Failed to drop the database",
@@ -1865,6 +1862,7 @@
         "psql_exec_failed": "Failed to execute psql",
         "psql_task_failed": "psql task failed",
         "query_failed": "Database query error",
+        "revoke_public_failed": "Failed to revoke PUBLIC access on the database",
         "schema_check_failed": "Failed to check schema existence",
         "schema_create_failed": "Failed to create the schema",
         "sql_file_missing": "SQL file is missing",
@@ -1882,12 +1880,8 @@
           "failed": "Database connection test failed",
           "unreachable": "Cannot reach the database server, please check the address, port and firewall",
           "auth_failed": "Database authentication failed: user does not exist or wrong password",
-          "database_missing": "Target database does not exist or access is denied, please click \"Create Database\" first"
-        },
-        "provision": {
-          "created": "Database created successfully, click \"Test Connection\" to continue",
-          "exists": "Database already exists, no need to create it again, click \"Test Connection\" to continue",
-          "no_privilege": "The current user has no permission to create databases (CREATEDB required), ask the database administrator to grant it or create it manually"
+          "database_missing": "Target database does not exist or access is denied, run the deployment script scripts/init-pgsql.sh first to create the database and account",
+          "no_privilege": "This account can connect to the target database but lacks privileges to initialize it: must be the database owner (or superuser) with CREATEDB privilege, contact the database administrator"
         }
       },
       "disabled": "System initialization is disabled in the configuration",

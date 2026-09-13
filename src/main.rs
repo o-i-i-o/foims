@@ -336,9 +336,15 @@ fn configure_app_services(
                     {
                         return Ok(foims_init::context::RestartMode::Manual);
                     }
-                    foims::system::services::trigger_service_restart()
-                        .await
-                        .map_err(|e| e.to_string())?;
+                    // 自退出重启：延迟退出后由单元的 Restart=always 拉起新进程。
+                    // 不走 systemctl restart——它受 polkit auth_admin 管控，
+                    // headless 服务器（服务进程无会话）下必然被拒，桌面环境
+                    // 则会在初始化完成时弹出系统认证窗口
+                    tokio::spawn(async {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        foims_common::log_info!("log.init.restart_self_exit");
+                        std::process::exit(0);
+                    });
                     Ok(foims_init::context::RestartMode::Systemd)
                 })
             }),
@@ -350,14 +356,11 @@ fn configure_app_services(
             .route("/api/init/db/clear", post(foims_init::clear_database))
             .route("/api/init/db/create", post(foims_init::create_database_api))
             // 数据库配置页（第 2 步）：连接测试充当下一步（通过后写盘
-            // 并切换内存连接），provision 按页面输入幂等建库
+            // 并切换内存连接）；建库/建账号由部署脚本 init-pgsql.sh
+            // 手动完成，向导不提供建库入口
             .route(
                 "/api/init/db/test-connection",
                 post(foims_init::test_db_connection),
-            )
-            .route(
-                "/api/init/db/provision",
-                post(foims_init::provision_database),
             )
             // import（无文件）与 create 共用同一 handler：原 import_database_api
             //             是 create 的逐行重复且无任何导入动作

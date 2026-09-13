@@ -292,56 +292,6 @@ export const handleDbConfigSubmit = async (e) => {
   }
 };
 
-/**
- * 第 2 步「创建数据库」：按页面输入以幂等方式创建目标数据库。
- * 成功（含已存在）-> 提示点击「连接测试」进入下一流程；
- * 失败 -> 按错误分类反馈（不可达 / 认证失败 / 无权限等）。
- */
-export const handleDbCreate = async () => {
-  if (dbConfigSubmitting) {
-    return;
-  }
-
-  const payload = collectDbConfigPayload();
-  if (!payload) {
-    return;
-  }
-
-  dbConfigSubmitting = true;
-  showLoading();
-
-  try {
-    const response = await fetch("/api/init/db/provision", {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload)
-    });
-
-    const result = await parseJsonResponse(response);
-    hideLoading();
-
-    if (result.success) {
-      const created = result.data ? result.data.created !== false : true;
-      renderDbConfigStatus(
-        "success",
-        created ? "init.db_create_success" : "init.db_create_existed",
-        t("init.db_create_next_hint")
-      );
-    } else {
-      renderDbConfigStatus(
-        "error",
-        "init.db_create_fail_title",
-        result.message || t(T_KEY_UNKNOWN_ERROR)
-      );
-    }
-  } catch (error) {
-    hideLoading();
-    showError(`${t(T_KEY_NETWORK_ERROR)}: ${error.message}`);
-  } finally {
-    dbConfigSubmitting = false;
-  }
-};
-
 /** 第三步表单提交：根据初始化方式新建或导入数据库。 */
 export const handleInitModeSubmit = async (e) => {
   e.preventDefault();
@@ -496,9 +446,7 @@ export const handleAdminAccountSubmit = async (e) => {
           showManualRestartGuide();
           return;
         }
-        setTimeout(() => {
-          window.location.href = "/main.html";
-        }, 2000);
+        await waitForBackendRestart();
       }, 3000);
     } else {
       showError(`${t("init.init_failed")}: ${result.message || t(T_KEY_UNKNOWN_ERROR)}`);
@@ -509,6 +457,35 @@ export const handleAdminAccountSubmit = async (e) => {
   } finally {
     adminAccountSubmitting = false;
   }
+};
+
+/**
+ * systemd 自退出重启后轮询后端恢复（/api/auth/init-status 两分支常驻注册），
+ * 恢复后跳转登录页。重启窗口内请求失败属预期，静默重试；
+ * 超时（服务未能自行拉起）提示用户后仍尝试跳转。
+ */
+const waitForBackendRestart = async () => {
+  const maxAttempts = 30;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const response = await fetch("/api/auth/init-status", {
+        headers: JSON_HEADERS,
+        cache: "no-store"
+      });
+      if (response.ok) {
+        const result = await parseJsonResponse(response);
+        if (result?.success) {
+          window.location.href = "/main.html";
+          return;
+        }
+      }
+    } catch (error) {
+      // 服务重启窗口内连接失败属预期：继续下一轮
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  showToast(t("init.restart_timeout"));
+  window.location.href = "/main.html";
 };
 
 /** 获取并展示服务器控制台验证码。由 index.js 的 .get-captcha-btn 点击监听调用。 */

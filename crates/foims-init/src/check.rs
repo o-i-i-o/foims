@@ -722,10 +722,21 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), foims_com
 
 /// 检查系统是否已有业务数据（以 users 表是否非空为准）。
 ///
+/// 空库（表尚未创建）是部署脚本建库后的合法初始状态：users 表
+/// 不存在时必然无业务数据，直接判定无数据；表存在时按行数判断。
 /// 查询错误向上传播（fail-fast）：本函数的结论决定
 /// `backup_and_drop_for_rebuild` 是否跳过备份直接删库，
 /// 把数据库故障误判为"无数据"会销毁存量业务数据。
 pub async fn check_has_data(pool: &sqlx::PgPool) -> Result<bool, sqlx::Error> {
+    let users_table_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if !users_table_exists {
+        return Ok(false);
+    }
+
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(pool)
         .await?;
