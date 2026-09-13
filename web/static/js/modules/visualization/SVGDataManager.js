@@ -263,6 +263,10 @@ export class SVGDataManager {
         if (hasSavedLayout && cabinets.length > 0) {
           await this.layoutAndRenderCabinets(cabinets, layoutData, token);
         } else {
+          // 无布局/无机柜：空画布兜底铺满，并清除上一房间残留的横向滚动占位
+          //（同步执行无渲染跟进；隐藏容器下回退尺寸由 ResizeObserver 在
+          // 切页签可见后纠正）
+          this.core.fitCabinetCanvasToContainer();
           // 无渲染跟进（无布局/无柜）:恢复完成标志,避免 saveLayout 被永久拒绝
           this.cabinetRenderSettled = true;
         }
@@ -649,6 +653,8 @@ export class SVGDataManager {
         );
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
+          // 清空后画布回到空态：兜底铺满并收回残留的横向滚动占位
+          this.core.fitCabinetCanvasToContainer();
           this.showToast(t("viz.layout_delete_success"), "success");
         } else {
           this.showToast(`${t("viz.layout_delete_failed")}: ${result.message}`, "error");

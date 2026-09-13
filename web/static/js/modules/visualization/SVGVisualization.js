@@ -137,8 +137,10 @@ export class SVGVisualization {
       }
 
       if (cabinets.length === 0) {
-        // 无渲染跟进:恢复完成标志,避免 saveLayout 被永久拒绝
+        // 无渲染跟进:恢复完成标志,避免 saveLayout 被永久拒绝；
+        // 空画布兜底铺满，清除上一房间残留的横向滚动占位
         this.dataManager.cabinetRenderSettled = true;
+        this.core.fitCabinetCanvasToContainer();
         this.core.showToast(t("viz.no_cabinet_data"), "info");
         return;
       }

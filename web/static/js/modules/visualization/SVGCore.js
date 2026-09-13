@@ -70,10 +70,17 @@ export class SVGCore extends SVGCanvasBase {
     // 否则高分辨率屏幕下机柜底部无法贴近屏幕底部
     this.container.style.overflow = "auto";
 
-    // 工位画布：容器从隐藏变可见（切换页面/子标签）、侧边栏折叠、窗口缩放时
-    // 保证 viewBox 至少覆盖容器，网格背景铺满画布
-    if (this.type !== "cabinet" && typeof ResizeObserver !== "undefined") {
-      this._containerObserver = new ResizeObserver(() => this.fitViewBoxToContainer());
+    // 画布容器尺寸跟踪（隐藏→可见、侧边栏折叠、窗口缩放时保证网格铺满）：
+    // 工位画布 viewBox 只增不减；机柜画布未定型时兜底取容器尺寸，
+    // 已定型（虚拟横向滚动）时按容器宽同步视野、高度不小于定型高
+    if (typeof ResizeObserver !== "undefined") {
+      this._containerObserver = new ResizeObserver(() => {
+        if (this.type === "cabinet") {
+          this._fitCabinetViewBoxOnResize();
+        } else {
+          this.fitViewBoxToContainer();
+        }
+      });
       this._containerObserver.observe(this.container);
     }
   }
@@ -363,6 +370,36 @@ export class SVGCore extends SVGCanvasBase {
     if (this.alignmentLinesGroup) {
       this.alignmentLinesGroup.innerHTML = "";
     }
+  }
+
+  /**
+   * 机柜空画布兜底铺满：viewBox 直接取容器尺寸（背景矩形随 setViewBox 同步），
+   * 并把滚动占位宽度收回容器宽度，清除上一房间残留的横向滚动。
+   * 容器隐藏（尺寸为 0）时回退 800×600，切页签可见后由 ResizeObserver 纠正。
+   */
+  fitCabinetCanvasToContainer() {
+    const w = this.container.clientWidth || 800;
+    const h = this.container.clientHeight || 600;
+    if (this.scrollSpacer?.isConnected) {
+      this.scrollSpacer.style.width = `${w}px`;
+    }
+    this.setViewBox(0, 0, w, h);
+  }
+
+  /**
+   * 机柜画布容器尺寸变化兜底（ResizeObserver 回调）：
+   * 未定型（尚未渲染机柜）时按容器尺寸铺满；已定型时视野宽跟随容器宽，
+   * 高度取定型高与当前容器高的较大值，避免隐藏期间以回退值定型后
+   * 切页签可见时网格上方留白。
+   */
+  _fitCabinetViewBoxOnResize() {
+    if (!this._cabinetScrollBound) {
+      this.fitCabinetCanvasToContainer();
+      return;
+    }
+    const viewWidth = this.container.clientWidth || 800;
+    const height = Math.max(this._cabinetViewHeight || 600, this.container.clientHeight || 0);
+    this.setViewBox(this.container.scrollLeft, 0, viewWidth, height);
   }
 
   /**
