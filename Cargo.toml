@@ -68,7 +68,7 @@ hex = "0.4.3"
 ipnetwork = "0.21.1"
 
 # JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
-jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
 openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
@@ -91,7 +91,7 @@ tokio = { version = "1.53.1", features = ["full"] }
 
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
-toml = "1.1.5"
+toml = "1.1.6"
 totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace", "fs", "set-header", "limit"] }
 
