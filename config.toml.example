@@ -38,6 +38,7 @@ cors_allowed_origins = []
 uds_path = "/run/foims/api.sock"
 
 # UDS socket 属组（须为反代 worker 进程的属组；Debian/Ubuntu nginx 为 www-data 或 nginx）
+# deb 安装时 postinst 自动检测 nginx worker 用户并改写此值，手动部署需自行保持一致
 uds_group = "www-data"
 
 # 是否由 axum 托管静态文件

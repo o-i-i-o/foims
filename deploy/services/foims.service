@@ -15,6 +15,7 @@
 #   生产推荐 /run/foims/api.sock（目录由 RuntimeDirectory 自动创建）。
 # nginx 进程需能读写该 socket：config.toml uds_group 与下方 SupplementaryGroups
 #   保持一致（Debian 系 nginx 以 www-data 运行，RHEL 系为 nginx）。
+#   deb 安装时 postinst 自动检测实际用户，通过 drop-in 覆盖 SupplementaryGroups。
 
 [Unit]
 Description=FOIMS - Organization IT Information Management System

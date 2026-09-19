@@ -16,7 +16,9 @@
 #   - nginx 生产配置安装到 /etc/nginx/conf.d/foims.conf（conffile），
 #     Depends 强制 nginx >= 1.28.1（h2c 上游与 HTTP/3）；
 #     TLS 证书由 postinst 用 openssl 在安装时自签生成（不预置于包内，
-#     避免证书随时间过期；已存在且未过期则跳过）
+#     避免证书随时间过期；已存在且未过期则跳过）；
+#     nginx worker 运行用户由 postinst 检测并自动对齐 uds_group 与
+#     SupplementaryGroups（drop-in），兼容 www-data / nginx 等差异
 #   - 初始化脚本 init-pgsql.sh 安装到 /usr/share/foims/scripts/（建库移交
 #     脚本后，向导第 2 步依赖它；白名单复制，打包工具自身不进包）
 
@@ -285,6 +287,39 @@ case "$1" in
             chmod 640 /etc/foims/config.toml
         fi
 
+        # nginx worker 运行用户自动对齐：nginx worker 进程需能连接 UDS
+        # socket（属组由 config.toml uds_group 决定，服务进程改属组又依赖
+        # SupplementaryGroups）。Debian/Ubuntu 发行版 nginx 为 www-data，
+        # nginx.org 官方包/部分环境为 nginx，硬编码任一值都会在另一场景
+        # 下 502（connect 13: Permission denied）。此处解析 nginx.conf 的
+        # user 指令，同步 config.toml 的 uds_group 与 drop-in 覆盖的
+        # SupplementaryGroups，安装即用
+        NGINX_USER=""
+        if [ -f /etc/nginx/nginx.conf ]; then
+            NGINX_USER=$(sed -n 's/^[[:space:]]*user[[:space:]]\{1,\}\([^[:space:];]\{1,\}\).*/\1/p' /etc/nginx/nginx.conf | head -n1)
+        fi
+        # user 指令缺失或对应用户不存在时回退 Debian 默认
+        if [ -z "$NGINX_USER" ] || ! getent passwd "$NGINX_USER" >/dev/null 2>&1; then
+            NGINX_USER=www-data
+        fi
+        # SupplementaryGroups 需要真实存在的组：取该用户主组
+        NGINX_GROUP=$(id -gn "$NGINX_USER" 2>/dev/null || echo "$NGINX_USER")
+
+        if [ -f /etc/foims/config.toml ] && grep -q '^uds_group' /etc/foims/config.toml; then
+            sed -i "s|^uds_group[[:space:]]*=.*|uds_group = \"$NGINX_USER\"|" /etc/foims/config.toml
+        fi
+
+        # drop-in 覆盖服务单元的 SupplementaryGroups（/etc 优先于 /usr/lib，
+        # 同名单指令覆盖语义），使非 root 的 foims 进程有权改 socket 属组；
+        # 写入在下方 daemon-reload 之前，重启/首启即生效
+        install -d -m 755 /etc/systemd/system/foims.service.d
+        cat > /etc/systemd/system/foims.service.d/uds-group.conf <<FOIMS_EOF
+# 由 foims 包 postinst 按检测到的 nginx worker 用户自动生成（勿手工编辑）：
+# 使 foims 进程能将 UDS socket 属组改为反代进程的组
+[Service]
+SupplementaryGroups=$NGINX_GROUP
+FOIMS_EOF
+
         # nginx 默认证书：已存在且剩余 ≥1 天（checkend 86400 秒）则幂等跳过，
         # 否则安装时自签生成（安装时生成而非打包预置，避免包内证书随时间
         # 过期）。openssl 失败时 set -e 使安装失败：HTTPS 栈无证书不可用，
@@ -379,6 +414,10 @@ case "$1" in
 
         # 删除证书物料（站点根 CA 与全部生成/导入证书，purge 语义为彻底清除）
         rm -rf /etc/ssl/foims-ca /etc/ssl/foims-certs /etc/ssl/foims-import-certs /etc/ssl/foims-import-cas
+
+        # 删除 postinst 生成的 UDS 属组 drop-in（purge 语义为彻底清除）
+        rm -f /etc/systemd/system/foims.service.d/uds-group.conf
+        rmdir --ignore-fail-on-non-empty /etc/systemd/system/foims.service.d 2>/dev/null || true
 
         # 删除用户
         if getent passwd foims > /dev/null; then
