@@ -1,6 +1,6 @@
-# FOIMS — Organization IT Information Management System
+# FOIMS — Organization Infrastructure Management System
 
-FOIMS（组织 IT 信息管理系统）是一个基于 Rust 和现代 Web 技术构建的高性能组织 IT 资产管理平台，为网络管理员提供安全、高效且直观的一站式管理界面：IP 地址、交换机、物理资产（机房/机柜/工位）、组织与人员、网络拓扑可视化等。
+FOIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技术构建的高性能组织基础设施管理平台，为网络管理员提供安全、高效且直观的一站式管理界面：IP 地址、交换机、物理资产（机房/机柜/工位）、组织与人员、网络拓扑可视化等。
 
 ## ✨ 核心特性
 
