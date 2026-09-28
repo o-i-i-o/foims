@@ -76,7 +76,7 @@ export default [
   },
   {
     // Node 环境脚本：lint 配置自身
-    files: ["eslint.config.mjs", "jest.config.mjs", "stylelint.config.mjs"],
+    files: ["eslint.config.mjs", "jest.config.mjs"],
     languageOptions: {
       globals: {
         ...globals.node

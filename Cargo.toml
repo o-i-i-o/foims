@@ -1,7 +1,7 @@
 
 [package]
 name = "foims"
-version = "0.20.43"
+version = "0.20.44"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -26,8 +26,12 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 
-# 与 AGENTS.md 硬性规范对应的 clippy 护栏（warn 级，CI 以 -D warnings 强制）：
-# 禁止 unwrap/expect/调试输出/占位实现遗留，禁止用 #[allow] 压制告警
+# 与 AGENTS.md 硬性规范对应的护栏（warn 级，CI 以 -D warnings 强制）：
+# clippy 禁止 unwrap/expect/调试输出/占位实现遗留，禁止用 #[allow] 压制告警；
+# rust 层直接禁用 unsafe 代码（本仓库为零 unsafe 的纯安全实现）
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
 [workspace.lints.clippy]
 unwrap_used = "warn"
 expect_used = "warn"

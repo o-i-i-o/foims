@@ -45,8 +45,9 @@ foims（bin/lib）             应用组装层：路由装配/系统管理/日�
   以 turbofish（`handler::<AppState>`）单态化。
 - 依赖版本统一由根 `Cargo.toml` 的 `[workspace.dependencies]` 管理，子 crate
   一律 `workspace = true`。
-- `[workspace.lints.clippy]` 已启用 unwrap/expect/print/dbg/todo/unreachable/
-  allow_attributes 护栏，CI 以 `-D warnings` 强制，不要新增违例。
+- `[workspace.lints]` 已启用 clippy 护栏（unwrap/expect/print/dbg/todo/
+  unreachable/allow_attributes）并在 rust lints 层 `unsafe_code = "forbid"`，
+  CI 以 `-D warnings` 强制，不要新增违例。
 
 ### 2.2 错误处理
 
@@ -102,10 +103,10 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
 
 ### 2.5 模型与注释
 
-- 模型按资源域拆分在 `src/models/<domain>.rs`，经 `mod.rs` glob 再导出，
-  调用方路径 `crate::models::X` 不变。
+- 模型按资源域拆分在 `crates/foims-models/src/models/<domain>.rs`，
+  经 `mod.rs` glob 再导出，调用方路径 `crate::models::X` 不变。
 - 每个模块第一行 `//!` 模块头；pub 函数（尤其 handler）`///` 注明用途与
-  错误情形，范本见 `src/resource/device/nic.rs`。
+  错误情形，范本见 `crates/foims-resource/src/device/nic.rs`。
 - 更新接口的可空字段用 `Option<Option<T>>`（`deserialize_some`）：
   缺省不改、`Some(None)` 置空；`QueryBuilder` 直接 `push_bind(Option)` 编码。
 
@@ -173,13 +174,15 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
 - 静态资源缓存策略在 `deploy/nginx/*.conf`：`/static/js/` 必须
   `no-cache`（ES 模块间相对导入不带版本号，长缓存会导致陈旧模块）；
   CSS/图片入口带 `?v=` 可长缓存。
-- 改动 JS/CSS 后同步 bump：`main.html` 等页面的 `?v=`、
-  `resourceLoader.js` 的 `MODULE_VERSION`（与前端资源版本同号）。
+- 改动 JS/CSS 后同步 bump：三个入口页（`main.html`/`index.html`/
+  `init_index.html`）的 `?v=` 与 `resourceLoader.js` 的 `MODULE_VERSION`
+  必须同号（由 `tests/frontend_consistency.rs` 强制校验，漏 bump 直接挂
+  `cargo test`）。
 
 ### 3.6 校验命令
 
 ```bash
-# JS 语法门禁（59 个模块全过）
+# JS 语法门禁（static/js 全部模块逐个校验，勿写死数量）
 find web/static/js -name "*.js" -exec sh -c 'node --input-type=module --check < "$1"' _ {} \;
 
 # import 死链扫描（相对导入 + MODULE_REGISTRY 全量核对）

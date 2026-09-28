@@ -1,12 +1,13 @@
 # FOIMS 代码规范入口
 
 **完整风格规范见 [docs/code-style.md](docs/code-style.md)**（前后端唯一权威来源，
-本文件仅保留必须随时可见的硬性规则）。`.trae/rules/` 下的指引亦以该文档为准。
+本文件仅保留必须随时可见的硬性规则）。
 
 ## 基础规范
 
 - 本项目基于 **Rust 2024 Edition**，风格由 rustfmt + clippy 强制落地
-  （`[workspace.lints.clippy]` 已启用 unwrap/expect/print/allow 等护栏）。
+  （`[workspace.lints]` 已启用 unwrap/expect/print/allow 等 clippy 护栏，
+  并设 `unsafe_code = "forbid"`）。
 - 符合 rust、axum、api、http、pgsql 最佳实践；不考虑老旧基础设施兼容性。
 - 本项目 IPv6 支持友好。
 - 不使用数据库迁移代码：修改结构时直接执行 SQL，然后同步完善 foims-init 的
@@ -27,7 +28,8 @@
 ## 版本与测试
 
 - 每次代码更新后 bump `Cargo.toml` 版本号（规则 `0.x.yy`，`yy>=99` 时进位）；
-  前端资源同步 bump `main.html` 的 `?v=` 与 `resourceLoader.js` 的 `MODULE_VERSION`。
+  前端资源同步 bump 三个入口页（main/index/init_index）的 `?v=` 与
+  `resourceLoader.js` 的 `MODULE_VERSION`（一致性由 `cargo test` 强制）。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
 - 测试：`cargo build --release && sudo systemctl restart foims`
   （运行需 root 监听端口）；测试用户 admin / admin123。
