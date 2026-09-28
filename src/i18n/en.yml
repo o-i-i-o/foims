@@ -317,8 +317,6 @@ system:
   snmp_trap_user_invalid: "Invalid SNMP trap v3 user {{username}}, skipped: {{error}}"
   start: "Starting FOIMS server..."
   start_time_initialized: "System startup time initialized"
-  static_serve_mode: "Static file serving: {{mode}}"
   uds_in_use: "UDS socket {{path}} is already used by another FOIMS process, refusing to start to avoid duplicate instances"
   uds_server_started: "UDS server started (h2c): {{path}}"
   uds_stale_cleaned: "Stale socket file detected (no listener), cleaned up: {{path}}"
-  web_dir_created: "Created web directory: {{path}}"

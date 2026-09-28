@@ -4,8 +4,6 @@
 //! 形式的提取器参数（下划线前缀表示“仅用其副作用”），为规范允许的
 //! 唯一下划线例外，见 docs/code-style.md。
 
-pub mod static_files;
-
 use std::collections::HashMap;
 use std::sync::Arc;
 

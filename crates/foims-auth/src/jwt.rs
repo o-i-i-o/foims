@@ -400,7 +400,6 @@ mod tests {
                 session_timeout: None,
                 page_timeout: None,
                 cors_allowed_origins: Vec::new(),
-                allow_localhost_cors: false,
                 listen: ListenConfig::default(),
             },
             jwt: FileJwtConfig {

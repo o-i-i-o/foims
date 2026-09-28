@@ -86,12 +86,10 @@ const fn default_health_check_interval() -> u64 {
 /// - axum 监听 Unix Domain Socket，使用 h2c (HTTP/2 cleartext) 协议
 /// - nginx 通过 `proxy_http_version 2.0` 以 h2c 反代到 axum
 /// - 静态文件由 nginx 直接托管，axum 仅服务 API
-/// - 调试时手动启动 axum 即可，无需安装 systemd 服务
 /// - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 性能优于 HTTP/1.1
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ListenConfig {
     /// UDS socket 文件路径，默认 /run/foims/api.sock
-    /// 调试时可改为 /tmp/foims-dev.sock 避免权限问题
     #[serde(default = "default_uds_path")]
     pub uds_path: String,
     /// UDS socket 属组（反代进程所属组，如 nginx 的 www-data）。
@@ -99,11 +97,6 @@ pub struct ListenConfig {
     /// 直连伪造 X-Real-IP 头访问初始化接口（见 security-review I-1）。
     #[serde(default = "default_uds_group")]
     pub uds_group: String,
-    /// 是否托管静态文件
-    /// - false（默认）：由 nginx 托管静态文件，axum 仅服务 API（生产模式）
-    /// - true：axum 同时托管静态文件和 API（调试模式，可用 curl 验证）
-    #[serde(default = "default_serve_static")]
-    pub serve_static: bool,
 }
 
 fn default_uds_path() -> String {
@@ -114,16 +107,11 @@ fn default_uds_group() -> String {
     "www-data".to_string()
 }
 
-const fn default_serve_static() -> bool {
-    false
-}
-
 impl Default for ListenConfig {
     fn default() -> Self {
         Self {
             uds_path: default_uds_path(),
             uds_group: default_uds_group(),
-            serve_static: default_serve_static(),
         }
     }
 }
@@ -137,8 +125,6 @@ pub struct ServerConfig {
     pub page_timeout: Option<u64>,    // 页面超时时间（分钟）
     #[serde(default)]
     pub cors_allowed_origins: Vec<String>, // CORS允许的源列表
-    #[serde(default)]
-    pub allow_localhost_cors: bool, // 是否允许localhost/127.0.0.1/[::1]跨域（仅开发环境启用）
     /// 监听配置（UDS 模式）
     #[serde(default)]
     pub listen: ListenConfig,

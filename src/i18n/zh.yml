@@ -317,8 +317,6 @@ system:
   snmp_trap_user_invalid: "SNMP Trap v3 用户 {{username}} 配置无效, 已跳过: {{error}}"
   start: "启动FOIMS服务器..."
   start_time_initialized: "系统启动时间初始化完成"
-  static_serve_mode: "静态文件托管: {{mode}}"
   uds_in_use: "UDS socket {{path}} 已被另一个 FOIMS 进程占用，拒绝启动以避免重复实例"
   uds_server_started: "UDS 服务器启动 (h2c): {{path}}"
   uds_stale_cleaned: "检测到残留 socket 文件（无监听者），清理后继续: {{path}}"
-  web_dir_created: "创建web目录: {{path}}"

@@ -1,6 +1,5 @@
 //! 程序入口：配置加载、服务启动与优雅退出。
 
-use std::fs;
 use std::panic;
 use std::path::Path;
 use std::sync::Arc;
@@ -10,17 +9,15 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{HeaderValue, Method, header};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::Response;
 use axum::routing::{get, post};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use foims::app_state::AppState;
 use foims::routes::get_init_status;
 use foims::routes::init_routes;
-use foims::routes::static_files::get_web_dir;
 use foims::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use foims::system::config::init_start_time;
 use foims::system::task_executors::{
@@ -59,48 +56,6 @@ fn setup_panic_handler() {
             location, msg, backtrace
         );
     }));
-}
-
-async fn static_cache_control_middleware(req: Request, next: Next) -> Response {
-    let path = req.uri().path().to_string();
-    // 精确解析 query：参数名恰为 "v" 且值非空才算带版本号
-    // （此前用 contains("v=") 子串匹配，?dev=1 也会误命中一年 immutable 缓存）
-    let has_version = req.uri().query().is_some_and(|q| {
-        q.split('&').any(|pair| {
-            let mut kv = pair.splitn(2, '=');
-            kv.next() == Some("v") && kv.next().is_some_and(|v| !v.is_empty())
-        })
-    });
-    let mut res = next.run(req).await;
-
-    if path.starts_with("/static/") {
-        // 带 ?v= 的资源由版本号机制保证内容变化即换 URL，可长缓存；
-        // 其余资源（含无版本号的 JS 模块动态 import）维持每次再验证
-        let cache_policy = if has_version {
-            "public, max-age=31536000, immutable"
-        } else {
-            "no-cache, must-revalidate"
-        };
-        res.headers_mut().insert(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static(cache_policy),
-        );
-        // 为 .json 文件补充 charset=utf-8（ServeDir 默认只设 application/json）
-        if path.ends_with(".json")
-            && res
-                .headers()
-                .get(header::CONTENT_TYPE)
-                .and_then(|v| v.to_str().ok())
-                .is_some_and(|ct| ct.starts_with("application/json") && !ct.contains("charset"))
-        {
-            res.headers_mut().insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json; charset=utf-8"),
-            );
-        }
-    }
-
-    res
 }
 
 async fn security_headers_middleware(req: Request, next: Next) -> Response {
@@ -155,7 +110,6 @@ async fn db_pool_metrics_middleware(
 
 fn build_cors_layer(config: &Config) -> CorsLayer {
     let mut allowed_origins = config.server.cors_allowed_origins.clone();
-    let allow_localhost = config.server.allow_localhost_cors;
 
     let public_url = config
         .server
@@ -176,7 +130,7 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
             // 仅精确匹配（含可选的显式 :80/:443 端口写法）。
             // 此前用 starts_with 前缀匹配，http://localhost.evil.com:80 这类
             // 后缀域名可绕过且 allow_credentials(true)（见 security-review A-10）
-            for allowed in allowed_origins.iter() {
+            allowed_origins.iter().any(|allowed| {
                 let base = allowed.trim_end_matches('/');
                 if origin_str == allowed || origin_str == base {
                     return true;
@@ -187,17 +141,8 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
                 } else {
                     format!("{base}:80")
                 };
-                if origin_str == with_port {
-                    return true;
-                }
-            }
-            allow_localhost
-                && (origin_str.starts_with("http://localhost:")
-                    || origin_str.starts_with("https://localhost:")
-                    || origin_str.starts_with("http://127.0.0.1:")
-                    || origin_str.starts_with("https://127.0.0.1:")
-                    || origin_str.starts_with("http://[::1]:")
-                    || origin_str.starts_with("https://[::1]:"))
+                origin_str == with_port
+            })
         },
     );
 
@@ -302,17 +247,8 @@ fn lookup_group_gid(group: &str) -> std::io::Result<Option<u32>> {
     Ok(None)
 }
 
-async fn redirect_to_index() -> Response {
-    Redirect::to("/static/index.html").into_response()
-}
-
-async fn redirect_to_init_index() -> Response {
-    Redirect::to("/init_index.html").into_response()
-}
-
 fn configure_app_services(
     app_state: Arc<AppState>,
-    serve_static: bool,
     init_enabled: bool,
     rate_limit_state: RateLimitState,
 ) -> Router {
@@ -383,46 +319,12 @@ fn configure_app_services(
             ))
             .with_state(init_context);
 
-        let router = Router::new().merge(init_router);
-
-        // 仅在 serve_static=true 时托管前端文件
-        // 生产模式（UDS + nginx）应禁用，由 nginx 直接服务静态资源
-        if serve_static {
-            router
-                .route_service(
-                    "/init_index.html",
-                    ServeFile::new(format!("{}/static/init_index.html", get_web_dir())),
-                )
-                .nest_service(
-                    "/static",
-                    ServeDir::new(format!("{}/static", get_web_dir())),
-                )
-                .route("/", get(redirect_to_init_index))
-        } else {
-            router
-        }
+        Router::new().merge(init_router)
     } else {
-        // API 路由
+        // API 路由：静态资源由 nginx 托管，axum 仅服务 API
         let api_router = init_routes(app_state.clone()).with_state(app_state.clone());
 
-        let router = Router::new().merge(api_router);
-
-        if serve_static {
-            // 开发模式：axum 直接托管静态文件 + main.html
-            router
-                .nest_service(
-                    "/static",
-                    ServeDir::new(format!("{}/static", get_web_dir())),
-                )
-                .route_service(
-                    "/main.html",
-                    ServeFile::new(format!("{}/static/main.html", get_web_dir())),
-                )
-                .route("/", get(redirect_to_index))
-        } else {
-            // 生产模式：仅注册 API 路由，静态文件由 nginx 托管
-            router
-        }
+        Router::new().merge(api_router)
     };
 
     // 始终注册的公开路由（初始化模式与正常模式都可用）
@@ -445,7 +347,6 @@ fn configure_app_services(
             app_state.clone(),
             db_pool_metrics_middleware,
         ))
-        .layer(middleware::from_fn(static_cache_control_middleware))
         .layer(middleware::from_fn(security_headers_middleware))
 }
 
@@ -642,14 +543,6 @@ async fn main() -> std::io::Result<()> {
     }
 
     let uds_path = config.server.listen.uds_path.clone();
-    let serve_static = config.server.listen.serve_static;
-
-    let web_dir = get_web_dir();
-    if serve_static && !Path::new(web_dir).exists() {
-        foims_common::log_info!("system.web_dir_created", path = web_dir);
-        // 同步文件系统操作移出 async 上下文，避免阻塞运行时工作线程
-        tokio::task::block_in_place(|| fs::create_dir_all(web_dir))?;
-    }
 
     let init_enabled = config.init.enabled;
 
@@ -660,10 +553,6 @@ async fn main() -> std::io::Result<()> {
     }
 
     foims_common::log_info!("system.listening_uds", path = uds_path);
-    foims_common::log_info!(
-        "system.static_serve_mode",
-        mode = if serve_static { "axum" } else { "nginx" }
-    );
 
     let app_state = Arc::new(
         AppState::new(
@@ -723,12 +612,7 @@ async fn main() -> std::io::Result<()> {
     };
 
     // 构建应用
-    let app = configure_app_services(
-        app_state.clone(),
-        serve_static,
-        init_enabled,
-        rate_limit_state,
-    );
+    let app = configure_app_services(app_state.clone(), init_enabled, rate_limit_state);
 
     foims_common::log_info!("system.uds_server_started", path = uds_path);
     foims_common::log_info!("system.ready");

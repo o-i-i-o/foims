@@ -51,9 +51,8 @@ FOIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技�
                                                    PostgreSQL
 ```
 
-- 后端以 h2c 监听 UDS（默认 `/run/foims/api.sock`，调试为 `/tmp/foims-dev.sock`），不直接暴露 TCP 端口。
+- 后端以 h2c 监听 UDS（默认 `/run/foims/api.sock`），不直接暴露 TCP 端口。
 - TLS 证书、安全响应头、静态资源缓存均在 nginx 层完成，样例见 [deploy/nginx/](deploy/nginx/)。
-- 也可将 `[server.listen].serve_static` 设为 `true` 由 axum 同时托管静态文件（不推荐生产使用）。
 
 ## 📦 安装与部署
 
@@ -94,8 +93,9 @@ cargo build --release
 sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 ```
 
-- 调试时后端默认监听 `/tmp/foims-dev.sock`，需配合 nginx 访问：
-  将 [deploy/nginx/foims-dev.conf](deploy/nginx/foims-dev.conf) 安装到 nginx（HTTP only，修改 `web_dir` 路径），`nginx -t && systemctl reload nginx` 后访问 `http://localhost`。
+- 后端仅服务 API（UDS），静态资源与 TLS 由 nginx 托管：
+  参考 [deploy/nginx/foims.conf](deploy/nginx/foims.conf) 安装配置（按需修改
+  `web_dir`、`uds_path`），`nginx -t && systemctl reload nginx` 后访问。
 - 前端为原生 ESM，无需构建；改完 `web/` 下文件刷新即可生效。
 
 ### 4. 初始化系统

@@ -27,25 +27,16 @@ cors_allowed_origins = []
 # - axum 监听 Unix Domain Socket，使用 h2c (HTTP/2 cleartext) 协议
 # - nginx 通过 proxy_http_version 2.0 以 h2c 反代到 axum（deploy/nginx/foims.conf）
 # - 静态文件由 nginx 直接托管，axum 仅服务 API
-# - 调试时手动启动 axum 即可，无需安装 systemd 服务
-#   示例：sudo FOIMS_WEB_DIR=/path/to/foims/web ./target/release/foims
 # - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 性能优于 HTTP/1.1
 
 [server.listen]
 # UDS socket 文件路径，需与 nginx upstream 配置一致
-# 调试：/tmp/foims-dev.sock（避免权限问题）
 # 生产：/run/foims/api.sock（systemd RuntimeDirectory 管理）
 uds_path = "/run/foims/api.sock"
 
 # UDS socket 属组（须为反代 worker 进程的属组；Debian/Ubuntu nginx 为 www-data 或 nginx）
 # deb 安装时 postinst 自动检测 nginx worker 用户并改写此值，手动部署需自行保持一致
 uds_group = "www-data"
-
-# 是否由 axum 托管静态文件
-# - false（推荐）：静态文件由 nginx 直接服务，axum 仅 API
-# - true：axum 同时托管静态文件和 API（不推荐，与 nginx 重复）
-# - axum托管静态文件仅供开发测试，功能可能存在异常或缺失，生产环境请确保nginx托管
-serve_static = false
 
 [jwt]
 # 请替换为随机生成的 32 字符以上密钥（含大小写字母、数字、特殊字符）
