@@ -371,11 +371,9 @@ impl Config {
         }
 
         // 然后加载环境变量（优先级高于配置文件）
-        // 支持的环境变量：
-        // - FOIMS_DATABASE__PASSWORD (注意双下划线表示嵌套)
-        // - FOIMS_DATABASE_PASSWORD
-        // - FOIMS_JWT__SECRET (注意双下划线表示嵌套)
-        // - FOIMS_JWT_SECRET
+        // 单下划线即嵌套分隔符（separator="_" 映射为 "."），支持：
+        // - FOIMS_DATABASE_PASSWORD（覆盖 database.password）
+        // - FOIMS_JWT_SECRET（覆盖 jwt.secret）
         builder = builder.add_source(
             config::Environment::default()
                 .prefix("FOIMS")

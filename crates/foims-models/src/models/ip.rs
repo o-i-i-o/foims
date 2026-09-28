@@ -176,7 +176,7 @@ pub struct IpDetailUpdate {
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
     /// 取值白名单：active / inactive / reserved（与前端 formatter 展示口径一致；
-    /// DB 无 CHECK 约束，应用层前置拦截非法值）
+    /// DB 侧有 CHECK 约束兜底，应用层前置拦截非法值）
     #[validate(custom(
         function = "crate::models::validate_ip_status_option",
         message = "server.ip.validation.status_invalid"

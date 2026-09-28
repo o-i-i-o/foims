@@ -336,9 +336,8 @@ pub struct SsoCallbackParams {
     code: Option<String>,
     state: Option<String>,
     error: Option<String>,
-    /// 启用 2FA 的外部账户回调重试时携带的 TOTP 动态码。
-    /// 仅 GET 兼容路径经 query 接收（记录迁移告警）；新接入应使用
-    /// POST 回调将动态码置于请求体（见 [`sso_callback_post`]）
+    /// 反序列化层识别字段：GET 回调对 query 携带的 TOTP 动态码一律显式
+    /// 拒绝（重定向提示改走 POST 请求体传输，见 [`sso_callback_post`]）
     totp_code: Option<String>,
 }
 

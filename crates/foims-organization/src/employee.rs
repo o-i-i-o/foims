@@ -20,7 +20,7 @@ use foims_common::DbProvider;
 use foims_common::{AppError, msg};
 use foims_models::{Employee, EmployeeCreate, EmployeeUpdate, is_valid_phone};
 
-// 空串转 None：crate 内唯一定义在 lib.rs
+// 空串转 None：唯一定义在 organization.rs，经 lib.rs 再导出为 crate::blank_to_none
 use crate::blank_to_none;
 
 /// 员工基础查询列（含组织名联表）

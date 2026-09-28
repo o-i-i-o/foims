@@ -13,7 +13,7 @@ const MAX_MINUTE_STEPS: usize = 366 * 24 * 60;
 /// - 秒位按候选秒值逐一遍历（此前对齐到最小命中秒值后按分钟步进，
 ///   会给出晚于真实触发时刻的 next_run_at）；
 /// - 日（day-of-month）与星期（day-of-week）同时受限（均非 `*`）时按
-///   OR 语义命中任一即触发（POSIX cron 惯例），此前误用 AND 语义。
+///   AND 语义须同时命中（与触发库 croner dom_and_dow(true) 一致）。
 pub fn calculate_next_run(cron_expression: &str) -> SchedulerResult<chrono::DateTime<Utc>> {
     let parts: Vec<&str> = cron_expression.split_whitespace().collect();
 

@@ -69,10 +69,10 @@ pub struct InitRequest {
     pub verification: String,
 }
 
-/// 数据库配置页请求：连接测试与创建数据库共用同一结构。
+/// 数据库配置页请求：供初始化向导第 2 步「连接测试」接口使用。
 ///
-/// 供初始化向导第 2 步（数据库配置）使用，用户在页面填写连接要素，
-/// 由「连接测试」验证通过后写入配置文件。
+/// 用户在页面填写连接要素，由「连接测试」验证通过后写入配置文件；
+/// 数据库与账号的创建由部署脚本 scripts/init-pgsql.sh 完成。
 #[derive(Debug, Serialize, Deserialize, validator::Validate)]
 pub struct DatabaseSetupRequest {
     /// 数据库类型（下拉框，为未来扩展预留；当前仅支持 pgsql）

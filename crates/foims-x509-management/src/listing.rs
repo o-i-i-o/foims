@@ -36,7 +36,7 @@ impl CertKind {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CertFileInfo {
-    /// 文件基础名（如 create_1761234567_cert）
+    /// 文件基础名（如 create_1761234567890_cert，毫秒时间戳）
     pub file_stem: String,
     pub cert_filename: String,
     pub key_filename: Option<String>,

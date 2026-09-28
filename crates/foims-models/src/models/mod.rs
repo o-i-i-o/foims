@@ -50,8 +50,9 @@ pub fn validate_role_option(role: &&String) -> Result<(), ValidationError> {
     validate_role(role)
 }
 
-/// SNMP 版本枚举（devices.snmp_version 为 VARCHAR(3)，DB 无 CHECK）：
-/// 非法值直写数据库报 500，此处前置拦截（db-schema-review 第五节）
+/// SNMP 版本枚举（devices.snmp_version 为 VARCHAR(3)，DB 侧有
+/// chk_devices_snmp_version CHECK 约束兜底）：应用层前置拦截以返回
+/// 更友好的校验错误（db-schema-review 第五节）
 pub fn validate_snmp_version_string(version: &str) -> Result<(), ValidationError> {
     match version {
         "v1" | "v2c" | "v3" => Ok(()),
@@ -243,7 +244,8 @@ pub fn validate_length_m_opt(len: f64) -> Result<(), ValidationError> {
 }
 
 /// IP 状态取值白名单：active（使用中）/ inactive（停用）/ reserved（保留）。
-/// ips.status 为 VARCHAR(20) 且 DB 无 CHECK 约束，应用层前置拦截非法值；
+/// ips.status 为 VARCHAR(20) 且 DB 侧有 chk_ips_status CHECK 约束兜底，
+/// 应用层前置拦截非法值；
 /// 合法值集合与前端 formatter 的状态文案键保持一致。
 pub fn validate_ip_status_string(status: &str) -> Result<(), ValidationError> {
     match status {
@@ -262,12 +264,12 @@ pub fn validate_hostname_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 100, "server.device.validation.hostname_length")
 }
 
-/// DeviceUpdate.snmp_community（VARCHAR(100)）
+/// DeviceUpdate.snmp_community（模型明文上限 100；DB 列以密文落库加宽为 VARCHAR(255)）
 pub fn validate_snmp_community_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 100, "server.device.validation.snmp_community_length")
 }
 
-/// DeviceUpdate.snmp_username（VARCHAR(50)）
+/// DeviceUpdate.snmp_username（模型明文上限 50；DB 列以密文落库加宽为 VARCHAR(128)）
 pub fn validate_snmp_username_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 50, "server.device.validation.snmp_username_length")
 }
@@ -281,7 +283,7 @@ pub fn validate_snmp_auth_protocol_opt(value: &&String) -> Result<(), Validation
     )
 }
 
-/// DeviceUpdate.snmp_auth_password（VARCHAR(100)）
+/// DeviceUpdate.snmp_auth_password（模型明文上限 100；DB 列以密文落库加宽为 VARCHAR(255)）
 pub fn validate_snmp_auth_password_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(
         value,
@@ -299,7 +301,7 @@ pub fn validate_snmp_priv_protocol_opt(value: &&String) -> Result<(), Validation
     )
 }
 
-/// DeviceUpdate.snmp_priv_password（VARCHAR(100)）
+/// DeviceUpdate.snmp_priv_password（模型明文上限 100；DB 列以密文落库加宽为 VARCHAR(255)）
 pub fn validate_snmp_priv_password_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(
         value,

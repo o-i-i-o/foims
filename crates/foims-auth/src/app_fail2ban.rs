@@ -18,7 +18,8 @@ use foims_common::{log_warn, msg};
 /// 应用层 Fail2ban 日志文件路径（供 OS fail2ban 监控）
 const AUTH_LOG_PATH: &str = "/var/log/foims/auth.log";
 
-/// 标识符清洗上限（字符数），与 login_logs.username 列宽对齐并留有余量
+/// 标识符清洗上限（字符数）；login_logs.username 列宽为 VARCHAR(50)，
+/// 写库前由 log_login 截断到 50 字符，此上限仅约束内存键与认证日志
 const IDENTIFIER_MAX_CHARS: usize = 64;
 
 /// 标识符清洗：移除全部控制字符（含换行/回车/制表与 DEL）并截断到 64 字符。
@@ -240,8 +241,8 @@ fn user_key(username: &str) -> String {
 
 /// 写入认证日志（供 OS fail2ban 监控）
 ///
-/// 日志格式：`2026-07-17T12:00:00Z [FAIL] 192.168.1.100 - login failed for admin`
-/// OS fail2ban 可配置 filter 正则：`^\[FAIL\] <HOST> - login failed`
+/// 日志格式：`2026-07-17T12:00:00Z [FAIL] 192.168.1.100 - user: admin - <原因>`
+/// OS fail2ban 可配置 filter 正则：`^\[FAIL\] <HOST> - user:`
 fn write_auth_log(success: bool, ip: &str, username: &str, reason: Option<&str>) {
     let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
     let status = if success { "[OK]" } else { "[FAIL]" };

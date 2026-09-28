@@ -86,8 +86,8 @@ pub async fn auth_middleware<P: AuthProvider>(
             Ok(false) => {
                 // 用户状态与令牌吊销点检查（同一中间件内完成，不延迟到 refresh）：
                 //   1. 账户被禁用 → 直接拒绝；
-                //   2. 令牌签发时间早于 tokens_invalidated_at（密码重置/权限变更
-                //      吊销点）→ 已被吊销，旧 access 令牌立即失效
+                //   2. 令牌签发时间不晚于 tokens_invalidated_at（密码重置/权限变更
+                //      吊销点，含恰好落在吊销秒上）→ 已被吊销，旧 access 令牌立即失效
                 let user_id = match Uuid::parse_str(&claims.sub) {
                     Ok(id) => id,
                     Err(_) => {

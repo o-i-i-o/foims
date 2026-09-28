@@ -781,7 +781,7 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         // 表达式部分索引，物理连线同设备对允许多条故不纳入
         ("uq_topology_connections_logical", "topology_connections"),
         // 物理连线同一设备对 + 端口组合（含 NULL 端口）唯一：
-        // 兜底手动创建路径的并发判重窗口（devices.rs 建表后补建）
+        // 兜底手动创建路径的并发判重窗口（topology.rs 建表后补建）
         ("uq_topology_connections_physical", "topology_connections"),
         // 同一对端点之间只允许一条跳接线路（cable_links.rs 建表后补建）
         ("uq_cable_links_endpoint_pair", "cable_links"),

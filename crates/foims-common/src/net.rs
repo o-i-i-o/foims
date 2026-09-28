@@ -37,8 +37,8 @@ pub fn escape_like(search: &str) -> String {
 // ==================== CIDR 验证 ====================
 
 /// 验证 CIDR 格式是否合法（与 PostgreSQL CIDR 类型语义一致）
-/// ipnetwork crate 会自动归一化（如 2001::36/64 → 2001::/64），
-/// 但 PostgreSQL CIDR 要求主机位全为0，因此需额外检查
+/// ipnetwork 解析时原样保留地址与掩码、不校验也不改写主机位，
+/// 而 PostgreSQL CIDR 要求主机位全为 0，因此需额外比较 ip() 与 network()
 #[must_use]
 pub fn validate_cidr(cidr: &str) -> bool {
     match ipnetwork::IpNetwork::from_str(cidr) {

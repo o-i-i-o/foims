@@ -3,8 +3,6 @@
 //! 由 network.rs 拆分而来（纯移动）：networks 与 network_regions 是
 //! 两个独立资源域，共用网段写入 advisory lock。
 
-//! 网络区域与网段管理。
-
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;

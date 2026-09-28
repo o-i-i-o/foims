@@ -11,7 +11,8 @@ pub const LAYOUT_TYPES: [&str; 2] = ["workstation", "cabinet"];
 /// 防止写库前才被 i32 饱和钳制（手工录入与拖拽保存同一口径）。
 pub const POSITION_COORD_LIMIT: f64 = 1_000_000.0;
 
-/// 旋转角绝对值上限：允许 -360..=360（负角落库时规范化为等价正角），
+/// 旋转角绝对值上限：允许 -360..=360（落库前经 rotation_i32 钳位到
+/// 0..=360，负角收敛为 0），
 /// 超出该范围的旋转无渲染意义且会与落库钳制口径不一致。
 pub const ROTATION_LIMIT: f64 = 360.0;
 
@@ -344,7 +345,7 @@ mod tests {
             })
         };
 
-        // 合法：-360..=360（负角落库时规范化为等价正角）
+        // 合法：-360..=360（落库前经 rotation_i32 钳位到 0..=360，负角收敛为 0）
         for ok_rotation in [-360.0, -90.0, 0.0, 90.0, 360.0] {
             let req: LayoutItem = serde_json::from_value(item(ok_rotation))?;
             assert!(req.validate().is_ok(), "旋转角 {ok_rotation} 应合法");

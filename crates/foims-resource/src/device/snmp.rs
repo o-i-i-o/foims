@@ -634,7 +634,8 @@ pub async fn test_snmp_connection<P: DbProvider>(
         _ => return Err(AppError::Validation(msg("server.device.snmp.ip_required"))),
     };
 
-    // 验证目标 IP 不是私有/回环/链路本地/组播地址，防止 SSRF
+    // 拒绝回环/组播/链路本地地址防止 SSRF；私有地址属机房管理正常目标，
+    // 仅告警放行
     let parsed_ip: std::net::IpAddr = ip
         .parse()
         .map_err(|_| AppError::Validation(msg("server.device.snmp.ip_invalid").with("ip", &ip)))?;

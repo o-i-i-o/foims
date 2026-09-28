@@ -7,7 +7,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 // ==================== 信息点模型 ====================
-// 信息点特指网络插座，仅隶属房间；配线架见下方独立模型
+// 信息点特指网络插座，仅隶属房间；配线架为独立模型（见 patch_panel.rs）
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct NetOutlet {

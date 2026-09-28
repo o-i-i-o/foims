@@ -298,7 +298,7 @@ pub async fn login<P: AuthProvider>(
 /// 进程级 dummy bcrypt 哈希（首次使用时生成，cost 与真实口令一致）
 static DUMMY_BCRYPT_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-/// 生成 6 位数字验证码（2FA 邮件验证码的启用与登录两条路径共用）
+/// 生成 6 位数字验证码（邮箱验证码登录发码与 2FA 邮件验证码发送两条路径共用）
 pub(super) fn generate_six_digit_code() -> String {
     let mut rng = rand::rng();
     (0..6)

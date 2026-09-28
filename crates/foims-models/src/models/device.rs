@@ -916,7 +916,7 @@ mod tests {
 
     #[test]
     fn test_device_create_invalid_snmp_version() -> Result<(), serde_json::Error> {
-        // snmp_version 仅允许 v1/v2c/v3（VARCHAR(3)，DB 无 CHECK，由应用层拦截）
+        // snmp_version 仅允许 v1/v2c/v3（VARCHAR(3)，DB 侧有 CHECK 约束兜底，应用层同步拦截）
         let mut json = valid_device_create_json();
         json["snmp_version"] = serde_json::json!("version3");
         let req: DeviceCreate = serde_json::from_value(json)?;

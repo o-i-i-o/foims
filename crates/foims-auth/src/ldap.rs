@@ -150,7 +150,7 @@ pub async fn save_ldap_config_to_db(pool: &PgPool, config: &LdapConfig) -> Resul
 
 // ==================== LDAP 认证 ====================
 
-/// RFC 4515 过滤器值转义：阻止单引号/括号/星号/空字节破坏或 broaden 过滤器。
+/// RFC 4515 过滤器值转义：转义反斜杠/括号/星号/空字节，防止破坏或 broaden 过滤器。
 fn escape_ldap_filter(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for c in input.chars() {
@@ -166,7 +166,7 @@ fn escape_ldap_filter(input: &str) -> String {
     out
 }
 
-/// LDAP 认证结果：用户 DN 与可选属性。
+/// LDAP 认证结果：经筛选的邮箱属性（可能为空）。
 struct LdapVerifiedUser {
     email: Option<String>,
 }

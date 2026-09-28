@@ -109,7 +109,8 @@ pub async fn update_device_template<P: DbProvider>(
     // device_type 与 create 路径一致：走白名单校验（模型仅有长度校验）
     super::validate_device_type(&req.device_type)?;
 
-    // brand/model/description 对齐 DB 列宽（50/100/TEXT 不限），超长拒绝
+    // brand/model 对齐 DB 列宽（50/100）；description 为业务约束的 255
+    // 字符上限（DB 列 TEXT 不限宽），超长拒绝
     if let Some(brand) = &req.brand
         && brand.chars().count() > 50
     {

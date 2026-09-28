@@ -21,7 +21,7 @@ use crate::shutdown::ShutdownSignal;
 
 #[derive(Clone)]
 pub struct AppState {
-    /// 共享配置槽：五个写盘端点成功落盘后刷新（store），GET 类端点与
+    /// 共享配置槽：六个写盘端点成功落盘后刷新（store），GET 类端点与
     /// src 侧读取一律经 `config_snapshot()` 取最新值，消除启动快照陈旧问题。
     pub config: SharedConfig,
     /// 进程启动时的配置快照。仅供 `AuthProvider::config()` trait 实现——
@@ -37,8 +37,9 @@ pub struct AppState {
     /// 请求限流器：预鉴权中间件按 IP 计数；已认证请求由鉴权中间件之后
     /// 的钩子经 `charge_user` 补记用户维度桶（见 routes/mod.rs）。
     pub rate_limiter: RateLimiter,
-    /// 配置文件写锁：config.toml 的「读-改-写盘」端点（系统配置/语言/
-    /// 会话与页面超时/恢复配置）必须互斥执行，防止并发写盘互相覆盖。
+    /// 配置文件写锁：config.toml 的「读-改-写盘」端点（系统配置/关闭
+    /// 初始化模式/语言/会话与页面超时/恢复配置）必须互斥执行，防止
+    /// 并发写盘互相覆盖。
     /// 经 Arc 共享，Clone 后各实例指向同一把锁。
     pub config_write_lock: Arc<tokio::sync::Mutex<()>>,
 }

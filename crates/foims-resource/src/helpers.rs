@@ -275,7 +275,9 @@ pub async fn send_mac_change_notification(
         Ok(()) => {
             log_info!("log.mac_change.email_sent", workstation = workstation_name)
         }
-        // SMTP 未配置属预期情形，降级为告警日志
+        // SMTP 未配置实际返回 Validation 错误（走下方兜底记录）；
+        // 收件人缺失已在 send_mac_change_email 内降级为 Ok(())，此分支
+        // 当前不可达，保留作兜底
         Err(AppError::NotFound(m)) => {
             log_warn!(
                 "log.mac_change.email_skipped",

@@ -23,7 +23,7 @@ const SYSLOG_PRI_INFO: u32 = 16 * 8 + 6;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogForwardingConfig {
     pub enabled: bool,
-    /// udp 或 tcp（不区分大小写，保存前统一小写；空/非法值一律校验拒绝）
+    /// udp 或 tcp（仅接受小写值，落盘时统一小写；空/非法值一律校验拒绝）
     pub protocol: String,
     pub host: String,
     pub port: u16,
