@@ -51,7 +51,7 @@ function getOrgTypeLabel(orgType) {
   return translated === key ? orgType : translated;
 }
 
-/** 将 levels 映射渲染为可读文本，多路径用 separator 分隔 */
+/** 从 levels 映射推断根类型（未被任何子级引用的 key），唯一根时返回，否则返回 null */
 function findRootType(levels) {
   if (!levels || typeof levels !== "object" || Array.isArray(levels)) {
     return null;
@@ -270,8 +270,8 @@ async function renderTreeNode(node, depth) {
 }
 
 /**
- * 获取允许的下级类型按钮
- * 基于模板层级，每个允许的下级类型一个按钮
+ * 获取"添加下级"通用按钮（单个入口）
+ * 可选的下级类型在弹窗打开后由 allowed-child-types 接口决定
  */
 function getAllowedChildButtons(node) {
   return iconButton({
@@ -424,7 +424,7 @@ export async function openOrgModal(org = null, parentId = null) {
     elementCache.setValue("org-type", org.type_path || org.org_type || "");
     elementCache.setValue("org-description", org.description || "");
     elementCache.setValue("org-parent-id", org.parent_id || "");
-    // 编辑时类型不可修改，显示从模板派生的名称
+    // 编辑时类型不可修改，置为单选项回显类型的 i18n 标签
     typeSelect.innerHTML = "";
     const option = document.createElement("option");
     option.value = org.type_path || org.org_type || "";

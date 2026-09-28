@@ -97,7 +97,7 @@ function renderAllPortGroups(cards) {
  */
 function createPortGroup(card, ports) {
   const groupElement = document.createElement("div");
-  // 自动板卡（SNMP 分组生成）与手工网卡以色调区分
+  // 分组统一套用 is-switch-group 色调样式（手工网卡与自动板卡不做视觉区分）
   groupElement.className = "port-group is-switch-group";
 
   const groupTitle = document.createElement("h4");
@@ -142,11 +142,11 @@ function createPortItem(iface) {
   portItem.dataset.speed = iface.speed || "";
   portItem.dataset.trunkId = iface.trunk_id || "";
 
-  // 显示端口名的末尾数字，无数字则显示首字母
+  // 显示端口名中的末尾数字段；不含数字的名称显示全名，空名显示 ?
   const display = extractPortLastNumber(iface.name) || (iface.name || "?").slice(0, 3);
   portItem.textContent = display;
 
-  // tooltip：端口名 + MAC + IP（含所属网段/网络区域）+ 运行状态
+  // tooltip：端口名 + MAC + IP（含所属网段/网络区域）+ 状态（非 up 时）+ 速率
   const ipList = Array.isArray(iface.ips)
     ? iface.ips
         .map((i) => {
@@ -287,8 +287,8 @@ async function openPortDetailModal(portData) {
   if (deleteBtn) {
     deleteBtn.style.display = isNewPort ? "none" : "inline-block";
   }
-  // 模态框 DOM 关闭后不销毁、再次打开时复用，onclick 赋值覆盖旧监听
-  // 保证幂等；addEventListener 会叠加监听导致一次点击多次提交
+  // onclick 赋值覆盖旧监听、保证幂等（同一 DOM 存活期内重复初始化时，
+  // addEventListener 会叠加监听导致一次点击多次提交）
   if (saveBtn) {
     saveBtn.onclick = () => submitPortForm();
   }
@@ -571,7 +571,7 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
     });
   }
 
-  // 全部跳过 / 全部覆盖：冲突模态框按钮常驻复用，onclick 赋值防监听叠加
+  // 全部跳过 / 全部覆盖：onclick 赋值幂等，重复初始化不会叠加监听
   const skipAllBtn = document.getElementById("conflict-skip-all-btn");
   const overwriteAllBtn = document.getElementById("conflict-overwrite-all-btn");
   if (skipAllBtn) {

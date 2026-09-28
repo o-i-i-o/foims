@@ -119,7 +119,7 @@ export const ORG_ICONS = {
 /**
  * 图标 key → 语义配色（引用主题 CSS 变量）。
  * 与类型徽章（org-node-type-badge[data-type]）的配色体系对齐：
- * 业务组织层级统一主色，物理地点蓝/青色系，功能空间按既有徽章语义色。
+ * 业务组织层级以主色为主（科室/小组、岗位/人员用成功色），物理地点蓝/青色系，功能空间按既有徽章语义色。
  */
 export const ORG_ICON_COLORS = {
   // 业务组织层级

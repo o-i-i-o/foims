@@ -3,7 +3,7 @@ import { showToast } from "../../utils/ui.js";
 import { showConfirm } from "../../utils/confirm.js";
 import { SVGCanvasBase, SVG_NS } from "./svgCanvasBase.js";
 
-// SVG 命名空间（visualization 各模块共用，唯一定义处）
+// SVG 命名空间（唯一定义处在 svgCanvasBase.js，此处再导出供渲染/数据模块引用）
 export { SVG_NS };
 
 /**

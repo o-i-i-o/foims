@@ -15,13 +15,13 @@ function separateShift(selfFixed, otherFixed, push) {
   return otherFixed ? push : push / 2;
 }
 
-// 房间容器留白：左右下内边距与顶部标题区高度
+// 房间容器留白：四周内边距，顶部另加标题区高度
 const ROOM_PADDING = 40;
 const ROOM_HEADER = 52;
 // 机柜容器留白
 const CABINET_PADDING = 24;
 const CABINET_HEADER = 36;
-// 房间容器之间的最小间距（推开重叠分组时使用）
+// 房间/机柜容器之间的最小间距（推开重叠分组与自动布局排布时使用）
 const ROOM_GAP = 80;
 const CABINET_GAP = 40;
 
@@ -153,7 +153,7 @@ export class TopologyVisualization {
     }
   }
 
-  /// 拖拽结束后：以用户摆放位置为准，推开其他被覆盖的房间分组，并自动保存坐标
+  /// 拖拽结束后：以用户摆放位置为准，推开其他被覆盖的房间/机柜分组，并自动保存坐标
   _handleNodeDragEnd(deviceId) {
     const node = this.nodes.find((n) => n.device_id === deviceId);
     const fixedKey = node?.room_id ? `room:${node.room_id}` : "room:none";
@@ -559,7 +559,7 @@ export class TopologyVisualization {
   }
 
   /// 推开包围盒相交的分组（先房间级、再房间内机柜级），
-  /// 返回是否发生移动。fixedKey 指定的房间分组保持不动。
+  /// 返回是否发生移动。fixedKey/fixedCabinetKey 指定的房间/机柜分组保持不动。
   _separateOverlappingGroups(fixedKey = null, fixedCabinetKey = null) {
     const rooms = this._collectSpatialGroups();
     let moved = this._separateGroupBoxes(

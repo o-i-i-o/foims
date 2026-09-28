@@ -2,7 +2,7 @@ import { activateTwoFactorView, hideLoginErrorBar, showLoginErrorBar } from "./l
 // 登录页面专用脚本
 //
 // 设计来源: example-files/animatedlogin.html 的双栏布局 + 动画角色
-// 功能保留: 密码登录 / 邮箱验证码登录 / 2FA / 忘记密码 / 记住我 / i18n / 会话检测
+// 功能保留: 密码登录 / 邮箱验证码登录 / LDAP / SSO / 2FA / 忘记密码 / 记住我 / i18n / 会话检测
 // 动画: 鼠标追踪、眨眼、密码可见偷看、输入互看、登录失败摇头+难过表情
 
 // ES模块导入
@@ -103,7 +103,7 @@ class LoginManager {
     this.handleForgotPassword = this.handleForgotPassword.bind(this);
     this.resetToInitState = this.resetToInitState.bind(this);
 
-    // 临时存储 2FA 所需的用户名/密码
+    // 临时存储 2FA 所需的用户名/密码/记住我选项
     this.tempAuthData = null;
   }
 
@@ -143,7 +143,7 @@ class LoginManager {
     this.cleanUrlParams();
     this.checkLoginStatus();
 
-    // 按后端配置显示 LDAP / SSO 登录方式
+    // 按后端配置显示邮箱 / LDAP / SSO 登录方式
     await this.setupAuthMethods();
 
     // 站点根证书下载入口（有 CA 时才显示）
@@ -197,8 +197,8 @@ class LoginManager {
   }
 
   /**
-   * 按后端 /api/auth/methods 返回的开关显示 LDAP / SSO 标签
-   * （请求失败时保持隐藏，_fail-safe）；
+   * 按后端 /api/auth/methods 返回的开关显示邮箱 / LDAP / SSO 标签
+   * （请求失败时保持隐藏，fail-safe）；
    * 邮箱登录依赖 SMTP，未配置时同样静默隐藏
    */
   async setupAuthMethods() {
@@ -752,7 +752,7 @@ class LoginManager {
 
   clearError() {
     hideLoginErrorBar();
-    // 恢复角色正常姿态
+    // 姿态不在此时强制复位，交由 triggerLoginError 的恢复定时器自然还原
     this.recoverLoginError();
   }
 
@@ -1292,7 +1292,7 @@ class LoginManager {
       orangeMouth.classList.add("visible");
     }
 
-    // 身体过渡(0.7s)结束后再开始摇头
+    // 身体过渡(0.7s)进行到一半（350ms）时再开始摇头
     setTimeout(() => {
       shakeEls.forEach((el) => el.classList.add("shake-head"));
     }, 350);
@@ -1309,7 +1309,7 @@ class LoginManager {
     }, 2500);
   }
 
-  // 清除错误时立即恢复角色姿态（保留 isLoginError 由 triggerLoginError 自身的恢复定时器管理）
+  // 有意空实现：清除错误时不立即复位姿态，交由 triggerLoginError 的恢复定时器统一还原
   recoverLoginError() {
     // 不强行重置 isLoginError，避免与 triggerLoginError 的定时器冲突；
     // 错误提示隐藏即可，角色姿态由其自身的 2.5s 定时器自然恢复。

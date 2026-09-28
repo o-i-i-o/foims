@@ -84,7 +84,7 @@ export const hideLoading = () => {
 
 /**
  * 切换数据库初始化方式（新建 / 导入）。
- * 由 init_index.html 的 inline onclick 调用，因此会被 index.js 挂到 window。
+ * 由 index.js 绑定到 .init-tab 点击事件调用。
  */
 export const setInitMode = (mode) => {
   state.initMode = mode;

@@ -20,7 +20,7 @@ import { isIPv6, isIpInCidr, isValidIP } from "./network.js";
 
 const DEFAULT_PORT_NAME = "eth0";
 
-// 高频 i18n 键（网卡/网口标题，各出现 10+ 次），抽常量避免字面量散落
+// 高频 i18n 键（网卡/网口标题，各出现 10 次上下），抽常量避免字面量散落
 const T_KEY_NETWORK_CARD = "device.network_card";
 const T_KEY_NETWORK_PORT = "device.network_port";
 

@@ -40,7 +40,7 @@ async function loadNetworkRegions(select) {
   });
 }
 
-// 加载网段选项（excludeIds 过滤已被其他行选中的网段，避免一行重复选择）
+// 加载网段选项（excludeIds 过滤已被其他行选中的网段，避免各行重复选中同一网段）
 async function loadNetworks(regionId, select, excludeIds = []) {
   if (!select) {
     return;
@@ -272,7 +272,7 @@ class NetworkConfigManager {
     const networkMap = new Map(allNetworks.map((n) => [n.id, n]));
     const selectedIds = networks.map((n) => n.id);
 
-    // 预热区域/网段缓存，避免逐条串行请求
+    // 预热区域选项缓存，网段选项由各行并行加载时共享缓存，避免逐条串行请求
     await loadNetworkRegions(document.createElement("select"));
 
     // 各网段条目的区域/网段选项加载相互独立，并行构建（缓存命中后无额外请求）
@@ -958,7 +958,8 @@ export function initRoomSortEvents() {
   initSortEvents("rooms-table", tableState, loadRoomsData);
 }
 
-// 编辑房间（轻量端点：仅基础字段 + 网络绑定，避免完整详情的 7 次查询）
+// 编辑房间（轻量端点：一次并行查询取齐基础字段、网络绑定与工位/机柜/信息点子项，
+// 避免完整详情接口的多重组装查询）
 export async function editRoom(id) {
   try {
     const result = await apiGet(`/api/resources/rooms/${id}/brief`);

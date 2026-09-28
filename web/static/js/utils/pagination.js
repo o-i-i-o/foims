@@ -3,15 +3,15 @@ import { t } from "./i18n.js";
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 /**
- * Render a pagination control into `container`.
+ * 向 container 渲染分页控件。
  *
  * @param {HTMLElement} container
  * @param {number} currentPage
  * @param {number} totalPages
  * @param {(page:number)=>void} onPageChange
  * @param {number} total
- * @param {object} [options] - optional page-size selector / jump box config
- *   { pageSize, pageSizeOptions:number[], onPageSizeChange:(size)=>void, showJump:boolean }
+ * @param {object} [options] - 可选的每页条数选择器配置
+ *   { pageSize, pageSizeOptions:number[], onPageSizeChange:(size)=>void }
  */
 export function renderPagination(
   container,
@@ -53,7 +53,7 @@ export function renderPagination(
   const sizeSelectorHtml = showSizeSelector
     ? buildPageSizeSelector(pageSizeOptions, currentPageSize, totalPages)
     : "";
-  // A jump-to-page box is only useful when there are several pages.
+  // 跳页框仅在总页数较多（>7）时渲染，不作为调用方可配置项
   const showJump = totalPages > 7;
   const jumpHtml = showJump ? buildJumpBox(currentPage, totalPages) : "";
 

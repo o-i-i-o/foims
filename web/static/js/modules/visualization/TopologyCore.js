@@ -418,7 +418,7 @@ export class TopologyCore extends SVGCanvasBase {
 
   /**
    * 开始容器拖动：按容器类型匹配组内全部设备节点并记录起始位置。
-   * @returns {boolean} 是否成功进入容器拖动（无成员时返回 false 走默认点击逻辑）
+   * @returns {boolean} 是否成功进入容器拖动（无成员或缺容器矩形时返回 false 走默认点击逻辑）
    */
   _startContainerDrag(containerG, e) {
     const kind = containerG.dataset.containerKind;

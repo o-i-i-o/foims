@@ -464,17 +464,15 @@ export function appendPaginationToTable(container, data, onPageChange, options =
   const total = data.total || 0;
   const currentPage = data.page || 1;
   const pageSize = data.page_size || options.pageSize || 20;
-  // Trust the backend's total_pages when provided; only fall back to a local
-  // computation when it is missing. Previously this always recomputed
-  // Math.ceil(total / 20), which broke callers that use a different page size
-  // (e.g. the IP table uses 100) and rendered many phantom empty pages.
+  // 优先采用后端返回的 total_pages，仅在其缺失时才本地推算。
+  // 此前总是重算 Math.ceil(total / 20)，页大小不同的调用方（如 IP 表每页 100）
+  // 会因此渲染出大量幻影空页。
   const totalPages =
     data.total_pages != null && data.total_pages > 0
       ? data.total_pages
       : Math.ceil(total / pageSize);
 
-  // Even with a single page we may still want the page-size selector, so only
-  // short-circuit when there is nothing interactive to show.
+  // 仅一页时仍可能需要展示每页条数选择器：完全无可交互内容时才短路返回
   const hasSizeSelector = typeof options.onPageSizeChange === "function";
   if (totalPages <= 1 && !hasSizeSelector) {
     if (paginationContainer && paginationContainer.classList.contains("pagination-container")) {

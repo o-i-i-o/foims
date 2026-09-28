@@ -32,7 +32,8 @@ export function getStatusText(status) {
 }
 
 export function getDeviceTypeName(type) {
-  // 与设备表的 9 种 device_type（device-modal.html 下拉）一一对应
+  // 覆盖设备表全部 9 种 device_type（device-modal.html 下拉一致）；
+  // workstation / cabinet_position 为额外兜底键，设备表约束中并无此二类
   const typeNames = {
     workstation: t("device.workstation"),
     cabinet_position: t("device.cabinet_position"),

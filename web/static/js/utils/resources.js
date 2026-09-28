@@ -260,7 +260,7 @@ export function loadDataCenterRoomsForSelect(selectId = "cabinet-room", orgId = 
  * 可视化页房间选择器。
  *
  * roomTypes 为 "office"（工位可视化全类别）、"datacenter"（机柜可视化全类别）
- * 或具体类型（如 "office"/"other"），可叠加组织过滤。
+ * 或具体类型（如 "other"，按字面过滤），可叠加组织过滤。
  */
 export function loadVisualizationRoomsForSelect(selectId, roomTypes, orgId = null) {
   let resolved = roomTypes;

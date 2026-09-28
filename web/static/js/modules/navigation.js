@@ -43,7 +43,7 @@ export function initNavigation() {
  * 等保三权分立：按角色计算不可访问的分区列表。
  * 后端始终强制校验（403），此处仅为界面整洁：
  * - auditor（审计管理员）：仅仪表盘与日志
- * - secadmin（安全管理员）：用户/系统安全/日志，不涉资源运维
+ * - secadmin（安全管理员）：IP/用户/系统安全/日志，不涉组织与资源运维
  * @returns {string[]} 当前角色无权访问的分区 ID 列表（未受限角色为空数组）
  */
 function getHiddenSections() {

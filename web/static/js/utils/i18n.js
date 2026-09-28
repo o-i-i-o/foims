@@ -127,9 +127,8 @@ export async function initI18n() {
         document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
         this.updatePageTranslations();
         this.updateLanguageSelector();
-        // Notify pages that render content dynamically (e.g. the init wizard's
-        // status blocks) so they can re-render in the new language. Static
-        // data-i18n elements are already handled by updatePageTranslations().
+        // 通知动态渲染内容的页面（如初始化向导的状态块）按新语言重绘；
+        // 静态 data-i18n 元素已由 updatePageTranslations() 处理完毕
         window.dispatchEvent(new CustomEvent("languagechange", { detail: { language: lang } }));
       },
 

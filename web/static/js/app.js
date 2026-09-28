@@ -33,8 +33,8 @@ import { prefetchModalsOnIdle } from "./utils/modalLoader.js";
  */
 async function initApp() {
   try {
-    // i18n 与登录态校验互不依赖（checkLoginStatus 走原生 fetch、不经过
-    // translateServerMessage），并行执行省一个串行 RTT
+    // i18n 与登录态校验互不依赖（checkLoginStatus 仅在本地已有会话时
+    // 才请求 /api/auth/me），并行执行省一个串行 RTT
     await Promise.all([initI18n(), checkLoginStatus()]);
 
     initNavigation();
@@ -144,7 +144,7 @@ function waitForStylesheets() {
         link.sheet.cssRules;
         return Promise.resolve();
       } catch {
-        // cross-origin stylesheet, treat as loaded
+        // 跨域样式表无法读取 cssRules（抛安全错误），视为已加载
         return Promise.resolve();
       }
     }

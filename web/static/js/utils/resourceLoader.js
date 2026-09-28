@@ -5,7 +5,7 @@ const preloadedModules = new Set();
 /* 版本号仅用于 CSS / 模态框 HTML 等经 fetch 加载的资源的缓存穿透；
    JS 模块动态 import 一律使用无版本号 URL —— 与静态 import 保持同一 URL 空间，
    避免同一模块因 URL 不同产生双实例、双份独立状态 */
-export const MODULE_VERSION = "01399";
+export const MODULE_VERSION = "01400";
 
 export function withVersion(path) {
   if (!path) {
@@ -14,9 +14,10 @@ export function withVersion(path) {
   return path.includes("?") ? `${path}&v=${MODULE_VERSION}` : `${path}?v=${MODULE_VERSION}`;
 }
 
-/* 模块注册表：仅收录真正经 loadModule 动态加载的模块。
-   静态导入的工具（apiClient/ui/toast 等）不在此列 —— 混注册会让读者
-   误判哪些是活的懒加载入口（双实例问题见 loadModule 注释）。 */
+/* 模块注册表：收录经 loadModule 动态加载的模块（authManager 例外，
+   现仅被静态导入、已无动态加载调用方）；apiClient/ui/toast 等
+   纯静态工具不应混入 —— 混注册会让读者误判哪些是活的懒加载入口
+   （双实例问题见 loadModule 注释）。 */
 const MODULE_REGISTRY = {
   networkCardManager: "/static/js/utils/networkCardManager.js",
   dashboard: "/static/js/modules/dashboard.js",
@@ -107,7 +108,7 @@ export function lazyLoad(moduleName, options = {}) {
     }
 
     if (when === "idle" && "requestIdleCallback" in window) {
-      // delay 作为 idle 回调的超时上限：最迟 delay 毫秒后强制执行
+      // idle 回调超时上限取 max(delay, 5000)：最迟该毫秒数后强制执行
       requestIdleCallback(executeLoad, { timeout: Math.max(delay, 5000) });
     } else if (delay > 0) {
       setTimeout(executeLoad, delay);

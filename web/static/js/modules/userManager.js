@@ -357,7 +357,7 @@ async function initTwoFactorConfig(userId) {
         secretInput.value = secret;
       }
 
-      // 存储URI用于验证
+      // otpauth URI 仅写入隐藏字段存档：验证只提交动态码与用户 ID，URI 不参与请求
       const uriInput = elementCache.get("two-factor-uri");
       if (uriInput) {
         uriInput.value = otpauth_url;

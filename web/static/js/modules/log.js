@@ -92,7 +92,7 @@ export function initLogTabs() {
     return;
   }
 
-  // 初始化搜索和刷新功能
+  // 初始化搜索功能
   initLogSearch();
 
   const tabBtns = logsContainer.querySelectorAll(".tab-btn");

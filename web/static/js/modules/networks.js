@@ -316,7 +316,7 @@ function calculateTotalIps(cidr) {
   }
 }
 
-// 生成网段的所有IP地址
+// 生成网段用于可视化网格的 IP 地址列表（最多 256 个）
 function generateIpAddresses(cidr) {
   if (!cidr) {
     return [];
@@ -336,7 +336,7 @@ function generateIpAddresses(cidr) {
       return [];
     }
 
-    // 计算网络地址
+    // 解析 IP 各段为数字
     const ipParts = ip.split(".").map(Number);
 
     // 计算网络地址：CIDR 基址可能不是网络地址（如 10.0.0.77/24），
@@ -361,7 +361,7 @@ function generateIpAddresses(cidr) {
     // 计算总IP数量
     const totalIps = calculateTotalIps(cidr);
 
-    // 生成IP地址列表（简化实现，只生成部分IP用于演示）
+    // 生成 IP 地址列表：可视化网格最多显示 256 个，超出部分截断
     const ipAddresses = [];
     const maxDisplayIps = Math.min(totalIps, 256); // 最多显示256个IP
 
@@ -1321,7 +1321,7 @@ export async function openNetworkRegionModal(networkRegion = null) {
   }
 }
 
-// ====== 子网管理模态框 ======
+// ====== 网段管理模态框 ======
 export async function openNetworkModal(network = null) {
   await openModal("network-modal");
 
