@@ -36,7 +36,7 @@ foims（bin/lib）             应用组装层：路由装配/系统管理/日�
 └── crates/foims-scheduler       定时任务
 ```
 
-- 依赖方向自上而下（`resource → auth → models → common`），禁止反向依赖与环。
+- 依赖方向自上而下，禁止反向依赖与环。
 - 跨 crate 共享的类型与工具放 `foims-common` / `foims-models`，
   **不得在多个 crate 各存一份副本**。
 - 业务 crate 不依赖主程序：状态访问经依赖倒置——handler 面向
