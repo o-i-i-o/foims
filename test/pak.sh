@@ -19,7 +19,7 @@ cp -f config.toml /opt/foims/
 
 echo 重启服务
 systemctl restart foims
-
+systemctl restart nginx
 systemctl status foims
 
 exit 0

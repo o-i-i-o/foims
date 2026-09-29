@@ -31,5 +31,5 @@
   前端资源同步 bump 三个入口页（main/index/init_index）的 `?v=` 与
   `resourceLoader.js` 的 `MODULE_VERSION`（一致性由 `cargo test` 强制）。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
-- 测试：`cargo build --release && sudo systemctl restart foims`
-  （运行需 root 监听端口）；测试用户 admin / admin123。
+- 开发直接测试：`sudo ./test/pak.sh`（运行需 root 监听端口）；
+- 测试用户 admin / admin123。
