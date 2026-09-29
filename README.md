@@ -1,13 +1,12 @@
-# FOIMS — Organization Infrastructure Management System
+# F-OIMS — Organization Infrastructure Management System
 
-FOIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技术构建的高性能组织基础设施管理平台，为网络管理员提供安全、高效且直观的一站式管理界面：IP 地址、交换机、物理资产（机房/机柜/工位）、组织与人员、网络拓扑可视化等。
+F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技术构建的高性能组织基础设施管理平台，为网络管理员提供安全、高效且直观的一站式管理界面：IP 地址、交换机、物理资产（机房/机柜/工位）、组织与人员、网络拓扑可视化等。
 
 ## ✨ 核心特性
 
 ### 🚀 高性能后端
 - **Rust Workspace 多 crate 架构**: 主程序 + 10 个职责单一的子 crate，按领域拆分、边界清晰。
 - **Axum 0.8 + UDS/h2c**: 后端监听 Unix Domain Socket 并以 h2c (HTTP/2 cleartext) 通信，nginx 反代多路复用，消除握手开销。
-- **HTTP/1.1 / HTTP/2 / HTTP/3**: TLS 与静态资源由 nginx 终结，nginx ≥ 1.25.1 可选开启 QUIC (HTTP/3)。
 - **PostgreSQL + SQLx**: 异步数据库访问，编译期校验的连接池配置与完备的建表校验。
 
 ### 🛡️ 安全优先
@@ -18,7 +17,7 @@ FOIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技�
 - **审计与日志**: 操作日志、登录日志与通知全链路记录，支持双语输出。
 
 ### 🌐 资源与 IP 管理
-- **IP 生命周期**: IPv4/IPv6 CIDR 管理，自动分配与回收。
+- **IP 生命周期**: IPv4/IPv6 CIDR 管理。
 - **子网管理**: 灵活的网络区域 (Region) 与子网 (Subnet) 划分。
 - **交换机集成**: SNMP (v1/v2c/v3) 自动采集交换机信息、端口状态、MAC 表与 LLDP 邻居。
 - **物理资产**: 完整的机房、机柜、U位、工位管理模型，设备与线缆链路 (Cable Link) 全量纳管。
@@ -68,12 +67,7 @@ cp config.toml.example config.toml
 完成 PostgreSQL 检查后在「数据库配置」页填写连接信息，可点击「创建数据库」
 自动建库（要求该用户已存在且具有 CREATEDB 权限），再通过「连接测试」进入
 后续流程。
-
 也可跳过页面建库，手动在 PostgreSQL 中预先创建（此后连接测试直接通过）：
-
-```sql
-CREATE USER foims WITH PASSWORD 'your_password' CREATEDB;
-```
 
 ### 3. 构建与运行（开发调试）
 
@@ -85,7 +79,6 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 - 后端仅服务 API（UDS），静态资源与 TLS 由 nginx 托管：
   参考 [deploy/nginx/foims.conf](deploy/nginx/foims.conf) 安装配置（按需修改
   `web_dir`、`uds_path`），`nginx -t && systemctl reload nginx` 后访问。
-- 前端为原生 ESM，无需构建；改完 `web/` 下文件刷新即可生效。
 
 ### 4. 初始化系统
 - 请初始化数据库，本项目提供了scripts/init-pgsql.sh 脚本辅助完成建库
@@ -124,11 +117,11 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 ## 🚀 快速开始
 
 1. **系统初始化**: 首次访问进入初始化向导，完成建表与管理员账号创建
-2. **登录系统**: 使用初始化的管理员账号登录，启用双因素认证
-3. **配置子网**: 在「资源管理」中添加网络区域与子网，划分 IP 范围
-4. **管理设备**: 在「交换机管理」中添加交换机并配置 SNMP，自动采集端口、MAC 表与 LLDP
-5. **管理物理资产**: 录入机房、机柜、工位，纳管设备与线缆链路
-6. **维护组织**: 维护组织树与员工台账，关联资产归属
+2. **登录系统**: 使用初始化的管理员账号登录
+3. **维护组织**: 维护组织树与员工台账
+4. **配置子网**: 在「资源管理」中添加网络区域与子网，划分 IP 范围
+5. **管理设备**: 在「交换机管理」中添加交换机并配置 SNMP，自动采集端口、MAC 表与 LLDP
+6. **管理物理资产**: 录入机房、机柜、工位，纳管设备与线缆链路
 7. **监控运维**: 查看仪表盘、配置通知与定时备份任务
 
 ## 📚 文档
@@ -137,25 +130,6 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 - **协作与构建说明**: [AGENTS.md](AGENTS.md)
 - **部署样例**: [deploy/](deploy/)（nginx、fail2ban）
 
-## 🐛 故障排查
-
-### 页面无法访问
-- 确认 nginx 已启动且配置中的 `web_dir`、UDS 路径正确：`nginx -t`
-- 检查 UDS socket 是否存在且属组与 nginx worker 一致（`uds_group`）
-- 后端日志：`journalctl -u foims`（服务方式）或控制台输出（手动运行）
-
-### 数据库连接失败
-- 检查 PostgreSQL 服务是否运行
-- 验证 `[database]` 连接信息是否正确
-- 确保数据库用户有足够的权限
-
-### SNMP 采集失败
-- 验证交换机 SNMP 配置（版本、社区字符串/v3 用户凭据）是否正确
-- 检查网络连通性与 `[snmp]` 超时设置
-
-### 服务重启异常
-- 检查 UDS 是否被残留占用（后端启动时会自动检测并清理陈旧 socket）
-- 查看 `journalctl -u foims` 与 `systemctl status foims`
 
 ## 📝 License
 
@@ -196,4 +170,4 @@ Copyright (c) 2025-2026 oi-io <boss@oi-io.cc>
 - 提供有偿部署服务，请给我发邮件
 ---
 
-**FOIMS - 让组织 IT 管理更简单！**
+**FOIMS - 让组织基础设施管理更简单！**
