@@ -1,25 +1,26 @@
 #!/bin/sh
 set -e
 echo 删除旧程序
-rm -rf /opt/foims/
-rm -f /usr/bin/foims
+sudo rm -rf /opt/foims/
+sudo rm -f /usr/bin/foims
 
 echo 创建工作目录
-mkdir -p /opt/foims/
+sudo mkdir -p /opt/foims/    
 
-ls /opt/
+sudo ls /opt/
 
 echo 编译后端
 cargo build --release
 
 echo 安装到生产目录
-cp -f target/release/foims /usr/bin/foims
-cp -rf web/ /opt/foims/
-cp -f config.toml /opt/foims/
+sudo cp -f target/release/foims /usr/bin/foims
+sudo cp -rf web/ /opt/foims/
+sudo cp -f config.toml /opt/foims/
 
 echo 重启服务
-systemctl restart foims
-systemctl restart nginx
-systemctl status foims
+sudo systemctl restart foims
+sudo systemctl restart nginx
+sudo systemctl status foims
+sudo systemctl status nginx
 
 exit 0
