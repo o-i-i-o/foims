@@ -401,8 +401,6 @@
     "total_ip_addresses": "Total IP Addresses",
     "active_ips": "Active IPs",
     "today_operations": "Today's Operations",
-    "device_distribution": "Device Distribution",
-    "ip_status": "IP Status",
     "top_networks": "Top Subnets",
     "recent_ips": "Recent IP Assignments",
     "top_rooms": "Top Rooms",

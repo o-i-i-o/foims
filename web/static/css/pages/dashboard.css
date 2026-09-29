@@ -75,7 +75,7 @@
 
 .dashboard-card-body {
   padding: var(--space-md) var(--space-lg);
-  min-height: 200px;
+  min-height: 300px;
 }
 
 .top-list {

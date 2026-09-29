@@ -401,8 +401,6 @@
     "total_ip_addresses": "IP地址总数",
     "active_ips": "活跃 IP",
     "today_operations": "今日操作",
-    "device_distribution": "设备分布",
-    "ip_status": "IP状态",
     "top_networks": "子网列表",
     "recent_ips": "最近IP分配",
     "top_rooms": "房间列表",

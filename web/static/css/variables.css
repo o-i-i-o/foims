@@ -103,15 +103,6 @@
   --color-bg-hover: #f1f3f5;
   --color-bg-secondary: #f1f3f5;
 
-  /* 图表配色（仪表盘图表与可视化共用，不在 JS 中硬编码色值） */
-  --chart-color-1: #66a80f;
-  --chart-color-2: #22b8cf;
-  --chart-color-3: #fcc419;
-  --status-active: #2f9e44;
-  --status-inactive: #f03e3e;
-  --status-reserved: #fab005;
-  --status-fallback: #868e96;
-
   /* 端口方块状态色（统一端口管理模态框与可视化端口网格共用） */
   --port-hover-border: #228be6;
   --port-hover-bg: #e7f5ff;

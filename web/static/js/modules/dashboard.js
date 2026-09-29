@@ -3,7 +3,6 @@ import { escapeHtml } from "../utils/ui.js";
 import { cache, safeAsync } from "../utils/helpers.js";
 import {
   getStatusText,
-  getDeviceTypeName,
   getRoomTypeName,
   getActionIcon,
   formatTime,
@@ -21,7 +20,6 @@ export async function loadDashboardData(forceRefresh = false) {
     const cached = cache.get(CACHE_KEY_STATS);
     if (cached) {
       updateDashboardUI(cached);
-      renderCharts(cached);
       await loadTopLists();
       initDashboardClickHandlers();
       return;
@@ -43,13 +41,12 @@ export async function loadDashboardData(forceRefresh = false) {
 
   cache.set(CACHE_KEY_STATS, result.data, CACHE_TTL);
   updateDashboardUI(result.data);
-  renderCharts(result.data);
   await loadTopLists();
   initDashboardClickHandlers();
 }
 
 function updateDashboardUI(data) {
-  // 页面仅展示以下统计卡；其余聚合字段（resources/users 等）供图表与后续扩展使用
+  // 页面仅展示以下统计卡；其余聚合字段（resources/users 等）供后续扩展使用
   const elements = {
     "total-networks": data.networks?.networks || 0,
     "total-network-regions": data.networks?.regions || 0,
@@ -304,90 +301,6 @@ function initDashboardClickHandlers() {
       }
     }
   });
-}
-
-function renderCharts(data) {
-  renderDeviceTypeChart(data.devices?.by_type || {});
-  renderIpStatusChart(data.ips?.by_status || {});
-}
-
-function renderDeviceTypeChart(deviceTypes) {
-  const container = document.getElementById("device-type-chart");
-  if (!container) {
-    return;
-  }
-
-  const total = Object.values(deviceTypes).reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    container.innerHTML = `<div class="chart-empty">${t("common.no_data")}</div>`;
-    return;
-  }
-
-  const colors = ["var(--chart-color-1)", "var(--chart-color-2)", "var(--chart-color-3)"];
-  let html = '<div class="chart-bars">';
-
-  let index = 0;
-  for (const [type, count] of Object.entries(deviceTypes)) {
-    const percentage = ((count / total) * 100).toFixed(1);
-    const name = getDeviceTypeName(type);
-    html += `
-      <div class="chart-bar-item">
-        <div class="chart-bar-label">${escapeHtml(name)}</div>
-        <div class="chart-bar-container">
-          <div class="chart-bar-fill" style="width: ${percentage}%; background-color: ${colors[index % colors.length]}"></div>
-        </div>
-        <div class="chart-bar-value">${count} (${percentage}%)</div>
-      </div>
-    `;
-    index++;
-  }
-
-  html += "</div>";
-  container.innerHTML = html;
-}
-
-function renderIpStatusChart(statusData) {
-  const container = document.getElementById("ip-status-chart");
-  if (!container) {
-    return;
-  }
-
-  const total = Object.values(statusData).reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    container.innerHTML = `<div class="chart-empty">${t("common.no_data")}</div>`;
-    return;
-  }
-
-  const statusNames = {
-    active: t("status.active"),
-    inactive: t("status.inactive"),
-    reserved: t("status.reserved")
-  };
-
-  const colors = {
-    active: "var(--status-active)",
-    inactive: "var(--status-inactive)",
-    reserved: "var(--status-reserved)"
-  };
-
-  let html = '<div class="chart-pie">';
-  html += '<div class="chart-pie-legend">';
-
-  for (const [status, count] of Object.entries(statusData)) {
-    const percentage = ((count / total) * 100).toFixed(1);
-    const name = statusNames[status] || escapeHtml(status);
-    const color = colors[status] || "var(--status-fallback)";
-
-    html += `
-      <div class="chart-legend-item">
-        <span class="chart-legend-color" style="background-color: ${color}"></span>
-        <span class="chart-legend-label">${name}: ${count} (${percentage}%)</span>
-      </div>
-    `;
-  }
-
-  html += "</div></div>";
-  container.innerHTML = html;
 }
 
 async function loadFallbackData() {
