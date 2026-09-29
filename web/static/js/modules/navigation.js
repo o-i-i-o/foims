@@ -7,10 +7,7 @@ import { loadModule } from "../utils/resourceLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 import { t } from "../utils/i18n.js";
-import {
-  getHiddenSections,
-  applyRoleUIMode
-} from "../utils/roleCapabilities.js";
+import { getHiddenSections, applyRoleUIMode } from "../utils/roleCapabilities.js";
 
 const DEFAULT_PAGE = "dashboard";
 const PAGE_LOADERS = {

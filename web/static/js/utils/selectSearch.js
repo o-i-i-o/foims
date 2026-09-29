@@ -57,9 +57,7 @@ function onWindowScroll(e) {
 
 /** 构建过滤后的选项列表（支持 optgroup 分组标题） */
 function buildOptionList(select) {
-  const keyword = (panel?.querySelector(".select-search-input")?.value || "")
-    .trim()
-    .toLowerCase();
+  const keyword = (panel?.querySelector(".select-search-input")?.value || "").trim().toLowerCase();
   const fragment = document.createDocumentFragment();
   let visibleCount = 0;
   let currentGroup = null;
