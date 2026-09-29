@@ -50,11 +50,52 @@ export class SVGCanvasBase {
     this.gridPatternId = `grid-${this.type}`;
   }
 
-  /** 初始化模板：SVG 结构 → tooltip → 事件（子类构造器末尾调用）。 */
+  /** 初始化模板：SVG 结构 → tooltip → 事件 → 容器尺寸跟踪（子类构造器末尾调用）。 */
   _init() {
     this._initSVG();
     this._initTooltip();
     this._initEventListeners();
+    this._observeContainer();
+    // RO 兜底：部分嵌入式 WebView（如 IDE 预览）不产渲染帧，RO 回调不派发，
+    // 且其自动化输入只合成 mouse 事件族（pointer 事件不派发）；故窗口缩放
+    // 与鼠标移入画布时按容器尺寸对比补一次同步，保证交互前网格覆盖正确
+    // （输入事件不依赖渲染帧，可靠触发）
+    this._onMaybeSync = () => this._syncIfContainerChanged();
+    window.addEventListener("resize", this._onMaybeSync);
+    this.svg.addEventListener("mouseenter", this._onMaybeSync);
+    this._syncGridRect();
+  }
+
+  /**
+   * 容器尺寸跟踪（隐藏→可见、侧边栏折叠、窗口缩放）：统一在基类 observe，
+   * 视野调整策略由子类覆写 _onContainerResize 实现。
+   */
+  _observeContainer() {
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    this._containerObserver = new ResizeObserver(() => this._onContainerResize());
+    this._containerObserver.observe(this.container);
+  }
+
+  /** 容器尺寸变化钩子（基类默认重算网格覆盖；视野策略由子类覆写）。 */
+  _onContainerResize() {
+    this._syncGridRect();
+  }
+
+  /**
+   * RO 兜底：容器尺寸与上次网格同步时不一致则补一次 _onContainerResize。
+   * 覆盖两类场景：不派发 RO 回调的嵌入式 WebView、后台标签页中的
+   * 尺寸变化在恢复可见前的延迟派发。输入事件不依赖渲染帧，可靠触发。
+   */
+  _syncIfContainerChanged() {
+    if (
+      this.container.clientWidth === this._lastSyncedContainerW &&
+      this.container.clientHeight === this._lastSyncedContainerH
+    ) {
+      return;
+    }
+    this._onContainerResize();
   }
 
   _initTooltip() {
@@ -95,31 +136,97 @@ export class SVGCanvasBase {
   }
 
   /**
-   * 按当前 viewBox 重绘主网格与坐标标注（viewBox 变化后调用）。
-   * 主网格间距为 gridSize 的 5 倍（100px），每条主网格线在视口
+   * 网格背景矩形：以 pattern 填充，尺寸不写死，统一由 _syncGridRect 按
+   * 覆盖矩形维护（子类在 _initSVG 中创建图层后调用本方法插入背景层）。
+   */
+  _createGridBackground() {
+    this.gridRect?.remove();
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("fill", `url(#${this.gridPatternId})`);
+    this.gridRect = rect;
+    this.svg.appendChild(rect);
+  }
+
+  /**
+   * 反算与可视区等大的世界坐标矩形（viewBox ∪ letterbox 区，即"覆盖矩形"）。
+   *
+   * meet 缩放下 viewBox 宽高比与容器不一致时，viewBox 只映射到画布的一个
+   * 子矩形，letterbox 区会露出无网格白底；按 preserveAspectRatio 锚定方向
+   * 把缺失的宽/高补回到世界坐标，网格与标尺即可铺满任意尺寸/分辨率的屏幕。
+   * 容器尺寸不可得（隐藏页签尺寸为 0）时退化为 viewBox 本身。
+   */
+  _getCoverRect() {
+    const vb = this.svg.viewBox.baseVal;
+    const cover = { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
+    const rect = this.svg.getBoundingClientRect();
+    if (!vb.width || !vb.height || !rect.width || !rect.height) {
+      return cover;
+    }
+    const scale = Math.min(rect.width / vb.width, rect.height / vb.height);
+    const extraW = rect.width / scale - vb.width;
+    const extraH = rect.height / scale - vb.height;
+    const match = (this.svg.getAttribute("preserveAspectRatio") || "").match(
+      /^x(Min|Mid|Max)Y(Min|Mid|Max)/
+    );
+    const ax = match ? match[1] : "Mid";
+    const ay = match ? match[2] : "Mid";
+    const anchorOffset = (align, extra) => {
+      if (align === "Min") {
+        return 0;
+      }
+      if (align === "Max") {
+        return extra;
+      }
+      return extra / 2;
+    };
+    cover.x -= anchorOffset(ax, extraW);
+    cover.y -= anchorOffset(ay, extraH);
+    cover.width += extraW;
+    cover.height += extraH;
+    return cover;
+  }
+
+  /** 背景矩形同步到覆盖矩形（setViewBox 与容器 resize 时调用）。 */
+  _syncGridRect() {
+    if (!this.gridRect) {
+      return;
+    }
+    const cover = this._getCoverRect();
+    this.gridRect.setAttribute("x", cover.x);
+    this.gridRect.setAttribute("y", cover.y);
+    this.gridRect.setAttribute("width", cover.width);
+    this.gridRect.setAttribute("height", cover.height);
+    // 记录同步时的容器尺寸，供 _syncIfContainerChanged 对比
+    this._lastSyncedContainerW = this.container.clientWidth;
+    this._lastSyncedContainerH = this.container.clientHeight;
+  }
+
+  /**
+   * 按覆盖矩形重绘主网格与坐标标注（viewBox 或容器尺寸变化后调用）。
+   * 主网格间距为 gridSize 的 5 倍（100px），每条主网格线在可视区
    * 顶边/左边标注画布坐标，配合坐标输入框精确定位。
    */
   _renderGridRuler() {
     if (!this.gridRulerGroup) {
       return;
     }
-    const vb = this.svg.viewBox.baseVal;
     const group = this.gridRulerGroup;
     group.innerHTML = "";
-    if (!vb.width || !vb.height) {
+    const cover = this._getCoverRect();
+    if (!cover.width || !cover.height) {
       return;
     }
 
     const step = this.gridSize * 5;
-    // 标注字号随视口宽度缩放，缩放后保持可读
-    const fontSize = Math.max(9, Math.min(14, vb.width / this.rulerFontDivisor));
-    const endX = vb.x + vb.width;
-    const endY = vb.y + vb.height;
+    // 标注字号随可视区世界宽度缩放，缩放后保持可读
+    const fontSize = Math.max(9, Math.min(14, cover.width / this.rulerFontDivisor));
+    const endX = cover.x + cover.width;
+    const endY = cover.y + cover.height;
 
-    for (let gx = Math.floor(vb.x / step) * step; gx <= endX; gx += step) {
+    for (let gx = Math.floor(cover.x / step) * step; gx <= endX; gx += step) {
       const line = document.createElementNS(SVG_NS, "line");
       line.setAttribute("x1", gx);
-      line.setAttribute("y1", vb.y);
+      line.setAttribute("y1", cover.y);
       line.setAttribute("x2", gx);
       line.setAttribute("y2", endY);
       line.setAttribute("class", "grid-major-line");
@@ -127,16 +234,16 @@ export class SVGCanvasBase {
 
       const label = document.createElementNS(SVG_NS, "text");
       label.setAttribute("x", gx + 2);
-      label.setAttribute("y", vb.y + fontSize);
+      label.setAttribute("y", cover.y + fontSize);
       label.setAttribute("class", "grid-label");
       label.setAttribute("font-size", fontSize);
       label.textContent = gx;
       group.appendChild(label);
     }
 
-    for (let gy = Math.floor(vb.y / step) * step; gy <= endY; gy += step) {
+    for (let gy = Math.floor(cover.y / step) * step; gy <= endY; gy += step) {
       const line = document.createElementNS(SVG_NS, "line");
-      line.setAttribute("x1", vb.x);
+      line.setAttribute("x1", cover.x);
       line.setAttribute("y1", gy);
       line.setAttribute("x2", endX);
       line.setAttribute("y2", gy);
@@ -144,7 +251,7 @@ export class SVGCanvasBase {
       group.appendChild(line);
 
       const label = document.createElementNS(SVG_NS, "text");
-      label.setAttribute("x", vb.x + 2);
+      label.setAttribute("x", cover.x + 2);
       label.setAttribute("y", gy - 2);
       label.setAttribute("class", "grid-label");
       label.setAttribute("font-size", fontSize);
@@ -153,16 +260,10 @@ export class SVGCanvasBase {
     }
   }
 
-  /** 统一的 viewBox 更新入口：背景矩形同步铺满，rAF 节流重绘主网格与坐标标注（平移/缩放/ResizeObserver 高频触发）。 */
+  /** 统一的 viewBox 更新入口：背景矩形同步到覆盖矩形，rAF 节流重绘主网格与坐标标注（平移/缩放/ResizeObserver 高频触发）。 */
   setViewBox(x, y, width, height) {
     this.svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
-    // 背景矩形跟随 viewBox 铺满可视区域（pattern 为 userSpaceOnUse，坐标不受影响）
-    if (this.gridRect) {
-      this.gridRect.setAttribute("x", x);
-      this.gridRect.setAttribute("y", y);
-      this.gridRect.setAttribute("width", width);
-      this.gridRect.setAttribute("height", height);
-    }
+    this._syncGridRect();
     if (this._gridRulerRaf) {
       return;
     }

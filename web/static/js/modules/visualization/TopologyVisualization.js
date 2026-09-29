@@ -37,7 +37,12 @@ export class TopologyVisualization {
       onConnectionComplete: (sDev, sPort, tDev, tPort) =>
         this._createConnection(sDev, sPort, tDev, tPort),
       onConnectionClick: (connId) => this._handleConnectionClick(connId),
-      onCanvasClick: () => this._deselectConnection()
+      onCanvasClick: () => this._deselectConnection(),
+      // 容器尺寸变化且用户未手动平移/缩放时自动重新适配内容
+      onAutoFit: () => {
+        this._fitView();
+        this.core._updateZoomIndicator();
+      }
     });
     this.renderer = new TopologyRenderer(this.core);
     this.dataManager = new TopologyDataManager();
@@ -882,6 +887,9 @@ export class TopologyVisualization {
   }
 
   _fitView() {
+    // 视野适配内容后即处于"适配态"：清除手动平移/缩放标记，
+    // 容器 resize 时可继续自动适配
+    this.core._userAdjustedViewBox = false;
     if (this.nodes.length === 0) {
       this.core.setViewBox(0, 0, 3000, 2000);
       return;

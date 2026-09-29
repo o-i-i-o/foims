@@ -24,6 +24,8 @@ export class SVGCore extends SVGCanvasBase {
     this.apiDelete = apiDelete;
     this.showToast = showToast;
     this.showConfirm = showConfirm;
+    // 机柜画布定型后容器 resize 的重排回调（由 SVGVisualization 接线到数据层）
+    this.onCabinetContainerResize = null;
 
     this._init();
   }
@@ -44,9 +46,9 @@ export class SVGCore extends SVGCanvasBase {
       const h = this.container.clientHeight || 600;
       this.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     } else {
-      // 工位视图内容锚定左上角：默认 xMidYMid 会在容器宽高比与 viewBox 不一致时
-      // 把网格整体居中，左缘留出空白带，视觉上画布与左侧边栏之间偏离一段距离。
-      // 初始 viewBox 取容器尺寸（下限 1000x800），网格从画布左缘铺起
+      // 工位视图内容锚定左上角：默认 xMidYMid 会在内容宽高比与容器不一致时
+      // 把内容整体居中，视觉上画布与左侧边栏之间偏离一段距离
+      // （网格留白已由基类覆盖矩形消除）。初始 viewBox 取容器尺寸（下限 1000x800）
       this.svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
       const w = this.container.clientWidth || 0;
       const h = this.container.clientHeight || 0;
@@ -69,25 +71,12 @@ export class SVGCore extends SVGCanvasBase {
     // 尺寸与边框由 CSS（visualization.css）控制，禁止内联 maxHeight 限制容器高度，
     // 否则高分辨率屏幕下机柜底部无法贴近屏幕底部
     this.container.style.overflow = "auto";
-
-    // 画布容器尺寸跟踪（隐藏→可见、侧边栏折叠、窗口缩放时保证网格铺满）：
-    // 工位画布 viewBox 只增不减；机柜画布未定型时兜底取容器尺寸，
-    // 已定型（虚拟横向滚动）时按容器宽同步视野、高度不小于定型高
-    if (typeof ResizeObserver !== "undefined") {
-      this._containerObserver = new ResizeObserver(() => {
-        if (this.type === "cabinet") {
-          this._fitCabinetViewBoxOnResize();
-        } else {
-          this.fitViewBoxToContainer();
-        }
-      });
-      this._containerObserver.observe(this.container);
-    }
   }
 
   /**
-   * 工位画布尺寸跟踪：viewBox 至少覆盖容器尺寸，保证网格背景铺满画布；
+   * 工位画布尺寸跟踪：viewBox 至少覆盖容器尺寸，保证 ~1:1 显示比例；
    * 已有内容时保留内容边界（取两者最大值），只增不减。
+   * （网格背景铺满由基类覆盖矩形统一保证，这里只负责视野大小。）
    */
   fitViewBoxToContainer() {
     const w = this.container.clientWidth || 0;
@@ -103,23 +92,21 @@ export class SVGCore extends SVGCanvasBase {
   }
 
   /**
-   * 网格背景矩形。宽度/高度不能用百分比：百分比按 SVG 视口（容器像素）
-   * 而非 viewBox 解析，宽屏下 viewBox 长宽比与容器不一致时网格只覆盖
-   * 画布局部区域，因此这里显式按初始 viewBox 尺寸铺满，并在 setViewBox
-   * 中同步更新。
+   * 容器尺寸变化（基类 ResizeObserver 钩子）：
+   * 先走基类同步网格覆盖矩形——画布可能在所属 section 隐藏时初始化
+   * （容器 0×0，覆盖矩形早退为 viewBox 副本），且工位路径的
+   * fitViewBoxToContainer 在 viewBox 已覆盖容器时会早退不调 setViewBox，
+   * 若不在此处显式同步，显示后网格背景将停留在初始化时的错误尺寸；
+   * 随后按类型调整视野：工位画布 viewBox 只增不减；机柜画布未定型时
+   * 兜底取容器尺寸，已定型（虚拟横向滚动）时交由数据层本地重排。
    */
-  _createGridBackground() {
-    this.gridRect?.remove();
-    const rect = document.createElementNS(SVG_NS, "rect");
-    const vb = this.svg.viewBox.baseVal;
-    rect.setAttribute("x", vb.x);
-    rect.setAttribute("y", vb.y);
-    rect.setAttribute("width", vb.width);
-    rect.setAttribute("height", vb.height);
-    rect.setAttribute("fill", `url(#${this.gridPatternId})`);
-    this.gridRect = rect;
-    // 保持图层顺序：背景位于标尺层与元素层之下
-    this.svg.insertBefore(rect, this.gridRulerGroup ?? null);
+  _onContainerResize() {
+    super._onContainerResize();
+    if (this.type === "cabinet") {
+      this._fitCabinetViewBoxOnResize();
+    } else {
+      this.fitViewBoxToContainer();
+    }
   }
 
   /**
@@ -387,19 +374,17 @@ export class SVGCore extends SVGCanvasBase {
   }
 
   /**
-   * 机柜画布容器尺寸变化兜底（ResizeObserver 回调）：
-   * 未定型（尚未渲染机柜）时按容器尺寸铺满；已定型时视野宽跟随容器宽，
-   * 高度取定型高与当前容器高的较大值，避免隐藏期间以回退值定型后
-   * 切页签可见时网格上方留白。
+   * 机柜画布容器尺寸变化兜底（基类 ResizeObserver 钩子的机柜分支）：
+   * 未定型（尚未渲染机柜）时按容器尺寸铺满；已定型时优先交由数据层
+   * 本地重排（重算 U 高并重设 viewBox，柜底贴底、网格铺满一步到位），
+   * 数据层未接入时退化为视野宽跟随容器宽、高度取定型高与容器高的较大值。
    */
   _fitCabinetViewBoxOnResize() {
-    if (!this._cabinetScrollBound) {
+    if (!this._cabinetScrollBound || !this.onCabinetContainerResize) {
       this.fitCabinetCanvasToContainer();
       return;
     }
-    const viewWidth = this.container.clientWidth || 800;
-    const height = Math.max(this._cabinetViewHeight || 600, this.container.clientHeight || 0);
-    this.setViewBox(this.container.scrollLeft, 0, viewWidth, height);
+    this.onCabinetContainerResize();
   }
 
   /**

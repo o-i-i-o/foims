@@ -54,6 +54,19 @@ export class SVGDataManager {
     this.workstationRenderToken = 0;
     // 当前房间本次加载/绘制的合法元素 id 集合（保存布局时用于归属过滤）
     this.layoutOwnerIds = new Set();
+    // 最近一次机柜渲染的输入（cabinets/layoutData）：容器 resize 后本地重排复用
+    this._lastCabinets = null;
+    this._lastLayoutData = null;
+    // 机位 IP 缓存（position_id → ipDetail）：resize 重排时免重复请求，
+    // 新一次完整加载（beginCabinetRender）时清空
+    this._ipCache = new Map();
+    // 机柜 resize 重排防抖计时器
+    this._cabinetRelayoutTimer = null;
+
+    if (core.type === "cabinet") {
+      // 接线：机柜画布定型后容器 resize → 本地重排（不回服务器重载）
+      core.onCabinetContainerResize = () => this.relayoutCabinets();
+    }
   }
 
   /** 数据获取失败时的统一提示（请求异常或响应形状异常） */
@@ -265,7 +278,9 @@ export class SVGDataManager {
         } else {
           // 无布局/无机柜：空画布兜底铺满，并清除上一房间残留的横向滚动占位
           //（同步执行无渲染跟进；隐藏容器下回退尺寸由 ResizeObserver 在
-          // 切页签可见后纠正）
+          // 切页签可见后纠正）；清空重排输入防止 resize 重排出上一房间布局
+          this._lastCabinets = null;
+          this._lastLayoutData = null;
           this.core.fitCabinetCanvasToContainer();
           // 无渲染跟进（无布局/无柜）:恢复完成标志,避免 saveLayout 被永久拒绝
           this.cabinetRenderSettled = true;
@@ -286,8 +301,11 @@ export class SVGDataManager {
         return null;
       }
       this.core.elementsGroup.innerHTML = "";
-      // 机柜视图异常中断后不会再有渲染跟进：恢复完成标志，避免 saveLayout 被永久拒绝
+      // 机柜视图异常中断后不会再有渲染跟进：恢复完成标志，避免 saveLayout 被永久拒绝；
+      // 同时清空重排输入，防止 resize 重排把中断前的半成品重新画出
       if (this.core.type === "cabinet") {
+        this._lastCabinets = null;
+        this._lastLayoutData = null;
         this.cabinetRenderSettled = true;
       }
       // 加载失败与"无布局"区分，调用方不得自动排布落库
@@ -374,7 +392,41 @@ export class SVGDataManager {
     this.core.elementsGroup.innerHTML = "";
     // 渲染开始:完成标志复位,由 renderCabinetBatches 全部批次完成时置回
     this.cabinetRenderSettled = false;
+    // 新一次完整加载：重排输入与 IP 缓存全部失效
+    this._lastCabinets = null;
+    this._lastLayoutData = null;
+    this._ipCache = new Map();
     return ++this.cabinetRenderToken;
+  }
+
+  /**
+   * 容器尺寸变化后的机柜本地重排（防抖 150ms）：按新容器高重算 U 高与
+   * 柜底贴底位置，复用最近一次渲染的机柜/布局/IP 数据，不再回服务器重载。
+   * 渲染在途、拖拽中或容器隐藏时跳过（切回可见后 ResizeObserver 会再触发）。
+   */
+  relayoutCabinets() {
+    clearTimeout(this._cabinetRelayoutTimer);
+    this._cabinetRelayoutTimer = setTimeout(() => {
+      this._cabinetRelayoutTimer = null;
+      if (!this.cabinetRenderSettled || this.core.isDragging || this.core.isContainerDragging) {
+        return;
+      }
+      // 容器隐藏（其他页签）时高度不可信，避免以回退值错误定型
+      if (!this.core.container.clientWidth || !this.core.container.clientHeight) {
+        return;
+      }
+      if (this._lastCabinets?.length) {
+        this.cabinetRenderSettled = false;
+        this.layoutAndRenderCabinets(
+          this._lastCabinets,
+          this._lastLayoutData,
+          this.cabinetRenderToken
+        );
+        return;
+      }
+      // 无布局数据（空房间/清空后）：按容器尺寸兜底铺满
+      this.core.fitCabinetCanvasToContainer();
+    }, 150);
   }
 
   /** 等待容器获得真实高度（隐藏 tab 刚切出时可能为 0）。 */
@@ -394,10 +446,18 @@ export class SVGDataManager {
    * @returns {Promise<boolean>} 渲染是否完整完成（false 表示已被新渲染取代）
    */
   async layoutAndRenderCabinets(cabinets, layoutData, token) {
+    // 记录本次渲染输入：容器 resize 后 relayoutCabinets 本地重排复用
+    this._lastCabinets = cabinets;
+    this._lastLayoutData = layoutData;
+
     const containerHeight = await this.waitForContainerHeight();
     if (token !== this.cabinetRenderToken) {
       return false;
     }
+
+    // 重排路径不经过 beginCabinetRender，统一在此清空画布后按新尺寸重画
+    //（缓存命中时整个重排在同一宏任务内完成，不会出现清空后的闪烁帧）
+    this.core.elementsGroup.innerHTML = "";
 
     const padding = CABINET_EDGE_PADDING;
     const maxCapacity = Math.max(...cabinets.map((c) => c.capacity ?? DEFAULT_CABINET_CAPACITY));
@@ -474,18 +534,33 @@ export class SVGDataManager {
     return true;
   }
 
-  /** 按机位 ID 批量拉取 IP 信息，返回 position_id → ipDetail 映射。 */
+  /**
+   * 按机位 ID 批量拉取 IP 信息，返回 position_id → ipDetail 映射。
+   * 命中 _ipCache 的机位直接复用，仅请求缺失部分（resize 重排零请求）。
+   */
   async fetchIpMapByPositions(positionIds) {
+    const map = new Map();
+    const missing = [];
+    [...new Set(positionIds)].forEach((id) => {
+      const cached = this._ipCache.get(id);
+      if (cached) {
+        map.set(id, cached);
+      } else {
+        missing.push(id);
+      }
+    });
+    if (missing.length === 0) {
+      return map;
+    }
     try {
-      const ids = [...new Set(positionIds)].join(",");
       // 单批机位上限 16 柜 × 48U = 768，page_size=1000 足够覆盖
       const result = await this.apiGet(
-        `/api/resources/ip?page_size=1000&position_ids=${encodeURIComponent(ids)}`
+        `/api/resources/ip?page_size=1000&position_ids=${encodeURIComponent(missing.join(","))}`
       );
-      const map = new Map();
       if (result.success && Array.isArray(result.data?.items)) {
         result.data.items.forEach((ipDetail) => {
           if (ipDetail.position_id) {
+            this._ipCache.set(ipDetail.position_id, ipDetail);
             map.set(ipDetail.position_id, ipDetail);
           }
         });
@@ -495,7 +570,7 @@ export class SVGDataManager {
       return map;
     } catch (error) {
       this._notifyLoadFailure(error, "批量获取机位IP");
-      return new Map();
+      return map;
     }
   }
 
@@ -653,7 +728,9 @@ export class SVGDataManager {
         );
         if (result.success) {
           this.core.elementsGroup.innerHTML = "";
-          // 清空后画布回到空态：兜底铺满并收回残留的横向滚动占位
+          // 清空后画布回到空态：清空重排输入并兜底铺满、收回残留的横向滚动占位
+          this._lastCabinets = null;
+          this._lastLayoutData = null;
           this.core.fitCabinetCanvasToContainer();
           this.showToast(t("viz.layout_delete_success"), "success");
         } else {

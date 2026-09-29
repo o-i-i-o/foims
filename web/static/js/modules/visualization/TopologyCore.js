@@ -28,6 +28,8 @@ export class TopologyCore extends SVGCanvasBase {
     this.isSpaceDown = false;
     this.isConnectionMode = false;
     this.connectionSource = null;
+    // 用户是否手动平移/缩放过视野：false 时容器 resize 自动重新适配内容
+    this._userAdjustedViewBox = false;
 
     this._init();
   }
@@ -40,22 +42,12 @@ export class TopologyCore extends SVGCanvasBase {
     this.svg.setAttribute("width", "100%");
     this.svg.setAttribute("height", "100%");
     this.svg.setAttribute("viewBox", "0 0 3000 2000");
-    // 内容锚定左上角：默认 xMidYMid 会在容器宽高比与 viewBox 不一致时把网格
-    // 整体居中，画布顶缘留出空白带，视觉上画布与工具栏之间偏离一段距离
+    // 内容锚定左上角：xMidYMid 会把内容整体居中，与工具栏之间视觉偏离
+    // （网格留白已由基类覆盖矩形消除）
     this.svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
 
     this._createDefs();
-
-    const bg = document.createElementNS(SVG_NS, "rect");
-    bg.setAttribute("x", 0);
-    bg.setAttribute("y", 0);
-    bg.setAttribute("width", 3000);
-    bg.setAttribute("height", 2000);
-    bg.setAttribute("fill", `url(#${this.gridPatternId})`);
-    this.svg.appendChild(bg);
-    // 背景矩形需随 viewBox 显式更新：百分比按容器像素而非 viewBox 解析，
-    // 缩小视野（fitView/缩小）时会导致网格只覆盖画布局部
-    this.gridRect = bg;
+    this._createGridBackground();
 
     // 主网格线 + 坐标标尺层（元素层之下，viewBox 变化时重绘）
     this.gridRulerGroup = document.createElementNS(SVG_NS, "g");
@@ -194,6 +186,7 @@ export class TopologyCore extends SVGCanvasBase {
       const scale = vb.width / this.container.clientWidth;
       const dx = (e.clientX - this.panStart.x) * scale;
       const dy = (e.clientY - this.panStart.y) * scale;
+      this._userAdjustedViewBox = true;
       this.setViewBox(this.viewBoxStart.x - dx, this.viewBoxStart.y - dy, vb.width, vb.height);
       return;
     }
@@ -314,8 +307,22 @@ export class TopologyCore extends SVGCanvasBase {
     const newX = mousePos.x - (mousePos.x - vb.x) * delta;
     const newY = mousePos.y - (mousePos.y - vb.y) * delta;
 
+    this._userAdjustedViewBox = true;
     this.setViewBox(newX, newY, newWidth, newHeight);
     this._updateZoomIndicator();
+  }
+
+  /**
+   * 容器尺寸变化（基类 ResizeObserver 钩子）：用户未手动平移/缩放时重新
+   * 适配内容（保持"适应画布"状态），已交互则保持当前视野并重算网格覆盖。
+   */
+  _onContainerResize() {
+    if (!this._userAdjustedViewBox && this.callbacks.onAutoFit) {
+      this.callbacks.onAutoFit();
+      return;
+    }
+    const vb = this.svg.viewBox.baseVal;
+    this.setViewBox(vb.x, vb.y, vb.width, vb.height);
   }
 
   /** 当前显示比例：容器像素宽 / viewBox 宽（1 = 100%）。 */
@@ -342,6 +349,7 @@ export class TopologyCore extends SVGCanvasBase {
       return;
     }
 
+    this._userAdjustedViewBox = true;
     this.setViewBox(centerX - newWidth / 2, centerY - newHeight / 2, newWidth, newHeight);
     this._updateZoomIndicator();
   }
