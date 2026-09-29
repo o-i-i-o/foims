@@ -159,7 +159,7 @@
 }
 
 .org-node-type-badge[data-type="headquarters"] {
-  background: rgb(102 126 234 / 15%);
+  background: rgb(52 58 64 / 8%);
   color: var(--color-primary-hover);
 }
 

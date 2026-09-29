@@ -603,7 +603,7 @@
 
 /* 逻辑连接（链路聚合） */
 .topology-connection.logical {
-  stroke: #7c3aed;
+  stroke: #66a80f;
   stroke-width: 3.5;
   stroke-dasharray: 10 5;
 }
@@ -614,7 +614,7 @@
 
 .topology-lag-badge rect {
   fill: #f3e8ff;
-  stroke: #7c3aed;
+  stroke: #66a80f;
   stroke-width: 1.5;
   cursor: pointer;
 }
@@ -629,7 +629,7 @@
 
 .topology-lag-members {
   font-size: 9px;
-  fill: #7c3aed;
+  fill: #66a80f;
   dominant-baseline: middle;
   pointer-events: none;
 }

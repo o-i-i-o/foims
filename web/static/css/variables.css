@@ -1,6 +1,11 @@
 /**
  * FOIMS CSS Variables
- * 
+ *
+ * 色彩体系：Open Color（https://yeun.github.io/open-color/）
+ * - 主色 lime（交互强调：按钮/焦点/激活态）
+ * - 副色 gray（文字/边框/背景/深色面板）
+ * - 辅助 green/red/yellow/cyan/blue（语义状态与图表）
+ *
  * Responsive Breakpoints (use in media queries):
  * - lg: 992px (large screens)
  * - md: 768px (tablets)
@@ -8,53 +13,52 @@
  * - xs: 480px (portrait phones)
  */
 :root {
-  --color-primary: #667eea;
-  --color-primary-hover: #5568d3;
-  --color-primary-light: rgb(102 126 234 / 10%);
-  --color-gradient-end: #764ba2;
-  --color-secondary: #6c757d;
-  --color-secondary-hover: #5a6268;
-  --color-success: #28a745;
-  --color-success-bg: #d4edda;
-  --color-success-text: #155724;
-  --color-success-border: #c3e6cb;
-  --color-danger: #dc3545;
-  --color-danger-hover: #c82333;
-  --color-danger-bg: #f8d7da;
-  --color-danger-text: #721c24;
-  --color-danger-border: #f5c6cb;
-  --color-warning: #ffc107;
-  --color-warning-bg: #fff3cd;
-  --color-warning-text: #856404;
-  --color-warning-border: #ffeeba;
-  --color-info: #17a2b8;
-  --color-info-hover: #138496;
-  --color-info-bg: #d1ecf1;
-  --color-info-text: #0c5460;
-  --color-info-border: #bee5eb;
-  --color-text: #333;
-  --color-text-secondary: #555;
-  --color-text-muted: #6c757d;
-  --color-text-light: #495057;
+  --color-primary: #66a80f;
+  --color-primary-hover: #5c940d;
+  --color-primary-light: rgb(102 168 15 / 10%);
+  --color-secondary: #495057;
+  --color-secondary-hover: #343a40;
+  --color-success: #2f9e44;
+  --color-success-bg: #d3f9d8;
+  --color-success-text: #2b8a3e;
+  --color-success-border: #b2f2bb;
+  --color-danger: #f03e3e;
+  --color-danger-hover: #c92a2a;
+  --color-danger-bg: #ffe3e3;
+  --color-danger-text: #c92a2a;
+  --color-danger-border: #ffc9c9;
+  --color-warning: #fab005;
+  --color-warning-bg: #fff3bf;
+  --color-warning-text: #e67700;
+  --color-warning-border: #ffec99;
+  --color-info: #15aabf;
+  --color-info-hover: #0c8599;
+  --color-info-bg: #c5f6fa;
+  --color-info-text: #0b7285;
+  --color-info-border: #99e9f2;
+  --color-text: #212529;
+  --color-text-secondary: #495057;
+  --color-text-muted: #868e96;
+  --color-text-light: #343a40;
   --color-bg: #f8f9fa;
   --color-bg-white: #fff;
   --color-border: #ced4da;
   --color-border-light: #e9ecef;
   --color-border-dark: #dee2e6;
-  --color-ipv6: #6f42c1;
-  --color-blue: #007bff;
-  --color-success-alt: #20c997;
-  --color-info-alt: #6610f2;
+  --color-ipv6: #7048e8;
+  --color-blue: #228be6;
+  --color-success-alt: #40c057;
+  --color-info-alt: #1098ad;
   --control-bg: #fff;
-  --control-bg-muted: #f8f9fa;
+  --control-bg-muted: #f1f3f5;
   --control-border: #ced4da;
-  --control-border-hover: #b9c1cc;
-  --control-border-focus: #667eea;
+  --control-border-hover: #adb5bd;
+  --control-border-focus: #74b816;
   --control-radius: 8px;
   --control-height: 44px;
   --control-padding-x: 0.85rem;
   --control-padding-y: 0.6rem;
-  --control-shadow: 0 0 0 3px rgb(102 126 234 / 20%);
+  --control-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
   --btn-height: 44px;
   --btn-padding-x: 1.1rem;
   --shadow-sm: 0 2px 4px rgb(0 0 0 / 10%);
@@ -89,33 +93,33 @@
   /* tooltip 高于任意层级的模态（模态内联 z-index 基准 1050、每层 +50），仅低于 toast */
   --z-tooltip: 3000;
   --z-toast: 9999;
-  --color-warning-dark: #e0a800;
-  --color-status-success-text: #2e7d32;
-  --color-status-info-text: #1565c0;
-  --color-status-danger-text: #c62828;
-  --color-status-warning-text: #e65100;
-  --color-status-neutral-text: #6b7280;
+  --color-warning-dark: #e67700;
+  --color-status-success-text: #2b8a3e;
+  --color-status-info-text: #1c7ed6;
+  --color-status-danger-text: #c92a2a;
+  --color-status-warning-text: #e8590c;
+  --color-status-neutral-text: #868e96;
   --color-orange: #fd7e14;
-  --color-bg-hover: #f0f0f0;
-  --color-bg-secondary: #f0f0f0;
+  --color-bg-hover: #f1f3f5;
+  --color-bg-secondary: #f1f3f5;
 
   /* 图表配色（仪表盘图表与可视化共用，不在 JS 中硬编码色值） */
-  --chart-color-1: #667eea;
-  --chart-color-2: #764ba2;
-  --chart-color-3: #f093fb;
-  --status-active: #28a745;
-  --status-inactive: #dc3545;
-  --status-reserved: #ffc107;
-  --status-fallback: #6c757d;
+  --chart-color-1: #66a80f;
+  --chart-color-2: #22b8cf;
+  --chart-color-3: #fcc419;
+  --status-active: #2f9e44;
+  --status-inactive: #f03e3e;
+  --status-reserved: #fab005;
+  --status-fallback: #868e96;
 
   /* 端口方块状态色（统一端口管理模态框与可视化端口网格共用） */
-  --port-hover-border: #4a90d9;
-  --port-hover-bg: #f0f8ff;
-  --port-up-border: #48bb78;
-  --port-up-bg: #f0fff4;
-  --port-down-border: #f56565;
+  --port-hover-border: #228be6;
+  --port-hover-bg: #e7f5ff;
+  --port-up-border: #2f9e44;
+  --port-up-bg: #ebfbee;
+  --port-down-border: #f03e3e;
   --port-down-bg: #fff5f5;
-  --port-admin-down-border: #ecc94b;
-  --port-admin-down-bg: #fffff0;
+  --port-admin-down-border: #fab005;
+  --port-admin-down-bg: #fff9db;
   --shadow-xl: 0 20px 40px rgb(0 0 0 / 25%);
 }

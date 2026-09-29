@@ -29,7 +29,7 @@
   content: "";
   width: 4px;
   height: 20px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
+  background: var(--color-primary);
   border-radius: 2px;
 }
 
@@ -45,7 +45,7 @@
 .config-card:hover {
   /* hover 边框用实色主色，10% tint 边框视觉上消失 */
   border-color: var(--color-primary);
-  box-shadow: 0 4px 12px rgb(102 126 234 / 10%);
+  box-shadow: 0 4px 12px rgb(102 168 15 / 15%);
 }
 
 .config-card-header {

@@ -92,5 +92,5 @@
 }
 
 .select-search-inline:focus {
-  border-color: var(--color-primary, #667eea);
+  border-color: var(--color-primary, #66a80f);
 }

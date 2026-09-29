@@ -25,10 +25,10 @@ body.sidebar-collapsed .main-content {
 
 .sidebar-header {
   position: relative;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-gradient-end) 100%);
+  background: #343a40;
   color: var(--color-bg-white);
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  border-bottom: 1px solid #212529;
   text-align: center;
 }
 
@@ -168,7 +168,7 @@ body.sidebar-collapsed .sidebar-menu li a:hover {
 
 /* 一级导航图标彩色化：按路由固定描边色，不随 hover/选中态变色 */
 .sidebar-menu .nav-link[href="#dashboard"] .nav-icon svg { stroke: #f59e0b; }
-.sidebar-menu .nav-link[href="#organization"] .nav-icon svg { stroke: #10b981; }
+.sidebar-menu .nav-link[href="#organization"] .nav-icon svg { stroke: #2f9e44; }
 .sidebar-menu .nav-link[href="#resources"] .nav-icon svg { stroke: #a855f7; }
 .sidebar-menu .nav-link[href="#ip"] .nav-icon svg { stroke: #3b82f6; }
 .sidebar-menu .nav-link[href="#visualization"] .nav-icon svg { stroke: #ec4899; }

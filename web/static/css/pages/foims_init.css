@@ -16,7 +16,7 @@
 .init-body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f1f3f5;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -47,7 +47,7 @@
 }
 
 .init-header {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  background: #343a40;
   color: var(--color-bg-white);
   padding: 40px 30px;
   text-align: center;
@@ -71,7 +71,7 @@
 }
 
 .init-lang-switch select option {
-  color: #1f2937;
+  color: #212529;
 }
 
 .init-header h1 {
@@ -103,7 +103,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: #e5e7eb;
+  background: #e9ecef;
   z-index: 1;
 }
 
@@ -113,7 +113,7 @@
   top: 20px;
   left: 0;
   height: 3px;
-  background: linear-gradient(90deg, #4f46e5, #10b981);
+  background: #82c91e;
   z-index: 2;
   transition: width 0.5s ease;
 }
@@ -130,8 +130,8 @@
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: #e5e7eb;
-  color: #9ca3af;
+  background: #e9ecef;
+  color: #adb5bd;
   font-size: 16px;
   font-weight: 600;
   display: flex;
@@ -142,30 +142,30 @@
 }
 
 .step.active .step-number {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: #343a40;
   color: var(--color-bg-white);
-  box-shadow: 0 4px 14px rgb(79 70 229 / 40%);
+  box-shadow: 0 4px 14px rgb(33 37 41 / 30%);
 }
 
 .step.completed .step-number {
-  background: #10b981;
+  background: #2f9e44;
   color: var(--color-bg-white);
 }
 
 .step-label {
   font-size: 13px;
-  color: #9ca3af;
+  color: #adb5bd;
   font-weight: 500;
   transition: color 0.3s ease;
 }
 
 .step.active .step-label {
-  color: #4f46e5;
+  color: #343a40;
   font-weight: 600;
 }
 
 .step.completed .step-label {
-  color: #10b981;
+  color: #2f9e44;
 }
 
 .step-content {
@@ -195,34 +195,34 @@
 
 .step-panel h2 {
   font-size: 22px;
-  color: #1f2937;
+  color: #212529;
   margin-bottom: 24px;
   font-weight: 600;
 }
 
 .status-container {
-  background: #f9fafb;
+  background: #f8f9fa;
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e9ecef;
   text-align: center;
   transition: all 0.3s ease;
 }
 
 .status-container.status-success {
-  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
-  border-color: #a7f3d0;
+  background: #ebfbee;
+  border-color: #b2f2bb;
 }
 
 .status-container.status-error {
-  background: linear-gradient(135deg, #fef2f2, #fee2e2);
-  border-color: #fecaca;
+  background: #fff5f5;
+  border-color: #ffc9c9;
 }
 
 .status-container.status-warning {
-  background: linear-gradient(135deg, #fffbeb, #fef3c7);
-  border-color: #fde68a;
+  background: #fff9db;
+  border-color: #ffe066;
 }
 
 /* 状态图标字号/间距：限定为容器直接子代。JS 会给容器本身加同名状态类
@@ -235,25 +235,25 @@
 }
 
 .status-success {
-  color: #10b981;
+  color: #2f9e44;
 }
 
 .status-error {
-  color: #ef4444;
+  color: #f03e3e;
 }
 
 .status-warning {
-  color: #f59e0b;
+  color: #fab005;
 }
 
 .status-container h3 {
   font-size: 18px;
-  color: #1f2937;
+  color: #212529;
   margin-bottom: 8px;
 }
 
 .status-container p {
-  color: #6b7280;
+  color: #868e96;
   margin-bottom: 8px;
 }
 
@@ -267,7 +267,7 @@
 
 .error-guide h4 {
   font-size: 14px;
-  color: #1f2937;
+  color: #212529;
   margin-bottom: 12px;
 }
 
@@ -278,13 +278,13 @@
 
 .error-guide li {
   padding: 6px 0;
-  color: #6b7280;
+  color: #868e96;
   font-size: 14px;
 }
 
 .error-guide li::before {
   content: "•";
-  color: #ef4444;
+  color: #f03e3e;
   margin-right: 8px;
 }
 
@@ -301,7 +301,7 @@
 }
 
 .status-loading p {
-  color: #6b7280;
+  color: #868e96;
 }
 
 .init-tabs {
@@ -314,7 +314,7 @@
 .init-tab {
   flex: 1;
   padding: 20px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #e9ecef;
   border-radius: 12px;
   cursor: pointer;
   text-align: center;
@@ -324,13 +324,13 @@
 }
 
 .init-tab:hover {
-  border-color: #4f46e5;
-  background: #f9fafb;
+  border-color: #343a40;
+  background: #f8f9fa;
 }
 
 .init-tab.active {
-  border-color: #4f46e5;
-  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  border-color: #343a40;
+  background: #f1f3f5;
 }
 
 .init-tab .tab-icon {
@@ -342,7 +342,7 @@
 .init-tab .tab-text {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
+  color: #212529;
 }
 
 .init-form {
@@ -350,27 +350,27 @@
 }
 
 .panel-description {
-  background: #f9fafb;
+  background: #f8f9fa;
   padding: 20px;
   border-radius: 12px;
   margin-bottom: 20px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e9ecef;
 }
 
 .panel-description h4 {
   font-size: 16px;
-  color: #1f2937;
+  color: #212529;
   margin-bottom: 8px;
 }
 
 .panel-description p {
-  color: #6b7280;
+  color: #868e96;
   margin-bottom: 12px;
 }
 
 .panel-description ul {
   padding-left: 20px;
-  color: #6b7280;
+  color: #868e96;
 }
 
 .panel-description li {
@@ -395,10 +395,10 @@
 .form-group input[type="number"] {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #e9ecef;
   border-radius: 10px;
   font-size: 15px;
-  color: #1f2937;
+  color: #212529;
   transition: all 0.2s ease;
   background: var(--color-bg-white);
 }
@@ -407,55 +407,55 @@
 .form-group select {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #e9ecef;
   border-radius: 10px;
   font-size: 15px;
-  color: #1f2937;
+  color: #212529;
   transition: all 0.2s ease;
   background: var(--color-bg-white);
 }
 
 .form-group select:focus {
   outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgb(79 70 229 / 10%);
+  border-color: #343a40;
+  box-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgb(79 70 229 / 10%);
+  border-color: #343a40;
+  box-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
 }
 
 .form-group input::placeholder {
-  color: #9ca3af;
+  color: #adb5bd;
 }
 
 .file-input {
   border: 2px dashed #d1d5db !important; /* stylelint-disable-line declaration-no-important -- 拖放区覆盖任意子元素样式 */
-  background: #f9fafb !important; /* stylelint-disable-line declaration-no-important */
+  background: #f8f9fa !important; /* stylelint-disable-line declaration-no-important */
   cursor: pointer;
 }
 
 .file-input:hover {
-  border-color: #4f46e5 !important; /* stylelint-disable-line declaration-no-important */
+  border-color: #343a40 !important; /* stylelint-disable-line declaration-no-important */
 }
 
 .help-text {
   font-size: 13px;
-  color: #9ca3af;
+  color: #adb5bd;
   margin-top: 6px;
 }
 
 .warning-text {
-  color: #f59e0b;
+  color: #fab005;
   font-weight: 600;
 }
 
 .form-actions {
   margin-top: 32px;
   padding-top: 24px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #e9ecef;
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -475,17 +475,17 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: #343a40;
   color: var(--color-bg-white);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgb(79 70 229 / 40%);
+  box-shadow: 0 4px 12px rgb(33 37 41 / 30%);
 }
 
 .btn-success {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: #2f9e44;
   color: var(--color-bg-white);
 }
 
@@ -495,12 +495,12 @@
 }
 
 .btn-secondary {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: #f1f3f5;
+  color: #868e96;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #e5e7eb;
+  background: #e9ecef;
 }
 
 .btn:disabled {
@@ -513,7 +513,7 @@
   position: fixed;
   top: 20px;
   right: 20px;
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+  background: #f03e3e;
   color: var(--color-bg-white);
   padding: 16px 24px;
   border-radius: 12px;
@@ -584,18 +584,18 @@
 }
 
 .loading-spinner::before {
-  border: 3px solid #e5e7eb;
+  border: 3px solid #e9ecef;
 }
 
 .loading-spinner::after {
   border: 3px solid transparent;
-  border-top-color: #4f46e5;
-  border-right-color: #4f46e5;
+  border-top-color: #343a40;
+  border-right-color: #343a40;
   animation: spin 0.6s linear infinite;
 }
 
 .loading p {
-  color: #6b7280;
+  color: #868e96;
   font-size: 15px;
 }
 
@@ -617,7 +617,7 @@
 .success-icon {
   width: 100px;
   height: 100px;
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: #2f9e44;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -640,19 +640,19 @@
 
 .init-success h2 {
   font-size: 28px;
-  color: #1f2937;
+  color: #212529;
   margin-bottom: 12px;
 }
 
 .init-success p {
-  color: #6b7280;
+  color: #868e96;
   margin-bottom: 8px;
 }
 
 /* 手动重启指引的辅助说明行（弱化展示） */
 .init-success .manual-restart-hint {
   font-size: 13px;
-  color: #9ca3af;
+  color: #adb5bd;
 }
 
 .init-success .form-actions {

@@ -22,10 +22,10 @@
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  background: #1a1a2e;
+  background: #212529;
   overflow: hidden;
   height: 100vh;
-  color: #1a1a2e;
+  color: #212529;
 }
 
 /* 无障碍：屏幕阅读器可见，视觉隐藏 */
@@ -55,7 +55,7 @@
   flex-direction: column;
   justify-content: center;
   gap: 40px;
-  background: linear-gradient(135deg, #d4d0dc 0%, #c8c4d0 50%, #bbb7c5 100%);
+  background: #e9ecef;
   padding: 40px 48px;
   overflow: hidden;
 }
@@ -66,7 +66,7 @@
   gap: 10px;
   font-size: 18px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #212529;
   z-index: 10;
   position: relative;
   letter-spacing: 0.5px;
@@ -98,7 +98,7 @@
   right: 15%;
   width: 260px;
   height: 260px;
-  background: rgb(180 170 200 / 25%);
+  background: rgb(173 181 189 / 25%);
   border-radius: 50%;
   filter: blur(80px);
 }
@@ -110,7 +110,7 @@
   left: 10%;
   width: 350px;
   height: 350px;
-  background: rgb(200 195 210 / 20%);
+  background: rgb(173 181 189 / 20%);
   border-radius: 50%;
   filter: blur(100px);
 }
@@ -143,7 +143,7 @@
   border-radius: 6px;
   border: 1px solid var(--color-border, #d1d5db);
   background: var(--color-bg, #fff);
-  color: var(--color-text, #1f2937);
+  color: var(--color-text, #212529);
   font-size: 13px;
   cursor: pointer;
 }
@@ -157,7 +157,7 @@
   font-size: 32px;
   font-weight: 800;
   letter-spacing: 2px;
-  color: #1a1a2e;
+  color: #212529;
 }
 
 .form-header {
@@ -168,21 +168,21 @@
 .form-header h1 {
   font-size: 26px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #212529;
   letter-spacing: -0.5px;
   margin-bottom: 6px;
 }
 
 .form-header p {
   font-size: 14px;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted, #868e96);
 }
 
 /* ============ 登录模式 Tabs（用户名密码 / 邮箱验证码） ============ */
 .login-tabs {
   display: flex;
   gap: 8px;
-  background: #f4f4f5;
+  background: #f1f3f5;
   border-radius: 25px;
   padding: 4px;
   margin-bottom: 24px;
@@ -197,20 +197,20 @@
   font-size: 14px;
   font-weight: 500;
   font-family: inherit;
-  color: #666;
+  color: #495057;
   cursor: pointer;
   transition: all 0.25s ease;
 }
 
 .login-tabs .tab-btn.active {
   background: var(--color-bg-white);
-  color: #1a1a2e;
+  color: #212529;
   font-weight: 600;
   box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
 }
 
 .login-tabs .tab-btn:hover:not(.active) {
-  color: #333;
+  color: #212529;
 }
 
 /* ============ 视图切换（登录视图 ↔ 2FA 视图） ============ */
@@ -235,13 +235,13 @@
 .view-header h3 {
   font-size: 22px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #212529;
   margin-bottom: 6px;
 }
 
 .view-desc {
   font-size: 14px;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted, #868e96);
 }
 
 /* 登录区段切换（用户名密码区 / 邮箱验证码区） */
@@ -262,7 +262,7 @@
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: #212529;
   margin-bottom: 8px;
 }
 
@@ -276,18 +276,18 @@
   width: 100%;
   height: 48px;
   border: none;
-  border-bottom: 1.5px solid #e0e0e0;
+  border-bottom: 1.5px solid #e9ecef;
   padding: 0 40px 0 0;
   font-size: 15px;
   font-family: inherit;
-  color: #1a1a2e;
+  color: #212529;
   background: transparent;
   outline: none;
   transition: border-color 0.3s;
 }
 
 .form-group input:focus {
-  border-bottom-color: #5b21b6;
+  border-bottom-color: #66a80f;
 }
 
 .form-group input::placeholder {
@@ -313,13 +313,13 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #666;
+  color: #495057;
   padding: 6px;
   transition: color 0.2s;
 }
 
 .toggle-password:hover {
-  color: #333;
+  color: #212529;
 }
 
 /* 邮箱验证码：输入框 + 发送按钮并排 */
@@ -337,9 +337,9 @@
   flex-shrink: 0;
   height: 38px;
   padding: 0 14px;
-  border: 1.5px solid #5b21b6;
+  border: 1.5px solid #66a80f;
   background: transparent;
-  color: #5b21b6;
+  color: #66a80f;
   border-radius: 19px;
   font-size: 13px;
   font-weight: 600;
@@ -350,7 +350,7 @@
 }
 
 .form-inline-group .btn-send-code:hover:not(:disabled) {
-  background: #5b21b6;
+  background: #343a40;
   color: var(--color-bg-white);
 }
 
@@ -364,7 +364,7 @@
 .hint-text {
   display: block;
   font-size: 12px;
-  color: #999;
+  color: #868e96;
 }
 
 /* ============ 记住我 & 忘记密码 ============ */
@@ -380,14 +380,14 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #555;
+  color: #495057;
   cursor: pointer;
 }
 
 .remember-me input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #5b21b6;
+  accent-color: #66a80f;
   cursor: pointer;
 }
 
@@ -403,7 +403,7 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #555;
+  color: #495057;
   cursor: pointer;
 }
 
@@ -426,7 +426,7 @@
 
 .forgot-link {
   font-size: 13px;
-  color: #5b21b6;
+  color: #66a80f;
   text-decoration: none;
   font-weight: 500;
   cursor: pointer;
@@ -445,8 +445,8 @@
   width: 100%;
   height: 50px;
   border-radius: 25px;
-  border: 1.5px solid #1a1a2e;
-  background: #1a1a2e;
+  border: 1.5px solid #212529;
+  background: #212529;
   color: var(--color-bg-white);
   font-size: 15px;
   font-weight: 600;
@@ -469,7 +469,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #5b21b6;
+  background: #343a40;
   color: var(--color-bg-white);
   opacity: 0;
   transition: all 0.3s;
@@ -496,7 +496,7 @@
   height: 44px;
   border: none;
   background: transparent;
-  color: #666;
+  color: #495057;
   font-size: 14px;
   font-weight: 500;
   font-family: inherit;
@@ -506,7 +506,7 @@
 }
 
 .btn-text-full:hover {
-  color: #1a1a2e;
+  color: #212529;
 }
 
 /* ============ 错误 / 成功消息 ============ */
@@ -514,9 +514,9 @@
   display: none;
   padding: 10px 14px;
   font-size: 13px;
-  color: #dc2626;
-  background: rgb(220 38 38 / 8%);
-  border: 1px solid rgb(220 38 38 / 20%);
+  color: #f03e3e;
+  background: rgb(240 62 62 / 8%);
+  border: 1px solid rgb(240 62 62 / 20%);
   border-radius: 10px;
   margin-bottom: 16px;
 }
@@ -529,9 +529,9 @@
   display: none;
   padding: 10px 14px;
   font-size: 13px;
-  color: #155724;
-  background: #d4edda;
-  border: 1px solid #c3e6cb;
+  color: #2b8a3e;
+  background: #d3f9d8;
+  border: 1px solid #b2f2bb;
   border-radius: 10px;
   margin-bottom: 16px;
 }
@@ -549,7 +549,7 @@
   gap: 8px;
   margin-top: 4px;
   font-size: 13px;
-  color: #6b7280;
+  color: #868e96;
 }
 
 .ca-download-entry[hidden] {
@@ -557,16 +557,16 @@
 }
 
 .ca-download-link {
-  color: #2563eb;
+  color: #228be6;
   text-decoration: none;
   padding: 2px 8px;
-  border: 1px solid rgb(37 99 235 / 25%);
+  border: 1px solid rgb(34 139 230 / 25%);
   border-radius: 6px;
   transition: background 0.2s, color 0.2s;
 }
 
 .ca-download-link:hover {
-  background: rgb(37 99 235 / 8%);
+  background: rgb(34 139 230 / 8%);
 }
 
 /* ============================================================
@@ -590,7 +590,7 @@
   left: 60px;
   width: 170px;
   height: 370px;
-  background: #6c3ff5;
+  background: #343a40;
   border-radius: 10px 10px 0 0;
   z-index: 1;
 }
@@ -600,7 +600,7 @@
   left: 220px;
   width: 115px;
   height: 290px;
-  background: #2d2d2d;
+  background: #212529;
   border-radius: 8px 8px 0 0;
   z-index: 2;
 }
@@ -610,7 +610,7 @@
   left: 0;
   width: 230px;
   height: 190px;
-  background: #ff9b6b;
+  background: #ffa94d;
   border-radius: 115px 115px 0 0;
   z-index: 3;
 }
@@ -620,7 +620,7 @@
   left: 290px;
   width: 135px;
   height: 215px;
-  background: #e8d754;
+  background: #fcc419;
   border-radius: 68px 68px 0 0;
   z-index: 4;
 }
@@ -645,7 +645,7 @@
 
 .pupil {
   border-radius: 50%;
-  background: #2d2d2d;
+  background: #212529;
   transition: transform 0.1s ease-out;
 }
 
@@ -654,7 +654,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #2d2d2d;
+  background: #212529;
   transition: transform 0.7s ease-in-out;
 }
 
@@ -663,7 +663,7 @@
   position: absolute;
   width: 50px;
   height: 4px;
-  background: #2d2d2d;
+  background: #212529;
   border-radius: 2px;
   transition: all 0.7s ease-in-out;
 }
@@ -673,7 +673,7 @@
   position: absolute;
   width: 28px;
   height: 14px;
-  border: 3px solid #2d2d2d;
+  border: 3px solid #212529;
   border-top: none;
   border-radius: 0 0 14px 14px;
   opacity: 0;
@@ -837,27 +837,27 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e9ecef;
 }
 
 .modal-title {
   font-size: 18px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #212529;
 }
 
 .modal .close {
   font-size: 26px;
   font-weight: 300;
   line-height: 1;
-  color: #999;
+  color: #868e96;
   cursor: pointer;
   user-select: none;
   transition: color 0.2s;
 }
 
 .modal .close:hover {
-  color: #333;
+  color: #212529;
 }
 
 .modal-body {
@@ -872,7 +872,7 @@
   display: flex;
   gap: 10px;
   padding: 16px 24px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #e9ecef;
   justify-content: flex-end;
 }
 
@@ -890,22 +890,22 @@
 }
 
 .modal-footer .btn-secondary {
-  background: #f5f5f5;
-  border-color: #e0e0e0;
-  color: #555;
+  background: #f1f3f5;
+  border-color: #e9ecef;
+  color: #495057;
 }
 
 .modal-footer .btn-secondary:hover {
-  background: #eee;
+  background: #e9ecef;
 }
 
 .modal-footer .btn-primary {
-  background: #1a1a2e;
+  background: #212529;
   color: var(--color-bg-white);
 }
 
 .modal-footer .btn-primary:hover {
-  background: #5b21b6;
+  background: #343a40;
 }
 
 .modal-footer .btn-primary:disabled {
@@ -998,5 +998,5 @@
 }
 
 .captcha-image:hover {
-  border-color: rgb(37 99 235 / 45%);
+  border-color: rgb(34 139 230 / 45%);
 }
