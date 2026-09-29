@@ -184,37 +184,11 @@ dl.config-field,
   text-align: center;
 }
 
-
-.config-actions {
-  display: flex;
-  gap: var(--space-md);
-  padding-top: var(--space-lg);
-  margin-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-light);
-  flex-wrap: wrap;
-}
-
 /* 安全卡片“手动封禁”行：新增的 IP 输入框关联标签，与同卡片 nc-field 标签视觉一致 */
 #security-tab .form-group-inline label {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
-}
-
-.config-actions .btn {
-  min-width: 120px;
-  padding: 0.65rem 1.5rem;
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-}
-
-.config-actions .btn:hover {
-  transform: translateY(-1px);
-}
-
-.config-actions .btn:active {
-  transform: translateY(0);
 }
 
 /* 用户管理 2fa 二维码居中 */
@@ -232,14 +206,6 @@ dl.config-field,
 @media (width <= 768px) {
   .config-row {
     grid-template-columns: 1fr;
-  }
-
-  .config-actions {
-    flex-direction: column;
-  }
-
-  .config-actions .btn {
-    width: 100%;
   }
 }
 

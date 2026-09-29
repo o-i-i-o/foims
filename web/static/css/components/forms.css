@@ -151,19 +151,6 @@ select.nc-input:not([multiple]) {
   margin-bottom: 0;
 }
 
-.form-actions {
-  display: flex;
-  gap: var(--space-md);
-  margin-top: var(--space-xl);
-  padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-light);
-  flex-wrap: wrap;
-}
-
-.form-actions .btn {
-  min-width: 120px;
-}
-
 .hint-text {
   color: var(--color-text-muted);
   font-size: 0.8rem;
@@ -222,32 +209,6 @@ select.nc-input:not([multiple]) {
   margin: 0;
   accent-color: var(--color-primary);
   cursor: pointer;
-}
-
-.form-inline-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  flex: 1;
-  min-width: 200px;
-}
-
-.form-inline-group label {
-  width: auto;
-  padding-top: 0;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.form-inline-group input,
-.form-inline-group select {
-  width: 100%;
-}
-
-.form-inline-group .hint-text {
-  font-size: 0.75rem;
-  margin-top: 2px;
 }
 
 /* 控件基样式已在上方与 .form-group 控件合并；此处仅保留工具类的布局差异 */

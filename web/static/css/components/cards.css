@@ -74,11 +74,3 @@
   font-weight: 700;
   line-height: 1.2;
 }
-
-.info-value {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
-  overflow-wrap: break-word;
-  line-height: 1.3;
-}

@@ -193,11 +193,6 @@
     align-self: stretch;
   }
 
-  .form-inline-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   /* 网络配置行纵向堆叠 */
   .network-config-item .form-row {
     flex-direction: column;

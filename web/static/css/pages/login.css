@@ -60,27 +60,6 @@
   overflow: hidden;
 }
 
-.left-panel .logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #212529;
-  z-index: 10;
-  position: relative;
-  letter-spacing: 0.5px;
-}
-
-.left-panel .logo svg {
-  width: 32px;
-  height: 32px;
-  background: rgb(255 255 255 / 45%);
-  backdrop-filter: blur(8px);
-  padding: 5px;
-  border-radius: 8px;
-}
-
 .characters-wrapper {
   position: relative;
   z-index: 10;
