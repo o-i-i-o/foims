@@ -617,7 +617,7 @@ pub struct SsoConfigResponse {
 
 pub async fn get_sso_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _user: crate::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let resp = match get_sso_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => SsoConfigResponse {
@@ -665,7 +665,7 @@ pub struct UpdateSsoConfigRequest {
 
 pub async fn update_sso_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _sysadmin: crate::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateSsoConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -700,7 +700,7 @@ pub async fn update_sso_config<P: AuthProvider>(
 /// 测试已保存的 SSO 配置：执行 OIDC 发现文档获取。
 pub async fn test_sso_connection<P: AuthProvider>(
     State(state): State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _sysadmin: crate::extractor::SysAdminUser,
 ) -> Result<Response, AppError> {
     let config = get_sso_config_from_db(&state.pool()?.get_conn())
         .await

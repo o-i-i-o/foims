@@ -159,7 +159,7 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
 
 pub async fn get_system_info(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let database_status = match sqlx::query("SELECT 1")
         .execute(&state.pool()?.get_conn())
@@ -203,7 +203,7 @@ pub async fn get_system_info(
 
 pub async fn get_system_config(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     // 读共享槽最新快照（写盘端点成功后已刷新），而非进程启动时快照
     let mut config = (*state.config_snapshot()).clone();
@@ -218,7 +218,7 @@ pub async fn get_system_config(
 
 pub async fn update_system_config(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateSystemConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -359,7 +359,7 @@ pub async fn disable_init_mode(
 
 pub async fn backup_config(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
@@ -479,7 +479,7 @@ pub async fn get_session_timeout_config(
 
 pub async fn update_session_timeout_config(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
 ) -> Result<Response, AppError> {
     // 配置写锁：与其他「读-改-写盘」端点互斥
@@ -538,7 +538,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
 
 pub async fn update_language_setting(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateLanguageRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -605,7 +605,7 @@ pub async fn get_page_timeout_config(
 
 pub async fn update_page_timeout_config(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdatePageTimeoutRequest>,
 ) -> Result<Response, AppError> {
     // 配置写锁：与其他「读-改-写盘」端点互斥
@@ -649,7 +649,7 @@ pub struct NotificationSettings {
 
 pub async fn get_notification_settings(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let recipients =
         match sqlx::query_scalar::<_, String>(
@@ -684,7 +684,7 @@ pub async fn get_notification_settings(
 
 pub async fn update_notification_settings(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<NotificationSettings>,
 ) -> Result<Response, AppError> {
     let value = serde_json::to_string(&req.email_recipients)
@@ -717,10 +717,7 @@ pub struct SmtpConfigResponse {
     pub has_password: bool,
 }
 
-pub async fn get_smtp_config(
-    State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
-) -> Result<Response, AppError> {
+pub async fn get_smtp_config(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     // 未配置属于业务状态而非错误：返回 200 + configured=false，避免浏览器控制台出现 404
     let resp = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => SmtpConfigResponse {
@@ -762,7 +759,7 @@ pub struct UpdateSmtpConfigRequest {
 
 pub async fn update_smtp_config(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateSmtpConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -798,7 +795,7 @@ pub async fn update_smtp_config(
 /// 测试已保存的通知邮件（SMTP）配置连通性。无需请求体。
 pub async fn test_smtp_connection(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
 ) -> Result<Response, AppError> {
     let config = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(c) => c,
@@ -825,7 +822,7 @@ pub struct SendSystemEmailRequest {
 
 pub async fn send_system_email(
     State(state): State<Arc<AppState>>,
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<SendSystemEmailRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -843,11 +840,8 @@ pub async fn send_system_email(
 
 // ==================== 等保密码策略配置 ====================
 
-/// 读取密码策略（未配置时返回等保三级默认值）
-pub async fn get_password_policy(
-    State(state): State<Arc<AppState>>,
-    _secadmin: foims_auth::extractor::SecAdminUser,
-) -> Result<Response, AppError> {
+/// 读取密码策略（未配置时返回等保三级默认值；策略非机密，登录即可读）
+pub async fn get_password_policy(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let policy = foims_auth::password_policy::load(&state.pool()?.get_conn()).await;
     Ok(foims_common::ok_json(
         policy,

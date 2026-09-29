@@ -17,10 +17,13 @@ import { iconButton } from "../utils/icons.js";
 import { createSeqGuard, elementCache } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
-// 角色显示（等保三权分立：admin/secadmin/auditor/user）
+// 角色显示（三权分立 + 超管：admin/sysadmin/secadmin/auditor/user）
 function roleLabel(role) {
   if (role === "admin") {
     return t("user.role_admin");
+  }
+  if (role === "sysadmin") {
+    return t("user.role_sysadmin");
   }
   if (role === "secadmin") {
     return t("user.role_secadmin");

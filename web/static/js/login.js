@@ -11,6 +11,7 @@ import { closeModal, openModal, loadModal } from "./utils/modalLoader.js";
 import { loginUser } from "./modules/authManager.js";
 import { t, initI18n, changeLanguage } from "./utils/i18n.js";
 import { SessionManager } from "./utils/sessionManager.js";
+import { initSelectSearch } from "./utils/selectSearch.js";
 
 // 登录页角色（吉祥物）共用的瞳孔位移：登录失败时看向左下，密码聚焦时看向别处
 const PUPIL_ERROR = "translate(-3px, 4px)";
@@ -112,6 +113,7 @@ class LoginManager {
    */
   async init() {
     await initI18n();
+    initSelectSearch();
 
     // 语言切换：项目约定先按浏览器语言应用，再由页面上的语言按钮切换。
     document.getElementById("language-selector")?.addEventListener("change", (e) => {

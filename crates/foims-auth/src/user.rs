@@ -23,8 +23,10 @@ use foims_models::{User, UserCreate, UserUpdate};
 /// 仅作为串行化标记，与其他锁键不冲突即可）
 const ADMIN_DELETE_ADVISORY_LOCK_KEY: i64 = 0x464F_494D_5300_0002;
 
+/// 用户列表（登录即可读：只读系统模块的普通用户/审计员需展示账户信息；
+/// 增删改由下方账户管理员端点约束）
 pub async fn get_users<P: AuthProvider>(
-    _secadmin: crate::extractor::SecAdminUser,
+    _user: crate::extractor::AuthUser,
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -98,7 +100,7 @@ pub async fn get_users<P: AuthProvider>(
 pub async fn create_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    _secadmin: crate::extractor::SecAdminUser,
+    account_admin: crate::extractor::AccountAdminUser,
     AppJson(req): AppJson<UserCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -121,6 +123,13 @@ pub async fn create_user<P: AuthProvider>(
 
     if existing_email.is_some() {
         return Err(AppError::Conflict(msg("server.user.email_exists")));
+    }
+
+    // 提权防护：仅超管可授予 admin 角色（sysadmin/secadmin 共管其余账户）
+    if req.role == "admin" && account_admin.role != "admin" {
+        return Err(AppError::Forbidden(msg(
+            "server.user.admin_role_admin_only",
+        )));
     }
 
     // 等保密码策略：复杂度校验（新用户无历史记录可查）
@@ -201,7 +210,7 @@ pub async fn create_user<P: AuthProvider>(
 }
 
 pub async fn get_user<P: AuthProvider>(
-    _secadmin: crate::extractor::SecAdminUser,
+    _user: crate::extractor::AuthUser,
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
@@ -221,7 +230,7 @@ pub async fn get_user<P: AuthProvider>(
 pub async fn update_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    _secadmin: crate::extractor::SecAdminUser,
+    account_admin: crate::extractor::AccountAdminUser,
     Path(id): Path<Uuid>,
     AppJson(req): AppJson<UserUpdate>,
 ) -> Result<Response, AppError> {
@@ -229,13 +238,33 @@ pub async fn update_user<P: AuthProvider>(
 
     let conn = state.pool()?.get_conn();
 
-    let existing_user = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE id = $1")
+    // 提权防护判定需要目标当前角色
+    let current_role: String = sqlx::query_scalar("SELECT role FROM users WHERE id = $1")
         .bind(id)
         .fetch_optional(&conn)
-        .await?;
+        .await?
+        .ok_or_else(|| AppError::NotFound(msg("server.user.not_found")))?;
 
-    if existing_user.is_none() {
-        return Err(AppError::NotFound(msg("server.user.not_found")));
+    // 禁止自改角色：编辑表单总是提交 role，仅在实际变更时拒绝
+    if account_admin.sub == id.to_string() && req.role.as_deref().is_some_and(|r| r != current_role)
+    {
+        return Err(AppError::Conflict(msg(
+            "server.user.self_role_change_forbidden",
+        )));
+    }
+
+    // 超管账户仅超管可管理（改邮箱/禁用/降权等一律拒绝）
+    if current_role == "admin" && account_admin.role != "admin" {
+        return Err(AppError::Forbidden(msg(
+            "server.user.admin_account_admin_only",
+        )));
+    }
+
+    // 仅超管可授予 admin 角色（防 sysadmin/secadmin 自我或他人提权）
+    if req.role.as_deref() == Some("admin") && account_admin.role != "admin" {
+        return Err(AppError::Forbidden(msg(
+            "server.user.admin_role_admin_only",
+        )));
     }
 
     let now = Utc::now();
@@ -276,13 +305,13 @@ pub async fn update_user<P: AuthProvider>(
 pub async fn delete_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
-    secadmin: crate::extractor::SecAdminUser,
+    account_admin: crate::extractor::AccountAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     // 禁止删除当前登录账户：误操作自删会立即把自己登出且无法恢复
-    if secadmin.sub == id.to_string() {
+    if account_admin.sub == id.to_string() {
         return Err(AppError::Conflict(msg("server.user.cannot_delete_self")));
     }
 
@@ -316,6 +345,13 @@ pub async fn delete_user<P: AuthProvider>(
             .await?;
 
     if target_role == "admin" || target_role == "secadmin" {
+        // 超管账户仅超管可删除
+        if target_role == "admin" && account_admin.role != "admin" {
+            return Err(AppError::Forbidden(msg(
+                "server.user.admin_account_admin_only",
+            )));
+        }
+
         let other_admins: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM users WHERE role IN ('admin', 'secadmin') AND id <> $1",
         )

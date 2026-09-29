@@ -1,0 +1,96 @@
+/**
+ * 全局下拉框快捷筛选样式（js/utils/selectSearch.js）。
+ */
+
+/* 单选：浮动筛选面板 */
+.select-search-panel {
+  position: fixed;
+  z-index: 10000;
+  background: var(--color-bg-white, #fff);
+  border: 1px solid var(--color-border, #ced4da);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.select-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid var(--color-border-light, #e9ecef);
+  outline: none;
+  font-size: 13px;
+  background: transparent;
+  color: var(--color-text, #333);
+}
+
+.select-search-options {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.select-search-option {
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--color-text, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select-search-option:hover,
+.select-search-option.active {
+  background: var(--color-primary-light, rgb(102 126 234 / 10%));
+}
+
+.select-search-option.selected {
+  background: var(--color-primary-light, rgb(102 126 234 / 10%));
+  font-weight: 600;
+}
+
+.select-search-option.disabled {
+  color: var(--color-text-muted, #6c757d);
+  cursor: not-allowed;
+}
+
+.select-search-group {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #6c757d);
+  cursor: default;
+}
+
+.select-search-empty {
+  padding: 12px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--color-text-muted, #6c757d);
+}
+
+/* 多选 / 列表框：控件上方的固定筛选输入框 */
+.select-search-inline {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border, #ced4da);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  color: var(--color-text, #333);
+  background: var(--color-bg-white, #fff);
+}
+
+.select-search-inline:focus {
+  border-color: var(--color-primary, #667eea);
+}

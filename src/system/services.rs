@@ -50,7 +50,7 @@ pub struct ServiceStatusItem {
 
 /// 查询全部受管服务状态（探测语义：单服务查询失败降级为默认字段并告警）。
 pub async fn get_services_status(
-    _admin: foims_auth::extractor::AdminUser,
+    _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let mut items = Vec::with_capacity(ManagedService::ALL.len());
     for svc in ManagedService::ALL {
@@ -65,7 +65,7 @@ pub async fn get_services_status(
 
 /// 执行服务管理操作（service / op 均来自路径参数，严格白名单校验）。
 pub async fn service_operation(
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     Path((service, op)): Path<(String, String)>,
 ) -> Result<Response, AppError> {
     let svc = ManagedService::parse(&service).ok_or_else(|| {

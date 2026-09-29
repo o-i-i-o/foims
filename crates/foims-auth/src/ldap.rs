@@ -472,7 +472,7 @@ pub struct LdapConfigResponse {
 
 pub async fn get_ldap_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _user: crate::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let resp = match get_ldap_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => LdapConfigResponse {
@@ -520,7 +520,7 @@ pub struct UpdateLdapConfigRequest {
 
 pub async fn update_ldap_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _sysadmin: crate::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateLdapConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -559,7 +559,7 @@ pub async fn update_ldap_config<P: AuthProvider>(
 /// 测试已保存的 LDAP 配置：连通性 + 服务账号绑定 + 基础检索。
 pub async fn test_ldap_connection<P: AuthProvider>(
     State(state): State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _sysadmin: crate::extractor::SysAdminUser,
 ) -> Result<Response, AppError> {
     let config = get_ldap_config_from_db(&state.pool()?.get_conn())
         .await

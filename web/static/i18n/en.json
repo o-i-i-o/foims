@@ -27,6 +27,9 @@
     "add": "Add",
     "refresh": "Refresh",
     "search_placeholder": "Search...",
+    "select_search_placeholder": "Type to filter options...",
+    "select_search_no_match": "No matching options",
+    "readonly_badge": "Read-only",
     "confirm": "Confirm",
     "index": "No.",
     "success": "Success",
@@ -728,7 +731,8 @@
   "user": {
     "email": "Email",
     "role": "Role",
-    "role_admin": "Administrator",
+    "role_admin": "Super Administrator",
+    "role_sysadmin": "System Administrator",
     "role_user": "User",
     "status": "Status",
     "status_enabled": "Enabled",
@@ -753,7 +757,8 @@
     "add_failed": "Failed to add user",
     "save_failed_network": "Failed to save user. Please check your network connection.",
     "role_secadmin": "Security Administrator",
-    "role_auditor": "Audit Administrator"
+    "role_auditor": "Audit Administrator",
+    "role_readonly_hint": "Read-only mode: current role has view permission only"
   },
   "config": {
     "page_timeout": "Page Timeout (minutes)",
@@ -1574,6 +1579,8 @@
       "password_complexity": "Password complexity insufficient (missing: {{missing}})",
       "password_reused": "New password reuses a recent password",
       "secadmin_required": "Security administrator privilege required",
+      "sysadmin_required": "System administrator privilege required",
+      "account_admin_required": "Account management privilege required (super/system/security administrator)",
       "two_factor_required": "Two-factor authentication is enabled for this account; enter your verification code",
       "admin_or_auditor_required": "Administrator or auditor privilege required"
     },
@@ -2316,7 +2323,10 @@
         "password_max_length": "Password must not exceed 72 bytes"
       },
       "cannot_delete_self": "Cannot delete the currently signed-in account",
-      "last_admin_protected": "Cannot delete the last administrator account"
+      "last_admin_protected": "Cannot delete the last administrator account",
+      "self_role_change_forbidden": "Cannot change your own role",
+      "admin_account_admin_only": "Super administrator accounts can only be managed by a super administrator",
+      "admin_role_admin_only": "Only a super administrator can grant the super administrator role"
     },
     "visualization": {
       "auto_discover_completed": "Auto discovery completed",

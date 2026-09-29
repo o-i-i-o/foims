@@ -56,3 +56,26 @@
 .btn-gap-left {
   margin-left: var(--space-xs);
 }
+
+/* ==========================================
+   角色只读模式（roleCapabilities.js）
+   ========================================== */
+
+/* 只读分区内隐藏的写控件（清扫函数追加该类） */
+.ro-hidden {
+  display: none !important;
+}
+
+/* 只读分区标题右侧的只读徽标 */
+.content-section.readonly-section h2::after {
+  content: attr(data-ro-badge);
+  display: inline-block;
+  margin-left: var(--space-sm, 8px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: middle;
+  background: var(--color-border-light, #e9ecef);
+  color: var(--color-text-muted, #6c757d);
+}

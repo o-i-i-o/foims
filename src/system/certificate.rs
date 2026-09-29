@@ -26,11 +26,11 @@ use foims_x509_management::{
 
 use crate::app_state::AppState;
 use crate::utils::{RequestMeta, log_op_best_effort};
-use foims_auth::extractor::AdminUser;
+use foims_auth::extractor::SysAdminUser;
 use foims_common::AppError;
 use foims_common::AppJson;
 
-pub async fn list(_admin: AdminUser) -> Result<Response, AppError> {
+pub async fn list(_user: foims_auth::extractor::AuthUser) -> Result<Response, AppError> {
     let inventory = list_certificates().await?;
     Ok(foims_common::ok_json(
         inventory,
@@ -41,7 +41,7 @@ pub async fn list(_admin: AdminUser) -> Result<Response, AppError> {
 pub async fn generate(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     AppJson(req): AppJson<GenerateCertRequest>,
 ) -> Result<Response, AppError> {
     // public_url 主机名自动加入 SAN
@@ -105,7 +105,7 @@ pub async fn generate(
 pub async fn ca_generate(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     AppJson(req): AppJson<GenerateCaRequest>,
 ) -> Result<Response, AppError> {
     let ca_path = generate_ca(req).await?;
@@ -131,7 +131,7 @@ pub async fn ca_generate(
 pub async fn ca_import(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     multipart: Multipart,
 ) -> Result<Response, AppError> {
     let (cert_data, key_data) = read_multipart_cert_pair(multipart).await?;
@@ -219,7 +219,7 @@ fn serve_file(content: Vec<u8>, filename: &str, content_type: &str) -> Result<Re
 pub async fn import(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     mut multipart: Multipart,
 ) -> Result<Response, AppError> {
     let mut cert_data: Option<Vec<u8>> = None;
@@ -279,7 +279,7 @@ pub async fn import(
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     Path((kind, file_stem)): Path<(String, String)>,
 ) -> Result<Response, AppError> {
     let cert_kind = CertKind::parse(&kind)
@@ -309,7 +309,7 @@ pub async fn delete(
 pub async fn apply(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     Path((kind, file_stem)): Path<(String, String)>,
 ) -> Result<Response, AppError> {
     let cert_kind = CertKind::parse(&kind)

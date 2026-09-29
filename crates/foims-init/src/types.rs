@@ -278,14 +278,14 @@ mod tests {
         req.role = "r".repeat(21);
         assert_field_error(&req, "role", "server.init.validation.role_length");
 
-        // 合法集合：admin/user/secadmin/auditor
-        for role in ["admin", "user", "secadmin", "auditor"] {
+        // 合法集合：admin/sysadmin/secadmin/auditor/user
+        for role in ["admin", "sysadmin", "user", "secadmin", "auditor"] {
             let mut req = valid_request();
             req.role = role.to_string();
             assert!(req.validate().is_ok(), "角色 {role} 应合法");
         }
 
-        // 集合外的值即使长度合法也必须拒绝（如 "r".repeat(20)、超级管理员）
+        // 集合外的值即使长度合法也必须拒绝（如 "r".repeat(20)、保留值 superadmin）
         for role in [
             "r".repeat(20),
             "superadmin".to_string(),

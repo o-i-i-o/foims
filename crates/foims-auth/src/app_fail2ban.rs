@@ -492,9 +492,9 @@ pub async fn save_config_to_db(
 
 // ==================== API Handler ====================
 
-/// 获取应用层 fail2ban 状态（仅管理员）
+/// 获取应用层 fail2ban 状态（登录即可读，管理操作见下方安全管理员端点）
 pub async fn get_app_fail2ban_status<P: AuthProvider>(
-    _admin: crate::extractor::AdminUser,
+    _user: crate::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     let store = app_fail2ban();
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
@@ -565,7 +565,7 @@ pub async fn get_app_fail2ban_status<P: AuthProvider>(
 /// 更新应用层 fail2ban 配置（仅管理员；变更持久化到 system_configs）
 pub async fn update_app_fail2ban_config<P: AuthProvider>(
     state: State<Arc<P>>,
-    _admin: crate::extractor::AdminUser,
+    _secadmin: crate::extractor::SecAdminUser,
     AppJson(req): AppJson<UpdateFail2banConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -607,7 +607,7 @@ pub async fn update_app_fail2ban_config<P: AuthProvider>(
 
 /// 手动解封 IP（仅管理员）
 pub async fn app_unban_ip<P: AuthProvider>(
-    _admin: crate::extractor::AdminUser,
+    _secadmin: crate::extractor::SecAdminUser,
     AppJson(req): AppJson<UnbanIpRequest>,
 ) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();
@@ -635,7 +635,7 @@ pub async fn app_unban_ip<P: AuthProvider>(
 
 /// 手动封禁 IP（仅管理员）
 pub async fn app_ban_ip<P: AuthProvider>(
-    _admin: crate::extractor::AdminUser,
+    _secadmin: crate::extractor::SecAdminUser,
     AppJson(req): AppJson<BanIpRequest>,
 ) -> Result<Response, AppError> {
     let ip = req.ip.trim().to_string();

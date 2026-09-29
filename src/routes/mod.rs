@@ -38,7 +38,7 @@ use foims_common::AppError;
 use foims_common::AppJson;
 
 async fn data_export_csv(
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     State(state): State<Arc<AppState>>,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
@@ -48,7 +48,7 @@ async fn data_export_csv(
 }
 
 async fn data_import_csv(
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     State(state): State<Arc<AppState>>,
     payload: Multipart,
 ) -> Result<Response, AppError> {
@@ -58,7 +58,7 @@ async fn data_import_csv(
 }
 
 async fn data_download_template(
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     type_param: Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     foims_data_management::download_template(type_param)
@@ -67,7 +67,7 @@ async fn data_download_template(
 }
 
 async fn data_export_database(
-    _admin: foims_auth::extractor::AdminUser,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
     foims_data_management::export_database(state.as_ref().clone())
@@ -98,9 +98,9 @@ async fn health_check() -> Response {
     foims_common::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
 }
 
-/// 资源写操作与敏感查询的管理员守卫（security-review A-2/S-2）。
+/// 资源写操作与敏感查询的角色守卫（security-review A-2/S-2）。
 ///
-/// 此前资源 CRUD 仅要求登录：普通用户可任意增删改组织/网段/设备数据、
+/// 此前资源 CRUD 仅要求登录：任意登录用户可增删改组织/网段/设备数据、
 /// 发起 SNMP 探测与读取审计日志。守卫规则：
 /// - `/api/resources/**` 下所有非 GET/HEAD/OPTIONS 请求（写操作、同步、探测）；
 /// - 实时 SNMP 探测的 GET 端点（snmp-info / snmp-ports，向任意内网目标发包）；
@@ -118,10 +118,11 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
         || method == axum::http::Method::HEAD
         || method == axum::http::Method::OPTIONS;
 
-    // 等保三权分立的角色矩阵：
-    // - 审计日志（/api/logs/**、日志统计、任务日志查询）：admin 或 auditor（审计管理员只读）
-    // - 其余受守卫资源（资源写、SNMP 查询）：admin（secadmin/auditor 由各自提取器按端点放行）
-    // - 日志清理等写操作仍由 handler 层 AdminUser 提取器约束
+    // 三权分立 + 超管的角色矩阵：
+    // - 审计日志（/api/logs/**、日志统计、任务日志查询）：admin（超管）或 auditor
+    // - 资源写与 SNMP 探测（设备/IP/组织等业务数据）：admin（超管）或 user（普通用户
+    //   管理除系统功能外的所有资源；sysadmin/secadmin/auditor 对资源只读）
+    // - 日志清理等写操作仍由 handler 层提取器约束
     let needs_admin_with_roles: Option<&[&str]> = if path.starts_with("/api/logs/")
         || (is_read
             && (path == "/api/system/logs/stats" || path == "/api/system/scheduled-tasks/logs"))
@@ -130,6 +131,7 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
     } else {
         None
     };
+    let resource_managers: &[&str] = &["admin", "user"];
     let needs_admin = needs_admin_with_roles.is_some()
         || (path.starts_with("/api/resources") && !is_read)
         || (is_read && (path.ends_with("/snmp-info") || path.ends_with("/snmp-ports")));
@@ -138,7 +140,7 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
         return next.run(req).await;
     }
 
-    let allowed_roles = needs_admin_with_roles.unwrap_or(&["admin"]);
+    let allowed_roles = needs_admin_with_roles.unwrap_or(resource_managers);
 
     match req.extensions().get::<foims_auth::jwt::JwtClaims>() {
         Some(claims) if allowed_roles.contains(&claims.role.as_str()) => next.run(req).await,

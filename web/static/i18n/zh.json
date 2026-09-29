@@ -27,6 +27,9 @@
     "add": "添加",
     "refresh": "刷新",
     "search_placeholder": "搜索...",
+    "select_search_placeholder": "输入关键字筛选选项...",
+    "select_search_no_match": "无匹配选项",
+    "readonly_badge": "只读",
     "confirm": "确认",
     "index": "序号",
     "success": "成功",
@@ -728,7 +731,8 @@
   "user": {
     "email": "邮箱",
     "role": "角色",
-    "role_admin": "管理员",
+    "role_admin": "超级管理员",
+    "role_sysadmin": "系统管理员",
     "role_user": "普通用户",
     "status": "状态",
     "status_enabled": "启用",
@@ -753,7 +757,8 @@
     "add_failed": "添加用户失败",
     "save_failed_network": "保存用户失败，请检查网络连接",
     "role_secadmin": "安全管理员",
-    "role_auditor": "审计管理员"
+    "role_auditor": "审计管理员",
+    "role_readonly_hint": "只读模式：当前角色仅有查看权限"
   },
   "config": {
     "page_timeout": "页面超时(分钟)",
@@ -1574,6 +1579,8 @@
       "password_complexity": "密码复杂度不足（缺少：{{missing}}）",
       "password_reused": "新密码与近期使用过的密码重复",
       "secadmin_required": "需要安全管理员权限",
+      "sysadmin_required": "需要系统管理员权限",
+      "account_admin_required": "需要账户管理权限（超级管理员/系统管理员/安全管理员）",
       "two_factor_required": "该账户已启用两步验证，请输入动态验证码",
       "admin_or_auditor_required": "需要管理员或审计员权限"
     },
@@ -2316,7 +2323,10 @@
         "password_max_length": "密码长度不能超过 72 字节"
       },
       "cannot_delete_self": "不能删除当前登录的账户",
-      "last_admin_protected": "不能删除最后一个管理员账户"
+      "last_admin_protected": "不能删除最后一个管理员账户",
+      "self_role_change_forbidden": "不能修改自己的角色",
+      "admin_account_admin_only": "超级管理员账户仅超级管理员可管理",
+      "admin_role_admin_only": "仅超级管理员可授予超级管理员角色"
     },
     "visualization": {
       "auto_discover_completed": "自动发现完成",

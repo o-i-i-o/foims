@@ -9,11 +9,12 @@ use crate::msg::{AppMessage, msg};
 /// 前 72 字节相同的口令将得到等价哈希，必须在入口拒绝（按 UTF-8 字节计）
 pub const PASSWORD_MAX_BYTES: usize = 72;
 
-/// 等保三权分立角色白名单（唯一定义，foims-models / foims-init 复用）：
-/// admin 系统管理员 / secadmin 安全管理员 / auditor 审计管理员 / user 普通用户
+/// 等保三权分立 + 超管角色白名单（唯一定义，foims-models / foims-init 复用）：
+/// admin 超级管理员 / sysadmin 系统管理员 / secadmin 安全管理员 /
+/// auditor 审计管理员 / user 普通用户
 pub fn validate_role(role: &str) -> Result<(), validator::ValidationError> {
     match role {
-        "admin" | "secadmin" | "auditor" | "user" => Ok(()),
+        "admin" | "sysadmin" | "secadmin" | "auditor" | "user" => Ok(()),
         _ => Err(validator::ValidationError::new(
             "server.user.validation.role_invalid",
         )),

@@ -15,9 +15,11 @@ import {
   getVerificationCode
 } from "./api.js";
 import { initI18n, changeLanguage } from "../../utils/i18n.js";
+import { initSelectSearch } from "../../utils/selectSearch.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   await initI18n();
+  initSelectSearch();
 
   // 语言切换：项目约定先按浏览器语言应用，再由页面上的语言按钮切换。
   document.getElementById("language-selector")?.addEventListener("change", (e) => {

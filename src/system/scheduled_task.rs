@@ -14,7 +14,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::app_state::AppState;
-use foims_auth::extractor::AdminUser;
+use foims_auth::extractor::{AuthUser, SysAdminUser};
 use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::pagination::{Pagination, paged_response};
@@ -68,7 +68,7 @@ fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<
 
 pub async fn get_scheduled_tasks(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _user: AuthUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let sort_by = query.get("sort_by").cloned().unwrap_or_default();
@@ -102,7 +102,7 @@ pub async fn get_scheduled_tasks(
 
 pub async fn get_scheduled_task(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _user: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let task: Option<ScheduledTask> = sqlx::query_as(
@@ -120,7 +120,7 @@ pub async fn get_scheduled_task(
 
 pub async fn create_scheduled_task(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     AppJson(req): AppJson<ScheduledTaskCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
@@ -170,7 +170,7 @@ pub async fn create_scheduled_task(
 
 pub async fn update_scheduled_task(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     Path(id): Path<Uuid>,
     AppJson(req): AppJson<ScheduledTaskUpdate>,
 ) -> Result<Response, AppError> {
@@ -257,7 +257,7 @@ pub async fn update_scheduled_task(
 
 pub async fn delete_scheduled_task(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let result = sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
@@ -274,7 +274,7 @@ pub async fn delete_scheduled_task(
 
 pub async fn toggle_scheduled_task(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
@@ -303,7 +303,7 @@ pub async fn toggle_scheduled_task(
 
 pub async fn run_scheduled_task_now(
     State(state): State<Arc<AppState>>,
-    _admin: AdminUser,
+    _sysadmin: SysAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let pool = state.pool()?;

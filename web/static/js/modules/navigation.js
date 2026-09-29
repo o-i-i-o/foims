@@ -7,7 +7,10 @@ import { loadModule } from "../utils/resourceLoader.js";
 import { loadPageStyles, preloadPageStyles } from "../utils/styleLoader.js";
 import { nextFrame, whenVisible, safeAsync } from "../utils/helpers.js";
 import { t } from "../utils/i18n.js";
-import { SessionManager } from "../utils/sessionManager.js";
+import {
+  getHiddenSections,
+  applyRoleUIMode
+} from "../utils/roleCapabilities.js";
 
 const DEFAULT_PAGE = "dashboard";
 const PAGE_LOADERS = {
@@ -40,29 +43,12 @@ export function initNavigation() {
 }
 
 /**
- * 等保三权分立：按角色计算不可访问的分区列表。
- * 后端始终强制校验（403），此处仅为界面整洁：
- * - auditor（审计管理员）：仅仪表盘与日志
- * - secadmin（安全管理员）：IP/用户/系统安全/日志，不涉组织与资源运维
- * @returns {string[]} 当前角色无权访问的分区 ID 列表（未受限角色为空数组）
+ * 等保三权分立 + 超管：按角色应用界面模式（可见性 / 只读）。
+ * 分区可见性与只读规则集中定义于 roleCapabilities.js，
+ * 后端始终强制校验（403），此处仅为界面整洁。
  */
-function getHiddenSections() {
-  const user = SessionManager.getUser();
-  const role = user?.role || "user";
-  if (role === "auditor") {
-    return ["organization", "resources", "ip", "visualization", "system"];
-  }
-  if (role === "secadmin") {
-    return ["organization", "resources", "visualization"];
-  }
-  return [];
-}
-
-export function applyRoleVisibility() {
+function applyRoleVisibility() {
   const hiddenSections = getHiddenSections();
-  if (hiddenSections.length === 0) {
-    return;
-  }
 
   for (const section of hiddenSections) {
     const link = document.querySelector(`.nav-link[href="#${section}"]`);
@@ -77,6 +63,9 @@ export function applyRoleVisibility() {
   ) {
     window.location.hash = `#${DEFAULT_PAGE}`;
   }
+
+  // 只读分区标记与写控件隐藏（auditor 全站只读、user 系统只读等）
+  applyRoleUIMode();
 }
 
 // ==========================================

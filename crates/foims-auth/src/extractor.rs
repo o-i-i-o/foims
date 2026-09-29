@@ -32,6 +32,9 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
     }
 }
 
+/// 超级管理员：拥有全部权限，居等保三权分立之上。
+///
+/// 系统功能与资源数据的全部读写、用户与安全策略管理、审计日志均可用。
 pub struct AdminUser {
     pub sub: String,
     pub username: String,
@@ -52,10 +55,65 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
     }
 }
 
+/// 系统管理员（等保三权分立）：admin 或 sysadmin 可用。
+///
+/// 管辖系统功能：系统设置、SMTP/LDAP/SSO、证书、服务、定时任务、导入导出等；
+/// 资源类数据（设备/IP/组织等）写操作不在其列（sysadmin 对资源只读）。
+pub struct SysAdminUser {
+    pub sub: String,
+    pub username: String,
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for SysAdminUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" || c.role == "sysadmin" => Ok(SysAdminUser {
+                sub: c.sub.clone(),
+                username: c.username.clone(),
+            }),
+            Some(_) => Err(AppError::Forbidden(msg("server.auth.sysadmin_required"))),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
+        }
+    }
+}
+
+/// 账户管理员（用户管理）：admin / sysadmin / secadmin 可用。
+///
+/// 仅供用户账户（users）的增删改查端点使用；admin 为超级管理员，
+/// sysadmin 系统管理员与 secadmin 安全管理员按三权分立共管账户。
+/// `role` 携带操作者角色，供 handler 做提权防护判定（超管账户仅超管可管）。
+pub struct AccountAdminUser {
+    pub sub: String,
+    pub username: String,
+    pub role: String,
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for AccountAdminUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" || c.role == "sysadmin" || c.role == "secadmin" => {
+                Ok(AccountAdminUser {
+                    sub: c.sub.clone(),
+                    username: c.username.clone(),
+                    role: c.role.clone(),
+                })
+            }
+            Some(_) => Err(AppError::Forbidden(msg(
+                "server.auth.account_admin_required",
+            ))),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
+        }
+    }
+}
+
 /// 安全管理员（等保三权分立）：admin 或 secadmin 可用。
 ///
-/// 管辖用户账户管理与安全策略（含密码策略、fail2ban、会话配置）；
-/// admin 为系统管理员，具有全部权限。
+/// 管辖安全策略：密码策略、fail2ban、日志外发；admin 为超级管理员，
+/// 具有全部权限。
 pub struct SecAdminUser {
     pub sub: String,
     pub username: String,
@@ -78,8 +136,8 @@ impl<S: Send + Sync> FromRequestParts<S> for SecAdminUser {
 
 /// 管理员或审计员（等保三权分立）：admin 或 auditor 可用。
 ///
-/// 供日志只读访问等审计类端点使用：admin 拥有全部权限，
-/// auditor 仅获得只读审计视图（角色拦截由中间件与 handler 共同保证）。
+/// 供日志只读访问等审计类端点使用：admin 为超级管理员拥有全部权限，
+/// auditor 登录后全站只读（角色拦截由中间件与 handler 共同保证）。
 pub struct AdminOrAuditorUser {
     pub sub: String,
     pub username: String,

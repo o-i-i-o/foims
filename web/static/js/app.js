@@ -13,6 +13,7 @@ import { initLanguageMenu } from "./modules/languageMenu.js";
 import { initEventListeners, initModals } from "./modules/eventManager.js";
 import { initUserEvents } from "./modules/userManager.js";
 import { initTooltip } from "./utils/tooltip.js";
+import { initSelectSearch } from "./utils/selectSearch.js";
 import {
   displayCurrentUser,
   initAutoRefresh,
@@ -39,6 +40,7 @@ async function initApp() {
 
     initNavigation();
     initLanguageMenu();
+    initSelectSearch();
     initModals(getResourceCallbacks());
     initEventListeners();
     initUserEvents();
