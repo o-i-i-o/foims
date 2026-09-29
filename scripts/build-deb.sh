@@ -13,8 +13,11 @@
 #     仓库/开发机的本地 config.toml 可能含真实数据库连接信息，不进包；
 #     数据库连接要素由安装后的初始化向导在页面填写并回写配置文件；
 #     JWT 密钥由本脚本生成随机 32 字符替换示例占位符
-#   - nginx 生产配置安装到 /etc/nginx/conf.d/foims.conf（conffile），
-#     Depends 强制 nginx >= 1.28.1（h2c 上游与 HTTP/3）；
+#   - nginx 生产配置安装到 /etc/nginx/conf.d/foims.conf（conffile）；
+#     nginx/PostgreSQL 不做包级强制依赖（兼容源码编译安装，无 dpkg 包
+#     记录的场景），改为 preinst 强制检查其 systemd 服务单元或运行中
+#     进程，二者均未检出即中止安装；建议 nginx >= 1.28.1（h2c 上游与
+#     HTTP/3）；
 #     TLS 证书由 postinst 用 openssl 在安装时自签生成（不预置于包内，
 #     避免证书随时间过期；已存在且未过期则跳过）；
 #     nginx worker 运行用户由 postinst 检测并自动对齐 uds_group 与
@@ -220,8 +223,9 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: oi-io <boss@oi-io.cc>
 Installed-Size: 0
-Depends: libc6 (>= 2.31), adduser, nginx (>= 1.28.1), postgresql (>= 15)
+Depends: libc6 (>= 2.31), adduser
 Recommends: fail2ban
+Suggests: nginx (>= 1.28.1), postgresql (>= 15)
 Homepage: https://github.com/example/foims
 Description: Organization IT Information Management System
  FOIMS - Organization IT Information Management System based on Rust
@@ -238,6 +242,42 @@ echo "9. 创建 preinst 脚本..."
 cat > "$DEBPAK_DIR/DEBIAN/preinst" << 'EOF'
 #!/bin/sh
 set -e
+
+# 强制运行依赖检查：FOIMS 运行依赖 nginx（反代/TLS/静态资源）与
+# PostgreSQL（数据库）。不检查 dpkg 包记录，只认「systemd 服务单元
+# 或运行中进程」，兼容源码编译安装（无包记录、服务单元名各异）的
+# 场景；二者均未检出则中止安装，避免装完即不可用。
+check_runtime_component() {
+    name="$1"
+    proc_name="$2"
+    unit_pattern="$3"
+
+    # 1) systemd 服务单元（任意状态：已注册即认可，含未启动的自建服务）
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-unit-files --type=service 2>/dev/null | grep -q "$unit_pattern"; then
+            echo "已检测到 $name（systemd 服务单元）"
+            return 0
+        fi
+    fi
+
+    # 2) 运行中的进程（编译安装且未注册 systemd 服务的场景）
+    if command -v pgrep >/dev/null 2>&1; then
+        if pgrep -x "$proc_name" >/dev/null 2>&1; then
+            echo "已检测到 $name（运行中的 $proc_name 进程）"
+            return 0
+        fi
+    elif ps -eo comm= 2>/dev/null | grep -qx "$proc_name"; then
+        echo "已检测到 $name（运行中的 $proc_name 进程）"
+        return 0
+    fi
+
+    echo "错误：未检测到 $name 运行环境（既无 systemd 服务单元，也无运行中的 $proc_name 进程）" >&2
+    echo "      FOIMS 需要 $name：请完成安装（发行版包或源码编译）并确保其已注册服务或正在运行后重试" >&2
+    return 1
+}
+
+check_runtime_component "nginx" "nginx" "^nginx\.service" || exit 1
+check_runtime_component "PostgreSQL" "postgres" "postgresql.*\.service" || exit 1
 
 # 升级时停止旧服务
 if [ "$1" = "upgrade" ]; then

@@ -38,18 +38,7 @@ FOIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技�
 - **服务管理**: 网页端一键重启 systemd 服务。
 - **国际化**: 前后端多语言支持，目前实现了中文与英文。
 
-## 🧭 架构概览
-
-```
-浏览器 ──HTTP/1.1 · HTTP/2 · HTTP/3(TLS 由 nginx 终结)──► nginx
-                                                        │  静态资源 (web/static/)
-                                                        │  UDS + h2c 反代
-                                                        ▼
-                                              axum (Unix Domain Socket)
-                                                        │
-                                                        ▼
-                                                   PostgreSQL
-```
+## 🧭 架构
 
 - 后端以 h2c 监听 UDS（默认 `/run/foims/api.sock`），不直接暴露 TCP 端口。
 - TLS 证书、安全响应头、静态资源缓存均在 nginx 层完成，样例见 [deploy/nginx/](deploy/nginx/)。
@@ -68,7 +57,7 @@ FOIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技�
 ```bash
 git clone https://github.com/o-i-i-o/foims.git
 cd foims
-cp config.toml.example config.toml   # 开发环境用当前目录；生产环境放 /etc/foims/config.toml
+cp config.toml.example config.toml
 ```
 
 配置文件按优先级搜索：`/etc/foims/config.toml` → `/opt/foims/config.toml` → `./config.toml`，详见 [🔧 配置说明](#-配置说明)。
