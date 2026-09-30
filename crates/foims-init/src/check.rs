@@ -84,6 +84,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "two_factor_email_code_expiry",
             "tokens_invalidated_at",
             "password_changed_at",
+            "password_expiry_days",
             "created_at",
             "updated_at",
         ],

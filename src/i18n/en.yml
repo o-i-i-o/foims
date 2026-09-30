@@ -166,6 +166,7 @@ log:
     email_code_success: "Email login code sent to user: {{{username}}}"
     2fa_success: "User {{username}} logged in with 2FA"
     record_failed: "Failed to record login log: {{error}}"
+    password_expiry_auto_disabled: "User {{user_id}} password expired, account auto-disabled"
     success: "User {{username}} logged in successfully"
     token_refreshed: "User {{username}} token refreshed"
   mac_change:
@@ -239,6 +240,7 @@ log:
     next_run_calc_failed: "Failed to calculate next run time: {{error}}"
     next_run_calc_task_failed: "Next run time calculation task failed: {{error}}"
     next_run_update_failed: "Failed to update next run time of task {{name}}: {{error}}"
+    password_expiry_sync_completed: "Password expiry sync completed: {{count}} expired accounts auto-disabled"
     run_result_rollback_failed: "Failed to roll back task run result: {{error}}"
     run_result_write_failed: "Failed to write task run result: {{error}}"
     query_failed: "Failed to query due scheduled tasks: {{error}}"
@@ -290,6 +292,7 @@ system:
   ready: "System startup complete, waiting for requests..."
   register_backup_job_failed: "Failed to register backup scheduled job: {{error}}"
   register_ip_status_sync_job_failed: "Failed to register the IP status sync system job: {{error}}"
+  register_password_expiry_sync_job_failed: "Failed to register the password expiry sync system job: {{error}}"
   register_token_cleanup_job_failed: "Failed to register token cleanup scheduled job: {{error}}"
   scheduler_create_failed: "Failed to create scheduler: {{error}}"
   scheduler_shutdown_timeout: "Scheduler shutdown timed out: {{error}}"

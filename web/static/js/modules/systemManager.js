@@ -1623,7 +1623,6 @@ async function loadPasswordPolicy() {
     }
     const policy = result.data;
     elementCache.setValue("password-policy-min-length", String(policy.min_length ?? 8));
-    elementCache.setValue("password-policy-expiry", String(policy.expiry_days ?? 90));
     elementCache.setValue("password-policy-history", String(policy.history_count ?? 5));
     const setCheck = (id, value) => {
       const el = elementCache.get(id);
@@ -1650,7 +1649,6 @@ async function savePasswordPolicy() {
   passwordPolicySaving = true;
   const body = {
     min_length: parseInt(elementCache.getValue("password-policy-min-length"), 10) || 8,
-    expiry_days: parseInt(elementCache.getValue("password-policy-expiry"), 10) || 0,
     history_count: parseInt(elementCache.getValue("password-policy-history"), 10) || 0,
     require_upper: elementCache.get("password-policy-upper")?.checked ?? true,
     require_lower: elementCache.get("password-policy-lower")?.checked ?? true,

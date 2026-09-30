@@ -47,6 +47,12 @@
             </select>
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-password-expiry" data-i18n="user.password_expiry">Password Validity (days, 0 = never expires)</label>
+            <input type="number" id="user-password-expiry" name="password_expiry_days" min="0" max="36500" value="0">
+          </div>
+        </div>
       </form>
     </div>
     <footer class="modal-footer">

@@ -21,6 +21,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             two_factor_email_code_expiry TIMESTAMP WITH TIME ZONE,
             tokens_invalidated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             password_changed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            password_expiry_days INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )",

@@ -269,6 +269,8 @@ pub async fn login<P: AuthProvider>(
         email,
         role: role.clone(),
         status,
+        // 登录响应不回传有效期，0 占位
+        password_expiry_days: 0,
         two_factor_enabled,
         two_factor_verified: true,
         created_at,

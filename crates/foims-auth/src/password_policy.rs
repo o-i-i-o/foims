@@ -1,8 +1,12 @@
-//! 等保三级密码策略：复杂度、有效期与历史重复检查。
+//! 等保三级密码策略：复杂度与历史重复检查。
 //!
 //! 策略存于 `system_configs`（config_type='password_policy'），
 //! 未配置时按等保三级默认值执行：长度 ≥8、含大小写字母与数字、
-//! 有效期 90 天、不得与最近 5 次历史密码重复。
+//! 不得与最近 5 次历史密码重复。
+//!
+//! 密码有效期不再属于全局策略：`users.password_expiry_days` 按用户
+//! 单独设置，到期后由 `is_expired`（认证路径即时触发）与
+//! `disable_expired`（定时任务批量扫描）自动禁用账户。
 
 use chrono::Utc;
 use sqlx::{PgPool, Row};
@@ -18,8 +22,6 @@ pub struct PasswordPolicy {
     pub require_lower: bool,
     pub require_digit: bool,
     pub require_special: bool,
-    /// 密码有效期（天），0 表示不启用
-    pub expiry_days: i32,
     /// 历史密码重复检查条数，0 表示不检查
     pub history_count: i32,
 }
@@ -32,7 +34,6 @@ impl Default for PasswordPolicy {
             require_lower: true,
             require_digit: true,
             require_special: false,
-            expiry_days: 90,
             history_count: 5,
         }
     }
@@ -65,7 +66,6 @@ pub async fn load(pool: &PgPool) -> PasswordPolicy {
         };
         match key.as_str() {
             "min_length" => apply_i32(&mut policy.min_length, &value),
-            "expiry_days" => apply_i32(&mut policy.expiry_days, &value),
             "history_count" => apply_i32(&mut policy.history_count, &value),
             "require_upper" => apply_bool(&mut policy.require_upper, &value),
             "require_lower" => apply_bool(&mut policy.require_lower, &value),
@@ -83,7 +83,6 @@ pub async fn load(pool: &PgPool) -> PasswordPolicy {
 pub async fn save(pool: &PgPool, policy: &PasswordPolicy) -> Result<(), AppError> {
     let mut policy = policy.clone();
     policy.min_length = policy.min_length.max(8);
-    policy.expiry_days = policy.expiry_days.clamp(0, 36500);
     policy.history_count = policy.history_count.clamp(0, 24);
 
     let items = [
@@ -92,7 +91,6 @@ pub async fn save(pool: &PgPool, policy: &PasswordPolicy) -> Result<(), AppError
         ("require_lower", policy.require_lower.to_string()),
         ("require_digit", policy.require_digit.to_string()),
         ("require_special", policy.require_special.to_string()),
-        ("expiry_days", policy.expiry_days.to_string()),
         ("history_count", policy.history_count.to_string()),
     ];
 
@@ -227,22 +225,53 @@ pub async fn record_history(
     Ok(())
 }
 
-/// 密码是否已过有效期（策略关闭或用户无记录时返回 false）
+/// 密码是否已过该用户自身设置的有效期。
+///
+/// 过期时自动禁用账户（status=false 并吊销令牌），使「有效期到后自动
+/// 转为禁用状态」在登录/2FA/邮箱码/刷新令牌等认证路径即时生效；
+/// 未设置有效期（password_expiry_days=0）或用户无记录时返回 false。
 pub async fn is_expired(pool: &PgPool, user_id: Uuid) -> Result<bool, AppError> {
-    let policy = load(pool).await;
-    if policy.expiry_days <= 0 {
-        return Ok(false);
-    }
-    let changed_at: Option<chrono::DateTime<Utc>> =
-        sqlx::query_scalar("SELECT password_changed_at FROM users WHERE id = $1")
+    let row: Option<(i32, chrono::DateTime<Utc>)> =
+        sqlx::query_as("SELECT password_expiry_days, password_changed_at FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_optional(pool)
-            .await?
-            .flatten();
-    let Some(changed_at) = changed_at else {
+            .await?;
+    let Some((expiry_days, changed_at)) = row else {
         return Ok(false);
     };
-    Ok(Utc::now() > changed_at + chrono::Duration::days(policy.expiry_days as i64))
+    if expiry_days <= 0 || Utc::now() <= changed_at + chrono::Duration::days(expiry_days as i64) {
+        return Ok(false);
+    }
+    disable_user(pool, user_id).await?;
+    Ok(true)
+}
+
+/// 单个账户到期禁用：仅当仍处启用态时翻转状态并吊销令牌
+async fn disable_user(pool: &PgPool, user_id: Uuid) -> Result<(), AppError> {
+    let result = sqlx::query(
+        "UPDATE users SET status = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
+         WHERE id = $1 AND status = TRUE",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    // 仅在实际翻转状态时留痕，便于管理员追溯账户被自动禁用的原因
+    if result.rows_affected() > 0 {
+        foims_common::log_info!("log.login.password_expiry_auto_disabled", user_id = user_id);
+    }
+    Ok(())
+}
+
+/// 批量禁用已过有效期的启用账户，返回禁用数量（供定时任务周期扫描）
+pub async fn disable_expired(pool: &PgPool) -> Result<u64, AppError> {
+    let result = sqlx::query(
+        "UPDATE users SET status = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
+         WHERE status = TRUE AND password_expiry_days > 0
+           AND NOW() > password_changed_at + make_interval(days => password_expiry_days)",
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
 }
 
 #[cfg(test)]

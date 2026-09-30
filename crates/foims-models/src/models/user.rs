@@ -15,6 +15,8 @@ pub struct User {
     pub email: String,
     pub role: String,
     pub status: bool,
+    /// 单独密码有效期（天），0 表示不启用；到期后账户自动禁用
+    pub password_expiry_days: i32,
     pub two_factor_enabled: bool,
     pub two_factor_verified: bool,
     pub created_at: DateTime<Utc>,
@@ -40,6 +42,14 @@ pub struct UserCreate {
         message = "server.user.validation.role_invalid"
     ))]
     pub role: String,
+    /// 单独密码有效期（天），缺省或 0 表示不启用
+    #[serde(default)]
+    #[validate(range(
+        min = 0,
+        max = 36500,
+        message = "server.user.validation.password_expiry_range"
+    ))]
+    pub password_expiry_days: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -53,6 +63,13 @@ pub struct UserUpdate {
     ))]
     pub role: Option<String>,
     pub status: Option<bool>,
+    /// 单独密码有效期（天），None 表示不修改
+    #[validate(range(
+        min = 0,
+        max = 36500,
+        message = "server.user.validation.password_expiry_range"
+    ))]
+    pub password_expiry_days: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -547,6 +564,7 @@ mod tests {
             email: "alice@example.com".to_string(),
             role: "admin".to_string(),
             status: true,
+            password_expiry_days: 0,
             two_factor_enabled: false,
             two_factor_verified: false,
             created_at: Utc::now(),

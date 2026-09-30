@@ -166,6 +166,7 @@ log:
     email_code_success: "已向用户发送邮箱登录验证码: {{{username}}}"
     2fa_success: "用户 {{username}} 2FA验证登录成功"
     record_failed: "记录登录日志失败: {{error}}"
+    password_expiry_auto_disabled: "用户 {{user_id}} 密码已过有效期，账户已自动禁用"
     success: "用户 {{username}} 登录成功"
     token_refreshed: "用户 {{username}} 令牌刷新成功"
   mac_change:
@@ -236,6 +237,7 @@ log:
     lock_release_failed: "释放任务锁失败: {{error}}"
     log_cleanup_completed: "清理了 {{count}} 条{{days}}天前的日志记录"
     log_record_failed: "记录任务日志失败: {{error}}"
+    password_expiry_sync_completed: "密码有效期同步完成：自动禁用 {{count}} 个到期账户"
     next_run_calc_failed: "计算下次运行时间失败: {{error}}"
     next_run_calc_task_failed: "计算下次运行时间任务失败: {{error}}"
     next_run_update_failed: "更新任务 {{name}} 的下次执行时间失败: {{error}}"
@@ -290,6 +292,7 @@ system:
   ready: "系统启动完成，等待请求..."
   register_backup_job_failed: "注册备份定时任务失败: {{error}}"
   register_ip_status_sync_job_failed: "注册 IP 状态同步系统任务失败: {{error}}"
+  register_password_expiry_sync_job_failed: "注册密码有效期同步系统任务失败: {{error}}"
   register_token_cleanup_job_failed: "注册Token清理定时任务失败: {{error}}"
   scheduler_create_failed: "创建调度器失败: {{error}}"
   scheduler_shutdown_timeout: "调度器关闭超时: {{error}}"

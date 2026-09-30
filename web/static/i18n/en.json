@@ -749,6 +749,7 @@
     "password_confirm_placeholder": "Enter password again",
     "password_leave_blank": "Leave blank to keep current password",
     "password_mismatch": "The passwords entered do not match",
+    "password_expiry": "Password Validity (days, 0 = never expires)",
     "update_success": "User updated successfully",
     "add_success": "User added successfully",
     "update_failed": "Failed to update user",
@@ -775,7 +776,6 @@
     "session_settings": "Session Settings",
     "password_policy": "Password Policy",
     "password_min_length": "Minimum Length",
-    "password_expiry": "Validity Period (days, 0 = disabled)",
     "password_history": "History Check (recent N, 0 = disabled)",
     "password_require_upper": "Require uppercase letters",
     "password_require_lower": "Require lowercase letters",
@@ -2294,6 +2294,8 @@
       "toggled": "Scheduled task status toggled",
       "token_cleanup_completed": "Expired tokens cleaned",
       "token_cleanup_failed": "Token cleanup failed",
+      "password_expiry_sync_completed": "Password expiry sync completed, expired accounts auto-disabled",
+      "password_expiry_sync_failed": "Password expiry sync failed",
       "type_unknown": "Unknown task type: {{task_type}}",
       "type_unsupported": "Unsupported task type: {{task_type}} (allowed: {{allowed}})",
       "updated": "Scheduled task updated",
@@ -2317,14 +2319,16 @@
         "password_length": "Password must be at least 8 characters",
         "role_invalid": "Role must be admin or user",
         "username_length": "Username must be 3 to 50 characters",
-        "email_length": "Email must not exceed 100 characters",
-        "password_max_length": "Password must not exceed 72 bytes"
+        "email_length": "Email cannot exceed 100 characters",
+        "password_max_length": "Password cannot exceed 72 bytes",
+        "password_expiry_range": "Password validity must be between 0 and 36500 days"
       },
       "cannot_delete_self": "Cannot delete the currently signed-in account",
       "last_admin_protected": "Cannot delete the last administrator account",
       "self_role_change_forbidden": "Cannot change your own role",
       "admin_account_admin_only": "Super administrator accounts can only be managed by a super administrator",
-      "admin_role_admin_only": "Only a super administrator can grant the super administrator role"
+      "admin_role_admin_only": "Only a super administrator can grant the super administrator role",
+      "reenable_password_expired": "This user's password has expired. Reset the password or adjust the validity period before re-enabling"
     },
     "visualization": {
       "auto_discover_completed": "Auto discovery completed",

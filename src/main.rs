@@ -22,7 +22,7 @@ use foims::shutdown::{ShutdownSignal, wait_for_shutdown_signal};
 use foims::system::config::init_start_time;
 use foims::system::task_executors::{
     BackupTaskExecutor, IpStatusSyncTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor,
-    TokenCleanupTaskExecutor,
+    PasswordExpirySyncTaskExecutor, TokenCleanupTaskExecutor,
 };
 use foims::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
@@ -433,6 +433,7 @@ async fn main() -> std::io::Result<()> {
         registry.register(Box::new(LogCleanupTaskExecutor));
         registry.register(Box::new(MacSyncTaskExecutor));
         registry.register(Box::new(IpStatusSyncTaskExecutor));
+        registry.register(Box::new(PasswordExpirySyncTaskExecutor));
         registry
     });
 
@@ -481,6 +482,22 @@ async fn main() -> std::io::Result<()> {
                 {
                     foims_common::log_error!(
                         "system.register_ip_status_sync_job_failed",
+                        error = e
+                    );
+                }
+
+                // 密码有效期到期账户自动禁用（每小时 20 分扫描，认证路径另有即时触发兜底）
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_password_expiry_sync",
+                        "0 20 * * * *",
+                        "password_expiry_sync",
+                        serde_json::json!({}),
+                    )
+                    .await
+                {
+                    foims_common::log_error!(
+                        "system.register_password_expiry_sync_job_failed",
                         error = e
                     );
                 }

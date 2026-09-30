@@ -202,6 +202,34 @@ impl TaskExecutor for IpStatusSyncTaskExecutor {
     }
 }
 
+/// 密码有效期同步任务执行器：批量禁用已过单独密码有效期的启用账户，
+/// 补齐认证路径之外的自动禁用（未登录用户也能按期翻转状态）
+pub struct PasswordExpirySyncTaskExecutor;
+
+#[async_trait]
+impl TaskExecutor for PasswordExpirySyncTaskExecutor {
+    fn task_type(&self) -> &str {
+        "password_expiry_sync"
+    }
+
+    /// 例行轮次多数无到期账户，成功日志降为 debug 避免刷屏
+    fn debug_routine_logs(&self) -> bool {
+        true
+    }
+
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+        let count = foims_auth::password_policy::disable_expired(&ctx.pool)
+            .await
+            .map_err(|e| {
+                SchedulerError::Execution(
+                    msg("server.task.password_expiry_sync_failed").with("error", e),
+                )
+            })?;
+        log_debug!("log.task.password_expiry_sync_completed", count = count);
+        Ok("server.task.password_expiry_sync_completed".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

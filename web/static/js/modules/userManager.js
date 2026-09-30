@@ -138,6 +138,7 @@ export async function openUserModal(userId) {
   const emailInput = elementCache.get("user-email");
   const roleInput = elementCache.get("user-role");
   const statusInput = elementCache.get("user-status");
+  const passwordExpiryInput = elementCache.get("user-password-expiry");
   const passwordInput = elementCache.get("user-password");
   const passwordConfirmInput = elementCache.get("user-password-confirm");
 
@@ -149,6 +150,7 @@ export async function openUserModal(userId) {
     !emailInput ||
     !roleInput ||
     !statusInput ||
+    !passwordExpiryInput ||
     !passwordInput ||
     !passwordConfirmInput
   ) {
@@ -172,6 +174,7 @@ export async function openUserModal(userId) {
     emailInput.value = "";
     roleInput.value = "user";
     statusInput.value = "true";
+    passwordExpiryInput.value = "0";
     passwordInput.value = "";
     passwordInput.placeholder = t("user.password_placeholder");
     passwordInput.required = true;
@@ -196,6 +199,7 @@ async function loadUserData(userId) {
       elementCache.setValue("user-email", user.email);
       elementCache.setValue("user-role", user.role);
       elementCache.setValue("user-status", user.status.toString());
+      elementCache.setValue("user-password-expiry", String(user.password_expiry_days ?? 0));
     }
   } catch (error) {
     console.error("加载用户数据失败:", error);
@@ -475,7 +479,8 @@ export async function submitUserForm() {
     username: formData.get("username"),
     email: formData.get("email"),
     role: formData.get("role"),
-    status: formData.get("status") === "true"
+    status: formData.get("status") === "true",
+    password_expiry_days: parseInt(formData.get("password_expiry_days"), 10) || 0
   };
 
   const password = formData.get("password");
