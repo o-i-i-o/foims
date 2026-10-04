@@ -337,42 +337,8 @@ export function createSeqGuard() {
 }
 
 // ==========================================
-// 功率单位（房间/机柜列表显示与输入框共用）
+// 功率输入换算（模态框内单位下拉共用）
 // ==========================================
-
-// 数据库与 API 统一以瓦（W）为单位存储；本状态仅影响前端展示与输入换算
-const POWER_UNIT_KEY = "foims_power_unit";
-
-/** 当前显示单位："W"（默认）或 "kW"，持久化到 localStorage */
-export function getPowerUnit() {
-  return localStorage.getItem(POWER_UNIT_KEY) === "kW" ? "kW" : "W";
-}
-
-export function setPowerUnit(unit) {
-  localStorage.setItem(POWER_UNIT_KEY, unit === "kW" ? "kW" : "W");
-}
-
-/**
- * 绑定页面上的功率单位下拉（.power-unit-select）：
- * 切换后持久化并同步其他页签的同款控件，回调方负责刷新列表。
- */
-export function bindPowerUnitSelect(select, onChange) {
-  if (!select) {
-    return;
-  }
-  select.value = getPowerUnit();
-  select.addEventListener("change", () => {
-    setPowerUnit(select.value);
-    document.querySelectorAll(".power-unit-select").forEach((el) => {
-      if (el !== select) {
-        el.value = select.value;
-      }
-    });
-    if (onChange) {
-      onChange();
-    }
-  });
-}
 
 /**
  * 读取功率输入并统一换算为瓦（整数）：

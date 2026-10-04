@@ -412,37 +412,43 @@
 #networks-table th:nth-child(6) { width: 17%; }
 #networks-table th:nth-child(7) { width: 16%; }
 
-/* 房间表：序号/名称/类型/组织/工位数/网络/描述/创建时间/操作（9 列，合计 100%） */
+/* 房间表：序号/名称/类型/组织/工位数/当前功率/电源功率/网络/描述/创建时间/操作
+   （11 列，合计 100%；列数与 main.html 表头严格对应，缺列会把尾部操作列压成 0 宽） */
 #rooms-table th:nth-child(1) { width: 4%; }
-#rooms-table th:nth-child(2) { width: 12%; }
-#rooms-table th:nth-child(3) { width: 9%; }
-#rooms-table th:nth-child(4) { width: 12%; }
-#rooms-table th:nth-child(5) { width: 8%; }
-#rooms-table th:nth-child(6) { width: 16%; }
-#rooms-table th:nth-child(7) { width: 13%; }
-#rooms-table th:nth-child(8) { width: 12%; }
-#rooms-table th:nth-child(9) { width: 14%; }
+#rooms-table th:nth-child(2) { width: 9%; }
+#rooms-table th:nth-child(3) { width: 7%; }
+#rooms-table th:nth-child(4) { width: 10%; }
+#rooms-table th:nth-child(5) { width: 6%; }
+#rooms-table th:nth-child(6) { width: 9%; }
+#rooms-table th:nth-child(7) { width: 9%; }
+#rooms-table th:nth-child(8) { width: 13%; }
+#rooms-table th:nth-child(9) { width: 12%; }
+#rooms-table th:nth-child(10) { width: 11%; }
+#rooms-table th:nth-child(11) { width: 10%; }
 
-/* 机柜表：序号/房间/名称/容量/位置数/描述/创建时间/操作 */
+/* 机柜表：序号/房间/名称/容量/当前功率/电源功率/机位数/描述/创建时间/操作（10 列） */
 #cabinets-table th:nth-child(1) { width: 5%; }
-#cabinets-table th:nth-child(2) { width: 12%; }
-#cabinets-table th:nth-child(3) { width: 14%; }
-#cabinets-table th:nth-child(4) { width: 10%; }
-#cabinets-table th:nth-child(5) { width: 12%; }
-#cabinets-table th:nth-child(6) { width: 19%; }
-#cabinets-table th:nth-child(7) { width: 16%; }
-#cabinets-table th:nth-child(8) { width: 12%; }
+#cabinets-table th:nth-child(2) { width: 11%; }
+#cabinets-table th:nth-child(3) { width: 12%; }
+#cabinets-table th:nth-child(4) { width: 7%; }
+#cabinets-table th:nth-child(5) { width: 9%; }
+#cabinets-table th:nth-child(6) { width: 9%; }
+#cabinets-table th:nth-child(7) { width: 7%; }
+#cabinets-table th:nth-child(8) { width: 14%; }
+#cabinets-table th:nth-child(9) { width: 13%; }
+#cabinets-table th:nth-child(10) { width: 13%; }
 
-/* 设备表：序号/名称/类型/品牌/型号/位置/房间/描述/操作 */
+/* 设备表：序号/名称/类型/品牌/型号/功率/位置/房间/描述/操作（10 列） */
 #devices-table th:nth-child(1) { width: 4%; }
-#devices-table th:nth-child(2) { width: 12%; }
+#devices-table th:nth-child(2) { width: 10%; }
 #devices-table th:nth-child(3) { width: 8%; }
-#devices-table th:nth-child(4) { width: 11%; }
-#devices-table th:nth-child(5) { width: 12%; }
-#devices-table th:nth-child(6) { width: 13%; }
-#devices-table th:nth-child(7) { width: 12%; }
-#devices-table th:nth-child(8) { width: 14%; }
-#devices-table th:nth-child(9) { width: 14%; }
+#devices-table th:nth-child(4) { width: 10%; }
+#devices-table th:nth-child(5) { width: 11%; }
+#devices-table th:nth-child(6) { width: 8%; }
+#devices-table th:nth-child(7) { width: 14%; }
+#devices-table th:nth-child(8) { width: 9%; }
+#devices-table th:nth-child(9) { width: 13%; }
+#devices-table th:nth-child(10) { width: 13%; }
 
 /* 线缆连接表：序号/A端类型/A端编号/B端类型/B端编号/类型/标签/长度/已测/操作 */
 #cable-links-table th:nth-child(1) { width: 4%; }

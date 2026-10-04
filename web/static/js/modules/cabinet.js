@@ -20,10 +20,8 @@ import {
 import { formatDateTime, formatPowerValue } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import {
-  bindPowerUnitSelect,
   createSeqGuard,
   elementCache,
-  getPowerUnit,
   readPowerWattsInput
 } from "../utils/helpers.js";
 
@@ -287,15 +285,15 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
         { field: "name", render: (v) => escapeHtml(v) },
         { field: "capacity", render: (v) => v ?? "-", className: "col-center" },
         {
-          // 当前功率：柜内机位关联设备功耗之和
+          // 当前功率：柜内机位关联设备功耗之和（固定以瓦显示）
           field: "allocated_power_watts",
-          render: (v) => formatPowerValue(v ?? 0, getPowerUnit()),
+          render: (v) => formatPowerValue(v ?? 0, "W"),
           className: "col-center"
         },
         {
           // 电源功率：供电上限（未设置显示 "-"）
           field: "total_power_watts",
-          render: (v) => formatPowerValue(v, getPowerUnit()),
+          render: (v) => formatPowerValue(v, "W"),
           className: "col-center"
         },
         { field: "position_count", render: (v) => v ?? 0, className: "col-center" },
@@ -397,8 +395,6 @@ export async function openCabinetPositionsListModal(cabinetId) {
 
 export function initCabinetSortEvents() {
   initSortEvents("cabinets-table", tableState, loadCabinetsData);
-  // 功率单位切换：仅影响显示（瓦/千瓦），切换后重拉当前页渲染
-  bindPowerUnitSelect(document.getElementById("cabinet-power-unit"), () => loadCabinetsData());
 }
 
 // 编辑机柜

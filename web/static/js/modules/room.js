@@ -22,10 +22,8 @@ import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
 import {
-  bindPowerUnitSelect,
   createSeqGuard,
   elementCache,
-  getPowerUnit,
   readPowerWattsInput
 } from "../utils/helpers.js";
 import { fillSelect, loadOrgsForSelect } from "../utils/resources.js";
@@ -819,16 +817,16 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
           render: (v) => (v != null ? String(v) : "0")
         },
         {
-          // 当前功率：该房间全部设备功耗之和
+          // 当前功率：该房间全部设备功耗之和（固定以瓦显示）
           field: "allocated_power_watts",
           className: "col-center",
-          render: (v) => formatPowerValue(v ?? 0, getPowerUnit())
+          render: (v) => formatPowerValue(v ?? 0, "W")
         },
         {
           // 电源功率：供电上限（未设置显示 "-"）
           field: "total_power_watts",
           className: "col-center",
-          render: (v) => formatPowerValue(v, getPowerUnit())
+          render: (v) => formatPowerValue(v, "W")
         },
         {
           field: "networks",
@@ -974,8 +972,6 @@ export async function openRoomNetOutletsListModal(roomId) {
 
 export function initRoomSortEvents() {
   initSortEvents("rooms-table", tableState, loadRoomsData);
-  // 功率单位切换：仅影响显示（瓦/千瓦），切换后重拉当前页渲染
-  bindPowerUnitSelect(document.getElementById("room-power-unit"), () => loadRoomsData());
 }
 
 // 编辑房间（轻量端点：一次并行查询取齐基础字段、网络绑定与工位/机柜/信息点子项，
