@@ -45,7 +45,7 @@ F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技
 ## 📦 安装与部署
 
 ### 前置要求
-- **Rust**: 1.87 或更高（推荐通过 rust官方命令安装
+- **Rust**: 1.87 或更高（推荐通过 rustup 官方命令安装）
 - **PostgreSQL**: 版本 16 或更高
 - **OpenSSL**: 开发库 (libssl-dev，邮件组件 native-tls 依赖)
 - **nginx**: 版本 ≥ 1.28.1（h2c 上游代理；如需 HTTP/3 还需编译 QUIC 支持）
@@ -63,11 +63,14 @@ cp config.toml.example config.toml
 
 ### 2. 准备数据库
 
+数据库需预先手动创建：运行本项目提供的 `scripts/init-pgsql.sh` 脚本辅助完成
+建库（用法：`PG_PASSWORD=your_password ./scripts/init-pgsql.sh`，可选通过
+`PG_USER`、`PG_DATABASE`、`PG_HOST`、`PG_PORT` 环境变量调整），也可在
+PostgreSQL 中手动执行建库 SQL。
+
 保持 `config.toml` 中 `[init] enabled = true`，首次启动后访问初始化向导：
-完成 PostgreSQL 检查后在「数据库配置」页填写连接信息，可点击「创建数据库」
-自动建库（要求该用户已存在且具有 CREATEDB 权限），再通过「连接测试」进入
-后续流程。
-也可跳过页面建库，手动在 PostgreSQL 中预先创建（此后连接测试直接通过）：
+完成 PostgreSQL 检查后在「数据库配置」页填写连接信息，通过「连接测试」
+（校验连通性，并要求账号为库主且具有 CREATEDB 权限）进入后续流程。
 
 ### 3. 构建与运行（开发调试）
 
