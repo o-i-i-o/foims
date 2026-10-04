@@ -882,9 +882,10 @@ class LoginManager {
     toggleBtn.addEventListener("click", () => {
       this.showPassword = !this.showPassword;
       this.dom.passwordInput.type = this.showPassword ? "text" : "password";
-      // 用 hidden 属性切换两个图标的互斥显隐
-      this.dom.eyeIcon.hidden = this.showPassword;
-      this.dom.eyeOffIcon.hidden = !this.showPassword;
+      // SVG 元素的 hidden IDL 属性不保证反射到 content attribute，
+      // 必须显式操作 attribute，确保 .toggle-password svg[hidden] 样式可靠匹配
+      this.dom.eyeIcon.toggleAttribute("hidden", this.showPassword);
+      this.dom.eyeOffIcon.toggleAttribute("hidden", !this.showPassword);
       this.updateCharacters();
       // 密码可见时，可能触发紫色角色偷看
       if (this.showPassword) {

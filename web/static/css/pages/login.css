@@ -301,6 +301,12 @@
   color: #212529;
 }
 
+/* SVG 命名空间元素不享受 HTML 的 [hidden] UA 样式，需显式声明隐藏，
+   否则初始加载时 eye-icon 与 eye-off-icon 会并排同时显示 */
+.toggle-password svg[hidden] {
+  display: none;
+}
+
 /* 邮箱验证码：输入框 + 发送按钮并排 */
 .form-inline-group {
   display: flex;
