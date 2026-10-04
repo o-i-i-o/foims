@@ -118,3 +118,17 @@ export function getResourceTypeText(resourceType) {
   }
   return t(`logs.resource_types.${resourceType}`, resourceType);
 }
+
+/**
+ * 功率展示：按单位（W/kW）格式化瓦值，未设置返回 "-"。
+ * 千瓦最多保留三位小数并去掉尾零（1500 -> 1.5 kW）。
+ */
+export function formatPowerValue(watts, unit) {
+  if (watts == null) {
+    return "-";
+  }
+  if (unit === "kW") {
+    return `${parseFloat((watts / 1000).toFixed(3))} kW`;
+  }
+  return `${watts} W`;
+}

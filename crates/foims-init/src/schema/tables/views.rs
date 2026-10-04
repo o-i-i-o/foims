@@ -62,6 +62,7 @@ const VIEWS: &[(&str, &str)] = &[
             d.snmp_version, d.snmp_community, d.snmp_username,
             d.snmp_auth_protocol, d.snmp_auth_password,
             d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+            d.power_watts,
             d.description,
             w.name AS workstation_name,
             r.name AS room_name,

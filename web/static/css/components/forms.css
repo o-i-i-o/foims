@@ -281,3 +281,23 @@ select.nc-input:not([multiple]) {
   height: 22px;
   font-size: 14px;
 }
+
+/* ===== 功率输入行：数值输入框与单位下拉（瓦/千瓦）并排 ===== */
+.power-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.power-input-row input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.power-input-row select {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 72px;
+}

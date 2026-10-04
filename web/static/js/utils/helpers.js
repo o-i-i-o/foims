@@ -335,3 +335,62 @@ export function createSeqGuard() {
     }
   };
 }
+
+// ==========================================
+// 功率单位（房间/机柜列表显示与输入框共用）
+// ==========================================
+
+// 数据库与 API 统一以瓦（W）为单位存储；本状态仅影响前端展示与输入换算
+const POWER_UNIT_KEY = "foims_power_unit";
+
+/** 当前显示单位："W"（默认）或 "kW"，持久化到 localStorage */
+export function getPowerUnit() {
+  return localStorage.getItem(POWER_UNIT_KEY) === "kW" ? "kW" : "W";
+}
+
+export function setPowerUnit(unit) {
+  localStorage.setItem(POWER_UNIT_KEY, unit === "kW" ? "kW" : "W");
+}
+
+/**
+ * 绑定页面上的功率单位下拉（.power-unit-select）：
+ * 切换后持久化并同步其他页签的同款控件，回调方负责刷新列表。
+ */
+export function bindPowerUnitSelect(select, onChange) {
+  if (!select) {
+    return;
+  }
+  select.value = getPowerUnit();
+  select.addEventListener("change", () => {
+    setPowerUnit(select.value);
+    document.querySelectorAll(".power-unit-select").forEach((el) => {
+      if (el !== select) {
+        el.value = select.value;
+      }
+    });
+    if (onChange) {
+      onChange();
+    }
+  });
+}
+
+/**
+ * 读取功率输入并统一换算为瓦（整数）：
+ * - 空串返回 null（语义：不设置/不记录）；
+ * - 千瓦乘 1000（容差 1e-9 吸收浮点误差，0.1kW -> 100W）；
+ * - 负数、非数字、换算后非整数瓦或超过 10000000W 返回 NaN（交由调用方提示）。
+ */
+export function readPowerWattsInput(value, unit) {
+  if (value === null || String(value).trim() === "") {
+    return null;
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return NaN;
+  }
+  const watts = unit === "kW" ? num * 1000 : num;
+  if (Math.abs(watts - Math.round(watts)) > 1e-9 || Math.round(watts) > 10000000) {
+    return NaN;
+  }
+  return Math.round(watts);
+}

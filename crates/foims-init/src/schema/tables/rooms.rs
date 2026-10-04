@@ -7,6 +7,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             name VARCHAR(50) NOT NULL,
             room_type VARCHAR(20) NOT NULL DEFAULT 'OFFICE',
             org_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
+            -- 房间总功率上限（瓦，可空=不限制）；房内设备功耗之和不得超过该值
+            total_power_watts INTEGER
+                CONSTRAINT chk_rooms_total_power CHECK (total_power_watts IS NULL OR total_power_watts >= 0),
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

@@ -110,6 +110,7 @@ pub async fn get_devices<P: DbProvider>(
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.power_watts,
                 d.description,
                 d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u,
@@ -223,7 +224,7 @@ pub async fn create_device<P: DbProvider>(
             return Err(AppError::NotFound(msg("server.workstation.not_found")));
         }
         // 房间一致性预检（与 trg_validate_device_room_consistency 同口径，
-        // 预检返回 422，触发器仅兜底并发窗口）
+        // 预检返回 400，触发器仅兜底并发窗口）
         let ws_room: Uuid = sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
             .bind(ws_id)
             .fetch_one(&mut *tx)
@@ -277,6 +278,17 @@ pub async fn create_device<P: DbProvider>(
     if name_dup.is_some() {
         return Err(AppError::Conflict(msg("server.device.name_exists")));
     }
+
+    // 功率容量校验：设备功耗不得超过房间/机柜总功率上限
+    // （锁序：房间行 → 机柜行；机柜经机位定位）
+    crate::helpers::ensure_device_power_capacity(
+        &mut tx,
+        req.room_id,
+        req.position_id,
+        None,
+        req.power_watts,
+    )
+    .await?;
 
     let (final_device_type, final_brand, final_model) = if let Some(tmpl_id) = req.template_id {
         let template_exists: bool =
@@ -343,8 +355,8 @@ pub async fn create_device<P: DbProvider>(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
+        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, power_watts, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
     )
     .bind(id)
     .bind(&req.name)
@@ -367,6 +379,7 @@ pub async fn create_device<P: DbProvider>(
     .bind(&req.snmp_priv_protocol)
     .bind(&encrypted_priv_password)
     .bind(snmp_port)
+    .bind(req.power_watts)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -456,6 +469,7 @@ pub async fn create_device<P: DbProvider>(
         snmp_priv_protocol: req.snmp_priv_protocol,
         snmp_priv_password: encrypted_priv_password,
         snmp_port: Some(snmp_port),
+        power_watts: req.power_watts,
         description: req.description,
         created_at: now,
         updated_at: now,
@@ -502,6 +516,7 @@ pub async fn get_device<P: DbProvider>(
                     d.snmp_version, d.snmp_community, d.snmp_username,
                     d.snmp_auth_protocol, d.snmp_auth_password,
                     d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                    d.power_watts,
                     d.description,
                     d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
                     d.start_u, d.end_u,
@@ -566,15 +581,17 @@ pub async fn update_device<P: DbProvider>(
     }
 
     // Fetch current device data for business validations
-    let current_row =
-        sqlx::query("SELECT workstation_id, position_id, room_id FROM devices WHERE id = $1")
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let current_row = sqlx::query(
+        "SELECT workstation_id, position_id, room_id, power_watts FROM devices WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
 
     let current_ws_id: Option<Uuid> = current_row.get("workstation_id");
     let current_pos_id: Option<Uuid> = current_row.get("position_id");
     let current_room_id: Uuid = current_row.get("room_id");
+    let current_power_watts: Option<i32> = current_row.get("power_watts");
 
     // Resolve the final values for Option<Option<Uuid>> fields
     let resolved_workstation_id = match &req.workstation_id {
@@ -643,6 +660,23 @@ pub async fn update_device<P: DbProvider>(
         }
     }
 
+    // 最终功耗：None 不修改，Some(_) 为新值（含 null 清空）
+    let resolved_power_watts = match &req.power_watts {
+        None => current_power_watts,
+        Some(v) => *v,
+    };
+
+    // 功率容量校验：最终功耗不得超过房间/机柜总功率上限
+    // （锁序：房间行 → 机柜行；更新路径排除自身功耗）
+    crate::helpers::ensure_device_power_capacity(
+        &mut tx,
+        resolved_room_id,
+        resolved_position_id,
+        Some(id),
+        resolved_power_watts,
+    )
+    .await?;
+
     // 变更房间且未随请求重提网卡配置时，校验存量 IP 均落在新房间绑定的
     // 子网内（不变量：设备 IP 必须归属其所在房间绑定的子网）
     if resolved_room_id != current_room_id && req.cards.is_none() {
@@ -705,9 +739,10 @@ pub async fn update_device<P: DbProvider>(
          snmp_priv_protocol = CASE WHEN $24::boolean THEN $25 ELSE snmp_priv_protocol END,
          snmp_priv_password = CASE WHEN $26::boolean THEN $27 ELSE snmp_priv_password END,
          snmp_port = COALESCE($28, snmp_port),
-         description = CASE WHEN $29::boolean THEN $30 ELSE description END,
-         updated_at = $31
-         WHERE id = $32",
+         power_watts = CASE WHEN $29::boolean THEN $30 ELSE power_watts END,
+         description = CASE WHEN $31::boolean THEN $32 ELSE description END,
+         updated_at = $33
+         WHERE id = $34",
     )
     .bind(&req.name)
     // 双层 Option：Some(_) 时 SET（Some(None) 绑定 NULL 即清空），None 不进 SET
@@ -738,6 +773,8 @@ pub async fn update_device<P: DbProvider>(
     .bind(req.snmp_priv_password.is_some())
     .bind(&encrypted_priv_password)
     .bind(req.snmp_port)
+    .bind(req.power_watts.is_some())
+    .bind(req.power_watts.flatten())
     .bind(req.description.is_some())
     .bind(req.description.clone().flatten())
     .bind(now)
@@ -837,6 +874,7 @@ pub async fn update_device<P: DbProvider>(
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.power_watts,
                 d.description,
                 d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
                 d.start_u, d.end_u,

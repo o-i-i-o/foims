@@ -27,6 +27,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             snmp_priv_protocol VARCHAR(10),
             snmp_priv_password VARCHAR(255),
             snmp_port INTEGER DEFAULT 161,
+            -- 设备额定功耗（瓦，可空=未记录）；机柜/房间功率容量校验的求和来源
+            power_watts INTEGER
+                CONSTRAINT chk_devices_power_watts CHECK (power_watts IS NULL OR power_watts >= 0),
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

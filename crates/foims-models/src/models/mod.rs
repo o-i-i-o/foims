@@ -243,6 +243,16 @@ pub fn validate_length_m_opt(len: f64) -> Result<(), ValidationError> {
     }
 }
 
+/// 功率数值范围：0..=10_000_000 瓦（覆盖设备功耗与机柜/房间总功率上限）。
+/// 双层 Option 的数值字段由 derive 解包后按值传入（Some(None) 已被跳过）。
+pub fn validate_power_watts(value: i32) -> Result<(), ValidationError> {
+    if (0..=10_000_000).contains(&value) {
+        Ok(())
+    } else {
+        Err(ValidationError::new("server.common.validation.power_range"))
+    }
+}
+
 /// IP 状态取值白名单：active（使用中）/ inactive（停用）/ reserved（保留）。
 /// ips.status 为 VARCHAR(20) 且 DB 侧有 chk_ips_status CHECK 约束兜底，
 /// 应用层前置拦截非法值；

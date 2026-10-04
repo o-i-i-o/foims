@@ -17,11 +17,17 @@ import {
   openSimpleListModal
 } from "../utils/ui.js";
 
-import { formatDateTime } from "../utils/formatter.js";
+import { formatDateTime, formatPowerValue } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
-import { createSeqGuard, elementCache } from "../utils/helpers.js";
+import {
+  bindPowerUnitSelect,
+  createSeqGuard,
+  elementCache,
+  getPowerUnit,
+  readPowerWattsInput
+} from "../utils/helpers.js";
 import { fillSelect, loadOrgsForSelect } from "../utils/resources.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 
@@ -813,6 +819,18 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
           render: (v) => (v != null ? String(v) : "0")
         },
         {
+          // 当前功率：该房间全部设备功耗之和
+          field: "allocated_power_watts",
+          className: "col-center",
+          render: (v) => formatPowerValue(v ?? 0, getPowerUnit())
+        },
+        {
+          // 电源功率：供电上限（未设置显示 "-"）
+          field: "total_power_watts",
+          className: "col-center",
+          render: (v) => formatPowerValue(v, getPowerUnit())
+        },
+        {
           field: "networks",
           render: (v) =>
             v && v.length > 0
@@ -956,6 +974,8 @@ export async function openRoomNetOutletsListModal(roomId) {
 
 export function initRoomSortEvents() {
   initSortEvents("rooms-table", tableState, loadRoomsData);
+  // 功率单位切换：仅影响显示（瓦/千瓦），切换后重拉当前页渲染
+  bindPowerUnitSelect(document.getElementById("room-power-unit"), () => loadRoomsData());
 }
 
 // 编辑房间（轻量端点：一次并行查询取齐基础字段、网络绑定与工位/机柜/信息点子项，
@@ -1007,6 +1027,16 @@ export async function submitRoomForm() {
     return;
   }
 
+  // 电源功率：空串=不限制（null）；按所选单位换算为瓦后校验
+  const totalPowerWatts = readPowerWattsInput(
+    getElementValue("room-total-power"),
+    getElementValue("room-power-unit-modal")
+  );
+  if (Number.isNaN(totalPowerWatts)) {
+    showToast(t("room.total_power_invalid"), "warning");
+    return;
+  }
+
   // 收集并校验子项数据（工位/机柜）
   const childrenData = roomChildrenManager.collectData();
   const childrenError = validateRoomChildren(childrenData, roomType);
@@ -1032,6 +1062,7 @@ export async function submitRoomForm() {
     name: name.trim(),
     room_type: formattedRoomType,
     org_id: orgId || null,
+    total_power_watts: totalPowerWatts,
     subnet_ids: subnetIds,
     description: description || null
   };
@@ -1162,6 +1193,8 @@ export async function openRoomModal(room = null) {
     elementCache.setValue("room-name", room.name);
     elementCache.setValue("room-type", room.room_type ? room.room_type.toLowerCase() : "office");
     elementCache.setValue("room-org-id", room.org_id || "");
+    elementCache.setValue("room-total-power", room.total_power_watts ?? "");
+    elementCache.setValue("room-power-unit-modal", "W");
     elementCache.setValue("room-description", room.description || "");
 
     // 初始化子项管理器并加载现有工位/机柜（依赖员工列表就绪，供管理人下拉渲染）

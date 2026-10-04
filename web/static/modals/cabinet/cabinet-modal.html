@@ -23,6 +23,16 @@
             <label for="cabinet-capacity"><span data-i18n="cabinet.capacity">Capacity (U)</span><span class="required">*</span></label>
             <input type="number" id="cabinet-capacity" name="capacity" min="1" max="45" required>
           </div>
+          <div class="form-group">
+            <label for="cabinet-total-power" data-i18n="cabinet.total_power">Power Supply</label>
+            <div class="power-input-row">
+              <input type="number" id="cabinet-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
+              <select id="cabinet-power-unit-modal" class="form-control" aria-label="Unit">
+                <option value="W" data-i18n="common.unit_watts">W</option>
+                <option value="kW" data-i18n="common.unit_kilowatts">kW</option>
+              </select>
+            </div>
+          </div>
         </div>
         <!-- 机位动态管理区域（首行列标题，列宽与输入行对齐） -->
         <div class="form-row">

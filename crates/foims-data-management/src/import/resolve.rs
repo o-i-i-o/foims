@@ -437,21 +437,32 @@ pub fn key_tuple(spec: &TableSpec, values: &ResolvedValues) -> Vec<Option<String
         .collect()
 }
 
-/// 按业务键匹配已有行并写入：返回 true 表示更新了已有行，false 表示新插入。
+/// 按业务键匹配已有行并写入：返回（落库行 id，true 表示更新了已有行，
+/// false 表示新插入）。id 供落库后的专项校验（如功率容量）定位行。
 pub async fn upsert_row(
     conn: &mut PgConnection,
     spec: &TableSpec,
     meta: &TableMeta,
     values: &ResolvedValues,
-) -> DataResult<bool> {
+) -> DataResult<(String, bool)> {
     // 业务键匹配（可空键用 IS NOT DISTINCT FROM，与 NULL 精确匹配；
-    // 多行同键时取最早一条，与库内历史数据行为一致）
+    // 多行同键时取最早一条，与库内历史数据行为一致）。键列含引用
+    // 解析出的 UUID（如 devices.room_id），参数须按列类型显式转换，
+    // 否则 uuid 列与 text 参数比较报 operator does not exist
     let mut where_sql = String::new();
     for (i, col) in spec.key.iter().enumerate() {
         if i > 0 {
             where_sql.push_str(" AND ");
         }
-        where_sql.push_str(&format!("{col} IS NOT DISTINCT FROM ${}", i + 1));
+        let cast = meta
+            .columns
+            .get(*col)
+            .map(|m| udt_cast(&m.udt))
+            .unwrap_or_else(|| "text".to_string());
+        where_sql.push_str(&format!(
+            "{col} IS NOT DISTINCT FROM ${i1}::{cast}",
+            i1 = i + 1
+        ));
     }
     let select_sql = format!(
         "SELECT id::text FROM {} WHERE {where_sql} ORDER BY created_at LIMIT 1",
@@ -468,8 +479,8 @@ pub async fn upsert_row(
 
     let Some(existing_id) = existing else {
         // 新插入：全部列入库，UUID 由数据库生成；文本绑定附显式类型转换
-        insert_row(conn, spec, meta, values).await?;
-        return Ok(false);
+        let new_id = insert_row(conn, spec, meta, values).await?;
+        return Ok((new_id, false));
     };
 
     // 更新已有行：除业务键外的全部列
@@ -479,7 +490,7 @@ pub async fn upsert_row(
         .filter(|c| !spec.key.contains(c))
         .collect();
     if update_cols.is_empty() {
-        return Ok(true);
+        return Ok((existing_id, true));
     }
     let set_sql: Vec<String> = update_cols
         .iter()
@@ -503,18 +514,18 @@ pub async fn upsert_row(
     for col in &update_cols {
         query = query.bind(values.get(*col).cloned().flatten());
     }
-    query = query.bind(existing_id);
+    query = query.bind(existing_id.clone());
     query.execute(&mut *conn).await.map_err(DataError::from)?;
-    Ok(true)
+    Ok((existing_id, true))
 }
 
-/// 插入新行（文本绑定 + 显式类型转换）。
+/// 插入新行（文本绑定 + 显式类型转换），返回数据库生成的行 id。
 async fn insert_row(
     conn: &mut PgConnection,
     spec: &TableSpec,
     meta: &TableMeta,
     values: &ResolvedValues,
-) -> DataResult<()> {
+) -> DataResult<String> {
     let cols: Vec<&str> = values.keys().map(String::as_str).collect();
     let placeholders: Vec<String> = cols
         .iter()
@@ -529,17 +540,16 @@ async fn insert_row(
         })
         .collect();
     let sql = format!(
-        "INSERT INTO {} ({}) VALUES ({})",
+        "INSERT INTO {} ({}) VALUES ({}) RETURNING id::text",
         spec.table,
         cols.join(", "),
         placeholders.join(", ")
     );
-    let mut query = sqlx::query(AssertSqlSafe(sql));
+    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql));
     for value in values.values() {
         query = query.bind(value.clone());
     }
-    query.execute(&mut *conn).await.map_err(DataError::from)?;
-    Ok(())
+    query.fetch_one(&mut *conn).await.map_err(DataError::from)
 }
 
 /// 接口 → (设备 id, 设备房间 id)。供 IP 网段归属校验使用。

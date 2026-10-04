@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=01415">
-  <link rel="stylesheet" href="/static/css/reset.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01415">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=01415">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01415">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01415">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01415">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01415">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01415">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01415">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01415">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01415">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01415">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=01415">
+  <link rel="stylesheet" href="/static/css/variables.css?v=01417">
+  <link rel="stylesheet" href="/static/css/reset.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=01417">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=01417">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=01417">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=01417">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=01417">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=01417">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=01417">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/net_area_modal.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=01417">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=01417">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=01417">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=01417">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=01417">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -319,6 +319,13 @@
         </div>
 
         <div id="rooms-tab" class="tab-content" role="tabpanel">
+          <div class="toolbar">
+            <label for="room-power-unit" data-i18n="room.power_unit">Power Unit</label>
+            <select id="room-power-unit" class="form-control power-unit-select" aria-label="Power unit">
+              <option value="W" data-i18n="common.unit_watts">W</option>
+              <option value="kW" data-i18n="common.unit_kilowatts">kW</option>
+            </select>
+          </div>
           <div class="table-container">
             <table id="rooms-table" class="data-table">
               <thead>
@@ -328,6 +335,8 @@
                   <th data-i18n="common.type" class="sortable col-center" data-sort="room_type">Type</th>
                   <th data-i18n="organization.parent_org" class="sortable" data-sort="org_name">Organization</th>
                   <th data-i18n="room.workstation_count" class="col-center">Workstation Count</th>
+                  <th data-i18n="room.power" class="col-center">Current Power</th>
+                  <th data-i18n="room.power_supply" class="col-center">Power Supply</th>
                   <th data-i18n="room.networks">Subnets</th>
                   <th data-i18n="common.description">Description</th>
                   <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
@@ -336,7 +345,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="11" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -344,6 +353,13 @@
         </div>
 
         <div id="cabinets-tab" class="tab-content" role="tabpanel">
+          <div class="toolbar">
+            <label for="cabinet-power-unit" data-i18n="cabinet.power_unit">Power Unit</label>
+            <select id="cabinet-power-unit" class="form-control power-unit-select" aria-label="Power unit">
+              <option value="W" data-i18n="common.unit_watts">W</option>
+              <option value="kW" data-i18n="common.unit_kilowatts">kW</option>
+            </select>
+          </div>
           <div class="table-container">
             <table id="cabinets-table" class="data-table">
               <thead>
@@ -352,6 +368,8 @@
                   <th data-i18n="cabinet.room" class="sortable" data-sort="room_name">Room</th>
                   <th data-i18n="common.name" class="sortable" data-sort="name">Name</th>
                   <th data-i18n="cabinet.capacity" class="sortable col-center" data-sort="capacity">Capacity</th>
+                  <th data-i18n="cabinet.power" class="col-center">Current Power</th>
+                  <th data-i18n="cabinet.power_supply" class="col-center">Power Supply</th>
                   <th data-i18n="cabinet.position_count" class="col-center">Position Count</th>
                   <th data-i18n="common.description">Description</th>
                   <th data-i18n="common.created_at" class="sortable col-center" data-sort="created_at">Created At</th>
@@ -360,7 +378,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="8" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -377,6 +395,7 @@
                   <th data-i18n="common.type" class="sortable col-center" data-sort="device_type">Type</th>
                   <th data-i18n="device.brand" class="sortable" data-sort="brand">Brand</th>
                   <th data-i18n="device.model" class="sortable" data-sort="model">Model</th>
+                  <th data-i18n="device.power_watts" class="col-center">Power (W)</th>
                   <th data-i18n="device.location">Location</th>
                   <th data-i18n="device.room" class="sortable" data-sort="room_name">Room</th>
                   <th data-i18n="common.description">Description</th>
@@ -385,7 +404,7 @@
               </thead>
               <tbody>
                 <tr class="empty-row">
-                  <td colspan="9" class="text-center" data-i18n="common.no_data">No data available</td>
+                  <td colspan="10" class="text-center" data-i18n="common.no_data">No data available</td>
                 </tr>
               </tbody>
             </table>
@@ -1469,6 +1488,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=01415"></script>
+  <script type="module" src="/static/js/app.js?v=01417"></script>
 </body>
 </html>

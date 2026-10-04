@@ -70,7 +70,7 @@ pub async fn get_rooms<P: DbProvider>(
     let mut count_builder: sqlx::QueryBuilder<sqlx::Postgres> =
         sqlx::QueryBuilder::new("SELECT COUNT(*) FROM rooms r");
     let mut list_builder: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
-        "SELECT r.id, r.name, r.room_type, r.org_id, r.description, \
+        "SELECT r.id, r.name, r.room_type, r.org_id, r.total_power_watts, r.description, \
          r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ \
          FROM rooms r LEFT JOIN organizations o ON r.org_id = o.id",
     );
@@ -175,6 +175,17 @@ pub async fn get_rooms<P: DbProvider>(
     .into_iter()
     .collect();
 
+    // 已分配功率批量查询（房间归属设备的功耗求和），与工位数同口径
+    let allocated_power_map: HashMap<Uuid, i64> = sqlx::query_as::<_, (Uuid, i64)>(
+        "SELECT room_id, COALESCE(SUM(power_watts), 0) FROM devices \
+         WHERE room_id = ANY($1) GROUP BY room_id",
+    )
+    .bind(&room_ids)
+    .fetch_all(&conn)
+    .await?
+    .into_iter()
+    .collect();
+
     let org_name_map: HashMap<Uuid, String> = if org_ids.is_empty() {
         HashMap::new()
     } else {
@@ -198,6 +209,8 @@ pub async fn get_rooms<P: DbProvider>(
             room_type: room.room_type.clone(),
             org_id: room.org_id,
             org_name,
+            total_power_watts: room.total_power_watts,
+            allocated_power_watts: allocated_power_map.get(&room.id).copied().unwrap_or(0),
             description: room.description.clone(),
             networks: room_networks,
             workstation_count,
@@ -266,13 +279,14 @@ pub async fn create_room<P: DbProvider>(
     let room_type_upper = req.room_type.to_uppercase();
 
     sqlx::query(
-        "INSERT INTO rooms (id, name, room_type, org_id, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO rooms (id, name, room_type, org_id, total_power_watts, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(&room_type_upper)
     .bind(req.org_id)
+    .bind(req.total_power_watts)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -309,6 +323,7 @@ pub async fn create_room<P: DbProvider>(
         name: req.name.clone(),
         room_type: room_type_upper,
         org_id: req.org_id,
+        total_power_watts: req.total_power_watts,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -317,6 +332,7 @@ pub async fn create_room<P: DbProvider>(
     let details = serde_json::json!({
         "name": room.name,
         "room_type": room.room_type,
+        "total_power_watts": room.total_power_watts,
         "description": room.description,
         "network_count": req.subnet_ids.len()
     });
@@ -345,7 +361,7 @@ pub async fn get_room_brief<P: DbProvider>(
     let conn = state.pool()?.get_conn();
     let (room, room_networks, ws_rows, cab_rows, no_rows) = tokio::join!(
         sqlx::query_as::<_, Room>(
-            "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
+            "SELECT id, name, room_type, org_id, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(&conn),
@@ -404,6 +420,7 @@ pub async fn get_room_brief<P: DbProvider>(
             "name": room.name,
             "room_type": room.room_type,
             "org_id": room.org_id,
+            "total_power_watts": room.total_power_watts,
             "description": room.description,
             "networks": room_networks,
             "workstations": workstations,
@@ -419,7 +436,7 @@ pub async fn get_room<P: DbProvider>(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let room = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
+        "SELECT id, name, room_type, org_id, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
@@ -436,7 +453,7 @@ pub async fn get_room<P: DbProvider>(
         "DATA_CENTER" | "TELECOM_CLOSET" | "OTHER"
     );
 
-    let (room_networks, workstation_count, org_name_opt, ws_rows, cab_rows, no_rows) =
+    let (room_networks, workstation_count, org_name_opt, ws_rows, cab_rows, no_rows, allocated_power) =
         tokio::join!(
             sqlx::query_as::<_, NetworkInfo>(
                 r"SELECT n.id, n.name, nr.name as network_region, n.network_region_id, n.ipv4_cidr::text as ipv4_cidr, n.ipv6_cidr::text as ipv6_cidr
@@ -490,11 +507,18 @@ pub async fn get_room<P: DbProvider>(
             },
             sqlx::query("SELECT id, name FROM net_outlets WHERE room_id = $1 ORDER BY name")
                 .bind(room.id)
-                .fetch_all(&conn)
+                .fetch_all(&conn),
+            // 已分配功率：房间归属设备的功耗求和（SUM 忽略 NULL，无设备返回 0）
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COALESCE(SUM(power_watts), 0) FROM devices WHERE room_id = $1",
+            )
+            .bind(room.id)
+            .fetch_one(&conn)
         );
 
     let workstation_count = workstation_count?;
     let org_name = org_name_opt?;
+    let allocated_power = allocated_power?;
 
     let workstations = if is_office {
         Some(
@@ -539,6 +563,8 @@ pub async fn get_room<P: DbProvider>(
         room_type: room.room_type,
         org_id: room.org_id,
         org_name,
+        total_power_watts: room.total_power_watts,
+        allocated_power_watts: allocated_power,
         description: room.description,
         networks: room_networks?,
         workstation_count,
@@ -563,13 +589,15 @@ pub async fn update_room<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // 预检（存在性/重名/引用）与写入放同一事务，避免 TOCTOU
+    // 预检（存在性/重名/引用）与写入放同一事务，避免 TOCTOU；
+    // 存在性检查即 FOR UPDATE 锁行，为后续功率上限校验关闭并发写入窗口
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing_room = sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    let existing_room =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM rooms WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
 
     if existing_room.is_none() {
         return Err(AppError::NotFound(msg("server.room.not_found")));
@@ -586,6 +614,18 @@ pub async fn update_room<P: DbProvider>(
         if duplicate.is_some() {
             return Err(AppError::Conflict(msg("server.room.name_exists")));
         }
+    }
+
+    // 设置（调低）总功率上限时的容量校验：房内已分配功耗不得超过新值；
+    // 缺省不修改、null 清空上限不受限
+    if let Some(Some(limit)) = req.total_power_watts {
+        crate::helpers::ensure_power_limit_covers_allocated(
+            &mut tx,
+            crate::helpers::PowerScope::Room(id),
+            limit,
+            "server.room.power_exceeded",
+        )
+        .await?;
     }
 
     // org_id 引用存在性校验（Some(None) 为清空，无需校验）
@@ -621,14 +661,17 @@ pub async fn update_room<P: DbProvider>(
          name = COALESCE($1, name),
          room_type = COALESCE($2, room_type),
          org_id = CASE WHEN $3::boolean THEN $4 ELSE org_id END,
-         description = COALESCE($5, description),
-         updated_at = $6
-         WHERE id = $7",
+         total_power_watts = CASE WHEN $5::boolean THEN $6 ELSE total_power_watts END,
+         description = COALESCE($7, description),
+         updated_at = $8
+         WHERE id = $9",
     )
     .bind(&req.name)
     .bind(req.room_type.as_ref().map(|t| t.to_uppercase()))
     .bind(req.org_id.is_some())
     .bind(req.org_id.flatten())
+    .bind(req.total_power_watts.is_some())
+    .bind(req.total_power_watts.flatten())
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -688,13 +731,14 @@ pub async fn update_room<P: DbProvider>(
     tx.commit().await?;
 
     let room = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
+        "SELECT id, name, room_type, org_id, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
 
     let details = serde_json::json!({
         "name": room.name,
         "room_type": room.room_type,
+        "total_power_watts": room.total_power_watts,
         "description": room.description
     });
     log_op_best_effort(

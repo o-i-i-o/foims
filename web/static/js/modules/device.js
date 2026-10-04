@@ -19,7 +19,7 @@ import {
 import { openModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
-import { createSeqGuard, elementCache } from "../utils/helpers.js";
+import { createSeqGuard, elementCache, readPowerWattsInput } from "../utils/helpers.js";
 import {
   loadRoomsForSelect,
   loadDeviceTemplatesForSelect,
@@ -126,6 +126,11 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
         },
         { field: "brand", render: (v) => escapeHtml(v) || "-" },
         { field: "model", render: (v) => escapeHtml(v) || "-" },
+        {
+          field: "power_watts",
+          render: (v) => (v != null ? v : "-"),
+          className: "col-center"
+        },
         {
           field: "workstation_name",
           render: (v, row) => {
@@ -657,6 +662,7 @@ export async function submitDeviceForm() {
   const model = getElementValue("device-model");
   const seller = getElementValue("device-seller");
   const location = getElementValue("device-location");
+  const powerWattsRaw = getElementValue("device-power-watts");
   const serialNumber = getElementValue("device-serial-number");
   const templateId = getElementValue("device-template-id");
   const roomId = getElementValue("device-room-id");
@@ -688,6 +694,16 @@ export async function submitDeviceForm() {
   const snmpVersion = getElementValue("device-snmp-version") || "v2c";
   const snmpPort = parseInt(getElementValue("device-snmp-port")) || 161;
 
+  // 功耗：空串=不记录（null）；按所选单位换算为瓦后校验，非法值直接拦截
+  const powerWatts = readPowerWattsInput(
+    powerWattsRaw,
+    getElementValue("device-power-unit-modal")
+  );
+  if (Number.isNaN(powerWatts)) {
+    showToast(t("device.power_watts_invalid"), "warning");
+    return;
+  }
+
   const deviceData = {
     name: name.trim(),
     hostname: getElementValue("device-hostname") || null,
@@ -706,6 +722,7 @@ export async function submitDeviceForm() {
     template_name: saveAsTemplate ? templateName?.trim() || name.trim() : null,
     snmp_version: snmpVersion,
     snmp_port: snmpPort,
+    power_watts: powerWatts,
     snmp_community: maskToNull(getElementValue("device-snmp-community")),
     snmp_username: getElementValue("device-snmp-username") || null,
     snmp_auth_protocol: getElementValue("device-snmp-auth-protocol") || null,
@@ -737,6 +754,8 @@ async function fillDeviceFormForEdit(device, cardManager, roomDetailPromise) {
   elementCache.setValue("device-model", device.model || "");
   elementCache.setValue("device-seller", device.seller || "");
   elementCache.setValue("device-location", device.location || "");
+  elementCache.setValue("device-power-watts", device.power_watts ?? "");
+  elementCache.setValue("device-power-unit-modal", "W");
   elementCache.setValue("device-serial-number", device.serial_number || "");
   elementCache.setValue("device-description", device.description || "");
 

@@ -16,6 +16,8 @@ pub struct Room {
     pub name: String,
     pub room_type: String,
     pub org_id: Option<Uuid>,
+    /// 房间总功率上限（瓦，None=不限制）
+    pub total_power_watts: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -28,6 +30,10 @@ pub struct RoomWithNetworks {
     pub room_type: String,
     pub org_id: Option<Uuid>,
     pub org_name: Option<String>,
+    /// 房间总功率上限（瓦，None=不限制）
+    pub total_power_watts: Option<i32>,
+    /// 房内设备功耗之和（瓦）
+    pub allocated_power_watts: i64,
     pub description: Option<String>,
     pub networks: Vec<NetworkInfo>,
     pub workstation_count: i64,
@@ -76,6 +82,12 @@ pub struct RoomCreate {
     pub room_type: String,
     pub org_id: Option<Uuid>,
     pub subnet_ids: Vec<Uuid>,
+    /// 房间总功率上限（瓦，0..=10_000_000；缺省/null=不限制）
+    #[validate(custom(
+        function = "crate::models::validate_power_watts",
+        message = "server.common.validation.power_range"
+    ))]
+    pub total_power_watts: Option<i32>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -92,6 +104,14 @@ pub struct RoomUpdate {
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     pub org_id: Option<Option<Uuid>>,
     pub subnet_ids: Option<Vec<Uuid>>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空上限（不限制）、值设置新值；
+    /// 设置新值时房内设备功耗之和不得超过该值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_power_watts",
+        message = "server.common.validation.power_range"
+    ))]
+    pub total_power_watts: Option<Option<i32>>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -225,6 +245,8 @@ mod tests {
             room_type: "office".to_string(),
             org_id: None,
             org_name: None,
+            total_power_watts: Some(50_000),
+            allocated_power_watts: 12_500,
             description: None,
             networks: Vec::new(),
             workstation_count: 0,
@@ -281,6 +303,8 @@ mod tests {
             "room_type": "office",
             "org_id": null,
             "org_name": null,
+            "total_power_watts": null,
+            "allocated_power_watts": 0,
             "description": null,
             "networks": [],
             "workstation_count": 0,
@@ -290,6 +314,7 @@ mod tests {
         let room: RoomWithNetworks = serde_json::from_value(value)?;
         assert!(room.net_outlets.is_empty());
         assert!(room.workstations.is_none());
+        assert_eq!(room.total_power_watts, None);
         Ok(())
     }
 
@@ -300,6 +325,7 @@ mod tests {
             name: "301".to_string(),
             room_type: "office".to_string(),
             org_id: None,
+            total_power_watts: Some(50_000),
             description: Some("三楼".to_string()),
             created_at: Utc::now(),
             updated_at: Utc::now(),

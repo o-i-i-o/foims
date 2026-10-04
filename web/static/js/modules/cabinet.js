@@ -17,9 +17,15 @@ import {
   openSimpleListModal
 } from "../utils/ui.js";
 
-import { formatDateTime } from "../utils/formatter.js";
+import { formatDateTime, formatPowerValue } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
-import { createSeqGuard, elementCache } from "../utils/helpers.js";
+import {
+  bindPowerUnitSelect,
+  createSeqGuard,
+  elementCache,
+  getPowerUnit,
+  readPowerWattsInput
+} from "../utils/helpers.js";
 
 // 列表/详情加载失败的统一提示文案（避免同一字面量多处重复）
 const cabinetLoadFailedMsg = (message) => `${t("cabinet.load_failed")}: ${message || ""}`;
@@ -280,6 +286,18 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
         { field: "room_name", render: (v) => escapeHtml(v) || "-" },
         { field: "name", render: (v) => escapeHtml(v) },
         { field: "capacity", render: (v) => v ?? "-", className: "col-center" },
+        {
+          // 当前功率：柜内机位关联设备功耗之和
+          field: "allocated_power_watts",
+          render: (v) => formatPowerValue(v ?? 0, getPowerUnit()),
+          className: "col-center"
+        },
+        {
+          // 电源功率：供电上限（未设置显示 "-"）
+          field: "total_power_watts",
+          render: (v) => formatPowerValue(v, getPowerUnit()),
+          className: "col-center"
+        },
         { field: "position_count", render: (v) => v ?? 0, className: "col-center" },
         { field: "description", render: (v) => escapeHtml(v) || "-" },
         {
@@ -379,6 +397,8 @@ export async function openCabinetPositionsListModal(cabinetId) {
 
 export function initCabinetSortEvents() {
   initSortEvents("cabinets-table", tableState, loadCabinetsData);
+  // 功率单位切换：仅影响显示（瓦/千瓦），切换后重拉当前页渲染
+  bindPowerUnitSelect(document.getElementById("cabinet-power-unit"), () => loadCabinetsData());
 }
 
 // 编辑机柜
@@ -422,6 +442,8 @@ export async function openCabinetModal(cabinet = null) {
     if (capacityInput) {
       capacityInput.value = cabinet.capacity || 42;
     }
+    elementCache.setValue("cabinet-total-power", cabinet.total_power_watts ?? "");
+    elementCache.setValue("cabinet-power-unit-modal", "W");
     elementCache.setValue("cabinet-description", cabinet.description || "");
 
     // 加载现有机位
@@ -466,6 +488,16 @@ export async function submitCabinetForm() {
     return;
   }
 
+  // 电源功率：空串=不限制（null）；按所选单位换算为瓦后校验
+  const totalPowerWatts = readPowerWattsInput(
+    getElementValue("cabinet-total-power"),
+    getElementValue("cabinet-power-unit-modal")
+  );
+  if (Number.isNaN(totalPowerWatts)) {
+    showToast(t("cabinet.total_power_invalid"), "warning");
+    return;
+  }
+
   // 收集并校验机位数据
   const positionsData = cabinetPositionsManager.collectData();
   const positionsError = validatePositions(positionsData.positions);
@@ -478,6 +510,7 @@ export async function submitCabinetForm() {
     name: name.trim(),
     room_id: roomId,
     capacity,
+    total_power_watts: totalPowerWatts,
     description: description.trim() || null
   };
 

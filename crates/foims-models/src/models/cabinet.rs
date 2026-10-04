@@ -16,6 +16,8 @@ pub struct Cabinet {
     pub name: String,
     pub room_id: Uuid,
     pub capacity: i32,
+    /// 机柜总功率上限（瓦，None=不限制）
+    pub total_power_watts: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -28,6 +30,10 @@ pub struct CabinetWithNetworks {
     pub room_id: Uuid,
     pub room_name: Option<String>,
     pub capacity: i32,
+    /// 机柜总功率上限（瓦，None=不限制）
+    pub total_power_watts: Option<i32>,
+    /// 柜内设备功耗之和（瓦，含未挂机位的设备为 0）
+    pub allocated_power_watts: i64,
     pub position_count: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub positions: Option<Vec<PositionBrief>>,
@@ -49,6 +55,12 @@ pub struct CabinetCreate {
         message = "server.cabinet.validation.capacity_range"
     ))]
     pub capacity: i32,
+    /// 机柜总功率上限（瓦，0..=10_000_000；缺省/null=不限制）
+    #[validate(custom(
+        function = "crate::models::validate_power_watts",
+        message = "server.common.validation.power_range"
+    ))]
+    pub total_power_watts: Option<i32>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -64,6 +76,14 @@ pub struct CabinetUpdate {
         message = "server.cabinet.validation.capacity_range"
     ))]
     pub capacity: Option<i32>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空上限（不限制）、值设置新值；
+    /// 设置新值时柜内设备功耗之和不得超过该值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_power_watts",
+        message = "server.common.validation.power_range"
+    ))]
+    pub total_power_watts: Option<Option<i32>>,
     /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
@@ -148,6 +168,56 @@ mod tests {
     }
 
     #[test]
+    fn test_cabinet_power_watts_validation() -> Result<(), serde_json::Error> {
+        // 创建路径：缺省=不限制，负数/超上限拒绝
+        let ok: CabinetCreate = serde_json::from_value(serde_json::json!({
+            "name": "A 机柜",
+            "room_id": Uuid::new_v4(),
+            "capacity": 42
+        }))?;
+        assert_eq!(ok.total_power_watts, None);
+
+        let set: CabinetCreate = serde_json::from_value(serde_json::json!({
+            "name": "A 机柜",
+            "room_id": Uuid::new_v4(),
+            "capacity": 42,
+            "total_power_watts": 10000
+        }))?;
+        assert_eq!(set.total_power_watts, Some(10000));
+        assert!(set.validate().is_ok());
+
+        let bad: CabinetCreate = serde_json::from_value(serde_json::json!({
+            "name": "A 机柜",
+            "room_id": Uuid::new_v4(),
+            "capacity": 42,
+            "total_power_watts": -1
+        }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("负总功率应被拒绝");
+        };
+        assert!(errors.errors().contains_key("total_power_watts"));
+
+        // 更新路径双层 Option：缺失不修改、null 清空、数值设置新值
+        let missing: CabinetUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(missing.total_power_watts, None);
+
+        let cleared: CabinetUpdate = serde_json::from_value(serde_json::json!({
+            "total_power_watts": null
+        }))?;
+        assert_eq!(cleared.total_power_watts, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        let bad_update: CabinetUpdate = serde_json::from_value(serde_json::json!({
+            "total_power_watts": 10_000_001
+        }))?;
+        let Err(errors) = bad_update.validate() else {
+            panic!("超上限总功率应被拒绝");
+        };
+        assert!(errors.errors().contains_key("total_power_watts"));
+        Ok(())
+    }
+
+    #[test]
     fn test_cabinet_update_description_three_states() -> Result<(), serde_json::Error> {
         // 双层 Option：null 清空描述、值设置新值且超长被拒绝
         let cleared: CabinetUpdate = serde_json::from_value(serde_json::json!({
@@ -175,6 +245,8 @@ mod tests {
             room_id: Uuid::new_v4(),
             room_name: Some("机房".to_string()),
             capacity: 42,
+            total_power_watts: Some(10_000),
+            allocated_power_watts: 1_200,
             position_count: 3,
             positions: None,
             patch_panels: None,
@@ -220,6 +292,7 @@ mod tests {
             name: "A 机柜".to_string(),
             room_id: Uuid::new_v4(),
             capacity: 42,
+            total_power_watts: Some(10_000),
             description: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),

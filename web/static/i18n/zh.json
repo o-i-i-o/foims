@@ -32,6 +32,8 @@
     "readonly_badge": "只读",
     "confirm": "确认",
     "index": "序号",
+    "unit_watts": "瓦",
+    "unit_kilowatts": "千瓦",
     "success": "成功",
     "failed": "失败",
     "loading": "加载中...",
@@ -127,6 +129,9 @@
     "position": "机位",
     "room": "房间",
     "location": "位置",
+    "power_watts": "功耗（瓦）",
+    "power_input": "功耗",
+    "power_watts_invalid": "功耗必须是非负整数",
     "select_template": "选择模板",
     "select_workstation": "选择工位",
     "select_position": "选择机位",
@@ -319,7 +324,12 @@
     "type_lobby": "大厅",
     "type_reception": "前台",
     "type_other": "其他",
-    "workstation_count": "工位数量"
+    "workstation_count": "工位数量",
+    "power": "当前功率",
+    "power_supply": "电源功率",
+    "power_unit": "功率单位",
+    "total_power": "电源功率",
+    "total_power_invalid": "电源功率必须是非负整数"
   },
   "time": {
     "just_now": "刚刚",
@@ -591,7 +601,12 @@
     "room_required": "房间为必选项",
     "name": "机柜名称",
     "room": "房间",
-    "capacity": "容量(U)",
+    "capacity": "容量（U）",
+    "power": "当前功率",
+    "power_supply": "电源功率",
+    "power_unit": "功率单位",
+    "total_power": "电源功率",
+    "total_power_invalid": "电源功率必须是非负整数",
     "select_room": "选择房间",
     "add_cabinet": "添加机柜",
     "edit_cabinet": "编辑机柜",
@@ -1604,6 +1619,7 @@
       "position_in_use": "机位已被设备关联，无法删除",
       "position_name_exists": "机位名称已存在",
       "positions_synced": "机位同步成功",
+      "power_exceeded": "设置失败：柜内已分配功率 {{allocated}} 瓦，超过总功率上限 {{total}} 瓦",
       "updated": "机柜更新成功",
       "validation": {
         "capacity_range": "机柜容量必须在1到48U之间",
@@ -1691,7 +1707,8 @@
         "description_length": "描述长度不能超过255个字符",
         "email_format": "邮箱格式不正确",
         "uuid_invalid": "无效的 UUID 参数",
-        "ip_format": "IP 地址格式无效"
+        "ip_format": "IP 地址格式无效",
+        "power_range": "功率值必须在 0 到 10000000 瓦之间"
       },
       "pgpass_write_failed": "写入 .pgpass 临时文件失败",
       "password_hash_failed": "密码哈希失败",
@@ -1745,6 +1762,8 @@
         "synced": "同步 {{count}} 条 MAC 记录"
       },
       "name_exists": "同房间下已存在同名设备",
+      "cabinet_power_exceeded": "设备功耗超过所在机柜总功率：已分配 {{allocated}} 瓦，本设备 {{power}} 瓦，上限 {{total}} 瓦",
+      "room_power_exceeded": "设备功耗超过房间总功率：已分配 {{allocated}} 瓦，本设备 {{power}} 瓦，上限 {{total}} 瓦",
       "nic": {
         "card_type_invalid": "网卡类型必须是pcie、onboard、usb、virtual、wwan、wifi或other",
         "fetched": "网卡配置获取成功",
@@ -2183,6 +2202,7 @@
       "networks_retrieved": "房间子网获取成功",
       "not_found": "房间不存在",
       "office_requires_workstations": "办公室房间需要工位数据",
+      "power_exceeded": "设置失败：房间内已分配功率 {{allocated}} 瓦，超过总功率上限 {{total}} 瓦",
       "updated": "房间更新成功",
       "validation": {
         "name_length": "房间名称长度必须在1到50个字符之间",

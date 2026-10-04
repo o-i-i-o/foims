@@ -59,7 +59,7 @@ pub async fn get_cabinets<P: DbProvider>(
             .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id {order_clause} LIMIT $1 OFFSET $2"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id {order_clause} LIMIT $1 OFFSET $2"))
         )
         .bind(page_size)
         .bind(offset)
@@ -74,7 +74,7 @@ pub async fn get_cabinets<P: DbProvider>(
             .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(parsed_room_id)
         .bind(page_size)
@@ -93,7 +93,7 @@ pub async fn get_cabinets<P: DbProvider>(
         .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"))
         )
         .bind(parsed_room_id)
         .bind(&search_pattern)
@@ -112,7 +112,7 @@ pub async fn get_cabinets<P: DbProvider>(
         .await?;
 
         let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
+            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
         )
         .bind(&search_pattern)
         .bind(page_size)
@@ -134,6 +134,17 @@ pub async fn get_cabinets<P: DbProvider>(
     .await?;
     let position_count_map: std::collections::HashMap<Uuid, i64> =
         position_counts.into_iter().collect();
+    // 已分配功率批量查询（经机位关联的设备功耗求和），与机位数同口径
+    let allocated_powers: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT p.cabinet_id, COALESCE(SUM(d.power_watts), 0) \
+         FROM devices d JOIN positions p ON d.position_id = p.id \
+         WHERE p.cabinet_id = ANY($1) GROUP BY p.cabinet_id",
+    )
+    .bind(&cabinet_ids)
+    .fetch_all(&state.pool()?.get_conn())
+    .await?;
+    let allocated_power_map: std::collections::HashMap<Uuid, i64> =
+        allocated_powers.into_iter().collect();
     let room_names: Vec<(Uuid, String)> = sqlx::query_as(
         "SELECT DISTINCT r.id, r.name FROM rooms r JOIN cabinets c ON c.room_id = r.id WHERE c.id = ANY($1)",
     )
@@ -153,6 +164,8 @@ pub async fn get_cabinets<P: DbProvider>(
                 name: cabinet.name,
                 room_id: cabinet.room_id,
                 capacity: cabinet.capacity,
+                total_power_watts: cabinet.total_power_watts,
+                allocated_power_watts: allocated_power_map.get(&cabinet_id).copied().unwrap_or(0),
                 positions: None,
                 patch_panels: None,
                 description: cabinet.description,
@@ -206,7 +219,7 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
             ));
         }
         sqlx::query_as::<_, Cabinet>(
-            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at, c.updated_at
+            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at, c.updated_at
                FROM cabinets c
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
@@ -218,7 +231,7 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
         .await?
     } else {
         sqlx::query_as::<_, Cabinet>(
-            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.description, c.created_at, c.updated_at
+            r"SELECT DISTINCT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at, c.updated_at
                FROM cabinets c
                LEFT JOIN rooms r ON c.room_id = r.id
                LEFT JOIN room_networks rn ON r.id = rn.room_id
@@ -269,13 +282,14 @@ pub async fn create_cabinet<P: DbProvider>(
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO cabinets (id, name, room_id, capacity, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO cabinets (id, name, room_id, capacity, total_power_watts, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.capacity)
+    .bind(req.total_power_watts)
     .bind(&req.description)
     .bind(now)
     .bind(now)
@@ -298,6 +312,7 @@ pub async fn create_cabinet<P: DbProvider>(
         name: req.name.clone(),
         room_id: req.room_id,
         capacity: req.capacity,
+        total_power_watts: req.total_power_watts,
         description: req.description.clone(),
         created_at: now,
         updated_at: now,
@@ -327,7 +342,7 @@ pub async fn get_cabinet<P: DbProvider>(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let cabinet = sqlx::query_as::<_, Cabinet>(
-        "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
+        "SELECT id, name, room_id, capacity, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_optional(&state.pool()?.get_conn()).await?
     .ok_or_else(|| AppError::NotFound(msg("server.cabinet.not_found")))?;
@@ -337,6 +352,16 @@ pub async fn get_cabinet<P: DbProvider>(
             .bind(cabinet.id)
             .fetch_one(&state.pool()?.get_conn())
             .await?;
+
+    // 已分配功率：柜内经机位关联的设备功耗之和（SUM 忽略 NULL）
+    let allocated_power: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(d.power_watts), 0) \
+         FROM devices d JOIN positions p ON d.position_id = p.id \
+         WHERE p.cabinet_id = $1",
+    )
+    .bind(cabinet.id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
 
     let room_name: Option<String> = sqlx::query_scalar("SELECT name FROM rooms WHERE id = $1")
         .bind(cabinet.room_id)
@@ -380,6 +405,8 @@ pub async fn get_cabinet<P: DbProvider>(
         room_id: cabinet.room_id,
         room_name,
         capacity: cabinet.capacity,
+        total_power_watts: cabinet.total_power_watts,
+        allocated_power_watts: allocated_power,
         position_count,
         positions: Some(positions),
         patch_panels: Some(patch_panels),
@@ -402,14 +429,16 @@ pub async fn update_cabinet<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // 预检（存在性/重名/引用）与写入放同一事务，避免 TOCTOU
+    // 预检（存在性/重名/引用）与写入放同一事务，避免 TOCTOU；
+    // 首查即 FOR UPDATE 锁行，为后续功率上限校验关闭并发写入窗口
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let current_room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| AppError::NotFound(msg("server.cabinet.not_found")))?;
+    let current_room_id: Uuid =
+        sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| AppError::NotFound(msg("server.cabinet.not_found")))?;
 
     // room_id 引用存在性校验（缺省沿用现值）
     if let Some(room_id) = req.room_id {
@@ -438,6 +467,18 @@ pub async fn update_cabinet<P: DbProvider>(
         .await?;
     }
 
+    // 设置（调低）总功率上限时的容量校验：柜内已分配功耗不得超过新值；
+    // 缺省不修改、null 清空上限不受限
+    if let Some(Some(limit)) = req.total_power_watts {
+        crate::helpers::ensure_power_limit_covers_allocated(
+            &mut tx,
+            crate::helpers::PowerScope::Cabinet(id),
+            limit,
+            "server.cabinet.power_exceeded",
+        )
+        .await?;
+    }
+
     let now = Utc::now();
 
     sqlx::query(
@@ -445,13 +486,16 @@ pub async fn update_cabinet<P: DbProvider>(
          name = COALESCE($1, name),
          room_id = COALESCE($2, room_id),
          capacity = COALESCE($3, capacity),
-         description = COALESCE($4, description),
-         updated_at = $5
-         WHERE id = $6",
+         total_power_watts = CASE WHEN $4::boolean THEN $5 ELSE total_power_watts END,
+         description = COALESCE($6, description),
+         updated_at = $7
+         WHERE id = $8",
     )
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.capacity)
+    .bind(req.total_power_watts.is_some())
+    .bind(req.total_power_watts.flatten())
     .bind(&req.description)
     .bind(now)
     .bind(id)
@@ -470,7 +514,7 @@ pub async fn update_cabinet<P: DbProvider>(
     tx.commit().await?;
 
     let cabinet = sqlx::query_as::<_, Cabinet>(
-        "SELECT id, name, room_id, capacity, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
+        "SELECT id, name, room_id, capacity, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM cabinets WHERE id = $1"
     ).bind(id)
     .fetch_one(&state.pool()?.get_conn()).await?;
 
@@ -478,6 +522,7 @@ pub async fn update_cabinet<P: DbProvider>(
         "name": cabinet.name,
         "room_id": cabinet.room_id,
         "capacity": cabinet.capacity,
+        "total_power_watts": cabinet.total_power_watts,
         "description": cabinet.description
     });
     log_op_best_effort(

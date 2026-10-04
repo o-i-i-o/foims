@@ -169,6 +169,156 @@ where
     Ok(())
 }
 
+// ==================== 功率容量校验 ====================
+
+/// 功率上限作用域：机柜按机位关联设备求和，房间按归属设备求和。
+pub(crate) enum PowerScope {
+    Room(Uuid),
+    Cabinet(Uuid),
+}
+
+impl PowerScope {
+    /// 当前已分配功耗合计（SUM 忽略 NULL，无设备返回 0）；
+    /// `exclude_device_id` 供更新路径排除设备自身。
+    pub(crate) async fn allocated_power_excluding(
+        self,
+        conn: &mut sqlx::PgConnection,
+        exclude_device_id: Option<Uuid>,
+    ) -> Result<i64, AppError> {
+        match self {
+            PowerScope::Room(id) => {
+                let allocated: i64 = sqlx::query_scalar(
+                    "SELECT COALESCE(SUM(power_watts), 0) FROM devices \
+                     WHERE room_id = $1 AND ($2::uuid IS NULL OR id != $2)",
+                )
+                .bind(id)
+                .bind(exclude_device_id)
+                .fetch_one(conn)
+                .await?;
+                Ok(allocated)
+            }
+            PowerScope::Cabinet(id) => {
+                let allocated: i64 = sqlx::query_scalar(
+                    "SELECT COALESCE(SUM(d.power_watts), 0) \
+                     FROM devices d JOIN positions p ON d.position_id = p.id \
+                     WHERE p.cabinet_id = $1 AND ($2::uuid IS NULL OR d.id != $2)",
+                )
+                .bind(id)
+                .bind(exclude_device_id)
+                .fetch_one(conn)
+                .await?;
+                Ok(allocated)
+            }
+        }
+    }
+}
+
+/// 设备功耗写入前的容量校验（房间/机柜总功率上限）。
+///
+/// 所有调用方必须在事务内且已完成房间/机位存在性与一致性校验；
+/// 本函数按 房间行（FOR UPDATE）→ 机柜行 的固定锁序加锁，各调用方
+/// 一致，无死锁环。校验口径：
+/// - `power_watts` 为 None 或 <= 0 不设限；
+/// - 房间上限：total_power_watts 非 NULL 时，该房间全部设备功耗之和
+///   （含本次写入、排除 `exclude_device_id`）不得超过上限；
+/// - 机柜上限：设备挂机位时按机位所属机柜的关联设备求和，上限为
+///   NULL 不限制。
+///
+/// 超限返回 400（AppError::Validation 映射 BAD_REQUEST），携带
+/// allocated（现有合计）/power（设备功耗）/total（上限值）占位。
+pub(crate) async fn ensure_device_power_capacity(
+    conn: &mut sqlx::PgConnection,
+    room_id: Uuid,
+    position_id: Option<Uuid>,
+    exclude_device_id: Option<Uuid>,
+    power_watts: Option<i32>,
+) -> Result<(), AppError> {
+    let Some(w) = power_watts else {
+        return Ok(());
+    };
+    if w <= 0 {
+        return Ok(());
+    }
+
+    // 房间上限（锁序 1：房间行）
+    let room_limit: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
+        "SELECT total_power_watts FROM rooms WHERE id = $1 FOR UPDATE",
+    )
+    .bind(room_id)
+    .fetch_optional(&mut *conn)
+    .await?
+    .flatten();
+    if let Some(total) = room_limit {
+        let allocated = PowerScope::Room(room_id)
+            .allocated_power_excluding(conn, exclude_device_id)
+            .await?;
+        if allocated + i64::from(w) > i64::from(total) {
+            return Err(AppError::Validation(
+                msg("server.device.room_power_exceeded")
+                    .with("allocated", allocated)
+                    .with("power", w)
+                    .with("total", total),
+            ));
+        }
+    }
+
+    // 机柜上限（锁序 2：机柜行）；未挂机位的设备仅校验房间
+    let Some(pos_id) = position_id else {
+        return Ok(());
+    };
+    let cabinet_id: Option<Uuid> =
+        sqlx::query_scalar::<_, Option<Uuid>>("SELECT cabinet_id FROM positions WHERE id = $1")
+            .bind(pos_id)
+            .fetch_optional(&mut *conn)
+            .await?
+            .flatten();
+    let Some(cab_id) = cabinet_id else {
+        return Ok(());
+    };
+    let cabinet_limit: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
+        "SELECT total_power_watts FROM cabinets WHERE id = $1 FOR UPDATE",
+    )
+    .bind(cab_id)
+    .fetch_optional(&mut *conn)
+    .await?
+    .flatten();
+    if let Some(total) = cabinet_limit {
+        let allocated = PowerScope::Cabinet(cab_id)
+            .allocated_power_excluding(conn, exclude_device_id)
+            .await?;
+        if allocated + i64::from(w) > i64::from(total) {
+            return Err(AppError::Validation(
+                msg("server.device.cabinet_power_exceeded")
+                    .with("allocated", allocated)
+                    .with("power", w)
+                    .with("total", total),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// 机柜/房间设置（调低）总功率上限时的容量校验：已分配功耗不得超过
+/// 新上限；清空上限（NULL）不受此函数约束（调用方跳过）。调用方须在
+/// 同一事务内先对目标行 FOR UPDATE 加锁，保证校验-写入窗口无并发写入。
+pub(crate) async fn ensure_power_limit_covers_allocated(
+    conn: &mut sqlx::PgConnection,
+    scope: PowerScope,
+    new_limit: i32,
+    error_key: &'static str,
+) -> Result<(), AppError> {
+    let allocated = scope.allocated_power_excluding(conn, None).await?;
+    if allocated > i64::from(new_limit) {
+        return Err(AppError::Validation(
+            msg(error_key)
+                .with("allocated", allocated)
+                .with("total", new_limit),
+        ));
+    }
+    Ok(())
+}
+
 // ==================== 站内通知与 MAC 变更告警 ====================
 
 /// 组装站内通知内容：以 JSON 形式存储「消息 key + 动态参数」，

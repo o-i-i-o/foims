@@ -24,6 +24,8 @@ use foims_models::{
     IpDetail,
 };
 
+use crate::helpers::PowerScope;
+
 /// 追加机位列表过滤条件（关键字 + 机柜 + 机房），供 COUNT 与数据查询共用。
 fn push_position_filters(
     builder: &mut QueryBuilder<Postgres>,
@@ -342,14 +344,16 @@ pub async fn update_cabinet_position<P: DbProvider>(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let position_exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM positions WHERE id = $1)")
+    // 现值一次取回：存在性校验 + 重名/U位/功率预检共用的
+    // cabinet_id 与 U 区间（避免同一行反复查询）
+    let existing: Option<(Option<Uuid>, i32, i32)> =
+        sqlx::query_as("SELECT cabinet_id, start_u, end_u FROM positions WHERE id = $1")
             .bind(id)
-            .fetch_one(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await?;
-    if !position_exists {
+    let Some((cur_cabinet_id, cur_start_u, cur_end_u)) = existing else {
         return Err(AppError::NotFound(msg("server.position.not_found")));
-    }
+    };
 
     // cabinet_id 三态：缺省沿用现值；Some(Some(id)) 校验引用存在性；
     // Some(None) 清空为 NULL（cabinet_id 可空），无需引用校验
@@ -369,12 +373,7 @@ pub async fn update_cabinet_position<P: DbProvider>(
     if let Some(name) = &req.name {
         let effective_cabinet_id: Option<Uuid> = match req.cabinet_id {
             Some(cabinet_id) => cabinet_id,
-            None => {
-                sqlx::query_scalar("SELECT cabinet_id FROM positions WHERE id = $1")
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await?
-            }
+            None => cur_cabinet_id,
         };
         // 机柜列可空（cabinet_id IS NULL 的未归属机位），共享预检的
         // IS NOT DISTINCT FROM 语义与原内联 SQL 一致
@@ -391,13 +390,8 @@ pub async fn update_cabinet_position<P: DbProvider>(
     }
 
     // U 位重叠预检（以最终生效的机柜与区间为口径）：
-    // 返回 422 而非触发器 P0001 的 500
+    // 返回 400 而非触发器 P0001 的 500
     {
-        let (cur_cabinet_id, cur_start_u, cur_end_u): (Option<Uuid>, i32, i32) =
-            sqlx::query_as("SELECT cabinet_id, start_u, end_u FROM positions WHERE id = $1")
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
         let final_cabinet_id = if req.cabinet_id.is_some() {
             req.cabinet_id.flatten()
         } else {
@@ -413,6 +407,76 @@ pub async fn update_cabinet_position<P: DbProvider>(
             Some(id),
         )
         .await?;
+    }
+
+    // 功率容量校验：机位变更归属机柜时，挂载设备随位迁移计入目标
+    // 机柜/房间功耗合计，不得超过其总功率上限。锁序与设备写入路径
+    // 一致（房间行 → 机柜行 FOR UPDATE），防止校验-写入竞态；
+    // 清空归属（Some(None)）或机柜未变化时分配只减不增，无需校验。
+    // 房间口径先排除本机位全部设备再计入其功耗合计，兼容设备
+    // room_id 尚未随位更新的存量数据（避免同房间内双算）。
+    if let Some(target_cabinet_id) = req.cabinet_id.flatten()
+        && cur_cabinet_id != Some(target_cabinet_id)
+    {
+        let moving_watts: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(power_watts), 0) FROM devices WHERE position_id = $1",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if moving_watts > 0 {
+            // 锁序 1：目标机柜所在房间行
+            let (target_room_id, room_limit): (Uuid, Option<i32>) = sqlx::query_as(
+                "SELECT r.id, r.total_power_watts \
+                 FROM rooms r JOIN cabinets c ON c.room_id = r.id \
+                 WHERE c.id = $1 FOR UPDATE OF r",
+            )
+            .bind(target_cabinet_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            // 锁序 2：目标机柜行
+            let cabinet_limit: Option<i32> = sqlx::query_scalar(
+                "SELECT total_power_watts FROM cabinets WHERE id = $1 FOR UPDATE",
+            )
+            .bind(target_cabinet_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if let Some(total) = room_limit {
+                let allocated: i64 = sqlx::query_scalar(
+                    "SELECT COALESCE(SUM(power_watts), 0) FROM devices \
+                     WHERE room_id = $1 AND position_id IS DISTINCT FROM $2",
+                )
+                .bind(target_room_id)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+                if allocated + moving_watts > i64::from(total) {
+                    return Err(AppError::Validation(
+                        msg("server.device.room_power_exceeded")
+                            .with("allocated", allocated)
+                            .with("power", moving_watts)
+                            .with("total", total),
+                    ));
+                }
+            }
+
+            // 机柜口径：移动设备挂在源机柜（或未归属），目标机柜
+            // 合计天然不含它们，直接累加移动功耗
+            if let Some(total) = cabinet_limit {
+                let allocated = PowerScope::Cabinet(target_cabinet_id)
+                    .allocated_power_excluding(&mut tx, None)
+                    .await?;
+                if allocated + moving_watts > i64::from(total) {
+                    return Err(AppError::Validation(
+                        msg("server.device.cabinet_power_exceeded")
+                            .with("allocated", allocated)
+                            .with("power", moving_watts)
+                            .with("total", total),
+                    ));
+                }
+            }
+        }
     }
 
     sqlx::query(

@@ -366,6 +366,8 @@ pub struct Device {
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
+    /// 设备额定功耗（瓦，None=未记录）
+    pub power_watts: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -401,6 +403,7 @@ pub struct DeviceWithDetails {
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
+    pub power_watts: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -466,6 +469,12 @@ pub struct DeviceCreate {
         message = "server.device.validation.snmp_port_range"
     ))]
     pub snmp_port: Option<i32>,
+    /// 设备额定功耗（瓦，0..=10_000_000；缺省/null=未记录）
+    #[validate(custom(
+        function = "crate::models::validate_power_watts",
+        message = "server.common.validation.power_range"
+    ))]
+    pub power_watts: Option<i32>,
     /// nested 显式开启：validator derive 不自动展开 Option<Vec> 元素，
     /// 缺失时网卡→网口→IP 嵌套链的校验在请求路径不会执行
     #[validate(nested)]
@@ -561,6 +570,13 @@ pub struct DeviceUpdate {
         message = "server.device.validation.snmp_port_range"
     ))]
     pub snmp_port: Option<i32>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空功耗（SET NULL）、值设置新值
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_power_watts",
+        message = "server.common.validation.power_range"
+    ))]
+    pub power_watts: Option<Option<i32>>,
     /// nested 显式开启：与 DeviceCreate.cards 同口径（网卡→网口→IP 嵌套链）
     #[validate(nested)]
     pub cards: Option<Vec<NetworkCardSyncItem>>,
@@ -897,6 +913,50 @@ mod tests {
     }
 
     #[test]
+    fn test_device_power_watts_three_states() -> Result<(), serde_json::Error> {
+        // 创建路径：缺省/null 均为 None（未记录），数值经范围校验
+        let missing: DeviceCreate = serde_json::from_value(valid_device_create_json())?;
+        assert_eq!(missing.power_watts, None);
+
+        let set: DeviceCreate = serde_json::from_value(serde_json::json!({
+            "name": "核心交换机",
+            "room_id": Uuid::new_v4(),
+            "power_watts": 350
+        }))?;
+        assert_eq!(set.power_watts, Some(350));
+        assert!(set.validate().is_ok());
+
+        let bad: DeviceCreate = serde_json::from_value(serde_json::json!({
+            "name": "核心交换机",
+            "room_id": Uuid::new_v4(),
+            "power_watts": -1
+        }))?;
+        let Err(errors) = bad.validate() else {
+            panic!("负功耗应被拒绝");
+        };
+        assert!(errors.errors().contains_key("power_watts"));
+
+        // 更新路径双层 Option：缺失不修改、null 清空、数值设置新值
+        let empty: DeviceUpdate = serde_json::from_value(serde_json::json!({}))?;
+        assert_eq!(empty.power_watts, None);
+
+        let cleared: DeviceUpdate = serde_json::from_value(serde_json::json!({
+            "power_watts": null
+        }))?;
+        assert_eq!(cleared.power_watts, Some(None));
+        assert!(cleared.validate().is_ok());
+
+        let bad_update: DeviceUpdate = serde_json::from_value(serde_json::json!({
+            "power_watts": 10_000_001
+        }))?;
+        let Err(errors) = bad_update.validate() else {
+            panic!("超上限功耗应被拒绝");
+        };
+        assert!(errors.errors().contains_key("power_watts"));
+        Ok(())
+    }
+
+    #[test]
     fn test_device_update_double_option_length_enforced() -> Result<(), serde_json::Error> {
         // 双层 Option 的长度经 custom 函数校验：超长 hostname 拒绝
         let req: DeviceUpdate = serde_json::from_value(serde_json::json!({
@@ -1155,6 +1215,7 @@ mod tests {
             snmp_priv_protocol: None,
             snmp_priv_password: None,
             snmp_port: Some(161),
+            power_watts: Some(350),
             description: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -1197,6 +1258,7 @@ mod tests {
             snmp_priv_protocol: None,
             snmp_priv_password: None,
             snmp_port: None,
+            power_watts: None,
             description: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),

@@ -233,10 +233,21 @@ pub async fn import_csv<P: DataProvider>(
                 if *table == "ips" {
                     validate_ip_in_room(&mut tx, &mut room_cidr_cache, &values, row).await?;
                 }
-                if upsert_row(&mut tx, spec, &meta, &values).await? {
+                let (row_id, is_update) = upsert_row(&mut tx, spec, &meta, &values).await?;
+                if is_update {
                     updated += 1;
                 } else {
                     inserted += 1;
+                }
+                // 功率容量校验（upsert 落库后按 DB 最终状态校验，超限整批
+                // 回滚）：rooms/cabinets 行校验"上限 ≥ 已分配"，devices 行
+                // 校验"含本行后不超上限"。双向覆盖使模块导入顺序不影响
+                // 最终不变量；错误消息沿用 API 端 power_exceeded 系列
+                match *table {
+                    "rooms" => validate_room_power(&mut tx, &row_id, &values).await?,
+                    "cabinets" => validate_cabinet_power(&mut tx, &row_id, &values).await?,
+                    "devices" => validate_device_power(&mut tx, &row_id).await?,
+                    _ => {}
                 }
             }
             summary.push(json!({
@@ -633,6 +644,167 @@ async fn validate_ip_in_room(
                 .with("room", room_name),
         ));
     }
+    Ok(())
+}
+
+/// 专项校验：房间总功率上限不得低于已分配功耗合计（upsert 落库后
+/// 按 DB 最终状态校验，超限整批回滚）。仅在 CSV 携带 total_power_watts
+/// 列时校验（未携带表示上限不变）；清空上限（NULL）不限制。
+async fn validate_room_power(
+    conn: &mut PgConnection,
+    row_id: &str,
+    values: &ResolvedValues,
+) -> DataResult<()> {
+    if !values.contains_key("total_power_watts") {
+        return Ok(());
+    }
+    let total: Option<i32> = values
+        .get("total_power_watts")
+        .cloned()
+        .flatten()
+        .and_then(|t| t.parse().ok());
+    let Some(total) = total else {
+        // 清空上限不限制；非数值由列类型转换拒绝，此处跳过
+        return Ok(());
+    };
+    let allocated: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(power_watts), 0) FROM devices WHERE room_id = $1::uuid",
+    )
+    .bind(row_id)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(DataError::from)?;
+    if allocated > i64::from(total) {
+        return Err(DataError::Validation(
+            msg("server.room.power_exceeded")
+                .with("allocated", allocated)
+                .with("total", total),
+        ));
+    }
+    Ok(())
+}
+
+/// 专项校验：机柜总功率上限不得低于其机位关联设备的功耗合计
+///（校验口径与 API 端一致，upsert 落库后按 DB 最终状态校验，
+/// 超限整批回滚）。仅在 CSV 携带 total_power_watts 列时校验。
+async fn validate_cabinet_power(
+    conn: &mut PgConnection,
+    row_id: &str,
+    values: &ResolvedValues,
+) -> DataResult<()> {
+    if !values.contains_key("total_power_watts") {
+        return Ok(());
+    }
+    let total: Option<i32> = values
+        .get("total_power_watts")
+        .cloned()
+        .flatten()
+        .and_then(|t| t.parse().ok());
+    let Some(total) = total else {
+        return Ok(());
+    };
+    let allocated: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(d.power_watts), 0) \
+         FROM devices d JOIN positions p ON d.position_id = p.id \
+         WHERE p.cabinet_id = $1::uuid",
+    )
+    .bind(row_id)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(DataError::from)?;
+    if allocated > i64::from(total) {
+        return Err(DataError::Validation(
+            msg("server.cabinet.power_exceeded")
+                .with("allocated", allocated)
+                .with("total", total),
+        ));
+    }
+    Ok(())
+}
+
+/// 专项校验：设备功耗（含本次导入后的最终状态）不得超过所在房间/
+/// 机柜总功率上限。upsert 落库后 SUM 已含本行，直接与上限比对；
+/// 房间行 → 机柜行 FOR UPDATE 与 API 端同锁序，与并发设备写入
+/// 串行化，避免导入与外部写入交错产生超限。
+async fn validate_device_power(conn: &mut PgConnection, row_id: &str) -> DataResult<()> {
+    let (room_id, position_id, power_watts): (String, Option<String>, Option<i32>) =
+        sqlx::query_as(
+            "SELECT room_id::text, position_id::text, power_watts \
+             FROM devices WHERE id = $1::uuid",
+        )
+        .bind(row_id)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(DataError::from)?;
+
+    let Some(power) = power_watts.filter(|w| *w > 0) else {
+        return Ok(()); // 无功耗或 0，不占容量
+    };
+
+    // 房间上限（锁序 1：房间行）
+    let room_limit: Option<i32> =
+        sqlx::query_scalar("SELECT total_power_watts FROM rooms WHERE id = $1::uuid FOR UPDATE")
+            .bind(&room_id)
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(DataError::from)?;
+    if let Some(total) = room_limit {
+        let allocated: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(power_watts), 0) FROM devices WHERE room_id = $1::uuid",
+        )
+        .bind(&room_id)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(DataError::from)?;
+        if allocated > i64::from(total) {
+            return Err(DataError::Validation(
+                msg("server.device.room_power_exceeded")
+                    .with("allocated", allocated)
+                    .with("power", power)
+                    .with("total", total),
+            ));
+        }
+    }
+
+    // 机柜上限（锁序 2：机柜行）；未挂机位或机位未归属机柜仅校验房间
+    let Some(pos_id) = position_id else {
+        return Ok(());
+    };
+    let cabinet_id: Option<String> =
+        sqlx::query_scalar("SELECT cabinet_id::text FROM positions WHERE id = $1::uuid")
+            .bind(&pos_id)
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(DataError::from)?;
+    let Some(cabinet_id) = cabinet_id else {
+        return Ok(());
+    };
+    let cabinet_limit: Option<i32> =
+        sqlx::query_scalar("SELECT total_power_watts FROM cabinets WHERE id = $1::uuid FOR UPDATE")
+            .bind(&cabinet_id)
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(DataError::from)?;
+    if let Some(total) = cabinet_limit {
+        let allocated: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(d.power_watts), 0) \
+             FROM devices d JOIN positions p ON d.position_id = p.id \
+             WHERE p.cabinet_id = $1::uuid",
+        )
+        .bind(&cabinet_id)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(DataError::from)?;
+        if allocated > i64::from(total) {
+            return Err(DataError::Validation(
+                msg("server.device.cabinet_power_exceeded")
+                    .with("allocated", allocated)
+                    .with("power", power)
+                    .with("total", total),
+            ));
+        }
+    }
+
     Ok(())
 }
 

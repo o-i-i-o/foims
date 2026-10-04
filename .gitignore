@@ -9,3 +9,4 @@ config.toml
 .zcode/
 chrome-headless-shell-linux64/
 guanwang/
+node_exporter/

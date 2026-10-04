@@ -76,6 +76,16 @@
             <label for="device-location" data-i18n="device.location">Location</label>
             <input type="text" id="device-location" name="location" autocomplete="off">
           </div>
+          <div class="form-group">
+            <label for="device-power-watts" data-i18n="device.power_input">Power</label>
+            <div class="power-input-row">
+              <input type="number" id="device-power-watts" name="power_watts" min="0" step="any" autocomplete="off">
+              <select id="device-power-unit-modal" class="form-control" aria-label="Unit">
+                <option value="W" data-i18n="common.unit_watts">W</option>
+                <option value="kW" data-i18n="common.unit_kilowatts">kW</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">

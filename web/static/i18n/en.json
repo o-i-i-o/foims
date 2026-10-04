@@ -32,6 +32,8 @@
     "readonly_badge": "Read-only",
     "confirm": "Confirm",
     "index": "No.",
+    "unit_watts": "W",
+    "unit_kilowatts": "kW",
     "success": "Success",
     "failed": "Failed",
     "loading": "Loading...",
@@ -127,6 +129,9 @@
     "position": "Cabinet Position",
     "room": "Room",
     "location": "Location",
+    "power_watts": "Power (W)",
+    "power_input": "Power",
+    "power_watts_invalid": "Power must be a non-negative integer",
     "select_template": "Select Template",
     "select_workstation": "Select Workstation",
     "select_position": "Select Position",
@@ -319,7 +324,12 @@
     "type_lobby": "Lobby",
     "type_reception": "Reception",
     "type_other": "Other",
-    "workstation_count": "Workstations"
+    "workstation_count": "Workstations",
+    "power": "Current Power",
+    "power_supply": "Power Supply",
+    "power_unit": "Power Unit",
+    "total_power": "Power Supply",
+    "total_power_invalid": "Power supply must be a non-negative integer"
   },
   "time": {
     "just_now": "Just now",
@@ -592,6 +602,11 @@
     "name": "Cabinet Name",
     "room": "Room",
     "capacity": "Capacity (U)",
+    "power": "Current Power",
+    "power_supply": "Power Supply",
+    "power_unit": "Power Unit",
+    "total_power": "Power Supply",
+    "total_power_invalid": "Power supply must be a non-negative integer",
     "select_room": "Select Room",
     "add_cabinet": "Add Cabinet",
     "edit_cabinet": "Edit Cabinet",
@@ -1604,6 +1619,7 @@
       "position_in_use": "Position is associated with devices and cannot be deleted",
       "position_name_exists": "Position name already exists",
       "positions_synced": "Positions synced successfully",
+      "power_exceeded": "Update failed: allocated power {{allocated}} W in this cabinet exceeds the total power limit {{total}} W",
       "updated": "Cabinet updated successfully",
       "validation": {
         "capacity_range": "Cabinet capacity must be between 1U and 48U",
@@ -1691,7 +1707,8 @@
         "description_length": "Description must not exceed 255 characters",
         "email_format": "Invalid email format",
         "uuid_invalid": "Invalid UUID parameter",
-        "ip_format": "Invalid IP address format"
+        "ip_format": "Invalid IP address format",
+        "power_range": "Power must be between 0 and 10000000 W"
       },
       "pgpass_write_failed": "Failed to write .pgpass temp file",
       "password_hash_failed": "Password hashing failed",
@@ -1745,6 +1762,8 @@
         "synced": "Synced {{count}} MAC records"
       },
       "name_exists": "A device with the same name already exists in this room",
+      "cabinet_power_exceeded": "Device power exceeds cabinet total power: allocated {{allocated}} W, this device {{power}} W, limit {{total}} W",
+      "room_power_exceeded": "Device power exceeds room total power: allocated {{allocated}} W, this device {{power}} W, limit {{total}} W",
       "nic": {
         "card_type_invalid": "Card type must be one of pcie, onboard, usb, virtual, wwan, wifi, other",
         "fetched": "NIC configuration retrieved successfully",
@@ -2183,6 +2202,7 @@
       "networks_retrieved": "Room subnets retrieved successfully",
       "not_found": "Room not found",
       "office_requires_workstations": "Office rooms require workstation data",
+      "power_exceeded": "Update failed: allocated power {{allocated}} W in this room exceeds the total power limit {{total}} W",
       "updated": "Room updated successfully",
       "validation": {
         "name_length": "Room name must be 1 to 50 characters",

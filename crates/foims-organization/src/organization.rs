@@ -1091,7 +1091,7 @@ pub async fn get_org_rooms<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.organization.not_found")));
     }
     let rooms = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, org_id, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
+        "SELECT id, name, room_type, org_id, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM rooms WHERE org_id = $1 ORDER BY created_at ASC",
     )
     .bind(id)
