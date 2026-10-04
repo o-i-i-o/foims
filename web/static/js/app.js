@@ -101,7 +101,7 @@ function getResourceCallbacks() {
     submitWorkstationForm: createCallback("workstation", "submitWorkstationForm"),
     submitCabinetForm: createCallback("cabinet", "submitCabinetForm"),
     submitCabinetPositionForm: createCallback("position", "submitCabinetPositionForm"),
-    submitUserForm: createCallback("userManager", "submitUserForm"),
+    goToUser2faStep: createCallback("userManager", "goToUser2faStep"),
     submitOrgForm: createCallback("organization", "submitOrgForm"),
     submitCableLinkForm: createCallback("cableLink", "submitCableLinkForm"),
     submitDeviceForm: createCallback("device", "submitDeviceForm")

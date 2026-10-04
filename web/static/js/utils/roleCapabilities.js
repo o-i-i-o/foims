@@ -66,7 +66,6 @@ const WRITE_CONTROL_SELECTOR = [
   ".btn-edit",
   ".btn-delete",
   ".btn-danger",
-  ".user-2fa",
   ".app-unban-btn",
   '[data-action^="edit"]',
   '[data-action^="delete"]',

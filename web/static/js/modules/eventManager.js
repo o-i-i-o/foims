@@ -79,7 +79,7 @@ const RESOURCE_FORM_CALLBACK_MAP = {
   "workstation-form": "submitWorkstationForm",
   "cabinet-form": "submitCabinetForm",
   "cabinet-position-form": "submitCabinetPositionForm",
-  "user-form": "submitUserForm",
+  "user-form": "goToUser2faStep",
   "organization-form": "submitOrgForm",
   "org-template-editor-form": "submitOrgTemplateForm",
   "cable-link-form": "submitCableLinkForm",

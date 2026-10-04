@@ -6,57 +6,101 @@
       <button type="button" class="close" data-modal-id="user-modal" aria-label="Close">&times;</button>
     </header>
     <div class="modal-body">
-      <form id="user-form">
-        <input type="hidden" id="user-id">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="user-username"><span data-i18n="auth.username">Username</span><span class="required">*</span></label>
-            <input type="text" id="user-username" name="username" autocomplete="username" required data-i18n-placeholder="user.username_placeholder" placeholder="Enter username">
+      <!-- 第一步：账户信息 -->
+      <div id="user-modal-step-account">
+        <form id="user-form">
+          <input type="hidden" id="user-id">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="user-username"><span data-i18n="auth.username">Username</span><span class="required">*</span></label>
+              <input type="text" id="user-username" name="username" autocomplete="username" required data-i18n-placeholder="user.username_placeholder" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+              <label for="user-email"><span data-i18n="user.email">Email</span><span class="required">*</span></label>
+              <input type="email" id="user-email" name="email" autocomplete="email" required data-i18n-placeholder="user.email_placeholder" placeholder="Enter email">
+            </div>
           </div>
-          <div class="form-group">
-            <label for="user-email"><span data-i18n="user.email">Email</span><span class="required">*</span></label>
-            <input type="email" id="user-email" name="email" autocomplete="email" required data-i18n-placeholder="user.email_placeholder" placeholder="Enter email">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="user-password" data-i18n="auth.password">Password</label>
+              <input type="password" id="user-password" name="password" autocomplete="new-password" data-i18n-placeholder="user.password_placeholder" placeholder="Enter password (required for new users)">
+            </div>
+            <div class="form-group">
+              <label for="user-password-confirm" data-i18n="auth.confirm_password">Confirm Password</label>
+              <input type="password" id="user-password-confirm" name="password_confirm" autocomplete="new-password" data-i18n-placeholder="user.password_confirm_placeholder" placeholder="Enter password again">
+            </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="user-role"><span data-i18n="user.role">Role</span><span class="required">*</span></label>
+              <select id="user-role" name="role" required>
+                <option value="admin" data-i18n="user.role_admin">Super Administrator</option>
+                <option value="sysadmin" data-i18n="user.role_sysadmin">System Administrator</option>
+                <option value="secadmin" data-i18n="user.role_secadmin">Security Administrator</option>
+                <option value="auditor" data-i18n="user.role_auditor">Audit Administrator</option>
+                <option value="user" data-i18n="user.role_user">User</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="user-status"><span data-i18n="user.status">Status</span><span class="required">*</span></label>
+              <select id="user-status" name="status" required>
+                <option value="true" data-i18n="user.status_enabled">Enabled</option>
+                <option value="false" data-i18n="user.status_disabled">Disabled</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="user-password-expiry" data-i18n="user.password_expiry">Password Validity (days, 0 = never expires)</label>
+              <input type="number" id="user-password-expiry" name="password_expiry_days" min="0" max="36500" value="0">
+            </div>
+          </div>
+        </form>
+      </div>
+      <!-- 第二步：双因素认证（半强制展示：必经此页，可不启用直接保存） -->
+      <div id="user-modal-step-2fa" class="hidden">
+        <!-- 未保存的新用户：2FA 需针对已存在用户，先保存再在编辑中配置 -->
+        <div id="user-2fa-unsaved-step" class="hidden">
+          <p class="hint-text" data-i18n="two_factor.unsaved_hint">Save the user first, then configure two-factor authentication when editing.</p>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="user-password" data-i18n="auth.password">Password</label>
-            <input type="password" id="user-password" name="password" autocomplete="new-password" data-i18n-placeholder="user.password_placeholder" placeholder="Enter password (required for new users)">
+        <!-- 未启用：扫码 / 手动输入密钥后提交动态码启用 -->
+        <div id="user-2fa-setup-step">
+          <p class="hint-text" data-i18n="two_factor.scan_hint">Scan the QR code below with your authenticator app, or enter the key manually:</p>
+          <div class="qr-code-container">
+            <!-- src 由 userManager.js 进入本页时以 data URI 动态填充，初始留空避免对当前页发起无效请求 -->
+            <img id="user-2fa-qr-code" alt="2FA QR Code">
           </div>
           <div class="form-group">
-            <label for="user-password-confirm" data-i18n="auth.confirm_password">Confirm Password</label>
-            <input type="password" id="user-password-confirm" name="password_confirm" autocomplete="new-password" data-i18n-placeholder="user.password_confirm_placeholder" placeholder="Enter password again">
+            <label for="user-2fa-secret" data-i18n="two_factor.secret_key">Secret Key</label>
+            <input type="text" id="user-2fa-secret" readonly value="" aria-label="2FA secret key">
           </div>
+          <div class="form-group">
+            <label for="user-2fa-verify-code" data-i18n="two_factor.verify_code">Verification Code</label>
+            <input type="text" id="user-2fa-verify-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" data-i18n-placeholder="two_factor.verify_code_placeholder" placeholder="Enter 6-digit code" aria-label="2FA verification code">
+          </div>
+          <div id="user-2fa-error" class="error-message" role="alert" aria-live="polite"></div>
         </div>
-        <div class="form-row">
+        <!-- 已启用：展示状态并可禁用 -->
+        <div id="user-2fa-manage-step" class="hidden">
+          <p class="hint-text" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
           <div class="form-group">
-            <label for="user-role"><span data-i18n="user.role">Role</span><span class="required">*</span></label>
-            <select id="user-role" name="role" required>
-              <option value="admin" data-i18n="user.role_admin">Super Administrator</option>
-              <option value="sysadmin" data-i18n="user.role_sysadmin">System Administrator</option>
-              <option value="secadmin" data-i18n="user.role_secadmin">Security Administrator</option>
-              <option value="auditor" data-i18n="user.role_auditor">Audit Administrator</option>
-              <option value="user" data-i18n="user.role_user">User</option>
-            </select>
+            <label for="user-2fa-disable-code" data-i18n="two_factor.verify_code">Verification Code</label>
+            <input type="text" id="user-2fa-disable-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" data-i18n-placeholder="two_factor.disable_code_placeholder" placeholder="Enter 6-digit code to disable 2FA" aria-label="Disable 2FA code">
           </div>
-          <div class="form-group">
-            <label for="user-status"><span data-i18n="user.status">Status</span><span class="required">*</span></label>
-            <select id="user-status" name="status" required>
-              <option value="true" data-i18n="user.status_enabled">Enabled</option>
-              <option value="false" data-i18n="user.status_disabled">Disabled</option>
-            </select>
-          </div>
+          <div id="user-2fa-disable-error" class="error-message" role="alert" aria-live="polite"></div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="user-password-expiry" data-i18n="user.password_expiry">Password Validity (days, 0 = never expires)</label>
-            <input type="number" id="user-password-expiry" name="password_expiry_days" min="0" max="36500" value="0">
-          </div>
-        </div>
-      </form>
+      </div>
     </div>
     <footer class="modal-footer">
-      <button type="submit" class="btn btn-primary" form="user-form" data-i18n="common.save">Save</button>
+      <!-- 第一步：下一步（仅切换到 2FA 页，不触发保存；保存由第二页"保存"统一提交） -->
+      <button type="submit" id="user-next-btn" class="btn btn-primary" form="user-form" data-i18n="user.next_step">Next</button>
+      <!-- 第二步：返回第一页（账户信息） -->
+      <button type="button" id="user-2fa-back-btn" class="btn btn-secondary hidden" data-i18n="user.previous_step">Back</button>
+      <!-- 第二步：启用/禁用 2FA（随当前状态二选一动态展示） -->
+      <button type="button" id="user-2fa-enable-btn" class="btn btn-primary hidden" data-i18n="two_factor.enable">Enable 2FA</button>
+      <button type="button" id="user-2fa-disable-btn" class="btn btn-danger hidden" data-i18n="two_factor.disable">Disable 2FA</button>
+      <!-- 第二步：保存（原保存逻辑：提交表单，成功后关闭模态框） -->
+      <button type="button" id="user-2fa-finish-btn" class="btn btn-primary hidden" data-i18n="common.save">Save</button>
     </footer>
   </div>
 </div>

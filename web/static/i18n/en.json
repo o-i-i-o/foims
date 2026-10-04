@@ -748,8 +748,8 @@
     "status_disabled": "Disabled",
     "two_factor_enabled": "Enabled",
     "two_factor_disabled": "Disabled",
-    "manage_2fa": "Manage 2FA",
-    "enable_2fa": "Enable 2FA",
+    "next_step": "Next",
+    "previous_step": "Back",
     "add_user": "Add User",
     "edit_user": "Edit User",
     "delete_user": "Delete User",
@@ -1093,8 +1093,6 @@
     "enable": "Enable 2FA",
     "disable": "Disable 2FA",
     "disable_confirm": "Are you sure you want to disable two-factor authentication?",
-    "open_modal_failed": "Unable to open 2FA modal",
-    "modal_load_failed": "Failed to load 2FA modal",
     "fetch_config_failed": "Failed to fetch 2FA configuration",
     "fetch_config_network": "Failed to fetch 2FA configuration. Please check your network connection.",
     "enable_success": "Two-factor authentication enabled successfully!",
@@ -1102,7 +1100,8 @@
     "enable_failed_network": "Enable failed. Please check your network connection.",
     "disable_success": "Two-factor authentication disabled successfully",
     "disable_failed": "Disable failed",
-    "disable_failed_network": "Disable failed. Please check your network connection."
+    "disable_failed_network": "Disable failed. Please check your network connection.",
+    "unsaved_hint": "The user has not been saved yet. Save it first, then configure two-factor authentication when editing."
   },
   "cert": {
     "generate_title": "Generate Certificate",

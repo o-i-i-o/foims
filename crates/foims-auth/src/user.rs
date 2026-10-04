@@ -292,6 +292,13 @@ pub async fn update_user<P: AuthProvider>(
 
     let now = Utc::now();
 
+    // 仅在实际降权/提权或实际禁用时吊销历史令牌（强制重新登录）。
+    // 吊销条件必须对比现值：编辑表单总是提交 role，若以"参数是否提供"
+    // 判定会每次编辑都吊销——管理员编辑自己的邮箱/密码有效期时会把
+    // 自己踢下线，后续请求 401 且 refresh 同样被拒，表现为强制跳登录页
+    let role_changed = req.role.as_deref().is_some_and(|r| r != current_role);
+    let disabling = req.status == Some(false) && current_status;
+
     // 权限/启用状态/有效期变更单语句完成：状态或角色变更时同语句吊销
     // 历史令牌（强制重新登录）；拆成两条语句时第二条失败会导致降权已
     // 生效但旧令牌未被强制下线（D-2）
@@ -301,7 +308,7 @@ pub async fn update_user<P: AuthProvider>(
          role = COALESCE($2, role),
          status = COALESCE($3, status),
          password_expiry_days = COALESCE($6, password_expiry_days),
-         tokens_invalidated_at = CASE WHEN $2::VARCHAR IS NOT NULL OR $3::BOOLEAN IS FALSE THEN NOW() ELSE tokens_invalidated_at END,
+         tokens_invalidated_at = CASE WHEN $7::BOOLEAN THEN NOW() ELSE tokens_invalidated_at END,
          updated_at = $4
          WHERE id = $5",
     )
@@ -311,6 +318,7 @@ pub async fn update_user<P: AuthProvider>(
     .bind(now)
     .bind(id)
     .bind(req.password_expiry_days)
+    .bind(role_changed || disabling)
     .execute(&conn)
     .await?;
 

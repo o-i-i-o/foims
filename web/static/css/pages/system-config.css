@@ -198,8 +198,8 @@ dl.config-field,
   justify-content: center;
 }
 
-/* 2fa 提示居中 */
-#two-factor-modal .hint-text {
+/* 2fa 提示居中（用户模态框第二页） */
+#user-modal-step-2fa .hint-text {
   text-align: center;
 }
 

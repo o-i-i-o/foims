@@ -748,8 +748,8 @@
     "status_disabled": "禁用",
     "two_factor_enabled": "已启用",
     "two_factor_disabled": "未启用",
-    "manage_2fa": "管理2FA",
-    "enable_2fa": "启用2FA",
+    "next_step": "下一步",
+    "previous_step": "上一步",
     "add_user": "添加用户",
     "edit_user": "编辑用户",
     "delete_user": "删除用户",
@@ -1093,8 +1093,6 @@
     "enable": "启用2FA",
     "disable": "禁用2FA",
     "disable_confirm": "确定要禁用双因素认证吗？",
-    "open_modal_failed": "无法打开2FA模态框",
-    "modal_load_failed": "2FA模态框加载失败",
     "fetch_config_failed": "获取2FA配置失败",
     "fetch_config_network": "获取2FA配置失败，请检查网络连接",
     "enable_success": "双因素认证已成功启用！",
@@ -1102,7 +1100,8 @@
     "enable_failed_network": "启用失败，请检查网络连接",
     "disable_success": "双因素认证已成功禁用",
     "disable_failed": "禁用失败",
-    "disable_failed_network": "禁用失败，请检查网络连接"
+    "disable_failed_network": "禁用失败，请检查网络连接",
+    "unsaved_hint": "用户尚未保存，保存后即可在编辑用户中配置双因素认证"
   },
   "cert": {
     "generate_title": "生成证书",

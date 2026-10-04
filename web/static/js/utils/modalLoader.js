@@ -65,7 +65,6 @@ const MODAL_REGISTRY = {
   "task-logs-modal": "/static/modals/log/task-logs-modal.html",
   // 系统
   "user-modal": "/static/modals/system/user-modal.html",
-  "two-factor-modal": "/static/modals/system/two-factor-modal.html",
   "scheduled-task-modal": "/static/modals/system/scheduled-task-modal.html",
   "cron-examples-modal": "/static/modals/system/cron-examples-modal.html",
   "cert-generate-modal": "/static/modals/system/cert-generate-modal.html",
