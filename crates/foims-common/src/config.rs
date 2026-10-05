@@ -331,6 +331,23 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     #[serde(default)]
     pub snmp: SnmpConfig,
+    #[serde(default)]
+    pub agent: AgentConfig,
+}
+
+/// Agent 采集（foims-agent 分发/接收）配置段（docs/agent-design.md）。
+/// 后续阶段在此扩展监听开关、bind 地址与证书路径等字段。
+#[derive(Debug, Deserialize, Clone, Serialize, Default)]
+pub struct AgentConfig {
+    /// 预编译 agent 产物目录（manifest.json + <target>/foims-agent +
+    /// install.sh），build-deb.sh 打包时装入 /opt/foims/agents；
+    /// 源码部署场景可指向 dist/agents。
+    #[serde(default = "default_agent_dist_dir")]
+    pub dist_dir: String,
+}
+
+fn default_agent_dist_dir() -> String {
+    "/opt/foims/agents".to_string()
 }
 
 /// 进程内共享配置槽：启动时装入初始配置，各「写盘」端点成功落盘后

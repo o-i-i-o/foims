@@ -1,0 +1,33 @@
+[package]
+name = "foims-agent-service"
+version = "0.1.1"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Agent 服务端：分发打包（manifest/zip/deb/rpm 动态组包）与下载 API（后续阶段扩展 QUIC 监听/认证/入库）"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+flate2 = { workspace = true }
+rand = { workspace = true }
+rpm = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { workspace = true }
+tar = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+zip = { workspace = true }
+
+foims-auth = { path = "../foims-auth" }
+foims-common = { path = "../foims-common" }
+
+[dev-dependencies]
+# 无
+
+[lints]
+workspace = true

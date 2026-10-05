@@ -1,6 +1,6 @@
 [package]
 name = "foims-auth"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Auth - authentication, user management, password policy, fail2ban, SMTP and audit op-log"

@@ -24,6 +24,10 @@
 #     SupplementaryGroups（drop-in），兼容 www-data / nginx 等差异
 #   - 初始化脚本 init-pgsql.sh 安装到 /usr/share/foims/scripts/（建库移交
 #     脚本后，向导第 2 步依赖它；白名单复制，打包工具自身不进包）
+#   - Agent 分发物料在主程序打包时同步产出（build-agent.sh 多平台 musl
+#     静态二进制 + manifest.json，agent 版本 = 主程序版本），装包到
+#     /opt/foims/agents/ 供服务端下载 API 动态组包（设计 docs/agent-design.md
+#     §6.1；物料缺失即失败退出，不带缺口发版）
 
 set -euo pipefail
 
@@ -69,6 +73,19 @@ cargo build --release
 if [ ! -f "target/release/$BINARY_NAME" ]; then
     echo "错误: 编译失败，找不到二进制文件" >&2
     exit 1
+fi
+
+# 多平台 Agent 编译（CI 集成，设计 docs/agent-design.md §6.1）：agent 版本
+# 由 build-agent.sh 从根 Cargo.toml 读取并以 FOIMS_AGENT_VERSION 注入编译
+# （agent 版本 = 主程序版本，满足「agent 版本不低于 foims」门控），产物与
+# manifest.json 归集到 dist/agents/。默认编译 x86_64/aarch64 两个 musl 静态
+# 目标（覆盖绝大多数部署场景）；可用环境变量 AGENT_TARGETS 覆盖目标列表，
+# AGENT_TARGETS=none 跳过（此时包内无 agent 分发物料，下载面板显示不可用）
+AGENT_TARGETS="${AGENT_TARGETS:-x86_64-unknown-linux-musl,aarch64-unknown-linux-musl}"
+if [ "$AGENT_TARGETS" != "none" ]; then
+    echo ""
+    echo "1b. 编译多平台 Agent（$AGENT_TARGETS）..."
+    bash "$SCRIPT_DIR/build-agent.sh" --only "$AGENT_TARGETS"
 fi
 
 echo ""
@@ -168,6 +185,48 @@ fi
 mkdir -p "$DEBPAK_DIR/usr/share/foims/scripts"
 cp scripts/init-pgsql.sh "$DEBPAK_DIR/usr/share/foims/scripts/"
 chmod 755 "$DEBPAK_DIR/usr/share/foims/scripts/init-pgsql.sh"
+
+# Agent 分发物料装包（白名单，设计 docs/agent-design.md §6.1）：服务端下载
+# API 从 /opt/foims/agents 读取 manifest 与二进制，按 OS/架构动态组包返回。
+# 任一物料缺失即失败退出，不带缺口发版（与 init-pgsql.sh 同策略）
+if [ "$AGENT_TARGETS" != "none" ]; then
+    if [ ! -f "dist/agents/manifest.json" ]; then
+        echo "错误：缺少 dist/agents/manifest.json（build-agent.sh 未产出清单）" >&2
+        exit 1
+    fi
+    # manifest 版本必须与主程序一致：不一致说明 dist/agents 残留旧构建产物，
+    # 继续打包会导致运行期版本门控误拒（agent 版本 = 主程序版本，构建期注入）
+    MANIFEST_VERSION=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        dist/agents/manifest.json | head -n1)
+    if [ "$MANIFEST_VERSION" != "$VERSION" ]; then
+        echo "错误：manifest.json 版本（$MANIFEST_VERSION）与主程序版本（$VERSION）不一致，dist/agents 疑似残留旧构建产物" >&2
+        exit 1
+    fi
+    # install.sh：zip 下载组包用（服务端 load_install_sh 优先读部署版本）
+    if [ ! -f "deploy/agent/install.sh" ]; then
+        echo "错误：缺少 deploy/agent/install.sh（zip 下载组包依赖）" >&2
+        exit 1
+    fi
+    mkdir -p "$DEBPAK_DIR/opt/foims/agents"
+    chmod 755 "$DEBPAK_DIR/opt/foims/agents"
+    cp dist/agents/manifest.json "$DEBPAK_DIR/opt/foims/agents/"
+    chmod 644 "$DEBPAK_DIR/opt/foims/agents/manifest.json"
+    cp deploy/agent/install.sh "$DEBPAK_DIR/opt/foims/agents/"
+    chmod 755 "$DEBPAK_DIR/opt/foims/agents/install.sh"
+    # 各目标二进制：白名单仅 foims-agent 本体，SHA256SUMS 等构建侧物料不进包
+    IFS=','
+    for target in $AGENT_TARGETS; do
+        if [ ! -f "dist/agents/$target/foims-agent" ]; then
+            echo "错误：缺少 dist/agents/$target/foims-agent" >&2
+            exit 1
+        fi
+        mkdir -p "$DEBPAK_DIR/opt/foims/agents/$target"
+        chmod 755 "$DEBPAK_DIR/opt/foims/agents/$target"
+        cp "dist/agents/$target/foims-agent" "$DEBPAK_DIR/opt/foims/agents/$target/"
+        chmod 755 "$DEBPAK_DIR/opt/foims/agents/$target/foims-agent"
+    done
+    unset IFS
+fi
 
 echo ""
 echo "6. 创建 polkit 规则（允许 foims 用户重启服务）..."
@@ -581,6 +640,10 @@ Reference nginx/systemd/fail2ban deployment configurations.
 .I /usr/share/foims/scripts/init-pgsql.sh
 PostgreSQL initialization script (creates the role and database
 required by the setup wizard; run it before step 2 of the wizard).
+.TP
+.I /opt/foims/agents/
+Pre-built FOIMS Agent binaries and manifest consumed by the download
+page (the server packages them per-OS/arch at download time).
 .SH SERVICE
 The application runs as a systemd service:
 .PP

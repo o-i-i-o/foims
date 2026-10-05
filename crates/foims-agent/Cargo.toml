@@ -1,0 +1,30 @@
+[package]
+name = "foims-agent"
+version = "0.1.2"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS Agent - node_exporter 的 Rust 重写：主机指标采集（demo 阶段：本地采集 + 文本/JSON 输出）"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# 系统调用安全封装：filesystem 采集器 statfs、uname 采集器 uname（crate 内零 unsafe）
+rustix = { workspace = true }
+
+[dev-dependencies]
+# HTTP/3 mTLS demo（examples/h3_demo.rs）：正式上报实施前的前置可行性验证，
+# 仅示例代码使用，不进入 agent 发布二进制
+bytes = { workspace = true }
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+http = { workspace = true }
+quinn = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

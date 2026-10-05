@@ -188,6 +188,8 @@ export class ApiClient {
           contentType.includes("application/vnd.openxmlformats") ||
           contentType.includes("application/x-pem-file") ||
           contentType.includes("application/zip") ||
+          contentType.includes("application/x-rpm") ||
+          contentType.includes("application/vnd.debian.binary-package") ||
           contentType.includes("application/sql"))
       ) {
         let filename = "download";

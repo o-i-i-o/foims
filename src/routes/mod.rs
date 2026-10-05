@@ -843,6 +843,24 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/fail2ban/app/unban",
             post(foims_auth::app_fail2ban::app_unban_ip::<AppState>),
         )
+        // Agent 采集分发路由（下载/清单，admin+secadmin 专属）：
+        // 子路由组经 nest + route_layer 挂专属角色守卫（避免前缀字符串
+        // 匹配漏判），外层 auth_middleware/限流照常覆盖嵌套路由
+        .nest(
+            "/api/agents",
+            Router::<Arc<AppState>>::new()
+                .route(
+                    "/dist",
+                    get(foims_agent_service::api::get_agent_dist::<AppState>),
+                )
+                .route(
+                    "/download",
+                    get(foims_agent_service::api::download_agent_package::<AppState>),
+                )
+                .route_layer(middleware::from_fn(
+                    foims_agent_service::api::agent_admin_guard,
+                )),
+        )
         // admin_guard_middleware 先注册（位于 auth_middleware 之内）：
         // 请求先经 auth_middleware 校验令牌注入 claims，再由守卫做角色判定；
         // charge_user_rate_limit_middleware 最后注册（链最内层），在 claims

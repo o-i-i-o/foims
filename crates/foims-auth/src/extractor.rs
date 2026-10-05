@@ -160,6 +160,32 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminOrAuditorUser {
     }
 }
 
+/// 管理员或安全管理员（等保三权分立）：admin 或 secadmin 可用。
+///
+/// 供 Agent 分发下载等安全敏感端点使用：admin 为超级管理员拥有全部权限，
+/// secadmin 管辖安全策略与主机监控相关操作。
+pub struct AdminOrSecAdminUser {
+    pub sub: String,
+    pub username: String,
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for AdminOrSecAdminUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<JwtClaims>() {
+            Some(c) if c.role == "admin" || c.role == "secadmin" => Ok(AdminOrSecAdminUser {
+                sub: c.sub.clone(),
+                username: c.username.clone(),
+            }),
+            Some(_) => Err(AppError::Forbidden(msg(
+                "server.auth.admin_or_secadmin_required",
+            ))),
+            None => Err(AppError::Unauthorized(msg("server.auth.auth_failed"))),
+        }
+    }
+}
+
 /// 提取 access_token（优先 Cookie `access_token`，其次 Authorization: Bearer 头）
 pub struct AccessToken(pub Option<String>);
 

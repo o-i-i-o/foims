@@ -20,6 +20,7 @@ pub mod user;
 // 供主程序直接引用的常用提取器（完整集合见 extractor 模块）
 pub use extractor::AccountAdminUser;
 pub use extractor::AdminOrAuditorUser;
+pub use extractor::AdminOrSecAdminUser;
 pub use extractor::SysAdminUser;
 
 /// 获取图形验证码（公开端点，登录页按需加载）

@@ -1,7 +1,7 @@
 
 [package]
 name = "foims"
-version = "0.21.12"
+version = "0.21.16"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -9,6 +9,8 @@ license = "GPL-3.0-or-later"
 [workspace]
 members = [
     ".",
+    "crates/foims-agent",
+    "crates/foims-agent-service",
     "crates/foims-auth",
     "crates/foims-common",
     "crates/foims-data-management",
@@ -66,6 +68,7 @@ config = { version = "0.15.27", features = ["toml"] }
 # CSV and ZIP
 csv = "1.4.0"
 dashmap = "6.2.1"
+flate2 = "1.1.10"
 hex = "0.4.3"
 
 # 网络 / 哈希 / 并发表 / 配置加载（主程序与 foims-common 共享）
@@ -86,6 +89,9 @@ sha2 = "0.11.0"
 # SQLx
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
 
+# deb 组包（foims-agent-service 分发下载：control/data tar + flate2 gzip）
+tar = "0.4.46"
+
 # Error handling
 thiserror = "2.0.21"
 time = "0.3.55"
@@ -101,6 +107,25 @@ tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace
 
 # Logging
 tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+# 系统调用安全封装（foims-agent：statfs/uname 等，零 unsafe）
+rustix = { version = "1.1", default-features = false, features = ["std", "fs", "system", "process"] }
+
+# RPM 组包（foims-agent-service 分发下载；免 rpmbuild，不签名故裁掉 pgp）
+rpm = { version = "0.29.0", default-features = false, features = ["payload", "gzip-compression"] }
+
+# semver 版本门控（agent 产物 manifest 与主程序版本比较）
+semver = "1.0.28"
+
+# HTTP/3 / QUIC（foims-agent mTLS 上报 demo 与后续正式实施共享；h3 处于 0.0.x，锁定小版本）
+bytes = "1.12.1"
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1.5.0"
+quinn = { version = "0.11.12", default-features = false, features = ["log", "rustls-ring", "runtime-tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std"] }
+rustls-pemfile = "2.2.0"
 
 # UUID
 uuid = { version = "1.27.0", features = ["v4", "serde"] }
@@ -121,6 +146,7 @@ axum-extra = { workspace = true }
 chrono = { workspace = true }
 config = { workspace = true }
 foims-auth = { path = "crates/foims-auth" }
+foims-agent-service = { path = "crates/foims-agent-service" }
 # Workspace crates
 foims-common = { path = "crates/foims-common" }
 foims-data-management = { path = "crates/foims-data-management" }
@@ -145,7 +171,7 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 # 主程序特有依赖
 
-tracing-subscriber = { version = "0.3.23", features = ["time", "local-time"] }
+tracing-subscriber = { workspace = true, features = ["time", "local-time"] }
 uuid = { workspace = true }
 validator = { workspace = true }
 

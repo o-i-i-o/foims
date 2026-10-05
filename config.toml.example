@@ -102,3 +102,9 @@ cooldown_secs = 30
 # auth_password = "authpass123"
 # priv_protocol = "aes128"
 # priv_password = "privpass123"
+
+# 主机采集 Agent 分发：deb 包内置多平台二进制与 manifest.json，
+# 系统设置「Agent 采集」页签按 OS/架构动态组包供下载
+[agent]
+# 预编译 agent 产物目录（manifest.json + <target>/foims-agent + install.sh）
+dist_dir = "/opt/foims/agents"

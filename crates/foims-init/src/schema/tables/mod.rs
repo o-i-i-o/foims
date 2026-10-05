@@ -1,5 +1,6 @@
 //! 建表总入口：按外键依赖顺序创建各表，随后建索引/视图/触发器。
 
+mod agents;
 mod cabinets;
 mod cable_links;
 mod device_interfaces;
@@ -90,6 +91,9 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     logs::create(pool).await?;
     tokens::create(pool).await?;
     notifications::create(pool).await?;
+
+    // 主机采集 Agent（无外键依赖；history 引用 agents）
+    agents::create(pool).await?;
 
     indexes::create(pool).await?;
     views::create(pool).await?;

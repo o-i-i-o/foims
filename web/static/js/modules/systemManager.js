@@ -59,6 +59,8 @@ export function initSystemTabs() {
         } else if (tabId === "security") {
           initSecurityTab();
           loadPasswordPolicy();
+        } else if (tabId === "agent-collect") {
+          loadAgentDist();
         }
       });
     });
@@ -165,6 +167,7 @@ export function initSystemTabs() {
 
   initCertificateManager();
   initServicesCard();
+  initAgentDistEvents();
 
   systemContainer.dataset.eventsInitialized = "true";
 }
@@ -2155,4 +2158,174 @@ function initCertificateManager() {
   if (caDownloadBtn) {
     caDownloadBtn.addEventListener("click", downloadCa);
   }
+}
+
+// ==========================================
+// Agent 采集分发（系统设置子页签，设计 docs/agent-design.md §7.3/§6.3）
+// ==========================================
+
+// 产物大小格式化：字节 → 可读文本
+function formatAgentSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "-";
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// 渲染版本/门控/CA 状态与可下载平台列表
+function renderAgentDist(data) {
+  setTextById("agent-dist-version", data.agent_version || "-");
+  setTextById("agent-server-version", data.server_version || "-");
+  setTextById(
+    "agent-gate-status",
+    data.gate_ok ? t("system.agent_gate_ok") : t("system.agent_gate_blocked")
+  );
+  setTextById(
+    "agent-ca-status",
+    data.ca_ok ? t("system.agent_ca_ok") : t("system.agent_ca_missing")
+  );
+
+  const messageEl = elementCache.get("agent-dist-message");
+  if (!data.available) {
+    // 产物目录不可用：显示后端下发的 i18n 文案并清空平台列表
+    if (messageEl) {
+      messageEl.textContent = t(data.message || "system.agent_dist_unavailable");
+      messageEl.hidden = false;
+    }
+    renderAgentTargets([], false);
+    return;
+  }
+
+  // 门控未通过或 CA 未生成：置顶提示并禁用下载（状态行已展示原因）
+  const blocked = !data.gate_ok || !data.ca_ok;
+  if (messageEl) {
+    messageEl.textContent = blocked
+      ? t(data.message || "system.agent_gate_blocked")
+      : "";
+    messageEl.hidden = !blocked;
+  }
+  renderAgentTargets(data.targets || [], blocked);
+}
+
+// 渲染平台列表：每行格式下拉 + 下载按钮（下载被门控/CA 状态禁用）
+function renderAgentTargets(targets, blocked) {
+  const tbody = elementCache.get("agent-dist-tbody");
+  if (!tbody) {
+    return;
+  }
+  if (!targets.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${escapeHtml(
+      t("common.no_data")
+    )}</td></tr>`;
+    return;
+  }
+
+  const rows = targets
+    .map((item) => {
+      const formats = Array.isArray(item.formats) ? item.formats : ["zip"];
+      const options = formats
+        .map(
+          (format) =>
+            `<option value="${escapeHtml(format)}">${escapeHtml(
+              format.toUpperCase()
+            )}</option>`
+        )
+        .join("");
+      const disabled = blocked ? "disabled" : "";
+      return `<tr>
+        <td>${escapeHtml(item.target || "-")}</td>
+        <td>${escapeHtml(item.arch || "-")}</td>
+        <td>${escapeHtml(formatAgentSize(item.size))}</td>
+        <td><select class="form-control" data-agent-format="${escapeHtml(
+          item.target
+        )}">${options}</select></td>
+        <td class="col-center"><button type="button" class="btn btn-primary btn-sm" data-agent-download="${escapeHtml(
+          item.target
+        )}" ${disabled}>${escapeHtml(t("system.agent_download"))}</button></td>
+      </tr>`;
+    })
+    .join("");
+  tbody.innerHTML = rows;
+}
+
+// 加载 Agent 分发摘要（GET /api/agents/dist）：版本/门控/CA + 平台列表
+export async function loadAgentDist() {
+  try {
+    const result = await apiRequest("/api/agents/dist");
+    // 成功响应为裸 JSON（available 字段承担成败语义）；非 200 时
+    // apiClient 归一为 { success: false, message } 对象，无 available 字段
+    if (result.available === undefined) {
+      showToast(
+        `${t("system.agent_dist_load_failed")}: ${result.message || ""}`,
+        "error"
+      );
+      return;
+    }
+    renderAgentDist(result);
+  } catch (error) {
+    console.error("加载Agent分发信息失败:", error);
+    showToast(`${t("system.agent_dist_load_failed")}: ${error.message}`, "error");
+  }
+}
+
+// 下载 Agent 安装包（GET /api/agents/download）：文件名取自
+// Content-Disposition（服务端已组好包），备注与上报地址覆盖随查询串下发
+export async function downloadAgentPackage(target) {
+  const tbody = elementCache.get("agent-dist-tbody");
+  const formatSelect = tbody?.querySelector(
+    `select[data-agent-format="${CSS.escape(target)}"]`
+  );
+  const format = formatSelect?.value || "zip";
+
+  const serverAddr = elementCache.getValue("agent-server-addr").trim();
+  const label = elementCache.getValue("agent-download-label").trim();
+
+  const params = new URLSearchParams({
+    target,
+    format
+  });
+  if (serverAddr) {
+    params.set("server_addr", serverAddr);
+  }
+  if (label) {
+    params.set("label", label);
+  }
+
+  try {
+    const result = await apiRequest(`/api/agents/download?${params.toString()}`);
+    if (!result.success) {
+      showToast(
+        `${t("system.agent_download_failed")}: ${result.message || ""}`,
+        "error"
+      );
+      return;
+    }
+    if (!result.isBlob) {
+      return;
+    }
+    downloadBlobResult(
+      result,
+      `foims-agent-${target}.${format}`
+    );
+  } catch (error) {
+    console.error("下载Agent安装包失败:", error);
+    showToast(`${t("system.agent_download_failed")}: ${error.message}`, "error");
+  }
+}
+
+// 平台列表事件委托：下载按钮动态渲染，统一在 tbody 上监听点击
+function initAgentDistEvents() {
+  const tbody = elementCache.get("agent-dist-tbody");
+  if (!tbody) {
+    return;
+  }
+  tbody.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-agent-download]");
+    if (btn && !btn.disabled) {
+      downloadAgentPackage(btn.getAttribute("data-agent-download"));
+    }
+  });
 }
