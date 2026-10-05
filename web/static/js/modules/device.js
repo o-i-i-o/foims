@@ -695,10 +695,7 @@ export async function submitDeviceForm() {
   const snmpPort = parseInt(getElementValue("device-snmp-port")) || 161;
 
   // 功耗：空串=不记录（null）；按所选单位换算为瓦后校验，非法值直接拦截
-  const powerWatts = readPowerWattsInput(
-    powerWattsRaw,
-    getElementValue("device-power-unit-modal")
-  );
+  const powerWatts = readPowerWattsInput(powerWattsRaw, getElementValue("device-power-unit-modal"));
   if (Number.isNaN(powerWatts)) {
     showToast(t("device.power_watts_invalid"), "warning");
     return;

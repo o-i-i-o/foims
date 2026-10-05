@@ -21,11 +21,7 @@ import { formatDateTime, formatPowerValue } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
 import { t } from "../utils/i18n.js";
 import { iconButton } from "../utils/icons.js";
-import {
-  createSeqGuard,
-  elementCache,
-  readPowerWattsInput
-} from "../utils/helpers.js";
+import { createSeqGuard, elementCache, readPowerWattsInput } from "../utils/helpers.js";
 import { fillSelect, loadOrgsForSelect } from "../utils/resources.js";
 import { DynamicRowManager } from "../utils/dynamicRowManager.js";
 

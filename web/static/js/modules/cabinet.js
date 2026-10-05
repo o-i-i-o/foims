@@ -19,11 +19,7 @@ import {
 
 import { formatDateTime, formatPowerValue } from "../utils/formatter.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
-import {
-  createSeqGuard,
-  elementCache,
-  readPowerWattsInput
-} from "../utils/helpers.js";
+import { createSeqGuard, elementCache, readPowerWattsInput } from "../utils/helpers.js";
 
 // 列表/详情加载失败的统一提示文案（避免同一字面量多处重复）
 const cabinetLoadFailedMsg = (message) => `${t("cabinet.load_failed")}: ${message || ""}`;

@@ -34,6 +34,9 @@ function roleLabel(role) {
   return t("user.role_user");
 }
 
+// 用户模态框 DOM id（openModal/closeModal/elementCache 共用）
+const USER_MODAL_ID = "user-modal";
+
 let currentUserPage = 1;
 const USER_PAGE_SIZE = 20;
 const userTableState = createSortState("created_at", "desc");
@@ -131,13 +134,13 @@ let twoFactorTargetEnabled = false;
 
 // 打开用户模态框（第一步：账户信息）
 export async function openUserModal(userId) {
-  await openModal("user-modal");
+  await openModal(USER_MODAL_ID);
 
   // 新弹窗打开即失效任何在途的用户资料请求
   userLoadToken++;
   twoFactorTargetEnabled = false;
 
-  const modal = elementCache.get("user-modal");
+  const modal = elementCache.get(USER_MODAL_ID);
   const title = elementCache.get("user-modal-title");
   const userIdInput = elementCache.get("user-id");
   const usernameInput = elementCache.get("user-username");
@@ -307,7 +310,7 @@ export { initUserEvents };
 // isEnabled 取编辑资料中的 two_factor_enabled：已启用展示管理页（可禁用），
 // 未启用展示扫码设置页；新增未落库用户展示待保存提示
 async function showUser2faStep(userId, isEnabled) {
-  const modal = elementCache.get("user-modal");
+  const modal = elementCache.get(USER_MODAL_ID);
   if (!modal) {
     return;
   }
@@ -340,7 +343,7 @@ async function showUser2faStep(userId, isEnabled) {
 
 // 渲染第二页视图（启用↔禁用动态切换共用）：按当前状态展示对应视图与按钮
 async function renderUser2faView(userId, isEnabled) {
-  const modal = elementCache.get("user-modal");
+  const modal = elementCache.get(USER_MODAL_ID);
   if (!modal) {
     return;
   }
@@ -401,7 +404,7 @@ async function renderUser2faView(userId, isEnabled) {
 
 // 第二步返回第一步：回到账户信息页继续编辑
 function handleUser2faBack() {
-  const modal = elementCache.get("user-modal");
+  const modal = elementCache.get(USER_MODAL_ID);
   if (!modal) {
     return;
   }
@@ -425,9 +428,7 @@ function handleUser2faBack() {
   // 恢复标题：第二页覆盖成了 2FA 标题；按 user-id 有无还原"编辑/添加用户"
   const title = elementCache.get("user-modal-title");
   if (title) {
-    title.textContent = elementCache.getValue("user-id")
-      ? t("user.edit_user")
-      : t("user.add_user");
+    title.textContent = elementCache.getValue("user-id") ? t("user.edit_user") : t("user.add_user");
   }
 }
 
@@ -493,7 +494,10 @@ async function handleUser2faEnable() {
   enableBtn.disabled = true;
 
   try {
-    const response = await apiPost("/api/two-factor/enable", { code, user_id: twoFactorTargetUserId });
+    const response = await apiPost("/api/two-factor/enable", {
+      code,
+      user_id: twoFactorTargetUserId
+    });
     if (response.success) {
       // 启用成功不关框：动态切到管理视图（主按钮变为“禁用2FA”），可继续操作
       showToast(t("two_factor.enable_success"), "success");
@@ -539,7 +543,10 @@ async function handleUser2faDisable() {
   disableBtn.disabled = true;
 
   try {
-    const response = await apiPost("/api/two-factor/disable", { code, user_id: twoFactorTargetUserId });
+    const response = await apiPost("/api/two-factor/disable", {
+      code,
+      user_id: twoFactorTargetUserId
+    });
     if (response.success) {
       // 禁用成功不关框：动态切回扫码设置页（重新 init 生成新密钥/二维码），
       // 主按钮变回“启用2FA”，可再次启用或直接“完成”
@@ -640,7 +647,7 @@ async function submitUserForm() {
       showToast(userId ? t("user.update_success") : t("user.add_success"), "success");
       // 背景列表同步刷新以反映刚才的保存
       loadUsersData();
-      closeModal("user-modal");
+      closeModal(USER_MODAL_ID);
     } else {
       showToast(
         `${userId ? t("user.update_failed") : t("user.add_failed")}：${response.message}`,
