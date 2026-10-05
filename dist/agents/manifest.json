@@ -1,0 +1,12 @@
+{
+  "version": "0.21.16",
+  "generated_at": "2026-10-05T14:02:33Z",
+  "targets": {
+    
+    "x86_64-unknown-linux-musl": { "sha256": "304309c6f500d0c45b9187851623fcc1c4d5b6c94eb8b74008861d54c0e9c701", "size": 2317208 },
+    "aarch64-unknown-linux-musl": { "sha256": "2f97670098bb835192deb5fa2cb4a1ffe9aae9512c28d4a8d2bd6ddca2a54fdd", "size": 2297432 },
+    "i686-unknown-linux-musl": { "sha256": "7a4a806ec049e1b5401e29e52c7603b7a1a034c26da1e88d76ec9905b04fffbd", "size": 2203832 },
+    "arm-unknown-linux-musleabihf": { "sha256": "f1ffb25b5a5cf074ec35387a7519194daba67f24a116b3f0bb5cf284c5299dc7", "size": 2204012 },
+    "armv7-unknown-linux-musleabihf": { "sha256": "4fb254f728cb9b70158ce38fa886d65ae03656a864737ff9156844bc71e6d516", "size": 2145448 }
+  }
+}
