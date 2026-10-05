@@ -363,6 +363,23 @@ dl.config-field,
   color: var(--color-text-secondary, #6b7280);
 }
 
+/* ==================== 商业许可卡片 ==================== */
+
+/* 许可说明文案：弱化色次级文本 */
+.license-note {
+  margin: var(--space-md) 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+/* 注册/购买占位按钮组 */
+.license-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
 /* ==================== 关于卡片：开源组件清单模态框 ==================== */
 
 /* 关于卡片内的“开源组件”入口：原 <a> 模拟链接已按钮化，
