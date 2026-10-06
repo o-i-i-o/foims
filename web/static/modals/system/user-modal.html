@@ -62,11 +62,11 @@
       <div id="user-modal-step-2fa" class="hidden">
         <!-- 未保存的新用户：2FA 需针对已存在用户，先保存再在编辑中配置 -->
         <div id="user-2fa-unsaved-step" class="hidden">
-          <p class="hint-text" data-i18n="two_factor.unsaved_hint">Save the user first, then configure two-factor authentication when editing.</p>
+          <p class="hint-text text-center" data-i18n="two_factor.unsaved_hint">Save the user first, then configure two-factor authentication when editing.</p>
         </div>
         <!-- 未启用：扫码 / 手动输入密钥后提交动态码启用 -->
         <div id="user-2fa-setup-step">
-          <p class="hint-text" data-i18n="two_factor.scan_hint">Scan the QR code below with your authenticator app, or enter the key manually:</p>
+          <p class="hint-text text-center" data-i18n="two_factor.scan_hint">Scan the QR code below with your authenticator app, or enter the key manually:</p>
           <div class="qr-code-container">
             <!-- src 由 userManager.js 进入本页时以 data URI 动态填充，初始留空避免对当前页发起无效请求 -->
             <img id="user-2fa-qr-code" alt="2FA QR Code">
@@ -83,7 +83,7 @@
         </div>
         <!-- 已启用：展示状态并可禁用 -->
         <div id="user-2fa-manage-step" class="hidden">
-          <p class="hint-text" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
+          <p class="hint-text text-center" data-i18n="two_factor.enabled_hint">Two-factor authentication is enabled for your account</p>
           <div class="form-group">
             <label for="user-2fa-disable-code" data-i18n="two_factor.verify_code">Verification Code</label>
             <input type="text" id="user-2fa-disable-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" data-i18n-placeholder="two_factor.disable_code_placeholder" placeholder="Enter 6-digit code to disable 2FA" aria-label="Disable 2FA code">

@@ -7,7 +7,7 @@
   align-items: flex-end;
   gap: 0.9375rem;
   margin-bottom: 1.25rem;
-  border-bottom: 0.125rem solid var(--color-border-dark);
+  border-bottom: 2px solid var(--color-border-dark);
 }
 
 /* 网段名：置于 IPv4/IPv6 切换按钮左侧的纯文本，仅标识当前网段 */
@@ -34,8 +34,8 @@
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--color-text-muted);
-  border-bottom: 0.125rem solid transparent;
-  margin-bottom: -0.125rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
   transition: all var(--transition-normal);
 }
 
@@ -56,15 +56,21 @@
   display: block;
 }
 
-/* 固定 4 列：8 项统计按顺序前 4 后 4 分两行；窄屏在下方媒体查询降为 2 列 */
-.usage-stats {
+/* 固定 4 列网格容器：IPv4 统计与 IPv6 信息共用同款外观；
+   间距各自控制（.usage-stats 独占一块，.ipv6-info-grid 由 .ipv6-info-section 提供间距）。
+   8 项统计按顺序前 4 后 4 分两行；窄屏在下方媒体查询降为 2 列 */
+.usage-stats,
+.ipv6-info-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.625rem;
-  margin-bottom: 1.25rem;
   padding: 0.9375rem;
   background-color: var(--color-bg);
   border-radius: var(--radius-lg);
+}
+
+.usage-stats {
+  margin-bottom: 1.25rem;
 }
 
 /* 作用域限定在 .usage-stats 内，避免与 cards.css 的 .stat-value 冲突 */
@@ -116,10 +122,10 @@
 
 .ip-grid-empty {
   padding: 0.75rem 1rem;
-  background-color: var(--color-warning-bg, rgb(255 193 7 / 10%));
-  border: 1px solid var(--color-warning-border, rgb(255 193 7 / 30%));
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: var(--radius-lg);
-  color: var(--color-warning-text, #856404);
+  color: var(--color-warning-text);
   font-size: 0.875rem;
   line-height: 1.5;
 }
@@ -181,17 +187,17 @@
 
 .ip-unused {
   background-color: var(--color-border-light);
-  border: 0.0625rem solid var(--color-border-dark);
+  border: 1px solid var(--color-border-dark);
 }
 
 .ip-used-active {
   background-color: var(--color-success-bg);
-  border: 0.0625rem solid var(--color-success);
+  border: 1px solid var(--color-success);
 }
 
 .ip-used-inactive {
   background-color: var(--color-warning-bg);
-  border: 0.0625rem solid var(--color-warning);
+  border: 1px solid var(--color-warning);
 }
 
 .usage-ips,
@@ -215,34 +221,30 @@
   margin-bottom: 0.75rem;
 }
 
-.usage-ips .table-responsive,
-.ipv6-list-section .table-responsive {
+/* IP / IPv6 列表表格容器（networks.js 输出 .table-responsive.usage-table，
+   组合类统一两处列表表格样式，避免按容器名重复选择器） */
+.usage-table {
   width: 100%;
-  overflow-x: auto;
   border-radius: var(--radius-md);
   background: var(--color-bg);
   box-shadow: var(--shadow-sm);
 }
 
-.usage-ips .table,
-.ipv6-list-section .table {
+.usage-table .table {
   width: 100%;
   margin-bottom: 0;
   border-collapse: collapse;
   font-size: 0.8125rem;
 }
 
-.usage-ips .table th,
-.usage-ips .table td,
-.ipv6-list-section .table th,
-.ipv6-list-section .table td {
+.usage-table th,
+.usage-table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--color-border);
 }
 
-.usage-ips .table th,
-.ipv6-list-section .table th {
+.usage-table th {
   background-color: var(--color-bg-secondary);
   border-bottom-width: 2px;
   font-weight: 600;
@@ -253,19 +255,16 @@
   white-space: nowrap;
 }
 
-.usage-ips .table td,
-.ipv6-list-section .table td {
+.usage-table td {
   vertical-align: middle;
   color: var(--color-text-light);
 }
 
-.usage-ips .table tbody tr:hover,
-.ipv6-list-section .table tbody tr:hover {
+.usage-table tbody tr:hover {
   background-color: var(--color-bg-secondary);
 }
 
-.usage-ips .table tbody tr:last-child td,
-.ipv6-list-section .table tbody tr:last-child td {
+.usage-table tr:last-child td {
   border-bottom: none;
 }
 
@@ -341,7 +340,9 @@
   color: var(--color-ipv6);
 }
 
-.no-ipv6-info {
+/* 无 IPv6 配置 / 网络不可用空态：共用居中留白样式 */
+.no-ipv6-info,
+.no-network-info {
   text-align: center;
   padding: 3.75rem 1.25rem;
   color: var(--color-text-muted);
@@ -361,12 +362,6 @@
   color: var(--color-text-muted);
 }
 
-.no-network-info {
-  text-align: center;
-  padding: 3.75rem 1.25rem;
-  color: var(--color-text-muted);
-}
-
 @media (width <= 768px) {
   .usage-tabs {
     flex-direction: column;
@@ -379,7 +374,7 @@
   }
 
   .usage-tab-btn {
-    border-bottom: 0.0625rem solid var(--color-border-dark);
+    border-bottom: 1px solid var(--color-border-dark);
     margin-bottom: 0;
   }
 

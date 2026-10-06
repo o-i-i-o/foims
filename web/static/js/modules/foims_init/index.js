@@ -74,7 +74,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document
-    .querySelector('.step-panel[data-step="1"] .btn-success')
+    .querySelector('.step-panel[data-step="1"] .init-btn-success')
     ?.addEventListener("click", () => {
       // PostgreSQL 检查通过：进入数据库配置页（第 2 步），
       // 连接信息由用户在页面填写，不再直接探测默认配置

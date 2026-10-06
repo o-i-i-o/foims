@@ -39,6 +39,7 @@
   --color-text: #212529;
   --color-text-secondary: #495057;
   --color-text-muted: #868e96;
+  --color-text-placeholder: #adb5bd;
   --color-text-light: #343a40;
   --color-bg: #f8f9fa;
   --color-bg-white: #fff;
@@ -112,4 +113,39 @@
   --port-admin-down-border: #fab005;
   --port-admin-down-bg: #fff9db;
   --shadow-xl: 0 20px 40px rgb(0 0 0 / 25%);
+
+  /* 可视化画布/图表色板（Open Color 括号内为档位） */
+  --chart-grid-line: #dee2e6; /* 主网格线 gray-3 */
+  --chart-grid-label: #adb5bd; /* 坐标标注 gray-5 */
+  --chart-node-bg: #f1f3f5; /* 中性节点填充 gray-1 */
+  --chart-node-border: #adb5bd; /* 中性节点描边 gray-5 */
+  --chart-node-border-strong: #868e96; /* 中性节点深描边（笔记本） gray-6 */
+  --chart-blue-bg: #e7f5ff; /* 蓝系节点填充 blue-0 */
+  --chart-blue-border: #228be6; /* 蓝系节点描边 blue-6 */
+  --chart-blue-bg-hover: #d0ebff; /* 蓝系节点悬停填充 blue-1 */
+  --chart-blue-border-strong: #1971c2; /* 蓝系深描边 blue-8 */
+  --chart-blue-border-strongest: #1864ab; /* 蓝系最深描边 blue-9 */
+  --chart-green-bg: #ebfbee; /* 绿系节点填充 green-0 */
+  --chart-green-border: #2f9e44; /* 绿系节点描边 green-8 */
+  --chart-orange-bg: #fff4e6; /* 橙系节点填充 orange-0 */
+  --chart-orange-border: #e8590c; /* 橙系节点描边 orange-8 */
+  --chart-orange-accent: #ff922b; /* 橙系强调（临时连线） orange-5 */
+  --chart-orange-deep: #d9480f; /* 橙系最深（连线起点描边/出口标签） orange-9 */
+  --chart-red-bg: #fff5f5; /* 红系节点填充 red-0 */
+  --chart-red-border: #e03131; /* 红系节点描边 red-8 */
+  --chart-pink-bg: #fff0f6; /* 粉系节点填充（摄像头） pink-0 */
+  --chart-violet-bg: #f3f0ff; /* 紫系节点填充 violet-0 */
+  --chart-violet-border: #6741d9; /* 紫系节点描边 violet-8 */
+  --chart-violet-border-strong: #5f3dc4; /* 紫系最深（LAG 文字/配线架） violet-9 */
+  --chart-violet-bg-hover: #d0bfff; /* 紫系悬停填充 violet-2 */
+  --chart-indigo-border: #4c6ef5; /* 自动发现连线 indigo-6 */
+  --chart-yellow-bg: #fff9db; /* 黄系节点填充（打印机） yellow-0 */
+  --chart-cable-label: #0b7285; /* 线缆标签文字 cyan-9 */
+  --chart-position-bg: #339af0; /* 机柜位节点填充 blue-5 */
+  --chart-position-bg-hover: #228be6; /* 机柜位节点悬停填充 blue-6 */
+  --chart-link: #868e96; /* 连线基色 gray-6 */
+
+  /* 拓扑弹窗层级：高于普通模态区间（1050/1100+），低于 toast */
+  --z-visualization-overlay: 8999;
+  --z-visualization-modal: 9000;
 }

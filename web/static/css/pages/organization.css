@@ -158,53 +158,52 @@
   flex-shrink: 0;
 }
 
+/* 节点类型徽章配色：底色统一取文字 token 的 10% 透明度（同文件 color-mix 模式） */
 .org-node-type-badge[data-type="headquarters"] {
-  background: rgb(52 58 64 / 8%);
-  color: var(--color-primary-hover);
+  background: color-mix(in srgb, var(--color-secondary-hover) 8%, transparent);
+
+  /* 比主色深一档的 lime 文字：主色向文字色深化 */
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-text));
 }
 
 .org-node-type-badge[data-type="building"] {
-  background: rgb(0 123 255 / 10%);
+  background: color-mix(in srgb, var(--color-blue) 10%, transparent);
   color: var(--color-blue);
 }
 
 .org-node-type-badge[data-type="floor"] {
-  background: rgb(23 162 184 / 10%);
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
   color: var(--color-info);
 }
 
 .org-node-type-badge[data-type="data_center"] {
-  background: rgb(220 53 69 / 10%);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   color: var(--color-danger);
 }
 
-.org-node-type-badge[data-type="telecom_closet"] {
-  background: rgb(111 66 193 / 10%);
+.org-node-type-badge[data-type="telecom_closet"],
+.org-node-type-badge[data-type="cabinet"] {
+  background: color-mix(in srgb, var(--color-ipv6) 10%, transparent);
   color: var(--color-ipv6);
 }
 
 .org-node-type-badge[data-type="office"] {
-  background: rgb(40 167 69 / 10%);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
   color: var(--color-success);
 }
 
 .org-node-type-badge[data-type="hall"] {
-  background: rgb(255 193 7 / 10%);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
   color: var(--color-warning-text);
 }
 
 .org-node-type-badge[data-type="workstation"] {
-  background: rgb(108 117 125 / 10%);
+  background: color-mix(in srgb, var(--color-secondary) 10%, transparent);
   color: var(--color-secondary);
 }
 
-.org-node-type-badge[data-type="cabinet"] {
-  background: rgb(111 66 193 / 10%);
-  color: var(--color-ipv6);
-}
-
 .org-node-type-badge[data-type="cabinet_position"] {
-  background: rgb(253 126 20 / 10%);
+  background: color-mix(in srgb, var(--color-orange) 10%, transparent);
   color: var(--color-orange);
 }
 
@@ -495,7 +494,7 @@
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 1000;
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -551,10 +550,6 @@
 .org-icon-picker-item.active {
   background: var(--color-primary-light);
   outline: 2px solid var(--color-primary);
-}
-
-.org-template-type-row .org-node-type-badge {
-  flex-shrink: 0;
 }
 
 .org-template-type-row .org-template-type-input {

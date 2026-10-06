@@ -676,7 +676,7 @@ function buildIPv4Content(network, networkIps, _subnetId) {
     
     <div class="usage-ips">
       <h5>${t("network.ipv4_list")}</h5>
-      <div class="table-responsive">
+      <div class="table-responsive usage-table">
         <table class="table">
           <thead>
             <tr>
@@ -777,7 +777,7 @@ function buildIPv6Content(network, networkIps, _subnetId) {
         <h5>${t("network.ipv6_list")}</h5>
         ${iconButton({ icon: "refresh", label: t("common.refresh"), cls: "btn-secondary", attrs: 'id="refresh-ipv6-usage"' })}
       </div>
-      <div class="table-responsive">
+      <div class="table-responsive usage-table">
         <table class="table">
           <thead>
             <tr>

@@ -8,10 +8,10 @@
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
     <title>FOIMS - 系统登录</title>
-    <link rel="stylesheet" href="/static/css/variables.css?v=1791300723">
-    <link rel="stylesheet" href="/static/css/pages/login.css?v=1791300723">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791300723">
-    <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791300723">
+    <link rel="stylesheet" href="/static/css/variables.css?v=1791311219">
+    <link rel="stylesheet" href="/static/css/pages/login.css?v=1791311219">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791311219">
+    <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791311219">
   </head>
   <!-- body 即文档主体，无需多余 role -->
   <body class="login-body">
@@ -81,10 +81,10 @@
           <!-- 登录模式 Tabs：用户名密码 / 邮箱验证码 / LDAP / SSO（LDAP 与 SSO 默认隐藏，
                由 /api/auth/methods 按配置开关显示） -->
           <div class="login-tabs" role="tablist">
-            <button type="button" class="tab-btn active" data-tab="password-login" role="tab" aria-selected="true" aria-controls="password-login-section" data-i18n="login.password_auth">密码认证</button>
-            <button type="button" class="tab-btn" data-tab="email-login" role="tab" aria-selected="false" aria-controls="email-login-section" data-i18n="login.email_auth">邮箱认证</button>
-            <button type="button" class="tab-btn" data-tab="ldap-login" role="tab" aria-selected="false" aria-controls="ldap-login-section" data-i18n="login.ldap_auth" hidden>LDAP认证</button>
-            <button type="button" class="tab-btn" data-tab="sso-login" role="tab" aria-selected="false" aria-controls="sso-login-section" data-i18n="login.sso_auth" hidden>SSO认证</button>
+            <button type="button" class="login-tab-btn active" data-tab="password-login" role="tab" aria-selected="true" aria-controls="password-login-section" data-i18n="login.password_auth">密码认证</button>
+            <button type="button" class="login-tab-btn" data-tab="email-login" role="tab" aria-selected="false" aria-controls="email-login-section" data-i18n="login.email_auth">邮箱认证</button>
+            <button type="button" class="login-tab-btn" data-tab="ldap-login" role="tab" aria-selected="false" aria-controls="ldap-login-section" data-i18n="login.ldap_auth" hidden>LDAP认证</button>
+            <button type="button" class="login-tab-btn" data-tab="sso-login" role="tab" aria-selected="false" aria-controls="sso-login-section" data-i18n="login.sso_auth" hidden>SSO认证</button>
           </div>
 
           <!-- 视图容器 -->
@@ -96,7 +96,7 @@
 
                 <!-- 用户名密码登录区域 -->
                 <div id="password-login-section" class="login-section active">
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <label for="username" data-i18n="login.username_or_email">用户名或邮箱</label>
                     <div class="input-wrapper">
                       <input
@@ -113,7 +113,7 @@
                     </div>
                   </div>
 
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <label for="password" data-i18n="auth.password">密码</label>
                     <div class="input-wrapper">
                       <input
@@ -142,7 +142,7 @@
                   </div>
 
                   <!-- 图形验证码（连续登录失败达到阈值后显示） -->
-                  <div class="form-group" id="captcha-group" hidden>
+                  <div class="login-form-group" id="captcha-group" hidden>
                     <label for="captcha-input" data-i18n="login.captcha">验证码</label>
                     <div class="captcha-row">
                       <input
@@ -160,7 +160,7 @@
 
                 <!-- 邮箱验证码登录区域 -->
                 <div id="email-login-section" class="login-section">
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <label for="email-login-input" data-i18n="auth.email">邮箱地址</label>
                     <div class="input-wrapper">
                       <input
@@ -175,7 +175,7 @@
                     </div>
                   </div>
 
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <label for="email-login-code" data-i18n="login.verify_code">验证码</label>
                     <div class="form-inline-group">
                       <input
@@ -196,7 +196,7 @@
 
                 <!-- LDAP 登录区域（使用 LDAP 目录账户） -->
                 <div id="ldap-login-section" class="login-section">
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <label for="ldap-username" data-i18n="login.ldap_username">LDAP 用户名</label>
                     <div class="input-wrapper">
                       <input
@@ -211,7 +211,7 @@
                     </div>
                   </div>
 
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <label for="ldap-password" data-i18n="auth.password">密码</label>
                     <div class="input-wrapper">
                       <input
@@ -227,7 +227,7 @@
                   </div>
 
                   <!-- 图形验证码（连续登录失败达到阈值后显示） -->
-                  <div class="form-group" id="ldap-captcha-group" hidden>
+                  <div class="login-form-group" id="ldap-captcha-group" hidden>
                     <label for="ldap-captcha-input" data-i18n="login.captcha">验证码</label>
                     <div class="captcha-row">
                       <input
@@ -245,7 +245,7 @@
 
                 <!-- SSO 登录区域（跳转 OIDC 认证平台） -->
                 <div id="sso-login-section" class="login-section">
-                  <div class="form-group">
+                  <div class="login-form-group">
                     <p class="hint-text" data-i18n="login.sso_hint">跳转到企业统一认证平台完成登录</p>
                   </div>
                 </div>
@@ -282,7 +282,7 @@
               </div>
 
               <form id="two-factor-form">
-                <div class="form-group">
+                <div class="login-form-group">
                   <label for="two-factor-code" data-i18n="login.verify_code">验证码</label>
                   <input
                     type="text"
@@ -298,7 +298,7 @@
                     required>
                 </div>
 
-                <div class="form-group password-hint">
+                <div class="login-form-group password-hint">
                   <small class="hint-text" data-i18n="login.two_factor_hint">请输入身份验证器生成的动态码</small>
                 </div>
 
@@ -320,7 +320,7 @@
             </div>
           </div>
 
-          <div id="login-error" class="error-message" role="alert" aria-live="polite"></div>
+          <div id="login-error" class="login-error-message" role="alert" aria-live="polite"></div>
 
           <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载；
                无 CA 时整体隐藏 -->
@@ -333,6 +333,6 @@
 
     
 
-    <script type="module" src="/static/js/login.js?v=1791300723"></script>
+    <script type="module" src="/static/js/login.js?v=1791311219"></script>
   </body>
 </html>

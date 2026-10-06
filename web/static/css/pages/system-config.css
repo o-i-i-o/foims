@@ -45,7 +45,7 @@
 .config-card:hover {
   /* hover 边框用实色主色，10% tint 边框视觉上消失 */
   border-color: var(--color-primary);
-  box-shadow: 0 4px 12px rgb(102 168 15 / 15%);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 15%, transparent);
 }
 
 .config-card-header {
@@ -143,6 +143,11 @@ dl.config-field,
   color: var(--color-text-muted);
 }
 
+/* 产物不可用/门控未通过等错误提示（agent-dist-message 显隐由 hidden 属性控制） */
+.config-hint-danger {
+  color: var(--color-danger);
+}
+
 /* SNMP Trap v3 USM 用户表：fixed 布局按列宽分配，行内输入控件按列宽自适应，
    防止 6 列控件以默认尺寸（~170px/列）撑破卡片产生横向滚动 */
 .snmp-trap-users-container .data-table {
@@ -178,8 +183,9 @@ dl.config-field,
   text-align: center;
 }
 
-/* 安全卡片“手动封禁”行：新增的 IP 输入框关联标签，与同卡片 nc-field 标签视觉一致 */
-#security-tab .form-group-inline label {
+/* 行内表单组的字段标签（如安全卡片“手动封禁”行 IP 输入框），
+   与表单字段标签视觉一致 */
+.inline-field-label {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -190,11 +196,6 @@ dl.config-field,
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* 2fa 提示居中（用户模态框第二页） */
-#user-modal-step-2fa .hint-text {
-  text-align: center;
 }
 
 @media (width <= 768px) {
@@ -226,11 +227,13 @@ dl.config-field,
   overflow: auto;
 }
 
-.cert-actions-cell {
+.cert-actions-cell,
+.svc-actions-cell {
   white-space: nowrap;
 }
 
-.cert-actions-cell .btn {
+.cert-actions-cell .btn,
+.svc-actions-cell .btn {
   margin-right: 6px;
 }
 
@@ -244,8 +247,10 @@ dl.config-field,
   font-weight: 700;
 }
 
-/* 证书类型徽章：自生成（站点 CA 签发）/ 导入（外部证书） */
-.cert-type-badge {
+/* 状态徽章：证书类型 / CA 私钥 / 服务状态三处共用同一形状规格 */
+.cert-type-badge,
+.ca-key-badge,
+.svc-badge {
   display: inline-block;
   padding: 1px 8px;
   border-radius: 10px;
@@ -254,14 +259,33 @@ dl.config-field,
   white-space: nowrap;
 }
 
+/* 徽章配色：文字用状态色 token，底色取同 token 的 12% 透明度（保持同色相） */
 .cert-type-generated {
   color: var(--color-status-info-text);
-  background: rgb(21 101 192 / 12%);
+  background: color-mix(in srgb, var(--color-status-info-text) 12%, transparent);
 }
 
-.cert-type-imported {
+.cert-type-imported,
+.ca-key-ok,
+.svc-active {
   color: var(--color-status-success-text);
-  background: rgb(46 125 50 / 12%);
+  background: color-mix(in srgb, var(--color-status-success-text) 12%, transparent);
+}
+
+.ca-key-missing,
+.svc-inactive {
+  color: var(--color-status-neutral-text);
+  background: color-mix(in srgb, var(--color-status-neutral-text) 12%, transparent);
+}
+
+.svc-failed {
+  color: var(--color-status-danger-text);
+  background: color-mix(in srgb, var(--color-status-danger-text) 12%, transparent);
+}
+
+.svc-unregistered {
+  color: var(--color-status-warning-text);
+  background: color-mix(in srgb, var(--color-status-warning-text) 12%, transparent);
 }
 
 /* ==================== 站点根 CA 区块 ==================== */
@@ -275,35 +299,17 @@ dl.config-field,
   margin-bottom: 8px;
 }
 
-/* CA 私钥徽章：具备私钥（可签发）/ 无私钥（不可签发） */
-.ca-key-badge {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.ca-key-ok {
-  color: var(--color-status-success-text);
-  background: rgb(46 125 50 / 12%);
-}
-
-.ca-key-missing {
-  color: var(--color-status-neutral-text);
-  background: rgb(107 114 128 / 12%);
-}
+/* CA 私钥徽章配色与形状复用上方 .ca-key-badge 共用规则 */
 
 .cert-ca-help {
   font-size: 12px;
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-secondary);
 }
 
 .cert-ca-help summary {
   cursor: pointer;
   user-select: none;
-  color: var(--color-primary, #2563eb);
+  color: var(--color-primary);
 }
 
 .cert-ca-help-body p {
@@ -313,48 +319,12 @@ dl.config-field,
 
 /* ==================== 服务管理卡片（foims / nginx 共同管理） ==================== */
 
-/* 状态 / 自启徽章：与证书类型徽章同规格 */
-.svc-badge {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.svc-active {
-  color: var(--color-status-success-text);
-  background: rgb(46 125 50 / 12%);
-}
-
-.svc-inactive {
-  color: var(--color-status-neutral-text);
-  background: rgb(107 114 128 / 12%);
-}
-
-.svc-failed {
-  color: var(--color-status-danger-text);
-  background: rgb(198 40 40 / 12%);
-}
-
-.svc-unregistered {
-  color: var(--color-status-warning-text);
-  background: rgb(230 81 0 / 12%);
-}
-
-.svc-actions-cell {
-  white-space: nowrap;
-}
-
-.svc-actions-cell .btn {
-  margin-right: 6px;
-}
+/* 状态 / 自启徽章与操作列样式复用上方共用规则 */
 
 /* 未注册服务的操作列提示文案 */
 .svc-unregistered-hint {
   font-size: 12px;
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-secondary);
 }
 
 /* ==================== 商业许可卡片 ==================== */

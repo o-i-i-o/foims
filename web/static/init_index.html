@@ -10,11 +10,11 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <!-- 样式必须在 <head> 中加载，避免内联样式导致的 FOUC（页面无样式闪烁）。
          ?v= 用于缓存破坏：toasts.css 为与 main.html 共享文件，本次修改后需刷新缓存。 -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=1791300723">
-    <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791300723">
-    <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791300723">
-    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=1791300723">
-    <script type="module" src="/static/js/modules/foims_init/index.js?v=1791300723"></script>
+    <link rel="stylesheet" href="/static/css/variables.css?v=1791311219">
+    <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791311219">
+    <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791311219">
+    <link rel="stylesheet" href="/static/css/pages/foims_init.css?v=1791311219">
+    <script type="module" src="/static/js/modules/foims_init/index.js?v=1791311219"></script>
 </head>
 <body class="init-body">
     <div class="init-container">
@@ -63,8 +63,8 @@
                         </div>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-primary" id="pg-recheck-btn" data-i18n="init.pg_recheck">重新检查</button>
-                        <button type="button" class="btn btn-success" disabled data-i18n="init.next">下一步</button>
+                        <button type="button" class="init-btn init-btn-primary" id="pg-recheck-btn" data-i18n="init.pg_recheck">重新检查</button>
+                        <button type="button" class="init-btn init-btn-success" disabled data-i18n="init.next">下一步</button>
                     </div>
                 </div>
 
@@ -73,37 +73,37 @@
                     <!-- 显隐由 JS 切换 hidden 属性：展示连接测试结果 -->
                     <div id="db-config-status" class="status-container" hidden></div>
                     <form id="db-config-form" class="init-form">
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="db-type" data-i18n="init.db_type">数据库类型:</label>
                             <!-- 下拉框为未来扩展预留，当前仅支持 PostgreSQL（默认选中） -->
                             <select id="db-type" name="db_type">
                                 <option value="pgsql" selected>PostgreSQL</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="db-host" data-i18n="init.db_host">服务器地址:</label>
                             <input type="text" id="db-host" name="host" placeholder="localhost" data-i18n-placeholder="init.db_host_placeholder" required>
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="db-port" data-i18n="init.db_port">端口:</label>
                             <input type="number" id="db-port" name="port" placeholder="5432" min="1" max="65535" required>
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="db-name" data-i18n="init.db_name">数据库名:</label>
                             <input type="text" id="db-name" name="database" placeholder="foims" data-i18n-placeholder="init.db_name_placeholder" required autocomplete="off">
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="db-username" data-i18n="init.db_username">用户名:</label>
                             <input type="text" id="db-username" name="username" required autocomplete="off">
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="db-password" data-i18n="init.db_password">密码:</label>
                             <input type="password" id="db-password" name="password" autocomplete="new-password" required>
                         </div>
-                        <p class="help-text" data-i18n="init.db_config_help">「连接测试」验证通过后自动保存配置并进入下一步；数据库与账号不存在时，请先运行部署脚本 scripts/init-pgsql.sh 创建。</p>
+                        <p class="init-help-text" data-i18n="init.db_config_help">「连接测试」验证通过后自动保存配置并进入下一步；数据库与账号不存在时，请先运行部署脚本 scripts/init-pgsql.sh 创建。</p>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
-                            <button type="submit" class="btn btn-success" data-i18n="init.db_test_btn">连接测试</button>
+                            <button type="button" class="init-btn init-btn-secondary prev-step" data-i18n="init.prev">上一步</button>
+                            <button type="submit" class="init-btn init-btn-success" data-i18n="init.db_test_btn">连接测试</button>
                         </div>
                     </form>
                 </div>
@@ -148,25 +148,25 @@
                                 <h4 data-i18n="init.tab_import_db">导入数据库</h4>
                                 <p data-i18n="init.import_db_desc">从SQL备份文件恢复数据库，适用于数据迁移或恢复。</p>
                             </div>
-                            <div class="form-group">
+                            <div class="init-form-group">
                                 <label for="sql-file" data-i18n="init.sql_backup_file">SQL备份文件:</label>
                                 <input type="file" id="sql-file" name="sql_file" accept=".sql" class="file-input">
-                                <p class="help-text" data-i18n="init.sql_backup_hint">选择要导入的 .sql 备份文件（可选，不选则创建空数据库结构）</p>
+                                <p class="init-help-text" data-i18n="init.sql_backup_hint">选择要导入的 .sql 备份文件（可选，不选则创建空数据库结构）</p>
                             </div>
                         </div>
 
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="verification-step2" data-i18n="init.console_captcha">控制台验证码:</label>
-                            <div class="button-row">
+                            <div class="init-button-row">
                                 <input type="text" id="verification-step2" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
-                                <button type="button" class="btn btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
+                                <button type="button" class="init-btn init-btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
-                            <p class="help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                            <p class="init-help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
                         </div>
 
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
-                            <button type="submit" class="btn btn-success" disabled data-i18n="init.next">下一步</button>
+                            <button type="button" class="init-btn init-btn-secondary prev-step" data-i18n="init.prev">上一步</button>
+                            <button type="submit" class="init-btn init-btn-success" disabled data-i18n="init.next">下一步</button>
                         </div>
                     </form>
                 </div>
@@ -174,33 +174,33 @@
                 <div class="step-panel" data-step="4">
                     <h2 data-i18n="init.admin_create_title">管理员账户创建</h2>
                     <form id="admin-account-form" class="init-form">
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="admin-username" data-i18n="init.username">用户名:</label>
                             <input type="text" id="admin-username" name="username" value="admin" required autocomplete="username">
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="admin-password" data-i18n="init.password">密码:</label>
                             <input type="password" id="admin-password" name="password" autocomplete="new-password" required>
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="admin-confirm-password" data-i18n="init.confirm_password">确认密码:</label>
                             <input type="password" id="admin-confirm-password" name="confirm_password" autocomplete="new-password" required>
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="admin-email" data-i18n="init.email">邮箱:</label>
                             <input type="email" id="admin-email" name="email" placeholder="admin@example.com" required autocomplete="email">
                         </div>
-                        <div class="form-group">
+                        <div class="init-form-group">
                             <label for="verification" data-i18n="init.console_captcha">控制台验证码:</label>
-                            <div class="button-row">
+                            <div class="init-button-row">
                                 <input type="text" id="verification" name="verification" placeholder="请输入服务器控制台显示的验证码" data-i18n-placeholder="init.console_captcha_hint" required>
-                                <button type="button" class="btn btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
+                                <button type="button" class="init-btn init-btn-primary get-captcha-btn" data-i18n="init.get_captcha">获取验证码</button>
                             </div>
-                            <p class="help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
+                            <p class="init-help-text" data-i18n="init.console_captcha_help">验证码已显示在服务器控制台，有效期为15分钟，请查看并输入。</p>
                         </div>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary prev-step" data-i18n="init.prev">上一步</button>
-                            <button type="submit" class="btn btn-success" data-i18n="init.finish_init">完成初始化</button>
+                            <button type="button" class="init-btn init-btn-secondary prev-step" data-i18n="init.prev">上一步</button>
+                            <button type="submit" class="init-btn init-btn-success" data-i18n="init.finish_init">完成初始化</button>
                         </div>
                     </form>
                 </div>
@@ -218,7 +218,7 @@
                             <p class="manual-restart-hint" data-i18n="init.manual_restart_hint">重启完成后，刷新页面即可登录系统。</p>
                         </div>
                         <div class="form-actions" id="init-login-actions">
-                            <a href="/main.html" class="btn btn-primary" id="init-login-btn" data-i18n="init.login_system">登录系统</a>
+                            <a href="/main.html" class="init-btn init-btn-primary" id="init-login-btn" data-i18n="init.login_system">登录系统</a>
                         </div>
                     </div>
                 </div>
@@ -226,9 +226,9 @@
         </div>
 
         <!-- 显隐由 JS 切换 hidden 属性 -->
-        <div id="error-message" class="error-message" hidden></div>
+        <div id="error-message" class="init-error-message" hidden></div>
 
-        <div id="loading" class="loading" hidden>
+        <div id="loading" class="init-loading" hidden>
             <div class="loading-spinner"></div>
             <p data-i18n="init.processing">正在处理...</p>
         </div>

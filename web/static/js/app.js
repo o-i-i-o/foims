@@ -54,18 +54,16 @@ async function initApp() {
     await Promise.allSettled([initAutoRefresh(), initPageTimeout(), initResourcePreloading()]);
   } catch (error) {
     console.error("应用程序初始化失败:", error);
-    // 显示用户友好的错误提示
+    // 显示用户友好的错误提示（样式见 toasts.css 的 .app-fatal-error）
     const errorDiv = document.createElement("div");
-    errorDiv.style.cssText =
-      "position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; background: #fff; border: 1px solid #ccc; border-radius: 8px; text-align: center; z-index: 10000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);";
+    errorDiv.className = "app-fatal-error";
     errorDiv.innerHTML = `
-      <h3 style="margin: 0 0 15px 0; color: #e74c3c;">${t("app.load_failed")}</h3>
-      <p style="margin: 0 0 15px 0; color: #666;">${t("app.refresh_or_contact")}</p>
+      <h3>${t("app.load_failed")}</h3>
+      <p>${t("app.refresh_or_contact")}</p>
     `;
     const reloadBtn = document.createElement("button");
+    reloadBtn.className = "btn btn-primary";
     reloadBtn.textContent = t("app.refresh_page");
-    reloadBtn.style.cssText =
-      "padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer;";
     reloadBtn.addEventListener("click", () => location.reload());
     errorDiv.appendChild(reloadBtn);
     document.body.appendChild(errorDiv);

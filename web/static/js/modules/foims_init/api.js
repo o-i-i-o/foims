@@ -76,7 +76,7 @@ export const checkPostgreSQL = async () => {
     hideLoading();
 
     const pgStatusElement = document.getElementById("pg-status");
-    const nextButton = document.querySelector('.step-panel[data-step="1"] .btn-success');
+    const nextButton = document.querySelector('.step-panel[data-step="1"] .init-btn-success');
     if (!pgStatusElement || !nextButton) {
       return;
     }
@@ -134,7 +134,7 @@ export const checkDatabaseStatus = async () => {
     if (result.success && result.data) {
       const dbStatus = result.data;
       const dbStatusElement = document.getElementById("db-status");
-      const nextButton = document.querySelector('.step-panel[data-step="3"] .btn-success');
+      const nextButton = document.querySelector('.step-panel[data-step="3"] .init-btn-success');
       if (!dbStatusElement || !nextButton) {
         return;
       }
@@ -147,7 +147,7 @@ export const checkDatabaseStatus = async () => {
                             <div class="status-warning">⚠</div>
                             <h3>${t("init.db_status_title")}</h3>
                             <p>${t("init.db_schema_ok")}</p>
-                            <p class="warning-text">${t("init.db_will_reset")}</p>
+                            <p class="init-warning-text">${t("init.db_will_reset")}</p>
                         `;
           dbStatusElement.classList.add("status-warning");
         } else if (!dbStatus.required_tables_exist) {
@@ -296,7 +296,7 @@ export const handleDbConfigSubmit = async (e) => {
 export const handleInitModeSubmit = async (e) => {
   e.preventDefault();
 
-  const nextButton = document.querySelector('.step-panel[data-step="3"] .btn-success');
+  const nextButton = document.querySelector('.step-panel[data-step="3"] .init-btn-success');
   const verificationInput = document.getElementById("verification-step2");
   if (!nextButton || !verificationInput) {
     return;

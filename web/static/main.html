@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791300723">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791300723">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791311219">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791311219">
 </head>
 <body class="main-body">
   <div id="app" class="app-container">
@@ -504,7 +504,7 @@
         </div>
       </section>
 
-      <section id="visualization" class="content-section" aria-label="Visualization" data-i18n-aria-label="nav.visualization">
+      <section id="visualization" class="content-section visualization-page" aria-label="Visualization" data-i18n-aria-label="nav.visualization">
         <div class="tabs" role="tablist">
           <button class="tab-btn active" data-tab="workstation-visualization" role="tab" aria-selected="true" aria-controls="workstation-visualization" data-i18n="visualization.workstation">Workstation Visualization</button>
           <button class="tab-btn" data-tab="cabinet-visualization" role="tab" aria-selected="false" aria-controls="cabinet-visualization" data-i18n="visualization.cabinet">Cabinet Visualization</button>
@@ -526,7 +526,7 @@
             <button id="save-workstation-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
             <button id="delete-workstation-layout" class="btn btn-danger btn-sm" data-i18n="visualization.delete_layout">Delete Layout</button>
           </div>
-          <div id="workstation-visualization-container" role="img" aria-label="Workstation visualization"></div>
+          <div id="workstation-visualization-container" class="visualization-canvas visualization-canvas-scroll" role="img" aria-label="Workstation visualization"></div>
         </div>
 
         <div id="cabinet-visualization" class="tab-content" role="tabpanel">
@@ -543,7 +543,7 @@
             <button id="delete-cabinet-layout" class="btn btn-danger btn-sm" data-i18n="visualization.delete_layout">Delete Layout</button>
             <button id="save-cabinet-layout" class="btn btn-secondary btn-sm" data-i18n="visualization.save_layout">Save Layout</button>
           </div>
-          <div id="cabinet-visualization-container" role="img" aria-label="Cabinet visualization"></div>
+          <div id="cabinet-visualization-container" class="visualization-canvas visualization-canvas-scroll" role="img" aria-label="Cabinet visualization"></div>
         </div>
 
         <div id="global-visualization" class="tab-content" role="tabpanel">
@@ -569,7 +569,7 @@
               <button id="topology-zoom-in" type="button" class="btn btn-secondary btn-sm" aria-label="Zoom in" data-i18n-aria-label="viz.zoom_in" data-tooltip="Zoom in" data-i18n-tooltip="viz.zoom_in">+</button>
             </div>
           </div>
-          <div id="global-visualization-container" role="img" aria-label="Device topology visualization"></div>
+          <div id="global-visualization-container" class="visualization-canvas visualization-canvas-fixed" role="img" aria-label="Device topology visualization"></div>
         </div>
       </section>
 
@@ -1478,7 +1478,7 @@
               <!-- 手动封禁/解封 -->
               <h4 class="mt-md" data-i18n="security.manual_ban">Manual Ban/Unban</h4>
               <div class="form-group-inline">
-                <label for="app-fail2ban-ip-input" data-i18n="system.app_fail2ban_ip">IP Address</label>
+                <label for="app-fail2ban-ip-input" class="inline-field-label" data-i18n="system.app_fail2ban_ip">IP Address</label>
                 <input type="text" id="app-fail2ban-ip-input" class="form-control" placeholder="192.168.1.100">
                 <button type="button" id="app-fail2ban-ban-btn" class="btn btn-danger btn-sm" data-i18n="security.ban_ip">Ban IP</button>
                 <button type="button" id="app-fail2ban-unban-btn" class="btn btn-success btn-sm" data-i18n="security.unban_ip">Unban IP</button>
@@ -1516,7 +1516,7 @@
                 </dl>
               </div>
               <!-- 产物不可用/门控未通过提示（hidden 属性控制显隐） -->
-              <p id="agent-dist-message" class="config-hint" hidden style="color: var(--color-danger);"></p>
+              <p id="agent-dist-message" class="config-hint config-hint-danger" hidden></p>
               <!-- 下载选项：上报地址覆盖 + 备注 -->
               <div class="form-group-inline">
                 <label for="agent-server-addr" data-i18n="system.agent_server_addr">Report Address Override</label>
@@ -1547,6 +1547,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791300723"></script>
+  <script type="module" src="/static/js/app.js?v=1791311219"></script>
 </body>
 </html>

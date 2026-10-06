@@ -1,4 +1,6 @@
-#visualization.content-section.active {
+/* 可视化页面作用域：.visualization-page（main.html 中 section#visualization 的样式钩子，
+   ID 仅保留给 JS 查找，样式一律走类选择器） */
+.visualization-page.content-section.active {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -7,7 +9,7 @@
 }
 
 /* 二级导航标签：保持原有大小与高度，水平居中悬浮在画布顶部 */
-#visualization > .tabs {
+.visualization-page > .tabs {
   position: absolute;
   top: 0;
   z-index: 10;
@@ -15,34 +17,54 @@
   box-shadow: var(--shadow-md);
 }
 
-#visualization > .tabs .tab-btn {
+.visualization-page > .tabs .tab-btn {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
 }
 
-#visualization .toolbar {
+/* 工具栏统一靠右（三个分页共用；其余 flex 属性由全局 .toolbar 提供） */
+.visualization-page .toolbar {
   justify-content: flex-end;
 }
 
-#visualization .tab-content {
+.visualization-page .tab-content {
   display: none;
 }
 
-#visualization .tab-content.active {
+.visualization-page .tab-content.active {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
-#workstation-visualization-container,
-#cabinet-visualization-container {
+/* 画布容器：共享边框/圆角，滚动模式（工位/机柜）与固定模式（全局拓扑）分饰 */
+.visualization-canvas {
   flex: 1;
   min-height: 0;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  overflow: auto;
   background-color: var(--color-bg-white);
+}
+
+.visualization-canvas-scroll {
+  overflow: auto;
+}
+
+.visualization-canvas-fixed {
+  overflow: hidden;
+  background-color: var(--color-bg);
+
+  /* 画布可左键拖拽平移：默认抓手提示，按住拖动时切换 grabbing */
+  cursor: grab;
+}
+
+.visualization-canvas-fixed.panning:active {
+  cursor: grabbing;
+}
+
+.visualization-canvas-fixed.connection-mode {
+  cursor: crosshair;
 }
 
 .visualization-svg {
@@ -55,7 +77,7 @@
 
 /* 主网格线：每 5 格细网格（100px）一条，细网格由 pattern 背景提供 */
 .grid-major-line {
-  stroke: #cfd8dc;
+  stroke: var(--chart-grid-line);
   stroke-width: 1;
   opacity: 0.55;
   pointer-events: none;
@@ -63,7 +85,7 @@
 
 /* 坐标标注：跟随视口顶边/左边，字号由 JS 按视口宽度设置 */
 .grid-label {
-  fill: #90a4ae;
+  fill: var(--chart-grid-label);
   pointer-events: none;
 }
 
@@ -73,8 +95,8 @@
 }
 
 .workstation-element rect {
-  fill: #e3f2fd;
-  stroke: #2196f3;
+  fill: var(--chart-blue-bg);
+  stroke: var(--chart-blue-border);
   stroke-width: 1;
   rx: 4;
   ry: 4;
@@ -104,29 +126,32 @@
 }
 
 .workstation-element:hover rect {
-  fill: #bbdefb;
-  stroke: #1976d2;
+  fill: var(--chart-blue-bg-hover);
+  stroke: var(--chart-blue-border-strong);
 }
 
-.workstation-element.selected rect {
+/* 选中态（虚线主色描边）：三类节点共用 */
+.workstation-element.selected rect,
+.cabinet-position-element.selected rect,
+.topology-device-node.selected rect {
   stroke: var(--color-primary);
   stroke-width: 2;
-  stroke-dasharray: 5, 5;
+  stroke-dasharray: 5 5;
 }
 
 .workstation-element.status-inactive rect {
-  fill: #ffebee;
-  stroke: #e53935;
+  fill: var(--chart-red-bg);
+  stroke: var(--chart-red-border);
 }
 
 .workstation-element.status-unknown rect {
-  fill: #f5f5f5;
-  stroke: #9e9e9e;
+  fill: var(--chart-node-bg);
+  stroke: var(--chart-node-border);
 }
 
 .cabinet-element rect {
-  fill: #f5f5f5;
-  stroke: #9e9e9e;
+  fill: var(--chart-node-bg);
+  stroke: var(--chart-node-border);
   stroke-width: 2;
   rx: 4;
   ry: 4;
@@ -146,15 +171,15 @@
 }
 
 .cabinet-position-element rect {
-  fill: #4a90d9;
-  stroke: #2d6cb5;
+  fill: var(--chart-position-bg);
+  stroke: var(--chart-blue-border-strong);
   stroke-width: 1;
   rx: 3;
   ry: 3;
 }
 
 .cabinet-position-element text {
-  fill: #fff;
+  fill: var(--color-bg-white);
   font-size: 12px;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -162,15 +187,9 @@
 }
 
 .cabinet-position-element:hover rect {
-  fill: #3a7fc8;
-  stroke: #1d5ca5;
+  fill: var(--chart-position-bg-hover);
+  stroke: var(--chart-blue-border-strongest);
   stroke-width: 2;
-}
-
-.cabinet-position-element.selected rect {
-  stroke: var(--color-primary);
-  stroke-width: 2;
-  stroke-dasharray: 5, 5;
 }
 
 .u-mark {
@@ -207,26 +226,6 @@
 
 /* ==================== 全局可视化 ==================== */
 
-#global-visualization-container {
-  flex: 1;
-  min-height: 0;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: #fafbfc;
-
-  /* 画布可左键拖拽平移：默认抓手提示，按住拖动时切换 grabbing */
-  cursor: grab;
-}
-
-#global-visualization-container.panning:active {
-  cursor: grabbing;
-}
-
-#global-visualization-container.connection-mode {
-  cursor: crosshair;
-}
-
 .topology-device-node {
   cursor: pointer;
   transition: filter var(--transition-fast);
@@ -236,12 +235,6 @@
   filter: brightness(1.05);
 }
 
-.topology-device-node.selected rect {
-  stroke: var(--color-primary);
-  stroke-width: 2;
-  stroke-dasharray: 5, 5;
-}
-
 .topology-device-node rect {
   rx: 6;
   ry: 6;
@@ -249,53 +242,50 @@
 }
 
 .topology-device-node.type-switch rect {
-  fill: #e3f2fd;
-  stroke: #1976d2;
+  fill: var(--chart-blue-bg);
+  stroke: var(--chart-blue-border-strong);
 }
 
 .topology-device-node.type-network_device rect {
-  fill: #e3f2fd;
-  stroke: #1565c0;
+  fill: var(--chart-blue-bg);
+  stroke: var(--chart-blue-border-strongest);
 }
 
 .topology-device-node.type-server rect {
-  fill: #e8f5e9;
-  stroke: #388e3c;
+  fill: var(--chart-green-bg);
+  stroke: var(--chart-green-border);
 }
 
 .topology-device-node.type-router rect {
-  fill: #fff3e0;
-  stroke: #f57c00;
+  fill: var(--chart-orange-bg);
+  stroke: var(--chart-orange-border);
 }
 
 .topology-device-node.type-camera rect {
-  fill: #fce4ec;
-  stroke: #c62828;
+  fill: var(--chart-pink-bg);
+  stroke: var(--color-danger-text);
 }
 
 .topology-device-node.type-phone rect {
-  fill: #f3e5f5;
-  stroke: #7b1fa2;
+  fill: var(--chart-violet-bg);
+  stroke: var(--chart-violet-border);
 }
 
-.topology-device-node.type-desktop rect {
-  fill: #f5f5f5;
-  stroke: #9e9e9e;
+/* 桌面/其他：同款中性灰节点 */
+.topology-device-node.type-desktop rect,
+.topology-device-node.type-other rect {
+  fill: var(--chart-node-bg);
+  stroke: var(--chart-node-border);
 }
 
 .topology-device-node.type-laptop rect {
-  fill: #f5f5f5;
-  stroke: #757575;
+  fill: var(--chart-node-bg);
+  stroke: var(--chart-node-border-strong);
 }
 
 .topology-device-node.type-printer rect {
-  fill: #fff8e1;
-  stroke: #f9a825;
-}
-
-.topology-device-node.type-other rect {
-  fill: #f5f5f5;
-  stroke: #9e9e9e;
+  fill: var(--chart-yellow-bg);
+  stroke: var(--color-warning);
 }
 
 .topology-device-node text {
@@ -322,44 +312,44 @@
 }
 
 .port-anchor {
-  fill: #fff;
-  stroke: #9e9e9e;
+  fill: var(--color-bg-white);
+  stroke: var(--chart-node-border);
   stroke-width: 1.5;
   cursor: crosshair;
   transition: all var(--transition-fast);
 }
 
 .port-anchor:hover {
-  fill: #1976d2;
-  stroke: #0d47a1;
+  fill: var(--chart-blue-border-strong);
+  stroke: var(--chart-blue-border-strongest);
 }
 
 .port-anchor.connection-source {
-  fill: #ff9800;
-  stroke: #e65100;
+  fill: var(--chart-orange-accent);
+  stroke: var(--chart-orange-deep);
 }
 
 .topology-connection {
   fill: none;
-  stroke: #78909c;
+  stroke: var(--chart-link);
   stroke-width: 2;
   cursor: pointer;
   transition: stroke var(--transition-fast);
 }
 
 .topology-connection:hover {
-  stroke: #1565c0;
+  stroke: var(--chart-blue-border-strong);
   stroke-width: 3;
 }
 
 .topology-connection.selected {
-  stroke: #e53935;
+  stroke: var(--color-danger);
   stroke-width: 3;
 }
 
 .topology-connection.auto-discovered {
   stroke-dasharray: 6 4;
-  stroke: #5c6bc0;
+  stroke: var(--chart-indigo-border);
 }
 
 .topology-connection-label {
@@ -377,7 +367,7 @@
 /* 信息点链中间节点（设备 → 信息点 → ... → 目标设备） */
 .topology-outlet-label {
   font-size: 9px;
-  fill: #e65100;
+  fill: var(--chart-orange-deep);
   font-weight: 600;
   dominant-baseline: middle;
   pointer-events: none;
@@ -385,7 +375,7 @@
 
 .topology-outlet-index {
   font-size: 8px;
-  fill: #5d4037;
+  fill: var(--color-text-secondary);
   font-weight: 700;
   dominant-baseline: middle;
   pointer-events: none;
@@ -393,9 +383,9 @@
 
 .temp-connection {
   fill: none;
-  stroke: #ff9800;
+  stroke: var(--chart-orange-accent);
   stroke-width: 2;
-  stroke-dasharray: 6, 4;
+  stroke-dasharray: 6 4;
   pointer-events: none;
 }
 
@@ -421,9 +411,9 @@
 }
 
 .btn.btn-warning.active-mode {
-  background-color: #e65100;
+  background-color: var(--chart-orange-deep);
   color: var(--color-bg-white);
-  box-shadow: 0 0 0 3px rgb(255 152 0 / 30%);
+  box-shadow: 0 0 0 3px rgb(255 146 43 / 30%);
 }
 
 /* 拓扑设备详情弹窗 */
@@ -441,7 +431,7 @@
   flex-direction: column;
 
   /* 高于普通模态（1050/1100+），低于 toast（9999），保证弹窗内 toast 校验反馈可见 */
-  z-index: 9000;
+  z-index: var(--z-visualization-modal);
 }
 
 .topology-detail-header {
@@ -543,6 +533,7 @@
   border-top: 1px solid var(--color-border-light);
 }
 
+/* 拓扑详情表格：模态框内轻量表格（与 .data-table 场景不同，无卡片容器） */
 .topology-detail-table {
   width: 100%;
   border-collapse: collapse;
@@ -590,31 +581,30 @@
   position: fixed;
   inset: 0;
   background: rgb(0 0 0 / 50%);
-  z-index: 8999;
+  z-index: var(--z-visualization-overlay);
 }
 
 /* ==================== 设备可视化：连线类型 ==================== */
 
-/* 手动物理示意连线（未录入线路时的草图） */
+/* 手动物理示意连线（未录入线路时的草图）：基色沿用 .topology-connection，仅加虚线 */
 .topology-connection.manual {
-  stroke: #78909c;
   stroke-dasharray: 3 3;
 }
 
 /* 逻辑连接（链路聚合） */
 .topology-connection.logical {
-  stroke: #66a80f;
+  stroke: var(--color-primary);
   stroke-width: 3.5;
   stroke-dasharray: 10 5;
 }
 
 .topology-connection.logical:hover {
-  stroke: #5b21b6;
+  stroke: var(--chart-violet-border-strong);
 }
 
 .topology-lag-badge rect {
-  fill: #f3e8ff;
-  stroke: #66a80f;
+  fill: var(--chart-violet-bg);
+  stroke: var(--color-primary);
   stroke-width: 1.5;
   cursor: pointer;
 }
@@ -622,14 +612,14 @@
 .topology-lag-badge text {
   font-size: 11px;
   font-weight: 700;
-  fill: #5b21b6;
+  fill: var(--chart-violet-border-strong);
   dominant-baseline: middle;
   pointer-events: none;
 }
 
 .topology-lag-members {
   font-size: 9px;
-  fill: #66a80f;
+  fill: var(--color-primary);
   dominant-baseline: middle;
   pointer-events: none;
 }
@@ -642,18 +632,18 @@
 }
 
 .topology-hop-node.hop-patch-panel:hover rect {
-  fill: #d1c4e9;
-  stroke: #4527a0;
+  fill: var(--chart-violet-bg-hover);
+  stroke: var(--chart-violet-border-strong);
 }
 
 .topology-hop-node.hop-patch-panel .topology-outlet-label {
-  fill: #4527a0;
+  fill: var(--chart-violet-border-strong);
 }
 
 /* 逐段线路标签 */
 .topology-cable-label {
   font-size: 9px;
-  fill: #00695c;
+  fill: var(--chart-cable-label);
   font-weight: 600;
   dominant-baseline: middle;
   pointer-events: none;
@@ -678,8 +668,8 @@
 }
 
 .topology-container {
-  fill: rgb(25 118 210 / 4%);
-  stroke: #90a4ae;
+  fill: color-mix(in srgb, var(--chart-blue-border-strong) 4%, transparent);
+  stroke: var(--chart-grid-label);
   stroke-width: 1.2;
   stroke-dasharray: 8 4;
 }
@@ -688,13 +678,13 @@
 .topology-container-label {
   font-size: 13px;
   font-weight: 700;
-  fill: #455a64;
+  fill: var(--color-text-secondary);
   dominant-baseline: middle;
 }
 
 .topology-container-count {
   font-size: 11px;
-  fill: #78909c;
+  fill: var(--chart-link);
   dominant-baseline: middle;
 }
 
@@ -777,13 +767,4 @@
   background: var(--color-bg);
   border-radius: var(--radius-sm);
   word-break: break-all;
-}
-
-/* 设备可视化工具栏：连线模式/创建连线/自动发现 靠左，
-   自动布局/保存布局/比例指示 靠右；顶部留白避开居中悬浮的子标签行 */
-#global-visualization .toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding-left: 0;
-  align-items: center;
 }

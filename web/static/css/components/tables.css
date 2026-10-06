@@ -5,8 +5,6 @@
   flex-direction: column;
 }
 
-
-
 .table-container > .data-table {
   flex: 1;
 }
@@ -596,7 +594,7 @@
 }
 
 .lldp-table th {
-  border: 1px solid var(--color-border-dark, var(--color-border-dark));
+  border: 1px solid var(--color-border-dark);
   padding: 12px 10px;
   font-weight: 600;
 }
@@ -616,13 +614,13 @@
 }
 
 .lldp-table td {
-  border: 1px solid var(--color-border-dark, var(--color-border-dark));
+  border: 1px solid var(--color-border-dark);
   padding: 10px;
 }
 
 .lldp-table td.lldp-index {
   text-align: center;
-  color: var(--color-text-muted, var(--color-text-muted));
+  color: var(--color-text-muted);
   padding: 10px 8px;
 }
 

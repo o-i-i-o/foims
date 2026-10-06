@@ -53,7 +53,7 @@ class LoginManager {
       twoFactorForm: document.getElementById("two-factor-form"),
 
       // Tabs
-      tabs: document.querySelectorAll(".tab-btn"),
+      tabs: document.querySelectorAll(".login-tab-btn"),
       loginSections: document.querySelectorAll(".login-section"),
 
       // Views
@@ -129,7 +129,7 @@ class LoginManager {
     // 登录页未加载 eventManager（其模态关闭委托只随 main.html 安装），
     // 此处补齐等价委托：忘记密码等模态的关闭按钮/背景点击才能关闭
     document.addEventListener("click", (e) => {
-      if (e.target.classList.contains("modal")) {
+      if (e.target.classList.contains("login-modal")) {
         closeModal(e.target.id);
         return;
       }

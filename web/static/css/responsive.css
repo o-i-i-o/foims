@@ -255,8 +255,7 @@
   }
 
   /* 可视化容器按视口高度取比例（原为固定 400px） */
-  #workstation-visualization-container,
-  #cabinet-visualization-container {
+  .visualization-canvas-scroll {
     height: clamp(300px, 60vh, 100%);
   }
 

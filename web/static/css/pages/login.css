@@ -1,12 +1,15 @@
 /* ============================================================
    FOIMS 登录页样式
    - 设计来源: example-files/animatedlogin.html (双栏 + 动画角色)
-   - 自包含: 不依赖 variables.css / buttons.css / modals.css / forms.css
-   - 作用域: 选择器挂在 .login-body / #login-page / .login-* / .modal 下，
-            避免污染 main.html
+   - 依赖: variables.css 的 CSS 变量（颜色/层级），不依赖组件库 CSS
+   - 作用域: 选择器挂在 .login-body / #login-page / .login-* 前缀类上
+            （含 .login-modal 家族与 .login-form-group 等通用名），
+            避免与 main.html 的组件类同名冲突
+   - 说明: 本页不加载 reset.css，开头的 .login-body 通配重置与 .sr-only
+          为就地提供的最小等价集
    ============================================================ */
 
-/* ============ 基础样式（自包含颜色变量，不依赖 variables.css） ============ */
+/* ============ 基础样式 ============ */
 .login-body,
 .login-body *,
 .login-body *::before,
@@ -17,18 +20,20 @@
 }
 
 .login-body {
-  --color-bg-white: #fff;
+  /* 动画角色设计色（源自示例文件，仅角色部件使用） */
+  --char-orange: #ffa94d;
+  --char-yellow: #fcc419;
 
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  background: #212529;
+  background: var(--color-text);
   overflow: hidden;
   height: 100vh;
-  color: #212529;
+  color: var(--color-text);
 }
 
-/* 无障碍：屏幕阅读器可见，视觉隐藏 */
+/* 无障碍：屏幕阅读器可见，视觉隐藏（本页不加载 reset.css，就地提供） */
 .login-body .sr-only {
   position: absolute;
   width: 1px;
@@ -55,7 +60,7 @@
   flex-direction: column;
   justify-content: center;
   gap: 40px;
-  background: #e9ecef;
+  background: var(--color-border-light);
   padding: 40px 48px;
   overflow: hidden;
 }
@@ -120,9 +125,9 @@
 .login-lang-switch select {
   padding: 5px 10px;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #d1d5db);
-  background: var(--color-bg, #fff);
-  color: var(--color-text, #212529);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
   font-size: 13px;
   cursor: pointer;
 }
@@ -136,7 +141,7 @@
   font-size: 32px;
   font-weight: 800;
   letter-spacing: 2px;
-  color: #212529;
+  color: var(--color-text);
 }
 
 .form-header {
@@ -147,27 +152,27 @@
 .form-header h1 {
   font-size: 26px;
   font-weight: 700;
-  color: #212529;
+  color: var(--color-text);
   letter-spacing: -0.5px;
   margin-bottom: 6px;
 }
 
 .form-header p {
   font-size: 14px;
-  color: var(--color-text-muted, #868e96);
+  color: var(--color-text-muted);
 }
 
 /* ============ 登录模式 Tabs（用户名密码 / 邮箱验证码） ============ */
 .login-tabs {
   display: flex;
   gap: 8px;
-  background: #f1f3f5;
+  background: var(--color-bg-secondary);
   border-radius: 25px;
   padding: 4px;
   margin-bottom: 24px;
 }
 
-.login-tabs .tab-btn {
+.login-tabs .login-tab-btn {
   flex: 1;
   height: 40px;
   border: none;
@@ -176,20 +181,20 @@
   font-size: 14px;
   font-weight: 500;
   font-family: inherit;
-  color: #495057;
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all var(--transition-normal);
 }
 
-.login-tabs .tab-btn.active {
+.login-tabs .login-tab-btn.active {
   background: var(--color-bg-white);
-  color: #212529;
+  color: var(--color-text);
   font-weight: 600;
   box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
 }
 
-.login-tabs .tab-btn:hover:not(.active) {
-  color: #212529;
+.login-tabs .login-tab-btn:hover:not(.active) {
+  color: var(--color-text);
 }
 
 /* ============ 视图切换（登录视图 ↔ 2FA 视图） ============ */
@@ -214,13 +219,13 @@
 .view-header h3 {
   font-size: 22px;
   font-weight: 700;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 6px;
 }
 
 .view-desc {
   font-size: 14px;
-  color: var(--color-text-muted, #868e96);
+  color: var(--color-text-muted);
 }
 
 /* 登录区段切换（用户名密码区 / 邮箱验证码区） */
@@ -233,53 +238,53 @@
 }
 
 /* ============ 表单字段 ============ */
-.form-group {
+.login-form-group {
   margin-bottom: 20px;
 }
 
-.form-group label {
+.login-form-group label {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 8px;
 }
 
-.form-group .input-wrapper {
+.login-form-group .input-wrapper {
   position: relative;
 }
 
-.form-group input[type="text"],
-.form-group input[type="email"],
-.form-group input[type="password"] {
+.login-form-group input[type="text"],
+.login-form-group input[type="email"],
+.login-form-group input[type="password"] {
   width: 100%;
   height: 48px;
   border: none;
-  border-bottom: 1.5px solid #e9ecef;
+  border-bottom: 1.5px solid var(--color-border-light);
   padding: 0 40px 0 0;
   font-size: 15px;
   font-family: inherit;
-  color: #212529;
+  color: var(--color-text);
   background: transparent;
   outline: none;
-  transition: border-color 0.3s;
+  transition: border-color var(--transition-slow);
 }
 
-.form-group input:focus {
-  border-bottom-color: #66a80f;
+.login-form-group input:focus {
+  border-bottom-color: var(--color-primary);
 }
 
-.form-group input::placeholder {
-  color: #ccc;
+.login-form-group input::placeholder {
+  color: var(--color-border);
 }
 
-.form-group input[type="password"]:not(:placeholder-shown) {
+.login-form-group input[type="password"]:not(:placeholder-shown) {
   letter-spacing: 2px;
 }
 
 /* Edge 浏览器密码框自带的显示/清除按钮 */
-.form-group input[type="password"]::-ms-reveal,
-.form-group input[type="password"]::-ms-clear {
+.login-form-group input[type="password"]::-ms-reveal,
+.login-form-group input[type="password"]::-ms-clear {
   display: none;
 }
 
@@ -292,13 +297,13 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #495057;
+  color: var(--color-text-secondary);
   padding: 6px;
-  transition: color 0.2s;
+  transition: color var(--transition-normal);
 }
 
 .toggle-password:hover {
-  color: #212529;
+  color: var(--color-text);
 }
 
 /* SVG 命名空间元素不享受 HTML 的 [hidden] UA 样式，需显式声明隐藏，
@@ -322,20 +327,20 @@
   flex-shrink: 0;
   height: 38px;
   padding: 0 14px;
-  border: 1.5px solid #66a80f;
+  border: 1.5px solid var(--color-primary);
   background: transparent;
-  color: #66a80f;
+  color: var(--color-primary);
   border-radius: 19px;
   font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s;
+  transition: all var(--transition-normal);
 }
 
 .form-inline-group .btn-send-code:hover:not(:disabled) {
-  background: #343a40;
+  background: var(--color-text-light);
   color: var(--color-bg-white);
 }
 
@@ -349,7 +354,7 @@
 .hint-text {
   display: block;
   font-size: 12px;
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 /* ============ 记住我 & 忘记密码 ============ */
@@ -365,36 +370,15 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #495057;
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .remember-me input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #66a80f;
+  accent-color: var(--color-primary);
   cursor: pointer;
-}
-
-/* form-group 形式的记住我 */
-.form-group.remember-me {
-  display: flex;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.form-group.remember-me .checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #495057;
-  cursor: pointer;
-}
-
-.form-group.forgot-password {
-  margin-bottom: 20px;
-  text-align: right;
 }
 
 /* 通用链接按钮：div/a 模拟链接按钮化时的按钮 reset（置于 .forgot-link 之前，具体类可覆盖下划线等细节） */
@@ -411,11 +395,11 @@
 
 .forgot-link {
   font-size: 13px;
-  color: #66a80f;
+  color: var(--color-primary);
   text-decoration: none;
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-normal);
 }
 
 .forgot-link:hover {
@@ -430,8 +414,8 @@
   width: 100%;
   height: 50px;
   border-radius: 25px;
-  border: 1.5px solid #212529;
-  background: #212529;
+  border: 1.5px solid var(--color-text);
+  background: var(--color-text);
   color: var(--color-bg-white);
   font-size: 15px;
   font-weight: 600;
@@ -439,12 +423,12 @@
   cursor: pointer;
   overflow: hidden;
   margin-bottom: 14px;
-  transition: all 0.3s;
+  transition: all var(--transition-slow);
 }
 
 .btn-login .btn-text {
   display: inline-block;
-  transition: all 0.3s;
+  transition: all var(--transition-slow);
 }
 
 .btn-login .btn-hover-content {
@@ -454,10 +438,10 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #343a40;
+  background: var(--color-text-light);
   color: var(--color-bg-white);
   opacity: 0;
-  transition: all 0.3s;
+  transition: all var(--transition-slow);
   border-radius: 25px;
 }
 
@@ -481,47 +465,43 @@
   height: 44px;
   border: none;
   background: transparent;
-  color: #495057;
+  color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   margin-top: 8px;
-  transition: color 0.2s;
+  transition: color var(--transition-normal);
 }
 
 .btn-text-full:hover {
-  color: #212529;
+  color: var(--color-text);
 }
 
-/* ============ 错误 / 成功消息 ============ */
-.error-message {
+/* ============ 错误 / 成功消息（同形不同色：形状集中、颜色分列） ============ */
+.login-error-message,
+.login-success-message {
   display: none;
   padding: 10px 14px;
   font-size: 13px;
-  color: #f03e3e;
-  background: rgb(240 62 62 / 8%);
-  border: 1px solid rgb(240 62 62 / 20%);
   border-radius: 10px;
   margin-bottom: 16px;
 }
 
-.error-message.show {
-  display: block;
+.login-error-message {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 20%, transparent);
 }
 
-.success-message {
-  display: none;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: #2b8a3e;
-  background: #d3f9d8;
-  border: 1px solid #b2f2bb;
-  border-radius: 10px;
-  margin-bottom: 16px;
+.login-success-message {
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
 }
 
-.success-message.show {
+.login-error-message.show,
+.login-success-message.show {
   display: block;
 }
 
@@ -534,7 +514,7 @@
   gap: 8px;
   margin-top: 4px;
   font-size: 13px;
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 .ca-download-entry[hidden] {
@@ -542,16 +522,16 @@
 }
 
 .ca-download-link {
-  color: #228be6;
+  color: var(--color-blue);
   text-decoration: none;
   padding: 2px 8px;
-  border: 1px solid rgb(34 139 230 / 25%);
+  border: 1px solid color-mix(in srgb, var(--color-blue) 25%, transparent);
   border-radius: 6px;
-  transition: background 0.2s, color 0.2s;
+  transition: background var(--transition-normal), color var(--transition-normal);
 }
 
 .ca-download-link:hover {
-  background: rgb(34 139 230 / 8%);
+  background: color-mix(in srgb, var(--color-blue) 8%, transparent);
 }
 
 /* ============================================================
@@ -575,7 +555,7 @@
   left: 60px;
   width: 170px;
   height: 370px;
-  background: #343a40;
+  background: var(--color-text-light);
   border-radius: 10px 10px 0 0;
   z-index: 1;
 }
@@ -585,7 +565,7 @@
   left: 220px;
   width: 115px;
   height: 290px;
-  background: #212529;
+  background: var(--color-text);
   border-radius: 8px 8px 0 0;
   z-index: 2;
 }
@@ -595,7 +575,7 @@
   left: 0;
   width: 230px;
   height: 190px;
-  background: #ffa94d;
+  background: var(--char-orange);
   border-radius: 115px 115px 0 0;
   z-index: 3;
 }
@@ -605,7 +585,7 @@
   left: 290px;
   width: 135px;
   height: 215px;
-  background: #fcc419;
+  background: var(--char-yellow);
   border-radius: 68px 68px 0 0;
   z-index: 4;
 }
@@ -624,13 +604,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: height 0.15s ease;
+  transition: height var(--transition-fast);
   overflow: hidden;
 }
 
 .pupil {
   border-radius: 50%;
-  background: #212529;
+  background: var(--color-text);
   transition: transform 0.1s ease-out;
 }
 
@@ -639,7 +619,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #212529;
+  background: var(--color-text);
   transition: transform 0.7s ease-in-out;
 }
 
@@ -648,7 +628,7 @@
   position: absolute;
   width: 50px;
   height: 4px;
-  background: #212529;
+  background: var(--color-text);
   border-radius: 2px;
   transition: all 0.7s ease-in-out;
 }
@@ -658,7 +638,7 @@
   position: absolute;
   width: 28px;
   height: 14px;
-  border: 3px solid #212529;
+  border: 3px solid var(--color-text);
   border-top: none;
   border-radius: 0 0 14px 14px;
   opacity: 0;
@@ -775,8 +755,8 @@
   animation: shake-head 0.8s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
-/* ============ 忘记密码模态框（自包含） ============ */
-.modal {
+/* ============ 忘记密码模态框（.login-modal 家族，独立于全局组件模态） ============ */
+.login-modal {
   display: none;
   position: fixed;
   z-index: var(--z-modal);
@@ -790,11 +770,11 @@
   padding: 1rem;
 }
 
-.modal.active {
+.login-modal.active {
   display: flex;
 }
 
-.modal-content {
+.login-modal-content {
   background: var(--color-bg-white);
   border-radius: 14px;
   width: 100%;
@@ -817,52 +797,52 @@
   }
 }
 
-.modal-header {
+.login-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
-.modal-title {
+.login-modal-title {
   font-size: 18px;
   font-weight: 600;
-  color: #212529;
+  color: var(--color-text);
 }
 
-.modal .close {
+.login-modal .close {
   font-size: 26px;
   font-weight: 300;
   line-height: 1;
-  color: #868e96;
+  color: var(--color-text-muted);
   cursor: pointer;
   user-select: none;
-  transition: color 0.2s;
+  transition: color var(--transition-normal);
 }
 
-.modal .close:hover {
-  color: #212529;
+.login-modal .close:hover {
+  color: var(--color-text);
 }
 
-.modal-body {
+.login-modal-body {
   padding: 24px;
 }
 
-.modal-body .form-group {
+.login-modal-body .login-form-group {
   margin-bottom: 16px;
 }
 
-.modal-footer {
+.login-modal-footer {
   display: flex;
   gap: 10px;
   padding: 16px 24px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid var(--color-border-light);
   justify-content: flex-end;
 }
 
-.modal-footer .btn-secondary,
-.modal-footer .btn-primary {
+.login-modal-footer .login-btn-secondary,
+.login-modal-footer .login-btn-primary {
   height: 40px;
   padding: 0 20px;
   border-radius: 20px;
@@ -871,29 +851,29 @@
   font-family: inherit;
   cursor: pointer;
   border: 1.5px solid transparent;
-  transition: all 0.2s;
+  transition: all var(--transition-normal);
 }
 
-.modal-footer .btn-secondary {
-  background: #f1f3f5;
-  border-color: #e9ecef;
-  color: #495057;
+.login-modal-footer .login-btn-secondary {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border-light);
+  color: var(--color-text-secondary);
 }
 
-.modal-footer .btn-secondary:hover {
-  background: #e9ecef;
+.login-modal-footer .login-btn-secondary:hover {
+  background: var(--color-border-light);
 }
 
-.modal-footer .btn-primary {
-  background: #212529;
+.login-modal-footer .login-btn-primary {
+  background: var(--color-text);
   color: var(--color-bg-white);
 }
 
-.modal-footer .btn-primary:hover {
-  background: #343a40;
+.login-modal-footer .login-btn-primary:hover {
+  background: var(--color-text-light);
 }
 
-.modal-footer .btn-primary:disabled {
+.login-modal-footer .login-btn-primary:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
@@ -983,5 +963,5 @@
 }
 
 .captcha-image:hover {
-  border-color: rgb(34 139 230 / 45%);
+  border-color: color-mix(in srgb, var(--color-blue) 45%, transparent);
 }

@@ -1,9 +1,11 @@
 /* ============================================================
    FOIMS 系统初始化页样式
-   - 自包含：仅依赖 variables.css 的 CSS 变量（颜色/圆角/阴影可选）
-   - 作用域：选择器挂在 .init-body / .init-* / .step-* / .status-* 等专属类名上，
+   - 依赖 variables.css 的 CSS 变量（颜色/圆角/阴影）
+   - 作用域：通用类一律挂 .init- 前缀（.init-btn/.init-form-group 等），
+            专属结构走 .init-body / .init-* / .step-* / .status-* 类名，
             避免污染 main.html
-   - 说明：必须通过 <link> 在 <head> 中加载，切勿内联到 <body> 末尾，
+   - 说明：本页不加载 reset.css，开头 4 行通配重置为就地提供的最小等价集；
+          必须通过 <link> 在 <head> 中加载，切勿内联到 <body> 末尾，
           否则会触发 FOUC（无样式内容闪烁）。
    ============================================================ */
 
@@ -16,7 +18,7 @@
 .init-body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background: #f1f3f5;
+  background: var(--color-bg-secondary);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -47,7 +49,7 @@
 }
 
 .init-header {
-  background: #343a40;
+  background: var(--color-secondary-hover);
   color: var(--color-bg-white);
   padding: 40px 30px;
   text-align: center;
@@ -71,7 +73,7 @@
 }
 
 .init-lang-switch select option {
-  color: #212529;
+  color: var(--color-text);
 }
 
 .init-header h1 {
@@ -103,7 +105,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: #e9ecef;
+  background: var(--color-border-light);
   z-index: 1;
 }
 
@@ -113,7 +115,7 @@
   top: 20px;
   left: 0;
   height: 3px;
-  background: #82c91e;
+  background: var(--color-primary);
   z-index: 2;
   transition: width 0.5s ease;
 }
@@ -130,8 +132,8 @@
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: #e9ecef;
-  color: #adb5bd;
+  background: var(--color-border-light);
+  color: var(--color-text-placeholder);
   font-size: 16px;
   font-weight: 600;
   display: flex;
@@ -142,30 +144,30 @@
 }
 
 .step.active .step-number {
-  background: #343a40;
+  background: var(--color-secondary-hover);
   color: var(--color-bg-white);
-  box-shadow: 0 4px 14px rgb(33 37 41 / 30%);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
 .step.completed .step-number {
-  background: #2f9e44;
+  background: var(--color-success);
   color: var(--color-bg-white);
 }
 
 .step-label {
   font-size: 13px;
-  color: #adb5bd;
+  color: var(--color-text-placeholder);
   font-weight: 500;
   transition: color 0.3s ease;
 }
 
 .step.active .step-label {
-  color: #343a40;
+  color: var(--color-text-light);
   font-weight: 600;
 }
 
 .step.completed .step-label {
-  color: #2f9e44;
+  color: var(--color-success);
 }
 
 .step-content {
@@ -195,34 +197,34 @@
 
 .step-panel h2 {
   font-size: 22px;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 24px;
   font-weight: 600;
 }
 
 .status-container {
-  background: #f8f9fa;
+  background: var(--color-bg);
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--color-border-light);
   text-align: center;
   transition: all 0.3s ease;
 }
 
 .status-container.status-success {
-  background: #ebfbee;
-  border-color: #b2f2bb;
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
 }
 
 .status-container.status-error {
-  background: #fff5f5;
-  border-color: #ffc9c9;
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
 }
 
 .status-container.status-warning {
-  background: #fff9db;
-  border-color: #ffe066;
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
 }
 
 /* 状态图标字号/间距：限定为容器直接子代。JS 会给容器本身加同名状态类
@@ -235,25 +237,25 @@
 }
 
 .status-success {
-  color: #2f9e44;
+  color: var(--color-success);
 }
 
 .status-error {
-  color: #f03e3e;
+  color: var(--color-danger);
 }
 
 .status-warning {
-  color: #fab005;
+  color: var(--color-warning);
 }
 
 .status-container h3 {
   font-size: 18px;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 8px;
 }
 
 .status-container p {
-  color: #868e96;
+  color: var(--color-text-muted);
   margin-bottom: 8px;
 }
 
@@ -267,7 +269,7 @@
 
 .error-guide h4 {
   font-size: 14px;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 12px;
 }
 
@@ -278,13 +280,13 @@
 
 .error-guide li {
   padding: 6px 0;
-  color: #868e96;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
 .error-guide li::before {
   content: "•";
-  color: #f03e3e;
+  color: var(--color-danger);
   margin-right: 8px;
 }
 
@@ -301,7 +303,7 @@
 }
 
 .status-loading p {
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 .init-tabs {
@@ -314,7 +316,7 @@
 .init-tab {
   flex: 1;
   padding: 20px;
-  border: 2px solid #e9ecef;
+  border: 2px solid var(--color-border-light);
   border-radius: 12px;
   cursor: pointer;
   text-align: center;
@@ -324,13 +326,13 @@
 }
 
 .init-tab:hover {
-  border-color: #343a40;
-  background: #f8f9fa;
+  border-color: var(--color-secondary-hover);
+  background: var(--color-bg);
 }
 
 .init-tab.active {
-  border-color: #343a40;
-  background: #f1f3f5;
+  border-color: var(--color-secondary-hover);
+  background: var(--color-bg-secondary);
 }
 
 .init-tab .tab-icon {
@@ -342,7 +344,7 @@
 .init-tab .tab-text {
   font-size: 15px;
   font-weight: 600;
-  color: #212529;
+  color: var(--color-text);
 }
 
 .init-form {
@@ -350,118 +352,103 @@
 }
 
 .panel-description {
-  background: #f8f9fa;
+  background: var(--color-bg);
   padding: 20px;
   border-radius: 12px;
   margin-bottom: 20px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--color-border-light);
 }
 
 .panel-description h4 {
   font-size: 16px;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 8px;
 }
 
 .panel-description p {
-  color: #868e96;
+  color: var(--color-text-muted);
   margin-bottom: 12px;
 }
 
 .panel-description ul {
   padding-left: 20px;
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 .panel-description li {
   margin-bottom: 6px;
 }
 
-.form-group {
+.init-form-group {
   margin-bottom: 20px;
 }
 
-.form-group label {
+.init-form-group label {
   display: block;
   font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
-.form-group input[type="text"],
-.form-group input[type="password"],
-.form-group input[type="email"],
-.form-group input[type="number"] {
+/* 输入框与下拉框同尺寸同观感（下拉框为数据库类型预留） */
+.init-form-group input[type="text"],
+.init-form-group input[type="password"],
+.init-form-group input[type="email"],
+.init-form-group input[type="number"],
+.init-form-group select {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid #e9ecef;
+  border: 2px solid var(--color-border-light);
   border-radius: 10px;
   font-size: 15px;
-  color: #212529;
+  color: var(--color-text);
   transition: all 0.2s ease;
   background: var(--color-bg-white);
 }
 
-/* 数据库配置页的类型下拉框：与输入框同尺寸（为未来扩展预留） */
-.form-group select {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid #e9ecef;
-  border-radius: 10px;
-  font-size: 15px;
-  color: #212529;
-  transition: all 0.2s ease;
-  background: var(--color-bg-white);
-}
-
-.form-group select:focus {
+.init-form-group select:focus,
+.init-form-group input:focus {
   outline: none;
-  border-color: #343a40;
-  box-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
+  border-color: var(--color-text-light);
+  box-shadow: var(--control-shadow);
 }
 
-.form-group input:focus {
-  outline: none;
-  border-color: #343a40;
-  box-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
-}
-
-.form-group input::placeholder {
-  color: #adb5bd;
+.init-form-group input::placeholder {
+  color: var(--color-text-placeholder);
 }
 
 .file-input {
-  border: 2px dashed #d1d5db !important; /* stylelint-disable-line declaration-no-important -- 拖放区覆盖任意子元素样式 */
-  background: #f8f9fa !important; /* stylelint-disable-line declaration-no-important */
+  border: 2px dashed var(--color-border) !important; /* stylelint-disable-line declaration-no-important -- 拖放区需覆盖任意来源（内联/其他类）的边框样式 */
+  background: var(--color-bg) !important; /* stylelint-disable-line declaration-no-important -- 同上，拖放区底色不受调用点影响 */
   cursor: pointer;
 }
 
 .file-input:hover {
-  border-color: #343a40 !important; /* stylelint-disable-line declaration-no-important */
+  border-color: var(--color-secondary-hover) !important; /* stylelint-disable-line declaration-no-important -- 悬停态与基础态同理强制生效 */
 }
 
-.help-text {
+.init-help-text {
   font-size: 13px;
-  color: #adb5bd;
+  color: var(--color-text-placeholder);
   margin-top: 6px;
 }
 
-.warning-text {
-  color: #fab005;
+.init-warning-text {
+  color: var(--color-warning);
   font-weight: 600;
 }
 
 .form-actions {
   margin-top: 32px;
   padding-top: 24px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid var(--color-border-light);
   display: flex;
   justify-content: flex-end;
   gap: 12px;
 }
 
-.btn {
+.init-btn {
   padding: 12px 24px;
   border: none;
   border-radius: 10px;
@@ -474,50 +461,50 @@
   gap: 8px;
 }
 
-.btn-primary {
-  background: #343a40;
+.init-btn-primary {
+  background: var(--color-secondary-hover);
   color: var(--color-bg-white);
 }
 
-.btn-primary:hover:not(:disabled) {
+.init-btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgb(33 37 41 / 30%);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
-.btn-success {
-  background: #2f9e44;
+.init-btn-success {
+  background: var(--color-success);
   color: var(--color-bg-white);
 }
 
-.btn-success:hover:not(:disabled) {
+.init-btn-success:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgb(16 185 129 / 40%);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-success) 40%, transparent);
 }
 
-.btn-secondary {
-  background: #f1f3f5;
-  color: #868e96;
+.init-btn-secondary {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background: #e9ecef;
+.init-btn-secondary:hover:not(:disabled) {
+  background: var(--color-border-light);
 }
 
-.btn:disabled {
+.init-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  transform: none !important; /* stylelint-disable-line declaration-no-important */
+  transform: none !important; /* stylelint-disable-line declaration-no-important -- 禁用态强制清除位移，防止悬停过渡残留 */
 }
 
-.error-message {
+.init-error-message {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: #f03e3e;
+  background: var(--color-danger);
   color: var(--color-bg-white);
   padding: 16px 24px;
   border-radius: 12px;
-  box-shadow: 0 10px 25px rgb(239 68 68 / 30%);
+  box-shadow: 0 10px 25px color-mix(in srgb, var(--color-danger) 30%, transparent);
 
   /* 默认由 HTML hidden 属性隐藏，JS 通过 el.hidden 切换显示 */
   z-index: 1001;
@@ -537,7 +524,7 @@
   }
 }
 
-.loading {
+.init-loading {
   position: fixed;
   top: 0;
   left: 0;
@@ -554,12 +541,12 @@
 }
 
 /* display:flex 会覆盖 UA 样式表的 [hidden]，须显式恢复 hidden 属性的隐藏能力 */
-.loading[hidden] {
+.init-loading[hidden] {
   display: none;
 }
 
 /* 输入框与按钮的行内横排（原内联 flex 布局收编为类） */
-.button-row {
+.init-button-row {
   display: flex;
   gap: 10px;
 }
@@ -584,18 +571,18 @@
 }
 
 .loading-spinner::before {
-  border: 3px solid #e9ecef;
+  border: 3px solid var(--color-border-light);
 }
 
 .loading-spinner::after {
   border: 3px solid transparent;
-  border-top-color: #343a40;
-  border-right-color: #343a40;
+  border-top-color: var(--color-text-light);
+  border-right-color: var(--color-text-light);
   animation: spin 0.6s linear infinite;
 }
 
-.loading p {
-  color: #868e96;
+.init-loading p {
+  color: var(--color-text-muted);
   font-size: 15px;
 }
 
@@ -617,7 +604,7 @@
 .success-icon {
   width: 100px;
   height: 100px;
-  background: #2f9e44;
+  background: var(--color-success);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -640,19 +627,19 @@
 
 .init-success h2 {
   font-size: 28px;
-  color: #212529;
+  color: var(--color-text);
   margin-bottom: 12px;
 }
 
 .init-success p {
-  color: #868e96;
+  color: var(--color-text-muted);
   margin-bottom: 8px;
 }
 
 /* 手动重启指引的辅助说明行（弱化展示） */
 .init-success .manual-restart-hint {
   font-size: 13px;
-  color: #adb5bd;
+  color: var(--color-text-placeholder);
 }
 
 .init-success .form-actions {
@@ -697,7 +684,7 @@
     flex-direction: column;
   }
 
-  .btn {
+  .init-btn {
     width: 100%;
     justify-content: center;
   }
