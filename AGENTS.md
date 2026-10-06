@@ -29,7 +29,8 @@
 
 - 每次代码更新后 bump `Cargo.toml` 版本号（规则 `0.x.yy`，`yy>=99` 时进位）；
   前端资源同步 bump 三个入口页（main/index/init_index）的 `?v=` 与
-  `resourceLoader.js` 的 `MODULE_VERSION`（一致性由 `cargo test` 强制）。
+  `resourceLoader.js` 的 `MODULE_VERSION`（时间戳格式，一键脚本
+  `bash test-scripts/bump_static_version.sh`；一致性由 `cargo test` 强制）。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
 - 开发直接测试：`./test/pak.sh`（运行需 root 监听端口）；
 - 测试用户 admin / admin123。

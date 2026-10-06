@@ -1,4 +1,4 @@
-# CSS 按项目约定保持 4 空格手工排版（见 docs/code-style.md 3.3），不归 prettier
+# CSS 按项目约定保持 2 空格手工排版（见 docs/CSS-style.md），不归 prettier
 static/css/
 # HTML 由表单/结构手工维护，避免整档重排
 static/main.html
