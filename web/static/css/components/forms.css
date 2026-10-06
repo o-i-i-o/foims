@@ -72,12 +72,6 @@
   min-width: 120px;
 }
 
-.form-group input:not([type="checkbox"]),
-.form-group select,
-.nc-input {
-  height: var(--control-height);
-}
-
 .form-group textarea {
   field-sizing: content;
   min-height: 1lh;    /* 最小1行高度，lh=行高单位 */
