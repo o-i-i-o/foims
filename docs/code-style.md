@@ -142,10 +142,7 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
 
 ### 3.3 CSS
 
-- 4 空格缩进（prettier 不处理 css 时保持现状），选择器功能语义命名
-  （`.data-table`、`.pagination-btn`），不引入 BEM。
-- 颜色/圆角/间距/层级一律走 `variables.css` 变量；`color: white`、
-  `border-radius: 4px`、手写主色 alpha 均属违例。
+css 代码规范位于 docs/CSS-style.md
 
 ### 3.4 HTML
 
@@ -295,11 +292,3 @@ id/注册表/i18n 键/版本号四类一致性校验已固化为 Rust 集成测�
 | 前端表格 | `renderTable` + `appendPaginationToTable` + `createSortState` |
 | 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network.js"` |
 
-CSS要求：
-1. 使用CSS变量管理颜色、间距、阴影、圆角，优先rem，减少固定px；
-2. 配色使用低饱和中性色系，1主色+1辅助色，禁用高饱和艳色，不要纯黑#000；
-3. 阴影使用多层弱透明度，禁止硬黑阴影；圆角区分大小，不要全部统一大圆角；
-4. 不要冗余CSS属性，不要多余动画；
-5. 增加现代css reset，支持亮色，可选暗色模式；
-6. 排版使用系统无衬线字体，行高合理；
-7. 不要写花哨渐变，样式克制简约，接近真实产品UI，不要AI模板感。

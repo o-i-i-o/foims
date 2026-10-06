@@ -2202,9 +2202,7 @@ function renderAgentDist(data) {
   // 门控未通过或 CA 未生成：置顶提示并禁用下载（状态行已展示原因）
   const blocked = !data.gate_ok || !data.ca_ok;
   if (messageEl) {
-    messageEl.textContent = blocked
-      ? t(data.message || "system.agent_gate_blocked")
-      : "";
+    messageEl.textContent = blocked ? t(data.message || "system.agent_gate_blocked") : "";
     messageEl.hidden = !blocked;
   }
   renderAgentTargets(data.targets || [], blocked);
@@ -2229,9 +2227,7 @@ function renderAgentTargets(targets, blocked) {
       const options = formats
         .map(
           (format) =>
-            `<option value="${escapeHtml(format)}">${escapeHtml(
-              format.toUpperCase()
-            )}</option>`
+            `<option value="${escapeHtml(format)}">${escapeHtml(format.toUpperCase())}</option>`
         )
         .join("");
       const disabled = blocked ? "disabled" : "";
@@ -2258,10 +2254,7 @@ export async function loadAgentDist() {
     // 成功响应为裸 JSON（available 字段承担成败语义）；非 200 时
     // apiClient 归一为 { success: false, message } 对象，无 available 字段
     if (result.available === undefined) {
-      showToast(
-        `${t("system.agent_dist_load_failed")}: ${result.message || ""}`,
-        "error"
-      );
+      showToast(`${t("system.agent_dist_load_failed")}: ${result.message || ""}`, "error");
       return;
     }
     renderAgentDist(result);
@@ -2275,9 +2268,7 @@ export async function loadAgentDist() {
 // Content-Disposition（服务端已组好包），备注与上报地址覆盖随查询串下发
 export async function downloadAgentPackage(target) {
   const tbody = elementCache.get("agent-dist-tbody");
-  const formatSelect = tbody?.querySelector(
-    `select[data-agent-format="${CSS.escape(target)}"]`
-  );
+  const formatSelect = tbody?.querySelector(`select[data-agent-format="${CSS.escape(target)}"]`);
   const format = formatSelect?.value || "zip";
 
   const serverAddr = elementCache.getValue("agent-server-addr").trim();
@@ -2297,19 +2288,13 @@ export async function downloadAgentPackage(target) {
   try {
     const result = await apiRequest(`/api/agents/download?${params.toString()}`);
     if (!result.success) {
-      showToast(
-        `${t("system.agent_download_failed")}: ${result.message || ""}`,
-        "error"
-      );
+      showToast(`${t("system.agent_download_failed")}: ${result.message || ""}`, "error");
       return;
     }
     if (!result.isBlob) {
       return;
     }
-    downloadBlobResult(
-      result,
-      `foims-agent-${target}.${format}`
-    );
+    downloadBlobResult(result, `foims-agent-${target}.${format}`);
   } catch (error) {
     console.error("下载Agent安装包失败:", error);
     showToast(`${t("system.agent_download_failed")}: ${error.message}`, "error");

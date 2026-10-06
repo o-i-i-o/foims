@@ -81,7 +81,7 @@ class CabinetPositionsManager extends DynamicRowManager {
     const endU = data.end_u ?? 1;
     const description = data.description || "";
     const div = document.createElement("div");
-    div.className = "cabinet-position-item";
+    div.className = "cabinet-position-item dyn-list-item";
     div.innerHTML = `
       <div class="form-row">
         <div class="form-group">
@@ -176,7 +176,7 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
     const id = data.id || "";
     const name = data.name || "";
     const div = document.createElement("div");
-    div.className = "cabinet-patch-panel-item";
+    div.className = "cabinet-patch-panel-item dyn-list-item";
     div.innerHTML = `
       <div class="form-row">
         <div class="form-group">

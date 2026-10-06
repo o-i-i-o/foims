@@ -4,7 +4,7 @@
 .port-groups-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 1.25rem;
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -12,48 +12,48 @@
 /* ============ 单个端口分组 ============ */
 .port-group {
   flex: 1;
-  min-width: 250px;
+  min-width: 15.625rem;
   border: 1px solid var(--color-border-dark);
-  border-radius: var(--radius-lg, 8px);
-  padding: 15px;
+  border-radius: var(--radius-lg);
+  padding: 0.9375rem;
   background-color: var(--color-bg);
 }
 
 .port-group h4 {
   margin-top: 0;
-  margin-bottom: 15px;
-  color: var(--color-text, var(--color-text));
-  font-size: 14px;
+  margin-bottom: 0.9375rem;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
 /* 交换板卡分组标题（与端口分组同款，仅多一个类型标记颜色） */
 .port-group.is-switch-group h4 {
-  color: #ff9800;
+  color: var(--color-orange);
 }
 
 /* ============ 端口网格 ============ */
 .port-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
+  gap: var(--space-sm);
 }
 
 /* ============ 单个端口项 ============ */
 .port-item {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   border: 1px solid var(--color-border-dark);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background-color: var(--color-bg-white);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   position: relative;
-  transition: all var(--transition-fast, 0.15s ease);
-  color: var(--color-text, var(--color-text));
+  transition: all var(--transition-fast);
+  color: var(--color-text);
 }
 
 .port-item:hover {
@@ -94,17 +94,17 @@
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  background-color: var(--color-text, var(--color-text));
+  background-color: var(--color-text);
   color: var(--color-bg-white);
-  padding: 5px 10px;
-  border-radius: var(--radius-sm, 4px);
-  font-size: 12px;
+  padding: 0.3125rem 0.625rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
   white-space: nowrap;
-  z-index: var(--z-tooltip, 1200);
-  margin-bottom: 5px;
+  z-index: var(--z-tooltip);
+  margin-bottom: 0.3125rem;
   opacity: 0;
   visibility: hidden;
-  transition: all var(--transition-fast, 0.15s ease);
+  transition: all var(--transition-fast);
 }
 
 .port-item:hover .port-tooltip {
@@ -118,9 +118,9 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  border-width: 5px;
+  border-width: 0.3125rem;
   border-style: solid;
-  border-color: var(--color-text, var(--color-text)) transparent transparent transparent;
+  border-color: var(--color-text) transparent transparent transparent;
 }
 
 /* 层叠模态框的层级由 js/utils/modalLoader.js 按打开顺序写内联 z-index，此处不再定义 */
@@ -128,39 +128,39 @@
 /* ============ 空消息（限定在端口分组容器内，避免污染全局 .error-message） ============ */
 .port-groups-container .empty-message {
   text-align: center;
-  padding: 20px;
-  color: var(--color-text-muted, var(--color-text-secondary));
+  padding: 1.25rem;
+  color: var(--color-text-muted);
   width: 100%;
 }
 
 /* ============ SNMP 端口冲突确认对话框 ============ */
 .port-conflict-summary {
-  margin-bottom: 16px;
-  padding: 12px 14px;
+  margin-bottom: var(--space-md);
+  padding: 0.75rem 0.875rem;
   background: var(--color-warning-bg);
   border: 1px solid var(--color-warning-border);
-  border-radius: 8px;
-  font-size: 13px;
-  color: #7a5d00;
+  border-radius: var(--radius-lg);
+  font-size: 0.8125rem;
+  color: var(--color-warning-text);
   line-height: 1.6;
 }
 
 .port-conflict-list {
-  max-height: 240px;
+  max-height: 15rem;
   overflow-y: auto;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  margin-bottom: 16px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-md);
 }
 
 .port-conflict-row {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid #f0f0f0;
-  font-size: 13px;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: 0.8125rem;
 }
 
 .port-conflict-row:last-child {
@@ -174,22 +174,22 @@
 
 .port-conflict-row .conflict-port-detail {
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
 }
 
 .port-conflict-row .conflict-select {
-  padding: 4px 8px;
+  padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   background: var(--color-bg-white);
 }
 
 .port-conflict-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-sm);
   justify-content: flex-end;
   flex-wrap: wrap;
-  padding-top: 8px;
-  border-top: 1px solid #e9ecef;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-light);
 }

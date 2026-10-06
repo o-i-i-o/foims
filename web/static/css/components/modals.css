@@ -58,14 +58,14 @@
 
 .modal-header {
   padding: 0.75rem;
-  background: #343a40;
+  background: var(--color-secondary-hover);
   color: var(--color-bg-white);
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
   position: relative;
-  border-bottom: 1px solid #212529;
+  border-bottom: 1px solid var(--color-text);
 }
 
 .modal-title {
@@ -83,7 +83,7 @@
   width: 4px;
   height: 18px;
   background: rgb(255 255 255 / 80%);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .modal-body {
@@ -104,7 +104,7 @@
 
 .modal-body::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .modal-body::-webkit-scrollbar-thumb:hover {
@@ -227,7 +227,7 @@
 .device-template-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
   flex: 1;
   min-width: 0;
 }
@@ -270,7 +270,7 @@
   display: block;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-xs);
 }
 
 .device-template-edit-actions {
@@ -302,8 +302,8 @@
 .spinner {
   width: 2rem;
   height: 2rem;
-  border: 0.25rem solid var(--color-border-light, #ddd);
-  border-top-color: var(--color-primary, #3b82f6);
+  border: 0.25rem solid var(--color-border-light);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto;
@@ -327,8 +327,8 @@
 .tab-search {
   width: 100%;
   padding: 0.5rem;
-  border: 0.0625rem solid var(--color-border-light, #ccc);
-  border-radius: var(--radius-sm, 4px);
+  border: 0.0625rem solid var(--color-border-light);
+  border-radius: var(--radius-sm);
   margin-bottom: 0.625rem;
 }
 

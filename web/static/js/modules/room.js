@@ -128,7 +128,7 @@ class NetworkConfigManager {
     const { regionSelectClass, networkSelectClass, removeBtnClass } = this.options;
 
     return `
-      <div class="network-config-item">
+      <div class="network-config-item dyn-list-item">
         <div class="form-row">
           <div class="form-group">
             <select class="${regionSelectClass}" required>
@@ -439,7 +439,7 @@ class RoomChildListManager extends DynamicRowManager {
     const id = data.id || "";
     const name = data.name || "";
     const div = document.createElement("div");
-    div.className = "room-child-item";
+    div.className = "room-child-item dyn-list-item";
     div.dataset.childType = "workstation";
     div.innerHTML = `
       <div class="form-row">
@@ -464,7 +464,7 @@ class RoomChildListManager extends DynamicRowManager {
     const name = data.name || "";
     const capacity = data.capacity || 42;
     const div = document.createElement("div");
-    div.className = "room-child-item";
+    div.className = "room-child-item dyn-list-item";
     div.dataset.childType = "cabinet";
     div.innerHTML = `
       <div class="form-row">
@@ -691,7 +691,7 @@ class RoomNetOutletsManager extends DynamicRowManager {
     const id = data.id || "";
     const name = data.name || "";
     const div = document.createElement("div");
-    div.className = "room-net-outlet-item";
+    div.className = "room-net-outlet-item dyn-list-item";
     div.innerHTML = `
       <div class="form-row">
         <div class="form-group">

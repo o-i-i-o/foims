@@ -45,7 +45,7 @@
               <span class="list-title" data-i18n="network.network_config">Network Config</span>
               <button type="button" id="room-add-network-config-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add" data-i18n-tooltip="network.add_network_config" aria-label="Add" data-i18n-aria-label="network.add_network_config"></button>
             </div>
-            <div id="network-configs-container"></div>
+            <div id="network-configs-container" class="dyn-list"></div>
         </div>
         <!-- 工位/机柜动态管理区域："其他"类型房间两者皆可管理 -->
         <div class="form-group" id="room-workstations-group">
@@ -53,14 +53,14 @@
               <span class="list-title" id="room-children-label" data-i18n="room.workstations">Workstations</span>
               <button type="button" id="add-room-workstation-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Workstation" data-i18n-tooltip="room.add_workstation" aria-label="Add Workstation" data-i18n-aria-label="room.add_workstation"></button>
             </div>
-            <div id="room-children-container"></div>
+            <div id="room-children-container" class="dyn-list"></div>
         </div>
         <div class="form-group hidden" id="room-cabinets-group">
             <div class="list-header">
               <span class="list-title" id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</span>
               <button type="button" id="add-room-cabinet-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Cabinet" data-i18n-tooltip="cabinet.add_cabinet" aria-label="Add Cabinet" data-i18n-aria-label="cabinet.add_cabinet"></button>
             </div>
-            <div id="room-cabinets-container"></div>
+            <div id="room-cabinets-container" class="dyn-list"></div>
         </div>
         <!-- 信息点动态管理区域（所有房型通用） -->
         <div class="form-group">
@@ -68,7 +68,7 @@
               <span class="list-title" id="room-net-outlets-label" data-i18n="room.net_outlets">Network Outlets</span>
               <button type="button" id="add-room-net-outlet-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Network Outlet" data-i18n-tooltip="room.add_net_outlet" aria-label="Add Network Outlet" data-i18n-aria-label="room.add_net_outlet"></button>
             </div>
-            <div id="room-net-outlets-container"></div>
+            <div id="room-net-outlets-container" class="dyn-list"></div>
         </div>
         <div class="form-group">
           <label for="room-description" data-i18n="common.description">Description</label>
