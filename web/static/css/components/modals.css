@@ -168,7 +168,6 @@
 }
 
 .modal .form-group label {
-  width: 100px;
   min-width: 100px;
   text-align: center;
   color: var(--color-text-secondary);
@@ -179,8 +178,6 @@
 .modal .form-group select,
 .modal .form-group textarea {
   flex: 1;
-  width: auto;
-  min-width: 0;
 }
 
 .modal .form-group textarea {

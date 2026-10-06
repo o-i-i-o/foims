@@ -227,8 +227,6 @@
   user-select: none;
   transition: background-color 0.2s ease;
   position: relative;
-  padding-left: 28px;
-  padding-right: 28px;
 }
 
 .data-table th.sortable:hover {

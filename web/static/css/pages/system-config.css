@@ -88,12 +88,6 @@
   margin-bottom: 0;
 }
 
-.config-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
 /* 只读字段 dl 化后：重置 dl/dd 的浏览器默认边距，保持原布局 */
 dl.config-field,
 .config-field dd {
