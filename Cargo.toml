@@ -1,7 +1,7 @@
 
 [package]
 name = "foims"
-version = "0.21.18"
+version = "0.21.20"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -109,8 +109,8 @@ tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
-# 系统调用安全封装（foims-agent：statfs/uname 等，零 unsafe）
-rustix = { version = "1.1", default-features = false, features = ["std", "fs", "system", "process"] }
+# 系统调用安全封装（foims-agent：statfs/uname/page_size 等，零 unsafe）
+rustix = { version = "1.1", default-features = false, features = ["std", "fs", "system", "process", "param"] }
 
 # RPM 组包（foims-agent-service 分发下载；免 rpmbuild，不签名故裁掉 pgp）
 rpm = { version = "0.29.0", default-features = false, features = ["payload", "gzip-compression"] }
