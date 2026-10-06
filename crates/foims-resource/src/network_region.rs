@@ -67,6 +67,7 @@ pub async fn get_network_regions<P: DbProvider>(
     let network_regions = if search.is_empty() {
         let sql = format!("{base_select} {order_clause} LIMIT $1 OFFSET $2");
         sqlx::query_as::<_, NetworkRegion>(sqlx::AssertSqlSafe(sql))
+            .persistent(false)
             .bind(page_size)
             .bind(offset)
             .fetch_all(&state.pool()?.get_conn())
@@ -77,6 +78,7 @@ pub async fn get_network_regions<P: DbProvider>(
             "{base_select} WHERE name ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
         );
         sqlx::query_as::<_, NetworkRegion>(sqlx::AssertSqlSafe(sql))
+            .persistent(false)
             .bind(&pattern)
             .bind(page_size)
             .bind(offset)

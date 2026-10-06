@@ -272,6 +272,7 @@ pub async fn get_organizations<P: DbProvider>(
 
     let total: i64 = count_qb
         .build_query_scalar()
+        .persistent(false)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -289,6 +290,7 @@ pub async fn get_organizations<P: DbProvider>(
 
     let organizations = list_qb
         .build_query_as::<Organization>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 

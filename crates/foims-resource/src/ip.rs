@@ -189,6 +189,7 @@ pub async fn get_ip_details<P: DbProvider>(
     push_ip_filters(&mut count_builder, &filters);
     let total: i64 = count_builder
         .build_query_scalar()
+        .persistent(false)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -205,6 +206,7 @@ pub async fn get_ip_details<P: DbProvider>(
         .push_bind(pagination.offset);
     let mappings = data_builder
         .build_query_as::<IpDetailWithNames>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 

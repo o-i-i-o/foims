@@ -151,6 +151,7 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
         // 表名来自静态白名单，已人工审计无注入风险
         let sql = format!("SELECT id::text, name FROM {table}");
         let rows: Vec<(String, String)> = sqlx::query_as(AssertSqlSafe(sql))
+            .persistent(false)
             .fetch_all(&mut *conn)
             .await?;
         simple.insert(table, rows.into_iter().collect());
@@ -176,6 +177,7 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
                FROM {table} t JOIN rooms r ON r.id = t.room_id"
         );
         let rows: Vec<(String, String)> = sqlx::query_as(AssertSqlSafe(sql))
+            .persistent(false)
             .fetch_all(&mut *conn)
             .await?;
         room_scoped.insert(table, rows.into_iter().collect());
@@ -425,6 +427,7 @@ async fn fetch_table_rows(conn: &mut PgConnection, table: &str) -> DataResult<Ve
     // table 来自规格静态白名单；AssertSqlSafe 表示该拼接已经人工审计无注入风险
     let sql = format!("SELECT to_jsonb(t) FROM {table} t ORDER BY id");
     let rows: Vec<sqlx::types::Json<Value>> = sqlx::query_scalar(AssertSqlSafe(sql))
+        .persistent(false)
         .fetch_all(conn)
         .await
         .map_err(DataError::from)?;

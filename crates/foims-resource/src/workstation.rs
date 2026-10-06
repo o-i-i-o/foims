@@ -103,6 +103,7 @@ pub async fn get_workstations<P: DbProvider>(
 
     let total: i64 = count_builder
         .build_query_scalar()
+        .persistent(false)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -115,6 +116,7 @@ pub async fn get_workstations<P: DbProvider>(
         .push_bind(pagination.offset);
     let items = data_builder
         .build_query_as::<WorkstationWithDetails>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
@@ -372,15 +374,20 @@ pub async fn update_workstation<P: DbProvider>(
     }
     builder.push(" WHERE id = ").push_bind(id);
 
-    builder.build().execute(&mut *tx).await.map_err(|e| {
-        // 并发写入竞态兜底：uq_workstations_room_name 冲突映射为 409
-        if let sqlx::Error::Database(ref db_err) = e
-            && db_err.is_unique_violation()
-        {
-            return AppError::Conflict(msg("server.workstation.name_exists"));
-        }
-        AppError::from(e)
-    })?;
+    builder
+        .build()
+        .persistent(false)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            // 并发写入竞态兜底：uq_workstations_room_name 冲突映射为 409
+            if let sqlx::Error::Database(ref db_err) = e
+                && db_err.is_unique_violation()
+            {
+                return AppError::Conflict(msg("server.workstation.name_exists"));
+            }
+            AppError::from(e)
+        })?;
 
     let mut result = fetch_workstation_base(&mut *tx, id)
         .await?

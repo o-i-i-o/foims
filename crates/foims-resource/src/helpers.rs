@@ -84,6 +84,7 @@ where
 
     let existing: Option<Uuid> = builder
         .build_query_scalar()
+        .persistent(false)
         .fetch_optional(executor)
         .await?;
     if existing.is_some() {

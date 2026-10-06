@@ -117,6 +117,7 @@ pub async fn get_resource_options<P: DbProvider>(
 
     let options: Vec<ResourceOption> = builder
         .build_query_as()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 

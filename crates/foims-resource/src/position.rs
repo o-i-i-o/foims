@@ -102,6 +102,7 @@ pub async fn get_positions<P: DbProvider>(
     );
     let total: i64 = count_builder
         .build_query_scalar()
+        .persistent(false)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -129,6 +130,7 @@ pub async fn get_positions<P: DbProvider>(
         .push_bind(pagination.offset);
     let items = data_builder
         .build_query_as::<CabinetPositionWithDetails>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 

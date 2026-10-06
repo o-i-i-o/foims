@@ -86,6 +86,7 @@ pub async fn get_employees<P: DbProvider>(
     builder.push(" ORDER BY e.name ASC LIMIT 1000");
     let items = builder
         .build_query_as::<Employee>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 

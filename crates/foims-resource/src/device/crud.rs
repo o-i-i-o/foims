@@ -124,8 +124,8 @@ pub async fn get_devices<P: DbProvider>(
     ));
 
     // Build and execute count query with bound params
-    let mut count_query = sqlx::query_scalar::<_, i64>(count_sql);
-    let mut data_query = sqlx::query_as::<_, DeviceWithDetails>(data_sql);
+    let mut count_query = sqlx::query_scalar::<_, i64>(count_sql).persistent(false);
+    let mut data_query = sqlx::query_as::<_, DeviceWithDetails>(data_sql).persistent(false);
 
     if !search.is_empty() {
         count_query = count_query.bind(&search_pattern);

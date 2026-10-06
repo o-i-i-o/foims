@@ -65,6 +65,7 @@ pub async fn get_users<P: AuthProvider>(
         let users = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(format!(
             "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users {order_clause} LIMIT $1 OFFSET $2"
         )))
+        .persistent(false)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&conn)
@@ -82,6 +83,7 @@ pub async fn get_users<P: AuthProvider>(
         let users = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(format!(
             "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE $1 OR email ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
         )))
+        .persistent(false)
         .bind(&search_pattern)
         .bind(page_size)
         .bind(offset)

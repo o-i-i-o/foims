@@ -82,7 +82,7 @@ pub async fn get_patch_panels<P: DbProvider>(
     ));
 
     let total: i64 = {
-        let mut q = sqlx::query_scalar::<_, i64>(count_sql);
+        let mut q = sqlx::query_scalar::<_, i64>(count_sql).persistent(false);
         if has_search {
             q = q.bind(&search_pattern);
         }
@@ -93,7 +93,7 @@ pub async fn get_patch_panels<P: DbProvider>(
     };
 
     let patch_panels = {
-        let mut q = sqlx::query_as::<_, PatchPanelWithDetails>(data_sql);
+        let mut q = sqlx::query_as::<_, PatchPanelWithDetails>(data_sql).persistent(false);
         if has_search {
             q = q.bind(&search_pattern);
         }

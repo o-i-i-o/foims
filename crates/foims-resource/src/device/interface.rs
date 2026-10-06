@@ -127,6 +127,7 @@ pub async fn get_all_device_interfaces<P: DbProvider>(
 
     let total: i64 = count_builder
         .build_query_scalar()
+        .persistent(false)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -137,6 +138,7 @@ pub async fn get_all_device_interfaces<P: DbProvider>(
         .push_bind(pagination.offset);
     let data = data_builder
         .build_query_as::<DeviceInterfaceWithDevice>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
@@ -386,6 +388,7 @@ pub async fn update_device_interface<P: DbProvider>(
 
     let result = builder
         .build()
+        .persistent(false)
         .execute(&state.pool()?.get_conn())
         .await
         .map_err(|e| {

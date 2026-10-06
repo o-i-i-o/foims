@@ -157,6 +157,7 @@ pub async fn get_cable_links<P: DbProvider>(
     push_link_filters(&mut count_builder, endpoint_filter, link_type);
     let total: i64 = count_builder
         .build_query_scalar()
+        .persistent(false)
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
@@ -173,6 +174,7 @@ pub async fn get_cable_links<P: DbProvider>(
         .push_bind(pagination.offset);
     let links = data_builder
         .build_query_as::<CableLinkWithDetails>()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
@@ -234,7 +236,11 @@ async fn ensure_endpoint_exists(
     builder.push(" WHERE id = ");
     builder.push_bind(endpoint_id);
     builder.push(")");
-    let exists: bool = builder.build_query_scalar().fetch_one(&mut *tx).await?;
+    let exists: bool = builder
+        .build_query_scalar()
+        .persistent(false)
+        .fetch_one(&mut *tx)
+        .await?;
     if !exists {
         return Err(AppError::Validation(
             msg("server.cable_link.endpoint_not_found")
@@ -514,6 +520,7 @@ pub async fn update_cable_link<P: DbProvider>(
     builder.push(" WHERE id = ").push_bind(id);
     builder
         .build()
+        .persistent(false)
         .execute(&mut *tx)
         .await
         .map_err(map_cable_link_unique_violation)?;

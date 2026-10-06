@@ -66,7 +66,7 @@ impl Resolver {
         sql: String,
         binds: Vec<String>,
     ) -> DataResult<Option<String>> {
-        let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql));
+        let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql)).persistent(false);
         for value in binds {
             query = query.bind(value);
         }
@@ -468,7 +468,7 @@ pub async fn upsert_row(
         "SELECT id::text FROM {} WHERE {where_sql} ORDER BY created_at LIMIT 1",
         spec.table
     );
-    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(select_sql));
+    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(select_sql)).persistent(false);
     for col in spec.key {
         query = query.bind(values.get(*col).cloned().flatten());
     }
@@ -510,7 +510,7 @@ pub async fn upsert_row(
         set_sql.join(", "),
         update_cols.len() + 1
     );
-    let mut query = sqlx::query(AssertSqlSafe(sql));
+    let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
     for col in &update_cols {
         query = query.bind(values.get(*col).cloned().flatten());
     }
@@ -545,7 +545,7 @@ async fn insert_row(
         cols.join(", "),
         placeholders.join(", ")
     );
-    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql));
+    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql)).persistent(false);
     for value in values.values() {
         query = query.bind(value.clone());
     }
