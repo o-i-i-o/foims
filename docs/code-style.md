@@ -33,7 +33,9 @@ foims（bin/lib）             应用组装层：路由装配/系统管理/日�
 ├── crates/foims-data-management CSV 导入导出
 ├── crates/foims-x509-management 证书管理
 ├── crates/foims-services        systemd 服务管理（foims/nginx）
-└── crates/foims-scheduler       定时任务
+├── crates/foims-scheduler       定时任务
+├── crates/foims-agent           主机指标采集 Agent（node_exporter 的 Rust 重写，独立分发）
+└── crates/foims-agent-service   Agent 服务端（清单版本门控/zip-deb-rpm 动态组包/下载 API）
 ```
 
 - 依赖方向自上而下，禁止反向依赖与环。
@@ -68,7 +70,10 @@ impl From<sqlx::Error> for AppError {
 ```
 
 - 日志统一 `tracing`（`error!`/`warn!`/`info!`/`debug!`），禁止 `println!`。
-- 面向用户的消息为完整中文句子（如 `"该端口号已存在"`），也要在代码里做 i18n 键。
+- 面向用户的响应 message 一律为 i18n 键 + `message_params` 插值
+  （`foims_common::msg` 或键字面量，词条在 `web/static/i18n/` 双语维护）；
+  可枚举的固定情形禁止直传中文文案（范本：`ldap.rs` 的
+  `"server.ldap.config_retrieved"`、`error.rs` 的 `msg("server.error.*")`）。
 
 ### 2.3 数据库访问
 
@@ -77,11 +82,23 @@ impl From<sqlx::Error> for AppError {
 ```rust
 let mut builder = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM workstations w");
 push_filters(&mut builder, ...);   // 条件拼接抽成 fn，供 COUNT/数据两查共用
-let total: i64 = builder.build_query_scalar().fetch_one(&pool).await?;
+let total: i64 = builder
+    .build_query_scalar()
+    .persistent(false) // 动态文本无法复用预处理语句，禁缓存防 LRU 污染
+    .fetch_one(&pool)
+    .await?;
 ```
 
 - 拼接动态 SQL 字符串（`format!` 结果）传给 `sqlx::query*` 时用
   `sqlx::AssertSqlSafe(...)` 显式声明已审计；用户输入永远走 `push_bind`。
+  **审计标准**：拼接内容只能来自代码内固定字面量、模块常量或 match 白名单
+  （排序字段/列清单/表名），不得含任何用户可控插值；使用处必须在同函数
+  注释写明拼接来源（范本：`cable_link.rs` 列清单注释、`export.rs`
+  白名单注释）。
+- **动态 SQL 一律 `.persistent(false)`**：QueryBuilder 的 `build_query_*`
+  与 `AssertSqlSafe` 拼接的动态文本（筛选/排序组合导致 SQL 文本变化）必须
+  禁用语句缓存——动态文本永远无法命中预处理语句缓存，persistent=true 只会
+  污染 LRU 挤掉热语句；文本恒定的查询（建表 DDL、固定清单循环）保持默认。
 - ILIKE 模式先经 `foims_common::net::escape_like` 转义，排序字段走 match 白名单。
 - 行映射统一 `query_as::<T>` + `#[derive(sqlx::FromRow)]`；不由 SQL 携带的
   字段用 `#[sqlx(skip)]` 后在代码中填充。
@@ -91,13 +108,14 @@ let total: i64 = builder.build_query_scalar().fetch_one(&pool).await?;
 ### 2.4 API 响应
 
 - 响应体统一 `foims_common::ApiResponse { success, message, data }`，
-  成功响应用 `foims_common::ok_json(data, "消息")`。
+  成功响应用 `foims_common::ok_json(data, "common.xxx")`（message 为 i18n 键）。
 - 分页列表响应统一（`foims_common::pagination`）：
 
 ```rust
-Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
+Ok(ok_json(paged_response(items, total, &pagination), "common.fetch_success"))
 ```
 
+`message` 必须为 i18n 键（前端查词条翻译展示），禁止直传中文文案。
 响应键固定为 `items/total/page/page_size/total_pages`；`total_pages` 一律由
 `pagination.total_pages(total)` 计算，禁止手写 `(total + page_size - 1) / page_size`。
 
@@ -122,7 +140,7 @@ Ok(ok_json(paged_response(items, total, &pagination), "获取成功"))
 ### 3.2 JS 风格
 
 - 格式以 prettier（`.prettierrc`）为准：2 空格缩进、双引号、分号、
-  模板字符串（不用 `+` 拼接）、`const` 优先。
+  printWidth 100、无尾逗号、模板字符串（不用 `+` 拼接）、`const` 优先。
 - 异步一律 `async/await`（不用 `.then` 链）。事件绑定按节点生命周期分两类
   （详见 3.7 模态框生命周期）：
   - **常驻节点**（页面表格、document 委托）：`addEventListener` +
@@ -152,6 +170,9 @@ css 代码规范位于 docs/CSS-style.md
   `.form-group-inline`、`.form-checkbox`），缺类先补类再使用。
 - 表单 label 必带 `for`；图标按钮带 `aria-label`；文案带 `data-i18n` 且
   以英文兜底文本。
+- HTML 禁止内联事件属性（`onclick`/`onsubmit`/`onchange` 等）：项目纯 ESM
+  无全局变量，内联属性引用不到模块函数；绑定一律在 JS 中以
+  `el.onclick = fn` 幂等赋值或容器委托完成（范式见 3.7）。
 - 模态框 HTML 抽离边界：**静态骨架**（固定表单/文案）放
   `modals/<域>/<名称>-modal.html`，经 `modalLoader.js` 注册挂载，值用
   DOM API 填充；**数据驱动正文**（`.map()` 行循环、条件分支、运行时
@@ -175,6 +196,10 @@ css 代码规范位于 docs/CSS-style.md
   `init_index.html`）的 `?v=` 与 `resourceLoader.js` 的 `MODULE_VERSION`
   必须同号（由 `tests/frontend_consistency.rs` 强制校验，漏 bump 直接挂
   `cargo test`）。
+- 版本号为 Unix 时间戳（秒）：递增、唯一，重复 bump 不冲突。用
+  `bash test-scripts/bump_static_version.sh` 一键 bump（同秒重复或时钟
+  回拨时自动取 当前+1 保证单调），`--check`/`--show` 可单独校验/查看；
+  也可传纯数字参数写入指定版本号。
 
 ### 3.6 校验命令
 
@@ -214,8 +239,8 @@ lint 职责划分（2026-08 起，配置见 `web/eslint.config.mjs`（ESLint 9 �
   （复杂度/重复串/隐患模式，认知复杂度阈值 40、重复串阈值 6，校准理由见配置内注释）、
   `eslint-config-prettier`（关闭与 prettier 冲突的格式规则，置于配置末尾）；
   格式类规则已全部移交 prettier，避免两者对模板串/三元换行的判定冲突；
-- **prettier**：仅管 `static/js` 与 lint 配置文件（CSS 按上文约定保持 4 空格
-  手工排版，见 `web/.prettierignore`）；
+- **prettier**：仅管 `static/js` 与 lint 配置文件（CSS 不归 prettier，
+  按 2 空格手工排版，见 `docs/CSS-style.md` 与 `web/.prettierignore`）；
 - **stylelint**：CSS 结构性检查（基线 `stylelint-config-standard` + 项目覆盖规则）；
   `!important` 默认禁止，打印隐藏/工具类等压制场景
   以 `/* stylelint-disable-line declaration-no-important -- 原因 */` 显式豁免；
@@ -241,8 +266,10 @@ lint 职责划分（2026-08 起，配置见 `web/eslint.config.mjs`（ESLint 9 �
 
 ### 3.6.1 已知豁免清单
 
-- `sonarjs/no-duplicate-string` 白名单：`device-*-id` 等模态框元素 id
-  必须保持字面量（`tests/frontend_consistency.rs` 按字面量正则做悬空校验）；
+- `sonarjs/no-duplicate-string` 白名单固定 6 项（`application/json` 与
+  `device-workstation-id` 等 5 个 `device-*-id` 元素 id，与
+  `web/eslint.config.mjs` 的 `ignoreStrings` 同步维护）；元素 id 必须保持
+  字面量（`tests/frontend_consistency.rs` 按字面量正则做悬空校验）；
 - `sonarjs/no-hardcoded-passwords`：`login.js` 的 `"password-login"` 为登录
   方式枚举值（与 index.html 的 data-tab 联动），非密钥；
 - `sonarjs/pseudo-random` / `sonarjs/void-use`：登录页角色动画的
@@ -259,7 +286,8 @@ lint 职责划分（2026-08 起，配置见 `web/eslint.config.mjs`（ESLint 9 �
   会等待目标元素出现（`waitForElement`），因此与 `openModal` 并行调用
   安全；其余手写填充必须在 `await openModal()` 之后执行。
 - **绑定范式**：模态内按钮用 `onclick = fn` 幂等赋值（重复打开/
-  刷新重绑不叠加监听）；容器级委托用 `dataset.bound` 标志。
+  刷新重绑不叠加监听）；容器级委托用 `dataset.bound` 标志。此处是 JS
+  对 DOM 属性的赋值；HTML 片段内禁止写内联 `on*` 属性（见 3.4）。
   历史教训（device.js 网卡区域注释）：模态 DOM 每次销毁重建，模块级
   "已绑定"标志位会导致第二次打开时新 DOM 零监听 —— 禁止使用。
 - **禁止跨模态复用 id**：两个模态框同屏时 `getElementById` 只返回文档序
