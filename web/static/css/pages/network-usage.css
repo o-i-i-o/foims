@@ -238,12 +238,13 @@
 .ipv6-list-section .table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .usage-ips .table th,
 .ipv6-list-section .table th {
   background-color: var(--color-bg-secondary);
+  border-bottom-width: 2px;
   font-weight: 600;
   font-size: 0.75rem;
   color: var(--color-text-muted);

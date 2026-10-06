@@ -784,7 +784,9 @@
     "password_confirm_placeholder": "Enter password again",
     "password_leave_blank": "Leave blank to keep current password",
     "password_mismatch": "The passwords entered do not match",
-    "password_expiry": "Password Validity (days, 0 = never expires)",
+    "password_expiry_f": "Password Validity",
+    "password_expiry_b": "days(0 = never expires)",
+
     "update_success": "User updated successfully",
     "add_success": "User added successfully",
     "update_failed": "Failed to update user",
