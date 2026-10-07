@@ -172,6 +172,7 @@ Copyright (c) 2025-2026 oi-io <boss@oi-io.cc>
 - QQ 群：1107983881
 - 发送邮件到 boss@oi-io.cc
 - 如果此程序对您有帮助，请考虑捐赠支持
+![捐赠二维码](/mm_reward_qrcode_1790828899753.png)
 - 提供有偿部署服务，请给我发邮件
 ---
 
