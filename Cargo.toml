@@ -113,7 +113,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 rustix = { version = "1.1", default-features = false, features = ["std", "fs", "system", "process", "param"] }
 
 # RPM 组包（foims-agent-service 分发下载；免 rpmbuild，不签名故裁掉 pgp）
-rpm = { version = "0.29.0", default-features = false, features = ["payload", "gzip-compression"] }
+rpm = { version = "0.30.1", default-features = false, features = ["payload", "gzip-compression"] }
 
 # semver 版本门控（agent 产物 manifest 与主程序版本比较）
 semver = "1.0.28"
