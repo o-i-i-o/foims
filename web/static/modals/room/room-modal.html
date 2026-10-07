@@ -2,11 +2,10 @@
 <div class="modal-body">
   <form id="room-form">
     <input type="hidden" id="room-id">
-    <div class="form-group">
-        <label for="room-org-id"><span data-i18n="organization.parent_org">Organization Node</span></label>
-        <select id="room-org-id" name="org_id">
-          <option value="" data-i18n="organization.select_org">Select Organization Node</option>
-        </select>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
+        <input type="text" id="room-name" name="name" autocomplete="off" required>
       </div>
       <div class="form-group">
         <label for="room-type"><span data-i18n="room.type">Room Type</span><span class="required">*</span></label>
@@ -18,20 +17,25 @@
           <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
           <option value="other" data-i18n="room.type_other">Other</option>
         </select>
+      </div>
     </div>
-    <div class="form-group">
-        <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
-        <input type="text" id="room-name" name="name" autocomplete="off" required>
-    </div>
-    <div class="form-group">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="room-org-id"><span data-i18n="organization.parent_org">Organization Node</span></label>
+        <select id="room-org-id" name="org_id">
+          <option value="" data-i18n="organization.select_org">Select Organization Node</option>
+        </select>
+      </div>
+      <div class="form-group power-inline">
         <label for="room-total-power" data-i18n="room.total_power">Power Supply</label>
         <div class="power-input-row">
-            <input type="number" id="room-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
-            <select id="room-power-unit-modal" class="form-control" aria-label="Unit">
-                <option value="W">W</option>
-                <option value="kW">kW</option>
-            </select>
+          <input type="number" id="room-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
+          <select id="room-power-unit-modal" class="form-control" aria-label="Unit">
+            <option value="W">W</option>
+            <option value="kW">kW</option>
+          </select>
         </div>
+      </div>
     </div>
     <div class="form-group network-config-wrapper">
         <div class="list-header">

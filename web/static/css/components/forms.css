@@ -283,6 +283,15 @@ select.nc-input:not([multiple]) {
   width: 100%;
 }
 
+/* 功率组合与 label 同行的变体：列宽充足（剩余空间 ≥ 输入框最小宽 + 单位下拉）
+   时取消整行换行，改为占满 label 右侧剩余空间；窄列（机柜/设备模态框）不加
+   此类，保持 label 在上、组合在下的换行布局 */
+.modal .form-group.power-inline .power-input-row {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
 .power-input-row input {
   flex: 1;
   min-width: 0;
