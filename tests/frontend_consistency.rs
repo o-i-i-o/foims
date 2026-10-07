@@ -140,6 +140,16 @@ fn js_referenced_dom_ids_must_exist() {
     let hex_color = Regex::new("^[0-9a-fA-F]{3,8}$").unwrap_or_else(|e| panic!("非法正则: {e}"));
     referenced.retain(|id| !hex_color.is_match(id));
 
+    // MODAL_REGISTRY 标准片段的根 id 与标题 id 由 buildModalShell 运行时生成，
+    // 静态文件中不存在，视为已定义
+    let modal_loader = read_file(&["js", "utils", "modalLoader.js"]);
+    for (key, _path, shell_generated) in parse_modal_registry(&modal_loader) {
+        if shell_generated {
+            defined.insert(key.clone());
+            defined.insert(format!("{key}-title"));
+        }
+    }
+
     let dangling: Vec<String> = referenced.difference(&defined).cloned().collect();
     assert!(
         dangling.is_empty(),
@@ -149,22 +159,47 @@ fn js_referenced_dom_ids_must_exist() {
     );
 }
 
+/// 解析 modalLoader.js 的 MODAL_REGISTRY。
+/// 返回 (键, 片段路径, 是否为标准片段)。标准片段带 title/titleHtml 字段，
+/// 其外壳与 header（根 id、{键}-title 标题 id、data-modal-id 关闭按钮）
+/// 由 buildModalShell 在运行时生成，片段文件内只有 body/footer；
+/// 无 title 字段的自包含片段必须自带完整外壳。
+fn parse_modal_registry(modal_loader: &str) -> Vec<(String, String, bool)> {
+    let entry_re =
+        Regex::new(r#""([\w-]+)":\s*\{([^}]*)\}"#).unwrap_or_else(|e| panic!("非法正则: {e}"));
+    let path_re = Regex::new(r#"path:\s*"(/static/modals/[^"]+)""#)
+        .unwrap_or_else(|e| panic!("非法正则: {e}"));
+    // 标准/自包含判定按字段名精确匹配，避免 path 等值偶然含 "title" 子串而误判
+    let title_field_re =
+        Regex::new(r"\b(?:titleHtml|title):").unwrap_or_else(|e| panic!("非法正则: {e}"));
+    entry_re
+        .captures_iter(modal_loader)
+        .filter_map(|c| {
+            let body = &c[2];
+            let path = path_re.captures(body)?.get(1)?.as_str().to_string();
+            let shell_generated = title_field_re.is_match(body);
+            Some((c[1].to_string(), path, shell_generated))
+        })
+        .collect()
+}
+
 #[test]
 fn registry_files_must_exist_and_keys_match_root_ids() {
     let static_root = web_static();
 
     let modal_loader = read_file(&["js", "utils", "modalLoader.js"]);
-    let modal_registry_re = Regex::new(r#""([\w-]+)":\s*"(/static/modals/[^"]+)""#)
-        .unwrap_or_else(|e| panic!("非法正则: {e}"));
-    for cap in modal_registry_re.captures_iter(&modal_loader) {
-        let key = cap[1].to_string();
-        let path = cap[2].to_string();
+    let registry = parse_modal_registry(&modal_loader);
+    assert!(
+        !registry.is_empty(),
+        "MODAL_REGISTRY 解析结果为空——解析模式与 modalLoader.js 的实现脱节"
+    );
+    for (key, path, shell_generated) in &registry {
         let file = static_root.join(path.trim_start_matches("/static/"));
         assert!(file.is_file(), "MODAL_REGISTRY 指向的文件不存在: {}", path);
-        // 注册表键必须与片段内的元素 id 对应，否则 openModal/closeModal 找不到根
+        // 自包含片段必须自带根 id；标准片段的根 id 由外壳运行时生成
         let content = fs::read_to_string(&file).unwrap_or_default();
         assert!(
-            content.contains(&format!("id=\"{key}\"")),
+            *shell_generated || content.contains(&format!("id=\"{key}\"")),
             "MODAL_REGISTRY 键 {key} 在 {} 中没有对应的 id=\"{key}\" 定义",
             file.display()
         );
@@ -177,10 +212,7 @@ fn registry_files_must_exist_and_keys_match_root_ids() {
     }
 
     // 所有模态片段的 data-modal-id（关闭按钮委托的依据）必须指向注册表键
-    let registry_keys: BTreeSet<String> = modal_registry_re
-        .captures_iter(&modal_loader)
-        .map(|c| c[1].to_string())
-        .collect();
+    let registry_keys: BTreeSet<String> = registry.iter().map(|(k, _, _)| k.clone()).collect();
     for path in all_html_files() {
         let content = fs::read_to_string(&path).unwrap_or_default();
         for id in extract_matches(r#"data-modal-id="([\w-]+)""#, &content) {

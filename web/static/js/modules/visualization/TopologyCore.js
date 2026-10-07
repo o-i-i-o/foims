@@ -73,10 +73,9 @@ export class TopologyCore extends SVGCanvasBase {
 
     this.container.appendChild(this.svg);
 
-    // 尺寸/边框/背景由 CSS（visualization.css 的 #global-visualization-container，
-    // flex:1 随可用空间伸缩）控制：内联固定高度 calc(100vh - 200px) 会覆盖 flex
-    // 布局，工具栏实际占高与 200px 不符时画布顶缘错位、底部溢出
-    this.container.style.overflow = "hidden";
+    // 尺寸/边框/背景/裁切均由 CSS（visualization.css 的 .visualization-canvas-fixed，
+    // flex:1 随可用空间伸缩）控制：JS 不写内联 overflow/height，内联固定高度
+    // calc(100vh - 200px) 会覆盖 flex 布局，工具栏实际占高不符时画布顶缘错位
   }
 
   _initEventListeners() {

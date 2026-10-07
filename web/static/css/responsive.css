@@ -193,11 +193,6 @@
     align-self: stretch;
   }
 
-  /* 网络配置行纵向堆叠 */
-  .network-config-item .form-row {
-    flex-direction: column;
-  }
-
   /* ===== 标签页横向滚动 ===== */
   .tabs {
     flex-wrap: nowrap;
@@ -211,52 +206,15 @@
     white-space: nowrap;
   }
 
-  /* 导入导出纵向 */
-  .import-actions,
-  .export-actions {
-    flex-direction: column;
-  }
-
-  .action-buttons {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .btn-sm {
-    padding: 0.4rem 0.75rem;
-    font-size: 0.8rem;
-    min-width: 60px;
-  }
-
-  /* 仪表盘卡片压缩 */
-  .stat-card {
-    padding: 1rem;
-  }
-
-  .stat-card .stat-icon {
-    font-size: 2rem;
-  }
+  /* 网络配置/导入导出/仪表盘等组件级响应式已迁回各自文件就近维护 */
 }
 
 /* 超小屏幕 */
 @media (width <= 480px) {
-  .stat-card h3 {
-    font-size: 0.8rem;
-  }
-
-  .stat-card .stat-value {
-    font-size: 1.5rem;
-  }
-
   .data-table th,
   .data-table td {
     padding: 0.35rem 0.25rem;
     font-size: 0.75rem;
-  }
-
-  /* 可视化容器按视口高度取比例（原为固定 400px） */
-  .visualization-canvas-scroll {
-    height: clamp(300px, 60vh, 100%);
   }
 
   .btn {

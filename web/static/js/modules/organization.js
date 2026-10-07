@@ -209,13 +209,15 @@ async function renderOrgTree(container, treeData) {
   const fragment = document.createDocumentFragment();
 
   for (const node of treeData) {
-    fragment.appendChild(await renderTreeNode(node, 0));
+    fragment.appendChild(await renderTreeNode(node));
   }
 
   container.appendChild(fragment);
 }
 
-async function renderTreeNode(node, depth) {
+// 缩进由 .org-children 的嵌套 padding-left（organization.css）逐层累加，
+// JS 不再按 depth 写内联 paddingLeft
+async function renderTreeNode(node) {
   const wrapper = document.createElement("div");
   wrapper.className = "org-node-wrapper";
   wrapper.dataset.nodeId = node.id;
@@ -223,7 +225,6 @@ async function renderTreeNode(node, depth) {
 
   const nodeEl = document.createElement("div");
   nodeEl.className = "org-node";
-  nodeEl.style.paddingLeft = `${depth * 24 + 16}px`;
 
   const hasChildren = node.children && node.children.length > 0;
   const icon = await getNodeIcon(node.org_type, node.template_id);
@@ -261,7 +262,7 @@ async function renderTreeNode(node, depth) {
       childrenContainer.style.display = "none";
     }
     for (const child of node.children) {
-      childrenContainer.appendChild(await renderTreeNode(child, depth + 1));
+      childrenContainer.appendChild(await renderTreeNode(child));
     }
     wrapper.appendChild(childrenContainer);
   }
@@ -1122,8 +1123,7 @@ function showIconPicker(iconBtn) {
     picker.appendChild(groupEl);
   }
 
-  // 定位面板
-  iconBtn.style.position = "relative";
+  // 定位锚点由 .org-template-icon-btn 的 position:relative（organization.css）提供
   iconBtn.appendChild(picker);
 
   // 点击外部关闭；选中图标时同样经由 dismissPicker 移除监听

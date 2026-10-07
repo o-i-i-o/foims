@@ -1,105 +1,97 @@
 <template id="cable-link-modal-template">
-<div id="cable-link-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="cable-link-modal-title">
-  <div class="modal-content">
-    <header class="modal-header">
-      <h3 class="modal-title" id="cable-link-modal-title" data-i18n="cable_link.add">Add Cable Link</h3>
-      <button type="button" class="close" data-modal-id="cable-link-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <form id="cable-link-form">
-        <input type="hidden" id="cable-link-id">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cable-link-a-type"><span data-i18n="cable_link.a_endpoint">A Endpoint Type</span><span class="required">*</span></label>
-            <select id="cable-link-a-type" name="a_endpoint_type" required>
-              <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
-              <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
-              <option value="patch_panel" data-i18n="cable_link.endpoint_patch_panel">Patch Panel</option>
-            </select>
-          </div>
-          <div class="form-group cable-link-scope-group" id="cable-link-a-scope-group">
-            <label for="cable-link-a-scope"><span id="cable-link-a-scope-label" data-i18n="cable_link.scope_room">Room</span></label>
-            <select id="cable-link-a-scope" name="a_scope"></select>
-          </div>
-        </div>
-        <div class="form-row hidden" id="cable-link-a-flow-row">
-          <div class="form-group">
-            <label for="cable-link-a-cabinet"><span data-i18n="cable_link.cabinet_filter">Cabinet (optional)</span></label>
-            <select id="cable-link-a-cabinet" name="a_cabinet"></select>
-          </div>
-          <div class="form-group">
-            <label for="cable-link-a-device"><span data-i18n="cable_link.scope_device">Device</span></label>
-            <select id="cable-link-a-device" name="a_device"></select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cable-link-a-id"><span data-i18n="cable_link.a_endpoint_id">A Endpoint</span><span class="required">*</span></label>
-            <select id="cable-link-a-id" name="a_endpoint_id" required></select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cable-link-b-type"><span data-i18n="cable_link.b_endpoint">B Endpoint Type</span><span class="required">*</span></label>
-            <select id="cable-link-b-type" name="b_endpoint_type" required>
-              <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
-              <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
-              <option value="patch_panel" data-i18n="cable_link.endpoint_patch_panel">Patch Panel</option>
-            </select>
-          </div>
-          <div class="form-group cable-link-scope-group" id="cable-link-b-scope-group">
-            <label for="cable-link-b-scope"><span id="cable-link-b-scope-label" data-i18n="cable_link.scope_room">Room</span></label>
-            <select id="cable-link-b-scope" name="b_scope"></select>
-          </div>
-        </div>
-        <div class="form-row hidden" id="cable-link-b-flow-row">
-          <div class="form-group">
-            <label for="cable-link-b-cabinet"><span data-i18n="cable_link.cabinet_filter">Cabinet (optional)</span></label>
-            <select id="cable-link-b-cabinet" name="b_cabinet"></select>
-          </div>
-          <div class="form-group">
-            <label for="cable-link-b-device"><span data-i18n="cable_link.scope_device">Device</span></label>
-            <select id="cable-link-b-device" name="b_device"></select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cable-link-b-id"><span data-i18n="cable_link.b_endpoint_id">B Endpoint</span><span class="required">*</span></label>
-            <select id="cable-link-b-id" name="b_endpoint_id" required></select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cable-link-link-type"><span data-i18n="cable_link.link_type">Link Type</span></label>
-            <select id="cable-link-link-type" name="link_type">
-              <option value="ethernet" data-i18n="cable_link.link_type_ethernet">Ethernet</option>
-              <option value="fiber" data-i18n="cable_link.link_type_fiber">Fiber</option>
-              <option value="console" data-i18n="cable_link.link_type_console">Console</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="cable-link-cable-label"><span data-i18n="cable_link.cable_label">Cable Label</span></label>
-            <input type="text" id="cable-link-cable-label" name="cable_label" autocomplete="off">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cable-link-length"><span data-i18n="cable_link.length_m">Length (m)</span></label>
-            <input type="number" id="cable-link-length" name="length_m" step="0.1" min="0" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="cable-link-tested"><span data-i18n="cable_link.tested">Tested</span></label>
-            <select id="cable-link-tested" name="tested">
-              <option value="0" data-i18n="cable_link.tested_no">No</option>
-              <option value="1" data-i18n="cable_link.tested_yes">Yes</option>
-            </select>
-          </div>
-        </div>
-      </form>
+<div class="modal-body">
+  <form id="cable-link-form">
+    <input type="hidden" id="cable-link-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cable-link-a-type"><span data-i18n="cable_link.a_endpoint">A Endpoint Type</span><span class="required">*</span></label>
+        <select id="cable-link-a-type" name="a_endpoint_type" required>
+          <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
+          <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
+          <option value="patch_panel" data-i18n="cable_link.endpoint_patch_panel">Patch Panel</option>
+        </select>
+      </div>
+      <div class="form-group" id="cable-link-a-scope-group">
+        <label for="cable-link-a-scope"><span id="cable-link-a-scope-label" data-i18n="cable_link.scope_room">Room</span></label>
+        <select id="cable-link-a-scope" name="a_scope"></select>
+      </div>
     </div>
-    <footer class="modal-footer">
-      <button type="submit" class="btn btn-primary" form="cable-link-form" data-i18n="common.save">Save</button>
-    </footer>
-  </div>
+    <div class="form-row hidden" id="cable-link-a-flow-row">
+      <div class="form-group">
+        <label for="cable-link-a-cabinet"><span data-i18n="cable_link.cabinet_filter">Cabinet (optional)</span></label>
+        <select id="cable-link-a-cabinet" name="a_cabinet"></select>
+      </div>
+      <div class="form-group">
+        <label for="cable-link-a-device"><span data-i18n="cable_link.scope_device">Device</span></label>
+        <select id="cable-link-a-device" name="a_device"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cable-link-a-id"><span data-i18n="cable_link.a_endpoint_id">A Endpoint</span><span class="required">*</span></label>
+        <select id="cable-link-a-id" name="a_endpoint_id" required></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cable-link-b-type"><span data-i18n="cable_link.b_endpoint">B Endpoint Type</span><span class="required">*</span></label>
+        <select id="cable-link-b-type" name="b_endpoint_type" required>
+          <option value="net_outlet" data-i18n="cable_link.endpoint_net_outlet">Network Outlet</option>
+          <option value="device_interface" data-i18n="cable_link.endpoint_device_interface">Device Interface</option>
+          <option value="patch_panel" data-i18n="cable_link.endpoint_patch_panel">Patch Panel</option>
+        </select>
+      </div>
+      <div class="form-group" id="cable-link-b-scope-group">
+        <label for="cable-link-b-scope"><span id="cable-link-b-scope-label" data-i18n="cable_link.scope_room">Room</span></label>
+        <select id="cable-link-b-scope" name="b_scope"></select>
+      </div>
+    </div>
+    <div class="form-row hidden" id="cable-link-b-flow-row">
+      <div class="form-group">
+        <label for="cable-link-b-cabinet"><span data-i18n="cable_link.cabinet_filter">Cabinet (optional)</span></label>
+        <select id="cable-link-b-cabinet" name="b_cabinet"></select>
+      </div>
+      <div class="form-group">
+        <label for="cable-link-b-device"><span data-i18n="cable_link.scope_device">Device</span></label>
+        <select id="cable-link-b-device" name="b_device"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cable-link-b-id"><span data-i18n="cable_link.b_endpoint_id">B Endpoint</span><span class="required">*</span></label>
+        <select id="cable-link-b-id" name="b_endpoint_id" required></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cable-link-link-type"><span data-i18n="cable_link.link_type">Link Type</span></label>
+        <select id="cable-link-link-type" name="link_type">
+          <option value="ethernet" data-i18n="cable_link.link_type_ethernet">Ethernet</option>
+          <option value="fiber" data-i18n="cable_link.link_type_fiber">Fiber</option>
+          <option value="console" data-i18n="cable_link.link_type_console">Console</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="cable-link-cable-label"><span data-i18n="cable_link.cable_label">Cable Label</span></label>
+        <input type="text" id="cable-link-cable-label" name="cable_label" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cable-link-length"><span data-i18n="cable_link.length_m">Length (m)</span></label>
+        <input type="number" id="cable-link-length" name="length_m" step="0.1" min="0" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="cable-link-tested"><span data-i18n="cable_link.tested">Tested</span></label>
+        <select id="cable-link-tested" name="tested">
+          <option value="0" data-i18n="cable_link.tested_no">No</option>
+          <option value="1" data-i18n="cable_link.tested_yes">Yes</option>
+        </select>
+      </div>
+    </div>
+  </form>
 </div>
+<footer class="modal-footer">
+  <button type="submit" class="btn btn-primary" form="cable-link-form" data-i18n="common.save">Save</button>
+</footer>
 </template>

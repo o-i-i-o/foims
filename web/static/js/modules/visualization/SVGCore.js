@@ -68,9 +68,8 @@ export class SVGCore extends SVGCanvasBase {
 
     this.container.appendChild(this.svg);
 
-    // 尺寸与边框由 CSS（visualization.css）控制，禁止内联 maxHeight 限制容器高度，
-    // 否则高分辨率屏幕下机柜底部无法贴近屏幕底部
-    this.container.style.overflow = "auto";
+    // 尺寸/边框/滚动均由 CSS（visualization.css 的 .visualization-canvas-scroll）控制，
+    // JS 不写内联 overflow/height：内联 maxHeight 会令高分辨率屏下机柜底部无法贴底
   }
 
   /**

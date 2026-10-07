@@ -2,12 +2,12 @@
  * 全局下拉框快捷筛选样式（js/utils/selectSearch.js）。
  */
 
-/* 单选：浮动筛选面板 */
+/* 单选：浮动筛选面板（body 直挂的 fixed 浮层，层级见 --z-select-panel） */
 .select-search-panel {
   position: fixed;
-  z-index: 10000;
-  background: var(--color-bg-white, #fff);
-  border: 1px solid var(--color-border, #ced4da);
+  z-index: var(--z-select-panel);
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
   overflow: hidden;
@@ -20,11 +20,11 @@
   box-sizing: border-box;
   padding: 8px 12px;
   border: none;
-  border-bottom: 1px solid var(--color-border-light, #e9ecef);
+  border-bottom: 1px solid var(--color-border-light);
   outline: none;
   font-size: 13px;
   background: transparent;
-  color: var(--color-text, #333);
+  color: var(--color-text);
 }
 
 .select-search-options {
@@ -40,7 +40,7 @@
   border-radius: 5px;
   font-size: 13px;
   cursor: pointer;
-  color: var(--color-text, #333);
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -48,16 +48,16 @@
 
 .select-search-option:hover,
 .select-search-option.active {
-  background: var(--color-primary-light, rgb(102 126 234 / 10%));
+  background: var(--color-primary-light);
 }
 
 .select-search-option.selected {
-  background: var(--color-primary-light, rgb(102 126 234 / 10%));
+  background: var(--color-primary-light);
   font-weight: 600;
 }
 
 .select-search-option.disabled {
-  color: var(--color-text-muted, #6c757d);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
@@ -66,7 +66,7 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--color-text-muted, #6c757d);
+  color: var(--color-text-muted);
   cursor: default;
 }
 
@@ -74,7 +74,7 @@
   padding: 12px;
   font-size: 13px;
   text-align: center;
-  color: var(--color-text-muted, #6c757d);
+  color: var(--color-text-muted);
 }
 
 /* 多选 / 列表框：控件上方的固定筛选输入框 */
@@ -83,14 +83,14 @@
   box-sizing: border-box;
   margin-bottom: 6px;
   padding: 6px 10px;
-  border: 1px solid var(--color-border, #ced4da);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 13px;
   outline: none;
-  color: var(--color-text, #333);
-  background: var(--color-bg-white, #fff);
+  color: var(--color-text);
+  background: var(--color-bg-white);
 }
 
 .select-search-inline:focus {
-  border-color: var(--color-primary, #66a80f);
+  border-color: var(--color-primary);
 }

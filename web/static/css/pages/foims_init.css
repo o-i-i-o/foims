@@ -506,8 +506,9 @@
   border-radius: 12px;
   box-shadow: 0 10px 25px color-mix(in srgb, var(--color-danger) 30%, transparent);
 
-  /* 默认由 HTML hidden 属性隐藏，JS 通过 el.hidden 切换显示 */
-  z-index: 1001;
+  /* 默认由 HTML hidden 属性隐藏，JS 通过 el.hidden 切换显示；
+     toast 语义层级直接引用 --z-toast */
+  z-index: var(--z-toast);
   animation: error-slide-in 0.3s ease;
   max-width: 400px;
 }

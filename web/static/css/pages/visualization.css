@@ -102,6 +102,19 @@
   ry: 4;
 }
 
+/* SVGRenderer.js 会输出 status-${ip.status}（值域见 ips.rs：active/inactive/reserved）
+   与 status-unknown：active 显式声明与基础态相同（同时屏蔽 badges.css 全局
+   .status-active 组合类对 SVG <g> 的误命中），reserved 为警示黄 */
+.workstation-element.status-active rect {
+  fill: var(--chart-blue-bg);
+  stroke: var(--chart-blue-border);
+}
+
+.workstation-element.status-reserved rect {
+  fill: var(--chart-yellow-bg);
+  stroke: var(--color-warning);
+}
+
 .workstation-element text {
   fill: var(--color-text);
   font-size: 12px;
@@ -413,7 +426,7 @@
 .btn.btn-warning.active-mode {
   background-color: var(--chart-orange-deep);
   color: var(--color-bg-white);
-  box-shadow: 0 0 0 3px rgb(255 146 43 / 30%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chart-orange-accent) 30%, transparent);
 }
 
 /* 拓扑设备详情弹窗 */
@@ -624,8 +637,16 @@
   pointer-events: none;
 }
 
-/* 途经节点：配线架（方形） */
+/* 途经节点：形状描边宽度共用；配线架（方形）与信息点（圆形）的
+   填充/描边由 CSS 统一供给（原 JS setAttribute 硬编码色收编于此） */
+.topology-hop-node rect,
+.topology-hop-node circle {
+  stroke-width: 1.5;
+}
+
 .topology-hop-node.hop-patch-panel rect {
+  fill: var(--chart-violet-bg);
+  stroke: var(--chart-violet-border);
   transition:
     fill var(--transition-fast),
     stroke var(--transition-fast);
@@ -634,6 +655,11 @@
 .topology-hop-node.hop-patch-panel:hover rect {
   fill: var(--chart-violet-bg-hover);
   stroke: var(--chart-violet-border-strong);
+}
+
+.topology-hop-node.hop-net-outlet circle {
+  fill: var(--chart-orange-accent);
+  stroke: var(--chart-orange-deep);
 }
 
 .topology-hop-node.hop-patch-panel .topology-outlet-label {
@@ -767,4 +793,11 @@
   background: var(--color-bg);
   border-radius: var(--radius-sm);
   word-break: break-all;
+}
+
+/* 窄屏：画布按视口高度取比例（原 responsive.css 组件级规则迁回） */
+@media (width <= 480px) {
+  .visualization-canvas-scroll {
+    height: clamp(300px, 60vh, 100%);
+  }
 }

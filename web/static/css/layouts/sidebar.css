@@ -132,7 +132,7 @@ body.sidebar-collapsed .sidebar-toggle svg {
 }
 
 .sidebar-menu li a.active {
-  background-color: rgb(102 126 234 / 10%);
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
   border-left-color: var(--color-primary);
   color: var(--color-primary);
   font-weight: 500;
@@ -166,14 +166,15 @@ body.sidebar-collapsed .sidebar-menu li a:hover {
   pointer-events: none;
 }
 
-/* 一级导航图标彩色化：按路由固定描边色，不随 hover/选中态变色 */
-.sidebar-menu .nav-link[href="#dashboard"] .nav-icon svg { stroke: #f59e0b; }
-.sidebar-menu .nav-link[href="#organization"] .nav-icon svg { stroke: #2f9e44; }
-.sidebar-menu .nav-link[href="#resources"] .nav-icon svg { stroke: #a855f7; }
-.sidebar-menu .nav-link[href="#ip"] .nav-icon svg { stroke: #3b82f6; }
-.sidebar-menu .nav-link[href="#visualization"] .nav-icon svg { stroke: #ec4899; }
-.sidebar-menu .nav-link[href="#logs"] .nav-icon svg { stroke: #14b8a6; }
-.sidebar-menu .nav-link[href="#system"] .nav-icon svg { stroke: #64748b; }
+/* 一级导航图标彩色化：按导航项组合类固定描边色（不耦合 href 属性，
+   路由名调整只需改 HTML 类），不随 hover/选中态变色 */
+.sidebar-menu .nav-link.nav-dashboard .nav-icon svg { stroke: var(--color-warning); }
+.sidebar-menu .nav-link.nav-organization .nav-icon svg { stroke: var(--color-success); }
+.sidebar-menu .nav-link.nav-resources .nav-icon svg { stroke: var(--color-ipv6); }
+.sidebar-menu .nav-link.nav-ip .nav-icon svg { stroke: var(--color-blue); }
+.sidebar-menu .nav-link.nav-visualization .nav-icon svg { stroke: var(--color-pink); }
+.sidebar-menu .nav-link.nav-logs .nav-icon svg { stroke: var(--color-info); }
+.sidebar-menu .nav-link.nav-system .nav-icon svg { stroke: var(--color-text-muted); }
 
 /* 导航文字：收起时先淡出再随 max-width 归零，展开时宽度恢复后延迟淡入 */
 .nav-text {

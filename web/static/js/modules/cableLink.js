@@ -496,18 +496,14 @@ async function onTypeChange(side) {
   }
 
   const cfg = type ? ENDPOINT_SCOPE[type] : null;
+  // 显隐统一走 .hidden 工具类，避免与 flowRow 两套机制并存
+  scopeGroup?.classList.toggle("hidden", !cfg);
   if (!cfg) {
-    if (scopeGroup) {
-      scopeGroup.style.display = "none";
-    }
     flowRow?.classList.add("hidden");
     return;
   }
   if (scopeLabel) {
     scopeLabel.textContent = t(cfg.labelKey) || cfg.scope;
-  }
-  if (scopeGroup) {
-    scopeGroup.style.display = "";
   }
   // 设备接口流程：显示 机柜（可选）+ 设备 级联行，其余类型隐藏
   flowRow?.classList.toggle("hidden", !cfg.deviceFlow);

@@ -16,6 +16,11 @@
   color: var(--color-text-muted);
 }
 
+/* 危险色文字（与 .text-muted 对称的颜色工具类） */
+.text-danger {
+  color: var(--color-danger);
+}
+
 .text-center {
   text-align: center;
 }
@@ -70,12 +75,12 @@
 .content-section.readonly-section h2::after {
   content: attr(data-ro-badge);
   display: inline-block;
-  margin-left: var(--space-sm, 8px);
+  margin-left: var(--space-sm);
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
   vertical-align: middle;
-  background: var(--color-border-light, #e9ecef);
-  color: var(--color-text-muted, #6c757d);
+  background: var(--color-border-light);
+  color: var(--color-text-muted);
 }

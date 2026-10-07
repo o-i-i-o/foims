@@ -1,47 +1,39 @@
 <template id="workstation-modal-template">
-<div id="workstation-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="workstation-modal-title">
-  <div class="modal-content">
-    <header class="modal-header">
-      <h3 class="modal-title" id="workstation-modal-title" data-i18n="workstation.add_workstation">Add Workstation</h3>
-      <button type="button" class="close" data-modal-id="workstation-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <form id="workstation-form">
-        <input type="hidden" id="workstation-id">
-        <div class="form-group">
-          <label for="workstation-room"><span data-i18n="workstation.room">Room</span><span class="required">*</span></label>
-          <select id="workstation-room" name="room_id" required></select>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="workstation-name"><span data-i18n="workstation.name">Workstation Name</span><span class="required">*</span></label>
-            <input type="text" id="workstation-name" name="name" autocomplete="off" required>
-          </div>
-          <div class="form-group">
-            <label for="workstation-manager" data-i18n="workstation.manager">Manager</label>
-            <select id="workstation-manager" name="manager_employee_id" autocomplete="off"></select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="workstation-x" data-i18n="workstation.position_x">X Coordinate</label>
-            <input type="number" id="workstation-x" name="position_x" min="0" step="1" data-i18n-placeholder="workstation.position_placeholder" placeholder="Canvas X coordinate">
-          </div>
-          <div class="form-group">
-            <label for="workstation-y" data-i18n="workstation.position_y">Y Coordinate</label>
-            <input type="number" id="workstation-y" name="position_y" min="0" step="1" data-i18n-placeholder="workstation.position_placeholder" placeholder="Canvas Y coordinate">
-          </div>
-        </div>
-        <p class="hint-text" data-i18n="workstation.position_hint">Coordinates locate the workstation on the visualization canvas; leave blank to keep the current position.</p>
-        <div class="form-group">
-          <label for="workstation-description" data-i18n="common.description">Description</label>
-          <textarea id="workstation-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
-        </div>
-      </form>
+<div class="modal-body">
+  <form id="workstation-form">
+    <input type="hidden" id="workstation-id">
+    <div class="form-group">
+      <label for="workstation-room"><span data-i18n="workstation.room">Room</span><span class="required">*</span></label>
+      <select id="workstation-room" name="room_id" required></select>
     </div>
-    <footer class="modal-footer">
-      <button type="submit" class="btn btn-primary" form="workstation-form" data-i18n="common.save">Save</button>
-    </footer>
-  </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="workstation-name"><span data-i18n="workstation.name">Workstation Name</span><span class="required">*</span></label>
+        <input type="text" id="workstation-name" name="name" autocomplete="off" required>
+      </div>
+      <div class="form-group">
+        <label for="workstation-manager" data-i18n="workstation.manager">Manager</label>
+        <select id="workstation-manager" name="manager_employee_id" autocomplete="off"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="workstation-x" data-i18n="workstation.position_x">X Coordinate</label>
+        <input type="number" id="workstation-x" name="position_x" min="0" step="1" data-i18n-placeholder="workstation.position_placeholder" placeholder="Canvas X coordinate">
+      </div>
+      <div class="form-group">
+        <label for="workstation-y" data-i18n="workstation.position_y">Y Coordinate</label>
+        <input type="number" id="workstation-y" name="position_y" min="0" step="1" data-i18n-placeholder="workstation.position_placeholder" placeholder="Canvas Y coordinate">
+      </div>
+    </div>
+    <p class="hint-text" data-i18n="workstation.position_hint">Coordinates locate the workstation on the visualization canvas; leave blank to keep the current position.</p>
+    <div class="form-group">
+      <label for="workstation-description" data-i18n="common.description">Description</label>
+      <textarea id="workstation-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+    </div>
+  </form>
 </div>
+<footer class="modal-footer">
+  <button type="submit" class="btn btn-primary" form="workstation-form" data-i18n="common.save">Save</button>
+</footer>
 </template>

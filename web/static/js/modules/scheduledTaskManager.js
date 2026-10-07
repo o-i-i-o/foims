@@ -143,11 +143,11 @@ async function loadScheduledTasks(sortBy = null, sortOrder = null) {
       renderScheduledTasks(response.data || []);
       updateSortIcons("scheduled-tasks-table", taskTableState);
     } else {
-      tbody.innerHTML = `<tr><td colspan="8" class="error-message">${t("scheduled_tasks.load_failed")}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="table-error-cell">${t("scheduled_tasks.load_failed")}</td></tr>`;
     }
   } catch (error) {
     console.error("Failed to load scheduled tasks:", error);
-    tbody.innerHTML = `<tr><td colspan="8" class="error-message">${t("scheduled_tasks.load_failed")}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="table-error-cell">${t("scheduled_tasks.load_failed")}</td></tr>`;
   }
 }
 

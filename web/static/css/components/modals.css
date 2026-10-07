@@ -130,13 +130,7 @@
   transition: all var(--transition-fast);
 }
 
-.modal-footer .btn:hover {
-  transform: translateY(-1px);
-}
-
-.modal-footer .btn:active {
-  transform: translateY(0);
-}
+/* hover/active 位移由 .btn:hover/.btn:active（buttons.css）提供，此处不重复 */
 
 .close {
   color: var(--color-bg-white);

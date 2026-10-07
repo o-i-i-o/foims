@@ -1,18 +1,11 @@
 <template id="unified-device-ports-modal-template">
-<div id="unified-device-ports-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unified-device-ports-modal-title">
-  <div class="modal-content modal-lg-custom">
-    <header class="modal-header">
-      <h3 class="modal-title" id="unified-device-ports-modal-title" data-i18n="device.unified_ports">Device Ports</h3>
-      <button type="button" class="close" data-modal-id="unified-device-ports-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <!-- 端口分组容器 -->
-      <div class="port-groups-container"></div>
-    </div>
-    <footer class="modal-footer">
-      <button type="button" class="btn btn-primary" id="add-port-btn" data-i18n="device.add_device_port">添加端口</button>
-      <button type="button" class="btn btn-secondary" id="get-snmp-ports-btn" data-i18n="device.sync_snmp_ports">从SNMP获取端口</button>
-    </footer>
-  </div>
+<div class="modal-body">
+  <!-- 端口分组容器 -->
+  <div class="port-groups-container"></div>
 </div>
+<footer class="modal-footer">
+  <button type="button" class="btn btn-primary" id="add-port-btn" data-i18n="device.add_device_port">添加端口</button>
+  <button type="button" class="btn btn-secondary" id="get-snmp-ports-btn" data-i18n="device.sync_snmp_ports">从SNMP获取端口</button>
+</footer>
+
 </template>

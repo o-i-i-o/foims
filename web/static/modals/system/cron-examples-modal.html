@@ -1,55 +1,47 @@
 <template id="cron-examples-modal-template">
-<div id="cron-examples-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="cron-examples-modal-title">
-  <div class="modal-content">
-    <header class="modal-header">
-      <h3 class="modal-title" id="cron-examples-modal-title" data-i18n="scheduled_tasks.cron_examples.title">Cron Expression Examples</h3>
-      <button type="button" class="close" data-modal-id="cron-examples-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <p class="hint-text" data-i18n="scheduled_tasks.cron_examples.format_note">Field order: minute hour day month weekday (Sunday = 0). Supports values, comma lists, ranges and steps; the day field also supports L (last day of month).</p>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th data-i18n="scheduled_tasks.cron_examples.expression">Expression</th>
-            <th data-i18n="scheduled_tasks.cron_examples.description">Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>* * * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.every_1_minute">Every 1 minute</td>
-          </tr>
-          <tr>
-            <td><code>*/10 * * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.every_10_minutes">Every 10 minutes</td>
-          </tr>
-          <tr>
-            <td><code>0 */1 * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.every_1_hour">Every 1 hour</td>
-          </tr>
-          <tr>
-            <td><code>30 21 * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.nightly_21_30">Every night at 21:30</td>
-          </tr>
-          <tr>
-            <td><code>3,15 * * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.minute_3_and_15">At minutes 3 and 15 of every hour</td>
-          </tr>
-          <tr>
-            <td><code>3,15 8-11 * * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.minute_3_15_8_to_11">At minutes 3 and 15 from 08:00 to 11:00</td>
-          </tr>
-          <tr>
-            <td><code>0 0 L * *</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.last_day_of_month">On the last day of every month</td>
-          </tr>
-          <tr>
-            <td><code>0 0 * * 0</code></td>
-            <td data-i18n="scheduled_tasks.cron_examples.sunday_midnight">Every Sunday at 00:00</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+<div class="modal-body">
+  <p class="hint-text" data-i18n="scheduled_tasks.cron_examples.format_note">Field order: minute hour day month weekday (Sunday = 0). Supports values, comma lists, ranges and steps; the day field also supports L (last day of month).</p>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th data-i18n="scheduled_tasks.cron_examples.expression">Expression</th>
+        <th data-i18n="scheduled_tasks.cron_examples.description">Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>* * * * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.every_1_minute">Every 1 minute</td>
+      </tr>
+      <tr>
+        <td><code>*/10 * * * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.every_10_minutes">Every 10 minutes</td>
+      </tr>
+      <tr>
+        <td><code>0 */1 * * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.every_1_hour">Every 1 hour</td>
+      </tr>
+      <tr>
+        <td><code>30 21 * * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.nightly_21_30">Every night at 21:30</td>
+      </tr>
+      <tr>
+        <td><code>3,15 * * * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.minute_3_and_15">At minutes 3 and 15 of every hour</td>
+      </tr>
+      <tr>
+        <td><code>3,15 8-11 * * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.minute_3_15_8_to_11">At minutes 3 and 15 from 08:00 to 11:00</td>
+      </tr>
+      <tr>
+        <td><code>0 0 L * *</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.last_day_of_month">On the last day of every month</td>
+      </tr>
+      <tr>
+        <td><code>0 0 * * 0</code></td>
+        <td data-i18n="scheduled_tasks.cron_examples.sunday_midnight">Every Sunday at 00:00</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 </template>

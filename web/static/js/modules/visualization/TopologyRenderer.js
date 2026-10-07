@@ -21,18 +21,9 @@ export function cabinetGroupKey(node) {
   return null;
 }
 
-const DEVICE_COLORS = {
-  switch: { fill: "#e3f2fd", stroke: "#1976d2" },
-  network_device: { fill: "#e3f2fd", stroke: "#1565c0" },
-  server: { fill: "#e8f5e9", stroke: "#388e3c" },
-  router: { fill: "#fff3e0", stroke: "#f57c00" },
-  camera: { fill: "#fce4ec", stroke: "#c62828" },
-  phone: { fill: "#f3e5f5", stroke: "#7b1fa2" },
-  desktop: { fill: "#f5f5f5", stroke: "#9e9e9e" },
-  laptop: { fill: "#f5f5f5", stroke: "#757575" },
-  printer: { fill: "#fff8e1", stroke: "#f9a825" },
-  other: { fill: "#f5f5f5", stroke: "#9e9e9e" }
-};
+/* 设备节点与途经节点的填充/描边色统一由 visualization.css 的
+   --chart-* token 规则供给（.topology-device-node.type-* 与
+   .topology-hop-node.hop-*），此处只维护形状与几何属性 */
 
 const DEVICE_TYPE_I18N_KEYS = {
   switch: "device_type.switch",
@@ -47,10 +38,10 @@ const DEVICE_TYPE_I18N_KEYS = {
   other: "device_type.other"
 };
 
-// 中间节点样式：信息点（圆形/橙）与配线架（方形/蓝紫）
+// 中间节点形状：信息点=圆形、配线架=方形（填充/描边色由 CSS 供给）
 const HOP_STYLES = {
-  net_outlet: { kind: "circle", fill: "#fff3e0", stroke: "#f57c00" },
-  patch_panel: { kind: "rect", fill: "#ede7f6", stroke: "#5e35b1" }
+  net_outlet: { kind: "circle" },
+  patch_panel: { kind: "rect" }
 };
 
 // 按设备类型维护的彩色图标（24x24 viewBox，扁平填充风格，
@@ -178,7 +169,6 @@ export class TopologyRenderer {
     const y = device.y ?? 100;
     const w = device.width ?? 200;
     const h = device.height ?? 100;
-    const colors = DEVICE_COLORS[device.device_type] || DEVICE_COLORS.other;
 
     const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("x", x);
@@ -187,9 +177,6 @@ export class TopologyRenderer {
     rect.setAttribute("height", h);
     rect.setAttribute("rx", 6);
     rect.setAttribute("ry", 6);
-    rect.setAttribute("fill", colors.fill);
-    rect.setAttribute("stroke", colors.stroke);
-    rect.setAttribute("stroke-width", 1.5);
     g.appendChild(rect);
 
     // 设备类型彩色图标：左侧垂直居中，文字区右移让位
@@ -247,9 +234,6 @@ export class TopologyRenderer {
       anchor.classList.add("port-anchor");
       anchor.dataset.portDir = dir;
       anchor.setAttribute("r", 5);
-      anchor.setAttribute("fill", "#fff");
-      anchor.setAttribute("stroke", colors.stroke);
-      anchor.setAttribute("stroke-width", 1.5);
 
       let cx, cy;
       switch (dir) {
@@ -482,18 +466,12 @@ export class TopologyRenderer {
       rect.setAttribute("width", 18);
       rect.setAttribute("height", 18);
       rect.setAttribute("rx", 3);
-      rect.setAttribute("fill", style.fill);
-      rect.setAttribute("stroke", style.stroke);
-      rect.setAttribute("stroke-width", 1.5);
       node.appendChild(rect);
     } else {
       const circle = document.createElementNS(SVG_NS, "circle");
       circle.setAttribute("cx", point.x);
       circle.setAttribute("cy", point.y);
       circle.setAttribute("r", 9);
-      circle.setAttribute("fill", style.fill);
-      circle.setAttribute("stroke", style.stroke);
-      circle.setAttribute("stroke-width", 1.5);
       node.appendChild(circle);
     }
 

@@ -48,6 +48,7 @@
   --color-border-dark: #dee2e6;
   --color-ipv6: #7048e8;
   --color-blue: #228be6;
+  --color-pink: #d6336c;
   --color-success-alt: #40c057;
   --control-bg: #fff;
   --control-bg-muted: #f1f3f5;
@@ -55,7 +56,6 @@
   --control-border-hover: #adb5bd;
   --control-border-focus: #74b816;
   --control-radius: 8px;
-  --control-height: 40px;
   --control-padding-x: 0.4rem;
   --control-padding-y: 0.4rem;
   --control-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
@@ -148,4 +148,8 @@
   /* 拓扑弹窗层级：高于普通模态区间（1050/1100+），低于 toast */
   --z-visualization-overlay: 8999;
   --z-visualization-modal: 9000;
+
+  /* 全局下拉筛选面板（body 直挂的 fixed 浮层）：须盖住任何模态（含 9000 拓扑弹窗），
+     仅低于 toast（9999），保证面板展开时 toast 反馈仍可见 */
+  --z-select-panel: 9500;
 }

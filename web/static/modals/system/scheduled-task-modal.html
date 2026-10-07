@@ -1,97 +1,87 @@
 <template id="scheduled-task-modal-template">
-<div id="scheduled-task-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduled-task-modal-title">
-  <div class="modal-content">
-    <header class="modal-header">
-      <h3 class="modal-title" id="scheduled-task-modal-title" data-i18n="scheduled_tasks.create_task">Create Scheduled Task</h3>
-      <button type="button" class="close" data-modal-id="scheduled-task-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <form id="scheduled-task-form">
-        <input type="hidden" id="scheduled-task-id">
-        <div class="form-group">
-          <label for="scheduled-task-name"><span data-i18n="scheduled_tasks.name">Name</span><span class="required">*</span></label>
-          <input type="text" id="scheduled-task-name" name="scheduled_task_name" required autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label for="scheduled-task-type"><span data-i18n="scheduled_tasks.type">Type</span><span class="required">*</span></label>
-          <select id="scheduled-task-type" name="scheduled_task_type" required>
-            <option value="mac_sync" data-i18n="scheduled_tasks.task_types.mac_sync">MAC Address Sync</option>
-            <option value="token_cleanup" data-i18n="scheduled_tasks.task_types.token_cleanup">Token Cleanup</option>
-            <option value="backup" data-i18n="scheduled_tasks.task_types.backup">Database Backup</option>
-            <option value="log_cleanup" data-i18n="scheduled_tasks.task_types.log_cleanup">Log Cleanup</option>
-            <option value="ip_status_sync" data-i18n="scheduled_tasks.task_types.ip_status_sync">IP Status Sync</option>
-          </select>
-        </div>
-        <div class="form-group cron-field-group">
-          <label><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
-          <!-- 标准 Linux cron 五段格式：分 时 日 月 星期，提交时以空格拼成完整表达式 -->
-          <div class="cron-field-row" id="scheduled-task-cron-fields">
-            <div class="cron-field">
-              <input type="text" id="scheduled-task-cron-minute" name="scheduled_task_cron_minute" value="0" required data-i18n-title="scheduled_tasks.cron_fields.minute">
-              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.minute">分</span>
-            </div>
-            <div class="cron-field">
-              <input type="text" id="scheduled-task-cron-hour" name="scheduled_task_cron_hour" value="*/6" required data-i18n-title="scheduled_tasks.cron_fields.hour">
-              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.hour">时</span>
-            </div>
-            <div class="cron-field">
-              <input type="text" id="scheduled-task-cron-day" name="scheduled_task_cron_day" value="*" required data-i18n-title="scheduled_tasks.cron_fields.day">
-              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.day">日</span>
-            </div>
-            <div class="cron-field">
-              <input type="text" id="scheduled-task-cron-month" name="scheduled_task_cron_month" value="*" required data-i18n-title="scheduled_tasks.cron_fields.month">
-              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.month">月</span>
-            </div>
-            <div class="cron-field">
-              <input type="text" id="scheduled-task-cron-weekday" name="scheduled_task_cron_weekday" value="*" required data-i18n-title="scheduled_tasks.cron_fields.weekday">
-              <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.weekday">星期</span>
-            </div>
-          </div>
-          <small class="hint-text cron-preview-hint">
-            <span data-i18n="scheduled_tasks.cron_preview">Expression preview</span>:
-            <code id="scheduled-task-cron-preview">0 */6 * * *</code>
-            <a href="#" id="cron-examples-link" data-i18n="scheduled_tasks.cron_hint_link">View cron expression examples</a></small>
-        </div>
-        <div id="scheduled-task-config-section">
-          <div class="form-row">
-            <div class="form-group hidden" id="mac-sync-config">
-              <label for="scheduled-task-device-id"><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></label>
-              <select id="scheduled-task-device-id" name="scheduled_task_device_id">
-                <option value="" data-i18n="scheduled_tasks.config_fields.select_device">Select Device</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group hidden" id="mac-sync-network-config">
-              <label for="scheduled-task-subnet-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span></label>
-              <select id="scheduled-task-subnet-id" name="scheduled_task_subnet_id">
-                <option value="" data-i18n="scheduled_tasks.config_fields.all_networks">All Subnets</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group hidden" id="log-cleanup-config">
-              <label for="scheduled-task-keep-days"><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
-              <input type="number" id="scheduled-task-keep-days" name="scheduled_task_keep_days" value="30" min="0">
-              <small class="hint-text" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
-            </div>
-            <div class="form-group hidden" id="ip-status-sync-config">
-              <label for="scheduled-task-stale-days"><span data-i18n="scheduled_tasks.config_fields.stale_days">Stale Days</span></label>
-              <input type="number" id="scheduled-task-stale-days" name="scheduled_task_stale_days" value="30" min="1">
-              <small class="hint-text" data-i18n="scheduled_tasks.config_fields.stale_days_hint">Mark IPs as inactive when not observed for the specified days; they recover automatically once seen again</small>
-            </div>
-          </div>
-        </div>
-
-      </form>
+<div class="modal-body">
+  <form id="scheduled-task-form">
+    <input type="hidden" id="scheduled-task-id">
+    <div class="form-group">
+      <label for="scheduled-task-name"><span data-i18n="scheduled_tasks.name">Name</span><span class="required">*</span></label>
+      <input type="text" id="scheduled-task-name" name="scheduled_task_name" required autocomplete="off">
     </div>
-    <footer class="modal-footer">
-      <label class="checkbox-label">
-        <input type="checkbox" id="scheduled-task-enabled" name="enabled" checked>
-        <span data-i18n="scheduled_tasks.enabled">Enabled</span>
-      </label>
-      <button type="submit" class="btn btn-primary" form="scheduled-task-form" data-i18n="common.save">Save</button>
-    </footer>
-  </div>
+    <div class="form-group">
+      <label for="scheduled-task-type"><span data-i18n="scheduled_tasks.type">Type</span><span class="required">*</span></label>
+      <select id="scheduled-task-type" name="scheduled_task_type" required>
+        <option value="mac_sync" data-i18n="scheduled_tasks.task_types.mac_sync">MAC Address Sync</option>
+        <option value="token_cleanup" data-i18n="scheduled_tasks.task_types.token_cleanup">Token Cleanup</option>
+        <option value="backup" data-i18n="scheduled_tasks.task_types.backup">Database Backup</option>
+        <option value="log_cleanup" data-i18n="scheduled_tasks.task_types.log_cleanup">Log Cleanup</option>
+        <option value="ip_status_sync" data-i18n="scheduled_tasks.task_types.ip_status_sync">IP Status Sync</option>
+      </select>
+    </div>
+    <div class="form-group cron-field-group">
+      <label><span data-i18n="scheduled_tasks.cron">Cron Expression</span><span class="required">*</span></label>
+      <!-- 标准 Linux cron 五段格式：分 时 日 月 星期，提交时以空格拼成完整表达式 -->
+      <div class="cron-field-row" id="scheduled-task-cron-fields">
+        <div class="cron-field">
+          <input type="text" id="scheduled-task-cron-minute" name="scheduled_task_cron_minute" value="0" required data-i18n-title="scheduled_tasks.cron_fields.minute">
+          <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.minute">分</span>
+        </div>
+        <div class="cron-field">
+          <input type="text" id="scheduled-task-cron-hour" name="scheduled_task_cron_hour" value="*/6" required data-i18n-title="scheduled_tasks.cron_fields.hour">
+          <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.hour">时</span>
+        </div>
+        <div class="cron-field">
+          <input type="text" id="scheduled-task-cron-day" name="scheduled_task_cron_day" value="*" required data-i18n-title="scheduled_tasks.cron_fields.day">
+          <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.day">日</span>
+        </div>
+        <div class="cron-field">
+          <input type="text" id="scheduled-task-cron-month" name="scheduled_task_cron_month" value="*" required data-i18n-title="scheduled_tasks.cron_fields.month">
+          <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.month">月</span>
+        </div>
+        <div class="cron-field">
+          <input type="text" id="scheduled-task-cron-weekday" name="scheduled_task_cron_weekday" value="*" required data-i18n-title="scheduled_tasks.cron_fields.weekday">
+          <span class="cron-field-label" data-i18n="scheduled_tasks.cron_fields.weekday">星期</span>
+        </div>
+      </div>
+      <small class="hint-text cron-preview-hint">
+        <span data-i18n="scheduled_tasks.cron_preview">Expression preview</span>:
+        <code id="scheduled-task-cron-preview">0 */6 * * *</code>
+        <a href="#" id="cron-examples-link" data-i18n="scheduled_tasks.cron_hint_link">View cron expression examples</a></small>
+    </div>
+    <div class="form-row">
+      <div class="form-group hidden" id="mac-sync-config">
+        <label for="scheduled-task-device-id"><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></label>
+        <select id="scheduled-task-device-id" name="scheduled_task_device_id">
+          <option value="" data-i18n="scheduled_tasks.config_fields.select_device">Select Device</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group hidden" id="mac-sync-network-config">
+        <label for="scheduled-task-subnet-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span></label>
+        <select id="scheduled-task-subnet-id" name="scheduled_task_subnet_id">
+          <option value="" data-i18n="scheduled_tasks.config_fields.all_networks">All Subnets</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group hidden" id="log-cleanup-config">
+        <label for="scheduled-task-keep-days"><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
+        <input type="number" id="scheduled-task-keep-days" name="scheduled_task_keep_days" value="30" min="0">
+        <small class="hint-text" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
+      </div>
+      <div class="form-group hidden" id="ip-status-sync-config">
+        <label for="scheduled-task-stale-days"><span data-i18n="scheduled_tasks.config_fields.stale_days">Stale Days</span></label>
+        <input type="number" id="scheduled-task-stale-days" name="scheduled_task_stale_days" value="30" min="1">
+        <small class="hint-text" data-i18n="scheduled_tasks.config_fields.stale_days_hint">Mark IPs as inactive when not observed for the specified days; they recover automatically once seen again</small>
+      </div>
+    </div>
+
+  </form>
 </div>
+<footer class="modal-footer">
+  <label class="checkbox-label">
+    <input type="checkbox" id="scheduled-task-enabled" name="enabled" checked>
+    <span data-i18n="scheduled_tasks.enabled">Enabled</span>
+  </label>
+  <button type="submit" class="btn btn-primary" form="scheduled-task-form" data-i18n="common.save">Save</button>
+</footer>
 </template>

@@ -153,3 +153,10 @@
   flex: none;
   width: auto;
 }
+
+/* 窄屏：动态配置行纵向堆叠（原 responsive.css 组件级规则迁回） */
+@media (width <= 768px) {
+  .network-config-item .form-row {
+    flex-direction: column;
+  }
+}

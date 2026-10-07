@@ -13,9 +13,41 @@ import { t, initI18n, changeLanguage } from "./utils/i18n.js";
 import { SessionManager } from "./utils/sessionManager.js";
 import { initSelectSearch } from "./utils/selectSearch.js";
 
-// 登录页角色（吉祥物）共用的瞳孔位移：登录失败时看向左下，密码聚焦时看向别处
-const PUPIL_ERROR = "translate(-3px, 4px)";
-const PUPIL_LOOKING_AWAY = "translate(-5px, -5px)";
+// 角色状态类全集（挂在 .character 根上，静态几何由 login.css 供给）
+const CHAR_STATES = ["error", "look-away", "show-pwd", "face-each-other", "typing"];
+
+/**
+ * 角色状态判定（优先级与原内联分支一致）：
+ * error > look-away > show-pwd > face-each-other > typing > 自由态("")
+ * 对无 error 身体姿态的角色（黑/橙/黄），"error" 仅让眼位/瞳孔/嘴走
+ * CSS 固定值，身体分支自行跳过该状态保持跟随。
+ */
+function resolveCharState(self, isShowingPwd, isLookingAway) {
+  if (self.isLoginError) {
+    return "error";
+  }
+  if (isLookingAway) {
+    return "look-away";
+  }
+  if (isShowingPwd) {
+    return "show-pwd";
+  }
+  if (self.isLookingAtEachOther) {
+    return "face-each-other";
+  }
+  if (self.isTyping) {
+    return "typing";
+  }
+  return "";
+}
+
+// 清除元素上的行内样式属性：进入 CSS 状态类管辖的静态分支前调用，
+// 防止此前鼠标跟随帧写下的内联值压过类规则
+function clearInlineStyles(el, ...props) {
+  for (const prop of props) {
+    el.style[prop] = "";
+  }
+}
 
 // 角色眨眼/偷看动画的随机调度延迟
 // eslint-disable-next-line sonarjs/pseudo-random -- 纯动画抖动延迟，非安全场景
@@ -1056,74 +1088,67 @@ class LoginManager {
     this._updateYellowCharacter(ctx, this.calcPosition(yellow));
   }
 
-  // 紫色角色：身体倾斜 + 眼睛/瞳孔（含眨眼与密码可见时的偷看）
+  // 紫色角色：身体倾斜 + 眼睛/瞳孔（含眨眼与密码可见时的偷看）。
+  // 眼位/瞳孔/眨眼：error/look-away/show-pwd/face-each-other 静态值由
+  // login.css 状态类供给，自由态与 typing 态随鼠标逐帧写内联。
+  // 身体分支与原始实现一致地不感知 error/互看（互看必伴随 typing），
+  // 仅 show-pwd/look-away 为静态（CSS），typing 与自由态随鼠标倾斜。
   _updatePurpleCharacter({ isShowingPwd, isLookingAway }, purplePos) {
     const purple = document.getElementById("char-purple");
-    if (isShowingPwd) {
-      purple.style.transform = "skewX(0deg)";
-      purple.style.height = "370px";
-    } else if (isLookingAway) {
-      purple.style.transform = "skewX(-14deg) translateX(-20px)";
-      purple.style.height = "410px";
+    const state = resolveCharState(this, isShowingPwd, isLookingAway);
+    for (const cls of CHAR_STATES) {
+      purple.classList.toggle(cls, cls === state);
+    }
+    purple.classList.toggle("peek", isShowingPwd && this.isPurplePeeking);
+    purple.classList.toggle("blink", this.isPurpleBlinking);
+
+    if (isShowingPwd || isLookingAway) {
+      clearInlineStyles(purple, "transform");
     } else if (this.isTyping) {
       purple.style.transform = `skewX(${(purplePos.bodySkew || 0) - 12}deg) translateX(40px)`;
-      purple.style.height = "410px";
     } else {
       purple.style.transform = `skewX(${purplePos.bodySkew}deg)`;
-      purple.style.height = "370px";
     }
+    // 高度全态由 CSS 供给（show-pwd 370 / look-away·typing·互看 410 / 其余基础 370）
+    clearInlineStyles(purple, "height");
 
     const purpleEyes = document.getElementById("purple-eyes");
     const purpleEyeL = document.getElementById("purple-eye-l");
-    const purpleEyeR = document.getElementById("purple-eye-r");
     const purplePupilL = document.getElementById("purple-pupil-l");
     const purplePupilR = document.getElementById("purple-pupil-r");
-    if (purpleEyes && purpleEyeL && purpleEyeR && purplePupilL && purplePupilR) {
-      purpleEyeL.style.height = this.isPurpleBlinking ? "2px" : "18px";
-      purpleEyeR.style.height = this.isPurpleBlinking ? "2px" : "18px";
-
-      if (this.isLoginError) {
-        purpleEyes.style.left = "30px";
-        purpleEyes.style.top = "55px";
-        purplePupilL.style.transform = PUPIL_ERROR;
-        purplePupilR.style.transform = PUPIL_ERROR;
-      } else if (isLookingAway) {
-        purpleEyes.style.left = "20px";
-        purpleEyes.style.top = "25px";
-        purplePupilL.style.transform = PUPIL_LOOKING_AWAY;
-        purplePupilR.style.transform = PUPIL_LOOKING_AWAY;
-      } else if (isShowingPwd) {
-        purpleEyes.style.left = "20px";
-        purpleEyes.style.top = "35px";
-        const px = this.isPurplePeeking ? 4 : -4;
-        const py = this.isPurplePeeking ? 5 : -4;
-        purplePupilL.style.transform = `translate(${px}px, ${py}px)`;
-        purplePupilR.style.transform = `translate(${px}px, ${py}px)`;
-      } else if (this.isLookingAtEachOther) {
-        purpleEyes.style.left = "55px";
-        purpleEyes.style.top = "65px";
-        purplePupilL.style.transform = "translate(3px, 4px)";
-        purplePupilR.style.transform = "translate(3px, 4px)";
-      } else {
+    if (purpleEyes && purpleEyeL && purplePupilL && purplePupilR) {
+      if (state === "" || state === "typing") {
         purpleEyes.style.left = `${45 + purplePos.faceX}px`;
         purpleEyes.style.top = `${40 + purplePos.faceY}px`;
         const po = this.calcPupilOffset(purpleEyeL, 5);
         purplePupilL.style.transform = `translate(${po.x}px, ${po.y}px)`;
         purplePupilR.style.transform = `translate(${po.x}px, ${po.y}px)`;
+      } else {
+        clearInlineStyles(purpleEyes, "left", "top");
+        clearInlineStyles(purplePupilL, "transform");
+        clearInlineStyles(purplePupilR, "transform");
       }
     }
   }
 
-  // 黑色角色：身体倾斜 + 眼睛/瞳孔（含眨眼）
+  // 黑色角色：身体倾斜 + 眼睛/瞳孔（含眨眼）。
+  // 静态姿态由 CSS 状态类供给；自由态/typing/互看态的身体倾斜与
+  // 自由态/typing 的眼位瞳孔随鼠标逐帧写内联。
   _updateBlackCharacter({ isShowingPwd, isLookingAway }, blackPos) {
     const black = document.getElementById("char-black");
-    if (isShowingPwd) {
-      black.style.transform = "skewX(0deg)";
-    } else if (isLookingAway) {
-      black.style.transform = "skewX(12deg) translateX(-10px)";
-    } else if (this.isLookingAtEachOther) {
+    // 黑色身体无 error 姿态分支（保持跟随鼠标），但眼位有 error 固定坐标，
+    // 故 state 仍取 "error"，由下方身体分支对该状态走动态倾斜
+    const state = resolveCharState(this, isShowingPwd, isLookingAway);
+    for (const cls of CHAR_STATES) {
+      black.classList.toggle(cls, cls === state);
+    }
+    black.classList.toggle("blink", this.isBlackBlinking);
+
+    if (state === "look-away" || state === "show-pwd") {
+      clearInlineStyles(black, "transform");
+    } else if (state === "face-each-other") {
       black.style.transform = `skewX(${(blackPos.bodySkew || 0) * 1.5 + 10}deg) translateX(20px)`;
-    } else if (this.isTyping) {
+    } else if (state === "typing") {
       black.style.transform = `skewX(${(blackPos.bodySkew || 0) * 1.5}deg)`;
     } else {
       black.style.transform = `skewX(${blackPos.bodySkew}deg)`;
@@ -1131,53 +1156,37 @@ class LoginManager {
 
     const blackEyes = document.getElementById("black-eyes");
     const blackEyeL = document.getElementById("black-eye-l");
-    const blackEyeR = document.getElementById("black-eye-r");
     const blackPupilL = document.getElementById("black-pupil-l");
     const blackPupilR = document.getElementById("black-pupil-r");
-    if (blackEyes && blackEyeL && blackEyeR && blackPupilL && blackPupilR) {
-      blackEyeL.style.height = this.isBlackBlinking ? "2px" : "16px";
-      blackEyeR.style.height = this.isBlackBlinking ? "2px" : "16px";
-
-      if (this.isLoginError) {
-        blackEyes.style.left = "15px";
-        blackEyes.style.top = "40px";
-        blackPupilL.style.transform = PUPIL_ERROR;
-        blackPupilR.style.transform = PUPIL_ERROR;
-      } else if (isLookingAway) {
-        blackEyes.style.left = "10px";
-        blackEyes.style.top = "20px";
-        blackPupilL.style.transform = "translate(-4px, -5px)";
-        blackPupilR.style.transform = "translate(-4px, -5px)";
-      } else if (isShowingPwd) {
-        blackEyes.style.left = "10px";
-        blackEyes.style.top = "28px";
-        blackPupilL.style.transform = "translate(-4px, -4px)";
-        blackPupilR.style.transform = "translate(-4px, -4px)";
-      } else if (this.isLookingAtEachOther) {
-        blackEyes.style.left = "32px";
-        blackEyes.style.top = "12px";
-        blackPupilL.style.transform = "translate(0px, -4px)";
-        blackPupilR.style.transform = "translate(0px, -4px)";
-      } else {
+    if (blackEyes && blackEyeL && blackPupilL && blackPupilR) {
+      if (state === "" || state === "typing") {
         blackEyes.style.left = `${26 + blackPos.faceX}px`;
         blackEyes.style.top = `${32 + blackPos.faceY}px`;
         const bo = this.calcPupilOffset(blackEyeL, 4);
         blackPupilL.style.transform = `translate(${bo.x}px, ${bo.y}px)`;
         blackPupilR.style.transform = `translate(${bo.x}px, ${bo.y}px)`;
+      } else {
+        clearInlineStyles(blackEyes, "left", "top");
+        clearInlineStyles(blackPupilL, "transform");
+        clearInlineStyles(blackPupilR, "transform");
       }
     }
   }
 
-  // 橙色角色：身体倾斜 + 眼睛/瞳孔 + 失败时的难过嘴
+  // 橙色角色：身体倾斜 + 眼睛/瞳孔 + 失败时的难过嘴。
+  // 身体仅 show-pwd 为静态（CSS），其余随鼠标；眼位/瞳孔仅
+  // error/look-away/show-pwd 为静态（CSS），typing/互看/自由态随鼠标；
+  // 难过嘴的 top/可见性由 CSS 状态类供给，left 随鼠标微调。
   _updateOrangeCharacter({ isShowingPwd, isLookingAway }, orangePos) {
     const orange = document.getElementById("char-orange");
     const orangeMouth = document.getElementById("orange-mouth");
-    if (this.isLoginError && orangeMouth) {
-      orangeMouth.style.left = `${80 + orangePos.faceX}px`;
-      orangeMouth.style.top = "130px";
+    const state = resolveCharState(this, isShowingPwd, isLookingAway);
+    for (const cls of CHAR_STATES) {
+      orange.classList.toggle(cls, cls === state);
     }
-    if (isShowingPwd) {
-      orange.style.transform = "skewX(0deg)";
+
+    if (state === "show-pwd") {
+      clearInlineStyles(orange, "transform");
     } else {
       orange.style.transform = `skewX(${orangePos.bodySkew}deg)`;
     }
@@ -1186,36 +1195,40 @@ class LoginManager {
     const orangePupilL = document.getElementById("orange-pupil-l");
     const orangePupilR = document.getElementById("orange-pupil-r");
     if (orangeEyes && orangePupilL && orangePupilR) {
-      if (this.isLoginError) {
-        orangeEyes.style.left = "60px";
-        orangeEyes.style.top = "95px";
-        orangePupilL.style.transform = PUPIL_ERROR;
-        orangePupilR.style.transform = PUPIL_ERROR;
-      } else if (isLookingAway) {
-        orangeEyes.style.left = "50px";
-        orangeEyes.style.top = "75px";
-        orangePupilL.style.transform = PUPIL_LOOKING_AWAY;
-        orangePupilR.style.transform = PUPIL_LOOKING_AWAY;
-      } else if (isShowingPwd) {
-        orangeEyes.style.left = "50px";
-        orangeEyes.style.top = "85px";
-        orangePupilL.style.transform = "translate(-5px, -4px)";
-        orangePupilR.style.transform = "translate(-5px, -4px)";
-      } else {
+      if (state === "" || state === "typing" || state === "face-each-other") {
         orangeEyes.style.left = `${82 + orangePos.faceX}px`;
         orangeEyes.style.top = `${90 + orangePos.faceY}px`;
         const oo = this.calcPupilOffset(orangePupilL, 5);
         orangePupilL.style.transform = `translate(${oo.x}px, ${oo.y}px)`;
         orangePupilR.style.transform = `translate(${oo.x}px, ${oo.y}px)`;
+      } else {
+        clearInlineStyles(orangeEyes, "left", "top");
+        clearInlineStyles(orangePupilL, "transform");
+        clearInlineStyles(orangePupilR, "transform");
+      }
+    }
+
+    if (orangeMouth) {
+      if (state === "error") {
+        orangeMouth.style.left = `${80 + orangePos.faceX}px`;
+      } else {
+        clearInlineStyles(orangeMouth, "left");
       }
     }
   }
 
-  // 黄色角色：身体倾斜 + 眼睛/瞳孔/嘴
+  // 黄色角色：身体倾斜 + 眼睛/瞳孔/嘴。
+  // 身体仅 show-pwd 为静态；眼位/瞳孔/嘴仅 error/look-away/show-pwd 为
+  // 静态（CSS），typing/互看/自由态随鼠标。
   _updateYellowCharacter({ isShowingPwd, isLookingAway }, yellowPos) {
     const yellow = document.getElementById("char-yellow");
-    if (isShowingPwd) {
-      yellow.style.transform = "skewX(0deg)";
+    const state = resolveCharState(this, isShowingPwd, isLookingAway);
+    for (const cls of CHAR_STATES) {
+      yellow.classList.toggle(cls, cls === state);
+    }
+
+    if (state === "show-pwd") {
+      clearInlineStyles(yellow, "transform");
     } else {
       yellow.style.transform = `skewX(${yellowPos.bodySkew}deg)`;
     }
@@ -1225,31 +1238,7 @@ class LoginManager {
     const yellowPupilR = document.getElementById("yellow-pupil-r");
     const yellowMouth = document.getElementById("yellow-mouth");
     if (yellowEyes && yellowPupilL && yellowPupilR && yellowMouth) {
-      if (this.isLoginError) {
-        yellowEyes.style.left = "35px";
-        yellowEyes.style.top = "45px";
-        yellowPupilL.style.transform = PUPIL_ERROR;
-        yellowPupilR.style.transform = PUPIL_ERROR;
-        yellowMouth.style.left = "30px";
-        yellowMouth.style.top = "92px";
-        yellowMouth.style.transform = "rotate(-8deg)";
-      } else if (isLookingAway) {
-        yellowEyes.style.left = "20px";
-        yellowEyes.style.top = "30px";
-        yellowPupilL.style.transform = PUPIL_LOOKING_AWAY;
-        yellowPupilR.style.transform = PUPIL_LOOKING_AWAY;
-        yellowMouth.style.left = "15px";
-        yellowMouth.style.top = "78px";
-        yellowMouth.style.transform = "rotate(0deg)";
-      } else if (isShowingPwd) {
-        yellowEyes.style.left = "20px";
-        yellowEyes.style.top = "35px";
-        yellowPupilL.style.transform = "translate(-5px, -4px)";
-        yellowPupilR.style.transform = "translate(-5px, -4px)";
-        yellowMouth.style.left = "10px";
-        yellowMouth.style.top = "88px";
-        yellowMouth.style.transform = "rotate(0deg)";
-      } else {
+      if (state === "" || state === "typing" || state === "face-each-other") {
         yellowEyes.style.left = `${52 + yellowPos.faceX}px`;
         yellowEyes.style.top = `${40 + yellowPos.faceY}px`;
         const yo = this.calcPupilOffset(yellowPupilL, 5);
@@ -1257,7 +1246,11 @@ class LoginManager {
         yellowPupilR.style.transform = `translate(${yo.x}px, ${yo.y}px)`;
         yellowMouth.style.left = `${40 + yellowPos.faceX}px`;
         yellowMouth.style.top = `${88 + yellowPos.faceY}px`;
-        yellowMouth.style.transform = "rotate(0deg)";
+      } else {
+        clearInlineStyles(yellowEyes, "left", "top");
+        clearInlineStyles(yellowPupilL, "transform");
+        clearInlineStyles(yellowPupilR, "transform");
+        clearInlineStyles(yellowMouth, "left", "top");
       }
     }
   }

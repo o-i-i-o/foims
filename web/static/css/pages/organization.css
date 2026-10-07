@@ -255,10 +255,7 @@
   color: var(--color-primary);
 }
 
-/* 悬浮浅色着色（与 btn-edit/btn-delete 的悬浮反馈一致） */
-.icon-btn.btn-add-child:hover {
-  background: rgb(40 167 69 / 12%);
-}
+/* btn-add-child 的悬浮着色由 buttons.css 的 .icon-btn.btn-add-child:hover 统一提供 */
 
 .icon-btn.btn-employees:hover {
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
@@ -290,9 +287,11 @@
   margin-bottom: 8px;
 }
 
-/* 子节点容器 */
+/* 子节点容器：缩进由嵌套容器的 padding-left 逐层累加（每层 24px），
+   替代原 JS 按深度写内联 paddingLeft 的方案 */
 .org-children {
   position: relative;
+  padding-left: 24px;
 }
 
 .org-children::before {

@@ -349,9 +349,9 @@
   cursor: not-allowed;
 }
 
-/* 提示文本 */
+/* 提示文本（login 前缀类：与主应用 forms.css 的 .hint-text 同名不同义，见文件头说明） */
 .password-hint,
-.hint-text {
+.login-hint-text {
   display: block;
   font-size: 12px;
   color: var(--color-text-muted);
@@ -702,6 +702,181 @@
 
 .char-yellow .yellow-mouth {
   left: 40px;
+  top: 88px;
+}
+
+/* ============ 角色状态类（login.js 状态机挂载，静态几何全部由本节供给） ============
+   状态词直接作组合类挂在 .character 根上（error/look-away/show-pwd/
+   face-each-other/typing/blink/peek）；JS 仅在鼠标跟随的自由态/typing 态
+   写内联 transform 与眼睛坐标，进入静态态时清除内联残留，保证类规则生效。 */
+
+/* 身体姿态与高度（与原始内联分支一致：紫色/黑/橙/黄身体均不感知 error，
+   互看态必伴随 typing，紫色身体按 typing 姿态取值） */
+.char-purple.look-away {
+  transform: skewX(-14deg) translateX(-20px);
+  height: 410px;
+}
+
+.char-purple.typing,
+.char-purple.face-each-other {
+  height: 410px;
+}
+
+.char-purple.show-pwd {
+  transform: skewX(0deg);
+  height: 370px;
+}
+
+.char-black.look-away {
+  transform: skewX(12deg) translateX(-10px);
+}
+
+.char-black.show-pwd {
+  transform: skewX(0deg);
+}
+
+.char-orange.show-pwd,
+.char-yellow.show-pwd {
+  transform: skewX(0deg);
+}
+
+/* 眼位（各状态固定坐标；自由态/typing 由 JS 随鼠标写入） */
+.char-purple.error .eyes {
+  left: 30px;
+  top: 55px;
+}
+
+.char-purple.look-away .eyes {
+  left: 20px;
+  top: 25px;
+}
+
+.char-purple.show-pwd .eyes {
+  left: 20px;
+  top: 35px;
+}
+
+.char-purple.face-each-other .eyes {
+  left: 55px;
+  top: 65px;
+}
+
+.char-black.error .eyes {
+  left: 15px;
+  top: 40px;
+}
+
+.char-black.look-away .eyes {
+  left: 10px;
+  top: 20px;
+}
+
+.char-black.show-pwd .eyes {
+  left: 10px;
+  top: 28px;
+}
+
+.char-black.face-each-other .eyes {
+  left: 32px;
+  top: 12px;
+}
+
+.char-orange.error .eyes {
+  left: 60px;
+  top: 95px;
+}
+
+.char-orange.look-away .eyes {
+  left: 50px;
+  top: 75px;
+}
+
+.char-orange.show-pwd .eyes {
+  left: 50px;
+  top: 85px;
+}
+
+.char-yellow.error .eyes {
+  left: 35px;
+  top: 45px;
+}
+
+.char-yellow.look-away .eyes {
+  left: 20px;
+  top: 30px;
+}
+
+.char-yellow.show-pwd .eyes {
+  left: 20px;
+  top: 35px;
+}
+
+/* 瞳孔位移：失败态全角色共用（原 PUPIL_ERROR），看向别处除黑色外共用
+   （原 PUPIL_LOOKING_AWAY；黑色原值差 1px，原样保留） */
+.character.error .pupil,
+.character.error .bare-pupil {
+  transform: translate(-3px, 4px);
+}
+
+.character.look-away .pupil,
+.character.look-away .bare-pupil {
+  transform: translate(-5px, -5px);
+}
+
+.char-black.look-away .pupil {
+  transform: translate(-4px, -5px);
+}
+
+/* 密码可见（偷看为 show-pwd + peek 组合）与互看态的固定瞳孔位移 */
+.char-purple.show-pwd .pupil {
+  transform: translate(-4px, -4px);
+}
+
+.char-purple.show-pwd.peek .pupil {
+  transform: translate(4px, 5px);
+}
+
+.char-black.show-pwd .pupil {
+  transform: translate(-4px, -4px);
+}
+
+.char-purple.face-each-other .pupil {
+  transform: translate(3px, 4px);
+}
+
+.char-black.face-each-other .pupil {
+  transform: translate(0, -4px);
+}
+
+.char-orange.show-pwd .bare-pupil,
+.char-yellow.show-pwd .bare-pupil {
+  transform: translate(-5px, -4px);
+}
+
+/* 眨眼：眼球压扁（基础高度 .char-purple .eyeball 18px / .char-black 16px） */
+.character.blink .eyeball {
+  height: 2px;
+}
+
+/* 嘴部状态：橙色难过嘴 error 态下移（left 由 JS 随鼠标微调）；
+   黄色嘴各状态固定坐标，error 态加低头角度 */
+.char-orange.error .orange-mouth {
+  top: 130px;
+}
+
+.char-yellow.error .yellow-mouth {
+  left: 30px;
+  top: 92px;
+  transform: rotate(-8deg);
+}
+
+.char-yellow.look-away .yellow-mouth {
+  left: 15px;
+  top: 78px;
+}
+
+.char-yellow.show-pwd .yellow-mouth {
+  left: 10px;
   top: 88px;
 }
 

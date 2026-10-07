@@ -117,7 +117,8 @@ function renderPanelList() {
       break;
     }
   }
-  emptyEl.style.display = visibleCount === 0 ? "block" : "none";
+  // 显隐走 hidden 属性（UA 默认 display:none），不写内联 style
+  emptyEl.hidden = visibleCount !== 0;
 }
 
 function moveHighlight(step) {
@@ -163,7 +164,7 @@ function openPanel(select) {
     <input type="text" class="select-search-input" autocomplete="off"
       placeholder="${t("common.select_search_placeholder")}" />
     <ul class="select-search-options"></ul>
-    <div class="select-search-empty" style="display:none">
+    <div class="select-search-empty" hidden>
       ${t("common.select_search_no_match")}
     </div>`;
 

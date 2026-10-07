@@ -57,11 +57,8 @@
   white-space: nowrap;
 }
 
-/* 宽度可控列（序号/时间/数字/枚举/按钮）的水平垂直居中 */
-.data-table td.col-center {
-  text-align: center;
-  vertical-align: middle;
-}
+/* 宽度可控列（序号/时间/数字/枚举/按钮）：居中由 .data-table td 基础规则提供，
+   .col-center 仅作为 HTML 侧的语义标记类保留，无独立样式 */
 
 .data-table tr:hover {
   background: var(--color-bg);
@@ -75,6 +72,15 @@
   padding: var(--space-lg);
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+/* 表格加载失败占位单元格：默认可见的文本错误行
+   （区别于表单内联错误框 .error-message——后者默认 display:none，依赖 .show） */
+.table-error-cell {
+  color: var(--color-danger-text);
+  text-align: center;
+  padding: 0.75rem;
+  font-weight: 500;
 }
 
 .pagination {
@@ -557,9 +563,19 @@
   user-select: none;
 }
 
-/* MAC 表分组标题右侧折叠箭头（transform 由 JS 按折叠状态内联切换） */
+/* MAC 表分组标题右侧折叠箭头：默认折叠态横置，展开时 JS 切换 .expanded 回正 */
 .mac-collapse-icon {
-  transition: transform 0.2s;
+  transform: rotate(-90deg);
+  transition: transform var(--transition-normal);
+}
+
+.mac-collapse-icon.expanded {
+  transform: rotate(0deg);
+}
+
+/* MAC 表组内明细：折叠态由 JS 切换 .collapsed 收起 */
+.network-group-content.collapsed {
+  display: none;
 }
 
 /* MAC 表组内明细表 */
@@ -587,10 +603,8 @@
   margin-top: 10px;
 }
 
-/* 变量统一引用 variables.css 的 --color-* 令牌（原 --bg-secondary 等未定义变量
-   仅 fallback 生效，全局换色不跟随），fallback 保留原值 */
 .lldp-table thead tr {
-  background-color: var(--color-bg-secondary, #f0f2f5);
+  background-color: var(--color-bg-secondary);
 }
 
 .lldp-table th {
@@ -606,11 +620,11 @@
 
 /* 隔行底色：与原内联实现一致（首行主背景，偶数行次背景） */
 .lldp-table tbody tr:nth-child(odd) {
-  background-color: var(--color-bg-white, #fff);
+  background-color: var(--color-bg-white);
 }
 
 .lldp-table tbody tr:nth-child(even) {
-  background-color: var(--color-bg, #fafbfc);
+  background-color: var(--color-bg);
 }
 
 .lldp-table td {

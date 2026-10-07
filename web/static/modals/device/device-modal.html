@@ -1,214 +1,207 @@
 <template id="device-modal-template">
-<div id="device-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
-  <div class="modal-content modal-lg">
-    <header class="modal-header">
-      <h3 class="modal-title" id="device-modal-title" data-i18n="device.add">Add Device</h3>
-      <button type="button" class="close" data-modal-id="device-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <form id="device-form">
-        <input type="hidden" id="device-id">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-name"><span data-i18n="device.name">Device Name</span><span class="required">*</span></label>
-            <input type="text" id="device-name" name="name" autocomplete="off" required>
-          </div>
-          <div class="form-group">
-            <label for="device-type" data-i18n="device.device_type">Device Type</label>
-            <select id="device-type" name="device_type">
-              <option value="desktop" data-i18n="device_type.desktop">Desktop</option>
-              <option value="laptop" data-i18n="device_type.laptop">Laptop</option>
-              <option value="printer" data-i18n="device_type.printer">Printer</option>
-              <option value="server" data-i18n="device_type.server">Server</option>
-              <option value="network_device" data-i18n="device_type.network_device">Network Device</option>
-              <option value="switch" data-i18n="device_type.switch">Switch</option>
-              <option value="camera" data-i18n="device_type.camera">Camera</option>
-              <option value="phone" data-i18n="device_type.phone">Phone</option>
-              <option value="other" data-i18n="device_type.other">Other</option>
-            </select>
-          </div>
+<div class="modal-body">
+  <form id="device-form">
+    <input type="hidden" id="device-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-name"><span data-i18n="device.name">Device Name</span><span class="required">*</span></label>
+        <input type="text" id="device-name" name="name" autocomplete="off" required>
+      </div>
+      <div class="form-group">
+        <label for="device-type" data-i18n="device.device_type">Device Type</label>
+        <select id="device-type" name="device_type">
+          <option value="desktop" data-i18n="device_type.desktop">Desktop</option>
+          <option value="laptop" data-i18n="device_type.laptop">Laptop</option>
+          <option value="printer" data-i18n="device_type.printer">Printer</option>
+          <option value="server" data-i18n="device_type.server">Server</option>
+          <option value="network_device" data-i18n="device_type.network_device">Network Device</option>
+          <option value="switch" data-i18n="device_type.switch">Switch</option>
+          <option value="camera" data-i18n="device_type.camera">Camera</option>
+          <option value="phone" data-i18n="device_type.phone">Phone</option>
+          <option value="other" data-i18n="device_type.other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-template-id" data-i18n="device.template">Template</label>
+        <select id="device-template-id" name="template_id">
+          <option value="" data-i18n="device.select_template">Select Template</option>
+        </select>
+      </div>
+      <div class="form-group form-group-inline">
+        <label for="device-save-as-template" data-i18n="device.save_as_template">Save as Template</label>
+        <input type="checkbox" id="device-save-as-template" name="save_as_template" class="form-checkbox">
+        <button type="button" id="device-template-manage-btn" class="icon-btn btn-secondary btn-gap-left" data-icon="list" data-tooltip="Manage Templates" data-i18n-tooltip="device_template.manage" aria-label="Manage Templates" data-i18n-aria-label="device_template.manage"></button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-serial-number" data-i18n="device.serial_number">Serial Number</label>
+        <input type="text" id="device-serial-number" name="serial_number" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="device-hostname" data-i18n="device.hostname">Hostname</label>
+        <input type="text" id="device-hostname" name="hostname" autocomplete="off" readonly
+               data-i18n-placeholder="device.hostname_placeholder" placeholder="Fetched via SNMP, read-only"
+               data-i18n-title="device.hostname_placeholder" title="Fetched via SNMP, read-only">
+      </div>
+      <div class="form-group hidden" id="device-template-name-group">
+        <label for="device-template-name" data-i18n="device.template_name">Template Name</label>
+        <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-brand" data-i18n="device.brand">Brand</label>
+        <input type="text" id="device-brand" name="brand" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="device-model" data-i18n="device.model">Model</label>
+        <input type="text" id="device-model" name="model" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-seller" data-i18n="device.seller">Seller</label>
+        <input type="text" id="device-seller" name="seller" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="device-location" data-i18n="device.location">Location</label>
+        <input type="text" id="device-location" name="location" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="device-power-watts" data-i18n="device.power_input">Power</label>
+        <div class="power-input-row">
+          <input type="number" id="device-power-watts" name="power_watts" min="0" step="any" autocomplete="off">
+          <select id="device-power-unit-modal" class="form-control" aria-label="Unit">
+            <option value="W">W</option>
+            <option value="kW">kW</option>
+          </select>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-template-id" data-i18n="device.template">Template</label>
-            <select id="device-template-id" name="template_id">
-              <option value="" data-i18n="device.select_template">Select Template</option>
-            </select>
-          </div>
-          <div class="form-group form-group-inline">
-            <label for="device-save-as-template" data-i18n="device.save_as_template">Save as Template</label>
-            <input type="checkbox" id="device-save-as-template" name="save_as_template" class="form-checkbox">
-            <button type="button" id="device-template-manage-btn" class="icon-btn btn-secondary btn-gap-left" data-icon="list" data-tooltip="Manage Templates" data-i18n-tooltip="device_template.manage" aria-label="Manage Templates" data-i18n-aria-label="device_template.manage"></button>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-serial-number" data-i18n="device.serial_number">Serial Number</label>
-            <input type="text" id="device-serial-number" name="serial_number" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="device-hostname" data-i18n="device.hostname">Hostname</label>
-            <input type="text" id="device-hostname" name="hostname" autocomplete="off" readonly
-                   data-i18n-placeholder="device.hostname_placeholder" placeholder="Fetched via SNMP, read-only"
-                   data-i18n-title="device.hostname_placeholder" title="Fetched via SNMP, read-only">
-          </div>
-          <div class="form-group hidden" id="device-template-name-group">
-            <label for="device-template-name" data-i18n="device.template_name">Template Name</label>
-            <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-brand" data-i18n="device.brand">Brand</label>
-            <input type="text" id="device-brand" name="brand" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="device-model" data-i18n="device.model">Model</label>
-            <input type="text" id="device-model" name="model" autocomplete="off">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-seller" data-i18n="device.seller">Seller</label>
-            <input type="text" id="device-seller" name="seller" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="device-location" data-i18n="device.location">Location</label>
-            <input type="text" id="device-location" name="location" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="device-power-watts" data-i18n="device.power_input">Power</label>
-            <div class="power-input-row">
-              <input type="number" id="device-power-watts" name="power_watts" min="0" step="any" autocomplete="off">
-              <select id="device-power-unit-modal" class="form-control" aria-label="Unit">
-                <option value="W">W</option>
-                <option value="kW">kW</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-org-id" data-i18n="organization.parent_org">Organization Node</label>
-            <select id="device-org-id" name="org_id">
-              <option value="" data-i18n="organization.select_org">Select Organization Node</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="device-room-type" data-i18n="device.room_type_filter">Room Type</label>
-            <select id="device-room-type" name="room_type">
-              <option value="" data-i18n="device.all_room_types">All Room Types</option>
-              <option value="office" data-i18n="room.type_office">Office</option>
-              <option value="lobby" data-i18n="room.type_lobby">Lobby</option>
-              <option value="reception" data-i18n="room.type_reception">Reception</option>
-              <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
-              <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
-              <option value="other" data-i18n="room.type_other">Other</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="device-room-id" data-i18n="device.room">Room</label>
-            <select id="device-room-id" name="room_id">
-              <option value="" data-i18n="device.select_room">Select Room</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="device-workstation-id" data-i18n="device.workstation">Workstation</label>
-            <select id="device-workstation-id" name="workstation_id">
-              <option value="" data-i18n="device.select_workstation">Select Workstation</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="device-cabinet-id" data-i18n="device.cabinet">Cabinet</label>
-            <select id="device-cabinet-id" name="cabinet_id">
-              <option value="" data-i18n="device.select_cabinet">Select Cabinet</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="device-position-id" data-i18n="device.position">Cabinet Position</label>
-            <select id="device-position-id" name="position_id">
-              <option value="" data-i18n="device.select_position">Select Position</option>
-            </select>
-          </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-org-id" data-i18n="organization.parent_org">Organization Node</label>
+        <select id="device-org-id" name="org_id">
+          <option value="" data-i18n="organization.select_org">Select Organization Node</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="device-room-type" data-i18n="device.room_type_filter">Room Type</label>
+        <select id="device-room-type" name="room_type">
+          <option value="" data-i18n="device.all_room_types">All Room Types</option>
+          <option value="office" data-i18n="room.type_office">Office</option>
+          <option value="lobby" data-i18n="room.type_lobby">Lobby</option>
+          <option value="reception" data-i18n="room.type_reception">Reception</option>
+          <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
+          <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
+          <option value="other" data-i18n="room.type_other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="device-room-id" data-i18n="device.room">Room</label>
+        <select id="device-room-id" name="room_id">
+          <option value="" data-i18n="device.select_room">Select Room</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="device-workstation-id" data-i18n="device.workstation">Workstation</label>
+        <select id="device-workstation-id" name="workstation_id">
+          <option value="" data-i18n="device.select_workstation">Select Workstation</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="device-cabinet-id" data-i18n="device.cabinet">Cabinet</label>
+        <select id="device-cabinet-id" name="cabinet_id">
+          <option value="" data-i18n="device.select_cabinet">Select Cabinet</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="device-position-id" data-i18n="device.position">Cabinet Position</label>
+        <select id="device-position-id" name="position_id">
+          <option value="" data-i18n="device.select_position">Select Position</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="device-description" data-i18n="common.description">Description</label>
+      <textarea id="device-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+    </div>
+    <hr class="section-divider">
+    <h4 class="section-subtitle" data-i18n="device.network_card_config">Network Card Management</h4>
+    <div id="device-network-cards-container"></div>
+    <hr class="section-divider">
+    <h4 class="section-subtitle" data-i18n="device.snmp_config">SNMP Configuration</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="device-snmp-version" data-i18n="device.snmp_version">SNMP Version</label>
+        <select id="device-snmp-version" name="snmp_version">
+          <option value="v2c" data-i18n="device.snmp_v2c">SNMPv1/v2c</option>
+          <option value="v3" data-i18n="device.snmp_v3">SNMPv3</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="device-snmp-port" data-i18n="device.snmp_port">SNMP Port</label>
+        <input type="number" id="device-snmp-port" name="snmp_port" value="161" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-row" id="snmp-v2c-config">
+      <div class="form-group flex-1">
+        <label for="device-snmp-community" data-i18n="device.snmp_community">Community String</label>
+        <input type="text" id="device-snmp-community" name="snmp_community" placeholder="public" autocomplete="off">
+      </div>
+    </div>
+    <div id="snmp-v3-config" class="hidden">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="device-snmp-username" data-i18n="device.snmp_username">Username</label>
+          <input type="text" id="device-snmp-username" name="snmp_username" autocomplete="off">
         </div>
         <div class="form-group">
-          <label for="device-description" data-i18n="common.description">Description</label>
-          <textarea id="device-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+          <label for="device-snmp-auth-protocol" data-i18n="device.snmp_auth_protocol">Auth Protocol</label>
+          <select id="device-snmp-auth-protocol" name="snmp_auth_protocol">
+            <option value="" data-i18n="device.snmp_no_auth">No Auth</option>
+            <option value="MD5">MD5</option>
+            <option value="SHA">SHA</option>
+            <option value="SHA-224">SHA-224</option>
+            <option value="SHA-256">SHA-256</option>
+            <option value="SHA-384">SHA-384</option>
+            <option value="SHA-512">SHA-512</option>
+          </select>
         </div>
-        <hr class="section-divider">
-        <h4 class="section-subtitle" data-i18n="device.network_card_config">Network Card Management</h4>
-        <div id="device-network-cards-container"></div>
-        <hr class="section-divider">
-        <h4 class="section-subtitle" data-i18n="device.snmp_config">SNMP Configuration</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-snmp-version" data-i18n="device.snmp_version">SNMP Version</label>
-            <select id="device-snmp-version" name="snmp_version">
-              <option value="v2c" data-i18n="device.snmp_v2c">SNMPv1/v2c</option>
-              <option value="v3" data-i18n="device.snmp_v3">SNMPv3</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="device-snmp-port" data-i18n="device.snmp_port">SNMP Port</label>
-            <input type="number" id="device-snmp-port" name="snmp_port" value="161" autocomplete="off">
-          </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="device-snmp-auth-password" data-i18n="device.snmp_auth_password">Auth Password</label>
+          <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="new-password">
         </div>
-        <div class="form-row" id="snmp-v2c-config">
-          <div class="form-group flex-1">
-            <label for="device-snmp-community" data-i18n="device.snmp_community">Community String</label>
-            <input type="text" id="device-snmp-community" name="snmp_community" placeholder="public" autocomplete="off">
-          </div>
+        <div class="form-group">
+          <label for="device-snmp-priv-protocol" data-i18n="device.snmp_priv_protocol">Privacy Protocol</label>
+          <select id="device-snmp-priv-protocol" name="snmp_priv_protocol">
+            <option value="" data-i18n="device.snmp_no_priv">No Privacy</option>
+            <option value="DES">DES</option>
+            <option value="AES">AES</option>
+            <option value="AES-128">AES-128</option>
+            <option value="AES-192">AES-192</option>
+            <option value="AES-256">AES-256</option>
+          </select>
         </div>
-        <div id="snmp-v3-config" class="hidden">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="device-snmp-username" data-i18n="device.snmp_username">Username</label>
-              <input type="text" id="device-snmp-username" name="snmp_username" autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="device-snmp-auth-protocol" data-i18n="device.snmp_auth_protocol">Auth Protocol</label>
-              <select id="device-snmp-auth-protocol" name="snmp_auth_protocol">
-                <option value="" data-i18n="device.snmp_no_auth">No Auth</option>
-                <option value="MD5">MD5</option>
-                <option value="SHA">SHA</option>
-                <option value="SHA-224">SHA-224</option>
-                <option value="SHA-256">SHA-256</option>
-                <option value="SHA-384">SHA-384</option>
-                <option value="SHA-512">SHA-512</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="device-snmp-auth-password" data-i18n="device.snmp_auth_password">Auth Password</label>
-              <input type="password" id="device-snmp-auth-password" name="snmp_auth_password" autocomplete="new-password">
-            </div>
-            <div class="form-group">
-              <label for="device-snmp-priv-protocol" data-i18n="device.snmp_priv_protocol">Privacy Protocol</label>
-              <select id="device-snmp-priv-protocol" name="snmp_priv_protocol">
-                <option value="" data-i18n="device.snmp_no_priv">No Privacy</option>
-                <option value="DES">DES</option>
-                <option value="AES">AES</option>
-                <option value="AES-128">AES-128</option>
-                <option value="AES-192">AES-192</option>
-                <option value="AES-256">AES-256</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="device-snmp-priv-password" data-i18n="device.snmp_priv_password">Privacy Password</label>
-              <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="new-password">
-            </div>
-          </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="device-snmp-priv-password" data-i18n="device.snmp_priv_password">Privacy Password</label>
+          <input type="password" id="device-snmp-priv-password" name="snmp_priv_password" autocomplete="new-password">
         </div>
-      </form>
+      </div>
     </div>
-    <footer class="modal-footer">
-      <button type="button" id="test-snmp-btn" class="btn btn-secondary" data-i18n="device.test_snmp">Test SNMP</button>
-      <button type="button" id="get-snmp-info-btn" class="btn btn-primary" data-i18n="device.get_snmp_info">Get Info from SNMP</button>
-      <button type="submit" class="btn btn-primary" form="device-form" data-i18n="common.save">Save</button>
-    </footer>
-  </div>
+  </form>
 </div>
+<footer class="modal-footer">
+  <button type="button" id="test-snmp-btn" class="btn btn-secondary" data-i18n="device.test_snmp">Test SNMP</button>
+  <button type="button" id="get-snmp-info-btn" class="btn btn-primary" data-i18n="device.get_snmp_info">Get Info from SNMP</button>
+  <button type="submit" class="btn btn-primary" form="device-form" data-i18n="common.save">Save</button>
+</footer>
+
 </template>

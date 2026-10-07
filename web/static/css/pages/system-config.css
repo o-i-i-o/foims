@@ -206,7 +206,8 @@ dl.config-field,
 
 /* ==================== 证书管理卡片 ==================== */
 
-.cert-manager-actions {
+/* 卡片头部操作按钮组（证书/SMTP 等卡片头部通用） */
+.card-header-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;

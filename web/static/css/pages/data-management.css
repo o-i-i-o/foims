@@ -114,3 +114,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 窄屏：导入导出操作区纵向堆叠（原 responsive.css 组件级规则迁回） */
+@media (width <= 768px) {
+  .import-actions,
+  .export-actions {
+    flex-direction: column;
+  }
+
+  .action-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

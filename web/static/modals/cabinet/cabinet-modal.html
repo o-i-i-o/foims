@@ -1,78 +1,70 @@
 <template id="cabinet-modal-template">
-<div id="cabinet-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="cabinet-modal-title">
-  <div class="modal-content">
-    <header class="modal-header">
-      <h3 class="modal-title" id="cabinet-modal-title" data-i18n="cabinet.add_cabinet">Add Cabinet</h3>
-      <button type="button" class="close" data-modal-id="cabinet-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <form id="cabinet-form">
-        <input type="hidden" id="cabinet-id">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cabinet-room"><span data-i18n="cabinet.room">Room</span><span class="required">*</span></label>
-            <select id="cabinet-room" name="room_id" required>
-              <option value="" data-i18n="cabinet.select_room">Select Room</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="cabinet-name"><span data-i18n="cabinet.name">Cabinet Name</span><span class="required">*</span></label>
-            <input type="text" id="cabinet-name" name="name" autocomplete="off" required>
-          </div>
-          <div class="form-group">
-            <label for="cabinet-capacity"><span data-i18n="cabinet.capacity">Capacity (U)</span><span class="required">*</span></label>
-            <input type="number" id="cabinet-capacity" name="capacity" min="1" max="45" required>
-          </div>
-          <div class="form-group">
-            <label for="cabinet-total-power" data-i18n="cabinet.total_power">Power Supply</label>
-            <div class="power-input-row">
-              <input type="number" id="cabinet-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
-              <select id="cabinet-power-unit-modal" class="form-control" aria-label="Unit">
-                <option value="W">W</option>
-                <option value="kW">kW</option>
-              </select>
-            </div>
-          </div>
+<div class="modal-body">
+  <form id="cabinet-form">
+    <input type="hidden" id="cabinet-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="cabinet-room"><span data-i18n="cabinet.room">Room</span><span class="required">*</span></label>
+        <select id="cabinet-room" name="room_id" required>
+          <option value="" data-i18n="cabinet.select_room">Select Room</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="cabinet-name"><span data-i18n="cabinet.name">Cabinet Name</span><span class="required">*</span></label>
+        <input type="text" id="cabinet-name" name="name" autocomplete="off" required>
+      </div>
+      <div class="form-group">
+        <label for="cabinet-capacity"><span data-i18n="cabinet.capacity">Capacity (U)</span><span class="required">*</span></label>
+        <input type="number" id="cabinet-capacity" name="capacity" min="1" max="45" required>
+      </div>
+      <div class="form-group">
+        <label for="cabinet-total-power" data-i18n="cabinet.total_power">Power Supply</label>
+        <div class="power-input-row">
+          <input type="number" id="cabinet-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
+          <select id="cabinet-power-unit-modal" class="form-control" aria-label="Unit">
+            <option value="W">W</option>
+            <option value="kW">kW</option>
+          </select>
         </div>
-        <!-- 机位动态管理区域（首行列标题，列宽与输入行对齐） -->
-        <div class="form-row">
-          <div class="form-group">
-            <div class="list-header">
-              <!-- 指向动态容器的分组标题：无控件可关联，改为语义中性的 span（.list-title） -->
-              <span class="list-title" id="cabinet-positions-label" data-i18n="cabinet.positions">Positions</span>
-              <button type="button" id="add-position-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Position" data-i18n-tooltip="cabinet.add_position" aria-label="Add Position" data-i18n-aria-label="cabinet.add_position"></button>
-            </div>
-            <div id="cabinet-positions-container" class="dyn-list">
-              <!-- 纯列标题：非表单控件标注，改为 span（CSS 选择器已同步） -->
-              <div class="cabinet-columns-header" aria-hidden="true">
-                <span data-i18n="cabinet_position.name">Name</span>
-                <span data-i18n="cabinet_position.start_u">Start U</span>
-                <span data-i18n="cabinet_position.end_u">End U</span>
-                <span data-i18n="cabinet_position.description">Description</span>
-                <span class="cabinet-item-actions"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- 配线架动态管理区域（参照房间信息点逻辑） -->
-        <div class="form-row">
-          <div class="form-group">
-            <div class="list-header">
-              <span class="list-title" id="cabinet-patch-panels-label" data-i18n="cabinet.patch_panels">Patch Panels</span>
-              <button type="button" id="add-patch-panel-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Patch Panel" data-i18n-tooltip="cabinet.add_patch_panel" aria-label="Add Patch Panel" data-i18n-aria-label="cabinet.add_patch_panel"></button>
-            </div>
-            <div id="cabinet-patch-panels-container" class="dyn-list"></div>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="cabinet-description" data-i18n="common.description">Description</label>
-          <textarea id="cabinet-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
-        </div>
-      </form>
+      </div>
     </div>
-    <footer class="modal-footer">
-      <button type="submit" class="btn btn-primary" form="cabinet-form" data-i18n="common.save">Save</button>
-    </footer>
-  </div>
+    <!-- 机位动态管理区域（首行列标题，列宽与输入行对齐） -->
+    <div class="form-row">
+      <div class="form-group">
+        <div class="list-header">
+          <!-- 指向动态容器的分组标题：无控件可关联，改为语义中性的 span（.list-title） -->
+          <span class="list-title" id="cabinet-positions-label" data-i18n="cabinet.positions">Positions</span>
+          <button type="button" id="add-position-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Position" data-i18n-tooltip="cabinet.add_position" aria-label="Add Position" data-i18n-aria-label="cabinet.add_position"></button>
+        </div>
+        <div id="cabinet-positions-container" class="dyn-list">
+          <!-- 纯列标题：非表单控件标注，改为 span（CSS 选择器已同步） -->
+          <div class="cabinet-columns-header" aria-hidden="true">
+            <span data-i18n="cabinet_position.name">Name</span>
+            <span data-i18n="cabinet_position.start_u">Start U</span>
+            <span data-i18n="cabinet_position.end_u">End U</span>
+            <span data-i18n="cabinet_position.description">Description</span>
+            <span class="cabinet-item-actions"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 配线架动态管理区域（参照房间信息点逻辑） -->
+    <div class="form-row">
+      <div class="form-group">
+        <div class="list-header">
+          <span class="list-title" id="cabinet-patch-panels-label" data-i18n="cabinet.patch_panels">Patch Panels</span>
+          <button type="button" id="add-patch-panel-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Patch Panel" data-i18n-tooltip="cabinet.add_patch_panel" aria-label="Add Patch Panel" data-i18n-aria-label="cabinet.add_patch_panel"></button>
+        </div>
+        <div id="cabinet-patch-panels-container" class="dyn-list"></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="cabinet-description" data-i18n="common.description">Description</label>
+      <textarea id="cabinet-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+    </div>
+  </form>
 </div>
+<footer class="modal-footer">
+  <button type="submit" class="btn btn-primary" form="cabinet-form" data-i18n="common.save">Save</button>
+</footer>
 </template>

@@ -1,84 +1,76 @@
 <template id="room-modal-template">
-<div id="room-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="room-modal-title">
-  <div class="modal-content">
-    <header class="modal-header">
-      <h3 class="modal-title" id="room-modal-title" data-i18n="room.add_room">Add Room</h3>
-      <button type="button" class="close" data-modal-id="room-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <form id="room-form">
-        <input type="hidden" id="room-id">
-        <div class="form-group">
-            <label for="room-org-id"><span data-i18n="organization.parent_org">Organization Node</span></label>
-            <select id="room-org-id" name="org_id">
-              <option value="" data-i18n="organization.select_org">Select Organization Node</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="room-type"><span data-i18n="room.type">Room Type</span><span class="required">*</span></label>
-            <select id="room-type" name="room_type" required>
-              <option value="office" data-i18n="room.type_office">Office</option>
-              <option value="lobby" data-i18n="room.type_lobby">Lobby</option>
-              <option value="reception" data-i18n="room.type_reception">Reception</option>
-              <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
-              <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
-              <option value="other" data-i18n="room.type_other">Other</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
-            <input type="text" id="room-name" name="name" autocomplete="off" required>
-        </div>
-        <div class="form-group">
-            <label for="room-total-power" data-i18n="room.total_power">Power Supply</label>
-            <div class="power-input-row">
-                <input type="number" id="room-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
-                <select id="room-power-unit-modal" class="form-control" aria-label="Unit">
-                    <option value="W">W</option>
-                    <option value="kW">kW</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-group network-config-wrapper">
-            <div class="list-header">
-              <!-- 指向动态容器的分组标题：无控件可关联，改为语义中性的 span（.list-title） -->
-              <span class="list-title" data-i18n="network.network_config">Network Config</span>
-              <button type="button" id="room-add-network-config-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add" data-i18n-tooltip="network.add_network_config" aria-label="Add" data-i18n-aria-label="network.add_network_config"></button>
-            </div>
-            <div id="network-configs-container" class="dyn-list"></div>
-        </div>
-        <!-- 工位/机柜动态管理区域："其他"类型房间两者皆可管理 -->
-        <div class="form-group" id="room-workstations-group">
-            <div class="list-header">
-              <span class="list-title" id="room-children-label" data-i18n="room.workstations">Workstations</span>
-              <button type="button" id="add-room-workstation-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Workstation" data-i18n-tooltip="room.add_workstation" aria-label="Add Workstation" data-i18n-aria-label="room.add_workstation"></button>
-            </div>
-            <div id="room-children-container" class="dyn-list"></div>
-        </div>
-        <div class="form-group hidden" id="room-cabinets-group">
-            <div class="list-header">
-              <span class="list-title" id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</span>
-              <button type="button" id="add-room-cabinet-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Cabinet" data-i18n-tooltip="cabinet.add_cabinet" aria-label="Add Cabinet" data-i18n-aria-label="cabinet.add_cabinet"></button>
-            </div>
-            <div id="room-cabinets-container" class="dyn-list"></div>
-        </div>
-        <!-- 信息点动态管理区域（所有房型通用） -->
-        <div class="form-group">
-            <div class="list-header">
-              <span class="list-title" id="room-net-outlets-label" data-i18n="room.net_outlets">Network Outlets</span>
-              <button type="button" id="add-room-net-outlet-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Network Outlet" data-i18n-tooltip="room.add_net_outlet" aria-label="Add Network Outlet" data-i18n-aria-label="room.add_net_outlet"></button>
-            </div>
-            <div id="room-net-outlets-container" class="dyn-list"></div>
-        </div>
-        <div class="form-group">
-          <label for="room-description" data-i18n="common.description">Description</label>
-          <textarea id="room-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
-        </div>
-      </form>
+<div class="modal-body">
+  <form id="room-form">
+    <input type="hidden" id="room-id">
+    <div class="form-group">
+        <label for="room-org-id"><span data-i18n="organization.parent_org">Organization Node</span></label>
+        <select id="room-org-id" name="org_id">
+          <option value="" data-i18n="organization.select_org">Select Organization Node</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="room-type"><span data-i18n="room.type">Room Type</span><span class="required">*</span></label>
+        <select id="room-type" name="room_type" required>
+          <option value="office" data-i18n="room.type_office">Office</option>
+          <option value="lobby" data-i18n="room.type_lobby">Lobby</option>
+          <option value="reception" data-i18n="room.type_reception">Reception</option>
+          <option value="data_center" data-i18n="room.type_datacenter">Data Center</option>
+          <option value="telecom_closet" data-i18n="room.type_telecom_closet">Telecom Closet</option>
+          <option value="other" data-i18n="room.type_other">Other</option>
+        </select>
     </div>
-    <footer class="modal-footer">
-      <button type="submit" class="btn btn-primary" form="room-form" data-i18n="common.save">Save</button>
-    </footer>
-  </div>
+    <div class="form-group">
+        <label for="room-name"><span data-i18n="room.name">Room Name</span><span class="required">*</span></label>
+        <input type="text" id="room-name" name="name" autocomplete="off" required>
+    </div>
+    <div class="form-group">
+        <label for="room-total-power" data-i18n="room.total_power">Power Supply</label>
+        <div class="power-input-row">
+            <input type="number" id="room-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
+            <select id="room-power-unit-modal" class="form-control" aria-label="Unit">
+                <option value="W">W</option>
+                <option value="kW">kW</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-group network-config-wrapper">
+        <div class="list-header">
+          <!-- 指向动态容器的分组标题：无控件可关联，改为语义中性的 span（.list-title） -->
+          <span class="list-title" data-i18n="network.network_config">Network Config</span>
+          <button type="button" id="room-add-network-config-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add" data-i18n-tooltip="network.add_network_config" aria-label="Add" data-i18n-aria-label="network.add_network_config"></button>
+        </div>
+        <div id="network-configs-container" class="dyn-list"></div>
+    </div>
+    <!-- 工位/机柜动态管理区域："其他"类型房间两者皆可管理 -->
+    <div class="form-group" id="room-workstations-group">
+        <div class="list-header">
+          <span class="list-title" id="room-children-label" data-i18n="room.workstations">Workstations</span>
+          <button type="button" id="add-room-workstation-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Workstation" data-i18n-tooltip="room.add_workstation" aria-label="Add Workstation" data-i18n-aria-label="room.add_workstation"></button>
+        </div>
+        <div id="room-children-container" class="dyn-list"></div>
+    </div>
+    <div class="form-group hidden" id="room-cabinets-group">
+        <div class="list-header">
+          <span class="list-title" id="room-cabinets-label" data-i18n="room.cabinets">Cabinets</span>
+          <button type="button" id="add-room-cabinet-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Cabinet" data-i18n-tooltip="cabinet.add_cabinet" aria-label="Add Cabinet" data-i18n-aria-label="cabinet.add_cabinet"></button>
+        </div>
+        <div id="room-cabinets-container" class="dyn-list"></div>
+    </div>
+    <!-- 信息点动态管理区域（所有房型通用） -->
+    <div class="form-group">
+        <div class="list-header">
+          <span class="list-title" id="room-net-outlets-label" data-i18n="room.net_outlets">Network Outlets</span>
+          <button type="button" id="add-room-net-outlet-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Network Outlet" data-i18n-tooltip="room.add_net_outlet" aria-label="Add Network Outlet" data-i18n-aria-label="room.add_net_outlet"></button>
+        </div>
+        <div id="room-net-outlets-container" class="dyn-list"></div>
+    </div>
+    <div class="form-group">
+      <label for="room-description" data-i18n="common.description">Description</label>
+      <textarea id="room-description" name="description" data-i18n-placeholder="common.description_placeholder" placeholder="Enter description"></textarea>
+    </div>
+  </form>
 </div>
+<footer class="modal-footer">
+  <button type="submit" class="btn btn-primary" form="room-form" data-i18n="common.save">Save</button>
+</footer>
 </template>

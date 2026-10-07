@@ -165,4 +165,24 @@
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+
+  /* 统计卡片压缩（原 responsive.css 组件级规则迁回） */
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-card .stat-icon {
+    font-size: 2rem;
+  }
+}
+
+@media (width <= 480px) {
+  /* 超窄屏：统计数字进一步收缩（原 responsive.css 组件级规则迁回） */
+  .stat-card h3 {
+    font-size: 0.8rem;
+  }
+
+  .stat-card .stat-value {
+    font-size: 1.5rem;
+  }
 }

@@ -20,62 +20,217 @@ const MODAL_Z_INDEX_STEP = 50;
 // 内的 data-tooltip（--z-tooltip 3000）都不被模态压住
 const MODAL_Z_INDEX_MAX = 2900;
 
-// 模态框清单：按功能模块分组存放于 modals/ 对应子目录
+// 模态框清单：按功能模块分组存放于 modals/ 对应子目录。
+// 片段分两类：
+// - 标准片段（带 title/titleHtml 字段）：文件只含 .modal-body（及可选 .modal-footer），
+//   外壳与 header（标题/关闭按钮）由 buildModalShell 统一生成，消除 38 份手写样板；
+//   title 为 i18n key，titleHtml 为复合标题（i18n span + 动态 span），"" 表示空标题
+//   （由 openModal(id, title) 填充）；
+// - 自包含片段（仅 path）：自带完整外壳（confirm 自定义 content 类与 close 语义、
+//   forgot-password 用登录页 .login-modal 家族、topology-detail 独立 header 结构），
+//   原样注入。
 const MODAL_REGISTRY = {
   // 公共
-  "confirm-modal": "/static/modals/common/confirm-modal.html",
-  "simple-list-modal": "/static/modals/common/simple-list-modal.html",
-  "import-result-modal": "/static/modals/common/import-result-modal.html",
+  "confirm-modal": { path: "/static/modals/common/confirm-modal.html" },
+  "simple-list-modal": {
+    path: "/static/modals/common/simple-list-modal.html",
+    contentClass: "modal-lg",
+    title: ""
+  },
+  "import-result-modal": {
+    path: "/static/modals/common/import-result-modal.html",
+    contentClass: "modal-lg",
+    title: "data-management.import_result"
+  },
   // 网段模块（网络区域 / 网段编辑 / 使用详情）
-  "network-region-modal": "/static/modals/network/network-region-modal.html",
-  "network-modal": "/static/modals/network/network-modal.html",
-  "subnet-usage-modal": "/static/modals/network/subnet-usage-modal.html",
+  "network-region-modal": {
+    path: "/static/modals/network/network-region-modal.html",
+    title: "network.add_region"
+  },
+  "network-modal": {
+    path: "/static/modals/network/network-modal.html",
+    title: "network.add_network"
+  },
+  "subnet-usage-modal": {
+    path: "/static/modals/network/subnet-usage-modal.html",
+    contentClass: "modal-lg",
+    title: "network.usage"
+  },
   // IP 详情（拉取 MAC）
-  "pull-mac-modal": "/static/modals/ip/pull-mac-modal.html",
+  "pull-mac-modal": {
+    path: "/static/modals/ip/pull-mac-modal.html",
+    title: "ip.pull_mac"
+  },
   // 组织模块
-  "organization-modal": "/static/modals/organization/organization-modal.html",
-  "org-template-modal": "/static/modals/organization/org-template-modal.html",
-  "org-template-editor-modal": "/static/modals/organization/org-template-editor-modal.html",
-  "employee-modal": "/static/modals/organization/employee-modal.html",
-  "employee-edit-modal": "/static/modals/organization/employee-edit-modal.html",
+  "organization-modal": {
+    path: "/static/modals/organization/organization-modal.html",
+    title: "organization.add"
+  },
+  "org-template-modal": {
+    path: "/static/modals/organization/org-template-modal.html",
+    title: "org_template.title"
+  },
+  "org-template-editor-modal": {
+    path: "/static/modals/organization/org-template-editor-modal.html",
+    title: "org_template.editor_title"
+  },
+  "employee-modal": {
+    path: "/static/modals/organization/employee-modal.html",
+    contentClass: "modal-lg",
+    titleHtml:
+      '<span data-i18n="employee.manager_title"></span><span id="employee-modal-org-name" class="employee-modal-org"></span>'
+  },
+  "employee-edit-modal": {
+    path: "/static/modals/organization/employee-edit-modal.html",
+    title: "employee.add_title"
+  },
   // 房间 / 工位 / 机柜
-  "room-modal": "/static/modals/room/room-modal.html",
-  "workstation-modal": "/static/modals/workstation/workstation-modal.html",
-  "cabinet-modal": "/static/modals/cabinet/cabinet-modal.html",
-  "cabinet-position-modal": "/static/modals/cabinet/cabinet-position-modal.html",
+  "room-modal": {
+    path: "/static/modals/room/room-modal.html",
+    title: "room.add_room"
+  },
+  "workstation-modal": {
+    path: "/static/modals/workstation/workstation-modal.html",
+    title: "workstation.add_workstation"
+  },
+  "cabinet-modal": {
+    path: "/static/modals/cabinet/cabinet-modal.html",
+    title: "cabinet.add_cabinet"
+  },
+  "cabinet-position-modal": {
+    path: "/static/modals/cabinet/cabinet-position-modal.html",
+    title: "cabinet_position.add_position"
+  },
   // 设备模块
-  "device-modal": "/static/modals/device/device-modal.html",
-  "device-template-modal": "/static/modals/device/device-template-modal.html",
-  "device-port-detail-modal": "/static/modals/device/device-port-detail-modal.html",
-  "unified-device-ports-modal": "/static/modals/device/unified-device-ports-modal.html",
-  "port-conflict-modal": "/static/modals/device/port-conflict-modal.html",
-  "arp-modal": "/static/modals/device/arp-modal.html",
-  "lldp-modal": "/static/modals/device/lldp-modal.html",
+  "device-modal": {
+    path: "/static/modals/device/device-modal.html",
+    contentClass: "modal-lg",
+    title: "device.add"
+  },
+  "device-template-modal": {
+    path: "/static/modals/device/device-template-modal.html",
+    title: "device_template.title"
+  },
+  "device-port-detail-modal": {
+    path: "/static/modals/device/device-port-detail-modal.html",
+    title: "device.port_detail"
+  },
+  "unified-device-ports-modal": {
+    path: "/static/modals/device/unified-device-ports-modal.html",
+    contentClass: "modal-lg-custom",
+    title: "device.unified_ports"
+  },
+  "port-conflict-modal": {
+    path: "/static/modals/device/port-conflict-modal.html",
+    title: "device.conflict_title"
+  },
+  "arp-modal": {
+    path: "/static/modals/device/arp-modal.html",
+    contentClass: "modal-xl",
+    titleHtml: '<span data-i18n="device.mac_table"></span> <span id="arp-device-name"></span>'
+  },
+  "lldp-modal": {
+    path: "/static/modals/device/lldp-modal.html",
+    contentClass: "modal-xl",
+    titleHtml: '<span data-i18n="device.lldp_neighbors"></span> <span id="lldp-device-name"></span>'
+  },
   // 线路
-  "cable-link-modal": "/static/modals/cable/cable-link-modal.html",
-  "cable-label-print-modal": "/static/modals/cable/cable-label-print-modal.html",
+  "cable-link-modal": {
+    path: "/static/modals/cable/cable-link-modal.html",
+    title: "cable_link.add"
+  },
+  "cable-label-print-modal": {
+    path: "/static/modals/cable/cable-label-print-modal.html",
+    title: "cable_link.print_labels"
+  },
   // 可视化
-  "topology-connection-modal": "/static/modals/visualization/topology-connection-modal.html",
-  "topology-connection-detail-modal":
-    "/static/modals/visualization/topology-connection-detail-modal.html",
-  "topology-container-modal": "/static/modals/visualization/topology-container-modal.html",
-  "topology-detail-modal": "/static/modals/visualization/topology-detail-modal.html",
+  "topology-connection-modal": {
+    path: "/static/modals/visualization/topology-connection-modal.html",
+    title: "viz.create_connection_title"
+  },
+  "topology-connection-detail-modal": {
+    path: "/static/modals/visualization/topology-connection-detail-modal.html",
+    title: "viz.connection_detail"
+  },
+  "topology-container-modal": {
+    path: "/static/modals/visualization/topology-container-modal.html",
+    title: "viz.container_coords"
+  },
+  "topology-detail-modal": { path: "/static/modals/visualization/topology-detail-modal.html" },
   // 日志
-  "log-details-modal": "/static/modals/log/log-details-modal.html",
-  "task-logs-modal": "/static/modals/log/task-logs-modal.html",
+  "log-details-modal": {
+    path: "/static/modals/log/log-details-modal.html",
+    contentClass: "modal-md",
+    title: "logs.detail_title"
+  },
+  "task-logs-modal": {
+    path: "/static/modals/log/task-logs-modal.html",
+    contentClass: "modal-lg",
+    title: "scheduled_tasks.logs_title"
+  },
   // 系统
-  "user-modal": "/static/modals/system/user-modal.html",
-  "scheduled-task-modal": "/static/modals/system/scheduled-task-modal.html",
-  "cron-examples-modal": "/static/modals/system/cron-examples-modal.html",
-  "cert-generate-modal": "/static/modals/system/cert-generate-modal.html",
-  "cert-import-modal": "/static/modals/system/cert-import-modal.html",
-  "ca-generate-modal": "/static/modals/system/ca-generate-modal.html",
-  "ca-import-modal": "/static/modals/system/ca-import-modal.html",
-  "change-password-modal": "/static/modals/system/change-password-modal.html",
-  "open-source-modal": "/static/modals/system/open-source-modal.html",
+  "user-modal": {
+    path: "/static/modals/system/user-modal.html",
+    title: "user.add_user"
+  },
+  "scheduled-task-modal": {
+    path: "/static/modals/system/scheduled-task-modal.html",
+    title: "scheduled_tasks.create_task"
+  },
+  "cron-examples-modal": {
+    path: "/static/modals/system/cron-examples-modal.html",
+    title: "scheduled_tasks.cron_examples.title"
+  },
+  "cert-generate-modal": {
+    path: "/static/modals/system/cert-generate-modal.html",
+    title: "cert.generate_title"
+  },
+  "cert-import-modal": {
+    path: "/static/modals/system/cert-import-modal.html",
+    title: "cert.import_title"
+  },
+  "ca-generate-modal": {
+    path: "/static/modals/system/ca-generate-modal.html",
+    title: "cert.ca_generate_title"
+  },
+  "ca-import-modal": {
+    path: "/static/modals/system/ca-import-modal.html",
+    title: "cert.ca_import_title"
+  },
+  "change-password-modal": {
+    path: "/static/modals/system/change-password-modal.html",
+    title: "auth.change_password"
+  },
+  "open-source-modal": {
+    path: "/static/modals/system/open-source-modal.html",
+    contentClass: "modal-lg",
+    title: "system.open_source_components"
+  },
   // 登录页
-  "forgot-password-modal": "/static/modals/auth/forgot-password-modal.html"
+  "forgot-password-modal": { path: "/static/modals/auth/forgot-password-modal.html" }
 };
+
+/**
+ * 标准片段外壳：header（标题 + 关闭按钮）全站唯一实现，
+ * 片段只提供 .modal-body 与可选 .modal-footer。
+ * 标题元素保留 {id}-title 供 aria-labelledby 与 JS 按需写入；
+ * data-i18n 标题由 loadModal 注入后的 updatePageTranslations 即时填充。
+ */
+function buildModalShell(id, entry, innerHtml) {
+  const titleI18nAttr = entry.titleHtml || !entry.title ? "" : ` data-i18n="${entry.title}"`;
+  const titleContent = entry.titleHtml || "";
+  const contentClass = entry.contentClass ? ` ${entry.contentClass}` : "";
+
+  return `<div id="${id}" class="modal" role="dialog" aria-modal="true" aria-labelledby="${id}-title">
+  <div class="modal-content${contentClass}">
+    <header class="modal-header">
+      <h3 class="modal-title" id="${id}-title"${titleI18nAttr}>${titleContent}</h3>
+      <button type="button" class="close" data-modal-id="${id}" aria-label="Close">&times;</button>
+    </header>
+${innerHtml}
+  </div>
+</div>`;
+}
 
 export async function fetchModalHtml(modalId) {
   const cacheKey = `${modalId}_${MODULE_VERSION}`;
@@ -88,7 +243,7 @@ export async function fetchModalHtml(modalId) {
     return loadingModals.get(cacheKey);
   }
 
-  const url = MODAL_REGISTRY[modalId];
+  const url = MODAL_REGISTRY[modalId]?.path;
   if (!url) {
     return null;
   }
@@ -108,8 +263,16 @@ export async function fetchModalHtml(modalId) {
       const match = html.match(/<template[^>]*>([\s\S]*?)<\/template>/);
       const innerHtml = match ? match[1].trim() : html.trim();
 
-      htmlCache.set(cacheKey, innerHtml);
-      return innerHtml;
+      // 标准片段（注册表带 title/titleHtml）由外壳函数补全 header；
+      // 自包含片段原样注入
+      const entry = MODAL_REGISTRY[modalId];
+      const result =
+        entry && ("title" in entry || "titleHtml" in entry)
+          ? buildModalShell(modalId, entry, innerHtml)
+          : innerHtml;
+
+      htmlCache.set(cacheKey, result);
+      return result;
     } catch (error) {
       console.error(`加载模态框模板失败 [${modalId}]:`, error);
       return null;

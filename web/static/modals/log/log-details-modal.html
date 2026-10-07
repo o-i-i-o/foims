@@ -1,48 +1,41 @@
 <template id="log-details-modal-template">
-<div id="log-details-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="log-details-modal-title">
-  <div class="modal-content modal-md">
-    <header class="modal-header">
-      <h3 class="modal-title" data-i18n="logs.detail_title" id="log-details-modal-title">Log Details</h3>
-      <button type="button" class="close" data-modal-id="log-details-modal" aria-label="Close">&times;</button>
-    </header>
-    <div class="modal-body">
-      <!-- 键值对 dl 化：dt 为字段名、dd 为字段值（id 保留，JS 按 id 填充） -->
-      <div class="log-detail-grid">
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.operation_time">Operation Time</dt>
-          <dd id="log-detail-time"></dd>
-        </dl>
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.operator">Operator</dt>
-          <dd id="log-detail-user"></dd>
-        </dl>
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.operation_type">Operation Type</dt>
-          <dd id="log-detail-type"></dd>
-        </dl>
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.result">Result</dt>
-          <dd id="log-detail-result"></dd>
-        </dl>
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.resource_type">Resource Type</dt>
-          <dd id="log-detail-resource-type"></dd>
-        </dl>
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.resource_id">Resource ID</dt>
-          <dd id="log-detail-resource-id"></dd>
-        </dl>
-        <dl class="log-detail-item">
-          <dt data-i18n="logs.ip_address">IP Address</dt>
-          <dd id="log-detail-ip"></dd>
-        </dl>
-      </div>
-      <div class="log-detail-section">
-        <!-- 纯标题（无关联表单控件）：改用标题元素，避免悬空 label -->
-        <h4 class="section-subtitle" data-i18n="logs.details">Details</h4>
-        <div id="log-detail-details"></div>
-      </div>
-    </div>
+<div class="modal-body">
+  <!-- 键值对 dl 化：dt 为字段名、dd 为字段值（id 保留，JS 按 id 填充） -->
+  <div class="log-detail-grid">
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.operation_time">Operation Time</dt>
+      <dd id="log-detail-time"></dd>
+    </dl>
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.operator">Operator</dt>
+      <dd id="log-detail-user"></dd>
+    </dl>
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.operation_type">Operation Type</dt>
+      <dd id="log-detail-type"></dd>
+    </dl>
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.result">Result</dt>
+      <dd id="log-detail-result"></dd>
+    </dl>
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.resource_type">Resource Type</dt>
+      <dd id="log-detail-resource-type"></dd>
+    </dl>
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.resource_id">Resource ID</dt>
+      <dd id="log-detail-resource-id"></dd>
+    </dl>
+    <dl class="log-detail-item">
+      <dt data-i18n="logs.ip_address">IP Address</dt>
+      <dd id="log-detail-ip"></dd>
+    </dl>
+  </div>
+  <div class="log-detail-section">
+    <!-- 纯标题（无关联表单控件）：改用标题元素，避免悬空 label -->
+    <h4 class="section-subtitle" data-i18n="logs.details">Details</h4>
+    <div id="log-detail-details"></div>
   </div>
 </div>
+
 </template>

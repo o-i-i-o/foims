@@ -87,17 +87,11 @@ export function toggleSnmpConfig() {
   const v3Section = elementCache.get("snmp-v3-config");
 
   if (v2cSection && v3Section) {
-    if (version === "v3") {
-      v2cSection.classList.add("hidden");
-      v2cSection.style.display = "none";
-      v3Section.classList.remove("hidden");
-      v3Section.style.display = "block";
-    } else {
-      v2cSection.classList.remove("hidden");
-      v2cSection.style.display = "block";
-      v3Section.classList.add("hidden");
-      v3Section.style.display = "none";
-    }
+    // 显隐统一走 .hidden 工具类：style.display 内联值会永久压过 CSS 的
+    // .form-row grid 布局，双机制并行导致残留覆盖
+    const isV3 = version === "v3";
+    v2cSection.classList.toggle("hidden", isV3);
+    v3Section.classList.toggle("hidden", !isV3);
   }
 }
 

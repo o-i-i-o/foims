@@ -180,13 +180,13 @@ function renderMacTable(entries, type) {
   let groupIndex = 0;
   for (const [network, items] of Object.entries(groups)) {
     const groupId = `${type}-group-${groupIndex}`;
-    // 初始折叠（内联 display:none），展开/折叠由点击处理切换同一内联样式
+    // 初始折叠：.collapsed 类收起明细，箭头默认横置（CSS 基础态），展开时 JS 切 .expanded
     html += `<div class="mac-network-group">
       <div class="network-group-header" data-target="${groupId}">
         <span>${escapeHtml(network)} (${items.length} ${t("common.records")})</span>
-        <span class="collapse-icon mac-collapse-icon" style="transform: rotate(-90deg);">▼</span>
+        <span class="collapse-icon mac-collapse-icon">▼</span>
       </div>
-      <div id="${groupId}" class="network-group-content" style="display: none;">
+      <div id="${groupId}" class="network-group-content collapsed">
         <table class="mac-group-table">
           <tr><th>${t("device.ip_address")}</th><th>${t("device.mac_address")}</th></tr>`;
     items.forEach((entry) => {
@@ -208,11 +208,9 @@ function bindCollapseEvents(container) {
       if (!content || !icon) {
         return;
       }
-      // 与初始态同一机制（内联 display）：初始 display:none 为折叠，
-      // toggle hidden 类不会改变内联样式，明细永远不可见
-      const collapsed = content.style.display === "none";
-      content.style.display = collapsed ? "block" : "none";
-      icon.style.transform = collapsed ? "rotate(0deg)" : "rotate(-90deg)";
+      // 与初始态同一机制（.collapsed 类收起，箭头 .expanded 回正）
+      const collapsed = content.classList.toggle("collapsed");
+      icon.classList.toggle("expanded", !collapsed);
     });
   });
 }
