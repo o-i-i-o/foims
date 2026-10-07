@@ -190,6 +190,24 @@
   min-width: 80px;
 }
 
+/* 整行表单组（描述等长文本字段）：无标题行，控件占满两列全宽——
+   右缘贴齐第二列尾；左缘以 --space-sm 小幅缩进，与第一列 80px 定宽
+   居中标题的文字起始位置在视觉上取齐。控件须取消 flex:1，
+   否则 flex-basis:0 会压掉 field-sizing:content 的自适应高度 */
+.modal .form-group.form-group-block {
+  flex-direction: column;
+  align-items: stretch;
+  padding-left: var(--space-sm);
+}
+
+.modal .form-group.form-group-block > input:not([type="checkbox"]),
+.modal .form-group.form-group-block > select,
+.modal .form-group.form-group-block > textarea {
+  flex: none;
+  width: 100%;
+  align-self: stretch;
+}
+
 /* 层叠模态框的层级不再由 CSS 兄弟选择器决定（DOM 相邻性 ≠ 打开顺序），
    改由 js/utils/modalLoader.js 在打开时按顺序写内联 z-index（基准 1050、每层 +50） */
 
