@@ -7,7 +7,8 @@ sudo rm -f /usr/bin/foims
 echo 创建工作目录
 sudo mkdir -p /opt/foims/    
 
-sudo ls /opt/
+echo 列出 /opt目录下的所有文件
+sudo ls -l /opt/
 
 echo 编译后端
 cargo build --release
