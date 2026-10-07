@@ -171,6 +171,7 @@ If you run into problems, please reach out through the following channels:
 - QQ group: 1107983881
 - Email boss@oi-io.cc
 - If this program helps you, please consider donating to support development
+![Donation QR Code](/mm_reward_qrcode_1790828899753.png)
 - Paid deployment services are available — email me for details
 ---
 
