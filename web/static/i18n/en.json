@@ -432,6 +432,7 @@
   },
   "network": {
     "name": "Subnet Name",
+    "subnet": "Subnet",
     "region": "Network Region",
     "ipv4_cidr": "IPv4 CIDR",
     "ipv6_cidr": "IPv6 CIDR",

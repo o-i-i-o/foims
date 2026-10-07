@@ -121,12 +121,13 @@
 }
 
 /* ==========================================
- * 机位列表（机柜模态框）列标题行：
- * 与输入行相同的 flex 列结构（前四列 flex:1 + 末列按钮组）
+ * 动态列表列标题行（机柜机位列表 + 房间子网配置/工位列表共用）：
+ * 与输入行相同的 flex 列结构（内容列 flex:1 + 末列操作位）
  * ========================================== */
 
 /* 列标题行：底部细线与输入行分隔，保证标题与下方输入框逐列对齐 */
-#cabinet-positions-container .cabinet-columns-header {
+#cabinet-positions-container .cabinet-columns-header,
+.dyn-columns-header {
   display: flex;
   gap: var(--space-md);
   align-items: center;
@@ -137,7 +138,8 @@
 
 /* 列标题已由 label 改为 span：选择器同步扩展，样式不变 */
 #cabinet-positions-container .cabinet-columns-header > label,
-#cabinet-positions-container .cabinet-columns-header > span {
+#cabinet-positions-container .cabinet-columns-header > span,
+.dyn-columns-header > span {
   flex: 1;
   min-width: 0;
   width: auto;
@@ -149,7 +151,8 @@
   color: var(--color-text-secondary);
 }
 
-#cabinet-positions-container .cabinet-columns-header > .cabinet-item-actions {
+#cabinet-positions-container .cabinet-columns-header > .cabinet-item-actions,
+.dyn-columns-header > .dyn-columns-actions {
   flex: none;
   width: auto;
 }

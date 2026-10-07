@@ -432,6 +432,7 @@
   },
   "network": {
     "name": "子网名称",
+    "subnet": "子网",
     "region": "网络区域",
     "ipv4_cidr": "IPv4 CIDR",
     "ipv6_cidr": "IPv6 CIDR",

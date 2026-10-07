@@ -104,7 +104,10 @@ class NetworkConfigManager {
     }
     this.bindExternalAddButton();
 
-    this.container.innerHTML = "";
+    // 仅移除旧条目，保留模板内的静态列头（与机位列表的列头保留机制一致）
+    this.container
+      .querySelectorAll(".network-config-item")
+      .forEach((el) => el.remove());
     await this.addItem();
     return true;
   }
@@ -267,7 +270,10 @@ class NetworkConfigManager {
       return;
     }
 
-    this.container.innerHTML = "";
+    // 仅移除旧条目，保留模板内的静态列头（与机位列表的列头保留机制一致）
+    this.container
+      .querySelectorAll(".network-config-item")
+      .forEach((el) => el.remove());
 
     const networkMap = new Map(allNetworks.map((n) => [n.id, n]));
     const selectedIds = networks.map((n) => n.id);
@@ -569,7 +575,10 @@ class RoomChildrenManager {
   clearLists() {
     for (const list of [this.workstationList, this.cabinetList]) {
       if (list.ensureContainer()) {
-        list.container.innerHTML = "";
+        // 仅移除条目与空状态占位，保留模板内的静态列头（与机位列表机制一致）
+        list.container
+          .querySelectorAll(".room-child-item, .room-child-empty")
+          .forEach((el) => el.remove());
         list.updateEmptyState();
       }
     }

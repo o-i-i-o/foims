@@ -13,11 +13,13 @@
         <label for="cabinet-name"><span data-i18n="cabinet.name">Cabinet Name</span><span class="required">*</span></label>
         <input type="text" id="cabinet-name" name="name" autocomplete="off" required>
       </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label for="cabinet-capacity"><span data-i18n="cabinet.capacity">Capacity (U)</span><span class="required">*</span></label>
         <input type="number" id="cabinet-capacity" name="capacity" min="1" max="45" required>
       </div>
-      <div class="form-group">
+      <div class="form-group power-inline">
         <label for="cabinet-total-power" data-i18n="cabinet.total_power">Power Supply</label>
         <div class="power-input-row">
           <input type="number" id="cabinet-total-power" name="total_power_watts" min="0" step="any" autocomplete="off">
@@ -55,7 +57,13 @@
           <span class="list-title" id="cabinet-patch-panels-label" data-i18n="cabinet.patch_panels">Patch Panels</span>
           <button type="button" id="add-patch-panel-row-btn" class="icon-btn btn-success list-add-btn" data-icon="plus" data-tooltip="Add Patch Panel" data-i18n-tooltip="cabinet.add_patch_panel" aria-label="Add Patch Panel" data-i18n-aria-label="cabinet.add_patch_panel"></button>
         </div>
-        <div id="cabinet-patch-panels-container" class="dyn-list"></div>
+        <div id="cabinet-patch-panels-container" class="dyn-list">
+          <!-- 纯列标题：非表单控件标注，样式与机位列头同款（.dyn-columns-header） -->
+          <div class="dyn-columns-header" aria-hidden="true">
+            <span data-i18n="cabinet.patch_panel_name">Patch Panel Name</span>
+            <span class="dyn-columns-actions"></span>
+          </div>
+        </div>
       </div>
     </div>
     <div class="form-group form-group-block">
