@@ -46,7 +46,10 @@
                data-i18n-placeholder="device.hostname_placeholder" placeholder="Fetched via SNMP, read-only"
                data-i18n-title="device.hostname_placeholder" title="Fetched via SNMP, read-only">
       </div>
-      <div class="form-group hidden" id="device-template-name-group">
+    </div>
+    <!-- 模板名称独占整行：显隐由 JS 切换本行 hidden（id 由 form-group 上移至行，切换逻辑不变） -->
+    <div class="form-row hidden" id="device-template-name-group">
+      <div class="form-group">
         <label for="device-template-name" data-i18n="device.template_name">Template Name</label>
         <input type="text" id="device-template-name" name="template_name" autocomplete="off" placeholder="" data-i18n-placeholder="device.template_name_placeholder">
       </div>
@@ -70,7 +73,7 @@
         <label for="device-location" data-i18n="device.location">Location</label>
         <input type="text" id="device-location" name="location" autocomplete="off">
       </div>
-      <div class="form-group">
+      <div class="form-group power-inline">
         <label for="device-power-watts" data-i18n="device.power_input">Power</label>
         <div class="power-input-row">
           <input type="number" id="device-power-watts" name="power_watts" min="0" step="any" autocomplete="off">
@@ -100,6 +103,8 @@
           <option value="other" data-i18n="room.type_other">Other</option>
         </select>
       </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label for="device-room-id" data-i18n="device.room">Room</label>
         <select id="device-room-id" name="room_id">
@@ -112,6 +117,8 @@
           <option value="" data-i18n="device.select_workstation">Select Workstation</option>
         </select>
       </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label for="device-cabinet-id" data-i18n="device.cabinet">Cabinet</label>
         <select id="device-cabinet-id" name="cabinet_id">

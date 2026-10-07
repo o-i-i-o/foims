@@ -479,13 +479,6 @@
 #ip-table th:nth-child(10) { width: 10%; }
 #ip-table th:nth-child(11) { width: 10%; }
 
-/* IP 表短列（状态/最后在线/创建时间）在上述配比下容不下默认 28px 排序留白，
-   表头会竖排换行；收窄为左 16 右 20（右侧仍避让排序箭头） */
-#ip-table th.sortable {
-  padding-left: 16px;
-  padding-right: 20px;
-}
-
 /* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/搜索框 */
 #operation-logs-table th:nth-child(1) { width: 4%; }
 #operation-logs-table th:nth-child(2) { width: 16%; }
