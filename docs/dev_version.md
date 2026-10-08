@@ -66,3 +66,7 @@ v0.0.11
 v0.0.12
 2026100722080501
 1.ip.select_device/ip.select_network 中英文案去除 -- 装饰符（同时用作行标签与下拉占位，与其它模态框占位文案风格统一），前端资源版本同步 bump，lib 版本 0.21.34→0.21.35
+
+v0.0.13
+2026100800503001
+1.系统区块表单家族化统一：配置卡片字段行 config-row/config-field 全量换为 form-row/form-group 家族类（系统信息/关于/会话设置/LDAP/SSO/SMTP/MAC 通知/SNMP Trap/Agent 信息卡），label 与控件同行定宽居中与模态框内一致，只读 dl 字段值框对齐控件壳 token，收件人清单与 v3 用户表换 form-group-block 整行块；同行表单变体规则自 modals.css 上移 forms.css 双作用域共享，删除 system-config.css 冗余控件样式，移动端堆叠规则纳入卡片作用域；网络区域/用户管理模态框已在此前提交家族化无需改动；前端资源版本同步 bump，lib 版本 0.21.35→0.21.36

@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791382085">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791382085">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791391909">
 </head>
 <body class="main-body">
   <div id="app">
@@ -680,7 +680,7 @@
                 </div>
               </header>
               <!-- 只读字段 dl 化：dl/dt/dd 语义化键值对（dd 默认边距已在 CSS 重置） -->
-              <div class="config-row">
+              <div class="form-row">
                 <dl class="config-field">
                   <dt data-i18n="system.system_name">System Name</dt>
                   <dd class="field-value" id="system-name">FOIMS</dd>
@@ -722,7 +722,7 @@
                   <span data-i18n="system.about">About</span>
                 </div>
               </header>
-              <div class="config-row">
+              <div class="form-row">
                 <dl class="config-field">
                   <dt data-i18n="system.version">System Version</dt>
                   <dd class="field-value" id="system-version">-</dd>
@@ -777,13 +777,13 @@
                   </div>
                   <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
                 </header>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="page-timeout" data-i18n="config.page_timeout">Page Timeout (minutes)</label>
                     <input type="number" id="page-timeout" name="page_timeout" min="1" max="1440" placeholder="30" aria-label="Page timeout">
                     <span class="hint-text" data-i18n="config.page_timeout_desc">Auto logout time after inactivity</span>
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="public-url" data-i18n="config.public_url">Public URL</label>
                     <input type="url" id="public-url" name="public_url" placeholder="https://example.com" aria-label="Public URL">
                     <span class="hint-text" data-i18n="config.public_url_desc">Server public URL for reset links and notifications</span>
@@ -914,37 +914,37 @@
                     <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                   </div>
                 </header>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="ldap-url" data-i18n="ldap.server_url">LDAP Server Address</label>
                     <input type="text" id="ldap-url" name="url" placeholder="ldap://ds.example.com:389" data-i18n-placeholder="ldap.server_url_placeholder" aria-label="LDAP server address" data-i18n-aria-label="ldap.server_url">
                     <span class="hint-text" data-i18n="ldap.server_url_desc">ldap:// plaintext or ldaps:// encrypted</span>
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="ldap-base-dn" data-i18n="ldap.base_dn">Base DN</label>
                     <input type="text" id="ldap-base-dn" name="base_dn" placeholder="dc=example,dc=com" data-i18n-placeholder="ldap.base_dn_placeholder" aria-label="Base DN" data-i18n-aria-label="ldap.base_dn">
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="ldap-bind-dn" data-i18n="ldap.bind_dn">Service Account DN</label>
                     <input type="text" id="ldap-bind-dn" name="bind_dn" placeholder="cn=admin,dc=example,dc=com" data-i18n-placeholder="ldap.bind_dn_placeholder" aria-label="Service account DN" data-i18n-aria-label="ldap.bind_dn">
                     <span class="hint-text" data-i18n="ldap.bind_dn_desc">Optional; empty for anonymous bind</span>
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="ldap-bind-password" data-i18n="ldap.bind_password">Service Account Password</label>
                     <input type="password" id="ldap-bind-password" name="bind_password" placeholder="LDAP service account password" data-i18n-placeholder="ldap.bind_password_placeholder" autocomplete="new-password" aria-label="Service account password" data-i18n-aria-label="ldap.bind_password">
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="ldap-user-filter" data-i18n="ldap.user_filter">User Search Filter</label>
                     <input type="text" id="ldap-user-filter" name="user_filter" placeholder="(&amp;(objectClass=person)(uid=%s))" data-i18n-placeholder="ldap.user_filter_placeholder" aria-label="User search filter" data-i18n-aria-label="ldap.user_filter">
                     <span class="hint-text" data-i18n="ldap.user_filter_desc">%s or {username} as the username placeholder</span>
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="ldap-default-role" data-i18n="ldap.default_role">Default Role for New Users</label>
-                    <select id="ldap-default-role" name="default_role" class="form-control" aria-label="Default role">
+                    <select id="ldap-default-role" name="default_role" aria-label="Default role">
                       <option value="user" data-i18n="user.role_user">User</option>
                       <option value="admin" data-i18n="user.role_admin">Administrator</option>
                     </select>
@@ -969,32 +969,32 @@
                     <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                   </div>
                 </header>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="sso-issuer-url" data-i18n="sso.issuer_url">Issuer URL</label>
                     <input type="url" id="sso-issuer-url" name="issuer_url" placeholder="https://sso.example.com" data-i18n-placeholder="sso.issuer_url_placeholder" aria-label="Issuer URL" data-i18n-aria-label="sso.issuer_url">
                     <span class="hint-text" data-i18n="sso.issuer_url_desc">Discovery document fetched from /.well-known/openid-configuration</span>
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="sso-client-id" data-i18n="sso.client_id">Client ID</label>
                     <input type="text" id="sso-client-id" name="client_id" placeholder="foims" data-i18n-placeholder="sso.client_id_placeholder" aria-label="Client ID" data-i18n-aria-label="sso.client_id">
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="sso-client-secret" data-i18n="sso.client_secret">Client Secret</label>
                     <input type="password" id="sso-client-secret" name="client_secret" placeholder="OIDC client secret" data-i18n-placeholder="sso.client_secret_placeholder" autocomplete="new-password" aria-label="Client secret" data-i18n-aria-label="sso.client_secret">
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="sso-redirect-uri" data-i18n="sso.redirect_uri">Redirect URI</label>
                     <input type="url" id="sso-redirect-uri" name="redirect_uri" placeholder="https://foims.example.com/api/auth/sso/callback" data-i18n-placeholder="sso.redirect_uri_placeholder" aria-label="Redirect URI" data-i18n-aria-label="sso.redirect_uri">
                     <span class="hint-text" data-i18n="sso.redirect_uri_desc">Optional; derived from the request host when empty. Register the same URI in the IdP</span>
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="sso-default-role" data-i18n="sso.default_role">Default Role for New Users</label>
-                    <select id="sso-default-role" name="default_role" class="form-control" aria-label="Default role">
+                    <select id="sso-default-role" name="default_role" aria-label="Default role">
                       <option value="user" data-i18n="user.role_user">User</option>
                       <option value="admin" data-i18n="user.role_admin">Administrator</option>
                     </select>
@@ -1019,34 +1019,34 @@
                     <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
                   </div>
                 </header>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="smtp-host" data-i18n="smtp.host">SMTP Server</label>
                     <input type="text" id="smtp-host" name="host" data-i18n-placeholder="smtp.host_placeholder" placeholder="SMTP server address" aria-label="SMTP server">
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="smtp-port" data-i18n="smtp.port">SMTP Port</label>
                     <input type="number" id="smtp-port" name="port" placeholder="587" aria-label="SMTP port">
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="smtp-username" data-i18n="smtp.username">Username</label>
                     <input type="text" id="smtp-username" name="username" placeholder="SMTP username" data-i18n-placeholder="smtp.username_placeholder" aria-label="SMTP username" autocomplete="off">
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="smtp-password" data-i18n="smtp.password">Password</label>
                     <input type="password" id="smtp-password" name="password" placeholder="SMTP password" data-i18n-placeholder="smtp.password_placeholder" aria-label="SMTP password" autocomplete="new-password">
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="smtp-from" data-i18n="smtp.from">Sender Email</label>
                     <input type="email" id="smtp-from" name="from" placeholder="Sender email" data-i18n-placeholder="smtp.from_placeholder" aria-label="Sender email" autocomplete="off">
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="smtp-secure-type" data-i18n="smtp.secure_type">SSL Connection Type</label>
-                    <select id="smtp-secure-type" name="secure_type" class="form-control" aria-label="SSL connection type">
+                    <select id="smtp-secure-type" name="secure_type" aria-label="SSL connection type">
                       <option value="none" data-i18n="smtp.ssl_none">No SSL</option>
                       <option value="ssl" data-i18n="smtp.ssl_ssl">SSL (Port 465)</option>
                       <option value="starttls" data-i18n="smtp.ssl_starttls">STARTTLS (Port 587)</option>
@@ -1065,8 +1065,8 @@
                   </div>
                   <button id="save-notification-settings-btn" type="button" class="btn btn-primary" data-i18n="common.save">Save Settings</button>
                 </header>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group form-group-block">
                     <span class="group-label" data-i18n="notification.email_recipients">Email Recipients for MAC Change Notifications</span>
                     <div id="notification-users-list" class="users-checkbox-list"></div>
                     <p class="config-hint" data-i18n="notification.recipients_hint">Select users who will receive email notifications when MAC address changes are detected.</p>
@@ -1090,27 +1090,27 @@
                     <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                   </div>
                 </header>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="snmp-trap-bind-addr" data-i18n="snmp_trap.bind_addr">Listen Address</label>
                     <input type="text" id="snmp-trap-bind-addr" placeholder="0.0.0.0:162" data-i18n-placeholder="snmp_trap.bind_addr_placeholder" aria-label="Trap listen address" data-i18n-aria-label="snmp_trap.bind_addr">
                     <span class="hint-text" data-i18n="snmp_trap.bind_addr_desc">UDP host:port; port 162 requires root, unprivileged ports like 1162 also work</span>
                   </div>
-                  <div class="config-field">
+                  <div class="form-group">
                     <label for="snmp-trap-cooldown" data-i18n="snmp_trap.cooldown_secs">Cooldown Window (seconds)</label>
                     <input type="number" id="snmp-trap-cooldown" min="0" max="86400" placeholder="30" aria-label="Cooldown window in seconds" data-i18n-aria-label="snmp_trap.cooldown_secs">
                     <span class="hint-text" data-i18n="snmp_trap.cooldown_desc">Subsequent notifications from the same source within the window are logged only</span>
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group">
                     <label for="snmp-trap-communities" data-i18n="snmp_trap.communities">v1/v2c Community Whitelist</label>
                     <input type="text" id="snmp-trap-communities" placeholder="public" data-i18n-placeholder="snmp_trap.communities_placeholder" autocomplete="off" aria-label="Community whitelist" data-i18n-aria-label="snmp_trap.communities">
                     <span class="hint-text" data-i18n="snmp_trap.communities_desc">Comma separated; empty accepts any community (intranet only)</span>
                   </div>
                 </div>
-                <div class="config-row">
-                  <div class="config-field">
+                <div class="form-row">
+                  <div class="form-group form-group-block">
                     <span class="group-label" data-i18n="snmp_trap.users">v3 USM Users</span>
                     <div class="table-container snmp-trap-users-container">
                       <table id="snmp-trap-users-table" class="data-table" aria-label="SNMP trap v3 USM users">
@@ -1501,7 +1501,7 @@
                 </div>
               </header>
               <!-- 版本与门控状态（/api/agents/dist） -->
-              <div class="config-row">
+              <div class="form-row">
                 <dl class="config-field">
                   <dt data-i18n="system.agent_dist_version">Agent Version</dt>
                   <dd class="field-value" id="agent-dist-version">-</dd>
@@ -1551,6 +1551,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791382085"></script>
+  <script type="module" src="/static/js/app.js?v=1791391909"></script>
 </body>
 </html>

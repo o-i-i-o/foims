@@ -16,7 +16,7 @@
 }
 
 /* 分组标题（.group-label）：原无控件可关联的 label 改为 span 后沿用其视觉，
-   规则与 .form-group label:not(.checkbox-label) / .modal .form-group label 保持一致 */
+   规则与 .form-group label:not(.checkbox-label) / 同行表单变体的 label 保持一致 */
 .group-label {
   display: block;
   min-width: 100px;
@@ -26,14 +26,6 @@
   font-size: 0.9rem;
   padding-top: 0.85rem;
   flex-shrink: 0;
-}
-
-.modal .form-group .group-label {
-  width: 100px;
-  min-width: 100px;
-  text-align: center;
-  color: var(--color-text-secondary);
-  padding-top: 0;
 }
 
 .form-group label .required,
@@ -142,6 +134,74 @@ select.nc-input:not([multiple]) {
   margin-bottom: 0;
 }
 
+/* ===== 同行表单变体：label 定宽居中、控件与 label 同行撑满剩余空间 =====
+   模态框（.modal .form-group）与系统配置卡片（.config-card .form-group）共用；
+   基样式见上，响应式纵向堆叠见 responsive.css */
+.modal .form-group,
+.config-card .form-group {
+  align-items: center;
+}
+
+.modal .form-group label:not(.checkbox-label),
+.config-card .form-group label:not(.checkbox-label) {
+  min-width: 100px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding-top: 0;
+}
+
+.modal .form-group .group-label,
+.config-card .form-group .group-label {
+  width: 100px;
+  min-width: 100px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding-top: 0;
+}
+
+.modal .form-group input:not([type="checkbox"]),
+.modal .form-group select,
+.modal .form-group textarea,
+.config-card .form-group input:not([type="checkbox"]),
+.config-card .form-group select,
+.config-card .form-group textarea {
+  flex: 1;
+}
+
+.modal .form-group textarea,
+.config-card .form-group textarea {
+  align-self: flex-start;
+}
+
+/* 行内组空间有限，label 退化为自适应宽度 */
+.modal .form-row .form-group label,
+.config-card .form-row .form-group label {
+  width: auto;
+  min-width: 80px;
+}
+
+/* 整行表单组（描述等长文本字段/块级分组）：无标题行，控件占满全宽——
+   右缘贴齐第二列尾；左缘以 --space-sm 小幅缩进，与第一列 80px 定宽
+   居中标题的文字起始位置在视觉上取齐。控件须取消 flex:1，
+   否则 flex-basis:0 会压掉 field-sizing:content 的自适应高度 */
+.modal .form-group.form-group-block,
+.config-card .form-group.form-group-block {
+  flex-direction: column;
+  align-items: stretch;
+  padding-left: var(--space-sm);
+}
+
+.modal .form-group.form-group-block > input:not([type="checkbox"]),
+.modal .form-group.form-group-block > select,
+.modal .form-group.form-group-block > textarea,
+.config-card .form-group.form-group-block > input:not([type="checkbox"]),
+.config-card .form-group.form-group-block > select,
+.config-card .form-group.form-group-block > textarea {
+  flex: none;
+  width: 100%;
+  align-self: stretch;
+}
+
 .hint-text {
   color: var(--color-text-muted);
   font-size: 0.8rem;
@@ -231,7 +291,7 @@ select.nc-input:not([multiple]) {
   gap: var(--space-xs);
 }
 
-/* 标题与输入行同宽、左缘对齐：选择器需覆盖 modals.css 的
+/* 标题与输入行同宽、左缘对齐：选择器需覆盖上方「同行表单变体」的
    .modal .form-row .form-group label（定宽居中）规则；
    .group-label 为原 label 改成的 span 分组标题，同样适用 */
 .modal .form-row .form-group.cidr-column > label,

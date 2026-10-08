@@ -77,59 +77,38 @@
   font-size: 0.75rem;
 }
 
-.config-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--space-lg);
-  margin-bottom: var(--space-lg);
-}
+/* 字段行已换用页面表单家族 form-row/form-group（label 定宽居中、控件同行撑满，
+   同行表单变体规则见 forms.css），此处仅保留只读 dl 字段与整行分组块的差异 */
 
-.config-row:last-child {
-  margin-bottom: 0;
-}
-
-/* 只读字段 dl 化后：重置 dl/dd 的浏览器默认边距，保持原布局 */
+/* 只读字段 dl：dt 与家族行 label 同款定宽居中，dd 值框 flex:1 撑满剩余空间 */
 dl.config-field,
 .config-field dd {
   margin: 0;
 }
 
-.config-field label,
+dl.config-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .config-field dt {
-  font-size: 0.85rem;
+  min-width: 80px;
+  flex-shrink: 0;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-secondary);
+  text-align: center;
 }
 
-.config-field input,
-.config-field select {
-  padding: 0.65rem 1rem;
+/* 只读字段值框：控件壳与表单控件同款（token 见 variables.css） */
+.config-field .field-value {
+  flex: 1;
+  min-width: 0;
+  padding: var(--control-padding-y) var(--control-padding-x);
   border: 1px solid var(--control-border);
   border-radius: var(--control-radius);
-  font-size: 0.9rem;
-  transition: all var(--transition-fast);
-  background: var(--color-bg-white);
-}
-
-.config-field input:focus,
-.config-field select:focus {
-  outline: none;
-  border-color: var(--control-border-focus);
-  box-shadow: var(--control-shadow);
-}
-
-.config-field .hint-text {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-top: 2px;
-}
-
-/* 只读字段值（系统信息卡片） */
-.config-field .field-value {
-  padding: 0.65rem 1rem;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--control-radius);
-  background: var(--color-bg-white);
+  background: var(--control-bg);
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text);
@@ -198,10 +177,18 @@ dl.config-field,
   justify-content: center;
 }
 
-@media (width <= 768px) {
-  .config-row {
-    grid-template-columns: 1fr;
-  }
+/* 整行分组块（收件人清单/SNMP v3 用户表）：标题左对齐取齐正文、
+   按钮不随 align-items:stretch 拉满整行；块规则本体见 forms.css 同行表单变体 */
+.config-card .form-group.form-group-block > .group-label {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding-top: 0;
+  color: var(--color-text-secondary);
+}
+
+.config-card .form-group.form-group-block > .btn {
+  align-self: flex-start;
 }
 
 /* ==================== 证书管理卡片 ==================== */
@@ -451,7 +438,7 @@ dl.config-field,
 /* ==================== 定时任务 Cron 五字段输入 ==================== */
 
 /* 标准 Linux cron 五段（分 时 日 月 星期）：横排等分输入框，下挂字段名。
-   选择器带 .cron-field-group 前缀抬升特异性，覆盖 modals.css 的
+   选择器带 .cron-field-group 前缀抬升特异性，覆盖 forms.css 同行表单变体的
    .modal .form-group label/input 横排规则（label 定宽居中、input flex:1） */
 .modal .form-group.cron-field-group {
   flex-direction: column;
