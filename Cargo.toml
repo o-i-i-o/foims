@@ -118,14 +118,14 @@ rpm = { version = "0.30.1", default-features = false, features = ["payload", "gz
 # semver 版本门控（agent 产物 manifest 与主程序版本比较）
 semver = "1.0.28"
 
-# HTTP/3 / QUIC（foims-agent mTLS 上报 demo 与后续正式实施共享；h3 处于 0.0.x，锁定小版本）
+# HTTP/3 / QUIC（foims-agent mTLS 上报）
+# rustls-pemfile已经停止维护很久了，请勿使用，检查是否可用rustls-pki-types替代（rustls依赖）
 bytes = "1.12.1"
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
 http = "1.5.0"
 quinn = { version = "0.11.12", default-features = false, features = ["log", "rustls-ring", "runtime-tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std"] }
-rustls-pemfile = "2.2.0"
 
 # UUID
 uuid = { version = "1.27.0", features = ["v4", "serde"] }

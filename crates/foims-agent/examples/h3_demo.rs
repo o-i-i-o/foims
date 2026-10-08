@@ -13,9 +13,6 @@
 //! - 客户端：`cargo run -p foims-agent --example h3_demo -- client`
 //! - 反例：  `cargo run -p foims-agent --example h3_demo -- client --no-cert`
 //!   （预期：服务端拒绝无证书连接，客户端握手失败退出）
-//!
-//! 说明：h3 crate 为 0.0.x（设计文档 §7 已列入风险并锁定版本），本 demo
-//! 同时踩点其 API，为正式实施时的「薄封装隔离」提供依据。
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};

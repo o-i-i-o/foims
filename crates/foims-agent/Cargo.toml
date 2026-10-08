@@ -23,7 +23,6 @@ h3-quinn = { workspace = true }
 http = { workspace = true }
 quinn = { workspace = true }
 rustls = { workspace = true }
-rustls-pemfile = { workspace = true }
 tokio = { workspace = true }
 
 [lints]
