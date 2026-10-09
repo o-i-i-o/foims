@@ -27,7 +27,8 @@
 
 ## 版本与测试
 
-- 每次代码更新后 按照`docs/dev_version.md`规则 bump 版本号；
+- 每次代码更新后按照`docs/dev_version.md`规则更新版本记录；Cargo.toml
+  仅当该文件 y/x 段变化时才联动 bump（z 段普通修改不动 Cargo.toml）；
   前端资源同步 bump 三个入口页（main/index/init_index）的 `?v=` 与
   `resourceLoader.js` 的 `MODULE_VERSION`（时间戳格式，一键脚本
   `bash test-scripts/bump_static_version.sh`；一致性由 `cargo test` 强制）。
