@@ -701,7 +701,12 @@ export async function loadSnmpTrapConfig() {
       mac_scan_timeout_secs: snmp.mac_scan_timeout_secs ?? 10
     };
     elementCache.setChecked("snmp-trap-enabled", Boolean(trap.enabled));
-    elementCache.setValue("snmp-trap-bind-addr", trap.bind_addr || "0.0.0.0:162");
+    // 磁盘上 bind_addr 为 host:port，加载时拆分到地址/端口两个输入框
+    const bindMatch = (trap.bind_addr || "0.0.0.0:162").match(
+      /^(\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/
+    );
+    elementCache.setValue("snmp-trap-bind-addr", bindMatch ? bindMatch[1] : "0.0.0.0");
+    elementCache.setValue("snmp-trap-bind-port", bindMatch ? bindMatch[2] : "162");
     elementCache.setValue("snmp-trap-cooldown", String(trap.cooldown_secs ?? 30));
     elementCache.setValue("snmp-trap-communities", (trap.communities || []).join(", "));
     renderSnmpTrapUsers(trap.users || []);
@@ -894,11 +899,12 @@ async function saveSnmpTrapConfig() {
     return;
   }
 
-  const bindAddr = elementCache.getValue("snmp-trap-bind-addr").trim();
-  // host:port，host 为 IPv4/主机名或方括号 IPv6；端口 1-65535
-  const bindMatch = bindAddr.match(/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/);
-  const bindPort = bindMatch ? parseInt(bindMatch[1], 10) : 0;
-  if (!bindMatch || bindPort < 1 || bindPort > 65535) {
+  // 地址为 IPv4/主机名或方括号 IPv6；端口 1-65535
+  const bindHost = elementCache.getValue("snmp-trap-bind-addr").trim();
+  const bindPort = parseInt(elementCache.getValue("snmp-trap-bind-port"), 10);
+  const bindHostValid = /^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(bindHost);
+  const bindPortValid = Number.isInteger(bindPort) && bindPort >= 1 && bindPort <= 65535;
+  if (!bindHostValid || !bindPortValid) {
     showToast(t("snmp_trap.invalid_bind_addr"), "warning");
     return;
   }
@@ -925,7 +931,7 @@ async function saveSnmpTrapConfig() {
       ...currentSnmpBaseConfig,
       trap: {
         enabled: elementCache.getChecked("snmp-trap-enabled"),
-        bind_addr: bindAddr,
+        bind_addr: `${bindHost}:${bindPort}`,
         communities,
         users,
         cooldown_secs: cooldown

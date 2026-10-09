@@ -78,3 +78,7 @@ v0.0.13
 v0.0.14
 2026100920021801
 1.完善版本号关联规则：明确本文件 z 段变化（普通修改）一律不触碰 Cargo.toml，仅 y 段变化触发 c+1、x 段变化触发 b+1（c 归零），目的为减缓智能体高频次修改导致的版本号膨胀；本次为纯文档规则澄清，Cargo.toml 保持 0.21.36 不变
+
+v0.0.15
+2026100920135101
+1.系统-通知配置-SNMP Trap 接收卡片监听地址拆分为监听地址+端口两个输入框（加载时从 host:port 拆分回填、保存时校验后组合写盘），新增 snmp_trap.bind_port/bind_port_placeholder/bind_port_desc 三组 i18n 键并同步中英文，invalid_bind_addr 文案更新，后端 bind_addr 存储格式与 API 契约不变，前端资源版本同步 bump，Cargo.toml 不变

@@ -11,33 +11,33 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791391909">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791391909">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791548041">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791548041">
 </head>
 <body class="main-body">
   <div id="app">
@@ -1093,8 +1093,13 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label for="snmp-trap-bind-addr" data-i18n="snmp_trap.bind_addr">Listen Address</label>
-                    <input type="text" id="snmp-trap-bind-addr" placeholder="0.0.0.0:162" data-i18n-placeholder="snmp_trap.bind_addr_placeholder" aria-label="Trap listen address" data-i18n-aria-label="snmp_trap.bind_addr">
-                    <span class="hint-text" data-i18n="snmp_trap.bind_addr_desc">UDP host:port; port 162 requires root, unprivileged ports like 1162 also work</span>
+                    <input type="text" id="snmp-trap-bind-addr" placeholder="0.0.0.0" data-i18n-placeholder="snmp_trap.bind_addr_placeholder" autocomplete="off" aria-label="Trap listen address" data-i18n-aria-label="snmp_trap.bind_addr">
+                    <span class="hint-text" data-i18n="snmp_trap.bind_addr_desc">IPv4, hostname or bracketed IPv6</span>
+                  </div>
+                  <div class="form-group">
+                    <label for="snmp-trap-bind-port" data-i18n="snmp_trap.bind_port">Port</label>
+                    <input type="number" id="snmp-trap-bind-port" min="1" max="65535" placeholder="162" aria-label="Trap listen port" data-i18n-aria-label="snmp_trap.bind_port">
+                    <span class="hint-text" data-i18n="snmp_trap.bind_port_desc">Port 162 requires root, unprivileged ports like 1162 also work</span>
                   </div>
                   <div class="form-group">
                     <label for="snmp-trap-cooldown" data-i18n="snmp_trap.cooldown_secs">Cooldown Window (seconds)</label>
@@ -1551,6 +1556,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791391909"></script>
+  <script type="module" src="/static/js/app.js?v=1791548041"></script>
 </body>
 </html>
