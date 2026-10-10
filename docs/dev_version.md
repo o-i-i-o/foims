@@ -86,3 +86,14 @@ v0.0.15
 v0.0.16
 2026101010502501
 1.修复设备可视化-设备模态框（拓扑详情浮窗）页签切换异常：端口/MAC表/LLDP 三个页签由「显示/隐藏叠加」改为互斥页签切换（点击仅显示对应面板、重复点击当前页签无操作），页签文案去除"显示"前缀与页签语义对齐；面板数据加载补充打开代次+设备一致性守卫，防止快速切换设备时旧设备数据写入新浮窗，前端资源版本同步 bump，Cargo.toml 不变
+
+v0.1.0
+2026101014000001
+1.新增主机监控模块（FOIMS Agent 采集闭环）：foims-common 上报协议类型与 [agent] 配置段扩展；foims-agent-service 新增 QUIC mTLS 上报接收（UDP 9100）、入库（agents 快照 + agent_metrics_history 曲线）、离线判定与历史清理调度、agent 证书自动签发、查询/管理 API；foims-agent 新增 h3 上报循环（--once 联调、断网缓存补报、指数退避）；前端新增「主机监控」页（列表/筛选/30s 自动刷新/详情弹窗 2×2 迷你曲线）；README/man/config.toml.example 文档同步；build-agent.sh 注入交叉 C 编译器（ring 交叉编译需 cc-rs 小写 CC_<target>）；下载地址缺端口自动补 9100；lib 版本 0.21.36→0.22.0（模块级功能 x+1），前端资源版本同步 bump
+
+v0.1.1
+2026101020225101
+1.修复 agent 证书物料复用缺少 CA 链校验：cert.rs 新签时向物料目录写入 agent_ca_fingerprint 指纹文件（站点 CA 证书 DER 的 SHA-256 十六进制小写），复用条件收紧为四物料可读+指纹一致+证书含 PEM 起始头，任一不满足自动重签并更新指纹文件（拒绝复用时记 warn 日志，新增 i18n 键 agent.certs_reuse_rejected 中英文），防止站点 CA 轮换后旧 agent 证书被复用导致 mTLS 握手失败；新增 ensure_agent_certs_in 可测核心与 5 个单测（指纹匹配复用/不匹配重签/指纹缺失重签/指纹格式/比对规则）
+2.Agent 监控链路代码审计修复（服务端侧）：上报入库输入校验加固（文本字段 trim+长度上限 machine_id/hostname/os/kernel/arch/agent_version，温度读数 [-100,250]℃、其他传感器 ±9999.9 防 NUMERIC(5,1) 溢出 500）；新增上报频控（last_seen 距今小于生效间隔一半返回 429，i18n 键 server.agent.report_too_frequent）；指标历史 INSERT 改 ON CONFLICT (agent_id, collected_at) DO NOTHING 幂等去重；历史曲线抽样下推 SQL 窗口函数（超 200 点不再全量拉取内存抽样，保留内存二次抽样防御）；server_addr 校验拒绝尾冒号（修复产出 host::9100 非法形式）；install.sh 内置兜底副本 systemd 分支 enable+restart 对齐部署脚本；agent_metrics_history 索引改 UNIQUE（真实库已执行 DROP+CREATE UNIQUE，foims-init 建表与 check.rs 清单同步且校验 indisunique）
+3.Agent 监控链路代码审计修复（agent 端与前端）：collect_report 拆同步纯函数经 tokio::task::spawn_blocking 执行（CPU 200ms 差分窗口与 /proc 同步读取不再阻塞 tokio worker，--once 与循环路径共用自动覆盖）；前端详情历史曲线加载失败 showToast 提示并清空渲染；迷你曲线单点序列补 circle 圆点渲染（原 length>1 才画 polyline 导致单点空白）；deploy/agent/install.sh systemd 分支 enable+restart、sysvinit 分支 restart 语义（升级安装后旧进程不再残留）
+以上均为 z 段普通修复，前端资源版本同步 bump（新增 i18n 键触发），Cargo.toml 不变

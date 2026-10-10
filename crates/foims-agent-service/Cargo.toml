@@ -3,21 +3,32 @@ name = "foims-agent-service"
 version = "0.1.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "FOIMS Agent 服务端：分发打包（manifest/zip/deb/rpm 动态组包）与下载 API（后续阶段扩展 QUIC 监听/认证/入库）"
+description = "FOIMS Agent 服务端：分发打包（manifest/zip/deb/rpm 动态组包）、下载 API 与 QUIC 指标接收（mTLS 鉴权/入库/历史）"
 license = "GPL-3.0-or-later"
 
 [dependencies]
+async-trait = { workspace = true }
 axum = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 flate2 = { workspace = true }
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+http = { workspace = true }
+if-addrs = { workspace = true }
+pem = "4"
+quinn = { workspace = true }
 rand = { workspace = true }
+rcgen = { version = "0.14", features = ["x509-parser"] }
 rpm = { workspace = true }
+rustls = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true }
 tar = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
@@ -25,6 +36,7 @@ zip = { workspace = true }
 
 foims-auth = { path = "../foims-auth" }
 foims-common = { path = "../foims-common" }
+foims-scheduler = { path = "../foims-scheduler" }
 
 [dev-dependencies]
 # 无

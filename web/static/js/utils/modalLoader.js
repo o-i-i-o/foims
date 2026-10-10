@@ -157,6 +157,13 @@ const MODAL_REGISTRY = {
     title: "viz.container_coords"
   },
   "topology-detail-modal": { path: "/static/modals/visualization/topology-detail-modal.html" },
+  // 主机监控（标题栏主机名由 JS 写入 #agent-detail-title-host）
+  "agent-detail-modal": {
+    path: "/static/modals/agents/agent-detail-modal.html",
+    contentClass: "modal-lg",
+    titleHtml:
+      '<span data-i18n="agents.detail_title"></span><span id="agent-detail-title-host" class="agent-title-host"></span>'
+  },
   // 日志
   "log-details-modal": {
     path: "/static/modals/log/log-details-modal.html",

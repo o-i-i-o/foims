@@ -1,7 +1,7 @@
 
 [package]
 name = "foims"
-version = "0.21.36"
+version = "0.22.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -70,6 +70,9 @@ csv = "1.4.0"
 dashmap = "6.2.1"
 flate2 = "1.1.10"
 hex = "0.4.3"
+
+# 本机网卡地址枚举（agent-service 证书 SAN，纯安全封装 getifaddrs）
+if-addrs = "0.15"
 
 # 网络 / 哈希 / 并发表 / 配置加载（主程序与 foims-common 共享）
 ipnetwork = "0.21.1"

@@ -27,6 +27,7 @@ use foims::system::task_executors::{
 use foims::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
 };
+use foims_agent_service::tasks::{AgentHistoryCleanupTaskExecutor, AgentOfflineTaskExecutor};
 use foims_common::config::Config;
 use foims_common::db::DbPool;
 use foims_init::InitContext;
@@ -434,6 +435,8 @@ async fn main() -> std::io::Result<()> {
         registry.register(Box::new(MacSyncTaskExecutor));
         registry.register(Box::new(IpStatusSyncTaskExecutor));
         registry.register(Box::new(PasswordExpirySyncTaskExecutor));
+        registry.register(Box::new(AgentOfflineTaskExecutor));
+        registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
         registry
     });
 
@@ -498,6 +501,38 @@ async fn main() -> std::io::Result<()> {
                 {
                     foims_common::log_error!(
                         "system.register_password_expiry_sync_job_failed",
+                        error = e
+                    );
+                }
+
+                // Agent 离线判定（每分钟）：last_seen 超过上报间隔 × 倍数置 offline
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_agent_offline",
+                        "0 * * * * *",
+                        "agent_offline",
+                        serde_json::json!({
+                            "interval_secs": config.agent.report_interval_secs,
+                            "factor": config.agent.offline_factor
+                        }),
+                    )
+                    .await
+                {
+                    foims_common::log_error!("system.register_agent_offline_job_failed", error = e);
+                }
+
+                // Agent 历史指标清理（每日 03:40，删除超保留期的 agent_metrics_history 行）
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_agent_history_cleanup",
+                        "0 40 3 * * *",
+                        "agent_history_cleanup",
+                        serde_json::json!({ "retention_days": config.agent.history_retention_days }),
+                    )
+                    .await
+                {
+                    foims_common::log_error!(
+                        "system.register_agent_history_cleanup_job_failed",
                         error = e
                     );
                 }
@@ -585,6 +620,16 @@ async fn main() -> std::io::Result<()> {
     app_state
         .jwt_utils
         .start_cache_cleanup_task(shutdown.subscribe());
+
+    // Agent 监控上报服务（QUIC mTLS，UDP 9100）：数据库可用且配置启用时后台启动；
+    // 证书签发或端口绑定失败仅在任务内记录日志，不阻塞主服务进程
+    if let Some(db_pool) = pool.as_ref() {
+        foims_agent_service::report_server::spawn_report_server_task(
+            db_pool.get_conn(),
+            app_state.config_snapshot().agent.clone(),
+            env!("CARGO_PKG_VERSION"),
+        );
+    }
 
     let rate_limit_state = RateLimitState::new(rate_limiter.clone(), rate_limit_enabled);
 

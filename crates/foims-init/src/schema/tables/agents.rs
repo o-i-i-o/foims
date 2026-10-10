@@ -52,9 +52,10 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 详情页曲线查询按 (agent_id, collected_at) 范围扫描
+    // (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING 幂等去重，
+    // 防止 agent 重试/重放同一采集时刻重复写重；兼顾曲线查询范围扫描
     sqlx::query(
-        r"CREATE INDEX IF NOT EXISTS idx_agent_metrics_history_agent_time
+        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_history_agent_time
             ON agent_metrics_history (agent_id, collected_at)",
     )
     .execute(pool)

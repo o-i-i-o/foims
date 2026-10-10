@@ -337,33 +337,35 @@ machine_id 冲突时视为同机重复安装，返回 409 由运营处理）。
 
 ## 8. 实施计划（分阶段，每阶段可独立验证）
 
-- [ ] **阶段 1 协议与存储**
+- [x] **阶段 1 协议与存储**（2026-10-10）
   foims-common 上报/响应类型；config.toml `[agent]` 段
   （enabled / bind_addr / cert / key / max_report_bytes / 保留天数）；
   手动执行建表 SQL；foims-init 建表代码与 check.rs 校验清单同步。
   验证：`cargo test -p foims-init` 通过，check.rs 校验全绿。
-- [ ] **阶段 2 服务端接收**
+- [x] **阶段 2 服务端接收**（2026-10-10；阈值告警一期未做，离线/清理调度已实现）
   foims-agent-service crate：quinn/h3 监听、认证、入库、阈值告警、离线/清理调度；
   agent 证书签发入口（cert.rs）；Web API 与权限。
   验证：curl/测试客户端模拟上报入库；`cargo clippy --release -- -D warnings`。
-- [ ] **阶段 3 Agent**
+- [x] **阶段 3 Agent**（2026-10-10；默认运行模式为循环上报，`--once` 供联调）
   foims-agent crate：各采集器（/proc 文本 fixture 单测）+ h3 客户端上报；
   `scripts/build-agent.sh` musl 构建；本地回环联调（agent → FOIMS 全链路）。
   验证：本机运行 agent，网页能看到本机指标。
-- [ ] **阶段 4 分发**（CI 集成已随 §6 优化先行落地，2026-10-05）
+- [x] **阶段 4 分发**（CI 集成已随 §6 优化先行落地，2026-10-05）
   build-agent.sh 版本注入 + manifest.json；build-deb.sh 集成多平台产物 +
   install.sh 装包（fail-fast）；packaging.rs（zip/deb/rpm 动态组包）+
   版本门控下载 API（/api/agents/dist、/api/agents/download，pending 记录 +
   token）+ 系统设置「Agent 采集」页签下载卡。
   验证：网页下载 zip → 另一台机器/容器安装 → 上报成功（上报依赖阶段 2/3）。
-- [ ] **阶段 5 前端**
+- [x] **阶段 5 前端**（2026-10-10；列表 + 详情曲线已做，故障设备页签与仪表盘小部件待后续）
   主机监控页（列表/故障/详情）+ nav + i18n + 仪表盘小部件。
   验证：浏览器冒烟（列表刷新、详情曲线、告警通知出现）。
-- [ ] **阶段 6 收尾**
-  版本 bump（Cargo.toml `0.x.yy` + 三入口 `?v=` + resourceLoader.js MODULE_VERSION）；
-  `cargo fmt && cargo clippy --release -- -D warnings`；
-  `./test/pak.sh` 冒烟（admin/admin123）；README / README_EN / config.toml.example /
-  man FILES（如新增文件）更新。
+- [x] **阶段 6 收尾**（2026-10-10）
+  版本 bump（Cargo.toml `0.21.37` + 三入口 `?v=` 时间戳 + resourceLoader.js
+  MODULE_VERSION）；`cargo fmt && cargo clippy --release -- -D warnings`；
+  `./test/pak.sh` 冒烟（admin/admin123）；README / README_EN 架构段注明
+  UDP 9100/162 直监听、man NETWORK 段注明防火墙放行、config.toml.example
+  `[agent]` 段全量注释；build-agent.sh 注入交叉 C 编译器（ring 交叉编译需要，
+  cc-rs 认小写 `CC_<target>` 环境变量）。
 
 ## 9. 风险与备注
 

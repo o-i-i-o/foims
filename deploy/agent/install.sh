@@ -15,19 +15,22 @@ fi
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# zip 内文件互相配套（agent.toml 含一次性 token），拆散后安装会失败
-for f in foims-agent agent.toml ca.pem; do
+# zip 内文件互相配套（agent.toml 含一次性 token，client.key 为 mTLS 客户端私钥），
+# 拆散后安装会失败
+for f in foims-agent agent.toml ca.pem client.pem client.key; do
     if [ ! -f "$SRC_DIR/$f" ]; then
         echo "错误：缺少 $f（请勿删改 zip 内文件后安装）" >&2
         exit 1
     fi
 done
 
-# 二进制与配置落位：二进制 0755；agent.toml 含 token 限 0600
+# 二进制与配置落位：二进制 0755；agent.toml 含 token 与 client.key 私钥均限 0600
 install -m 755 "$SRC_DIR/foims-agent" /usr/local/bin/foims-agent
 install -d -m 755 /etc/foims-agent
 install -m 600 "$SRC_DIR/agent.toml" /etc/foims-agent/agent.toml
 install -m 644 "$SRC_DIR/ca.pem" /etc/foims-agent/ca.pem
+install -m 644 "$SRC_DIR/client.pem" /etc/foims-agent/client.pem
+install -m 600 "$SRC_DIR/client.key" /etc/foims-agent/client.key
 
 # 启动前自检：架构不匹配（exec format error）或二进制损坏在此暴露，
 # 避免注册服务后进入无意义的重启循环
@@ -52,7 +55,8 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT_EOF
     systemctl daemon-reload
-    systemctl enable --now foims-agent.service
+    systemctl enable foims-agent.service
+    systemctl restart foims-agent.service
     echo "FOIMS Agent 已安装并启动（systemd）：systemctl status foims-agent"
 else
     # sysvinit 兜底：无 systemd 的环境（老发行版/容器）注册 init.d 脚本
@@ -97,6 +101,6 @@ INIT_EOF
     elif command -v chkconfig >/dev/null 2>&1; then
         chkconfig --add foims-agent
     fi
-    /etc/init.d/foims-agent start
+    /etc/init.d/foims-agent restart
     echo "FOIMS Agent 已安装并启动（sysvinit）"
 fi

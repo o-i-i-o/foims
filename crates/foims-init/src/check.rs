@@ -580,11 +580,16 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
         }
     }
 
-    // 必需索引缺失（如按旧版 DDL 建的库）时同样视为结构不完整，
-    // 触发 init 路径的 create_tables 幂等补建
+    // 必需索引缺失或非唯一（如按旧版 DDL 建的库）时同样视为结构不完整，
+    // 触发 init 路径的 create_tables 幂等补建；清单仅收唯一索引，
+    // 故连 pg_index.indisunique 一并校验
     for (index, table) in get_required_indexes() {
         let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
-            "SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = '{table}' AND indexname = '{index}')"
+            "SELECT EXISTS(\
+                SELECT 1 FROM pg_indexes i \
+                JOIN pg_index x ON x.indexrelid = to_regclass(format('public.%I', i.indexname)) \
+                WHERE i.schemaname = 'public' AND i.tablename = '{table}' \
+                  AND i.indexname = '{index}' AND x.indisunique)"
         )))
         .fetch_one(pool)
         .await
@@ -846,7 +851,8 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ("uq_devices_room_name", "devices"),
         // 同机重复安装判重：machine_id 仅对已回填行唯一（agents.rs 部分唯一索引）
         ("idx_agents_machine_id", "agents"),
-        // 指标历史按 (agent_id, collected_at) 范围扫描（agents.rs 建表时创建）
+        // 指标历史 (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING
+        // 幂等去重，防重复上报写重（agents.rs 建表时创建）
         (
             "idx_agent_metrics_history_agent_time",
             "agent_metrics_history",

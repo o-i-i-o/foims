@@ -843,12 +843,26 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/fail2ban/app/unban",
             post(foims_auth::app_fail2ban::app_unban_ip::<AppState>),
         )
-        // Agent 采集分发路由（下载/清单，admin+secadmin 专属）：
-        // 子路由组经 nest + route_layer 挂专属角色守卫（避免前缀字符串
-        // 匹配漏判），外层 auth_middleware/限流照常覆盖嵌套路由
+        // Agent 采集分发与监控管理路由（下载/清单 + 列表/详情/历史/修改/删除，
+        // admin+secadmin 专属）：子路由组经 nest + route_layer 挂专属角色守卫
+        // （避免前缀字符串匹配漏判），外层 auth_middleware/限流照常覆盖嵌套路由
         .nest(
             "/api/agents",
             Router::<Arc<AppState>>::new()
+                .route(
+                    "/",
+                    get(foims_agent_service::agents_api::list_agents::<AppState>),
+                )
+                .route(
+                    "/{id}",
+                    get(foims_agent_service::agents_api::get_agent_detail::<AppState>)
+                        .patch(foims_agent_service::agents_api::patch_agent::<AppState>)
+                        .delete(foims_agent_service::agents_api::delete_agent::<AppState>),
+                )
+                .route(
+                    "/{id}/history",
+                    get(foims_agent_service::agents_api::get_agent_history::<AppState>),
+                )
                 .route(
                     "/dist",
                     get(foims_agent_service::api::get_agent_dist::<AppState>),

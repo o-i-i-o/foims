@@ -30,6 +30,7 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 ### 📊 Visualization & Monitoring
 - **Interactive layout**: SVG-based visual layout for server rooms / racks / workstations, with drag-and-drop adjustment and automatic drawing.
 - **Dashboard**: Real-time statistics on network utilization, device distribution, and recent activity.
+- **Host monitoring**: FOIMS Agent (multi-platform musl static binaries) reports CPU/memory/disk/network/temperature metrics over HTTP/3 mTLS; download installers, view the fleet list and detail curves in one place.
 
 ### 🛠️ System Management
 - **Data portability**: Per-module CSV import/export and full database backup/restore.
@@ -42,6 +43,7 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 ## 🧭 Architecture
 
 - The backend listens on a UDS over h2c (default `/run/foims/api.sock`) and does not directly expose a TCP port.
+- Two exceptions are in-process UDP listeners (not proxied by nginx; allow them through the firewall): Agent metric reporting (UDP 9100 by default, HTTP/3) and SNMP Trap reception (UDP 162 by default, configurable).
 - TLS certificates, security response headers, and static asset caching are all handled at the nginx layer; see samples in [deploy/nginx/](deploy/nginx/).
 
 ## 📦 Installation & Deployment

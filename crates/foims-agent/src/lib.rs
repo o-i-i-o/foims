@@ -8,6 +8,7 @@
 pub mod collector;
 pub mod collectors;
 pub mod metric;
+pub mod reporter;
 
 pub use collector::{Collector, CollectorError, default_collectors, scrape};
 pub use metric::{MetricFamily, MetricType, encode_text_all};

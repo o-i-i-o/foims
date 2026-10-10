@@ -1,19 +1,26 @@
-//! FOIMS Agent 可执行入口（demo 阶段：本地采集 + 文本/JSON 输出）。
+//! FOIMS Agent 可执行入口：本地采集输出 + HTTP/3 mTLS 指标上报。
 //!
 //! 用法：
-//! - `foims-agent`                          采集一次，输出 Prometheus 文本格式
-//! - `foims-agent --list`                   列出已移植的采集器
-//! - `foims-agent --only loadavg,meminfo`   仅启用指定采集器
-//! - `foims-agent --format json`            采集一次，输出 JSON
-//! - `foims-agent --listen 0.0.0.0:9100`    常驻模式：HTTP 提供 /metrics
+//! - `foims-agent`：默认 HTTP/3 上报模式（读取 /etc/foims-agent/agent.toml 常驻循环）
+//! - `foims-agent --config PATH`：指定配置文件路径
+//! - `foims-agent --cert-dir DIR`：指定证书目录（或 FOIMS_AGENT_CERT_DIR）
+//! - `foims-agent --once`：采集 + 上报一次即退出（联调/测试）
+//! - `foims-agent --list`：列出已移植的采集器
+//! - `foims-agent --only loadavg,meminfo`：仅启用指定采集器（输出模式）
+//! - `foims-agent --format json`：采集一次，输出 JSON
+//! - `foims-agent --listen 0.0.0.0:9100`：常驻模式，HTTP 提供 /metrics
 //!
 //! 日志统一走 tracing 输出到 stderr，stdout 只承载指标数据（便于管道/对照验证）。
 
 use std::io::{self, Read, Write as IoWrite};
 use std::net::TcpStream;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use foims_agent::reporter::{
+    DEFAULT_CERT_DIR, DEFAULT_CONFIG_PATH, ENV_CERT_DIR, Reporter, ReporterConfig,
+};
 use foims_agent::{MetricFamily, VERSION, default_collectors, encode_text_all, scrape};
 
 /// 输出格式
@@ -30,8 +37,12 @@ struct Cli {
     list: bool,
     version: bool,
     only: Option<Vec<String>>,
-    format: OutputFormat,
+    /// None 表示未显式指定（区分默认上报模式与一次性输出）
+    format: Option<OutputFormat>,
     listen: Option<String>,
+    config: Option<String>,
+    cert_dir: Option<String>,
+    once: bool,
 }
 
 fn main() -> ExitCode {
@@ -47,7 +58,7 @@ fn main() -> ExitCode {
     }
 }
 
-const USAGE: &str = "用法: foims-agent [--version] [--list] [--only 名称,名称] [--format prometheus|json] [--listen ADDR:PORT]";
+const USAGE: &str = "用法: foims-agent [--version] [--list] [--only 名称,名称] [--format prometheus|json] [--listen ADDR:PORT]\n      默认（无 --list/--format/--listen）: HTTP/3 上报模式 [--config PATH] [--cert-dir DIR] [--once]";
 
 /// 初始化日志：默认 info 级，可用 RUST_LOG 覆盖；写入 stderr 避免污染指标输出
 fn init_tracing() {
@@ -65,8 +76,11 @@ fn parse_cli(args: &[String]) -> Result<Cli, String> {
         list: false,
         version: false,
         only: None,
-        format: OutputFormat::Prometheus,
+        format: None,
         listen: None,
+        config: None,
+        cert_dir: None,
+        once: false,
     };
     let mut index = 0;
     while index < args.len() {
@@ -95,11 +109,11 @@ fn parse_cli(args: &[String]) -> Result<Cli, String> {
                 let value = args
                     .get(index)
                     .ok_or_else(|| "--format 缺少参数".to_string())?;
-                cli.format = match value.as_str() {
+                cli.format = Some(match value.as_str() {
                     "prometheus" | "text" => OutputFormat::Prometheus,
                     "json" => OutputFormat::Json,
                     other => return Err(format!("未知输出格式: {other}")),
-                };
+                });
             }
             "--listen" => {
                 index += 1;
@@ -108,6 +122,21 @@ fn parse_cli(args: &[String]) -> Result<Cli, String> {
                     .ok_or_else(|| "--listen 缺少参数".to_string())?;
                 cli.listen = Some(value.clone());
             }
+            "--config" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--config 缺少参数".to_string())?;
+                cli.config = Some(value.clone());
+            }
+            "--cert-dir" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--cert-dir 缺少参数".to_string())?;
+                cli.cert_dir = Some(value.clone());
+            }
+            "--once" => cli.once = true,
             "--help" | "-h" => {
                 stderr_line(USAGE);
                 std::process::exit(0);
@@ -141,17 +170,88 @@ fn run(cli: Cli) -> ExitCode {
             }
         }
     }
-    let collectors = Arc::new(default_collectors(cli.only.as_deref()));
-    match &cli.listen {
-        Some(addr) => match serve(addr, collectors, cli.format) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(message) => {
-                stderr_line(&message);
-                ExitCode::FAILURE
+    match (&cli.listen, cli.format) {
+        // 常驻 HTTP /metrics 服务（原有语义）
+        (Some(addr), _) => {
+            let collectors = Arc::new(default_collectors(cli.only.as_deref()));
+            match serve(
+                addr,
+                collectors,
+                cli.format.unwrap_or(OutputFormat::Prometheus),
+            ) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(message) => {
+                    stderr_line(&message);
+                    ExitCode::FAILURE
+                }
             }
-        },
-        None => one_shot(&collectors, cli.format),
+        }
+        // 显式指定输出格式：采集一次输出（原有语义）
+        (None, Some(format)) => {
+            let collectors = default_collectors(cli.only.as_deref());
+            one_shot(&collectors, format)
+        }
+        // 默认模式：HTTP/3 mTLS 上报
+        (None, None) => run_reporter(&cli),
     }
+}
+
+/// 上报模式：加载配置 → 构建运行时 → 常驻循环或 --once 单次
+fn run_reporter(cli: &Cli) -> ExitCode {
+    let config_path = cli
+        .config
+        .clone()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
+    let cert_dir = cli
+        .cert_dir
+        .clone()
+        .map(PathBuf::from)
+        .or_else(|| std::env::var(ENV_CERT_DIR).ok().map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_CERT_DIR));
+    let config = match ReporterConfig::load(&config_path, cert_dir) {
+        Ok(config) => config,
+        Err(error) => {
+            stderr_line(&format!("加载配置失败: {error}"));
+            stderr_line(&format!(
+                "提示: 默认上报模式需要 agent 配置文件（缺省 {DEFAULT_CONFIG_PATH}，含 server_addr/token），\
+                 或用 --config 指定路径；仅本地输出请使用 --format prometheus"
+            ));
+            return ExitCode::FAILURE;
+        }
+    };
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            stderr_line(&format!("构建 tokio 运行时失败: {error}"));
+            return ExitCode::FAILURE;
+        }
+    };
+    runtime.block_on(async move {
+        let mut reporter = Reporter::new(config);
+        if cli.once {
+            match reporter.report_once().await {
+                Ok(response) => {
+                    tracing::info!(
+                        interval = response.report_interval,
+                        latest_version = %response.latest_version,
+                        "单次上报完成"
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    stderr_line(&format!("上报失败: {error}"));
+                    ExitCode::FAILURE
+                }
+            }
+        } else {
+            reporter.run().await;
+            ExitCode::SUCCESS
+        }
+    })
 }
 
 /// 列出全部已移植采集器（每行一个，便于脚本处理）
@@ -323,7 +423,10 @@ mod tests {
         assert!(!cli.version);
         assert!(cli.only.is_none());
         assert!(cli.listen.is_none());
-        assert!(matches!(cli.format, OutputFormat::Prometheus));
+        assert!(cli.format.is_none());
+        assert!(cli.config.is_none());
+        assert!(cli.cert_dir.is_none());
+        assert!(!cli.once);
     }
 
     #[test]
@@ -352,7 +455,27 @@ mod tests {
             Some(vec!["loadavg".to_string(), "meminfo".to_string()])
         );
         assert_eq!(cli.listen.as_deref(), Some("0.0.0.0:9100"));
-        assert!(matches!(cli.format, OutputFormat::Json));
+        assert!(matches!(cli.format, Some(OutputFormat::Json)));
+    }
+
+    #[test]
+    fn test_parse_cli_reporter_flags() {
+        let args: Vec<String> = vec![
+            "--config",
+            "/tmp/agent.toml",
+            "--cert-dir",
+            "/tmp/certs",
+            "--once",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        let cli = parse_cli(&args).unwrap_or_else(|e| panic!("解析失败: {e}"));
+        assert_eq!(cli.config.as_deref(), Some("/tmp/agent.toml"));
+        assert_eq!(cli.cert_dir.as_deref(), Some("/tmp/certs"));
+        assert!(cli.once);
+        // 上报模式判定：无 --list/--format/--listen
+        assert!(cli.listen.is_none() && cli.format.is_none() && !cli.list);
     }
 
     #[test]

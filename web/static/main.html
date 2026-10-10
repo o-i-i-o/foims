@@ -11,33 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791600628">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791600628">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791635091">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791635091">
 </head>
 <body class="main-body">
   <div id="app">
@@ -79,6 +80,12 @@
             <a href="#visualization" class="nav-link nav-visualization" role="menuitem" data-tooltip="Visualization" data-i18n-tooltip="nav.visualization">
               <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
               <span class="nav-text" data-i18n="nav.visualization">Visualization</span>
+            </a>
+          </li>
+          <li role="none">
+            <a href="#agents" class="nav-link nav-agents" role="menuitem" data-tooltip="Host Monitoring" data-i18n-tooltip="nav.agents">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+              <span class="nav-text" data-i18n="nav.agents">Host Monitoring</span>
             </a>
           </li>
           <li role="none">
@@ -574,6 +581,45 @@
             </div>
           </div>
           <div id="global-visualization-container" class="visualization-canvas visualization-canvas-fixed" role="img" aria-label="Device topology visualization"></div>
+        </div>
+      </section>
+
+      <section id="agents" class="content-section" aria-label="Host Monitoring" data-i18n-aria-label="nav.agents">
+        <div class="agents-toolbar">
+          <select id="agents-status-filter" class="form-control form-control-sm w-auto" aria-label="Status filter" data-i18n-aria-label="agents.filter_status">
+            <option value="" data-i18n="common.all">全部</option>
+            <option value="active" data-i18n="agents.status_active">在线</option>
+            <option value="offline" data-i18n="agents.status_offline">离线</option>
+            <option value="pending" data-i18n="agents.status_pending">待激活</option>
+            <option value="disabled" data-i18n="agents.status_disabled">已禁用</option>
+            <option value="revoked" data-i18n="agents.status_revoked">已吊销</option>
+          </select>
+          <input type="text" id="agents-keyword" class="form-control form-control-sm w-auto" data-i18n-placeholder="agents.search_placeholder" placeholder="搜索主机名 / IP / 标签..." aria-label="Search agents" data-i18n-aria-label="agents.search_placeholder">
+          <button id="agents-query-btn" type="button" class="btn btn-primary btn-sm" data-i18n="agents.query">查询</button>
+          <button id="agents-refresh-btn" type="button" class="btn btn-secondary btn-sm" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div class="table-container">
+          <table id="agents-table" class="data-table" aria-label="Agent hosts">
+            <thead>
+              <tr>
+                <th data-i18n="common.status" class="col-center">状态</th>
+                <th data-i18n="agents.col_hostname">主机名</th>
+                <th data-i18n="agents.col_ip">IP 地址</th>
+                <th data-i18n="agents.col_os">系统</th>
+                <th data-i18n="agents.col_arch" class="col-center">架构</th>
+                <th data-i18n="agents.col_cpu">CPU</th>
+                <th data-i18n="agents.col_memory">内存</th>
+                <th data-i18n="agents.col_disk">磁盘</th>
+                <th data-i18n="agents.col_temp" class="col-center">最高温度</th>
+                <th data-i18n="agents.col_version">Agent 版本</th>
+                <th data-i18n="agents.col_last_seen">最近上报</th>
+                <th data-i18n="common.actions" class="col-center">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="empty-row"><td colspan="12" class="text-center" data-i18n="common.no_data">暂无数据</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -1556,6 +1602,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791600628"></script>
+  <script type="module" src="/static/js/app.js?v=1791635091"></script>
 </body>
 </html>

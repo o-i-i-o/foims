@@ -20,6 +20,7 @@ pub mod pagination;
 pub mod pgpass;
 pub mod provider;
 pub mod rate_limit;
+pub mod report;
 pub mod validation;
 
 pub use api::{ApiResponse, ok_json};

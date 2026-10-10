@@ -1,0 +1,420 @@
+/* 主机监控页面与详情弹窗样式 */
+
+/* 工具栏：状态筛选 + 关键字 + 查询/刷新 */
+.agents-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+/* 状态点：绿=在线 红=离线 灰=待激活 橙=已禁用 深红=已吊销 */
+.agent-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+.agent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-dot-active {
+  background: var(--color-success);
+}
+
+.agent-dot-offline {
+  background: var(--color-danger);
+}
+
+.agent-dot-pending {
+  background: var(--color-text-muted);
+}
+
+.agent-dot-disabled {
+  background: var(--color-warning);
+}
+
+.agent-dot-revoked {
+  background: var(--color-danger-hover);
+}
+
+/* 主机名旁的备注标签 */
+.agent-host-label {
+  margin-left: 0.375rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  white-space: nowrap;
+}
+
+/* 使用率迷你进度条：>85% 红、>60% 橙、其余绿 */
+.agent-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 90px;
+}
+
+.agent-usage-bar {
+  flex: 1;
+  min-width: 46px;
+  max-width: 110px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-border-light);
+  overflow: hidden;
+}
+
+.agent-usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.agent-usage-ok {
+  background: var(--color-success);
+}
+
+.agent-usage-warning {
+  background: var(--color-warning);
+}
+
+.agent-usage-danger {
+  background: var(--color-danger);
+}
+
+.agent-usage-num {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.agent-usage-none {
+  color: var(--color-text-muted);
+}
+
+/* ===== 详情弹窗 ===== */
+
+/* 头部概要：状态徽章 + IP */
+.agent-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.agent-detail-badge {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.agent-badge-active {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-border);
+}
+
+.agent-badge-offline {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
+}
+
+.agent-badge-pending {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-light);
+}
+
+.agent-badge-disabled {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-border);
+}
+
+.agent-badge-revoked {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
+}
+
+.agent-detail-ip {
+  color: var(--color-text-secondary);
+  font-family: monospace;
+}
+
+/* 分组卡片网格（弹窗内 2 列） */
+.agent-detail-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.agent-detail-card {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.875rem;
+  background: var(--color-bg);
+  min-width: 0;
+}
+
+.agent-detail-card-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-detail-card-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+/* 键值对字段网格 */
+.agent-kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+}
+
+.agent-kv dt {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.agent-kv dd {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+  word-break: break-all;
+}
+
+/* CPU 使用率大数字 */
+.agent-cpu-big {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 0.25rem;
+}
+
+.agent-mem-bar {
+  margin-bottom: 0.5rem;
+}
+
+/* 弹窗内的容量条（内存/磁盘），比列表迷你条加高 */
+.agent-bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-border-light);
+  overflow: hidden;
+  min-width: 120px;
+}
+
+.agent-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+/* 磁盘 / 网卡 / 温度风扇行 */
+.agent-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.agent-disk-row,
+.agent-net-row,
+.agent-sensor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.agent-disk-name {
+  font-weight: 600;
+  color: var(--color-text-light);
+  min-width: 90px;
+}
+
+.agent-disk-mount {
+  color: var(--color-text-muted);
+}
+
+.agent-disk-row .agent-bar {
+  flex: 1 1 140px;
+}
+
+.agent-disk-cap,
+.agent-disk-iops,
+.agent-disk-util {
+  white-space: nowrap;
+}
+
+.agent-disk-iops,
+.agent-disk-util {
+  color: var(--color-text-muted);
+}
+
+.agent-net-iface {
+  font-weight: 600;
+  color: var(--color-text-light);
+  min-width: 80px;
+}
+
+.agent-net-rate {
+  font-family: monospace;
+}
+
+.agent-net-errors,
+.agent-sensor-kind,
+.agent-sensor-value {
+  color: var(--color-text-muted);
+}
+
+.agent-sensor-label {
+  font-weight: 600;
+  color: var(--color-text-light);
+  min-width: 100px;
+}
+
+.agent-detail-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ===== 24h 迷你曲线（2×2） ===== */
+.agent-spark-heading {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.agent-spark-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.agent-spark-card {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg);
+  min-width: 0;
+}
+
+.agent-spark-card h5 {
+  margin: 0 0 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.agent-spark-box {
+  width: 100%;
+}
+
+.agent-spark {
+  display: block;
+  width: 100%;
+  height: 96px;
+}
+
+.agent-spark-gridline {
+  stroke: var(--color-border-light);
+  stroke-width: 1;
+}
+
+.agent-spark-line polyline {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* 单点序列渲染为实心圆点：无描边，填充色跟随各指标折线颜色 */
+.agent-spark-line circle {
+  stroke: none;
+}
+
+.agent-chart-line-cpu polyline {
+  stroke: var(--color-info);
+}
+
+.agent-chart-line-cpu circle {
+  fill: var(--color-info);
+}
+
+.agent-chart-line-memory polyline {
+  stroke: var(--color-primary);
+}
+
+.agent-chart-line-memory circle {
+  fill: var(--color-primary);
+}
+
+.agent-chart-line-disk polyline {
+  stroke: var(--color-warning-dark);
+}
+
+.agent-chart-line-disk circle {
+  fill: var(--color-warning-dark);
+}
+
+.agent-chart-line-temp polyline {
+  stroke: var(--color-danger);
+}
+
+.agent-chart-line-temp circle {
+  fill: var(--color-danger);
+}
+
+.agent-spark-range {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.agent-spark-empty {
+  margin: 0;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* 弹窗标题内嵌的主机名（modalLoader titleHtml 注入） */
+.agent-title-host {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+@media (width <= 576px) {
+  .agent-detail-groups,
+  .agent-spark-grid {
+    grid-template-columns: 1fr;
+  }
+}

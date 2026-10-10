@@ -654,6 +654,16 @@ systemctl stop foims
 systemctl status foims
 .RE
 .fi
+.SH NETWORK
+Apart from the Unix domain socket served behind nginx, the process
+listens on two UDP ports directly (not proxied); allow them through
+the firewall:
+.TP
+.I udp/9100
+FOIMS Agent metric reporting (HTTP/3 over QUIC).
+.TP
+.I udp/162
+SNMP Trap/Inform reception (configurable in /etc/foims/config.toml).
 .SH AUTHOR
 oi-io <boss@oi-io.cc>
 .SH "SEE ALSO"

@@ -336,18 +336,69 @@ pub struct Config {
 }
 
 /// Agent 采集（foims-agent 分发/接收）配置段（docs/agent-design.md）。
-/// 后续阶段在此扩展监听开关、bind 地址与证书路径等字段。
-#[derive(Debug, Deserialize, Clone, Serialize, Default)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct AgentConfig {
     /// 预编译 agent 产物目录（manifest.json + <target>/foims-agent +
     /// install.sh），build-deb.sh 打包时装入 /opt/foims/agents；
     /// 源码部署场景可指向 dist/agents。
     #[serde(default = "default_agent_dist_dir")]
     pub dist_dir: String,
+    /// QUIC 上报监听开关（UDP 9100，nginx 不代理 UDP，需防火墙放行）。
+    #[serde(default)]
+    pub enabled: bool,
+    /// QUIC 监听地址；[::] 双栈（IPv4-mapped 兼容 IPv4 agent）。
+    #[serde(default = "default_agent_bind_addr")]
+    pub bind_addr: String,
+    /// 上报间隔下限（秒）：响应控制面下发的 report_interval 不低于该值。
+    #[serde(default = "default_agent_report_interval")]
+    pub report_interval_secs: u64,
+    /// 单条上报 payload 上限（字节），超出返回 413。
+    #[serde(default = "default_agent_max_report_bytes")]
+    pub max_report_bytes: usize,
+    /// agent_metrics_history 保留天数（清理任务按此删除旧行）。
+    #[serde(default = "default_agent_history_retention_days")]
+    pub history_retention_days: u32,
+    /// 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline。
+    #[serde(default = "default_agent_offline_factor")]
+    pub offline_factor: u32,
 }
 
 fn default_agent_dist_dir() -> String {
     "/opt/foims/agents".to_string()
+}
+
+fn default_agent_bind_addr() -> String {
+    "[::]:9100".to_string()
+}
+
+const fn default_agent_report_interval() -> u64 {
+    60
+}
+
+const fn default_agent_max_report_bytes() -> usize {
+    262_144
+}
+
+const fn default_agent_history_retention_days() -> u32 {
+    30
+}
+
+const fn default_agent_offline_factor() -> u32 {
+    3
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            dist_dir: default_agent_dist_dir(),
+            enabled: false,
+            bind_addr: default_agent_bind_addr(),
+            report_interval_secs: default_agent_report_interval(),
+            max_report_bytes: default_agent_max_report_bytes(),
+            history_retention_days: default_agent_history_retention_days(),
+            offline_factor: default_agent_offline_factor(),
+        }
+    }
 }
 
 /// 进程内共享配置槽：启动时装入初始配置，各「写盘」端点成功落盘后

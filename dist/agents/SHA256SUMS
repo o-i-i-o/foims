@@ -1,0 +1,5 @@
+9e0f1aecb19614e12531f88680b71745cc99234f03d00ca3c0af7f5c490887ff  x86_64-unknown-linux-musl/foims-agent
+93a8751099f8dc8060f62f102df9b388b72035963639b4433cb45d1a1bc33e92  aarch64-unknown-linux-musl/foims-agent
+f3c2fb829c03713d8d2182679015cf136befef21f5a9ab5efd6d61553c88da71  i686-unknown-linux-musl/foims-agent
+54ced199db479f7cf0933ab6b4badac00e257bcd773d64f4aeccc732d837aa84  arm-unknown-linux-musleabihf/foims-agent
+f47624b04f4d841169157ac7725f6be30a07250e72d1d1aba7bf7a0b35b4a14a  armv7-unknown-linux-musleabihf/foims-agent

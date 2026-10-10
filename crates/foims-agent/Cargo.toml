@@ -3,20 +3,11 @@ name = "foims-agent"
 version = "0.1.3"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "FOIMS Agent - node_exporter 的 Rust 重写：主机指标采集（demo 阶段：本地采集 + 文本/JSON 输出）"
+description = "FOIMS Agent - node_exporter 的 Rust 重写：主机指标采集 + HTTP/3 mTLS 上报 + 文本/JSON 输出"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-# 系统调用安全封装：filesystem 采集器 statfs、uname 采集器 uname（crate 内零 unsafe）
-rustix = { workspace = true }
-
-[dev-dependencies]
-# HTTP/3 mTLS demo（examples/h3_demo.rs）：正式上报实施前的前置可行性验证，
-# 仅示例代码使用，不进入 agent 发布二进制
+# HTTP/3 mTLS 上报链路（quinn+rustls-ring 纯用户态，musl 静态友好，无 OpenSSL）
 bytes = { workspace = true }
 h3 = { workspace = true }
 h3-quinn = { workspace = true }
@@ -24,6 +15,28 @@ http = { workspace = true }
 quinn = { workspace = true }
 rustls = { workspace = true }
 tokio = { workspace = true }
+# 上报协议共享类型（AgentReport/ReportResponse，唯一权威定义在 foims-common）
+foims-common = { path = "../foims-common" }
+
+# RFC3339 时刻（collected_at）
+chrono = { workspace = true }
+# 上报间隔 ±10% 抖动与 machine-id 随机回退
+rand = { workspace = true }
+# machine-id 兜底生成
+uuid = { workspace = true }
+# agent.toml 配置解析
+toml = { workspace = true }
+
+serde_json = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# 系统调用安全封装：filesystem 采集器 statfs、uname 采集器 uname（crate 内零 unsafe）
+rustix = { workspace = true }
+
+[dev-dependencies]
+# 无（examples/h3_demo.rs 与 examples/report_smoke.rs 复用 [dependencies]）
 
 [lints]
 workspace = true

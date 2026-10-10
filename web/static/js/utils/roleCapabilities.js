@@ -4,10 +4,10 @@
  * 后端始终强制校验（403），此处仅为界面整洁（隐藏无权限入口与写控件）。
  * 角色与权限矩阵：
  * - admin    超级管理员：全部可见、全部可写
- * - sysadmin 系统管理员：系统功能可写；资源类分区只读；日志不可见（后端拒绝）
+ * - sysadmin 系统管理员：系统功能可写；资源类分区只读；日志/主机监控不可见（后端拒绝）
  * - secadmin 安全管理员：用户/安全设置可写；组织/资源/可视化不可见；IP 只读
- * - auditor  审计管理员：全站可见但只读（含系统模块）
- * - user     普通用户：资源类分区可写；系统模块只读；日志不可见（后端拒绝）
+ * - auditor  审计管理员：全站可见但只读（含系统模块）；主机监控不可见
+ * - user     普通用户：资源类分区可写；系统模块只读；日志/主机监控不可见（后端拒绝）
  */
 
 import { SessionManager } from "./sessionManager.js";
@@ -16,10 +16,10 @@ import { t } from "./i18n.js";
 /** 各角色不可见的分区（后端同样拒绝对应数据，避免页面报错） */
 const ROLE_HIDDEN_SECTIONS = {
   admin: [],
-  sysadmin: ["logs"],
+  sysadmin: ["logs", "agents"],
   secadmin: ["organization", "resources", "visualization"],
-  auditor: [],
-  user: ["logs"]
+  auditor: ["agents"],
+  user: ["logs", "agents"]
 };
 
 /** 各角色以只读模式展示的分区（隐藏写操作控件） */

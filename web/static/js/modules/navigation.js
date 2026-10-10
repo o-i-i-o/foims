@@ -15,9 +15,10 @@ const PAGE_LOADERS = {
   resources: loadResourcesPage,
   organization: loadOrganizationPage,
   ip: loadIpPage,
+  visualization: loadVisualizationPage,
+  agents: loadAgentsPage,
   logs: loadLogsPage,
-  system: loadSystemPage,
-  visualization: loadVisualizationPage
+  system: loadSystemPage
 };
 
 const SIDEBAR_COLLAPSE_STORAGE_KEY = "sidebar-collapsed";
@@ -175,6 +176,18 @@ async function loadSystemPage() {
 async function loadVisualizationPage() {
   const viz = await loadModule("visualizationManager");
   await viz.initVisualization();
+}
+
+/**
+ * 加载主机监控页面（事件绑定幂等；数据由 whenVisible 首次可见时加载）
+ */
+async function loadAgentsPage() {
+  const agentsModule = await loadModule("agents");
+  agentsModule.initAgentsPage();
+
+  whenVisible("#agents", () => {
+    agentsModule.loadAgentsData();
+  });
 }
 
 // ==========================================

@@ -1455,7 +1455,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.21.36"
+version = "0.22.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1495,36 +1495,54 @@ name = "foims-agent"
 version = "0.1.3"
 dependencies = [
  "bytes",
+ "chrono",
+ "foims-common",
  "h3",
  "h3-quinn",
  "http",
  "quinn",
+ "rand 0.10.3",
  "rustix",
  "rustls",
+ "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "toml 1.1.6+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
 name = "foims-agent-service"
 version = "0.1.1"
 dependencies = [
+ "async-trait",
  "axum",
+ "bytes",
  "chrono",
  "flate2",
  "foims-auth",
  "foims-common",
+ "foims-scheduler",
+ "h3",
+ "h3-quinn",
+ "http",
+ "if-addrs",
+ "pem 4.0.0",
+ "quinn",
  "rand 0.10.3",
+ "rcgen",
  "rpm",
+ "rustls",
  "semver",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "sqlx",
  "tar",
+ "time",
  "tokio",
  "tracing",
  "uuid",
@@ -2388,6 +2406,16 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "if-addrs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

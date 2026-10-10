@@ -22,6 +22,10 @@ pub struct PackageInputs<'a> {
     pub agent_toml: &'a str,
     /// 站点 CA 公钥
     pub ca_pem: &'a [u8],
+    /// Agent 客户端证书 PEM（mTLS 上报身份）
+    pub client_cert_pem: &'a str,
+    /// Agent 客户端私钥 PEM（0600 语义落位）
+    pub client_key_pem: &'a str,
     /// install.sh 文本（zip 场景使用）
     pub install_sh: &'a str,
 }
@@ -60,11 +64,11 @@ pub const ZIP_README: &str = r#"FOIMS Agent 安装包
 
 1. 解压本压缩包后，以 root 执行安装：
    sudo bash install.sh
-   （脚本会把 foims-agent 安装到 /usr/local/bin，配置写入 /etc/foims-agent/，
-   并在有 systemd 的系统上自动 enable --now foims-agent.service）
+   （脚本会把 foims-agent 安装到 /usr/local/bin，配置与 mTLS 客户端证书写入
+   /etc/foims-agent/，并在有 systemd 的系统上自动 enable --now foims-agent.service）
 
 2. 配置文件位置：/etc/foims-agent/agent.toml（含上报地址 server_addr 与本机 token，
-   token 属敏感物料，请勿泄露）。
+   token 与 client.key 属敏感物料，请勿泄露）。
 
 3. 服务状态查看：systemctl status foims-agent
 
@@ -113,7 +117,8 @@ pub fn rpm_arch(arch: &str) -> Option<&'static str> {
 }
 
 /// 组装 zip 安装包：foims-agent(0755) / agent.toml(0600) / ca.pem(0644) /
-/// install.sh(0755) / README.txt(0644)，文件名不带目录前缀。
+/// client.pem(0644) / client.key(0600) / install.sh(0755) / README.txt(0644)，
+/// 文件名不带目录前缀。
 pub fn build_zip(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
     fn start(
         writer: &mut zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
@@ -143,6 +148,16 @@ pub fn build_zip(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
     writer
         .write_all(inputs.ca_pem)
         .map_err(|e| format!("zip 写入 ca.pem 内容失败: {e}"))?;
+
+    start(&mut writer, "client.pem", 0o644)?;
+    writer
+        .write_all(inputs.client_cert_pem.as_bytes())
+        .map_err(|e| format!("zip 写入 client.pem 内容失败: {e}"))?;
+
+    start(&mut writer, "client.key", 0o600)?;
+    writer
+        .write_all(inputs.client_key_pem.as_bytes())
+        .map_err(|e| format!("zip 写入 client.key 内容失败: {e}"))?;
 
     start(&mut writer, "install.sh", 0o755)?;
     writer
@@ -234,7 +249,8 @@ fn append_ar_member(out: &mut Vec<u8>, name: &str, data: &[u8]) -> Result<(), St
 
 /// 组装 deb 安装包（纯 Rust，不调用外部命令）。
 ///
-/// data.tar.gz：二进制(0755) + agent.toml(0600) + ca.pem(0644) + systemd unit(0644)；
+/// data.tar.gz：二进制(0755) + agent.toml(0600) + ca.pem(0644) +
+/// client.pem(0644) + client.key(0600) + systemd unit(0644)；
 /// control.tar.gz：control(0644) + postinst(0755)；
 /// ar 成员依次：debian-binary、control.tar.gz、data.tar.gz。
 pub fn build_deb(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
@@ -253,6 +269,18 @@ pub fn build_deb(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
             0o600,
         )?;
         append_tar_entry(builder, "./etc/foims-agent/ca.pem", inputs.ca_pem, 0o644)?;
+        append_tar_entry(
+            builder,
+            "./etc/foims-agent/client.pem",
+            inputs.client_cert_pem.as_bytes(),
+            0o644,
+        )?;
+        append_tar_entry(
+            builder,
+            "./etc/foims-agent/client.key",
+            inputs.client_key_pem.as_bytes(),
+            0o600,
+        )?;
         append_tar_entry(
             builder,
             "./usr/lib/systemd/system/foims-agent.service",
@@ -321,6 +349,18 @@ pub fn build_rpm(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("rpm 添加 ca.pem 失败: {e}"))?;
     builder
         .with_file_contents(
+            inputs.client_cert_pem,
+            rpm::FileOptions::new("/etc/foims-agent/client.pem").permissions(0o644),
+        )
+        .map_err(|e| format!("rpm 添加 client.pem 失败: {e}"))?;
+    builder
+        .with_file_contents(
+            inputs.client_key_pem,
+            rpm::FileOptions::new("/etc/foims-agent/client.key").permissions(0o600),
+        )
+        .map_err(|e| format!("rpm 添加 client.key 失败: {e}"))?;
+    builder
+        .with_file_contents(
             SYSTEMD_UNIT,
             rpm::FileOptions::new("/usr/lib/systemd/system/foims-agent.service").permissions(0o644),
         )
@@ -359,6 +399,16 @@ mod tests {
                 .to_vec()
                 .into_boxed_slice(),
         );
+        let client_cert: &'static str = Box::leak(
+            "-----BEGIN CERTIFICATE-----\nCLIENT\n-----END CERTIFICATE-----\n"
+                .to_string()
+                .into_boxed_str(),
+        );
+        let client_key: &'static str = Box::leak(
+            "-----BEGIN PRIVATE KEY-----\nCLIENTKEY\n-----END PRIVATE KEY-----\n"
+                .to_string()
+                .into_boxed_str(),
+        );
         let sh: &'static str = Box::leak(
             "#!/bin/sh\nset -e\ninstall -m 0755 foims-agent /usr/local/bin/foims-agent\n"
                 .to_string()
@@ -370,6 +420,8 @@ mod tests {
             agent_version: VERSION,
             agent_toml: toml,
             ca_pem: ca,
+            client_cert_pem: client_cert,
+            client_key_pem: client_key,
             install_sh: sh,
         };
         (binary.to_vec(), inputs)
@@ -487,6 +539,8 @@ mod tests {
             ("foims-agent", 0o755),
             ("agent.toml", 0o600),
             ("ca.pem", 0o644),
+            ("client.pem", 0o644),
+            ("client.key", 0o600),
             ("install.sh", 0o755),
             ("README.txt", 0o644),
         ];
@@ -537,13 +591,15 @@ mod tests {
                 .contains("systemctl enable --now foims-agent.service")
         );
 
-        // data.tar.gz：四个安装文件与权限
+        // data.tar.gz：安装文件与权限
         let data_entries =
             parse_tar_gz(&members[2].1).unwrap_or_else(|e| panic!("data.tar.gz 解析失败: {e}"));
         let expect_files = [
             ("usr/local/bin/foims-agent", 0o755),
             ("etc/foims-agent/agent.toml", 0o600),
             ("etc/foims-agent/ca.pem", 0o644),
+            ("etc/foims-agent/client.pem", 0o644),
+            ("etc/foims-agent/client.key", 0o600),
             ("usr/lib/systemd/system/foims-agent.service", 0o644),
         ];
         assert_eq!(
@@ -556,7 +612,7 @@ mod tests {
             assert_eq!(&data_entries[idx].1, mode, "条目 {path} 权限应一致");
         }
         assert_eq!(data_entries[0].2, binary, "二进制内容应一致");
-        assert_eq!(data_entries[3].2, SYSTEMD_UNIT.as_bytes());
+        assert_eq!(data_entries[5].2, SYSTEMD_UNIT.as_bytes());
     }
 
     #[test]
@@ -595,6 +651,8 @@ mod tests {
     fn rpm_未知target报错() {
         let toml: &'static str = Box::leak("token = \"t\"\n".to_string().into_boxed_str());
         let ca: &'static [u8] = Box::leak(b"CA".to_vec().into_boxed_slice());
+        let client_cert: &'static str = Box::leak("CLIENT CERT".to_string().into_boxed_str());
+        let client_key: &'static str = Box::leak("CLIENT KEY".to_string().into_boxed_str());
         let binary: &'static [u8] = Box::leak(b"bin".to_vec().into_boxed_slice());
         let sh: &'static str = Box::leak("#!/bin/sh\n".to_string().into_boxed_str());
         let inputs = PackageInputs {
@@ -603,6 +661,8 @@ mod tests {
             agent_version: VERSION,
             agent_toml: toml,
             ca_pem: ca,
+            client_cert_pem: client_cert,
+            client_key_pem: client_key,
             install_sh: sh,
         };
         assert!(

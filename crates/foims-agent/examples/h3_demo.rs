@@ -22,6 +22,7 @@ use std::time::Duration;
 
 use bytes::{Buf, Bytes};
 use http::{Method, Request, Response, StatusCode};
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 /// 统一错误类型（demo 简化：装箱任意 Error，附 Send+Sync 以便跨协程传递）
@@ -95,27 +96,19 @@ fn arg_value(args: &[String], flag: &str) -> Result<Option<String>, DemoError> {
     Ok(Some(value.clone()))
 }
 
-/// 读取 PEM 证书文件（可能含多张）
+/// 读取 PEM 证书文件（可能含多张；rustls-pki-types 已内置 PEM 解析，
+/// 不使用已停止维护的 rustls-pemfile）
 fn load_certs(label: &str, path: &Path) -> Result<Vec<CertificateDer<'static>>, DemoError> {
-    let file = std::fs::File::open(path)
-        .map_err(|error| format!("打开{label}证书失败 {path:?}: {error}"))?;
-    let mut reader = std::io::BufReader::new(file);
-    Ok(rustls_pemfile::certs(&mut reader)
+    CertificateDer::pem_file_iter(path)
+        .map_err(|error| format!("打开{label}证书失败 {path:?}: {error}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("解析{label}证书失败 {path:?}: {error}"))?)
+        .map_err(|error| format!("解析{label}证书失败 {path:?}: {error}").into())
 }
 
-/// 读取 PEM 私钥
+/// 读取 PEM 私钥（PKCS1/PKCS8/SEC1 由 from_pem_file 自动识别）
 fn load_key(label: &str, path: &Path) -> Result<PrivateKeyDer<'static>, DemoError> {
-    let file = std::fs::File::open(path)
-        .map_err(|error| format!("打开{label}私钥失败 {path:?}: {error}"))?;
-    let mut reader = std::io::BufReader::new(file);
-    let key = rustls_pemfile::private_key(&mut reader)
-        .map_err(|error| format!("解析{label}私钥失败 {path:?}: {error}"))?;
-    match key {
-        Some(key) => Ok(key),
-        None => Err(format!("{label}私钥文件无有效内容: {path:?}").into()),
-    }
+    PrivateKeyDer::from_pem_file(path)
+        .map_err(|error| format!("解析{label}私钥失败 {path:?}: {error}").into())
 }
 
 // ---------------------------------------------------------------------------
@@ -193,21 +186,16 @@ async fn handle_request(request: Request<()>, mut stream: AgentStream) -> Result
 
     // 读取请求体（链路上为 TLS 1.3 密文，此处为服务端解密后的明文）
     let mut body: Vec<u8> = Vec::new();
-    loop {
-        match stream.recv_data().await? {
-            Some(chunk) => {
-                body.extend_from_slice(chunk.chunk());
-                if body.len() > MAX_BODY_BYTES {
-                    send_response(
-                        &mut stream,
-                        StatusCode::PAYLOAD_TOO_LARGE,
-                        b"request body too large",
-                    )
-                    .await?;
-                    return Ok(());
-                }
-            }
-            None => break,
+    while let Some(chunk) = stream.recv_data().await? {
+        body.extend_from_slice(chunk.chunk());
+        if body.len() > MAX_BODY_BYTES {
+            send_response(
+                &mut stream,
+                StatusCode::PAYLOAD_TOO_LARGE,
+                b"request body too large",
+            )
+            .await?;
+            return Ok(());
         }
     }
 

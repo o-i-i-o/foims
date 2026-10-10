@@ -21,8 +21,7 @@ use foims_common::{log_info, log_warn};
 use crate::manifest::{self, AgentManifest};
 use crate::packaging::{self, PackageInputs};
 
-/// 站点 CA 公钥路径（公开物料，作 agent 信任锚，设计 §3.1）。
-const SITE_CA_PATH: &str = "/etc/ssl/foims-ca/ca.pem";
+/// 站点 CA 公钥路径取 crate 根常量（cert 模块与下载流程共用，见 lib.rs）。
 /// agent 默认上报端口（设计 §5.4：server_addr 未指定端口时取请求 Host + 9100）。
 const DEFAULT_AGENT_PORT: &str = "9100";
 
@@ -84,7 +83,7 @@ pub async fn get_agent_dist<S: ConfigProvider>(
     let gate_ok = manifest::gate_check(&manifest.version, server_version).is_ok();
 
     // 站点 CA 是否已生成（证书管理页生成后即可下载）
-    let ca_ok = tokio::fs::metadata(SITE_CA_PATH).await.is_ok();
+    let ca_ok = tokio::fs::metadata(crate::SITE_CA_PATH).await.is_ok();
 
     // 平台列表：zip 恒有；deb/rpm 按架构映射成功与否；按架构标签排序
     let mut targets: Vec<serde_json::Value> = manifest
@@ -190,9 +189,18 @@ pub async fn download_agent_package<S: ConfigProvider>(
     }
 
     // 4. 站点 CA（未生成 CA 时拒绝下载，提示先在证书管理页生成）
-    let ca_pem = tokio::fs::read(SITE_CA_PATH)
+    let ca_pem = tokio::fs::read(crate::SITE_CA_PATH)
         .await
         .map_err(|_| AppError::Conflict(msg("server.agent.ca_missing")))?;
+
+    // 4b. Agent 客户端证书（mTLS 上报身份；未生成时提示先启用 Agent 采集）
+    let certs_dir = std::path::Path::new(crate::cert::AGENT_CERT_DIR);
+    let client_cert_pem = tokio::fs::read_to_string(certs_dir.join(crate::cert::CLIENT_CERT))
+        .await
+        .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
+    let client_key_pem = tokio::fs::read_to_string(certs_dir.join(crate::cert::CLIENT_KEY))
+        .await
+        .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
 
     // 5. 二进制校验（sha256 + size 与清单一致）
     let binary =
@@ -239,6 +247,8 @@ pub async fn download_agent_package<S: ConfigProvider>(
         agent_version: &manifest.version,
         agent_toml: &agent_toml,
         ca_pem: &ca_pem,
+        client_cert_pem: &client_cert_pem,
+        client_key_pem: &client_key_pem,
         install_sh: &install_sh,
     };
     let (content_type, package) = match format {
@@ -306,11 +316,32 @@ fn normalize_label(label: &Option<String>) -> Option<String> {
 }
 
 /// 校验上报地址合法形式 host[:port]（白名单字符，防止注入配置文本）。
+/// 尾冒号（如 "host:"）会在补端口时产出非法 "host::9100"，直接拒绝；
+/// 方括号 IPv6 以 "]" 结尾不受影响。
 fn valid_server_addr(addr: &str) -> bool {
     !addr.is_empty()
+        && !addr.ends_with(':')
         && addr
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | ':' | '[' | ']' | '-' | '_'))
+}
+
+/// 显式地址缺端口时补默认端口 9100（agent 端要求 host:port 形式）。
+/// host:port 与 [v6]:port 原样返回；裸 host/IPv4 与方括号 IPv6 追加端口；
+/// 裸 IPv6（多冒号且无方括号）无法可靠判端口，保持原样交由 agent 配置校验拒绝。
+fn ensure_agent_port(addr: &str) -> String {
+    let has_port = if let Some(idx) = addr.rfind(']') {
+        addr[idx + 1..].starts_with(':')
+    } else if addr.contains(':') {
+        matches!(addr.rsplit_once(':'), Some((_, p)) if !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    } else {
+        false
+    };
+    if has_port {
+        addr.to_string()
+    } else {
+        format!("{addr}:{DEFAULT_AGENT_PORT}")
+    }
 }
 
 /// 从 Host 头提取主机部分（去端口、去方括号 IPv6）。
@@ -353,7 +384,7 @@ fn resolve_server_addr(
                 msg("server.common.invalid_param").with("param", "server_addr"),
             ));
         }
-        return Ok(explicit.to_string());
+        return Ok(ensure_agent_port(explicit));
     }
     let host = host_from_headers(headers)
         .or_else(|| uri.host().map(str::to_string))
@@ -383,6 +414,8 @@ install -m 0755 foims-agent /usr/local/bin/foims-agent
 install -d -m 0755 /etc/foims-agent
 install -m 0600 agent.toml /etc/foims-agent/agent.toml
 install -m 0644 ca.pem /etc/foims-agent/ca.pem
+install -m 0644 client.pem /etc/foims-agent/client.pem
+install -m 0600 client.key /etc/foims-agent/client.key
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     cat > /etc/systemd/system/foims-agent.service << 'UNIT_EOF'
 [Unit]
@@ -399,7 +432,8 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT_EOF
     systemctl daemon-reload
-    systemctl enable --now foims-agent.service
+    systemctl enable foims-agent.service
+    systemctl restart foims-agent.service
 else
     echo "未检测到 systemd，请自行配置 foims-agent 的开机自启" >&2
 fi
@@ -414,5 +448,52 @@ async fn load_install_sh(dist_dir: &str) -> String {
             log_warn!("log.agent.install_sh_fallback");
             INSTALL_SH_FALLBACK.to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_agent_port, valid_server_addr};
+
+    #[test]
+    fn test_ensure_agent_port() {
+        // 已含端口：原样返回
+        assert_eq!(ensure_agent_port("127.0.0.1:9100"), "127.0.0.1:9100");
+        assert_eq!(
+            ensure_agent_port("foims.example.com:9443"),
+            "foims.example.com:9443"
+        );
+        assert_eq!(ensure_agent_port("[::1]:9100"), "[::1]:9100");
+        // 缺端口：补默认 9100
+        assert_eq!(ensure_agent_port("127.0.0.1"), "127.0.0.1:9100");
+        assert_eq!(
+            ensure_agent_port("foims.example.com"),
+            "foims.example.com:9100"
+        );
+        assert_eq!(ensure_agent_port("[::1]"), "[::1]:9100");
+        assert_eq!(
+            ensure_agent_port("agent.example-com_cn"),
+            "agent.example-com_cn:9100"
+        );
+    }
+
+    #[test]
+    fn test_valid_server_addr() {
+        // 合法：域名 / IPv4 / 方括号 IPv6（缺端口与带端口形式均合法）
+        assert!(valid_server_addr("foims.example.com"));
+        assert!(valid_server_addr("127.0.0.1:9100"));
+        assert!(valid_server_addr("[::1]"));
+        assert!(valid_server_addr("[::1]:9100"));
+        assert!(valid_server_addr("agent.example-com_cn"));
+        // 尾冒号：补端口会产出 "host::9100" 非法形式，必须拒绝
+        //（方括号 IPv6 以 "]" 结尾不受影响，见上方合法用例）
+        assert!(!valid_server_addr("host:"), "尾冒号应拒绝");
+        assert!(!valid_server_addr("127.0.0.1:"), "尾冒号应拒绝");
+        assert!(!valid_server_addr("[::1]:"), "尾冒号应拒绝");
+        assert!(!valid_server_addr("::"), "裸 IPv6 尾冒号应拒绝");
+        // 空串与非白名单字符拒绝
+        assert!(!valid_server_addr(""));
+        assert!(!valid_server_addr("host\n.example.com"));
+        assert!(!valid_server_addr("host\"; rm -rf /"));
     }
 }

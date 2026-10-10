@@ -13,8 +13,10 @@
 #   dist/agents/SHA256SUMS                       # 全部二进制的校验和
 #
 # 设计约束：
-#   - foims-agent 为纯 Rust 实现（rustix 走 linux 内联 syscall，无 libc C 依赖），
-#     musl 目标由 rust-lld 自含链接（Rust 1.71+ 默认），无需外部交叉工具链
+#   - 主体为纯 Rust 实现（rustix 走 linux 内联 syscall），musl 目标由
+#     rust-lld 自含链接（Rust 1.71+ 默认）；但依赖链中含 C 代码（ring 的
+#     密码学实现），交叉编译时需按目标注入 musl 交叉 C 编译器（见
+#     cc_for_target：x86_64 用 musl-tools，其余用 musl.cc 工具链）
 #   - tier1/2 目标：stable 直编，缺 std 组件时 rustup target add；
 #     国内镜像源缺组件（404）时自动回退官方源离线安装（校验 sha256）
 #   - tier3 目标：需 nightly + rust-src，用 -Z build-std 现场构建 std
@@ -141,18 +143,44 @@ install_target_offline() {
     rm -rf "$tmpdir"
 }
 
+# 各 musl 目标对应的交叉 C 编译器：依赖链中含 C 代码（如 ring）时，
+# cc-rs 按目标前缀查找编译器且不回退宿主 cc，必须显式注入 CC_<target>。
+# x86_64 用发行版 musl-tools 的 musl-gcc；其余用 musl.cc 交叉工具链。
+cc_for_target() {
+    case "$1" in
+        x86_64-unknown-linux-musl)    command -v musl-gcc || true ;;
+        aarch64-unknown-linux-musl)   echo "/opt/musl-cross/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc" ;;
+        i686-unknown-linux-musl)      echo "/opt/musl-cross/i686-linux-musl-cross/bin/i686-linux-musl-gcc" ;;
+        arm-unknown-linux-musleabihf) echo "/opt/musl-cross/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc" ;;
+        armv7-unknown-linux-musleabihf)
+            echo "/opt/musl-cross/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc" ;;
+        *) : ;;
+    esac
+}
+
 # 构建 tier1/2：stable 直编。
 # 链接器统一用 rustc 自带的 rust-lld（除 x86_64 musl 已默认外，其余目标
-# 默认调用 cc，交叉场景下宿主 gcc 无法链接异构 musl 目标）。
+# 默认调用 cc，交叉场景下宿主 gcc 无法链接异构 musl 目标）；
+# C 依赖（ring）按目标注入交叉编译器，未就位时警告并继续（仅纯 Rust 可过）。
 build_tier12() {
     local target="$1"
-    local linker_var
+    local linker_var cc_var cc
     linker_var="CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_LINKER"
+    # cc-rs 认小写形式（如 CC_aarch64_unknown_linux_musl），大写不生效
+    cc_var="CC_$(echo "$target" | tr '.' '_')"
     if ! target_std_installed "$target"; then
         rustup target add "$target" || install_target_offline "$target"
     fi
-    (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "FOIMS_AGENT_VERSION=$VERSION" \
-        cargo build --release -p "$CRATE" --target "$target")
+    cc="$(cc_for_target "$target")"
+    if [ -n "$cc" ] && [ -x "$cc" ]; then
+        (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "$cc_var=$cc" \
+            "FOIMS_AGENT_VERSION=$VERSION" \
+            cargo build --release -p "$CRATE" --target "$target")
+    else
+        echo "警告：[$target] 未找到交叉 C 编译器（ring 等依赖需要），仅以 rust-lld 继续" >&2
+        (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "FOIMS_AGENT_VERSION=$VERSION" \
+            cargo build --release -p "$CRATE" --target "$target")
+    fi
 }
 
 # 构建 tier3：nightly -Z build-std（链接器同 tier1/2，统一 rust-lld）
