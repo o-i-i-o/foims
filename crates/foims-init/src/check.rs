@@ -536,6 +536,8 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "id",
             "machine_id",
             "token_hash",
+            "source",
+            "device_id",
             "label",
             "status",
             "hostname",
@@ -810,10 +812,10 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         ("ips", "device_interface_id"),
         // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）
         ("ips", "subnet_id"),
-        // agent 凭 token 哈希定位记录（认证与激活的唯一锚点，禁止可空）
-        ("agents", "token_hash"),
         // agent 状态机（pending|active|offline|disabled|revoked）必须有值
         ("agents", "status"),
+        // 数据来源（agent|snmp）必须有值：区分 Agent 上报与 SNMP 轮询记录
+        ("agents", "source"),
         // 指标历史必须归属 agent 且带采集时间与指标载荷
         ("agent_metrics_history", "agent_id"),
         ("agent_metrics_history", "collected_at"),
@@ -851,6 +853,8 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ("uq_devices_room_name", "devices"),
         // 同机重复安装判重：machine_id 仅对已回填行唯一（agents.rs 部分唯一索引）
         ("idx_agents_machine_id", "agents"),
+        // 一台设备至多一条 SNMP 采集记录（agents.rs 部分唯一索引）
+        ("idx_agents_device_id", "agents"),
         // 指标历史 (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING
         // 幂等去重，防重复上报写重（agents.rs 建表时创建）
         (

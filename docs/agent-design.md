@@ -180,7 +180,9 @@ CREATE TABLE agents (
   -- machine_id 下载时未知（agent 所在主机生成），首报激活时回填；
   -- 唯一性用 partial unique index（仅对已回填行生效）
   machine_id TEXT,
-  token_hash TEXT NOT NULL UNIQUE,
+  token_hash TEXT UNIQUE,                              -- SNMP 采集行无下发 token，可空
+  source TEXT NOT NULL DEFAULT 'agent',                -- agent|snmp 数据来源
+  device_id UUID REFERENCES devices(id) ON DELETE CASCADE, -- SNMP 采集来源设备
   label TEXT,                                          -- 下载时的备注
   status TEXT NOT NULL DEFAULT 'pending',              -- pending|active|offline|disabled|revoked
   hostname TEXT, ip TEXT, os TEXT, kernel TEXT, arch TEXT, agent_version TEXT,
@@ -193,6 +195,8 @@ CREATE TABLE agents (
 
 CREATE UNIQUE INDEX idx_agents_machine_id
   ON agents (machine_id) WHERE machine_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_agents_device_id
+  ON agents (device_id) WHERE device_id IS NOT NULL;
 
 CREATE TABLE agent_metrics_history (
   id BIGSERIAL PRIMARY KEY,
@@ -203,6 +207,28 @@ CREATE TABLE agent_metrics_history (
 CREATE INDEX idx_agent_metrics_history_agent_time
   ON agent_metrics_history (agent_id, collected_at);
 ```
+
+### 5.2.1 SNMP 设备纳入主机监控（一期，2026-10-10）
+
+设备配置 SNMP 凭据后自动出现在主机监控页，无需安装 agent：
+
+- **身份模型**：`agents.source = 'snmp'`，`machine_id` 合成
+  `snmp:{device_id}`（与 agent 机器指纹命名空间隔离），无下发 token
+  故 `token_hash` 可空；`device_id` 外键关联设备，设备删除级联清理。
+- **采集范围（一期）**：MIB-II 系统组 —— sysName → hostname（缺失回落
+  设备名）、sysDescr → os、sysUpTime → uptime_secs（百分之一秒换算）。
+  CPU/内存/磁盘/温度与流量曲线留二期。
+- **调度**：`agent_snmp_poll` 任务每 5 分钟运行（foims-agent-service
+  snmp_poll 模块）：单查询捞取「已配置凭据（community/username 任一非空，
+  与设备列表 snmp_configured 同口径）且有管理地址」的设备，并发 8 台
+  上限逐台 GET 三个 OID 后 upsert agents 行；成功刷新 last_seen 并翻转
+  offline → active，连续两轮失败（间隔 × 2 阈值）统一置 offline。
+- **与 agent 离线判定隔离**：`agent_offline` 任务限定
+  `source = 'agent'`——SNMP 行轮询间隔（5 分钟）长于 agent 上报间隔
+  （默认 1 分钟），沿用 agent 阈值会把正常 SNMP 行误判离线。
+- **前端**：SNMP 行主机名旁显示「SNMP」来源徽标，隐藏禁用/启用/吊销
+  （无令牌管理语义）；CPU/内存/磁盘/温度列显示 "-"。
+
 
 热列（cpu_usage 等）用于列表排序与阈值 SQL；raw JSONB 存全量供详情页。
 首报激活：`UPDATE agents SET machine_id=…, status='active', first_seen=…, last_seen=…`

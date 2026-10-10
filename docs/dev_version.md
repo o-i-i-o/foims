@@ -101,3 +101,8 @@ v0.1.1
 v0.1.2
 2026101111503001
 1.系统页「Agent 采集」子标签更名「数据采集」（i18n 键 system.agent_collect 中英文同步，英文 Data Collection），SNMP Trap 接收卡片自「通知」子标签迁入该子标签（HTML 结构原样移动，Agent 分发卡片图标改 📦 避免与 SNMP 📡 重复）；子标签内卡片标题保留原文案，拆独立键 system.agent_collect_card（中文「Agent 采集」/英文 Agent Collection）；子标签激活分支 system-notification 移除 loadSnmpTrapConfig、agent-collect 补挂 loadSnmpTrapConfig（表单 submit 与 v3 用户行按钮绑定在 initSystemTabs 通用区，不受迁移影响），前端资源版本同步 bump，Cargo.toml 不变
+
+v0.2.0
+2026101021201501
+1.新增 SNMP 设备自动纳入主机监控（一期）：agents 表加 source（agent|snmp）与 device_id 外键（设备删除级联清理），token_hash 放宽可空（真实库已执行 ALTER，foims-init 建表与 check.rs 清单同步，新增 idx_agents_device_id 部分唯一索引）；foims-agent-service 新增 snmp_poll 模块与 agent_snmp_poll 调度任务（每 5 分钟轮询已配置 SNMP 凭据且有管理地址的设备，GET sysName/sysDescr/sysUpTime → 以 machine_id='snmp:{device_id}'、source='snmp' upsert agents 行，成功刷新 last_seen 并翻转 offline→active，连续两轮失败置 offline；agent_offline 任务限定 source='agent' 不受 SNMP 轮询间隔影响）；/api/agents 列表与详情返回 source；前端主机列表 SNMP 行显示来源徽标并隐藏禁用/启用/吊销（无令牌管理语义），新增 i18n 键 agents.source_snmp 与任务文案中英文；一期仅 MIB-II 系统组，流量曲线/更多指标留二期，lib 版本 0.22.0→0.22.1，前端资源版本同步 bump
+2.联调修正：snmp_poll 的 SNMP 客户端关闭内建重试（async-snmp 默认 Retry 为 3 次 × 5s 超时 + 1s 退避，单个 OID 卡 23s、三个 OID 共 69s，设备不可达时会挤占下一轮 5 分钟调度窗口），改 Retry::none() 单次超时；e2e 联调定位轮询超时根因为测试数据团体字与 snmpd 配置不符（strace 证实请求正常发出、snmpd 对错误 community 静默丢弃导致超时），非代码缺陷

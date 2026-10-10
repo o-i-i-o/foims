@@ -1,6 +1,6 @@
 [package]
 name = "foims-agent-service"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Agent 服务端：分发打包（manifest/zip/deb/rpm 动态组包）、下载 API 与 QUIC 指标接收（mTLS 鉴权/入库/历史）"
@@ -8,6 +8,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 async-trait = { workspace = true }
+async-snmp = "0.18.1"
 axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -36,6 +37,7 @@ zip = { workspace = true }
 
 foims-auth = { path = "../foims-auth" }
 foims-common = { path = "../foims-common" }
+foims-resource = { path = "../foims-resource" }
 foims-scheduler = { path = "../foims-scheduler" }
 
 [dev-dependencies]

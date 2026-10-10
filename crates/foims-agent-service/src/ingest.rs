@@ -189,7 +189,8 @@ fn normalize_report(report: &AgentReport) -> Result<TrimmedReport, String> {
 /// 入库（单事务）：
 /// - agents 主行刷新快照列（pending/offline 首报即翻转 active，machine_id
 ///   缺失时回填，last_seen/first_seen 置位）；
-/// - agent_metrics_history 追加曲线精简快照 {"cpu","mem","disk","temp"}。
+/// - agent_metrics_history 追加曲线精简快照
+///   {"cpu","mem","disk","temp","rx_bps","tx_bps"}。
 pub async fn ingest(
     ctx: &ReportContext,
     headers: &HeaderMap,
@@ -261,12 +262,19 @@ pub async fn ingest(
     let mem_pct = mem_usage_pct(report.memory.total, report.memory.used);
     let disk_pct = disk_usage_pct(&report.disks);
     let temp = max_temp(&report.sensors);
+    // 流量合计（bit/s）：各网卡速率求和，无网卡 → null（与 SNMP 轮询
+    // 路径的快照键保持一致，供详情网络曲线共用）
+    let sum_bps = |get: fn(&foims_common::report::ReportNet) -> f64| -> Option<f64> {
+        (!report.nets.is_empty()).then(|| report.nets.iter().map(get).sum())
+    };
     let raw_metrics = serde_json::to_value(&report).unwrap_or(Value::Null);
     let history_snapshot = json!({
         "cpu": report.cpu.usage_pct,
         "mem": mem_pct,
         "disk": disk_pct,
         "temp": temp,
+        "rx_bps": sum_bps(|n| n.rx_bps),
+        "tx_bps": sum_bps(|n| n.tx_bps),
     });
     let ip = normalize_ipv4_address(peer_ip);
 

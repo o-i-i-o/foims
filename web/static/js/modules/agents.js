@@ -214,10 +214,15 @@ export async function loadAgentsData(page = currentPage) {
   }
 }
 
-/** 渲染单行：状态点 / 主机名+备注 / 使用率迷你条 / 相对时间 / 行内操作 */
+/** 渲染单行：状态点 / 主机名+来源徽标+备注 / 使用率迷你条 / 相对时间 / 行内操作 */
 function renderAgentRow(agent) {
   const meta = STATUS_META[agent.status];
   const statusText = meta ? t(meta.label) : String(agent.status ?? "-");
+  // SNMP 采集行显示来源徽标（非 Agent 上报，无令牌管理语义）
+  const sourceBadge =
+    agent.source === "snmp"
+      ? `<span class="agent-source-badge">${escapeHtml(t("agents.source_snmp"))}</span>`
+      : "";
   const labelBadge = agent.label
     ? `<span class="agent-host-label">${escapeHtml(agent.label)}</span>`
     : "";
@@ -225,7 +230,7 @@ function renderAgentRow(agent) {
     <td class="col-center">
       <span class="agent-status-wrap"><span class="agent-status-dot ${meta ? meta.dot : "agent-dot-pending"}" aria-hidden="true"></span>${escapeHtml(statusText)}</span>
     </td>
-    <td>${escapeHtml(agent.hostname) || "-"}${labelBadge}</td>
+    <td>${escapeHtml(agent.hostname) || "-"}${sourceBadge}${labelBadge}</td>
     <td>${escapeHtml(agent.ip) || "-"}</td>
     <td>${escapeHtml(agent.os) || "-"}</td>
     <td class="col-center">${escapeHtml(agent.arch) || "-"}</td>
@@ -270,8 +275,10 @@ function renderTemp(temp) {
   return `${Number(temp).toFixed(1)}℃`;
 }
 
-/** 行内操作按钮：按 status 动态显隐（吊销与删除需确认） */
+/** 行内操作按钮：按 status 动态显隐（吊销与删除需确认）；
+ * SNMP 采集行无下发令牌，禁用/启用/吊销仅对 Agent 行有意义，予以隐藏 */
 function renderRowActions(agent) {
+  const isSnmp = agent.source === "snmp";
   const buttons = [
     iconButton({
       icon: "eye",
@@ -280,7 +287,7 @@ function renderRowActions(agent) {
       attrs: `data-agent-action="detail" data-id="${agent.id}"`
     })
   ];
-  if (agent.status === "active" || agent.status === "pending") {
+  if (!isSnmp && (agent.status === "active" || agent.status === "pending")) {
     buttons.push(
       iconButton({
         icon: "lock",
@@ -290,7 +297,7 @@ function renderRowActions(agent) {
       })
     );
   }
-  if (agent.status === "disabled") {
+  if (!isSnmp && agent.status === "disabled") {
     buttons.push(
       iconButton({
         icon: "check",
@@ -300,7 +307,7 @@ function renderRowActions(agent) {
       })
     );
   }
-  if (agent.status !== "revoked") {
+  if (!isSnmp && agent.status !== "revoked") {
     buttons.push(
       iconButton({
         icon: "shield",
@@ -541,7 +548,7 @@ function renderSensorRow(sensor) {
 // 近 24h 迷你曲线
 // ==========================================
 
-/** 拉取 24h 历史并渲染 2×2 迷你曲线（CPU/内存/磁盘/温度） */
+/** 拉取 24h 历史并渲染迷你曲线卡（CPU/内存/磁盘/温度/网络） */
 async function loadAgentHistory(id) {
   const requestSeq = historySeq.next();
   try {
@@ -564,7 +571,7 @@ async function loadAgentHistory(id) {
   }
 }
 
-/** 按指标拆分序列并渲染四张曲线卡（cpu/mem/disk/temp 均可能为 null） */
+/** 按指标拆分序列并渲染五张曲线卡（cpu/mem/disk/temp/rx/tx 均可能为 null） */
 function renderAllCharts(items) {
   renderSparkline("agent-chart-cpu", items.map((item) => item?.cpu), "%", "agent-chart-line-cpu");
   renderSparkline(
@@ -585,14 +592,24 @@ function renderAllCharts(items) {
     "℃",
     "agent-chart-line-temp"
   );
+  // 网络卡双线：下行 rx / 上行 tx（bit/s，与列表行 formatBps 口径一致）
+  renderSparklineSeries(
+    "agent-chart-net",
+    [
+      { values: items.map((item) => item?.rx_bps), lineClass: "agent-chart-line-rx" },
+      { values: items.map((item) => item?.tx_bps), lineClass: "agent-chart-line-tx" }
+    ],
+    formatBps,
+    t("agents.chart_net")
+  );
 }
 
 /**
- * 迷你曲线：固定 viewBox（0 0 320 96）自绘 polyline。
- * 网格线 2 条 + max/min 标注；null/缺失值视为断点（分段 polyline）；
- * 全空时渲染"暂无历史数据"。
+ * 迷你曲线（多序列）：固定 viewBox（0 0 320 96）自绘 polyline，
+ * 每序列独立配色（lineClass）。max/min 标注由 formatValue 人性化；
+ * null/缺失值视为断点（分段 polyline）；全空时渲染"暂无历史数据"。
  */
-function renderSparkline(containerId, values, unit, lineClass) {
+function renderSparklineSeries(containerId, series, formatValue, ariaLabel) {
   const container = document.getElementById(containerId);
   if (!container) {
     return;
@@ -601,7 +618,10 @@ function renderSparkline(containerId, values, unit, lineClass) {
   const width = 320;
   const height = 96;
   const pad = 6;
-  const nums = values.filter((v) => v != null && Number.isFinite(Number(v))).map(Number);
+  const nums = series
+    .flatMap((s) => s.values)
+    .filter((v) => v != null && Number.isFinite(Number(v)))
+    .map(Number);
   if (!nums.length) {
     container.innerHTML = `<p class="agent-spark-empty">${t("agents.no_history")}</p>`;
     return;
@@ -610,44 +630,63 @@ function renderSparkline(containerId, values, unit, lineClass) {
   const max = Math.max(...nums);
   const min = Math.min(...nums);
   const span = max - min || 1;
-  const step = (width - pad * 2) / Math.max(values.length - 1, 1);
+  const len = Math.max(...series.map((s) => s.values.length));
+  const step = (width - pad * 2) / Math.max(len - 1, 1);
   const toY = (v) => height - pad - ((v - min) / span) * (height - pad * 2);
 
   // 连续非空点拼接 polyline：null 视为断点；孤立单点记录为圆点，避免序列仅 1 点时曲线空白
-  const segments = [];
-  const singles = [];
-  let current = [];
-  values.forEach((v, i) => {
-    if (v == null || !Number.isFinite(Number(v))) {
-      if (current.length > 1) {
-        segments.push(current.join(" "));
-      } else if (current.length === 1) {
-        singles.push(current[0]);
+  const groups = series.map((s) => {
+    const segments = [];
+    const singles = [];
+    let current = [];
+    s.values.forEach((v, i) => {
+      if (v == null || !Number.isFinite(Number(v))) {
+        if (current.length > 1) {
+          segments.push(current.join(" "));
+        } else if (current.length === 1) {
+          singles.push(current[0]);
+        }
+        current = [];
+        return;
       }
-      current = [];
-      return;
+      current.push(`${(pad + i * step).toFixed(1)},${toY(Number(v)).toFixed(1)}`);
+    });
+    if (current.length > 1) {
+      segments.push(current.join(" "));
+    } else if (current.length === 1) {
+      singles.push(current[0]);
     }
-    current.push(`${(pad + i * step).toFixed(1)},${toY(Number(v)).toFixed(1)}`);
+    return { lineClass: s.lineClass, segments, singles };
   });
-  if (current.length > 1) {
-    segments.push(current.join(" "));
-  } else if (current.length === 1) {
-    singles.push(current[0]);
-  }
 
-  const lines = segments.map((points) => `<polyline points="${points}"/>`).join("");
-  const dots = singles
-    .map((point) => {
-      const [cx, cy] = point.split(",");
-      return `<circle cx="${cx}" cy="${cy}" r="3"/>`;
+  const groupsSvg = groups
+    .map((g) => {
+      const lines = g.segments.map((points) => `<polyline points="${points}"/>`).join("");
+      const dots = g.singles
+        .map((point) => {
+          const [cx, cy] = point.split(",");
+          return `<circle cx="${cx}" cy="${cy}" r="3"/>`;
+        })
+        .join("");
+      return `<g class="agent-spark-line ${g.lineClass}">${lines}${dots}</g>`;
     })
     .join("");
-  container.innerHTML = `<svg class="agent-spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(unit)}">
+  container.innerHTML = `<svg class="agent-spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(ariaLabel || "")}">
       <line class="agent-spark-gridline" x1="${pad}" y1="${(height / 3).toFixed(1)}" x2="${width - pad}" y2="${(height / 3).toFixed(1)}"></line>
       <line class="agent-spark-gridline" x1="${pad}" y1="${((height / 3) * 2).toFixed(1)}" x2="${width - pad}" y2="${((height / 3) * 2).toFixed(1)}"></line>
-      <g class="agent-spark-line ${lineClass}">${lines}${dots}</g>
+      ${groupsSvg}
     </svg>
-    <div class="agent-spark-range"><span>${formatChartNum(max)}${unit}</span><span>${formatChartNum(min)}${unit}</span></div>`;
+    <div class="agent-spark-range"><span>${formatValue(max)}</span><span>${formatValue(min)}</span></div>`;
+}
+
+/** 单序列迷你曲线（四张百分比/温度卡复用，单位后缀标注） */
+function renderSparkline(containerId, values, unit, lineClass) {
+  renderSparklineSeries(
+    containerId,
+    [{ values, lineClass }],
+    (v) => formatChartNum(v) + unit,
+    unit
+  );
 }
 
 /** 曲线 min/max 标注数值：整数去小数，其余保留一位 */

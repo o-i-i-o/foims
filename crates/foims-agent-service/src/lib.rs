@@ -8,7 +8,10 @@
 //! - [`report_server`]：QUIC/HTTP3 指标接收监听（强制客户端证书）；
 //! - [`ingest`]：上报鉴权、校验与入库（agents + agent_metrics_history）；
 //! - [`agents_api`]：Agent 列表/详情/历史/管理的 Web API；
-//! - [`tasks`]：离线判定与历史清理调度任务执行器。
+//! - [`snmp_poll`]：SNMP 设备轮询采集（纳入主机监控页，source='snmp'）；
+//! - [`snmp_metrics`]：SNMP 性能指标采集（CPU/内存/磁盘/温度/流量/负载
+//!   与差值计算，二期）；
+//! - [`tasks`]：离线判定、SNMP 轮询与历史清理调度任务执行器。
 
 /// 站点 CA 公钥路径（公开物料，作 agent 信任锚，设计 §3.1）
 pub const SITE_CA_PATH: &str = "/etc/ssl/foims-ca/ca.pem";
@@ -22,4 +25,6 @@ pub mod ingest;
 pub mod manifest;
 pub mod packaging;
 pub mod report_server;
+pub mod snmp_metrics;
+pub mod snmp_poll;
 pub mod tasks;

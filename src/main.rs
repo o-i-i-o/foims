@@ -27,7 +27,9 @@ use foims::system::task_executors::{
 use foims::utils::rate_limit::{
     RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
 };
-use foims_agent_service::tasks::{AgentHistoryCleanupTaskExecutor, AgentOfflineTaskExecutor};
+use foims_agent_service::tasks::{
+    AgentHistoryCleanupTaskExecutor, AgentOfflineTaskExecutor, AgentSnmpPollTaskExecutor,
+};
 use foims_common::config::Config;
 use foims_common::db::DbPool;
 use foims_init::InitContext;
@@ -437,6 +439,7 @@ async fn main() -> std::io::Result<()> {
         registry.register(Box::new(PasswordExpirySyncTaskExecutor));
         registry.register(Box::new(AgentOfflineTaskExecutor));
         registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
+        registry.register(Box::new(AgentSnmpPollTaskExecutor));
         registry
     });
 
@@ -533,6 +536,23 @@ async fn main() -> std::io::Result<()> {
                 {
                     foims_common::log_error!(
                         "system.register_agent_history_cleanup_job_failed",
+                        error = e
+                    );
+                }
+
+                // SNMP 设备轮询（每 5 分钟）：已配置 SNMP 的设备以 source='snmp'
+                // 呈现于主机监控页，连续两轮失败置 offline（snmp_poll 自行判定）
+                if let Err(e) = state
+                    .add_system_job(
+                        "system_agent_snmp_poll",
+                        "0 */5 * * * *",
+                        "agent_snmp_poll",
+                        serde_json::json!({ "interval_secs": 300 }),
+                    )
+                    .await
+                {
+                    foims_common::log_error!(
+                        "system.register_agent_snmp_poll_job_failed",
                         error = e
                     );
                 }

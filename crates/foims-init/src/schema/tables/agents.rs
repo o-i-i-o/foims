@@ -4,13 +4,19 @@
 //! （machine_id 未知，首报激活时回填）；唯一性用 partial unique index
 //! （仅对已回填行生效）。agent_metrics_history 存 JSONB 全量指标供
 //! 详情页曲线渲染，保留期由调度任务清理。
+//!
+//! source 区分数据来源：'agent'（FOIMS Agent 主动上报）/'snmp'（服务端
+//! SNMP 轮询设备，machine_id 合成 'snmp:{device_id}'，无 token 故
+//! token_hash 可空）；device_id 关联 devices，设备删除级联清理。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS agents (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             machine_id TEXT,
-            token_hash TEXT NOT NULL UNIQUE,
+            token_hash TEXT UNIQUE,
+            source TEXT NOT NULL DEFAULT 'agent',
+            device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
             label TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
             hostname TEXT,
@@ -37,6 +43,14 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_machine_id
             ON agents (machine_id) WHERE machine_id IS NOT NULL",
+    )
+    .execute(pool)
+    .await?;
+
+    // 一台设备至多一条 SNMP 采集记录（snmp_poll upsert 判重锚点）
+    sqlx::query(
+        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_device_id
+            ON agents (device_id) WHERE device_id IS NOT NULL",
     )
     .execute(pool)
     .await?;

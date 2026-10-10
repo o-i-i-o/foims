@@ -92,7 +92,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     tokens::create(pool).await?;
     notifications::create(pool).await?;
 
-    // 主机采集 Agent（无外键依赖；history 引用 agents）
+    // 主机采集 Agent（device_id 引用 devices；history 引用 agents）
     agents::create(pool).await?;
 
     indexes::create(pool).await?;

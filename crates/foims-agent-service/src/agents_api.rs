@@ -129,7 +129,7 @@ pub async fn list_agents<S: ConfigProvider>(
 
     // 列表行（NUMERIC 统一 cast float8 读取；不取 raw_metrics）
     let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        r#"SELECT id, status, hostname, label, ip, os, arch, agent_version,
+        r#"SELECT id, status, source, hostname, label, ip, os, arch, agent_version,
                   cpu_usage::float8 AS cpu_usage,
                   mem_usage_pct::float8 AS mem_usage_pct,
                   disk_usage_pct::float8 AS disk_usage_pct,
@@ -155,6 +155,7 @@ pub async fn list_agents<S: ConfigProvider>(
             json!({
                 "id": row.get::<Uuid, _>("id"),
                 "status": row.get::<String, _>("status"),
+                "source": row.get::<String, _>("source"),
                 "hostname": row.get::<Option<String>, _>("hostname"),
                 "label": row.get::<Option<String>, _>("label"),
                 "ip": row.get::<Option<String>, _>("ip"),
@@ -184,7 +185,7 @@ pub async fn get_agent_detail<S: ConfigProvider>(
 ) -> Result<Response, AppError> {
     let pool = state.pool()?.get_conn();
     let row = sqlx::query(
-        r#"SELECT id, machine_id, label, status, hostname, ip, os, kernel, arch,
+        r#"SELECT id, machine_id, label, status, source, hostname, ip, os, kernel, arch,
                   agent_version,
                   cpu_usage::float8 AS cpu_usage,
                   mem_usage_pct::float8 AS mem_usage_pct,
@@ -205,6 +206,7 @@ pub async fn get_agent_detail<S: ConfigProvider>(
         "machine_id": row.get::<Option<String>, _>("machine_id"),
         "label": row.get::<Option<String>, _>("label"),
         "status": row.get::<String, _>("status"),
+        "source": row.get::<String, _>("source"),
         "hostname": row.get::<Option<String>, _>("hostname"),
         "ip": row.get::<Option<String>, _>("ip"),
         "os": row.get::<Option<String>, _>("os"),
@@ -228,7 +230,8 @@ pub async fn get_agent_detail<S: ConfigProvider>(
 }
 
 /// GET /api/agents/{id}/history?hours=24：曲线数据，hours 合法区间 1..=168，
-/// 返回 {items:[{t,cpu,mem,disk,temp}]}（非分页，超出上限均匀抽样）。
+/// 返回 {items:[{t,cpu,mem,disk,temp,rx_bps,tx_bps}]}（非分页，超出上限
+/// 均匀抽样）。
 pub async fn get_agent_history<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -271,7 +274,7 @@ pub async fn get_agent_history<S: ConfigProvider>(
     let points: Vec<Value> = rows
         .into_iter()
         .map(|(t, metrics)| {
-            // 曲线精简快照键：cpu/mem/disk/temp（缺键时补 null）
+            // 曲线精简快照键：cpu/mem/disk/temp/rx_bps/tx_bps（缺键时补 null）
             let pick = |key: &str| metrics.get(key).cloned().unwrap_or(Value::Null);
             json!({
                 "t": rfc3339(t),
@@ -279,6 +282,8 @@ pub async fn get_agent_history<S: ConfigProvider>(
                 "mem": pick("mem"),
                 "disk": pick("disk"),
                 "temp": pick("temp"),
+                "rx_bps": pick("rx_bps"),
+                "tx_bps": pick("tx_bps"),
             })
         })
         .collect();
