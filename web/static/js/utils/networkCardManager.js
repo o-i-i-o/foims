@@ -331,6 +331,29 @@ export class NetworkCardManager {
     card.remove();
   }
 
+  /**
+   * 生成表单内未占用的默认网口名（eth0、eth1、…）。
+   * 扫描当前表单全部网口名称输入框，避免新增网口默认名与已有网口
+   * 重名（同设备重名会被后端 409 拒绝，且表单内不可见的非托管网口
+   * 仍由后端兜底）。新建网卡在挂载前构建，扫描不到自身输入框，不影响。
+   */
+  nextDefaultPortName() {
+    const used = new Set();
+    this.getContainer()
+      ?.querySelectorAll(".port-name")
+      .forEach((el) => {
+        const value = el.value?.trim();
+        if (value) {
+          used.add(value);
+        }
+      });
+    let index = 0;
+    while (used.has(`${DEFAULT_PORT_NAME}${index}`)) {
+      index++;
+    }
+    return `${DEFAULT_PORT_NAME}${index}`;
+  }
+
   createPortElement(portData = {}) {
     const div = document.createElement("div");
     div.className = "nc-port-item";
@@ -348,7 +371,7 @@ export class NetworkCardManager {
       <div class="nc-fields">
         <div class="nc-field">
           <label for="${uid}-name">${t("device.network_port_name")}<span class="required" aria-hidden="true">*</span></label>
-          <input id="${uid}-name" type="text" class="port-name nc-input" value="${escapeHtml(portData.name || DEFAULT_PORT_NAME)}" placeholder="${t("device.network_port_name")}" autocomplete="off" required />
+          <input id="${uid}-name" type="text" class="port-name nc-input" value="${escapeHtml(portData.name || this.nextDefaultPortName())}" placeholder="${t("device.network_port_name")}" autocomplete="off" required />
         </div>
         <div class="nc-field">
           <label for="${uid}-ptype">${t("device.physical_type")}</label>

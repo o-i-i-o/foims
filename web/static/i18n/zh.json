@@ -1847,7 +1847,7 @@
         "interface_role_required": "接口角色为必填项",
         "list_all_retrieved": "所有接口列表获取成功",
         "list_retrieved": "接口列表获取成功",
-        "name_exists": "该接口名已存在",
+        "name_exists": "该设备下已存在同名网口",
         "not_found": "接口不存在",
         "physical_type_required": "接口物理形态为必填项",
         "port_type_invalid": "端口类型必须是以下之一: access、trunk、uplink、stack、console",

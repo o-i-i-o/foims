@@ -1848,7 +1848,7 @@
         "interface_role_required": "Interface role is required",
         "list_all_retrieved": "All interface list retrieved successfully",
         "list_retrieved": "Interface list retrieved successfully",
-        "name_exists": "Interface name already exists",
+        "name_exists": "A port with this name already exists on this device",
         "not_found": "Interface not found",
         "physical_type_required": "Interface physical type is required",
         "port_type_invalid": "Port type must be one of: access, trunk, uplink, stack, console",
