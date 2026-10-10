@@ -12,7 +12,6 @@ export class TopologyModal {
     this.currentDeviceId = null;
     this.currentDeviceName = null;
     this.activePanel = "ports";
-    this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.onRemoveDevice = null;
     // 打开代次：连续 open/close 交错时作废在途的渲染与面板加载
     this.openToken = 0;
@@ -30,7 +29,6 @@ export class TopologyModal {
     this.currentDeviceId = deviceId;
     this.currentDeviceName = deviceName || deviceId;
     this.currentPosition = position;
-    this.panelVisibility = { ports: true, macs: false, lldp: false };
     this.activePanel = "ports";
     // 先完成模板渲染再拉取面板数据，保证 _loadPanelData 能拿到容器节点
     this._render(token).then(() => {
@@ -135,27 +133,18 @@ export class TopologyModal {
     updatePageTranslations();
   }
 
+  // 页签互斥切换：点击页签仅显示对应面板（经典页签行为），重复点击当前页签无操作
   _togglePanel(panel) {
-    const visiblePanels = Object.entries(this.panelVisibility).filter(([, v]) => v);
-    if (this.panelVisibility[panel] && visiblePanels.length <= 1) {
+    const panels = ["ports", "macs", "lldp"];
+    if (!panels.includes(panel) || this.activePanel === panel) {
       return;
     }
 
-    this.panelVisibility[panel] = !this.panelVisibility[panel];
-
-    if (this.panelVisibility[panel]) {
-      this.activePanel = panel;
-    } else {
-      const remaining = Object.entries(this.panelVisibility).filter(([, v]) => v);
-      if (remaining.length > 0) {
-        this.activePanel = remaining[0][0];
-      }
-    }
-
+    this.activePanel = panel;
     this._updatePanelVisibility();
     this._updateTabStates();
 
-    if (this.panelVisibility[panel] && this.currentDeviceId) {
+    if (this.currentDeviceId) {
       this._loadPanelData(panel);
     }
   }
@@ -164,15 +153,14 @@ export class TopologyModal {
     ["ports", "macs", "lldp"].forEach((panel) => {
       const el = this.modal?.querySelector(`.${panel}-panel`);
       if (el) {
-        el.classList.toggle("hidden", !this.panelVisibility[panel]);
+        el.classList.toggle("hidden", panel !== this.activePanel);
       }
     });
   }
 
   _updateTabStates() {
     this.modal?.querySelectorAll(".topology-detail-tabs button").forEach((btn) => {
-      const panel = btn.dataset.panel;
-      btn.classList.toggle("active", this.panelVisibility[panel]);
+      btn.classList.toggle("active", btn.dataset.panel === this.activePanel);
     });
   }
 
@@ -180,11 +168,7 @@ export class TopologyModal {
     if (!this.currentDeviceId) {
       return;
     }
-    await Promise.all([
-      this._loadPanelData("ports"),
-      this.panelVisibility.macs ? this._loadPanelData("macs") : Promise.resolve(),
-      this.panelVisibility.lldp ? this._loadPanelData("lldp") : Promise.resolve()
-    ]);
+    await this._loadPanelData(this.activePanel);
   }
 
   async _loadPanelData(panel) {
@@ -197,26 +181,41 @@ export class TopologyModal {
       return;
     }
 
+    // 请求代次 + 设备一致性：模态框已被关闭/重开或已切换设备时丢弃在途响应，
+    // 防止旧设备的面板数据写入新模态框
+    const token = this.openToken;
+    const deviceId = this.currentDeviceId;
     container.innerHTML = `<div class="topology-loading">${t("common.loading")}</div>`;
 
     try {
       let data;
       switch (panel) {
         case "ports":
-          data = await this.dataManager.fetchDevicePorts(this.currentDeviceId);
+          data = await this.dataManager.fetchDevicePorts(deviceId);
+          break;
+        case "macs":
+          data = await this.dataManager.fetchDeviceMacs(deviceId);
+          break;
+        default:
+          data = await this.dataManager.fetchDeviceLldp(deviceId);
+      }
+      if (token !== this.openToken || deviceId !== this.currentDeviceId) {
+        return; // 已被新的 open/close 或设备切换取代
+      }
+      switch (panel) {
+        case "ports":
           container.innerHTML = this._renderPortsTable(data);
           break;
         case "macs":
-          data = await this.dataManager.fetchDeviceMacs(this.currentDeviceId);
           container.innerHTML = this._renderMacsTable(data);
           break;
-        case "lldp":
-          data = await this.dataManager.fetchDeviceLldp(this.currentDeviceId);
+        default:
           container.innerHTML = this._renderLldpTable(data);
-          break;
       }
     } catch {
-      container.innerHTML = `<div class="topology-error">${t("common.load_failed")}</div>`;
+      if (token === this.openToken && deviceId === this.currentDeviceId) {
+        container.innerHTML = `<div class="topology-error">${t("common.load_failed")}</div>`;
+      }
     }
   }
 
