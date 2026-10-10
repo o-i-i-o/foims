@@ -217,7 +217,7 @@ CREATE INDEX idx_agent_metrics_history_agent_time
   故 `token_hash` 可空；`device_id` 外键关联设备，设备删除级联清理。
 - **采集范围（一期）**：MIB-II 系统组 —— sysName → hostname（缺失回落
   设备名）、sysDescr → os、sysUpTime → uptime_secs（百分之一秒换算）。
-  CPU/内存/磁盘/温度与流量曲线留二期。
+  CPU/内存/磁盘/温度与流量曲线见 §5.2.2（二期，已实施）。
 - **调度**：`agent_snmp_poll` 任务每 5 分钟运行（foims-agent-service
   snmp_poll 模块）：单查询捞取「已配置凭据（community/username 任一非空，
   与设备列表 snmp_configured 同口径）且有管理地址」的设备，并发 8 台
@@ -234,6 +234,36 @@ CREATE INDEX idx_agent_metrics_history_agent_time
 首报激活：`UPDATE agents SET machine_id=…, status='active', first_seen=…, last_seen=…`
 `WHERE token_hash=$1 AND status='pending'`（token 唯一，凭 token 定位记录；
 machine_id 冲突时视为同机重复安装，返回 409 由运营处理）。
+
+### 5.2.2 SNMP 性能指标与流量曲线（二期，2026-10-10）
+
+在一期系统组之上，轮询同一连接追加采集性能指标（snmp_metrics 模块），
+各类采集失败仅该类置 None，热列 upsert 用 COALESCE 保留旧值：
+
+| 类别 | OID 与语义 |
+|---|---|
+| CPU | UCD-SNMP-MIB `ssCpuRaw*` 计数器（.4.1.2021.11.50–60：User/Nice/System/Idle/Wait/Kernel/Interrupt/SoftIrq/Steal/Guest/GuestNice，Counter32）**差值**计算：usage = 100×(1−Δidle/Δtotal)，Δtotal 为全部计数器差值之和，Δtotal≤0 → None（首轮无状态不出值）；net-snmp 5.9 已移除 ssCpu 百分比标量，故必须走计数器差值 |
+| 内存 | hrStorageTable（.1.3.6.1.2.1.25.2.3.1）walk：Ram 行 total/used + descr 精确匹配 "Available memory" 行 → used = max(0, total−avail)；无 Ram/失败回落 UCD memTotalReal(4)/memAvailReal(6)（KB×1024）；swap 用 memTotalSwap(3)/memAvailSwap(4)，total=0 → None |
+| 磁盘 | hrStorage 中 hrStorageType == .1.3.6.1.2.1.25.2.1.4（FixedDisk），size≤0（>8TB 32 位溢出）跳过；device = mount = descr |
+| 温度 | LM-SENSORS-MIB lmTempSensorsTable（.1.3.6.1.4.1.2021.13.16.2.1.{2,3}）：device 为标签、Gauge32 毫度 /1000；≤0 跳过、超 [−100, 250]℃ 剔除 |
+| 负载 | laLoad.1/2/3（.4.1.2021.10.1.3.1–3，STRING），parse f64 失败容忍 None |
+| 流量 | ifTable（.1.3.6.1.2.1.2.2.1）+ ifXTable（.1.3.6.1.2.1.31.1.1.1）bulk_walk：ifName 优先命名（缺回落 ifDescr），过滤 oper==1 且 type≠24（环回），按名排序 cap 24；HC 64 位计数器（ifHCIn/OutOctets）优先，32 位回落 + 回绕校正（Δ = cur + 2³² − prev）；速率 = Δbytes×8/elapsed，elapsed<30s → None（计数器状态仍更新），并做合理性校验 Δ ≤ elapsed×speed/8×1.1（ifSpeed < 1Mbps 视为未知用 100Gbps 兜底 cap） |
+
+- **差值状态 `_snmp_state`**：私有键存于 agents.raw_metrics
+  （`{ts, cpu:{total,idle}, ifaces:{name:{in,out}}}`，serde 全 default 向后兼容），
+  下轮轮询读出作 prev；不污染 AgentReport 同形的展示字段。
+- **上报合成**：全部指标合成 AgentReport 同形 JSON 写 raw_metrics
+  （agent_version/kernel/arch 等不可得字段 null），前端详情弹窗零改动渲染；
+  sysName GET 失败容忍（一期语义）。
+- **history 快照**：新增 `rx_bps`/`tx_bps`（nets 求和，全 None → None）；
+  agent 侧 ingest 同步写入两键，详情弹窗曲线渲染共用 `/api/agents/:id/history`。
+- **前端**：详情弹窗新增第 5 张「网络」卡（rx/tx 双线 + 图例），
+  renderSparkline 重构为多序列 renderSparklineSeries（单序列委托兼容）。
+- **部署注意**：Linux snmpd 默认 view 仅 `systemonly`，需在
+  `/etc/snmp/snmpd.conf` 的 view 放行 `.1.3.6.1.2.1.2`、`.1.3.6.1.2.1.31`、
+  `.1.3.6.1.2.1.25.2`、`.1.3.6.1.4.1.2021` 与 LM-SENSORS 子树，否则表现为
+  walk 全部超时（async-snmp 必须配 `.retry(Retry::none())`，snmpd 对错误
+  OID 静默丢包，默认重试会拖长 5 倍耗时）。
 
 ### 5.3 告警与调度
 
