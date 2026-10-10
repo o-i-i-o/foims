@@ -681,6 +681,7 @@
     "agent_size": "大小",
     "agent_format": "格式",
     "agent_download": "下载",
+    "agent_dist_no_arch": "该平台暂无可用架构",
     "agent_dist_unavailable": "Agent 分发产物不可用（未随包安装或目录缺失）",
     "agent_dist_load_failed": "加载 Agent 分发信息失败",
     "agent_download_failed": "下载安装包失败",
@@ -852,6 +853,24 @@
     "save_success": "通知设置保存成功",
     "save_failed": "通知设置保存失败",
     "save_error": "保存通知设置失败"
+  },
+  "agent_service": {
+    "title": "Agent 上报服务",
+    "enabled": "启用接收",
+    "bind_addr": "监听地址",
+    "bind_addr_placeholder": "::",
+    "bind_addr_desc": "IPv4、主机名或方括号 IPv6；[::] 双栈同时兼容 IPv4 agent",
+    "bind_port": "端口",
+    "bind_port_desc": "QUIC/UDP 端口，防火墙需放行；nginx 无法代理 UDP",
+    "report_interval": "上报间隔（秒）",
+    "report_interval_desc": "10-3600，经上报响应下发给 agent，同时驱动离线判定阈值",
+    "download_addr": "下载默认上报地址",
+    "download_addr_desc": "预填下方「上报地址覆盖」输入框；留空则按请求 Host 自动推导",
+    "invalid_bind_addr": "监听地址或端口不合法",
+    "invalid_download_addr": "下载默认上报地址格式不合法",
+    "save_success": "Agent 上报服务配置保存成功",
+    "save_failed": "Agent 上报服务配置保存失败",
+    "save_error": "保存 Agent 上报服务配置失败"
   },
   "snmp_trap": {
     "title": "SNMP Trap 接收",

@@ -22,6 +22,7 @@ pub mod provider;
 pub mod rate_limit;
 pub mod report;
 pub mod validation;
+pub mod x509;
 
 pub use api::{ApiResponse, ok_json};
 pub use config::{ArcSwap, Config, SharedConfig};

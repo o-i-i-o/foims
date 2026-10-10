@@ -156,6 +156,35 @@ fn fill_leaf_extensions(params: &mut CertificateParams, ekus: &[ExtendedKeyUsage
     params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
 }
 
+/// 为 agent 签发新 client 证书（续期用）：leaf_dn("foims-agent-client") +
+/// clientAuth EKU，与 [`issue_material`] 的 client 证书同构。
+/// 返回 (证书 PEM, 私钥 PEM, 失效时刻 UNIX 秒)；供 `spawn_blocking` 调用。
+fn issue_client_material(
+    ca_cert_pem: &str,
+    ca_key_pem: &str,
+) -> Result<(String, String, i64), String> {
+    let gen_error = |e: rcgen::Error| format!("rcgen 签发失败: {e}");
+
+    let ca_key = KeyPair::from_pem(ca_key_pem).map_err(|e| format!("站点 CA 私钥解析失败: {e}"))?;
+    let issuer = rcgen::Issuer::from_ca_cert_pem(ca_cert_pem, ca_key).map_err(gen_error)?;
+
+    // client 证书：clientAuth EKU（SAN 留空——客户端身份仅由证书链保证）
+    let client_key = KeyPair::generate().map_err(gen_error)?;
+    let mut client_params = CertificateParams::default();
+    client_params.distinguished_name = leaf_dn("foims-agent-client");
+    fill_leaf_extensions(&mut client_params, &[ExtendedKeyUsagePurpose::ClientAuth]);
+    let not_after_unix = client_params.not_after.unix_timestamp();
+    let client_cert = client_params
+        .signed_by(&client_key, &issuer)
+        .map_err(gen_error)?;
+
+    Ok((
+        client_cert.pem(),
+        client_key.serialize_pem(),
+        not_after_unix,
+    ))
+}
+
 /// 读取 PEM 文本，不存在/不可读时返回 Err（错误信息含路径）。
 async fn read_pem(path: &Path, label: &str) -> Result<String, String> {
     tokio::fs::read_to_string(path)
@@ -334,6 +363,47 @@ async fn ensure_agent_certs_in(
         client_cert_pem: client_pem,
         client_key_pem,
     })
+}
+
+/// 续期 agent client 证书：以站点 CA 重签同身份（CN=foims-agent-client、
+/// clientAuth EKU）新证书，并同步替换磁盘上的 CLIENT_CERT/CLIENT_KEY
+/// （后续下载组包即携带新证书）。返回 (新证书 PEM, 新私钥 PEM, 失效时刻
+/// RFC 3339)；QUIC 监听端校验只锚定 CA，替换 client 物料无需重启监听。
+pub async fn renew_client_cert() -> Result<(String, String, String), String> {
+    renew_client_cert_in(
+        Path::new(AGENT_CERT_DIR),
+        Path::new(super::SITE_CA_PATH),
+        Path::new(super::SITE_CA_KEY_PATH),
+    )
+    .await
+}
+
+/// [`renew_client_cert`] 的可测核心：目录与 CA 路径参数注入。
+async fn renew_client_cert_in(
+    dir: &Path,
+    ca_cert_path: &Path,
+    ca_key_path: &Path,
+) -> Result<(String, String, String), String> {
+    let ca_cert = read_pem(ca_cert_path, "站点 CA 证书").await?;
+    let ca_key = read_pem(ca_key_path, "站点 CA 私钥").await?;
+
+    // rcgen 签发移出异步线程
+    let (cert_pem, key_pem, not_after_unix) =
+        tokio::task::spawn_blocking(move || issue_client_material(&ca_cert, &ca_key))
+            .await
+            .map_err(|e| format!("签发任务调度失败: {e}"))??;
+    let not_after = chrono::DateTime::from_timestamp(not_after_unix, 0)
+        .ok_or_else(|| format!("证书失效时刻非法: {not_after_unix}"))?
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+    tokio::fs::create_dir_all(dir)
+        .await
+        .map_err(|e| format!("创建证书目录 {} 失败: {e}", dir.display()))?;
+    write_cert_file(&dir.join(CLIENT_CERT), &cert_pem).await?;
+    write_key_file(&dir.join(CLIENT_KEY), &key_pem).await?;
+
+    foims_common::log_info!("log.agent.client_cert_renewed", not_after = not_after);
+    Ok((cert_pem, key_pem, not_after))
 }
 
 #[cfg(test)]
@@ -545,5 +615,42 @@ mod tests {
         );
         assert!(!fingerprint_matches("abc", "abd"), "内容不同应判不匹配");
         assert!(!fingerprint_matches("abc", ""), "空内容应判不匹配");
+    }
+
+    #[tokio::test]
+    async fn 续期client证书_应重签并替换磁盘物料() {
+        let material_dir = temp_dir("renew-mat");
+        let ca_dir = temp_dir("renew-ca");
+        let ca = test_ca("FOIMS Test CA Renew");
+        let (ca_cert_path, ca_key_path) = write_ca(&ca_dir, &ca);
+        let initial = ensure_agent_certs_in(&material_dir, &ca_cert_path, &ca_key_path)
+            .await
+            .unwrap();
+
+        // 续期：应重签出与初始不同的新证书并替换磁盘 CLIENT_CERT/CLIENT_KEY
+        let (cert_pem, key_pem, not_after) =
+            renew_client_cert_in(&material_dir, &ca_cert_path, &ca_key_path)
+                .await
+                .unwrap();
+        assert_ne!(
+            cert_pem, initial.client_cert_pem,
+            "续期应重签新证书而非复用"
+        );
+        assert!(cert_pem.contains(PEM_CERT_HEADER), "证书 PEM 应含证书段");
+        assert!(key_pem.contains("BEGIN PRIVATE KEY"), "私钥应为 PKCS#8 PEM");
+        let parsed = chrono::DateTime::parse_from_rfc3339(&not_after)
+            .unwrap_or_else(|e| panic!("not_after 应为合法 RFC3339: {e}"))
+            .with_timezone(&chrono::Utc);
+        let days = (parsed - chrono::Utc::now()).num_days();
+        assert!(
+            (1820..=1825).contains(&days),
+            "新证书有效期应约 5 年: {days}"
+        );
+        let disk_cert = fs::read_to_string(material_dir.join(CLIENT_CERT))
+            .unwrap_or_else(|e| panic!("读取续期后证书失败: {e}"));
+        assert_eq!(disk_cert, cert_pem, "磁盘 client 证书应已替换为续期产物");
+
+        let _ = fs::remove_dir_all(&material_dir);
+        let _ = fs::remove_dir_all(&ca_dir);
     }
 }

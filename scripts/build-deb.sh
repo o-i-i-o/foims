@@ -76,10 +76,10 @@ if [ ! -f "target/release/$BINARY_NAME" ]; then
 fi
 
 # 多平台 Agent 编译（CI 集成，设计 docs/agent-design.md §6.1）：agent 版本
-# 由 build-agent.sh 从根 Cargo.toml 读取并以 FOIMS_AGENT_VERSION 注入编译
-# （agent 版本 = 主程序版本，满足「agent 版本不低于 foims」门控），产物与
-# manifest.json 归集到 dist/agents/。默认编译 x86_64/aarch64 两个 musl 静态
-# 目标（覆盖绝大多数部署场景）；可用环境变量 AGENT_TARGETS 覆盖目标列表，
+# 独立自管理（foims-agent crate 自身版本），manifest.json 的 version 写主程序
+# 版本（语义为「本批产物对齐的服务端版本」，供下载门控与新鲜度校验），
+# 产物与 manifest.json 归集到 dist/agents/。默认编译 x86_64/aarch64 两个 musl
+# 静态目标（覆盖绝大多数部署场景）；可用环境变量 AGENT_TARGETS 覆盖目标列表，
 # AGENT_TARGETS=none 跳过（此时包内无 agent 分发物料，下载面板显示不可用）
 AGENT_TARGETS="${AGENT_TARGETS:-x86_64-unknown-linux-musl,aarch64-unknown-linux-musl}"
 if [ "$AGENT_TARGETS" != "none" ]; then

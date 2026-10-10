@@ -1,6 +1,9 @@
 //! SNMP Trap/Inform 接收服务：常驻 UDP 监听，收到的消息逐管理员写入站内通知，
 //! 在「日志-通知」页面展示。
 //!
+//! 本模块属服务端数据采集面（与 SNMP 轮询、agent 上报接收同处一 crate），
+//! 自资源管理模块迁入：Trap 接收是采集服务而非资源管理业务。
+//!
 //! - v1/v2c：可选 community 白名单（`communities` 为空表示接受任意）；
 //! - v3：按 `users` 配置 USM 用户，未配置任何用户时拒绝全部 v3 通知；
 //!   引擎 ID 每次启动随机生成（发送方经发现流程自动感知，无需持久化 boots）；
@@ -21,7 +24,7 @@ use foims_common::{log_error, log_info, log_warn};
 use tokio::sync::broadcast::Receiver as ShutdownReceiver;
 use uuid::Uuid;
 
-use crate::helpers::create_notification;
+use foims_resource::helpers::create_notification;
 
 /// 站内通知类型标识（notifications.notification_type 列）
 const NOTIFICATION_TYPE_SNMP_TRAP: &str = "snmp_trap";
@@ -131,7 +134,7 @@ async fn build_receiver(config: &SnmpTrapConfig) -> Result<NotificationReceiver,
 // 认证/加密协议字符串解析复用 device::snmp 的唯一定义
 //（库内 FromStr 别名表 + AES-192/256 Blumenthal 旧别名，覆盖范围
 // 为本模块旧手写解析表的超集），不再各自维护匹配表
-use crate::device::snmp::{parse_auth_protocol, parse_priv_protocol};
+use foims_resource::device::snmp::{parse_auth_protocol, parse_priv_protocol};
 
 /// 按配置构建 USM 用户；配置非法时返回错误说明，调用方跳过该用户继续。
 fn build_usm_user(config: &SnmpTrapUsmUser) -> Result<UsmUser, String> {

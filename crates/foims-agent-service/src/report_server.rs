@@ -10,6 +10,7 @@
 
 use std::sync::Arc;
 
+use axum::Json;
 use bytes::{Buf, Bytes};
 use http::{Method, Request, Response, StatusCode, header};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -20,9 +21,12 @@ use foims_common::net::normalize_ipv4_address;
 use foims_common::{log_debug, log_error, log_info, log_warn};
 
 use crate::ingest;
+use crate::renew;
 
 /// 上报端点路径（协议约定 §3.3）
 pub const REPORT_PATH: &str = "/agent/v1/report";
+/// 客户端证书续期端点路径（协议约定 §3.4，mTLS 鉴权）
+pub const RENEW_PATH: &str = "/agent/v1/renew";
 
 /// h3 请求流类型（h3 0.0.x API 变动以本别名隔离）
 type AgentStream = h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
@@ -168,6 +172,8 @@ async fn handle_connection(ctx: ReportContext, incoming: quinn::Incoming) {
     // IPv4-mapped 对端地址归一为 IPv4 点分形式后入库
     let peer_ip = normalize_ipv4_address(&connection.remote_address().ip().to_string());
     log_debug!("log.agent.quic_connected", peer = peer_ip);
+    // 对端客户端证书 leaf（mTLS 握手已验链；续期端点绑定请求体证书用）
+    let peer_leaf = peer_leaf_cert(&connection);
 
     let Ok(mut h3_conn) = h3::server::Connection::new(h3_quinn::Connection::new(connection)).await
     else {
@@ -179,7 +185,9 @@ async fn handle_connection(ctx: ReportContext, incoming: quinn::Incoming) {
         match h3_conn.accept().await {
             Ok(Some(resolver)) => match resolver.resolve_request().await {
                 Ok((request, stream)) => {
-                    if let Err(e) = handle_request(&ctx, request, stream, &peer_ip).await {
+                    if let Err(e) =
+                        handle_request(&ctx, request, stream, &peer_ip, peer_leaf.as_deref()).await
+                    {
                         log_warn!("log.agent.report_request_failed", peer = peer_ip, error = e);
                     }
                 }
@@ -200,17 +208,27 @@ async fn handle_connection(ctx: ReportContext, incoming: quinn::Incoming) {
     }
 }
 
-/// 单请求处理：仅放行 POST + 上报路径；读满请求体（超限 413）后交 ingest。
+/// 从 QUIC 连接提取对端客户端证书 leaf 的 DER 字节（rustls crypto 下
+/// peer_identity 为 [`CertificateDer`] 链，链路校验已在握手阶段完成）。
+fn peer_leaf_cert(connection: &quinn::Connection) -> Option<Vec<u8>> {
+    let identity = connection.peer_identity()?;
+    let certs = identity.downcast::<Vec<CertificateDer<'static>>>().ok()?;
+    certs.first().map(|cert| cert.as_ref().to_vec())
+}
+
+/// 单请求处理：仅放行 POST + 上报/续期路径；读满请求体（超限 413）后
+/// 按路径分发至 ingest（上报）或 renew（证书续期）。
 async fn handle_request(
     ctx: &ReportContext,
     request: Request<()>,
     mut stream: AgentStream,
     peer_ip: &str,
+    peer_leaf_der: Option<&[u8]>,
 ) -> Result<(), String> {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
 
-    if path != REPORT_PATH {
+    if path != REPORT_PATH && path != RENEW_PATH {
         return send_json(
             &mut stream,
             StatusCode::NOT_FOUND,
@@ -239,14 +257,20 @@ async fn handle_request(
             return send_json(
                 &mut stream,
                 StatusCode::PAYLOAD_TOO_LARGE,
-                serde_json::json!({"error": "上报体积超过上限"}),
+                serde_json::json!({"error": "请求体积超过上限"}),
             )
             .await;
         }
     }
 
-    let (status, payload) = ingest::ingest(ctx, request.headers(), &body, peer_ip).await;
-    send_json(&mut stream, status, payload.0).await
+    let (status, payload) = if path == RENEW_PATH {
+        let (status, Json(payload)) = renew::handle_renew(ctx, &body, peer_leaf_der).await;
+        (status, payload)
+    } else {
+        let (status, payload) = ingest::ingest(ctx, request.headers(), &body, peer_ip).await;
+        (status, payload.0)
+    };
+    send_json(&mut stream, status, payload).await
 }
 
 /// 回送 JSON 响应并结束流。

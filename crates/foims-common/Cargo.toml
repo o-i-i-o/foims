@@ -1,6 +1,6 @@
 [package]
 name = "foims-common"
-version = "0.3.2"
+version = "0.3.3"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Common - shared infra: responses, errors, config, crypto, db pool, net utils, rate limiting"
@@ -48,6 +48,14 @@ dashmap = { workspace = true }
 
 # 网络/CIDR 工具
 ipnetwork = { workspace = true }
+
+# x509 证书解析（证书剩余寿命解析，agent 续期链路 agent/服务端共用）
+x509-parser = { workspace = true }
+
+[dev-dependencies]
+# 证书剩余寿命解析测试自签证书
+rcgen = "0.14"
+time = { workspace = true }
 
 [lints]
 workspace = true

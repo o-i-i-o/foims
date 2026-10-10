@@ -1455,7 +1455,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.22.2"
+version = "0.23.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1492,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "foims-agent"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "bytes",
  "chrono",
@@ -1516,13 +1516,14 @@ dependencies = [
 
 [[package]]
 name = "foims-agent-service"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "async-snmp",
  "async-trait",
  "axum",
  "bytes",
  "chrono",
+ "dashmap",
  "flate2",
  "foims-auth",
  "foims-common",
@@ -1582,7 +1583,7 @@ dependencies = [
 
 [[package]]
 name = "foims-common"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -1594,14 +1595,17 @@ dependencies = [
  "hex",
  "ipnetwork",
  "rand 0.10.3",
+ "rcgen",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "sqlx",
  "thiserror 2.0.21",
+ "time",
  "tokio",
  "tracing",
  "validator",
+ "x509-parser",
 ]
 
 [[package]]

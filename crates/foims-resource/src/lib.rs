@@ -12,7 +12,6 @@ pub mod options;
 pub mod patch_panel;
 pub mod position;
 pub mod room;
-pub mod trap;
 pub mod workstation;
 
 pub use cabinets::*;
@@ -26,5 +25,4 @@ pub use options::*;
 pub use patch_panel::*;
 pub use position::*;
 pub use room::*;
-pub use trap::*;
 pub use workstation::*;

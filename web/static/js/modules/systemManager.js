@@ -60,6 +60,7 @@ export function initSystemTabs() {
           loadPasswordPolicy();
         } else if (tabId === "agent-collect") {
           loadAgentDist();
+          loadAgentServiceConfig();
           loadSnmpTrapConfig();
         }
       });
@@ -117,6 +118,14 @@ export function initSystemTabs() {
     snmpTrapConfigForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       await saveSnmpTrapConfig();
+    });
+  }
+
+  const agentServiceConfigForm = elementCache.get("agent-service-config-form");
+  if (agentServiceConfigForm) {
+    agentServiceConfigForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await saveAgentServiceConfig();
     });
   }
 
@@ -953,6 +962,105 @@ async function saveSnmpTrapConfig() {
     showToast(`${t("snmp_trap.save_error")}: ${error.message}`, "error");
   } finally {
     snmpTrapConfigSaving = false;
+  }
+}
+
+// ==================== Agent 上报服务配置 ====================
+
+// 最近一次加载的 Agent 基础参数（分发目录/上报上限/历史保留/离线倍数等与
+// 监听无关的字段）：PUT /api/system/config 会整体替换 agent 段，保存时原样带回
+let currentAgentBaseConfig = null;
+
+// 加载 Agent 上报服务配置（经系统配置接口读取）
+function loadAgentServiceConfig() {
+  return (async () => {
+    try {
+      const result = await apiGet("/api/system/config");
+      if (!result.success || !result.data?.agent) {
+        return;
+      }
+      const agent = result.data.agent;
+      currentAgentBaseConfig = {
+        dist_dir: agent.dist_dir,
+        max_report_bytes: agent.max_report_bytes,
+        history_retention_days: agent.history_retention_days,
+        offline_factor: agent.offline_factor
+      };
+      elementCache.setChecked("agent-service-enabled", Boolean(agent.enabled));
+      // 磁盘上 bind_addr 为 host:port，加载时拆分到地址/端口两个输入框
+      const bindMatch = (agent.bind_addr || "[::]:9100").match(
+        /^(\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/
+      );
+      elementCache.setValue("agent-service-bind-addr", bindMatch ? bindMatch[1] : "[::]");
+      elementCache.setValue("agent-service-bind-port", bindMatch ? bindMatch[2] : "9100");
+      elementCache.setValue("agent-service-interval", String(agent.report_interval_secs ?? 60));
+      // 下载默认上报地址预填下载面板的「上报地址覆盖」输入框（仍允许临时修改）
+      const downloadAddr = elementCache.get("agent-server-addr");
+      if (downloadAddr) {
+        downloadAddr.value = agent.download_server_addr || "";
+      }
+    } catch (error) {
+      console.error("加载Agent上报服务配置失败:", error);
+    }
+  })();
+}
+
+// 保存 Agent 上报服务配置（接收器随服务启动，监听地址/开关保存后需重启生效；
+// 上报间隔经响应控制面下发，已装 agent 在下一轮上报时生效）
+let agentServiceConfigSaving = false;
+
+async function saveAgentServiceConfig() {
+  if (agentServiceConfigSaving) {
+    return;
+  }
+
+  // 地址为 IPv4/主机名或方括号 IPv6；端口 1-65535
+  const bindHost = elementCache.getValue("agent-service-bind-addr").trim();
+  const bindPort = parseInt(elementCache.getValue("agent-service-bind-port"), 10);
+  const bindHostValid = /^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(bindHost);
+  const bindPortValid = Number.isInteger(bindPort) && bindPort >= 1 && bindPort <= 65535;
+  if (!bindHostValid || !bindPortValid) {
+    showToast(t("agent_service.invalid_bind_addr"), "warning");
+    return;
+  }
+
+  // 上报间隔 clamp 到 10-3600（与后端校验及 agent 端 clamp 对齐）
+  const interval = Math.min(
+    Math.max(parseInt(elementCache.getValue("agent-service-interval"), 10) || 0, 10),
+    3600
+  );
+
+  // 下载默认上报地址：IPv4/主机名或方括号 IPv6，可带端口；留空表示按请求 Host 推导
+  const downloadAddr = elementCache.getValue("agent-service-download-addr").trim();
+  if (downloadAddr && !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d{1,5})?$/.test(downloadAddr)) {
+    showToast(t("agent_service.invalid_download_addr"), "warning");
+    return;
+  }
+
+  agentServiceConfigSaving = true;
+  try {
+    const agent = {
+      ...currentAgentBaseConfig,
+      enabled: elementCache.getChecked("agent-service-enabled"),
+      bind_addr: `${bindHost}:${bindPort}`,
+      report_interval_secs: interval,
+      download_server_addr: downloadAddr || null
+    };
+
+    const result = await apiPut("/api/system/config", { agent });
+    if (result.success) {
+      showToast(t("agent_service.save_success"), "success");
+      showToast(t("system.config_saved_restart_needed"), "warning");
+      sessionStorage.setItem("configUpdated", "true");
+      await loadAgentServiceConfig();
+    } else {
+      showToast(`${t("agent_service.save_failed")}: ${result.message}`, "error");
+    }
+  } catch (error) {
+    console.error("保存Agent上报服务配置失败:", error);
+    showToast(`${t("agent_service.save_error")}: ${error.message}`, "error");
+  } finally {
+    agentServiceConfigSaving = false;
   }
 }
 
@@ -2214,43 +2322,105 @@ function renderAgentDist(data) {
   renderAgentTargets(data.targets || [], blocked);
 }
 
-// 渲染平台列表：每行格式下拉 + 下载按钮（下载被门控/CA 状态禁用）
+// 最近一次加载的产物列表与门控状态（平台/架构/格式三级联动选择的数据源）
+let currentAgentTargets = [];
+let agentDistBlocked = false;
+
+// 从 target 三元组取 OS 段（x86_64-unknown-linux-musl → linux）
+function agentTargetOs(target) {
+  const segments = String(target || "").split("-");
+  return segments.length >= 3 ? segments[2] : "";
+}
+
+// 渲染平台下拉：按 OS 去重排序；无产物或被门控时整体禁用
 function renderAgentTargets(targets, blocked) {
-  const tbody = elementCache.get("agent-dist-tbody");
-  if (!tbody) {
-    return;
-  }
-  if (!targets.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">${escapeHtml(
-      t("common.no_data")
-    )}</td></tr>`;
+  currentAgentTargets = Array.isArray(targets) ? targets : [];
+  agentDistBlocked = Boolean(blocked);
+
+  const platformSelect = elementCache.get("agent-dist-platform");
+  const archSelect = elementCache.get("agent-dist-arch");
+  const formatSelect = elementCache.get("agent-dist-format");
+  const downloadBtn = elementCache.get("agent-dist-download-btn");
+  if (!platformSelect || !archSelect || !formatSelect || !downloadBtn) {
     return;
   }
 
-  const rows = targets
-    .map((item) => {
-      const formats = Array.isArray(item.formats) ? item.formats : ["zip"];
-      const options = formats
-        .map(
-          (format) =>
-            `<option value="${escapeHtml(format)}">${escapeHtml(format.toUpperCase())}</option>`
-        )
-        .join("");
-      const disabled = blocked ? "disabled" : "";
-      return `<tr>
-        <td>${escapeHtml(item.target || "-")}</td>
-        <td>${escapeHtml(item.arch || "-")}</td>
-        <td>${escapeHtml(formatAgentSize(item.size))}</td>
-        <td><select class="form-control" data-agent-format="${escapeHtml(
-          item.target
-        )}">${options}</select></td>
-        <td class="col-center"><button type="button" class="btn btn-primary btn-sm" data-agent-download="${escapeHtml(
-          item.target
-        )}" ${disabled}>${escapeHtml(t("system.agent_download"))}</button></td>
-      </tr>`;
-    })
-    .join("");
-  tbody.innerHTML = rows;
+  const platforms = [
+    ...new Set(currentAgentTargets.map((item) => agentTargetOs(item.target)).filter(Boolean))
+  ].sort();
+  platformSelect.innerHTML = platforms.length
+    ? platforms
+        .map((os) => `<option value="${escapeHtml(os)}">${escapeHtml(os)}</option>`)
+        .join("")
+    : `<option value="">${escapeHtml(t("common.no_data"))}</option>`;
+
+  const disabled = agentDistBlocked || !platforms.length;
+  [platformSelect, archSelect, formatSelect, downloadBtn].forEach((el) => {
+    el.disabled = disabled;
+  });
+  syncAgentArchOptions();
+}
+
+// 平台选中后刷新架构下拉（联动）
+function syncAgentArchOptions() {
+  const platformSelect = elementCache.get("agent-dist-platform");
+  const archSelect = elementCache.get("agent-dist-arch");
+  if (!platformSelect || !archSelect) {
+    return;
+  }
+  const os = platformSelect.value;
+  const archs = [
+    ...new Set(
+      currentAgentTargets
+        .filter((item) => agentTargetOs(item.target) === os)
+        .map((item) => item.arch)
+        .filter(Boolean)
+    )
+  ].sort();
+  archSelect.innerHTML = archs.length
+    ? archs
+        .map((arch) => `<option value="${escapeHtml(arch)}">${escapeHtml(arch)}</option>`)
+        .join("")
+    : `<option value="">${escapeHtml(t("system.agent_dist_no_arch"))}</option>`;
+  syncAgentDistSelection();
+}
+
+// 按平台×架构选中项刷新格式下拉、大小与下载按钮可用性
+function syncAgentDistSelection() {
+  const platformSelect = elementCache.get("agent-dist-platform");
+  const archSelect = elementCache.get("agent-dist-arch");
+  const formatSelect = elementCache.get("agent-dist-format");
+  const downloadBtn = elementCache.get("agent-dist-download-btn");
+  const sizeEl = elementCache.get("agent-dist-size");
+  if (!platformSelect || !archSelect || !formatSelect || !downloadBtn) {
+    return;
+  }
+
+  const target = currentAgentTargets.find(
+    (item) =>
+      agentTargetOs(item.target) === platformSelect.value && item.arch === archSelect.value
+  );
+  if (target && !agentDistBlocked) {
+    const formats = Array.isArray(target.formats) && target.formats.length ? target.formats : ["zip"];
+    formatSelect.innerHTML = formats
+      .map(
+        (format) =>
+          `<option value="${escapeHtml(format)}">${escapeHtml(format.toUpperCase())}</option>`
+      )
+      .join("");
+    formatSelect.disabled = false;
+    downloadBtn.disabled = false;
+    if (sizeEl) {
+      sizeEl.textContent = `${t("system.agent_size")}: ${formatAgentSize(target.size)}`;
+    }
+  } else {
+    formatSelect.innerHTML = `<option value="">-</option>`;
+    formatSelect.disabled = true;
+    downloadBtn.disabled = true;
+    if (sizeEl) {
+      sizeEl.textContent = "-";
+    }
+  }
 }
 
 // 加载 Agent 分发摘要（GET /api/agents/dist）：版本/门控/CA + 平台列表
@@ -2272,11 +2442,7 @@ export async function loadAgentDist() {
 
 // 下载 Agent 安装包（GET /api/agents/download）：文件名取自
 // Content-Disposition（服务端已组好包），备注与上报地址覆盖随查询串下发
-export async function downloadAgentPackage(target) {
-  const tbody = elementCache.get("agent-dist-tbody");
-  const formatSelect = tbody?.querySelector(`select[data-agent-format="${CSS.escape(target)}"]`);
-  const format = formatSelect?.value || "zip";
-
+export async function downloadAgentPackage(target, format = "zip") {
   const serverAddr = elementCache.getValue("agent-server-addr").trim();
   const label = elementCache.getValue("agent-download-label").trim();
 
@@ -2307,16 +2473,33 @@ export async function downloadAgentPackage(target) {
   }
 }
 
-// 平台列表事件委托：下载按钮动态渲染，统一在 tbody 上监听点击
+// 平台/架构/格式三级联动 + 下载按钮
 function initAgentDistEvents() {
-  const tbody = elementCache.get("agent-dist-tbody");
-  if (!tbody) {
-    return;
+  const platformSelect = elementCache.get("agent-dist-platform");
+  if (platformSelect) {
+    platformSelect.addEventListener("change", syncAgentArchOptions);
   }
-  tbody.addEventListener("click", (event) => {
-    const btn = event.target.closest("button[data-agent-download]");
-    if (btn && !btn.disabled) {
-      downloadAgentPackage(btn.getAttribute("data-agent-download"));
-    }
-  });
+
+  const archSelect = elementCache.get("agent-dist-arch");
+  if (archSelect) {
+    archSelect.addEventListener("change", syncAgentDistSelection);
+  }
+
+  const downloadBtn = elementCache.get("agent-dist-download-btn");
+  if (downloadBtn) {
+    downloadBtn.addEventListener("click", () => {
+      const os = elementCache.getValue("agent-dist-platform");
+      const arch = elementCache.getValue("agent-dist-arch");
+      const formatSelect = elementCache.get("agent-dist-format");
+      if (!os || !arch || !formatSelect) {
+        return;
+      }
+      const target = currentAgentTargets.find(
+        (item) => agentTargetOs(item.target) === os && item.arch === arch
+      );
+      if (target) {
+        downloadAgentPackage(target.target, formatSelect.value || "zip");
+      }
+    });
+  }
 }

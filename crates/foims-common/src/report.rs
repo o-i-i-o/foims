@@ -117,6 +117,25 @@ pub struct ReportResponse {
     pub latest_version: String,
 }
 
+/// `POST /agent/v1/renew` 请求体：agent 携带当前客户端证书 PEM 申请续期
+/// （mTLS 鉴权，服务端校验请求证书与连接证书一致且剩余寿命低于阈值）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CertRenewRequest {
+    /// 当前客户端证书 PEM（须与 mTLS 连接呈现的 leaf 证书一致）。
+    pub client_cert_pem: String,
+}
+
+/// `POST /agent/v1/renew` 响应体：新签发的客户端证书与私钥 PEM。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CertRenewResponse {
+    /// 新客户端证书 PEM。
+    pub cert_pem: String,
+    /// 新客户端私钥 PEM（PKCS#8）。
+    pub key_pem: String,
+    /// 新证书失效时刻 RFC 3339（供 agent 记录下次续期预期）。
+    pub not_after: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +208,25 @@ mod tests {
         };
         let json = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ReportResponse = serde_json::from_str(&json).unwrap_or(response.clone());
+        assert_eq!(parsed, response);
+    }
+
+    #[test]
+    fn cert_renew_json_roundtrip() {
+        let request = CertRenewRequest {
+            client_cert_pem: "-----BEGIN CERTIFICATE-----\nabc\n".to_string(),
+        };
+        let json = serde_json::to_string(&request).unwrap_or_default();
+        let parsed: CertRenewRequest = serde_json::from_str(&json).unwrap_or(request.clone());
+        assert_eq!(parsed, request);
+
+        let response = CertRenewResponse {
+            cert_pem: "-----BEGIN CERTIFICATE-----\nnew\n".to_string(),
+            key_pem: "-----BEGIN PRIVATE KEY-----\nkey\n".to_string(),
+            not_after: "2031-10-10T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&response).unwrap_or_default();
+        let parsed: CertRenewResponse = serde_json::from_str(&json).unwrap_or(response.clone());
         assert_eq!(parsed, response);
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "foims-agent"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Agent - node_exporter 的 Rust 重写：主机指标采集 + HTTP/3 mTLS 上报 + 文本/JSON 输出"

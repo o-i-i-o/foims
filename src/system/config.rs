@@ -32,6 +32,7 @@ pub struct UpdateSystemConfigRequest {
     pub init: Option<foims_common::config::InitConfig>,
     pub rate_limit: Option<foims_common::config::RateLimitConfig>,
     pub snmp: Option<foims_common::config::SnmpConfig>,
+    pub agent: Option<foims_common::config::AgentConfig>,
 }
 
 /// 配置落盘前的校验（对齐 `Config::load` 启动校验与各组件启动期约束）：
@@ -83,6 +84,48 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
     {
         return Err(AppError::Validation(
             msg("server.common.invalid_param").with("param", "rate_limit limits (at least 1)"),
+        ));
+    }
+
+    // Agent：监听地址端口合法（绑定失败会令 QUIC 接收不启动）、上报间隔与
+    // 历史保留期在业务区间内（与 agent 端 clamp / 清理任务上限对齐）
+    let agent = &config.agent;
+    let (host, port) = agent.bind_addr.rsplit_once(':').ok_or_else(|| {
+        AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.bind_addr (host:port)"),
+        )
+    })?;
+    let port: u16 = port.parse().map_err(|_| {
+        AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.bind_addr port (1-65535)"),
+        )
+    })?;
+    if host.trim().is_empty() || port == 0 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.bind_addr (host:port)"),
+        ));
+    }
+    if !(10..=3600).contains(&agent.report_interval_secs) {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param")
+                .with("param", "agent.report_interval_secs (10-3600)"),
+        ));
+    }
+    if agent.max_report_bytes < 1024 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param")
+                .with("param", "agent.max_report_bytes (at least 1024)"),
+        ));
+    }
+    if agent.history_retention_days == 0 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param")
+                .with("param", "agent.history_retention_days (at least 1)"),
+        ));
+    }
+    if agent.offline_factor < 2 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.offline_factor (at least 2)"),
         ));
     }
 
@@ -279,6 +322,15 @@ pub async fn update_system_config(
         let mut snmp_config = snmp;
         restore_snmp_trap_secrets(&mut snmp_config.trap.users, &new_config.snmp.trap.users);
         new_config.snmp = snmp_config;
+    }
+
+    if let Some(mut agent) = req.agent {
+        // 上报地址留空归一为 None（语义：按请求 Host 自动推导）
+        agent.download_server_addr = agent.download_server_addr.take().and_then(|addr| {
+            let trimmed = addr.trim().to_string();
+            (!trimmed.is_empty()).then_some(trimmed)
+        });
+        new_config.agent = agent;
     }
 
     // 落盘前校验：拒绝写入启动校验无法通过的配置（防持久化自伤）

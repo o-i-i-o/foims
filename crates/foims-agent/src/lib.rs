@@ -13,10 +13,8 @@ pub mod reporter;
 pub use collector::{Collector, CollectorError, default_collectors, scrape};
 pub use metric::{MetricFamily, MetricType, encode_text_all};
 
-/// Agent 版本：构建期由 build-agent.sh 以 FOIMS_AGENT_VERSION 注入主程序
-/// 版本（agent 版本 = 主程序版本，满足「agent 版本不低于 foims」门控）；
-/// 未注入（如开发机直编）时回退 crate 自身版本。
-pub const VERSION: &str = match option_env!("FOIMS_AGENT_VERSION") {
-    Some(v) => v,
-    None => env!("CARGO_PKG_VERSION"),
-};
+/// Agent 版本：独立自管理（取 crate 自身版本），经 --version 与上报快照
+/// agent_version 仅作展示/运维核对，不再与主程序版本绑定。
+/// 分发门控（agent 版本不低于主程序）比较的是 dist/agents/manifest.json
+/// 的清单版本（构建时对齐的服务端版本），与本值无关。
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -21,9 +21,10 @@
 #     国内镜像源缺组件（404）时自动回退官方源离线安装（校验 sha256）
 #   - tier3 目标：需 nightly + rust-src，用 -Z build-std 现场构建 std
 #     （与 node_exporter .promu.yml 的 crossbuild 矩阵对齐，OpenBSD 另行处理）
-#   - 版本注入：以主程序版本（根 Cargo.toml）作为 FOIMS_AGENT_VERSION 编译期
-#     写入 agent（agent 版本 = 主程序版本，天然满足「不低于 foims」门控），
-#     并生成 manifest.json 供服务端下载 API 做版本门控与产物校验
+#   - 版本策略：agent 版本独立自管理（取 foims-agent crate 自身版本，
+#     不再注入 FOIMS_AGENT_VERSION 强制对齐主程序）；manifest.json 的
+#     version 仍写主程序版本，语义为「本批产物对齐的服务端版本」，供
+#     服务端下载 API 做版本门控与产物校验，build-deb.sh 据此校验新鲜度
 #   - 单个目标失败不中断整体构建，结尾汇总并以非零码退出（便于 CI 感知）
 
 set -euo pipefail
@@ -174,11 +175,10 @@ build_tier12() {
     cc="$(cc_for_target "$target")"
     if [ -n "$cc" ] && [ -x "$cc" ]; then
         (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "$cc_var=$cc" \
-            "FOIMS_AGENT_VERSION=$VERSION" \
             cargo build --release -p "$CRATE" --target "$target")
     else
         echo "警告：[$target] 未找到交叉 C 编译器（ring 等依赖需要），仅以 rust-lld 继续" >&2
-        (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "FOIMS_AGENT_VERSION=$VERSION" \
+        (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" \
             cargo build --release -p "$CRATE" --target "$target")
     fi
 }
@@ -191,7 +191,7 @@ build_tier3() {
     rustup toolchain install nightly --profile minimal >/dev/null 2>&1 \
         || rustup toolchain install nightly --profile minimal
     rustup component add rust-src --toolchain nightly
-    (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "FOIMS_AGENT_VERSION=$VERSION" \
+    (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" \
         cargo +nightly build --release -p "$CRATE" \
         -Z build-std=std,panic_abort --target "$target")
 }

@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use bytes::{Buf, Bytes};
 use foims_common::report::{
-    AgentReport, ReportCpu, ReportDisk, ReportMemory, ReportNet, ReportResponse, ReportSensor,
-    ReportSystem,
+    AgentReport, CertRenewRequest, CertRenewResponse, ReportCpu, ReportDisk, ReportMemory,
+    ReportNet, ReportResponse, ReportSensor, ReportSystem,
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -32,6 +32,8 @@ use crate::metric::{MetricFamily, Sample};
 
 /// 上报路径（与服务端 `POST /agent/v1/report` 一致）
 pub const REPORT_PATH: &str = "/agent/v1/report";
+/// 证书续期路径（与服务端 `POST /agent/v1/renew` 一致）
+pub const RENEW_PATH: &str = "/agent/v1/renew";
 /// 缺省配置文件路径
 pub const DEFAULT_CONFIG_PATH: &str = "/etc/foims-agent/agent.toml";
 /// 缺省证书目录（client.pem / client.key / ca.pem 由安装脚本放置）
@@ -47,6 +49,8 @@ pub const MAX_INTERVAL_SECS: u64 = 3600;
 const PENDING_CACHE_CAP: usize = 10;
 /// 退避封顶秒数
 const MAX_BACKOFF_SECS: u64 = 600;
+/// 证书剩余寿命低于该天数触发自动续期（服务端 <90 天才签发，agent 端阈值取更低值）
+const CERT_RENEW_THRESHOLD_DAYS: i64 = 30;
 /// CPU 使用率两次采样窗口
 const CPU_SAMPLE_WINDOW: Duration = Duration::from_millis(200);
 /// 握手与单请求阶段超时
@@ -621,7 +625,12 @@ impl Reporter {
     /// 单轮「采集 + 上报」（--once 与冒烟客户端用）
     pub async fn report_once(&mut self) -> Result<ReportResponse, ReporterError> {
         let report = self.collect_report().await?;
-        self.send_report(&report).await
+        let response = self.send_report(&report).await;
+        if response.is_ok() {
+            // 上报成功说明链路可用，顺带检查证书是否临近过期
+            self.maybe_renew_cert().await;
+        }
+        response
     }
 
     /// 上报主循环：立即上报一次 → 间隔（含抖动/退避）→ 循环。
@@ -645,6 +654,7 @@ impl Reporter {
                         self.apply_interval(response.report_interval);
                         self.log_response(&response);
                         self.replay_pending().await;
+                        self.maybe_renew_cert().await;
                     }
                     Err(error) => {
                         self.fail_count += 1;
@@ -682,15 +692,8 @@ impl Reporter {
         }
     }
 
-    /// 控制面日志：版本通告与采集器开关
+    /// 控制面日志：采集器开关（版本通告不再比较：agent 版本独立自管理）
     fn log_response(&self, response: &ReportResponse) {
-        if !response.latest_version.is_empty() && response.latest_version != VERSION {
-            tracing::info!(
-                latest = %response.latest_version,
-                current = VERSION,
-                "服务端通告新版本 agent"
-            );
-        }
         if !response.collectors.is_empty() {
             tracing::debug!(collectors = ?response.collectors, "服务端采集器开关");
         }
@@ -718,11 +721,63 @@ impl Reporter {
         }
     }
 
-    /// 经 HTTP/3 mTLS 上报一次并解析控制面响应
-    async fn send_report(&self, report: &AgentReport) -> Result<ReportResponse, ReporterError> {
-        let body = serde_json::to_vec(report)
-            .map_err(|error| ReporterError::Collect(format!("序列化上报体: {error}")))?;
+    /// 证书剩余寿命检查：低于阈值时经 HTTP/3 mTLS 请求服务端换发。
+    /// 检查/续期失败仅记录告警，不影响上报主流程（下轮成功后继续尝试）。
+    async fn maybe_renew_cert(&self) {
+        let cert_path = self.config.cert_dir.join("client.pem");
+        let Ok(client_pem) = std::fs::read_to_string(&cert_path) else {
+            tracing::warn!(path = %cert_path.display(), "读取客户端证书失败，跳过续期检查");
+            return;
+        };
+        let remaining_days = match foims_common::x509::cert_remaining(&client_pem) {
+            Ok((days, _)) => days,
+            Err(error) => {
+                tracing::warn!(path = %cert_path.display(), %error, "解析客户端证书失败，跳过续期检查");
+                return;
+            }
+        };
+        if remaining_days >= CERT_RENEW_THRESHOLD_DAYS {
+            return;
+        }
+        tracing::info!(remaining_days, "客户端证书临近过期，尝试自动续期");
+        match self.try_renew_cert(&client_pem).await {
+            Ok(renewed) => tracing::info!(
+                not_after = %renewed.not_after,
+                "客户端证书续期成功，下一轮上报启用新证书"
+            ),
+            Err(error) => {
+                tracing::warn!(%error, "客户端证书续期失败，下轮继续尝试");
+            }
+        }
+    }
 
+    /// 执行一次续期请求并用服务端签发的新物料原子替换磁盘证书/私钥
+    /// （证书 0644 / 私钥 0600）。请求经旧证书建立的 mTLS 链路发送，
+    /// 服务端校验请求体证书与连接证书一致后才签发。
+    async fn try_renew_cert(&self, client_pem: &str) -> Result<CertRenewResponse, ReporterError> {
+        let body = serde_json::to_vec(&CertRenewRequest {
+            client_cert_pem: client_pem.to_string(),
+        })
+        .map_err(|error| ReporterError::Report(format!("序列化续期请求: {error}")))?;
+        let (status, resp_body) = self.h3_exchange(RENEW_PATH, body).await?;
+        if status != http::StatusCode::OK {
+            return Err(ReporterError::Report(format!(
+                "服务端拒绝续期（{status}）: {}",
+                String::from_utf8_lossy(&resp_body)
+            )));
+        }
+        let renewed: CertRenewResponse = serde_json::from_slice(&resp_body)?;
+        write_renewed_material(&self.config.cert_dir, &renewed.cert_pem, &renewed.key_pem)?;
+        Ok(renewed)
+    }
+
+    /// 经 HTTP/3 mTLS 发送一次 POST JSON 请求并读取完整响应（上报与续期共用）。
+    /// 每次调用重建连接，TLS 物料从磁盘实时读取：续期替换证书后下一轮自动生效。
+    async fn h3_exchange(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+    ) -> Result<(http::StatusCode, Vec<u8>), ReporterError> {
         // 地址解析（域名/IPv4/IPv6 均可；IPv6 友好）
         let addr: SocketAddr = tokio::net::lookup_host(self.config.server_addr.as_str())
             .await
@@ -765,7 +820,7 @@ impl Reporter {
 
         let request = http::Request::builder()
             .method(http::Method::POST)
-            .uri(report_uri(addr))
+            .uri(request_uri(addr, path))
             .header("content-type", "application/json")
             .header("authorization", format!("Bearer {}", self.config.token))
             .header(
@@ -788,12 +843,6 @@ impl Reporter {
             .await
             .map_err(|_| ReporterError::Report("等待响应超时".to_string()))?
             .map_err(transport)?;
-        if response.status() != http::StatusCode::OK {
-            return Err(ReporterError::Report(format!(
-                "服务端返回 {}（401 token 无效 / 403 已吊销 / 413 超限 / 429 过频）",
-                response.status()
-            )));
-        }
         let mut resp_body: Vec<u8> = Vec::new();
         loop {
             let chunk = tokio::time::timeout(REQUEST_TIMEOUT, stream.recv_data())
@@ -806,6 +855,20 @@ impl Reporter {
         endpoint.close(0u32.into(), b"done");
         tracing::debug!(bytes = resp_body.len(), "收到服务端响应");
 
+        Ok((response.status(), resp_body))
+    }
+
+    /// 经 HTTP/3 mTLS 上报一次并解析控制面响应
+    async fn send_report(&self, report: &AgentReport) -> Result<ReportResponse, ReporterError> {
+        let body = serde_json::to_vec(report)
+            .map_err(|error| ReporterError::Collect(format!("序列化上报体: {error}")))?;
+        let (status, resp_body) = self.h3_exchange(REPORT_PATH, body).await?;
+        if status != http::StatusCode::OK {
+            return Err(ReporterError::Report(format!(
+                "服务端返回 {}（401 token 无效 / 403 已吊销 / 413 超限 / 429 过频）",
+                status
+            )));
+        }
         serde_json::from_slice(&resp_body).map_err(ReporterError::from)
     }
 
@@ -1084,13 +1147,63 @@ fn collect_sensors(families: &[MetricFamily]) -> Vec<ReportSensor> {
     sensors
 }
 
-/// 组装上报 URL（IPv6 字面量地址需方括号）
-fn report_uri(addr: SocketAddr) -> String {
+/// 组装请求 URL（IPv6 字面量地址需方括号）
+fn request_uri(addr: SocketAddr, path: &str) -> String {
     let host = match addr {
         SocketAddr::V4(v4) => v4.ip().to_string(),
         SocketAddr::V6(v6) => format!("[{}]", v6.ip()),
     };
-    format!("https://{host}:{}{REPORT_PATH}", addr.port())
+    format!("https://{host}:{}{path}", addr.port())
+}
+
+/// 清理续期临时文件（失败仅记录调试日志，不影响主流程）
+fn cleanup_temp(tmp: &Path) {
+    if let Err(error) = std::fs::remove_file(tmp) {
+        tracing::debug!(%error, path = %tmp.display(), "清理续期临时文件失败");
+    }
+}
+
+/// 在目标文件同目录写临时文件并设定权限（供原子替换使用）
+fn write_temp_file(path: &Path, data: &[u8], mode: u32) -> std::io::Result<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = PathBuf::from(format!("{}.new", path.display()));
+    std::fs::write(&tmp, data)?;
+    if let Err(error) = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode)) {
+        cleanup_temp(&tmp);
+        return Err(error);
+    }
+    Ok(tmp)
+}
+
+/// 续期产物落盘：证书与私钥先全部写为同目录 `.new` 临时文件（证书 0644 /
+/// 私钥 0600），写全后依次 rename 原子替换。临时文件阶段任一步失败即清理
+/// 并报错，旧物料保持不变；rename 阶段失败同样清理未完成项（同目录 rename
+/// 在写入成功后几乎不可能失败，跨文件瞬时窗口可忽略）。
+fn write_renewed_material(
+    cert_dir: &Path,
+    cert_pem: &str,
+    key_pem: &str,
+) -> Result<(), ReporterError> {
+    let cert_path = cert_dir.join("client.pem");
+    let key_path = cert_dir.join("client.key");
+    let cert_tmp = write_temp_file(&cert_path, cert_pem.as_bytes(), 0o644)?;
+    let key_tmp = match write_temp_file(&key_path, key_pem.as_bytes(), 0o600) {
+        Ok(tmp) => tmp,
+        Err(error) => {
+            cleanup_temp(&cert_tmp);
+            return Err(ReporterError::Io(error));
+        }
+    };
+    if let Err(error) = std::fs::rename(&cert_tmp, &cert_path) {
+        cleanup_temp(&cert_tmp);
+        cleanup_temp(&key_tmp);
+        return Err(ReporterError::Io(error));
+    }
+    if let Err(error) = std::fs::rename(&key_tmp, &key_path) {
+        cleanup_temp(&key_tmp);
+        return Err(ReporterError::Io(error));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1423,14 +1536,63 @@ mod tests {
     }
 
     #[test]
-    fn test_report_uri() {
+    fn test_request_uri() {
         let v4: SocketAddr = "1.2.3.4:9100"
             .parse()
             .unwrap_or_else(|e| panic!("解析失败: {e}"));
-        assert_eq!(report_uri(v4), "https://1.2.3.4:9100/agent/v1/report");
+        assert_eq!(
+            request_uri(v4, REPORT_PATH),
+            "https://1.2.3.4:9100/agent/v1/report"
+        );
         let v6: SocketAddr = "[2001:db8::1]:9100"
             .parse()
             .unwrap_or_else(|e| panic!("解析失败: {e}"));
-        assert_eq!(report_uri(v6), "https://[2001:db8::1]:9100/agent/v1/report");
+        assert_eq!(
+            request_uri(v6, RENEW_PATH),
+            "https://[2001:db8::1]:9100/agent/v1/renew"
+        );
+    }
+
+    #[test]
+    fn test_write_renewed_material() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("renew-material");
+        write_renewed_material(&dir, "CERT-1", "KEY-1")
+            .unwrap_or_else(|e| panic!("首次落盘失败: {e}"));
+        let cert = std::fs::read_to_string(dir.join("client.pem"))
+            .unwrap_or_else(|e| panic!("读取证书失败: {e}"));
+        assert_eq!(cert, "CERT-1");
+        let key = std::fs::read_to_string(dir.join("client.key"))
+            .unwrap_or_else(|e| panic!("读取私钥失败: {e}"));
+        assert_eq!(key, "KEY-1");
+        let cert_mode = std::fs::metadata(dir.join("client.pem"))
+            .unwrap_or_else(|e| panic!("读证书元数据失败: {e}"))
+            .permissions()
+            .mode();
+        assert_eq!(cert_mode & 0o777, 0o644, "证书应为 0644");
+        let key_mode = std::fs::metadata(dir.join("client.key"))
+            .unwrap_or_else(|e| panic!("读私钥元数据失败: {e}"))
+            .permissions()
+            .mode();
+        assert_eq!(key_mode & 0o777, 0o600, "私钥应为 0600");
+        // 目录内无 .new 临时文件残留
+        let leftovers = std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("读目录失败: {e}"))
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".new"))
+            .count();
+        assert_eq!(leftovers, 0, "不应有临时文件残留");
+
+        // 再次落盘应整体替换
+        write_renewed_material(&dir, "CERT-2", "KEY-2")
+            .unwrap_or_else(|e| panic!("替换落盘失败: {e}"));
+        let cert = std::fs::read_to_string(dir.join("client.pem"))
+            .unwrap_or_else(|e| panic!("复读证书失败: {e}"));
+        assert_eq!(cert, "CERT-2");
+
+        // 目录不存在应整体失败且不产生半成品
+        let missing = dir.join("no-such-subdir");
+        assert!(write_renewed_material(&missing, "CERT-3", "KEY-3").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

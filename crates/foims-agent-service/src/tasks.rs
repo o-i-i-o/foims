@@ -14,9 +14,6 @@ use foims_common::{log_debug, msg};
 
 use crate::snmp_poll;
 
-/// 离线判定参数缺省值（与 AgentConfig 默认一致）
-const DEFAULT_INTERVAL_SECS: u64 = 60;
-const DEFAULT_OFFLINE_FACTOR: u64 = 3;
 /// SNMP 轮询间隔缺省值（秒，调度注册侧保持一致）
 const DEFAULT_SNMP_POLL_INTERVAL_SECS: u64 = 300;
 /// 历史保留天数缺省值与上限（对齐天数类任务的既有口径）
@@ -36,7 +33,25 @@ fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
 /// active agent 置为 offline（pending/disabled/revoked 不参与判定）。
 /// 仅对 source='agent' 生效：SNMP 采集行轮询间隔更长（默认 5 分钟），
 /// 由 snmp_poll 按自身间隔 × 2 独立判定离线。
-pub struct AgentOfflineTaskExecutor;
+///
+/// 判定参数与上报间隔同源（AgentConfig）：默认值在注册时由主程序从
+/// agent 配置段注入，避免「上报间隔已改而离线阈值仍用旧默认」的错判；
+/// 任务配置显式给出 interval_secs/factor 时仍以任务配置优先。
+pub struct AgentOfflineTaskExecutor {
+    /// 默认判定间隔（秒），注册时取自 AgentConfig.report_interval_secs
+    default_interval_secs: u64,
+    /// 默认离线倍数，注册时取自 AgentConfig.offline_factor
+    default_factor: u64,
+}
+
+impl AgentOfflineTaskExecutor {
+    pub fn new(default_interval_secs: u64, default_factor: u64) -> Self {
+        Self {
+            default_interval_secs,
+            default_factor,
+        }
+    }
+}
 
 #[async_trait]
 impl TaskExecutor for AgentOfflineTaskExecutor {
@@ -50,8 +65,8 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let interval_secs = config_u64(&ctx.config, "interval_secs", DEFAULT_INTERVAL_SECS);
-        let factor = config_u64(&ctx.config, "factor", DEFAULT_OFFLINE_FACTOR);
+        let interval_secs = config_u64(&ctx.config, "interval_secs", self.default_interval_secs);
+        let factor = config_u64(&ctx.config, "factor", self.default_factor);
         let seconds = interval_secs.saturating_mul(factor);
 
         let result = sqlx::query(

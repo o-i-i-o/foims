@@ -416,11 +416,12 @@ async fn main() -> std::io::Result<()> {
     foims_common::log_info!("system.fail2ban_cleanup_started");
 
     // SNMP Trap/Inform 接收：常驻 UDP 监听，收到的消息写入站内通知
-    // （日志-通知页面展示）。初始化模式无连接池，跳过启动
+    // （日志-通知页面展示）。采集服务职责（foims-agent-service），初始化模式
+    // 无连接池，跳过启动
     if config.snmp.trap.enabled
         && let Some(db_pool) = pool.as_ref()
     {
-        foims_resource::start_trap_receiver(
+        foims_agent_service::start_trap_receiver(
             db_pool.get_conn(),
             config.snmp.trap.clone(),
             shutdown.subscribe(),
@@ -437,7 +438,12 @@ async fn main() -> std::io::Result<()> {
         registry.register(Box::new(MacSyncTaskExecutor));
         registry.register(Box::new(IpStatusSyncTaskExecutor));
         registry.register(Box::new(PasswordExpirySyncTaskExecutor));
-        registry.register(Box::new(AgentOfflineTaskExecutor));
+        // 离线判定参数与上报间隔同源：默认值取自 agent 配置段（前端可改，
+        // 重启后生效），任务配置显式覆盖时仍优先
+        registry.register(Box::new(AgentOfflineTaskExecutor::new(
+            config.agent.report_interval_secs,
+            u64::from(config.agent.offline_factor),
+        )));
         registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
         registry.register(Box::new(AgentSnmpPollTaskExecutor));
         registry

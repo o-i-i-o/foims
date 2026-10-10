@@ -107,6 +107,36 @@ POST /agent/v1/report        （HTTP/3，Bearer token）
 - 时间偏差：`collected_at` 偏差过大（如 >5 分钟）拒绝入库；latest 快照一律用服务端时间。
 - 防重放一期不做（TLS 1.3 + token 已够），记为后续增强。
 
+### 3.4 证书续期协议（POST /agent/v1/renew）
+
+client 证书有效期约 5 年，过期后 mTLS 握手将失败且 agent 无法自行恢复，
+因此双方内置自动续期：
+
+```
+POST /agent/v1/renew       （HTTP/3，mTLS，与上报同链路）
+{ "client_cert_pem": "-----BEGIN CERTIFICATE-----…" }
+
+→ 200 { "cert_pem": "…", "key_pem": "…", "not_after": "2031-10-08T…Z" }
+→ 400 未到续期窗口 / 请求体解析失败
+→ 403 连接无客户端证书 / 请求体证书与连接证书不一致
+→ 500 服务端签发失败（CA 物料缺失等）
+```
+
+- 鉴权：完全依赖 mTLS（能建立连接即持有站点 CA 签发的 client 证书），
+  续期不授予任何新权限，仅换发同身份新证书。
+- 身份绑定：请求体携带的 PEM 证书 DER 必须与 mTLS 连接的对端 leaf
+  逐字节一致，防止「链路证书鉴权、为任意 PEM 换发」。
+- 频控：服务端仅在证书剩余寿命 < 90 天时签发（`RENEW_REMAINING_DAYS_THRESHOLD`）；
+  agent 端在剩余 < 30 天时才发起（`CERT_RENEW_THRESHOLD_DAYS`），正常周期
+  不会反复重签。
+- 生效：服务端签发后同步替换磁盘 CLIENT_CERT/CLIENT_KEY（后续下载组包携带
+  新证书）；QUIC 监听端只锚定 CA，不 pin leaf，无需重启。agent 收到响应后
+  以「临时文件 + rename」原子替换 client.pem（0644）/ client.key（0600）；
+  agent 每轮上报重建连接并从磁盘重读证书，下一轮自动生效。
+- 触发时机：上报主循环每轮成功后（补报缓存之后）与 `--once` 上报成功后检查；
+  证书已过期（握手即失败）时 agent 无法自救，需人工重签（服务端重新组包下载）。
+- 自更新（服务端向 agent 推送版本升级）留二期，复用本节链路设计。
+
 ## 4. foims-agent（Rust 重写 node_exporter）
 
 - 新 crate `foims-agent`（bin target，加入 workspace 以共享 `foims-common`）。
@@ -298,13 +328,14 @@ machine_id 冲突时视为同机重复安装，返回 409 由运营处理）。
 
 ### 6.1 构建期（CI 集成进主程序安装包）
 
-- **版本注入**：`scripts/build-agent.sh` 从根 `Cargo.toml` 读取主程序版本，
-  以 `FOIMS_AGENT_VERSION` 环境变量注入编译（agent 内 `option_env!` 读取，
-  缺省回退 `CARGO_PKG_VERSION`）。**agent 版本 = 打包时的主程序版本**，
-  天然满足「agent 版本不低于 foims」；`foims-agent --version` 输出该版本。
+- **版本策略（2026-10-11 调整：解除强制绑定）**：agent 版本独立自管理
+  （取 foims-agent crate 自身 `CARGO_PKG_VERSION`，不再注入
+  `FOIMS_AGENT_VERSION`），`foims-agent --version` 与上报快照
+  `agent_version` 仅作展示/运维核对；门控比较的对象是清单版本。
 - **产物清单**：`build-agent.sh` 归集产物时生成 `dist/agents/manifest.json`
   （`version` + 各 `target` 的 `sha256`/`size`）与 `SHA256SUMS`，作为运行期
-  分发的唯一事实来源。
+  分发的唯一事实来源；`version` 写主程序版本，语义为「本批产物对齐的
+  服务端版本」，供服务端门控与 `build-deb.sh` 新鲜度校验。
 - **集成进安装包**：`scripts/build-deb.sh` 调用 `build-agent.sh`（默认
   `--only x86_64-unknown-linux-musl,aarch64-unknown-linux-musl`，控制包体）
   后按**显式清单**（硬性规则，禁通配符）复制进包：

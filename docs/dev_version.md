@@ -116,3 +116,11 @@ v0.3.0
 v0.3.1
 2026101023085901
 1.设备网口同名语义澄清与新增网口默认名修复：核实不同设备网口可同名（device_interfaces/device_nics 均为 UNIQUE(device_id, name)，建单口/整体同步/SNMP 同步三条写入路径全为 per-device 判重，跨设备同名 eth0 经 API 与 UI 端到端验证通过，无全局唯一限制）；真正缺陷在设备模态框「添加网口」默认名固定 eth0——设备创建即自带 eth0，不改名直接保存必触发同设备 409，报错文案「该接口名已存在」易被误读为跨设备全局唯一。修复：networkCardManager 新增 nextDefaultPortName()（扫描表单内全部网口名输入框取首个空闲 ethN），新增网口默认名自动避开表单内已有名称；i18n 键 server.device.interface.name_exists 中英文改为「该设备下已存在同名网口 / A port with this name already exists on this device」明确作用域；前端资源版本同步 bump，Cargo.toml 不变
+
+v0.4.0
+2026101100495801
+1.SNMP 采集代码归位（数据采集 crate 重定位）：snmp trap 接收自 foims-resource/device 迁至 foims-agent-service/trap（路由挂载与 module_docs 同步，resource 内部 interface/mac/lldp 对 parse_auth_protocol/parse_priv_protocol 的反向依赖保留原位并改 pub 跨 crate 复用），SNMP 采集与 agent 上报统一收口「数据采集」crate
+2.agent 版本独立自管理：FOIMS_AGENT_VERSION 不再绑定主程序版本（VERSION = env!("CARGO_PKG_VERSION") 读 foims-agent 自身版本），版本门控保留（manifest.version 语义为「产物对齐的服务端版本」，gate_check/build-deb.sh 不动）
+3.系统页「数据采集」新增 Agent 服务端配置持久化：agent.enabled/bind_addr/report_interval_secs/download_server_addr 存系统配置（新键 download_server_addr），前端表单校验（bind host:port 正则、interval clamp [10,3600]、下载地址可选）+ sessionStorage 重启提示，下载地址缺端口安装链路 ensure_agent_port 自动补 9100
+4.Agent 分发下载列表改平台×架构两级联动下拉（架构选项随平台动态过滤，包体大小提示、门控禁用状态跨重入保持），替换原全量表格
+5.新增证书续期协议（POST /agent/v1/renew，docs/agent-design.md §3.4）：服务端 mTLS-only 鉴权 + 请求体 PEM 与对端 leaf DER 逐字节一致 + 剩余寿命 <90 天才签发（renew.rs，x509-parser 0.18 解析，foims-common 新增 x509::cert_remaining 共享辅助与 CertRenewRequest/CertRenewResponse 类型），issue_client_material 重签后原子替换磁盘 CLIENT_CERT/CLIENT_KEY（QUIC 监听端只锚定 CA 无需重启）；agent 端每轮上报成功后检查剩余 <30 天自动续期（reporter.rs 抽出 h3_exchange 共用收发链路，report_uri 泛化 request_uri，续期产物临时文件+rename 原子落盘 证书 0644/私钥 0600，下一轮上报重读新证书生效）；证书已过期（握手即失败）无法自救需人工重签记入文档；lib 版本 0.22.2→0.23.0（x+1 → b+1 c 归零），foims-common 0.3.2→0.3.3、foims-agent 0.1.3→0.1.4、foims-agent-service 0.1.3→0.1.4，前端资源版本同步 bump

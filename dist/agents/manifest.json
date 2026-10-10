@@ -1,12 +1,12 @@
 {
-  "version": "0.22.0",
-  "generated_at": "2026-10-10T12:27:25Z",
+  "version": "0.23.0",
+  "generated_at": "2026-10-10T17:06:47Z",
   "targets": {
     
-    "x86_64-unknown-linux-musl": { "sha256": "9e0f1aecb19614e12531f88680b71745cc99234f03d00ca3c0af7f5c490887ff", "size": 7875920 },
-    "aarch64-unknown-linux-musl": { "sha256": "93a8751099f8dc8060f62f102df9b388b72035963639b4433cb45d1a1bc33e92", "size": 7816168 },
-    "i686-unknown-linux-musl": { "sha256": "f3c2fb829c03713d8d2182679015cf136befef21f5a9ab5efd6d61553c88da71", "size": 7148984 },
-    "arm-unknown-linux-musleabihf": { "sha256": "54ced199db479f7cf0933ab6b4badac00e257bcd773d64f4aeccc732d837aa84", "size": 6784600 },
-    "armv7-unknown-linux-musleabihf": { "sha256": "f47624b04f4d841169157ac7725f6be30a07250e72d1d1aba7bf7a0b35b4a14a", "size": 6655828 }
+    "x86_64-unknown-linux-musl": { "sha256": "448bf2b46f9e62d446f54a27daa486afe628a9a4858364e21011d8ba8862530b", "size": 8266232 },
+    "aarch64-unknown-linux-musl": { "sha256": "8e51c1d056d163d5fe16f3d3eb27329544a54ea010e48cf1e8d2bdd57c1ed0e9", "size": 8195176 },
+    "i686-unknown-linux-musl": { "sha256": "2a9ee8a27d3fbb64c22378901308c6ac9a0ef97b45329d0df1f035067a8d9640", "size": 7520796 },
+    "arm-unknown-linux-musleabihf": { "sha256": "5e776e937f878461a17e8126ebcdc0aeb797c02a3b4dd7145e85b9ac7a0d24c9", "size": 7118252 },
+    "armv7-unknown-linux-musleabihf": { "sha256": "6fcf991d0ac3a4fd7a29009cd9d33d32d9ffc50cceebda7f80d79737490251f3", "size": 6985048 }
   }
 }
