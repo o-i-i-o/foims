@@ -50,7 +50,6 @@ export function initSystemTabs() {
         } else if (tabId === "system-notification") {
           loadSmtpConfig();
           loadNotificationSettings();
-          loadSnmpTrapConfig();
         } else if (tabId === "data-management") {
           loadLogsStats();
           loadLogForwarding();
@@ -61,6 +60,7 @@ export function initSystemTabs() {
           loadPasswordPolicy();
         } else if (tabId === "agent-collect") {
           loadAgentDist();
+          loadSnmpTrapConfig();
         }
       });
     });

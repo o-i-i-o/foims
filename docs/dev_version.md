@@ -97,3 +97,7 @@ v0.1.1
 2.Agent 监控链路代码审计修复（服务端侧）：上报入库输入校验加固（文本字段 trim+长度上限 machine_id/hostname/os/kernel/arch/agent_version，温度读数 [-100,250]℃、其他传感器 ±9999.9 防 NUMERIC(5,1) 溢出 500）；新增上报频控（last_seen 距今小于生效间隔一半返回 429，i18n 键 server.agent.report_too_frequent）；指标历史 INSERT 改 ON CONFLICT (agent_id, collected_at) DO NOTHING 幂等去重；历史曲线抽样下推 SQL 窗口函数（超 200 点不再全量拉取内存抽样，保留内存二次抽样防御）；server_addr 校验拒绝尾冒号（修复产出 host::9100 非法形式）；install.sh 内置兜底副本 systemd 分支 enable+restart 对齐部署脚本；agent_metrics_history 索引改 UNIQUE（真实库已执行 DROP+CREATE UNIQUE，foims-init 建表与 check.rs 清单同步且校验 indisunique）
 3.Agent 监控链路代码审计修复（agent 端与前端）：collect_report 拆同步纯函数经 tokio::task::spawn_blocking 执行（CPU 200ms 差分窗口与 /proc 同步读取不再阻塞 tokio worker，--once 与循环路径共用自动覆盖）；前端详情历史曲线加载失败 showToast 提示并清空渲染；迷你曲线单点序列补 circle 圆点渲染（原 length>1 才画 polyline 导致单点空白）；deploy/agent/install.sh systemd 分支 enable+restart、sysvinit 分支 restart 语义（升级安装后旧进程不再残留）
 以上均为 z 段普通修复，前端资源版本同步 bump（新增 i18n 键触发），Cargo.toml 不变
+
+v0.1.2
+2026101111503001
+1.系统页「Agent 采集」子标签更名「数据采集」（i18n 键 system.agent_collect 中英文同步，英文 Data Collection），SNMP Trap 接收卡片自「通知」子标签迁入该子标签（HTML 结构原样移动，Agent 分发卡片图标改 📦 避免与 SNMP 📡 重复）；子标签内卡片标题保留原文案，拆独立键 system.agent_collect_card（中文「Agent 采集」/英文 Agent Collection）；子标签激活分支 system-notification 移除 loadSnmpTrapConfig、agent-collect 补挂 loadSnmpTrapConfig（表单 submit 与 v3 用户行按钮绑定在 initSystemTabs 通用区，不受迁移影响），前端资源版本同步 bump，Cargo.toml 不变
