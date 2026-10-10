@@ -3,14 +3,14 @@
  * 主机列表 / 状态与关键字筛选 / 30s 自动刷新 / 行内管理操作 /
  * 详情弹窗（分组卡片 + 近 24h 迷你曲线）
  */
-import { apiGet, apiRequest, apiDelete } from "../utils/apiClient.js";
+import { apiGet, apiRequest, apiDelete, apiPut } from "../utils/apiClient.js";
 import { escapeHtml, renderTable, appendPaginationToTable, showToast } from "../utils/ui.js";
 import { showConfirm } from "../utils/confirm.js";
 import { t } from "../utils/i18n.js";
 import { formatDateTime, formatTime } from "../utils/formatter.js";
 import { createSeqGuard, nextFrame } from "../utils/helpers.js";
 import { iconButton } from "../utils/icons.js";
-import { openModal } from "../utils/modalLoader.js";
+import { openModal, closeModal } from "../utils/modalLoader.js";
 
 // 自动刷新周期与每页条数
 const REFRESH_INTERVAL_MS = 30_000;
@@ -80,6 +80,9 @@ function bindToolbarEvents(section) {
   });
   section.querySelector("#agents-refresh-btn")?.addEventListener("click", () => {
     loadAgentsData(currentPage);
+  });
+  section.querySelector("#agents-threshold-btn")?.addEventListener("click", () => {
+    openAlertThresholdModal();
   });
 }
 
@@ -386,6 +389,96 @@ async function deleteAgent(id) {
   } catch (error) {
     console.error("删除主机失败:", error);
     showToast(t("common.operation_failed_retry"), "error");
+  }
+}
+
+// ==========================================
+// 告警阈值配置弹窗
+// ==========================================
+
+/** 阈值输入框定义：id 与取值范围（百分比 1-100 / 温度 1-200） */
+const ALERT_THRESHOLD_FIELDS = [
+  { id: "agent-alert-cpu", key: "cpu_pct", min: 1, max: 100 },
+  { id: "agent-alert-mem", key: "mem_pct", min: 1, max: 100 },
+  { id: "agent-alert-disk", key: "disk_pct", min: 1, max: 100 },
+  { id: "agent-alert-temp", key: "temp_c", min: 1, max: 200 }
+];
+
+/** 打开告警阈值弹窗：拉取当前配置填充表单（closeModal 会移除 DOM，每次重绑提交事件） */
+async function openAlertThresholdModal() {
+  const modal = await openModal("agent-alert-threshold-modal");
+  if (!modal) {
+    return;
+  }
+  modal
+    .querySelector("#agent-alert-threshold-form")
+    ?.addEventListener("submit", saveAlertThresholds);
+  try {
+    const result = await apiGet("/api/agents/alert-thresholds");
+    if (!result.success) {
+      showToast(result.message || t("common.load_failed"), "error");
+      return;
+    }
+    const config = result.data || {};
+    const enabled = modal.querySelector("#agent-alert-enabled");
+    if (enabled) {
+      enabled.checked = !!config.enabled;
+    }
+    for (const field of ALERT_THRESHOLD_FIELDS) {
+      const input = modal.querySelector(`#${field.id}`);
+      if (input) {
+        input.value = config[field.key] ?? "";
+      }
+    }
+  } catch (error) {
+    showToast(`${t("common.load_failed")}: ${error.message}`, "error");
+  }
+}
+
+/** 保存告警阈值：前端范围校验后 PUT，服务端保存并立即评估一轮 */
+async function saveAlertThresholds(e) {
+  e.preventDefault();
+  const modal = document.getElementById("agent-alert-threshold-modal");
+  if (!modal || modal.dataset.saving === "true") {
+    return;
+  }
+  const payload = {
+    enabled: !!modal.querySelector("#agent-alert-enabled")?.checked,
+    cpu_pct: null,
+    mem_pct: null,
+    disk_pct: null,
+    temp_c: null
+  };
+  for (const field of ALERT_THRESHOLD_FIELDS) {
+    const input = modal.querySelector(`#${field.id}`);
+    if (!input) {
+      continue;
+    }
+    const raw = String(input.value).trim();
+    if (raw === "") {
+      continue;
+    }
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < field.min || value > field.max) {
+      showToast(t("agents.alert_invalid_range", { min: field.min, max: field.max }), "error");
+      input.focus();
+      return;
+    }
+    payload[field.key] = value;
+  }
+  modal.dataset.saving = "true";
+  try {
+    const result = await apiPut("/api/agents/alert-thresholds", payload);
+    if (!result.success) {
+      showToast(`${t("agents.alert_save_failed")}: ${result.message}`, "error");
+      return;
+    }
+    showToast(t("agents.alert_save_success"), "success");
+    closeModal("agent-alert-threshold-modal");
+  } catch (error) {
+    showToast(`${t("agents.alert_save_failed")}: ${error.message}`, "error");
+  } finally {
+    delete modal.dataset.saving;
   }
 }
 

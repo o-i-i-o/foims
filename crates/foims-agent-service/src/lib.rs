@@ -10,6 +10,7 @@
 //!   同时承载 [`renew`] 续期端点的路由分发）；
 //! - [`renew`]：客户端证书续期处理（POST /agent/v1/renew，mTLS 鉴权）；
 //! - [`ingest`]：上报鉴权、校验与入库（agents + agent_metrics_history）；
+//! - [`alerts`]：主机资源告警（全局阈值 + 状态翻转评估 + 站内通知）；
 //! - [`agents_api`]：Agent 列表/详情/历史/管理的 Web API；
 //! - [`snmp_poll`]：SNMP 设备轮询采集（纳入主机监控页，source='snmp'）；
 //! - [`snmp_metrics`]：SNMP 性能指标采集（CPU/内存/磁盘/温度/流量/负载
@@ -23,6 +24,7 @@ pub const SITE_CA_PATH: &str = "/etc/ssl/foims-ca/ca.pem";
 pub const SITE_CA_KEY_PATH: &str = "/etc/ssl/foims-ca/ca.key";
 
 pub mod agents_api;
+pub mod alerts;
 pub mod api;
 pub mod cert;
 pub mod ingest;

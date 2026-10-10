@@ -1,0 +1,38 @@
+<template id="agent-alert-threshold-modal-template">
+<div class="modal-body">
+  <form id="agent-alert-threshold-form">
+    <div class="form-group">
+      <label for="agent-alert-cpu">
+        <span data-i18n="agents.alert_cpu">CPU 使用率阈值 (%)</span>
+      </label>
+      <input type="number" id="agent-alert-cpu" name="cpu_pct" min="1" max="100" step="1" inputmode="numeric" data-i18n-placeholder="agents.alert_placeholder_pct" placeholder="留空不监控" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="agent-alert-mem">
+        <span data-i18n="agents.alert_mem">内存使用率阈值 (%)</span>
+      </label>
+      <input type="number" id="agent-alert-mem" name="mem_pct" min="1" max="100" step="1" inputmode="numeric" data-i18n-placeholder="agents.alert_placeholder_pct" placeholder="留空不监控" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="agent-alert-disk">
+        <span data-i18n="agents.alert_disk">磁盘使用率阈值 (%)</span>
+      </label>
+      <input type="number" id="agent-alert-disk" name="disk_pct" min="1" max="100" step="1" inputmode="numeric" data-i18n-placeholder="agents.alert_placeholder_pct" placeholder="留空不监控" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="agent-alert-temp">
+        <span data-i18n="agents.alert_temp">最高温度阈值 (℃)</span>
+      </label>
+      <input type="number" id="agent-alert-temp" name="temp_c" min="1" max="200" step="1" inputmode="numeric" data-i18n-placeholder="agents.alert_placeholder_temp" placeholder="留空不监控" autocomplete="off">
+    </div>
+    <small class="hint-text" data-i18n="agents.alert_hint">留空表示不监控该项；保存后立即按各主机当前指标评估一次，超过阈值的边沿向全部管理员发送站内通知，恢复后再次超标才会重复提醒。</small>
+  </form>
+</div>
+<footer class="modal-footer">
+  <label class="checkbox-label">
+    <input type="checkbox" id="agent-alert-enabled" name="enabled">
+    <span data-i18n="agents.alert_enabled">启用主机资源告警</span>
+  </label>
+  <button type="submit" class="btn btn-primary" form="agent-alert-threshold-form" data-i18n="common.save">保存</button>
+</footer>
+</template>

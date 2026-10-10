@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791650950">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791650950">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791654563">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791654563">
 </head>
 <body class="main-body">
   <div id="app">
@@ -597,6 +597,7 @@
           <input type="text" id="agents-keyword" class="form-control form-control-sm w-auto" data-i18n-placeholder="agents.search_placeholder" placeholder="搜索主机名 / IP / 标签..." aria-label="Search agents" data-i18n-aria-label="agents.search_placeholder">
           <button id="agents-query-btn" type="button" class="btn btn-primary btn-sm" data-i18n="agents.query">查询</button>
           <button id="agents-refresh-btn" type="button" class="btn btn-secondary btn-sm" data-i18n="common.refresh">刷新</button>
+          <button id="agents-threshold-btn" type="button" class="btn btn-secondary btn-sm" data-i18n="agents.alert_threshold">告警阈值</button>
         </div>
         <div class="table-container">
           <table id="agents-table" class="data-table" aria-label="Agent hosts">
@@ -1652,6 +1653,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791650950"></script>
+  <script type="module" src="/static/js/app.js?v=1791654563"></script>
 </body>
 </html>

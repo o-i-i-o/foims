@@ -57,6 +57,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         // 主机采集 Agent
         "agents",
         "agent_metrics_history",
+        "agent_alert_states",
     ]
 }
 
@@ -561,6 +562,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         "agent_metrics_history",
         vec!["id", "agent_id", "collected_at", "metrics"],
     );
+    columns.insert("agent_alert_states", vec!["agent_id", "metric", "alerting"]);
 
     columns
 }
@@ -820,6 +822,10 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         ("agent_metrics_history", "agent_id"),
         ("agent_metrics_history", "collected_at"),
         ("agent_metrics_history", "metrics"),
+        // 告警状态必须归属 agent 且带指标名与告警态（状态翻转检测依据）
+        ("agent_alert_states", "agent_id"),
+        ("agent_alert_states", "metric"),
+        ("agent_alert_states", "alerting"),
     ]
 }
 

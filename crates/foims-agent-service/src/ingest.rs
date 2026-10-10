@@ -382,7 +382,25 @@ pub async fn ingest(
         return error_json(StatusCode::INTERNAL_SERVER_ERROR, "入库失败：事务提交出错");
     }
 
-    // 6. 响应控制面：下发上报间隔（不低于下限）与最新版本通告
+    // 6. 告警评估：入库成功后按全局阈值评估本条快照（超阈值边沿发站内
+    // 通知）；评估失败仅记日志，不影响已成功的上报响应
+    let values = crate::alerts::MetricValues {
+        cpu_pct: Some(report.cpu.usage_pct),
+        mem_pct,
+        disk_pct,
+        temp_c: temp,
+    };
+    if let Err(e) =
+        crate::alerts::evaluate_report(&ctx.pool, agent_id, &trimmed.hostname, &ip, values).await
+    {
+        foims_common::log_error!(
+            "log.agent.alert_evaluate_failed",
+            agent_id = agent_id,
+            error = e
+        );
+    }
+
+    // 7. 响应控制面：下发上报间隔（不低于下限）与最新版本通告
     (
         StatusCode::OK,
         Json(json!(foims_common::report::ReportResponse {

@@ -972,7 +972,19 @@
     "no_history": "暂无历史数据",
     "uptime_dh": "{{d}} 天 {{h}} 小时",
     "uptime_hm": "{{h}} 小时 {{m}} 分",
-    "uptime_m": "{{m}} 分钟"
+    "uptime_m": "{{m}} 分钟",
+    "alert_threshold": "告警阈值",
+    "alert_enabled": "启用主机资源告警",
+    "alert_cpu": "CPU 使用率阈值 (%)",
+    "alert_mem": "内存使用率阈值 (%)",
+    "alert_disk": "磁盘使用率阈值 (%)",
+    "alert_temp": "最高温度阈值 (℃)",
+    "alert_placeholder_pct": "留空不监控",
+    "alert_placeholder_temp": "留空不监控",
+    "alert_hint": "留空表示不监控该项；保存后立即按各主机当前指标评估一次，超过阈值的边沿向全部管理员发送站内通知，恢复后再次超标才会重复提醒。",
+    "alert_invalid_range": "阈值必须是 {{min}}-{{max}} 之间的整数，或留空不监控",
+    "alert_save_success": "告警阈值已保存",
+    "alert_save_failed": "告警阈值保存失败"
   },
   "logs": {
     "operation_logs": "操作日志",
@@ -1723,7 +1735,9 @@
       "deleted": "Agent 删除成功",
       "list_retrieved": "主机列表已获取",
       "detail_retrieved": "主机详情已获取",
-      "history_retrieved": "历史曲线数据已获取"
+      "history_retrieved": "历史曲线数据已获取",
+      "alert_thresholds_retrieved": "告警阈值配置已获取",
+      "alert_thresholds_updated": "告警阈值已保存，已按当前指标评估一轮"
     },
     "backup": {
       "dir_create_failed": "创建备份目录失败",
@@ -2209,6 +2223,13 @@
         "title": "SNMP Trap/Inform",
         "body": "接收到来自 {{source}} 的 {{version}} {{kind}} 消息，Trap OID：{{trap_oid}}",
         "body_varbinds": "接收到来自 {{source}} 的 {{version}} {{kind}} 消息，Trap OID：{{trap_oid}}；变量绑定：{{varbinds}}"
+      },
+      "agent_alert": {
+        "title": "主机资源告警",
+        "body_cpu": "主机 {{hostname}}（{{ip}}）CPU 使用率 {{value}}%，超过告警阈值 {{threshold}}%",
+        "body_mem": "主机 {{hostname}}（{{ip}}）内存使用率 {{value}}%，超过告警阈值 {{threshold}}%",
+        "body_disk": "主机 {{hostname}}（{{ip}}）磁盘使用率 {{value}}%，超过告警阈值 {{threshold}}%",
+        "body_temp": "主机 {{hostname}}（{{ip}}）最高温度 {{value}}℃，超过告警阈值 {{threshold}}℃"
       }
     },
     "org_template": {

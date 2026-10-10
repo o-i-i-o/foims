@@ -973,7 +973,19 @@
     "no_history": "No history data",
     "uptime_dh": "{{d}}d {{h}}h",
     "uptime_hm": "{{h}}h {{m}}m",
-    "uptime_m": "{{m}}m"
+    "uptime_m": "{{m}}m",
+    "alert_threshold": "Alert Thresholds",
+    "alert_enabled": "Enable host resource alerts",
+    "alert_cpu": "CPU usage threshold (%)",
+    "alert_mem": "Memory usage threshold (%)",
+    "alert_disk": "Disk usage threshold (%)",
+    "alert_temp": "Max temperature threshold (°C)",
+    "alert_placeholder_pct": "Leave empty to skip",
+    "alert_placeholder_temp": "Leave empty to skip",
+    "alert_hint": "Leave empty to skip a metric; after saving, all hosts are evaluated once immediately. Crossing a threshold sends an in-app notification to all administrators; it only repeats after the metric recovers and exceeds again.",
+    "alert_invalid_range": "Threshold must be an integer between {{min}} and {{max}}, or left empty to skip",
+    "alert_save_success": "Alert thresholds saved",
+    "alert_save_failed": "Failed to save alert thresholds"
   },
   "logs": {
     "operation_logs": "Operation Logs",
@@ -1724,7 +1736,9 @@
       "deleted": "Agent deleted successfully",
       "list_retrieved": "Agent list retrieved",
       "detail_retrieved": "Agent detail retrieved",
-      "history_retrieved": "Agent history retrieved"
+      "history_retrieved": "Agent history retrieved",
+      "alert_thresholds_retrieved": "Alert threshold config retrieved",
+      "alert_thresholds_updated": "Alert thresholds saved, all hosts evaluated once"
     },
     "backup": {
       "dir_create_failed": "Failed to create backup directory",
@@ -2210,6 +2224,13 @@
         "title": "SNMP Trap/Inform",
         "body": "Received {{version}} {{kind}} from {{source}}, trap OID: {{trap_oid}}",
         "body_varbinds": "Received {{version}} {{kind}} from {{source}}, trap OID: {{trap_oid}}; varbinds: {{varbinds}}"
+      },
+      "agent_alert": {
+        "title": "Host Resource Alert",
+        "body_cpu": "Host {{hostname}} ({{ip}}) CPU usage {{value}}% exceeds the alert threshold {{threshold}}%",
+        "body_mem": "Host {{hostname}} ({{ip}}) memory usage {{value}}% exceeds the alert threshold {{threshold}}%",
+        "body_disk": "Host {{hostname}} ({{ip}}) disk usage {{value}}% exceeds the alert threshold {{threshold}}%",
+        "body_temp": "Host {{hostname}} ({{ip}}) max temperature {{value}}°C exceeds the alert threshold {{threshold}}°C"
       }
     },
     "org_template": {

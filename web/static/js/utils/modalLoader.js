@@ -164,6 +164,11 @@ const MODAL_REGISTRY = {
     titleHtml:
       '<span data-i18n="agents.detail_title"></span><span id="agent-detail-title-host" class="agent-title-host"></span>'
   },
+  // 主机资源告警阈值配置（启用开关在 footer，保存即评估一轮）
+  "agent-alert-threshold-modal": {
+    path: "/static/modals/agents/agent-alert-threshold-modal.html",
+    title: "agents.alert_threshold"
+  },
   // 日志
   "log-details-modal": {
     path: "/static/modals/log/log-details-modal.html",

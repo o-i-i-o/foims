@@ -1,6 +1,6 @@
 {
-  "version": "0.23.0",
-  "generated_at": "2026-10-10T17:06:47Z",
+  "version": "0.23.1",
+  "generated_at": "2026-10-10T18:11:37Z",
   "targets": {
     
     "x86_64-unknown-linux-musl": { "sha256": "448bf2b46f9e62d446f54a27daa486afe628a9a4858364e21011d8ba8862530b", "size": 8266232 },

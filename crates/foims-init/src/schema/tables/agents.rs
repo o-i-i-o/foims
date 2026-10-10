@@ -75,5 +75,18 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 告警状态表：记录每台主机各指标当前的告警态（状态翻转检测的持久依据），
+    // 超阈值边沿 false→true 时发站内通知；主机删除级联清理
+    sqlx::query(
+        r"CREATE TABLE IF NOT EXISTS agent_alert_states (
+            agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+            metric TEXT NOT NULL,
+            alerting BOOLEAN NOT NULL DEFAULT FALSE,
+            PRIMARY KEY (agent_id, metric)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

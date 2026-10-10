@@ -864,6 +864,11 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                     get(foims_agent_service::agents_api::get_agent_history::<AppState>),
                 )
                 .route(
+                    "/alert-thresholds",
+                    get(foims_agent_service::alerts::get_alert_thresholds::<AppState>)
+                        .put(foims_agent_service::alerts::put_alert_thresholds::<AppState>),
+                )
+                .route(
                     "/dist",
                     get(foims_agent_service::api::get_agent_dist::<AppState>),
                 )
