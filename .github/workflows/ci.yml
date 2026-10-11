@@ -130,7 +130,7 @@ jobs:
       - name: 安装 aarch64 musl 交叉工具链
         if: steps.muslcc.outputs.cache-hit != 'true'
         run: |
-          wget --timeout=60 --tries=3 -O /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          wget --timeout=1200 --tries=3 -O /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
           sudo mkdir -p /opt/musl-cross
           sudo chown "$(id -u):$(id -g)" /opt/musl-cross
           tar -xzf /tmp/aarch64-linux-musl-cross.tgz -C /opt/musl-cross
@@ -195,7 +195,7 @@ jobs:
       - name: 安装 aarch64 musl 交叉工具链
         if: steps.muslcc.outputs.cache-hit != 'true'
         run: |
-          wget --timeout=60 --tries=3 -O /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          wget --timeout=1200 --tries=3 -O /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
           sudo mkdir -p /opt/musl-cross
           sudo chown "$(id -u):$(id -g)" /opt/musl-cross
           tar -xzf /tmp/aarch64-linux-musl-cross.tgz -C /opt/musl-cross
