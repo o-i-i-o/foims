@@ -11,4 +11,5 @@ chrome-headless-shell-linux64/
 guanwang/
 node_exporter/
 .zcodeignore
-/crates/foims-agent/tests/fixtures/
+crates/foims-agent/tests/fixtures/
+dist/agents/
