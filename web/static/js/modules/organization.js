@@ -232,8 +232,9 @@ async function renderTreeNode(node) {
   const typeLabel = getOrgTypeLabel(node.org_type);
 
   const toggleStateClass = allExpanded ? "expanded" : "";
+  const ariaExpanded = allExpanded ? "true" : "false";
   const toggleBtn = hasChildren
-    ? `<span class="org-toggle ${toggleStateClass}" data-action="toggle" role="button" tabindex="0" aria-expanded="${allExpanded ? "true" : "false"}">
+    ? `<span class="org-toggle ${toggleStateClass}" data-action="toggle" role="button" tabindex="0" aria-expanded="${ariaExpanded}">
          <svg class="org-toggle-icon" width="16" height="16" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
        </span>`
     : '<span class="org-toggle-placeholder"></span>';

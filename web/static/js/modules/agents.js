@@ -666,7 +666,12 @@ async function loadAgentHistory(id) {
 
 /** 按指标拆分序列并渲染五张曲线卡（cpu/mem/disk/temp/rx/tx 均可能为 null） */
 function renderAllCharts(items) {
-  renderSparkline("agent-chart-cpu", items.map((item) => item?.cpu), "%", "agent-chart-line-cpu");
+  renderSparkline(
+    "agent-chart-cpu",
+    items.map((item) => item?.cpu),
+    "%",
+    "agent-chart-line-cpu"
+  );
   renderSparkline(
     "agent-chart-memory",
     items.map((item) => item?.mem),

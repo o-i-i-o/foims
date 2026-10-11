@@ -10,6 +10,9 @@ import { initSecurityTab } from "./fail2banManager.js";
 import { elementCache, setActiveSubtab, getActiveSubtab } from "../utils/helpers.js";
 import { showConfirm } from "../utils/confirm.js";
 
+// 系统配置端点（PUT 整体替换、GET 读取共用）
+const SYSTEM_CONFIG_API = "/api/system/config";
+
 // 初始化系统管理标签页
 export function initSystemTabs() {
   const systemContainer = elementCache.get("system");
@@ -305,7 +308,7 @@ async function saveSystemConfig() {
 
     const config = { server: serverConfig };
 
-    const result = await apiPut("/api/system/config", config);
+    const result = await apiPut(SYSTEM_CONFIG_API, config);
 
     if (result.success) {
       await loadSystemConfig();
@@ -337,7 +340,7 @@ function checkConfigUpdateRestartPrompt() {
 // 加载系统配置
 export async function loadSystemConfig() {
   try {
-    const result = await apiGet("/api/system/config");
+    const result = await apiGet(SYSTEM_CONFIG_API);
     if (result.success) {
       const config = result.data;
 
@@ -697,7 +700,7 @@ let currentSnmpBaseConfig = null;
 // 加载 Trap 配置（经系统配置接口读取，密码已由后端脱敏为 ***）
 export async function loadSnmpTrapConfig() {
   try {
-    const result = await apiGet("/api/system/config");
+    const result = await apiGet(SYSTEM_CONFIG_API);
     if (!result.success || !result.data?.snmp) {
       return;
     }
@@ -947,7 +950,7 @@ async function saveSnmpTrapConfig() {
       }
     };
 
-    const result = await apiPut("/api/system/config", { snmp });
+    const result = await apiPut(SYSTEM_CONFIG_API, { snmp });
     if (result.success) {
       showToast(t("snmp_trap.save_success"), "success");
       showToast(t("system.config_saved_restart_needed"), "warning");
@@ -975,7 +978,7 @@ let currentAgentBaseConfig = null;
 function loadAgentServiceConfig() {
   return (async () => {
     try {
-      const result = await apiGet("/api/system/config");
+      const result = await apiGet(SYSTEM_CONFIG_API);
       if (!result.success || !result.data?.agent) {
         return;
       }
@@ -1047,7 +1050,7 @@ async function saveAgentServiceConfig() {
       download_server_addr: downloadAddr || null
     };
 
-    const result = await apiPut("/api/system/config", { agent });
+    const result = await apiPut(SYSTEM_CONFIG_API, { agent });
     if (result.success) {
       showToast(t("agent_service.save_success"), "success");
       showToast(t("system.config_saved_restart_needed"), "warning");
@@ -2349,9 +2352,7 @@ function renderAgentTargets(targets, blocked) {
     ...new Set(currentAgentTargets.map((item) => agentTargetOs(item.target)).filter(Boolean))
   ].sort();
   platformSelect.innerHTML = platforms.length
-    ? platforms
-        .map((os) => `<option value="${escapeHtml(os)}">${escapeHtml(os)}</option>`)
-        .join("")
+    ? platforms.map((os) => `<option value="${escapeHtml(os)}">${escapeHtml(os)}</option>`).join("")
     : `<option value="">${escapeHtml(t("common.no_data"))}</option>`;
 
   const disabled = agentDistBlocked || !platforms.length;
@@ -2397,11 +2398,11 @@ function syncAgentDistSelection() {
   }
 
   const target = currentAgentTargets.find(
-    (item) =>
-      agentTargetOs(item.target) === platformSelect.value && item.arch === archSelect.value
+    (item) => agentTargetOs(item.target) === platformSelect.value && item.arch === archSelect.value
   );
   if (target && !agentDistBlocked) {
-    const formats = Array.isArray(target.formats) && target.formats.length ? target.formats : ["zip"];
+    const formats =
+      Array.isArray(target.formats) && target.formats.length ? target.formats : ["zip"];
     formatSelect.innerHTML = formats
       .map(
         (format) =>
