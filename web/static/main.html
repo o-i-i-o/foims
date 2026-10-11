@@ -1179,11 +1179,7 @@
                 </div>
                 <!-- 产物不可用/门控未通过提示（hidden 属性控制显隐） -->
                 <p id="agent-dist-message" class="config-hint config-hint-danger" hidden></p>
-                <!-- 下载选项：备注 -->
-                <div class="form-group-inline">
-                  <label for="agent-download-label" data-i18n="system.agent_download_label">Download Label</label>
-                  <input type="text" id="agent-download-label" class="form-control" maxlength="100">
-                </div>
+
                 <div class="form-row">
                   <div class="form-group">
                     <label for="agent-dist-platform" data-i18n="system.agent_target">Platform</label>
@@ -1200,6 +1196,11 @@
                     <select id="agent-dist-format" class="form-control" disabled aria-label="Agent package format">
                     </select>
                   </div>
+                  <!-- 下载选项：备注 -->
+                  <div class="form-group">
+                    <label for="agent-download-label" data-i18n="system.agent_download_label">Download Label</label>
+                    <input type="text" id="agent-download-label" class="form-control" maxlength="100">
+                  </div>                  
                   <div class="form-group">
                       <span id="agent-dist-size" class="hint-text" aria-live="polite">-</span>
                       <button type="button" id="agent-dist-download-btn" class="btn btn-primary" data-i18n="system.agent_download" disabled>Download</button>
