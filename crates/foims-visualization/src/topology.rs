@@ -830,32 +830,35 @@ pub async fn auto_discover_all_topology(
 ) -> Result<AutoDiscoverResult, VisualizationError> {
     let derived = derive_physical_connections(pool).await?;
 
-    let mut device_ids: Vec<Uuid> = Vec::new();
-    for conn in &derived {
-        if !device_ids.contains(&conn.source_device_id) {
-            device_ids.push(conn.source_device_id);
-        }
-        if !device_ids.contains(&conn.target_device_id) {
-            device_ids.push(conn.target_device_id);
-        }
-    }
-
-    // 设备模块中的全部设备均确保存在节点（已存在的由 ON CONFLICT 跳过）
-    let all_devices: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM devices ORDER BY name")
-        .fetch_all(pool)
-        .await?;
-    for device_id in all_devices {
-        if !device_ids.contains(&device_id) {
-            device_ids.push(device_id);
-        }
-    }
-
-    let mut added_nodes = 0usize;
-    for device_id in &device_ids {
-        if ensure_topology_node(pool, *device_id).await? {
-            added_nodes += 1;
-        }
-    }
+    // 坐标分配单语句原子完成：候选设备（devices 中布局缺失的设备）按
+    // 名称排序，以语句内快照的现有节点总数为基偏移计算网格坐标，
+    // 消除"先读节点数、再逐条插入"的先读后写竞态与部分失败残留
+    let added_nodes = sqlx::query_scalar::<_, Uuid>(
+        r"WITH candidates AS (
+            SELECT d.id, d.name
+            FROM devices d
+            WHERE NOT EXISTS (
+                SELECT 1 FROM topology_nodes tn WHERE tn.device_id = d.id
+            )
+        ),
+        ranked AS (
+            SELECT c.id AS device_id,
+                   ROW_NUMBER() OVER (ORDER BY c.name, c.id)
+                       + (SELECT COUNT(*) FROM topology_nodes) AS ordinal
+            FROM candidates c
+        )
+        INSERT INTO topology_nodes (device_id, x, y, width, height)
+        SELECT device_id,
+               (100 + ((ordinal - 1) % 8) * 250)::int,
+               (100 + ((ordinal - 1) / 8) * 150)::int,
+               200,
+               100
+        FROM ranked
+        RETURNING device_id",
+    )
+    .fetch_all(pool)
+    .await?
+    .len();
 
     // 仅清理历史遗留的自动发现「物理」连线（迁移兜底）：CSV 导入同样
     // 写 auto_discovered 列，无条件删除会把导入的逻辑连线（含级联的
@@ -879,29 +882,6 @@ pub async fn trigger_auto_discover(pool: &PgPool) -> Result<Response, Visualizat
         result,
         "server.visualization.auto_discover_completed",
     ))
-}
-
-/// 确保拓扑节点存在，返回是否新增（按现有节点总数网格排布初始坐标）
-async fn ensure_topology_node(pool: &PgPool, device_id: Uuid) -> Result<bool, VisualizationError> {
-    let existing_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM topology_nodes")
-        .fetch_one(pool)
-        .await?;
-
-    let x = 100 + (existing_count as i32 % 8) * 250;
-    let y = 100 + (existing_count as i32 / 8) * 150;
-
-    let result = sqlx::query(
-        r"INSERT INTO topology_nodes (device_id, x, y, width, height)
-         VALUES ($1, $2, $3, 200, 100)
-         ON CONFLICT (device_id) DO NOTHING",
-    )
-    .bind(device_id)
-    .bind(x)
-    .bind(y)
-    .execute(pool)
-    .await?;
-
-    Ok(result.rows_affected() > 0)
 }
 
 #[cfg(test)]

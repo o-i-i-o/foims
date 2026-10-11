@@ -126,15 +126,12 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
 pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 只读探测：GET 状态端点不得携带建库/建 schema 的副作用，
     // 因此不再调用 ensure_database_and_schema
-    if !ctx.init_enabled() {
-        return Ok(json_ok(serde_json::json!({
-            "initialized": false,
-            "version": env!("CARGO_PKG_VERSION"),
-        })));
-    }
-
-    // init 启用时目标库通常尚不存在：只做只读连接探测，
-    // 连接失败与 users 表缺失同样视为未初始化
+    //
+    // 状态机以「数据探测」为准而非 init_enabled 开关：初始化完成后
+    // 开关已翻转（init_enabled=false），但库里已有数据、服务尚未重启，
+    // 若此时按开关短路返回 initialized=false，重启轮询方会把已完成
+    // 初始化的系统误判为未初始化（状态机卡死）。init_enabled 仅作
+    // 附加字段透出，供调用方区分「初始化进行中」与「已完成等待重启」
     let cfg = ctx.db_config();
     let db_url = crate::utils::build_pg_url(&cfg, &cfg.database);
 
@@ -146,6 +143,7 @@ pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Re
 
     Ok(json_ok(serde_json::json!({
         "initialized": initialized,
+        "init_in_progress": ctx.init_enabled(),
         "version": env!("CARGO_PKG_VERSION"),
     })))
 }
@@ -157,9 +155,19 @@ pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Resp
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
     foims_common::log_info!("log.init.restart_requested");
-    let mode = (ctx.restart_fn)()
-        .await
-        .map_err(|e| InitError::Internal(msg("server.init.restart_failed").with("error", e)))?;
+    // 下发失败时恢复一次性重启许可：许可已被消费、init 模式也已关闭，
+    // 若不恢复，后续重启请求将永久被拒（状态机卡在「初始化完成但
+    // 无法重启」），用户只能手动重启进程
+    let mode = match (ctx.restart_fn)().await {
+        Ok(mode) => mode,
+        Err(e) => {
+            ctx.arm_restart();
+            foims_common::log_warn!("log.init.restart_arm_restored", error = e);
+            return Err(InitError::Internal(
+                msg("server.init.restart_failed").with("error", e),
+            ));
+        }
+    };
 
     // 纯 systemd 重启；未注册单元（程序并非以服务运行）不下发重启，
     // 由前端展示完整页面引导用户手动重启完成初始化

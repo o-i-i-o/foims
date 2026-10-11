@@ -113,17 +113,38 @@ pub fn backup_to_file(
                 msg("server.backup.file_write_failed").with("error", "备份文件名冲突超过重试上限"),
             ));
         };
-        file.write_all(&sql_content).map_err(|e| {
-            DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
-        })?;
+        if let Err(e) = file.write_all(&sql_content) {
+            // 写盘中断（磁盘满等）会留下半截备份，恢复误用有风险：
+            // 失败路径尽力删除，删除失败记 warn 不掩盖原错误
+            if let Err(remove_err) = std::fs::remove_file(&backup_file) {
+                log_warn!(
+                    "log.backup.backup_file_remove_failed",
+                    path = backup_file,
+                    error = remove_err
+                );
+            }
+            return Err(DataError::Internal(
+                msg("server.backup.file_write_failed").with("error", e),
+            ));
+        }
         Ok(backup_file)
     }
     #[cfg(not(unix))]
     {
         let backup_file = format!("{backup_dir}/{file_prefix}_{timestamp}.sql");
-        std::fs::write(&backup_file, &sql_content).map_err(|e| {
-            DataError::Internal(msg("server.backup.file_write_failed").with("error", e))
-        })?;
+        if let Err(e) = std::fs::write(&backup_file, &sql_content) {
+            // 写盘中断会留下半截备份：失败路径尽力删除（不掩盖原错误）
+            if let Err(remove_err) = std::fs::remove_file(&backup_file) {
+                log_warn!(
+                    "log.backup.backup_file_remove_failed",
+                    path = backup_file,
+                    error = remove_err
+                );
+            }
+            return Err(DataError::Internal(
+                msg("server.backup.file_write_failed").with("error", e),
+            ));
+        }
         Ok(backup_file)
     }
 }

@@ -165,33 +165,59 @@ async fn create_triggers(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     ];
 
     for (endpoint_type, table, func_name, trigger_name, label, guard) in PREVENT_DELETION_TRIGGERS {
-        // 标识符与文案均来自上方内部常量，拼入 DDL 无注入风险
-        let func = format!(
-            r"CREATE OR REPLACE FUNCTION {func_name}() RETURNS TRIGGER AS $$
+        // 标识符与文案均来自上方内部常量，经 QueryBuilder push 分段拼接
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new("CREATE OR REPLACE FUNCTION ");
+        qb.push(func_name)
+            .push(
+                r"() RETURNS TRIGGER AS $$
             BEGIN
-                IF {guard} AND EXISTS(
+                IF ",
+            )
+            .push(guard)
+            .push(
+                r" AND EXISTS(
                     SELECT 1 FROM cable_links
-                    WHERE (a_endpoint_type='{endpoint_type}' AND a_endpoint_id = OLD.id)
-                       OR (b_endpoint_type='{endpoint_type}' AND b_endpoint_id = OLD.id)
+                    WHERE (a_endpoint_type='",
+            )
+            .push(endpoint_type)
+            .push(
+                "' AND a_endpoint_id = OLD.id)
+                       OR (b_endpoint_type='",
+            )
+            .push(endpoint_type)
+            .push(
+                r"' AND b_endpoint_id = OLD.id)
                 ) THEN
-                    RAISE EXCEPTION 'ERR_CABLE_LINK_REFERENCE: {label} % 被 cable_links 引用，不能删除', OLD.id;
+                    RAISE EXCEPTION 'ERR_CABLE_LINK_REFERENCE: ",
+            )
+            .push(label)
+            .push(
+                r" % 被 cable_links 引用，不能删除', OLD.id;
                 END IF;
                 RETURN OLD;
             END;
-            $$ LANGUAGE plpgsql;"
-        );
-        sqlx::query(sqlx::AssertSqlSafe(func)).execute(pool).await?;
+            $$ LANGUAGE plpgsql;",
+            );
+        qb.build().execute(pool).await?;
 
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            "DROP TRIGGER IF EXISTS {trigger_name} ON {table}"
-        )))
-        .execute(pool)
-        .await?;
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            "CREATE TRIGGER {trigger_name} BEFORE DELETE ON {table} FOR EACH ROW EXECUTE FUNCTION {func_name}()"
-        )))
-        .execute(pool)
-        .await?;
+        // 表名/触发器名均为内部常量，经 QueryBuilder push 拼接
+        sqlx::QueryBuilder::<sqlx::Postgres>::new("DROP TRIGGER IF EXISTS ")
+            .push(trigger_name)
+            .push(" ON ")
+            .push(table)
+            .build()
+            .execute(pool)
+            .await?;
+        sqlx::QueryBuilder::<sqlx::Postgres>::new("CREATE TRIGGER ")
+            .push(trigger_name)
+            .push(" BEFORE DELETE ON ")
+            .push(table)
+            .push(" FOR EACH ROW EXECUTE FUNCTION ")
+            .push(func_name)
+            .push("()")
+            .build()
+            .execute(pool)
+            .await?;
     }
 
     Ok(())

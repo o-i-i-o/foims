@@ -1,6 +1,6 @@
 [package]
 name = "foims-agent"
-version = "0.1.4"
+version = "0.1.5"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Agent - node_exporter 的 Rust 重写：主机指标采集 + HTTP/3 mTLS 上报 + 文本/JSON 输出"
@@ -36,7 +36,8 @@ tracing-subscriber = { workspace = true }
 rustix = { workspace = true }
 
 [dev-dependencies]
-# 无（examples/h3_demo.rs 与 examples/report_smoke.rs 复用 [dependencies]）
+# 续期落盘校验测试自签证书（与 foims-common 同版本）
+rcgen = "0.14"
 
 [lints]
 workspace = true

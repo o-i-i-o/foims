@@ -305,12 +305,19 @@ async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCer
     })
 }
 
+/// 证书签发/续期进程内互斥：client 证书重签与磁盘替换是多步操作，并发续期
+/// 会交错写盘导致证书与私钥混搭不一致；同一时刻仅允许一次签发。
+static ISSUE_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+
 /// 确保四份证书物料齐备并返回：物料齐备且与当前站点 CA 指纹一致时直接复用；
 /// 否则要求站点 CA 存在，经 rcgen 签发 server（SAN=本机全部 IP + localhost）
 /// 与 client 证书，连同 CA 指纹文件一并落盘。
 ///
 /// 返回 Err 时调用方不应启动 QUIC 监听（cert 未就绪则 mTLS 无法建立）。
 pub async fn ensure_agent_certs() -> Result<AgentCertMaterial, String> {
+    // 与续期共用互斥：启动签发不会与运行期续期交错写盘
+    let _guard = ISSUE_LOCK.lock().await;
     ensure_agent_certs_in(
         Path::new(AGENT_CERT_DIR),
         Path::new(super::SITE_CA_PATH),
@@ -370,6 +377,11 @@ async fn ensure_agent_certs_in(
 /// （后续下载组包即携带新证书）。返回 (新证书 PEM, 新私钥 PEM, 失效时刻
 /// RFC 3339)；QUIC 监听端校验只锚定 CA，替换 client 物料无需重启监听。
 pub async fn renew_client_cert() -> Result<(String, String, String), String> {
+    // try_lock 互斥：并发续期直接返回明确错误而非排队重复签发
+    let _guard = ISSUE_LOCK.try_lock().map_err(|_| {
+        foims_common::log_warn!("log.agent.renew_conflict");
+        "已有证书续期正在进行，请稍后重试".to_string()
+    })?;
     renew_client_cert_in(
         Path::new(AGENT_CERT_DIR),
         Path::new(super::SITE_CA_PATH),

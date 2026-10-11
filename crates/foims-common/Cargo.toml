@@ -1,6 +1,6 @@
 [package]
 name = "foims-common"
-version = "0.3.3"
+version = "0.3.4"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Common - shared infra: responses, errors, config, crypto, db pool, net utils, rate limiting"

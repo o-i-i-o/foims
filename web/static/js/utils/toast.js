@@ -9,6 +9,8 @@ function ensureContainer() {
       toastContainer = document.createElement("div");
       toastContainer.id = "toast-container";
       toastContainer.className = "toast-container";
+      toastContainer.setAttribute("aria-live", "polite");
+      toastContainer.setAttribute("role", "status");
       document.body.appendChild(toastContainer);
     }
   }

@@ -537,9 +537,20 @@ pub async fn import_ca(cert_pem: Vec<u8>, key_pem: Vec<u8>) -> Result<PathBuf, C
     };
 
     // 证书与私钥成对写入，避免新旧错配；证书走临时文件 + rename 原子写
-    //（list_cas 会并发清点该目录，不能让读者看到半截 PEM）
+    //（list_cas 会并发清点该目录，不能让读者看到半截 PEM）。
+    // 证书写失败时清空本目录：目录由本流程独占创建、仅含本次物料，
+    // 不清理会留下无证书的孤儿私钥；清理失败仅记 warn，不掩盖原错误
     write_key_file(&target_dir.join(CA_KEY_FILE), &key_pem).await?;
-    write_ca_cert_atomic(&target_dir.join(CA_CERT_FILE), &cert_pem).await?;
+    if let Err(e) = write_ca_cert_atomic(&target_dir.join(CA_CERT_FILE), &cert_pem).await {
+        if let Err(cleanup_err) = tokio::fs::remove_dir_all(&target_dir).await {
+            foims_common::log_warn!(
+                "log.certificate.import_ca_cleanup_failed",
+                path = target_dir.display(),
+                error = cleanup_err
+            );
+        }
+        return Err(e);
+    }
 
     Ok(target_dir)
 }

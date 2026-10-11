@@ -129,3 +129,21 @@ v0.4.0
 v0.5.0
 2026101101482601
 1.主机监控新增资源告警阈值（边沿触发站内通知）：新表 agent_alert_states（agent_id+metric 主键、alerting 状态位、agents 删除级联，真实库已执行建表，foims-init 建表与 check.rs 表/列清单同步）；foims-agent-service 新增 alerts 模块——全局阈值存 system_configs（config_type='agent' 新键 alert_thresholds：enabled + cpu/mem/disk 百分比与温度阈值，None 为不监控该指标），GET/PUT /api/agents/alert-thresholds（agent_admin_guard admin+secadmin），评估点两处（ingest 入库成功后按本条快照评估 + PUT 保存后对全部 active agent 快照列评估一轮），通知策略为状态翻转边沿触发（alerting false→true 先发通知再落状态、失败待重试，恢复/读数缺失静默复位，接收人为全部启用状态管理员 admin/sysadmin/secadmin，标题/正文 i18n key 存 notifications.content 由前端按语言翻译）；前端主机监控工具栏新增「告警阈值」按钮 + 配置弹窗（modalLoader 注册 agent-alert-threshold-modal，四项阈值留空不监控 + footer 启用开关，保存即评估一轮）；i18n 中英文新增 agents.alert_* 与 server.agent.alert_thresholds_* 及 server.notification.agent_alert.*，日志键 log.agent.alert_*；lib 版本 0.23.0→0.23.1（y+1 → c+1），foims-agent-service 0.1.4→0.1.5、foims-init 0.1.5→0.1.6，前端资源版本同步 bump
+
+v0.5.1
+2026101103590701
+1.前端代码审计修复（无障碍与交互反馈）：reset.css 补全局 *:focus-visible 可见焦点环（--color-primary，键盘导航可达）；modalLoader 动态模态框补焦点管理——打开时统一设置 role=dialog/aria-modal 并将焦点移入首个可聚焦元素、Tab 焦点陷阱框内首尾循环、关闭时焦点归还触发元素（层叠模态仅归还本层，WeakMap 记录触发元素）；organization 组织树展开按钮（span[role=button]）补 Enter/Space 键盘触发与 aria-expanded 状态同步；toast 容器补 aria-live=polite + role=status；eventManager 两处动态 import 懒加载失败静默补 catch 并 showToast(t("common.load_failed"))（复用现有 i18n 键，无新增）
+2.前端性能反模式修正：transition:all 36 处中 16 处高频交互组件（分页按钮/表头排序图标/表头搜索钮/模态 footer 按钮/关闭钮/统计卡/仪表盘卡片与列表/tab 按钮/系统配置卡/用量页 tab 与子网按钮与 IP 块/端口方块与 tooltip）改为具体过渡属性；其余 20 处（login 10/foims_init 5/visualization 5，多为装饰性动画）保留待后续处理
+3.审计项核实结论：userManager/workstation/networkCardManager 的 id 内插均为服务端生成 Uuid（固定格式无注入面），豁免不改；main.html 无静态模态框（全部经 modalLoader 动态注入且外壳自带 role=dialog），该项误报；均为 z 段普通修复，前端资源版本同步 bump，Cargo.toml 不变
+
+v0.6.0
+2026101104194501
+1.全仓库三维审计（代码质量/安全/Web 规范）集中修复之后端部分，涉及全部 14 个 crate：
+2.鉴权与安全加固（foims-auth）：登录/令牌路径唯一约束冲突映射 409、禁用账户分支补诱饵 bcrypt 校验消除时序侧信道、密码重置令牌改单次哈希存储、SSO issuer scheme 白名单（仅 https 与 localhost http）、LDAP 配置保存对 ldap:// 明文告警；revoked_tokens 库级去重并补 UNIQUE 索引
+3.资源与业务 crate（foims-resource/foims-organization/foims-x509-management/foims-data-management/foims-visualization）：SNMP 端口同步循环补 req.validate()（非法 vlan 跳过并记日志）、pull_ip_details 空态改 ok_json、网卡/接口 INSERT 唯一约束映射 409、SMTP 失败区分未配置与真实故障；模板删除加 FOR UPDATE 消除 TOCTOU、组织删除递归 CTE 等价简化、CA 导入失败清理孤儿物料目录、nginx conf 落盘继承目标权限（兜底 0644）、备份写失败清理半截文件、拓扑坐标分配改单条 INSERT...SELECT 原子化
+4.采集链路（foims-agent/foims-agent-service/foims-scheduler）：--listen 服务加并发上限 32 与连接读写 10s 超时、采集器 Box→Arc 并加 30s 超时+600s 卡死冷却（中毒锁恢复）、textfile 指标名/标签键白名单、--listen 模式死代码清理；上报响应体 1MiB 上限、CPU guest 双计修复、server_addr 裸 IPv6 拒绝、续期物料落盘前校验（证书可解析+私钥 PEM 头白名单）、组包失败回删 pending 行、trap community 白名单/收件人补 sysadmin/冷却表容量上限、续期全局互斥锁、manifest 加载与二进制校验移 spawn_blocking、上报入库原子频控闸门、任务认领原子化（条件 UPDATE + advisory lock 短事务化）与运行标记 RAII 清理
+5.初始化模块（foims-init/foims-common）：check_init_status 以数据探测为准（init_enabled 改附加字段 init_in_progress）、SQL_FILE_MAX 对齐 50MB、视图 GRANT 改 CURRENT_USER、host 输入字符白名单（a-zA-Z0-9.:-[]）、DROP DATABASE 加 WITH (FORCE)、REVOKE PUBLIC 失败改致命、备份响应不再回传绝对路径、重启失败恢复一次性许可、会话 SET replication_role 失败降级继续清库、localhost 守卫补 Host 头校验（防 DNS rebinding，h2c 走 uri.host() 兜底）、clear_database 验证码字段统一 verification
+6.动态 SQL 治理：全仓库 AssertSqlSafe 56 处清零迁移 sqlx::QueryBuilder（值 push_bind/排序与标识符白名单/IN 列表 separated），语义等价，涉及主 crate 与 auth/resource/init/agent-service/data-management/common 等 8 crate
+7.日志与 i18n：新增/修正日志键双语注册（log.agent.package_rollback/renew_conflict、log.task.next_run_sync_skipped/snmp_poll_permit_failed、log.ldap.plaintext_url、log.device.snmp_port_invalid、log.certificate.conf_tmp_chmod_failed/import_ca_cleanup_failed、log.backup.backup_file_remove_failed、log.init.restart_arm_restored、log.init.db.replication_role_set_failed）
+8.明确不修项（评估后保留）：2FA 启用无密码确认（需前端改版后续立项）、Cookie Secure 依赖反代 X-Forwarded-Proto、fail2ban 进程内存态（重启重置为可接受语义）、agent --metrics 默认 127.0.0.1、SNMP 测试端点限流、sessionManager localStorage PII 取舍
+9.版本联动：lib 0.23.1→0.23.2，foims-auth 0.1.2→0.1.3、foims-resource 0.1.5→0.1.6、foims-agent 0.1.4→0.1.5、foims-agent-service 0.1.5→0.1.6、foims-scheduler 0.1.1→0.1.2、foims-init 0.1.6→0.1.7、foims-common 0.3.3→0.3.4、foims-models 0.2.7→0.2.8、foims-organization 0.1.1→0.1.2、foims-x509-management 0.2.2→0.2.3、foims-data-management 0.2.3→0.2.4、foims-visualization 0.2.4→0.2.5；前端资源版本已于 v0.5.1 同步 bump，本次后端修复未触碰前端静态文件

@@ -16,7 +16,7 @@ use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use foims_common::{log_warn, msg};
 use serde_json::Value;
-use sqlx::{AssertSqlSafe, Connection, PgConnection};
+use sqlx::{Connection, PgConnection};
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use zip::{ZipWriter, write::FileOptions};
@@ -148,12 +148,14 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
         "device_templates",
         "network_regions",
     ] {
-        // 表名来自静态白名单，已人工审计无注入风险
-        let sql = format!("SELECT id::text, name FROM {table}");
-        let rows: Vec<(String, String)> = sqlx::query_as(AssertSqlSafe(sql))
-            .persistent(false)
-            .fetch_all(&mut *conn)
-            .await?;
+        // 表名来自静态白名单，经 QueryBuilder push 拼接
+        let rows: Vec<(String, String)> =
+            sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT id::text, name FROM ")
+                .push(table)
+                .build_query_as()
+                .persistent(false)
+                .fetch_all(&mut *conn)
+                .await?;
         simple.insert(table, rows.into_iter().collect());
     }
 
@@ -171,15 +173,17 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
 
     let mut room_scoped: HashMap<&'static str, HashMap<String, String>> = HashMap::new();
     for table in ["workstations", "cabinets"] {
-        // 表名来自静态白名单，已人工审计无注入风险
-        let sql = format!(
+        // 表名来自静态白名单，经 QueryBuilder push 拼接
+        let rows: Vec<(String, String)> = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             r"SELECT t.id::text, r.name || '/' || t.name
-               FROM {table} t JOIN rooms r ON r.id = t.room_id"
-        );
-        let rows: Vec<(String, String)> = sqlx::query_as(AssertSqlSafe(sql))
-            .persistent(false)
-            .fetch_all(&mut *conn)
-            .await?;
+               FROM ",
+        )
+        .push(table)
+        .push(" t JOIN rooms r ON r.id = t.room_id")
+        .build_query_as()
+        .persistent(false)
+        .fetch_all(&mut *conn)
+        .await?;
         room_scoped.insert(table, rows.into_iter().collect());
     }
 
@@ -424,13 +428,16 @@ fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> Da
 
 /// 读取一张表的全部行（JSON 对象数组），按主键排序保证导出稳定。
 async fn fetch_table_rows(conn: &mut PgConnection, table: &str) -> DataResult<Vec<Value>> {
-    // table 来自规格静态白名单；AssertSqlSafe 表示该拼接已经人工审计无注入风险
-    let sql = format!("SELECT to_jsonb(t) FROM {table} t ORDER BY id");
-    let rows: Vec<sqlx::types::Json<Value>> = sqlx::query_scalar(AssertSqlSafe(sql))
-        .persistent(false)
-        .fetch_all(conn)
-        .await
-        .map_err(DataError::from)?;
+    // table 来自规格静态白名单，经 QueryBuilder push 拼接
+    let rows: Vec<sqlx::types::Json<Value>> =
+        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT to_jsonb(t) FROM ")
+            .push(table)
+            .push(" t ORDER BY id")
+            .build_query_scalar()
+            .persistent(false)
+            .fetch_all(conn)
+            .await
+            .map_err(DataError::from)?;
     Ok(rows.into_iter().map(|j| j.0).collect())
 }
 

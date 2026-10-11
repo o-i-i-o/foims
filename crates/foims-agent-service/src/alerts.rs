@@ -379,8 +379,11 @@ pub async fn put_alert_thresholds<S: ConfigProvider>(
     .await
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
-    // 保存成功后评估一轮：评估失败仅记日志，不影响保存结果
-    evaluate_all(&pool).await;
+    // 保存成功后异步评估一轮（fire-and-forget）：评估是涉及全量在线主机的
+    // 长操作，内联 await 会拖慢本请求；内部失败已自行记日志，不影响保存结果
+    tokio::spawn(async move {
+        evaluate_all(&pool).await;
+    });
 
     Ok(foims_common::ok_json(
         (),

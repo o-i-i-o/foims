@@ -134,7 +134,12 @@ export function initModals(callbacks = {}) {
     const callbackName = buttonHost ? RESOURCE_BUTTON_CALLBACK_MAP[buttonHost.id] : undefined;
     if (callbackName && callbacks[callbackName]) {
       e.preventDefault();
-      callbacks[callbackName]();
+      // 回调内部经 loadModule 动态 import 懒加载（旧版本 404/网络闪断会 reject），
+      // 必须捕获并提示，避免 unhandled rejection 且用户点击无任何反馈
+      Promise.resolve(callbacks[callbackName]()).catch((error) => {
+        console.error(`资源按钮 ${buttonHost.id} 回调执行失败:`, error);
+        showToast(t("common.load_failed"), "error");
+      });
       return;
     }
 
@@ -270,7 +275,11 @@ function initButtonEventBindings() {
     const target = e.target.closest("[id]");
     const handler = target ? clickHandlers[target.id] : null;
     if (handler) {
-      handler(e);
+      // 处理器内部经 getModule 动态 import 懒加载，失败须提示而非静默
+      Promise.resolve(handler(e)).catch((error) => {
+        console.error(`按钮 ${target.id} 处理失败:`, error);
+        showToast(t("common.load_failed"), "error");
+      });
     }
   });
 

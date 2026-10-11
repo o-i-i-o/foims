@@ -150,26 +150,30 @@ const VIEWS: &[(&str, &str)] = &[
 /// 创建全部视图（重复执行安全：先删后建）。
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     for (name, ddl) in VIEWS {
-        // 旧视图残留时删除失败不致命（如权限差异），告警后继续重建
-        if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "DROP VIEW IF EXISTS {name} CASCADE"
-        )))
-        .execute(pool)
-        .await
+        // 视图名来自上方内部常量清单，经 QueryBuilder push 拼接
+        //（DROP VIEW 不支持参数绑定）
+        if let Err(e) = sqlx::QueryBuilder::<sqlx::Postgres>::new("DROP VIEW IF EXISTS ")
+            .push(name)
+            .push(" CASCADE")
+            .build()
+            .execute(pool)
+            .await
         {
             foims_common::log_warn!("log.init.view_drop_failed", name = name, error = e);
         }
 
-        sqlx::query(sqlx::AssertSqlSafe((*ddl).to_string()))
-            .execute(pool)
-            .await?;
+        // DDL 为静态常量字符串，直接执行
+        sqlx::query(*ddl).execute(pool).await?;
 
-        // 应用角色缺省时 GRANT 失败不致命，告警后继续
-        if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "GRANT SELECT ON {name} TO foims"
-        )))
-        .execute(pool)
-        .await
+        // 授权对象基于当前连接用户（即建视图的应用账号/所有者）而非
+        // 固定角色名：多环境部署时角色名可能不同，固定 foims 会造成
+        // 授权对象漂移（owner 天然持有 SELECT，此处为幂等的显式授权）
+        if let Err(e) = sqlx::QueryBuilder::<sqlx::Postgres>::new("GRANT SELECT ON ")
+            .push(name)
+            .push(" TO CURRENT_USER")
+            .build()
+            .execute(pool)
+            .await
         {
             foims_common::log_warn!("log.init.view_grant_failed", name = name, error = e);
         }

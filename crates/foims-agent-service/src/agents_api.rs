@@ -251,23 +251,26 @@ pub async fn get_agent_history<S: ConfigProvider>(
     let since = Utc::now() - chrono::Duration::hours(hours);
     // 抽样下推：窗口函数计算行号 rn 与总行数 n，超上限时按 rn % ⌈n/上限⌉ = 1
     // 在 SQL 内均匀抽取，避免 168h 最坏约 6 万行全量拉取后内存抽样
-    //（rn/n 为 bigint，ceil(...)::int 为 int4，仅外层取 collected_at/metrics；
-    // 内插值仅为 HISTORY_MAX_POINTS 编译期常量，无外部输入，id/时间走 bind）
-    let sql = sqlx::AssertSqlSafe(format!(
+    //（rn/n 为 bigint；内插值仅为 HISTORY_MAX_POINTS 编译期常量，
+    // 经 QueryBuilder push 拼接；id/时间走 push_bind）
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         r#"SELECT collected_at, metrics FROM (
                SELECT collected_at, metrics,
                       row_number() OVER (ORDER BY collected_at) AS rn,
                       count(*) OVER () AS n
                  FROM agent_metrics_history
-                WHERE agent_id = $1 AND collected_at >= $2
-           ) sampled
-         WHERE n <= {HISTORY_MAX_POINTS}
-            OR rn % ceil(n::float / {HISTORY_MAX_POINTS})::int = 1
-         ORDER BY collected_at"#,
-    ));
-    let rows = sqlx::query_as::<_, (DateTime<Utc>, Value)>(sql)
-        .bind(id)
-        .bind(since)
+                WHERE agent_id = "#,
+    );
+    qb.push_bind(id)
+        .push(" AND collected_at >= ")
+        .push_bind(since)
+        .push(") sampled WHERE n <= ")
+        .push(HISTORY_MAX_POINTS)
+        .push(" OR rn % ceil(n::float / ")
+        .push(HISTORY_MAX_POINTS)
+        .push(")::int = 1 ORDER BY collected_at");
+    let rows = qb
+        .build_query_as::<(DateTime<Utc>, Value)>()
         .fetch_all(&pool)
         .await?;
 

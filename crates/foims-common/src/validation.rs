@@ -30,6 +30,18 @@ pub fn validate_password_max_bytes(password: &str) -> Result<(), validator::Vali
     }
 }
 
+/// 用户名禁含 '@'：登录标识查询为 `username = $1 OR email = $1`，允许 '@'
+/// 会让用户名与他人的邮箱撞车，登录目标取决于行返回顺序（凭 A 凭据登入 B）。
+/// '@' 保留给邮箱登录语义（旧数据不受影响，仅在创建时拦截）
+pub fn validate_username_no_at(username: &str) -> Result<(), validator::ValidationError> {
+    if username.contains('@') {
+        return Err(validator::ValidationError::new(
+            "server.user.validation.username_no_at",
+        ));
+    }
+    Ok(())
+}
+
 /// 提取校验错误中的第一个消息 key。
 pub fn validation_errors_to_message(err: &validator::ValidationErrors) -> AppMessage {
     let key = err

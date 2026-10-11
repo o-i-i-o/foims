@@ -708,10 +708,15 @@ pub async fn delete_org_template<P: DbProvider>(
 ) -> Result<Response, AppError> {
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM org_templates WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    // FOR UPDATE 锁定模板行，与 create_organization / update_org_template
+    // 的模板行锁互斥：引用计数检查与删除在同一锁持有期内完成，并发新增
+    // 的引用（其插入需等待本锁）必然提交在本事务 COUNT 之后而被拦截，
+    // 消除"检查-删除"之间的 TOCTOU 窗口
+    let existing: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM org_templates WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
     if existing.is_none() {
         return Err(AppError::NotFound(msg("server.org_template.not_found")));
     }

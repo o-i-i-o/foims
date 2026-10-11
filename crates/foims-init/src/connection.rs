@@ -26,18 +26,21 @@ pub async fn ensure_database_and_schema(config: &DatabaseConfig) -> Result<PgPoo
 
     if !db_exists {
         foims_common::log_info!("log.init.db.missing_creating", name = config.database);
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            "CREATE DATABASE {}",
-            quote_ident(&config.database)
-        )))
-        .execute(&postgres_pool)
-        .await
-        .map_err(|e| msg("server.init.db.create_failed").with("error", e))?;
-        // 补建路径同样收紧 PUBLIC 授权：失败仅记录日志，不阻断主流程
-        //（连接测试的权限校验与建库路径的致命校验已兜底）
-        if let Err(e) = restrict_public_grants(&postgres_pool, &config.database).await {
-            foims_common::log_warn!("log.init.db.revoke_public_failed", error = e);
-        }
+        // 库名为已校验标识符（validate_identifier + quote_ident 加固），
+        // CREATE DATABASE 不支持参数绑定，经 QueryBuilder push 拼接
+        sqlx::QueryBuilder::<sqlx::Postgres>::new("CREATE DATABASE ")
+            .push(quote_ident(&config.database))
+            .build()
+            .execute(&postgres_pool)
+            .await
+            .map_err(|e| msg("server.init.db.create_failed").with("error", e))?;
+        // 补建路径同样收紧 PUBLIC 授权，失败处理与 operations::create_database
+        // 的新建路径口径一致（致命错误）：REVOKE 失败意味着实例状态异常，
+        // 留下「任意角色均可连接」的库继续初始化比中止流程更危险；
+        // 与 init-pgsql.sh 的授权模型一致——除所有者外的授权一律不保留
+        restrict_public_grants(&postgres_pool, &config.database)
+            .await
+            .map_err(|e| msg("server.init.db.revoke_public_failed").with("error", e))?;
         foims_common::log_info!("log.init.db.created", name = config.database);
     }
 

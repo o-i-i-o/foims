@@ -145,6 +145,9 @@ pub async fn login<P: AuthProvider>(
     }
 
     if !status {
+        // 与用户不存在/外部账户分支同口径：等价 bcrypt 校验抹平耗时侧信道，
+        // 防止以响应时间区分「账户存在且被禁用」（账户枚举）
+        dummy_bcrypt_verify(&req.password).await;
         crate::app_fail2ban::record_login_failure(
             client_ip,
             login_identifier,

@@ -164,9 +164,6 @@ fn legacy(stats: &mut HashMap<String, u64>) {
     if let Some(value) = pop(stats, "transmit_fifo_errors") {
         stats.insert("transmit_fifo".to_string(), value);
     }
-    if let Some(value) = pop(stats, "multicast") {
-        stats.insert("receive_multicast".to_string(), value);
-    }
     if let Some(value) = pop(stats, "collisions") {
         stats.insert("transmit_colls".to_string(), value);
     }

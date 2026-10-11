@@ -320,6 +320,34 @@ pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     }
 }
 
+/// Host 值是否指向本机：仅接受 `localhost`、`127.0.0.1`、`::1`
+/// （域名不区分大小写；容忍带端口 `127.0.0.1:443`、方括号 IPv6
+/// `[::1]:443` 与裸 IPv6 `::1` 三种形态）。
+#[must_use]
+fn is_localhost_host_value(raw: &str) -> bool {
+    // 去端口与方括号，归一化出主机部分
+    let host = if let Some(rest) = raw.strip_prefix('[') {
+        // [::1]:443 → ::1
+        match rest.split_once(']') {
+            Some((h, _)) => h,
+            None => return false,
+        }
+    } else if raw.matches(':').count() == 1 {
+        // 单冒号：host:port（IPv4/域名）
+        match raw.split_once(':') {
+            Some((h, _)) => h,
+            None => raw,
+        }
+    } else {
+        // 裸 IPv6（多冒号无端口）或普通主机名
+        raw
+    };
+    matches!(
+        host.to_ascii_lowercase().as_str(),
+        "localhost" | "127.0.0.1" | "::1"
+    )
+}
+
 /// 判定请求是否来自本机（供仅限本机使用的端点做来源守卫）。
 ///
 /// 判定要点：
@@ -332,7 +360,12 @@ pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
 ///      `proxy_set_header X-Real-IP $remote_addr;` 覆盖式写入，取自
 ///      TCP 对端，客户端无法伪造。切勿改用 X-Forwarded-For：其经
 ///      `$proxy_add_x_forwarded_for` 会保留客户端伪造的首段值；
-///   3. fail-close：无法判定来源时默认拒绝。
+///   3. Host 头兜底校验（防 DNS rebinding）：rebinding 攻击把攻击域名
+///      解析到 127.0.0.1，来源 IP 判定无法区分，故 Host（或 h2c 链路的
+///      `:authority`，经请求 URI 暴露）必须为 localhost/127.0.0.1/::1；
+///      本项目 nginx 以 `proxy_set_header Host $host` 原样透传客户端
+///      Host，本机初始化访问应使用 localhost/127.0.0.1；
+///   4. fail-close：无法判定来源（含 Host 信息缺失）时默认拒绝。
 #[must_use]
 pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
     let peer_loopback = parts
@@ -348,7 +381,7 @@ pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
         .filter(|s| !s.is_empty())
         .and_then(|s| s.parse::<std::net::IpAddr>().ok());
 
-    match peer_loopback {
+    let source_ok = match peer_loopback {
         // 回环对端：本机直连或经本机 nginx 转发，按 X-Real-IP 判定真实来源
         //（无头时视为本机直连放行）
         Some(true) => header_ip.is_none_or(|ip| ip.is_loopback()),
@@ -356,7 +389,21 @@ pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
         Some(false) => false,
         // UDS：无对端信息，仅能依赖本机反代写入的 X-Real-IP 判定
         None => header_ip.is_some_and(|ip| ip.is_loopback()),
+    };
+    if !source_ok {
+        return false;
     }
+
+    // Host 校验：Host 头优先；h2c 链路无 Host 头（:authority 伪头进入
+    // 请求 URI），按 uri.host() 兜底；两者皆缺时 fail-close 拒绝
+    let host = parts
+        .headers
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| parts.uri.host());
+    host.is_some_and(is_localhost_host_value)
 }
 
 // ==================== 单元测试 ====================
@@ -773,5 +820,63 @@ mod tests {
         assert!(!is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
             0x2001, 0xdb8, 0, 0, 0, 0, 0, 1
         ))));
+    }
+
+    // ---------- Host 校验（防 DNS rebinding） ----------
+
+    #[test]
+    fn test_is_localhost_host_value() {
+        // 合法形态：localhost / IPv4 / IPv6（裸、方括号、带端口）
+        for good in [
+            "localhost",
+            "LOCALHOST",
+            "127.0.0.1",
+            "127.0.0.1:443",
+            "::1",
+            "[::1]",
+            "[::1]:8443",
+        ] {
+            assert!(is_localhost_host_value(good), "{good} 应指向本机");
+        }
+        // 非法：攻击域名（rebinding 场景）、其他 IP、残缺方括号、空串
+        for bad in [
+            "evil.com",
+            "EVIL.com",
+            "192.168.1.10",
+            "10.0.0.2:80",
+            "[::1",
+            "",
+        ] {
+            assert!(!is_localhost_host_value(bad), "{bad} 不应指向本机");
+        }
+    }
+
+    #[test]
+    fn test_is_localhost_request_host_guard() {
+        // UDS + X-Real-IP 回环：Host 为 localhost 时放行
+        let ok = parts_with_headers(&[("X-Real-IP", "127.0.0.1"), ("Host", "localhost:8443")]);
+        assert!(is_localhost_request_from_parts(&ok));
+
+        // DNS rebinding：来源回环但 Host 为攻击域名 → 拒绝
+        let rebound = parts_with_headers(&[("X-Real-IP", "127.0.0.1"), ("Host", "evil.com")]);
+        assert!(!is_localhost_request_from_parts(&rebound));
+
+        // 无 Host 头也无 URI authority → fail-close 拒绝
+        let no_host = parts_with_headers(&[("X-Real-IP", "127.0.0.1")]);
+        assert!(!is_localhost_request_from_parts(&no_host));
+
+        // 回环直连 + Host 带端口放行
+        let direct = parts_with_peer(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            &[("Host", "127.0.0.1:8080")],
+        );
+        assert!(is_localhost_request_from_parts(&direct));
+
+        // 回环直连但 Host 非本机（经本机代理访问外部虚拟主机）→ 拒绝
+        let foreign = parts_with_peer(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            &[("Host", "intranet.example.org")],
+        );
+        assert!(!is_localhost_request_from_parts(&foreign));
     }
 }

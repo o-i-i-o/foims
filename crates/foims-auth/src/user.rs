@@ -62,14 +62,18 @@ pub async fn get_users<P: AuthProvider>(
             .fetch_one(&conn)
             .await?;
 
-        let users = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(format!(
-            "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users {order_clause} LIMIT $1 OFFSET $2"
-        )))
-        .persistent(false)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&conn)
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users",
+        );
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let users = qb
+            .build_query_as::<User>()
+            .persistent(false)
+            .fetch_all(&conn)
+            .await?;
 
         (total, users)
     } else {
@@ -80,15 +84,21 @@ pub async fn get_users<P: AuthProvider>(
         .fetch_one(&conn)
         .await?;
 
-        let users = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(format!(
-            "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE $1 OR email ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
-        )))
-        .persistent(false)
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&conn)
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE ",
+        );
+        qb.push_bind(&search_pattern)
+            .push(" OR email ILIKE ")
+            .push_bind(&search_pattern);
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let users = qb
+            .build_query_as::<User>()
+            .persistent(false)
+            .fetch_all(&conn)
+            .await?;
 
         (total, users)
     };
@@ -322,7 +332,17 @@ pub async fn update_user<P: AuthProvider>(
     .bind(req.password_expiry_days)
     .bind(role_changed || disabling)
     .execute(&conn)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 并发同邮箱的 TOCTOU 兜底：预检（create_user 同款）不可覆盖编辑路径
+        // 撞 users.email 唯一约束（23505），映射为 409 而非 500
+        if let Some(db_err) = e.as_database_error()
+            && db_err.is_unique_violation()
+        {
+            return AppError::Conflict(msg("server.user.email_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     let details = json!({"email": req.email, "role": req.role, "status": req.status, "password_expiry_days": req.password_expiry_days});
     log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;

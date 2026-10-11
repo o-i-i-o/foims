@@ -37,6 +37,12 @@ button:focus {
   outline: none;
 }
 
+/* 键盘导航可见焦点环：仅 :focus-visible 生效，不影响鼠标点击 */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 ul,
 ol {
   list-style: none;

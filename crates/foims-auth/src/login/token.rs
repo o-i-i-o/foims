@@ -38,7 +38,13 @@ pub async fn logout<P: AuthProvider>(
             crate::jwt::revoke_token(&state.pool()?.get_conn(), &access_token, user_id, expiry)
                 .await
         {
-            foims_common::log_warn!("log.auth.revoke_access_token_failed", error = e);
+            // 唯一冲突 = 令牌已撤销（重复登出），幂等处理不计失败
+            let already_revoked = e
+                .as_database_error()
+                .is_some_and(sqlx::error::DatabaseError::is_unique_violation);
+            if !already_revoked {
+                foims_common::log_warn!("log.auth.revoke_access_token_failed", error = e);
+            }
         }
     }
 
@@ -53,10 +59,16 @@ pub async fn logout<P: AuthProvider>(
             crate::jwt::revoke_token(&state.pool()?.get_conn(), &refresh_token, user_id, expiry)
                 .await
         {
-            foims_common::log_error!("log.auth.revoke_refresh_token_failed", error = e);
-            return Err(AppError::Database(
-                msg("server.db.operation_failed").with("error", e),
-            ));
+            // 唯一冲突 = 令牌已撤销（重复登出/并发登出），幂等放行
+            let already_revoked = e
+                .as_database_error()
+                .is_some_and(sqlx::error::DatabaseError::is_unique_violation);
+            if !already_revoked {
+                foims_common::log_error!("log.auth.revoke_refresh_token_failed", error = e);
+                return Err(AppError::Database(
+                    msg("server.db.operation_failed").with("error", e),
+                ));
+            }
         }
     }
 
@@ -159,8 +171,24 @@ pub async fn refresh_token<P: AuthProvider>(
     let token_expiry =
         chrono::DateTime::from_timestamp(claims.exp as i64, 0).unwrap_or_else(Utc::now);
     // 旋转令牌必须先成功撤销旧令牌：撤销失败（如 DB 故障）仍签发新令牌的话，
-    // 旧 refresh token 在其有效期内继续可用，轮换防重放失效（A-8）
+    // 旧 refresh token 在其有效期内继续可用，轮换防重放失效（A-8）。
+    // revoked_tokens.token_hash 唯一索引下，撤销冲突即「并发重放同一令牌」：
+    // 立即作废该用户全部会话并拒绝刷新（盗用检测），而非返回通用 DB 错误
     if let Err(e) = crate::jwt::revoke_token(&conn, &token, Some(user_id), token_expiry).await {
+        let is_replay = e
+            .as_database_error()
+            .is_some_and(sqlx::error::DatabaseError::is_unique_violation);
+        if is_replay {
+            foims_common::log_warn!("log.auth.refresh_token_replay", user_id = user_id);
+            sqlx::query("UPDATE users SET tokens_invalidated_at = NOW() WHERE id = $1")
+                .bind(user_id)
+                .execute(&conn)
+                .await
+                .map_err(|e| {
+                    AppError::Database(msg("server.db.operation_failed").with("error", e))
+                })?;
+            return Err(AppError::Unauthorized(msg("server.auth.token_revoked")));
+        }
         foims_common::log_error!("log.auth.revoke_token_failed", error = e);
         return Err(AppError::Database(msg("server.db.operation_failed")));
     }
@@ -386,7 +414,11 @@ pub(crate) async fn find_or_create_external_user(
         }
         Err(e) => {
             // 邮箱已被其他账户占用：退化为占位邮箱重试，避免阻断登录
-            if e.to_string().contains("users_email_key") {
+            // （用 sqlx 数据库错误类型判定唯一约束，避免依赖错误文案）
+            let unique_violation = e
+                .as_database_error()
+                .is_some_and(sqlx::error::DatabaseError::is_unique_violation);
+            if unique_violation {
                 let placeholder = format!("{username}@{provider}.invalid");
                 let (id, username, email, role, status, two_factor_enabled, created_at, updated_at) =
                     sqlx::query_as::<

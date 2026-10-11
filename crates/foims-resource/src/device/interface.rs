@@ -292,16 +292,19 @@ pub async fn get_device_interface<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(interface_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let data = sqlx::query_as::<_, DeviceInterfaceWithDevice>(sqlx::AssertSqlSafe(format!(
+    // 列清单来自内部常量，id 经 push_bind 传参
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
         "SELECT {INTERFACE_WITH_DEVICE_COLUMNS}
             FROM device_interfaces di
             JOIN devices d ON di.device_id = d.id
-            WHERE di.id = $1"
-    )))
-    .bind(interface_id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound(msg("server.device.interface.not_found")))?;
+            WHERE di.id = "
+    ));
+    qb.push_bind(interface_id);
+    let data = qb
+        .build_query_as::<DeviceInterfaceWithDevice>()
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
+        .ok_or_else(|| AppError::NotFound(msg("server.device.interface.not_found")))?;
 
     Ok(foims_common::ok_json(
         data,
@@ -599,6 +602,17 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
         let mut port_rows = Vec::with_capacity(ports.len());
         for port in &ports {
             let req = snmp_port_to_create(port);
+            // 设备侧数据不可信：vlan_id 超出 1..=4094 等非法端口跳过，
+            // 避免单条异常数据导致整批 INSERT 失败
+            if let Err(e) = req.validate() {
+                foims_common::log_warn!(
+                    "log.device.snmp_port_invalid",
+                    device_id = device_id,
+                    name = req.name,
+                    error = e
+                );
+                continue;
+            }
             let group = port_group_prefix(&req.name).to_string();
             let nic_id = if let Some(id) = nic_cache.get(&group) {
                 *id

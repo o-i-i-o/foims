@@ -2495,6 +2495,7 @@
         "password_length": "Password must be at least 8 characters",
         "role_invalid": "Role must be admin or user",
         "username_length": "Username must be 3 to 50 characters",
+        "username_no_at": "Username cannot contain the @ character (reserved for email login)",
         "email_length": "Email cannot exceed 100 characters",
         "password_max_length": "Password cannot exceed 72 bytes",
         "password_expiry_range": "Password validity must be between 0 and 36500 days"
@@ -2599,6 +2600,7 @@
       "test_success": "SSO discovery document fetched successfully",
       "validation": {
         "issuer_format": "Invalid issuer URL format",
+        "issuer_https_required": "Issuer URL must use https (http is allowed only for localhost/127.0.0.1/::1)",
         "client_id_length": "Client ID is required (max 100 characters)",
         "secret_length": "Invalid client secret length",
         "redirect_uri_length": "Invalid redirect URI length"

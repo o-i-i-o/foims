@@ -80,8 +80,16 @@ pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
         let semaphore = semaphore.clone();
         let pool = pool.clone();
         tasks.spawn(async move {
-            // 先取许可再采集，限制单轮并发
-            let _permit = semaphore.acquire_owned().await;
+            // 先取许可再采集，限制单轮并发；许可获取失败（信号量已关闭等
+            // 运行时异常）记 warn 并跳过本轮采集
+            let permit = match semaphore.acquire_owned().await {
+                Ok(permit) => permit,
+                Err(e) => {
+                    foims_common::log_warn!("log.task.snmp_poll_permit_failed", error = e);
+                    return Err(());
+                }
+            };
+            let _permit = permit;
             poll_and_upsert(&pool, &row).await
         });
     }

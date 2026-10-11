@@ -11,7 +11,7 @@ use crate::names;
 use crate::spec::{TableSpec, Target};
 use crate::types::{DataError, DataResult};
 use foims_common::msg;
-use sqlx::{AssertSqlSafe, PgConnection};
+use sqlx::PgConnection;
 use std::collections::{BTreeMap, HashMap};
 
 /// 名称引用解析缓存（与连接分离，跨行复用；连接由调用方传入）。
@@ -66,7 +66,9 @@ impl Resolver {
         sql: String,
         binds: Vec<String>,
     ) -> DataResult<Option<String>> {
-        let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql)).persistent(false);
+        // SQL 文本由静态规格（白名单表/列名）拼接，值经参数绑定传入
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(sql);
+        let mut query = qb.build_query_scalar::<String>().persistent(false);
         for value in binds {
             query = query.bind(value);
         }
@@ -468,7 +470,9 @@ pub async fn upsert_row(
         "SELECT id::text FROM {} WHERE {where_sql} ORDER BY created_at LIMIT 1",
         spec.table
     );
-    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(select_sql)).persistent(false);
+    // 表名来自静态规格白名单，占位符/$N::cast 由规格元数据生成，值经参数绑定
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(select_sql);
+    let mut query = qb.build_query_scalar::<String>().persistent(false);
     for col in spec.key {
         query = query.bind(values.get(*col).cloned().flatten());
     }
@@ -510,7 +514,9 @@ pub async fn upsert_row(
         set_sql.join(", "),
         update_cols.len() + 1
     );
-    let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+    // 表名/列名来自静态规格白名单，$N::cast 由规格元数据生成，值经参数绑定
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(sql);
+    let mut query = qb.build().persistent(false);
     for col in &update_cols {
         query = query.bind(values.get(*col).cloned().flatten());
     }
@@ -545,7 +551,9 @@ async fn insert_row(
         cols.join(", "),
         placeholders.join(", ")
     );
-    let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql)).persistent(false);
+    // 表名/列名来自静态规格白名单，$N::cast 由规格元数据生成，值经参数绑定
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(sql);
+    let mut query = qb.build_query_scalar::<String>().persistent(false);
     for value in values.values() {
         query = query.bind(value.clone());
     }

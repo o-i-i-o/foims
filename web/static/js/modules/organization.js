@@ -119,6 +119,7 @@ function bindOrgEvents() {
   container.dataset.initialized = "true";
 
   container.addEventListener("click", handleTreeClick);
+  container.addEventListener("keydown", handleTreeKeydown);
 
   const addRootBtn = document.getElementById("org-add-root-btn");
   addRootBtn?.addEventListener("click", () => openOrgModal(null, null));
@@ -232,7 +233,7 @@ async function renderTreeNode(node) {
 
   const toggleStateClass = allExpanded ? "expanded" : "";
   const toggleBtn = hasChildren
-    ? `<span class="org-toggle ${toggleStateClass}" data-action="toggle" role="button" tabindex="0">
+    ? `<span class="org-toggle ${toggleStateClass}" data-action="toggle" role="button" tabindex="0" aria-expanded="${allExpanded ? "true" : "false"}">
          <svg class="org-toggle-icon" width="16" height="16" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
        </span>`
     : '<span class="org-toggle-placeholder"></span>';
@@ -323,6 +324,20 @@ function handleTreeClick(e) {
   }
 }
 
+// 键盘可达性：org-toggle 为假按钮（span[role=button][tabindex=0]），
+// Enter/Space 需等效点击触发展开/收起
+function handleTreeKeydown(e) {
+  if (e.key !== "Enter" && e.key !== " ") {
+    return;
+  }
+  const target = e.target.closest('[data-action="toggle"]');
+  if (!target) {
+    return;
+  }
+  e.preventDefault();
+  toggleNode(target);
+}
+
 function toggleNode(toggleEl) {
   const wrapper = toggleEl.closest(".org-node-wrapper");
   if (!wrapper) {
@@ -337,6 +352,7 @@ function toggleNode(toggleEl) {
   const isHidden = children.style.display === "none";
   children.style.display = isHidden ? "" : "none";
   toggleEl.classList.toggle("expanded", isHidden);
+  toggleEl.setAttribute("aria-expanded", isHidden ? "true" : "false");
 }
 
 function expandAllNodes() {
@@ -346,6 +362,7 @@ function expandAllNodes() {
   });
   document.querySelectorAll(".org-toggle").forEach((el) => {
     el.classList.add("expanded");
+    el.setAttribute("aria-expanded", "true");
   });
 }
 
@@ -356,6 +373,7 @@ function collapseAllNodes() {
   });
   document.querySelectorAll(".org-toggle").forEach((el) => {
     el.classList.remove("expanded");
+    el.setAttribute("aria-expanded", "false");
   });
 }
 

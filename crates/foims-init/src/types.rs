@@ -20,6 +20,11 @@ fn validate_init_role(role: &str) -> Result<(), validator::ValidationError> {
     foims_common::validation::validate_role(role)
 }
 
+/// 用户名禁含 '@' 校验（委托 foims-common 唯一定义，防登录标识撞车）
+fn validate_username_no_at(username: &str) -> Result<(), validator::ValidationError> {
+    foims_common::validation::validate_username_no_at(username)
+}
+
 #[derive(Debug, Clone)]
 pub struct VerificationCode {
     pub code: String,
@@ -46,6 +51,10 @@ impl VerificationCode {
 #[derive(Debug, Serialize, Deserialize, validator::Validate)]
 pub struct InitRequest {
     #[validate(length(min = 3, max = 50, message = "server.init.validation.username_length"))]
+    #[validate(custom(
+        function = "validate_username_no_at",
+        message = "server.user.validation.username_no_at"
+    ))]
     pub username: String,
     #[validate(length(min = 8, message = "server.init.validation.password_length"))]
     #[validate(custom(
@@ -83,6 +92,10 @@ pub struct DatabaseSetupRequest {
     ))]
     pub db_type: String,
     #[validate(length(min = 1, max = 255, message = "server.init.dbcfg.host_invalid"))]
+    #[validate(custom(
+        function = "validate_setup_host",
+        message = "server.init.dbcfg.host_invalid"
+    ))]
     pub host: String,
     /// 端口以字符串接收：若用 u16，超出范围的数字会被 serde 直接拒绝，
     /// 返回 axum 默认 422 纯文本而非项目统一的消息 key
@@ -128,6 +141,21 @@ fn validate_setup_db_name(name: &str) -> Result<(), validator::ValidationError> 
         Ok(())
     } else {
         Err(validator::ValidationError::new("database"))
+    }
+}
+
+/// 数据库主机字符白名单：仅允许主机名（字母/数字/点/连字符）、IPv4、
+/// IPv6（冒号与方括号字面量）字符。host 会进入连接串与 psql/pg_dump
+/// 命令行参数，白名单在输入源头阻断注入面（含空白、@、/、引号等）。
+fn validate_setup_host(host: &str) -> Result<(), validator::ValidationError> {
+    if !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+    {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("host"))
     }
 }
 
@@ -464,6 +492,40 @@ mod tests {
         let mut req = valid_setup_request();
         req.host = "h".repeat(256);
         assert_setup_field_error(&req, "host", "server.init.dbcfg.host_invalid");
+    }
+
+    #[test]
+    fn 配置页请求_主机字符白名单() {
+        // 合法：主机名 / IPv4 / IPv6 字面量（方括号形式与裸形式）
+        for good in [
+            "localhost",
+            "db.example.com",
+            "127.0.0.1",
+            "::1",
+            "[::1]",
+            "pg-1.internal",
+        ] {
+            let mut req = valid_setup_request();
+            req.host = good.to_string();
+            assert!(req.validate().is_ok(), "主机 {good} 应合法");
+        }
+        // 非法：空白、注入常见字符（@ / 引号 / 分号 / 斜杠 / 反斜杠等）
+        for bad in [
+            "bad host",
+            "host@example.com",
+            "host;rm -rf",
+            "host/24",
+            "host\\x",
+            "host'x",
+            "host\"x",
+            "h\tost",
+            "h\nost",
+            "host%00",
+        ] {
+            let mut req = valid_setup_request();
+            req.host = bad.to_string();
+            assert_setup_field_error(&req, "host", "server.init.dbcfg.host_invalid");
+        }
     }
 
     #[test]

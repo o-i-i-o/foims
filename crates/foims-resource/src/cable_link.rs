@@ -103,13 +103,14 @@ async fn fetch_link_by_id(
     executor: impl PgExecutor<'_>,
     id: Uuid,
 ) -> Result<Option<CableLinkWithDetails>, sqlx::Error> {
-    // 列清单来自内部常量，无用户输入，可用 AssertSqlSafe 声明已审计
-    sqlx::query_as::<_, CableLinkWithDetails>(sqlx::AssertSqlSafe(format!(
-        "SELECT {CABLE_LINK_COLUMNS} FROM cable_links_with_details cl WHERE cl.id = $1"
-    )))
-    .bind(id)
-    .fetch_optional(executor)
-    .await
+    // 列清单来自内部常量，id 经 push_bind 传参
+    let mut qb = QueryBuilder::<Postgres>::new(format!(
+        "SELECT {CABLE_LINK_COLUMNS} FROM cable_links_with_details cl WHERE cl.id = "
+    ));
+    qb.push_bind(id);
+    qb.build_query_as::<CableLinkWithDetails>()
+        .fetch_optional(executor)
+        .await
 }
 
 /// 分页获取物理链路列表，支持端点（A/B 双向）、链路类型过滤与白名单排序。

@@ -17,6 +17,8 @@ use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use foims_agent::reporter::{
     DEFAULT_CERT_DIR, DEFAULT_CONFIG_PATH, ENV_CERT_DIR, Reporter, ReporterConfig,
@@ -270,7 +272,7 @@ fn list_collectors() -> ExitCode {
 }
 
 /// 采集一次并输出到 stdout
-fn one_shot(collectors: &[Box<dyn foims_agent::Collector>], format: OutputFormat) -> ExitCode {
+fn one_shot(collectors: &[Arc<dyn foims_agent::Collector>], format: OutputFormat) -> ExitCode {
     let families = scrape(collectors);
     let text = match render(&families, format) {
         Ok(text) => text,
@@ -322,7 +324,7 @@ fn render(families: &[MetricFamily], format: OutputFormat) -> Result<String, Str
 /// 常驻模式：极简 HTTP/1.1 服务，GET /metrics 返回指标
 fn serve(
     addr: &str,
-    collectors: Arc<Vec<Box<dyn foims_agent::Collector>>>,
+    collectors: Arc<Vec<Arc<dyn foims_agent::Collector>>>,
     format: OutputFormat,
 ) -> Result<(), String> {
     let listener =
@@ -331,8 +333,17 @@ fn serve(
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                // 采集可能占用 CPU，超量并发抓取会拖垮整机：达到上限直接拒收
+                if ACTIVE_CONNS.load(Ordering::Relaxed) >= MAX_CONCURRENT_CONNS {
+                    tracing::warn!("并发连接达到上限 {MAX_CONCURRENT_CONNS}，拒绝新连接");
+                    continue;
+                }
+                ACTIVE_CONNS.fetch_add(1, Ordering::Relaxed);
                 let collectors = Arc::clone(&collectors);
-                std::thread::spawn(move || handle_conn(stream, collectors, format));
+                std::thread::spawn(move || {
+                    handle_conn(stream, collectors, format);
+                    ACTIVE_CONNS.fetch_sub(1, Ordering::Relaxed);
+                });
             }
             Err(error) => tracing::warn!(%error, "接受连接失败"),
         }
@@ -340,12 +351,27 @@ fn serve(
     Ok(())
 }
 
+/// 同时处理的连接数上限
+const MAX_CONCURRENT_CONNS: usize = 32;
+/// 套接字读写超时：防止慢客户端（不发请求/不收响应）长期占用线程
+const CONN_TIMEOUT: Duration = Duration::from_secs(10);
+
+static ACTIVE_CONNS: AtomicUsize = AtomicUsize::new(0);
+
 /// 处理单个 HTTP 连接（demo 实现：仅解析请求行，不持久连接）
 fn handle_conn(
     mut stream: TcpStream,
-    collectors: Arc<Vec<Box<dyn foims_agent::Collector>>>,
+    collectors: Arc<Vec<Arc<dyn foims_agent::Collector>>>,
     format: OutputFormat,
 ) {
+    if let Err(error) = stream.set_read_timeout(Some(CONN_TIMEOUT)) {
+        tracing::debug!(%error, "设置读超时失败");
+        return;
+    }
+    if let Err(error) = stream.set_write_timeout(Some(CONN_TIMEOUT)) {
+        tracing::debug!(%error, "设置写超时失败");
+        return;
+    }
     let mut buffer = [0u8; 4096];
     let read = match stream.read(&mut buffer) {
         Ok(read) => read,

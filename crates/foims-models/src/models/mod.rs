@@ -10,7 +10,7 @@ use validator::ValidationError;
 // 角色白名单与密码长度上限校验的真身定义在 foims-common::validation，
 // 此处再导出保持 `foims_models::validate_role` 等旧调用路径稳定
 pub use foims_common::validation::{
-    PASSWORD_MAX_BYTES, validate_password_max_bytes, validate_role,
+    PASSWORD_MAX_BYTES, validate_password_max_bytes, validate_role, validate_username_no_at,
 };
 
 // ==================== 验证函数 ====================

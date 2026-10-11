@@ -1,7 +1,7 @@
 //! 任务执行日志记录。
 
 use chrono::Utc;
-use foims_common::{log_error, log_warn, msg};
+use foims_common::{log_debug, log_error, log_warn, msg};
 use uuid::Uuid;
 
 use crate::cron::calculate_next_run;
@@ -83,14 +83,30 @@ async fn update_next_run_at(pool: &sqlx::PgPool, task: &ScheduledTask) -> Schedu
 
     // 只更新调度字段：updated_at 语义是"最后配置变更时间"，例行调度
     // 每 5 分钟覆盖会破坏该语义（对照手动编辑路径）
-    sqlx::query("UPDATE scheduled_tasks SET next_run_at = $1 WHERE id = $2")
-        .bind(next_run)
-        .bind(task.id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            SchedulerError::Database(msg("server.task.next_run_update_failed").with("error", e))
-        })?;
+    //
+    // 条件前移：仅当现有 next_run_at 为空或晚于本次计算值时才写入，
+    // 不允许推后覆盖——本同步与手动触发/到期派发/其他调度器实例并发时，
+    // 无条件覆盖可能把一次尚未执行的到期调度推后吞掉
+    let updated = sqlx::query(
+        "UPDATE scheduled_tasks SET next_run_at = $1
+         WHERE id = $2 AND (next_run_at IS NULL OR next_run_at > $1)",
+    )
+    .bind(next_run)
+    .bind(task.id)
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        SchedulerError::Database(msg("server.task.next_run_update_failed").with("error", e))
+    })?;
+
+    if updated.rows_affected() == 0 {
+        // 未生效：现有 next_run_at 不晚于计算值（或任务已被并发停用/删除），保留原值
+        log_debug!(
+            "log.task.next_run_sync_skipped",
+            name = task.name,
+            next_run = next_run
+        );
+    }
 
     Ok(())
 }

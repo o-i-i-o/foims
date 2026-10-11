@@ -60,6 +60,20 @@ async fn write_conf_atomic(conf: &Path, content: &str) -> Result<(), CertManager
         return Err(write_err(e));
     }
 
+    // 临时文件继承目标配置既有权限后 rename（新文件默认 umask 可能过宽
+    // 或过窄，与原 conf 权限语义不一致）；目标已消失（并发被删）时兜底
+    // 0644 的常规 conf 权限，设置失败仅记 warn，不阻断替换
+    let desired = match tokio::fs::metadata(conf).await {
+        Ok(meta) => meta.permissions(),
+        Err(_) => {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::Permissions::from_mode(0o644)
+        }
+    };
+    if let Err(e) = tokio::fs::set_permissions(&tmp_path, desired).await {
+        foims_common::log_warn!("log.certificate.conf_tmp_chmod_failed", error = e);
+    }
+
     if let Err(e) = tokio::fs::rename(&tmp_path, conf).await {
         if let Err(remove_err) = tokio::fs::remove_file(&tmp_path).await {
             foims_common::log_warn!("log.certificate.conf_tmp_remove_failed", error = remove_err);

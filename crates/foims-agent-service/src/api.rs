@@ -16,7 +16,7 @@ use serde::Deserialize;
 
 use foims_common::provider::ConfigProvider;
 use foims_common::{ApiResponse, AppError, msg};
-use foims_common::{log_info, log_warn};
+use foims_common::{log_error, log_info, log_warn};
 
 use crate::manifest::{self, AgentManifest};
 use crate::packaging::{self, PackageInputs};
@@ -68,15 +68,22 @@ pub async fn get_agent_dist<S: ConfigProvider>(
     let dist_dir = state.config().agent.dist_dir.clone();
     let server_version = state.server_version();
 
-    let Ok(manifest) = manifest::load(std::path::Path::new(&dist_dir)) else {
-        return Ok((
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "available": false,
-                "message": msg("server.agent.dist_unavailable").key(),
-            })),
-        )
-            .into_response());
+    // 清单读取为同步 IO，移入阻塞线程避免卡住异步 worker
+    let manifest_path = std::path::Path::new(&dist_dir).to_path_buf();
+    let loaded = tokio::task::spawn_blocking(move || manifest::load(&manifest_path)).await;
+    let manifest = match loaded {
+        Ok(Ok(manifest)) => manifest,
+        // 产物目录不可用时仍返回 200（available=false），由前端置灰下载面板并提示
+        Ok(Err(_)) | Err(_) => {
+            return Ok((
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "available": false,
+                    "message": msg("server.agent.dist_unavailable").key(),
+                })),
+            )
+                .into_response());
+        }
     };
 
     // 版本门控（设计 §6.2）：manifest.version >= 主程序版本才允许下载
@@ -148,9 +155,15 @@ pub async fn download_agent_package<S: ConfigProvider>(
     let dist_dir = state.config().agent.dist_dir.clone();
     let server_version = state.server_version();
 
-    // 1. 清单加载
-    let manifest: AgentManifest = manifest::load(std::path::Path::new(&dist_dir))
-        .map_err(|_| AppError::NotFound(msg("server.agent.dist_unavailable")))?;
+    // 1. 清单加载（同步 IO 移入阻塞线程）
+    let manifest_path = std::path::Path::new(&dist_dir).to_path_buf();
+    let loaded = tokio::task::spawn_blocking(move || manifest::load(&manifest_path)).await;
+    let manifest: AgentManifest = match loaded {
+        Ok(Ok(manifest)) => manifest,
+        Ok(Err(_)) | Err(_) => {
+            return Err(AppError::NotFound(msg("server.agent.dist_unavailable")));
+        }
+    };
 
     // 2. 版本门控：agent 版本不得低于主程序版本
     if let Err(e) = manifest::gate_check(&manifest.version, server_version) {
@@ -202,14 +215,23 @@ pub async fn download_agent_package<S: ConfigProvider>(
         .await
         .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
 
-    // 5. 二进制校验（sha256 + size 与清单一致）
-    let binary =
-        manifest::verify_binary(std::path::Path::new(&dist_dir), &manifest, &params.target)
-            .map_err(|_| {
-                AppError::Validation(
-                    msg("server.agent.binary_missing").with("target", &params.target),
-                )
-            })?;
+    // 5. 二进制校验（sha256 + size 与清单一致；逐块哈希为 CPU/IO 密集同步
+    //    操作，移入阻塞线程避免卡住异步 worker）
+    let verify_manifest = manifest.clone();
+    let verify_dir = std::path::Path::new(&dist_dir).to_path_buf();
+    let verify_target = params.target.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        manifest::verify_binary(&verify_dir, &verify_manifest, &verify_target)
+    })
+    .await;
+    let binary = match verified {
+        Ok(Ok(binary)) => binary,
+        Ok(Err(_)) | Err(_) => {
+            return Err(AppError::Validation(
+                msg("server.agent.binary_missing").with("target", &params.target),
+            ));
+        }
+    };
 
     // 6. 上报地址：显式参数优先，否则取请求 Host/URI authority（h2c 无 Host
     //    头）+ 默认端口；解析失败须在入库前返回，避免泄漏 pending 记录
@@ -258,20 +280,27 @@ pub async fn download_agent_package<S: ConfigProvider>(
             packaging::build_deb(inputs),
         ),
         "rpm" => ("application/x-rpm", packaging::build_rpm(inputs)),
+        // 格式已在步骤 3 校验，此分支防御性兜底（同样需回删 pending 行）
         _ => {
+            rollback_pending_agent(&pool, agent_id).await;
             return Err(AppError::Validation(
                 msg("server.agent.unknown_format").with("format", &params.format),
             ));
         }
     };
-    let package = package.map_err(|e| {
-        foims_common::log_error!("log.agent.package_failed", detail = e);
-        AppError::Internal(
-            msg("server.agent.package_failed")
-                .with("target", &params.target)
-                .with("format", &params.format),
-        )
-    })?;
+    let package = match package {
+        Ok(package) => package,
+        Err(e) => {
+            log_error!("log.agent.package_failed", detail = e);
+            // 组包失败：回删本次请求创建的 pending 行，避免残留脏记录
+            rollback_pending_agent(&pool, agent_id).await;
+            return Err(AppError::Internal(
+                msg("server.agent.package_failed")
+                    .with("target", &params.target)
+                    .with("format", &params.format),
+            ));
+        }
+    };
 
     // 10. 流式返回（attachment 文件名 foims-agent-<版本>-<架构>.<格式>）
     log_info!(
@@ -296,6 +325,19 @@ pub async fn download_agent_package<S: ConfigProvider>(
         package,
     )
         .into_response())
+}
+
+/// 组包失败回滚：删除本次下载请求刚创建的 pending agent 行（按本次返回的
+/// id 精确删除，不影响其他请求），删除失败仅记日志（残留行可人工清理）。
+async fn rollback_pending_agent(pool: &sqlx::PgPool, agent_id: uuid::Uuid) {
+    let deleted = sqlx::query("DELETE FROM agents WHERE id = $1")
+        .bind(agent_id)
+        .execute(pool)
+        .await;
+    match deleted {
+        Ok(_) => log_error!("log.agent.package_rollback", agent_id = agent_id),
+        Err(e) => log_error!("log.agent.package_rollback", agent_id = agent_id, error = e),
+    }
 }
 
 /// 生成 32 字节随机 token 的十六进制字符串。

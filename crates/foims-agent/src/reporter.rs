@@ -56,6 +56,8 @@ const CPU_SAMPLE_WINDOW: Duration = Duration::from_millis(200);
 /// 握手与单请求阶段超时
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+/// 服务端响应体上限（1 MiB）：控制面响应远小于该值，超限视为链路异常
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// 上报链路错误
 #[derive(Debug, thiserror::Error)]
@@ -155,7 +157,7 @@ impl ReporterConfig {
     }
 }
 
-/// 校验 "host:port" 形式并返回主机部分（IPv6 主机需方括号，去括号返回）
+/// 校验 "host:port" 形式并返回主机部分（IPv6 主机必须带方括号，去括号返回）
 fn parse_host_port(server_addr: &str) -> Result<&str, ReporterError> {
     let Some((host_part, port_text)) = server_addr.rsplit_once(':') else {
         return Err(ReporterError::Config(format!(
@@ -170,12 +172,26 @@ fn parse_host_port(server_addr: &str) -> Result<&str, ReporterError> {
             "server_addr 端口不能为 0".to_string(),
         ));
     }
-    // 裸 IPv6 无端口会在这里被误切，要求 IPv6 主机必须带方括号
-    let host = host_part
-        .strip_prefix('[')
-        .and_then(|rest| rest.strip_suffix(']'))
-        .unwrap_or(host_part)
-        .trim();
+    // 裸 IPv6 含多个 ':'，rsplit_once 切分点存在歧义（如 ::1:9100），
+    // 无法可靠区分主机与端口，必须使用 [..]:port 方括号形式
+    let host = if host_part.starts_with('[') {
+        let Some(inner) = host_part
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        else {
+            return Err(ReporterError::Config(format!(
+                "server_addr IPv6 主机方括号不匹配: {server_addr}"
+            )));
+        };
+        inner
+    } else if host_part.contains(':') {
+        return Err(ReporterError::Config(format!(
+            "server_addr 含裸 IPv6 地址，必须使用方括号形式（如 [::1]:9100）: {server_addr}"
+        )));
+    } else {
+        host_part
+    };
+    let host = host.trim();
     if host.is_empty() {
         return Err(ReporterError::Config(format!(
             "server_addr 主机部分为空: {server_addr}"
@@ -267,7 +283,10 @@ struct CpuSample {
     idle: f64,
 }
 
-/// 解析 /proc/stat 聚合 "cpu" 行：total 为全部列之和，idle 取 idle + iowait
+/// 解析 /proc/stat 聚合 "cpu" 行：total 为前 8 列之和，idle 取 idle + iowait。
+///
+/// guest/guest_nice 已计入 user/nice（内核口径），整行求和会双计虚拟机
+/// 负载导致使用率虚高，因此 total 仅累加 user..steal 共 8 列。
 fn parse_cpu_aggregate(text: &str) -> Option<CpuSample> {
     let line = text.lines().find(|line| line.starts_with("cpu "))?;
     let mut values = Vec::new();
@@ -278,7 +297,8 @@ fn parse_cpu_aggregate(text: &str) -> Option<CpuSample> {
     if values.len() < 4 {
         return None;
     }
-    let total: f64 = values.iter().sum();
+    // 列序：user nice system idle iowait irq softirq steal [guest guest_nice]
+    let total: f64 = values.iter().take(8).sum();
     let idle = values[3] + values.get(4).copied().unwrap_or(0.0);
     Some(CpuSample { total, idle })
 }
@@ -850,6 +870,13 @@ impl Reporter {
                 .map_err(|_| ReporterError::Report("读取响应超时".to_string()))?
                 .map_err(transport)?;
             let Some(chunk) = chunk else { break };
+            // 服务端响应仅为控制面 JSON（回执/续期/自更新指令），
+            // 异常超大体视为链路异常，防止无界读取耗尽内存
+            if resp_body.len() + chunk.remaining() > MAX_RESPONSE_BYTES {
+                return Err(ReporterError::Report(format!(
+                    "响应体超过 {MAX_RESPONSE_BYTES} 字节上限"
+                )));
+            }
             resp_body.extend_from_slice(chunk.chunk());
         }
         endpoint.close(0u32.into(), b"done");
@@ -1179,6 +1206,9 @@ fn write_temp_file(path: &Path, data: &[u8], mode: u32) -> std::io::Result<PathB
 /// 私钥 0600），写全后依次 rename 原子替换。临时文件阶段任一步失败即清理
 /// 并报错，旧物料保持不变；rename 阶段失败同样清理未完成项（同目录 rename
 /// 在写入成功后几乎不可能失败，跨文件瞬时窗口可忽略）。
+///
+/// 写盘前先校验产物有效性（证书可解析、私钥含 PEM 头）：坏物料一旦替换
+/// 旧证书，agent 将无法再建立 mTLS 链路（续期依赖旧证书），只能人工修复。
 fn write_renewed_material(
     cert_dir: &Path,
     cert_pem: &str,
@@ -1186,6 +1216,23 @@ fn write_renewed_material(
 ) -> Result<(), ReporterError> {
     let cert_path = cert_dir.join("client.pem");
     let key_path = cert_dir.join("client.key");
+
+    foims_common::x509::cert_remaining(cert_pem).map_err(|error| {
+        ReporterError::Report(format!("续期返回的证书 PEM 非法，拒绝落盘: {error}"))
+    })?;
+    let key_valid = [
+        "-----BEGIN PRIVATE KEY-----",
+        "-----BEGIN EC PRIVATE KEY-----",
+        "-----BEGIN RSA PRIVATE KEY-----",
+    ]
+    .iter()
+    .any(|header| key_pem.contains(header));
+    if !key_valid {
+        return Err(ReporterError::Report(
+            "续期返回的私钥不含 PEM 私钥块，拒绝落盘".to_string(),
+        ));
+    }
+
     let cert_tmp = write_temp_file(&cert_path, cert_pem.as_bytes(), 0o644)?;
     let key_tmp = match write_temp_file(&key_path, key_pem.as_bytes(), 0o600) {
         Ok(tmp) => tmp,
@@ -1285,6 +1332,10 @@ mod tests {
         assert!(parse_host_port("example.com:0").is_err());
         assert!(parse_host_port("example.com:99999").is_err());
         assert!(parse_host_port(":9100").is_err());
+        // 裸 IPv6 与方括号不匹配一律拒绝
+        assert!(parse_host_port("::1:9100").is_err());
+        assert!(parse_host_port("2001:db8::1:9100").is_err());
+        assert!(parse_host_port("[2001:db8::1:9100").is_err());
     }
 
     #[test]
@@ -1424,6 +1475,10 @@ mod tests {
         assert!(parse_cpu_aggregate("cpu").is_none());
         assert!(parse_cpu_aggregate("cpu a b c d").is_none());
         assert!(parse_cpu_aggregate("intr 1").is_none());
+        // guest/guest_nice 已计入 user/nice：total 不得整行求和双计
+        let guest = "cpu  10 20 30 40 10 0 0 0 7 9\n";
+        let sample = parse_cpu_aggregate(guest).unwrap_or_else(|| panic!("应解析出聚合行"));
+        assert!((sample.total - 110.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1553,18 +1608,25 @@ mod tests {
         );
     }
 
+    /// 生成测试用自签证书与私钥 PEM（write_renewed_material 会做解析校验）
+    fn renewed_material() -> (String, String) {
+        let pair = rcgen::generate_simple_self_signed(vec!["foims-agent-renew-test".to_string()])
+            .unwrap_or_else(|e| panic!("自签失败: {e}"));
+        (pair.cert.pem(), pair.signing_key.serialize_pem())
+    }
+
     #[test]
     fn test_write_renewed_material() {
         use std::os::unix::fs::PermissionsExt;
         let dir = temp_dir("renew-material");
-        write_renewed_material(&dir, "CERT-1", "KEY-1")
-            .unwrap_or_else(|e| panic!("首次落盘失败: {e}"));
+        let (cert1, key1) = renewed_material();
+        write_renewed_material(&dir, &cert1, &key1).unwrap_or_else(|e| panic!("首次落盘失败: {e}"));
         let cert = std::fs::read_to_string(dir.join("client.pem"))
             .unwrap_or_else(|e| panic!("读取证书失败: {e}"));
-        assert_eq!(cert, "CERT-1");
+        assert_eq!(cert, cert1);
         let key = std::fs::read_to_string(dir.join("client.key"))
             .unwrap_or_else(|e| panic!("读取私钥失败: {e}"));
-        assert_eq!(key, "KEY-1");
+        assert_eq!(key, key1);
         let cert_mode = std::fs::metadata(dir.join("client.pem"))
             .unwrap_or_else(|e| panic!("读证书元数据失败: {e}"))
             .permissions()
@@ -1584,15 +1646,23 @@ mod tests {
         assert_eq!(leftovers, 0, "不应有临时文件残留");
 
         // 再次落盘应整体替换
-        write_renewed_material(&dir, "CERT-2", "KEY-2")
-            .unwrap_or_else(|e| panic!("替换落盘失败: {e}"));
+        let (cert2, key2) = renewed_material();
+        write_renewed_material(&dir, &cert2, &key2).unwrap_or_else(|e| panic!("替换落盘失败: {e}"));
         let cert = std::fs::read_to_string(dir.join("client.pem"))
             .unwrap_or_else(|e| panic!("复读证书失败: {e}"));
-        assert_eq!(cert, "CERT-2");
+        assert_eq!(cert, cert2);
+
+        // 非法证书/私钥拒绝落盘，旧物料保持不变
+        assert!(write_renewed_material(&dir, "not-a-pem", &key2).is_err());
+        assert!(write_renewed_material(&dir, &cert2, "not-a-key").is_err());
+        let cert = std::fs::read_to_string(dir.join("client.pem"))
+            .unwrap_or_else(|e| panic!("复读证书失败: {e}"));
+        assert_eq!(cert, cert2, "拒绝落盘时旧证书不得被破坏");
 
         // 目录不存在应整体失败且不产生半成品
         let missing = dir.join("no-such-subdir");
-        assert!(write_renewed_material(&missing, "CERT-3", "KEY-3").is_err());
+        let (cert3, key3) = renewed_material();
+        assert!(write_renewed_material(&missing, &cert3, &key3).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

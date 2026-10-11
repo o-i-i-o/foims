@@ -136,81 +136,67 @@ pub async fn get_networks<P: DbProvider>(
         || !ipv4_filter.is_empty()
         || !ipv6_filter.is_empty();
 
-    let total: i64 = if has_filters {
-        let mut conditions = Vec::new();
-        let mut param_count = 1;
-
+    // 动态过滤条件统一参数化构建：全部值经 push_bind 传参，不拼接用户输入原文
+    fn push_network_filters(
+        qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
+        search: &str,
+        region_id: Option<Uuid>,
+        name_filter: &str,
+        network_region_filter: &str,
+        ipv4_filter: &str,
+        ipv6_filter: &str,
+    ) {
         if !search.is_empty() {
-            conditions.push(format!("(n.name ILIKE ${param_count} OR n.description ILIKE ${param_count} OR n.ipv4_cidr::TEXT ILIKE ${param_count} OR n.ipv6_cidr::TEXT ILIKE ${param_count})"));
-            param_count += 1;
+            let pattern = foims_common::net::escape_like(search);
+            qb.push(" AND (n.name ILIKE ")
+                .push_bind(pattern.clone())
+                .push(" OR n.description ILIKE ")
+                .push_bind(pattern.clone())
+                .push(" OR n.ipv4_cidr::TEXT ILIKE ")
+                .push_bind(pattern.clone())
+                .push(" OR n.ipv6_cidr::TEXT ILIKE ")
+                .push_bind(pattern)
+                .push(")");
         }
-
-        if let Some(_rid) = region_id {
-            conditions.push(format!("n.network_region_id = ${param_count}"));
-            param_count += 1;
-        }
-
-        if !name_filter.is_empty() {
-            conditions.push(format!("n.name ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        if !network_region_filter.is_empty() {
-            conditions.push(format!("nt.name ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        if !ipv4_filter.is_empty() {
-            conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        if !ipv6_filter.is_empty() {
-            conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${param_count}"));
-        }
-
-        let where_clause = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", conditions.join(" AND "))
-        };
-
-        let count_query = format!(
-            "SELECT COUNT(*) FROM network_cidrs n JOIN network_regions nt ON n.network_region_id = nt.id {where_clause}"
-        );
-
-        let mut count_sql = sqlx::query_scalar(sqlx::AssertSqlSafe(count_query)).persistent(false);
-
-        if !search.is_empty() {
-            let pattern = foims_common::net::escape_like(&search);
-            count_sql = count_sql.bind(pattern);
-        }
-
         if let Some(rid) = region_id {
-            count_sql = count_sql.bind(rid);
+            qb.push(" AND n.network_region_id = ").push_bind(rid);
         }
-
         if !name_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&name_filter);
-            count_sql = count_sql.bind(pattern);
+            qb.push(" AND n.name ILIKE ")
+                .push_bind(foims_common::net::escape_like(name_filter));
         }
-
         if !network_region_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&network_region_filter);
-            count_sql = count_sql.bind(pattern);
+            qb.push(" AND nt.name ILIKE ")
+                .push_bind(foims_common::net::escape_like(network_region_filter));
         }
-
         if !ipv4_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&ipv4_filter);
-            count_sql = count_sql.bind(pattern);
+            qb.push(" AND n.ipv4_cidr::TEXT ILIKE ")
+                .push_bind(foims_common::net::escape_like(ipv4_filter));
         }
-
         if !ipv6_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&ipv6_filter);
-            count_sql = count_sql.bind(pattern);
+            qb.push(" AND n.ipv6_cidr::TEXT ILIKE ")
+                .push_bind(foims_common::net::escape_like(ipv6_filter));
         }
+    }
 
-        count_sql.fetch_one(&state.pool()?.get_conn()).await?
+    let total: i64 = if has_filters {
+        let mut count_qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT COUNT(*) FROM network_cidrs n JOIN network_regions nt ON n.network_region_id = nt.id WHERE 1=1",
+        );
+        push_network_filters(
+            &mut count_qb,
+            &search,
+            region_id,
+            &name_filter,
+            &network_region_filter,
+            &ipv4_filter,
+            &ipv6_filter,
+        );
+        count_qb
+            .build_query_scalar::<i64>()
+            .persistent(false)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?
     } else {
         sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")
             .fetch_one(&state.pool()?.get_conn())
@@ -218,115 +204,50 @@ pub async fn get_networks<P: DbProvider>(
     };
 
     let networks: Vec<Network> = if has_filters {
-        let mut conditions = Vec::new();
-        let mut param_count = 1;
-
-        if !search.is_empty() {
-            conditions.push(format!("(n.name ILIKE ${param_count} OR n.description ILIKE ${param_count} OR n.ipv4_cidr::TEXT ILIKE ${param_count} OR n.ipv6_cidr::TEXT ILIKE ${param_count})"));
-            param_count += 1;
-        }
-
-        if let Some(_rid) = region_id {
-            conditions.push(format!("n.network_region_id = ${param_count}"));
-            param_count += 1;
-        }
-
-        if !name_filter.is_empty() {
-            conditions.push(format!("n.name ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        if !network_region_filter.is_empty() {
-            conditions.push(format!("nt.name ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        if !ipv4_filter.is_empty() {
-            conditions.push(format!("n.ipv4_cidr::TEXT ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        if !ipv6_filter.is_empty() {
-            conditions.push(format!("n.ipv6_cidr::TEXT ILIKE ${param_count}"));
-            param_count += 1;
-        }
-
-        let where_clause = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", conditions.join(" AND "))
-        };
-
-        let data_query = format!(
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway),
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
                FROM network_cidrs n
                JOIN network_regions nt ON n.network_region_id = nt.id
-               {}
-               {order_clause}
-               LIMIT ${} OFFSET ${}",
-            where_clause,
-            param_count,
-            param_count + 1
+               WHERE 1=1",
         );
-
-        let mut data_sql = sqlx::query(sqlx::AssertSqlSafe(data_query)).persistent(false);
-
-        if !search.is_empty() {
-            let pattern = foims_common::net::escape_like(&search);
-            data_sql = data_sql.bind(pattern);
-        }
-
-        if let Some(rid) = region_id {
-            data_sql = data_sql.bind(rid);
-        }
-
-        if !name_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&name_filter);
-            data_sql = data_sql.bind(pattern);
-        }
-
-        if !network_region_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&network_region_filter);
-            data_sql = data_sql.bind(pattern);
-        }
-
-        if !ipv4_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&ipv4_filter);
-            data_sql = data_sql.bind(pattern);
-        }
-
-        if !ipv6_filter.is_empty() {
-            let pattern = foims_common::net::escape_like(&ipv6_filter);
-            data_sql = data_sql.bind(pattern);
-        }
-
-        data_sql = data_sql.bind(page_size).bind(offset);
-
-        data_sql
+        push_network_filters(
+            &mut qb,
+            &search,
+            region_id,
+            &name_filter,
+            &network_region_filter,
+            &ipv4_filter,
+            &ipv6_filter,
+        );
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        qb.build()
+            .persistent(false)
             .fetch_all(&state.pool()?.get_conn())
             .await?
             .into_iter()
             .map(|row| parse_network_from_row(&row))
             .collect::<Result<_, _>>()?
     } else {
-        let data_query = format!(
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             r"SELECT n.id, n.name, n.network_region_id, nt.name as network_region, n.ipv4_cidr::TEXT, n.ipv6_cidr::TEXT, host(n.ipv4_gateway), host(n.ipv6_gateway),
                (SELECT json_agg(host(d)) FROM unnest(n.ipv4_dns) AS d) as ipv4_dns,
                (SELECT json_agg(host(d)) FROM unnest(n.ipv6_dns) AS d) as ipv6_dns,
                n.description, n.created_at::TIMESTAMPTZ, n.updated_at::TIMESTAMPTZ
                FROM network_cidrs n
-               JOIN network_regions nt ON n.network_region_id = nt.id
-               {order_clause}
-               LIMIT $1 OFFSET $2"
+               JOIN network_regions nt ON n.network_region_id = nt.id",
         );
-
-        sqlx::query(sqlx::AssertSqlSafe(data_query))
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        qb.build()
             .persistent(false)
-            .bind(page_size)
-            .bind(offset)
             .fetch_all(&state.pool()?.get_conn())
             .await?
             .into_iter()

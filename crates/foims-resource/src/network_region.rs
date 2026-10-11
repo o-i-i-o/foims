@@ -65,23 +65,28 @@ pub async fn get_network_regions<P: DbProvider>(
                     created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM network_regions";
 
     let network_regions = if search.is_empty() {
-        let sql = format!("{base_select} {order_clause} LIMIT $1 OFFSET $2");
-        sqlx::query_as::<_, NetworkRegion>(sqlx::AssertSqlSafe(sql))
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(base_select);
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        qb.build_query_as::<NetworkRegion>()
             .persistent(false)
-            .bind(page_size)
-            .bind(offset)
             .fetch_all(&state.pool()?.get_conn())
             .await?
     } else {
         let pattern = foims_common::net::escape_like(&search);
-        let sql = format!(
-            "{base_select} WHERE name ILIKE $1 OR description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
-        );
-        sqlx::query_as::<_, NetworkRegion>(sqlx::AssertSqlSafe(sql))
+        let mut qb =
+            sqlx::QueryBuilder::<sqlx::Postgres>::new(format!("{base_select} WHERE name ILIKE "));
+        qb.push_bind(&pattern)
+            .push(" OR description ILIKE ")
+            .push_bind(&pattern);
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        qb.build_query_as::<NetworkRegion>()
             .persistent(false)
-            .bind(&pattern)
-            .bind(page_size)
-            .bind(offset)
             .fetch_all(&state.pool()?.get_conn())
             .await?
     };

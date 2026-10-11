@@ -26,6 +26,10 @@ pub struct User {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserCreate {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
+    #[validate(custom(
+        function = "crate::models::validate_username_no_at",
+        message = "server.user.validation.username_no_at"
+    ))]
     pub username: String,
     #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     /// bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝

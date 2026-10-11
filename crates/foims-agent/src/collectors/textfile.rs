@@ -182,6 +182,29 @@ fn scan_labels(section: &str) -> Result<(Vec<(String, String)>, usize), Collecto
     }
 }
 
+/// 标签键白名单：Prometheus 规范 `[a-zA-Z_][a-zA-Z0-9_]*`。
+///
+/// .prom 文件内容不受信任：非法键名会破坏暴露格式（如含空白/引号
+/// 导致下游解析歧义），必须在解析期拒绝
+fn is_valid_label_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// 指标名白名单：Prometheus 规范 `[a-zA-Z_:][a-zA-Z0-9_:]*`（比标签键多允许 ':'）
+fn is_valid_metric_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_' || first == ':')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':')
+}
+
 /// 解析单个样本行：`name{k="v"} value` 或 `name value`；
 /// 含自定义时间戳（额外字段）时报错
 fn parse_sample_line(line: &str, families: &mut Vec<TextFamily>) -> Result<(), CollectorError> {
@@ -198,9 +221,17 @@ fn parse_sample_line(line: &str, families: &mut Vec<TextFamily>) -> Result<(), C
     if name.is_empty() {
         return Err(invalid("缺少指标名".to_string()));
     }
+    if !is_valid_metric_name(name) {
+        return Err(invalid(format!("指标名 {name:?} 含非法字符")));
+    }
     let mut labels = Vec::new();
     if index < bytes.len() && bytes[index] == b'{' {
         let (parsed, consumed) = scan_labels(&line[index + 1..])?;
+        for (key, _) in &parsed {
+            if !is_valid_label_key(key) {
+                return Err(invalid(format!("标签键 {key:?} 含非法字符")));
+            }
+        }
         labels = parsed;
         index += 1 + consumed;
     }
@@ -657,6 +688,10 @@ mod tests {
         assert_eq!(families[1].samples[0].labels[1].1, "\"q\"");
         // 自定义时间戳 → 错误
         assert!(parse_sample_line("m3 1 123", &mut Vec::new()).is_err());
+        // 指标名/标签键白名单
+        assert!(parse_sample_line("bad name 1", &mut Vec::new()).is_err());
+        assert!(parse_sample_line("m{k ey=\"v\"} 1", &mut Vec::new()).is_err());
+        assert!(parse_sample_line("m{ok_1=\"v\"} 1", &mut Vec::new()).is_ok());
     }
 
     #[test]

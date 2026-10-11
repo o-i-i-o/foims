@@ -227,15 +227,17 @@ async fn fetch_workstation_base(
     executor: impl PgExecutor<'_>,
     id: Uuid,
 ) -> Result<Option<WorkstationWithDetails>, sqlx::Error> {
-    sqlx::query_as::<_, WorkstationWithDetails>(sqlx::AssertSqlSafe(format!(
+    // WORKSTATION_COLUMNS 为服务端常量列清单，id 经 push_bind 传参
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
         "SELECT {WORKSTATION_COLUMNS}
         FROM workstations w
         LEFT JOIN rooms r ON w.room_id = r.id
-        WHERE w.id = $1"
-    )))
-    .bind(id)
-    .fetch_optional(executor)
-    .await
+        WHERE w.id = "
+    ));
+    qb.push_bind(id);
+    qb.build_query_as::<WorkstationWithDetails>()
+        .fetch_optional(executor)
+        .await
 }
 
 /// 查询工位上设备绑定的 IP 明细（含网段/区域联表）。

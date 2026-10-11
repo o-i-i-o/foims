@@ -101,16 +101,18 @@ pub async fn get_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let employee = sqlx::query_as::<_, Employee>(sqlx::AssertSqlSafe(format!(
+    let mut qb = QueryBuilder::<Postgres>::new(format!(
         "SELECT {EMPLOYEE_COLUMNS}
         FROM employees e
         LEFT JOIN organizations o ON e.org_id = o.id
-        WHERE e.id = $1"
-    )))
-    .bind(id)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?
-    .ok_or_else(|| AppError::NotFound(msg("server.employee.not_found")))?;
+        WHERE e.id = "
+    ));
+    qb.push_bind(id);
+    let employee = qb
+        .build_query_as::<Employee>()
+        .fetch_optional(&state.pool()?.get_conn())
+        .await?
+        .ok_or_else(|| AppError::NotFound(msg("server.employee.not_found")))?;
 
     Ok(foims_common::ok_json(employee, "server.employee.fetched"))
 }

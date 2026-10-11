@@ -1,6 +1,6 @@
 [package]
 name = "foims-organization"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Organization - org tree, employees and org templates"

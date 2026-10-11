@@ -4,6 +4,7 @@
 //! 配置了邮箱，则把设备当前 IP 信息发送给管理人。通知是尽力而为的
 //! 旁路动作：SMTP 未配置或发送失败仅记录日志，不影响设备操作结果。
 
+use foims_common::AppError;
 use foims_common::{log_debug, log_warn};
 use sqlx::Row;
 use uuid::Uuid;
@@ -104,15 +105,19 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
         info.device_name, info.workstation_name
     );
 
-    // SMTP 未配置属于业务状态：静默跳过，不产生错误日志刷屏
-    if foims_auth::smtp::send_email_async(pool, &info.manager_email, &subject, &body)
-        .await
-        .is_err()
+    // SMTP 未配置属于业务状态：静默跳过，不产生错误日志刷屏；
+    // 其余发送失败需以 warn 呈现，便于排查通知未送达问题
+    if let Err(e) =
+        foims_auth::smtp::send_email_async(pool, &info.manager_email, &subject, &body).await
     {
-        log_debug!(
-            "log.smtp.device_notify_skipped",
-            device_id = device_id.to_string()
-        );
+        if matches!(&e, AppError::Validation(m) if m.key() == "server.smtp.not_configured") {
+            log_debug!(
+                "log.smtp.device_notify_skipped",
+                device_id = device_id.to_string()
+            );
+        } else {
+            log_warn!("log.smtp.device_notify_failed", error = e);
+        }
     }
     Ok(())
 }

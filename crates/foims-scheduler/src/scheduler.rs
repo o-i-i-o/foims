@@ -42,6 +42,24 @@ impl Drop for SyncRunningGuard {
     }
 }
 
+/// 派发任务执行映射的条目守卫（RAII）：Drop 时从映射移除对应任务 id。
+/// 执行结束、出错或 panic 的所有路径都经由 Drop 清理，映射中不会残留
+/// 已结束任务的条目——条目残留会使该任务永远无法再次分发
+struct DispatchRunningGuard {
+    running_map: Arc<std::sync::Mutex<std::collections::HashSet<uuid::Uuid>>>,
+    task_id: uuid::Uuid,
+}
+impl Drop for DispatchRunningGuard {
+    fn drop(&mut self) {
+        // Mutex 中毒（持锁期间 panic）也必须完成清理：恢复内部数据后移除
+        let mut running = self
+            .running_map
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        running.remove(&self.task_id);
+    }
+}
+
 impl SchedulerState {
     /// 创建调度器，注册任务执行器
     pub async fn new(
@@ -224,13 +242,14 @@ impl SchedulerState {
         // 用户任务到期派发 job（每分钟）：scheduled_tasks 中的用户任务
         // 此前只被同步 next_run_at 展示字段、从未被注册为可触发的 job，
         // 创建后静默永不自动执行。派发器以 next_run_at 为权威判定到期，
-        // 执行后前移，避免动态 Job 增删的映射管理
+        // 认领时原子前移，避免动态 Job 增删的映射管理
         let dispatch_pool = self.pool.clone();
         let dispatch_registry = self.registry.clone();
         let dispatch_db_config = self.db_config.clone();
-        let dispatch_running: Arc<
-            std::sync::Mutex<std::collections::HashMap<uuid::Uuid, Arc<AtomicBool>>>,
-        > = Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        // 正在执行的用户任务 id 集合：插入即占用，结束由守卫移除（RAII），
+        // 无需手工清理路径
+        let dispatch_running: Arc<std::sync::Mutex<std::collections::HashSet<uuid::Uuid>>> =
+            Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
         let dispatch_job = Job::new_async("0 * * * * *", move |_, _| {
             let pool = dispatch_pool.clone();
             let registry = dispatch_registry.clone();
@@ -262,16 +281,16 @@ impl SchedulerState {
     }
 }
 
-/// 派发到期的用户任务：逐任务查库取到期集合，带按任务 id 的重叠保护，
+/// 派发到期的用户任务：逐任务查库取到期集合，带按任务 id 的重叠保护
+/// （进程内集合记录执行中任务，条目由 RAII 守卫在结束时移除），
 /// 执行后写审计日志并前移 next_run_at/last_run_at/last_result。
-/// 执行前以与「立即执行」路径相同的咨询锁互斥并复核到期（due 列表是
-/// 执行前的快照，慢任务期间下一轮派发可能已处理同一任务）；
-/// task_logs 与状态前移在锁事务内原子提交。
+/// 认领以与「立即执行」路径相同的咨询锁互斥：due 列表是派发前的快照，
+/// 认领事务内条件更新原子复核到期，慢任务期间下一轮派发不会重复处理。
 async fn dispatch_due_user_tasks(
     pool: sqlx::PgPool,
     registry: TaskRegistryRef,
     db_config: DatabaseConfig,
-    running_map: Arc<std::sync::Mutex<std::collections::HashMap<uuid::Uuid, Arc<AtomicBool>>>>,
+    running_map: Arc<std::sync::Mutex<std::collections::HashSet<uuid::Uuid>>>,
 ) {
     let due: Vec<crate::models::ScheduledTask> =
         match sqlx::query_as(
@@ -291,26 +310,26 @@ async fn dispatch_due_user_tasks(
         };
 
     for task in due {
-        // 按任务 id 的重叠保护：上一轮未结束则本轮跳过
-        let flag = {
-            let Ok(mut map) = running_map.lock() else {
-                continue;
-            };
-            let flag = map
-                .entry(task.id)
-                .or_insert_with(|| Arc::new(AtomicBool::new(false)));
-            Arc::clone(flag)
+        // 按任务 id 的重叠保护：集合插入成功即占用，已在集合中说明
+        // 上一轮尚未结束，本轮跳过
+        let newly_claimed = {
+            // Mutex 中毒（持锁期间 panic）时恢复内部数据继续派发，
+            // 避免派发路径就此永久停摆
+            let mut running = running_map
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            running.insert(task.id)
         };
-        if flag
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
+        if !newly_claimed {
             log_warn!("log.task.overlap_skipped", name = task.name);
             continue;
         }
-        // 占位成功即创建 Drop 守卫（与系统 job 同款，panic 安全）：
-        // 执行器 panic 时标志随之释放，任务不会静默停摆
-        let _guard = SyncRunningGuard(flag);
+        // 占用成功即创建 Drop 守卫（RAII，panic 安全）：执行结束、出错或
+        // panic 时均从集合移除条目，不会残留导致任务无法再次分发
+        let _guard = DispatchRunningGuard {
+            running_map: Arc::clone(&running_map),
+            task_id: task.id,
+        };
 
         if let Err(e) = dispatch_single_task(&pool, &registry, &db_config, task).await {
             log_error!("log.task.dispatch_failed", error = e);
@@ -327,61 +346,32 @@ fn task_advisory_lock_key(id: uuid::Uuid) -> i64 {
     hasher.finish() as i64
 }
 
-/// 派发单个到期任务：咨询锁 → 到期复核 → 执行 → 双写（同事务原子提交）。
-/// 任一步失败回滚（next_run_at 不前移，下轮派发重试）。
+/// 派发单个到期任务：短事务认领 → 锁外执行 → 短事务写回。
+/// 第一段在咨询锁事务内原子认领：仍处于到期状态才条件前移 next_run_at
+/// （该表无独立 status 列，以前移后的 next_run_at 充当认领标记），以
+/// rows_affected 判定认领结果，认领即提交释放锁——避免慢任务长期持锁
+/// 阻塞「立即执行」路径与其他调度实例；第二段锁外执行任务体；第三段
+/// 短事务写审计日志与执行状态。认领后执行/写回失败不影响已前移的
+/// next_run_at（按 cron 正常节律重试，不回滚避免每分钟重试风暴）。
 async fn dispatch_single_task(
     pool: &sqlx::PgPool,
     registry: &TaskRegistryRef,
     db_config: &DatabaseConfig,
     task: crate::models::ScheduledTask,
 ) -> Result<(), sqlx::Error> {
-    let mut lock_tx = pool.begin().await?;
+    // ---- 第一段：短事务原子认领 ----
+    let mut claim_tx = pool.begin().await?;
     let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
         .bind(task_advisory_lock_key(task.id))
-        .fetch_one(&mut *lock_tx)
+        .fetch_one(&mut *claim_tx)
         .await?;
     if !locked {
-        // 任务正被「立即执行」或上一轮派发执行
+        // 任务正被「立即执行」或上一轮派发认领
         log_warn!("log.task.overlap_skipped", name = task.name);
         return Ok(());
     }
 
-    // 到期复核：due 列表是派发前的快照，锁等待期间 next_run_at 可能已被
-    // 并发路径前移；已处理/被停用的任务直接跳过
-    let still_due: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM scheduled_tasks
-          WHERE id = $1 AND enabled = true
-            AND next_run_at IS NOT NULL AND next_run_at <= NOW())",
-    )
-    .bind(task.id)
-    .fetch_one(&mut *lock_tx)
-    .await?;
-    if !still_due {
-        return Ok(());
-    }
-
-    let started_at = Utc::now();
-    let ctx = TaskContext {
-        pool: pool.clone(),
-        config: task.config.clone(),
-        db_config: db_config.clone(),
-    };
-    let result = registry.execute(&task.task_type, &ctx).await;
-    let end_time = Utc::now();
-    let duration = i32::try_from((end_time - started_at).num_milliseconds()).unwrap_or(i32::MAX);
-    let (status, details) = match &result {
-        Ok(message) => (
-            "success",
-            serde_json::json!({ "message": message, "task_type": task.task_type }),
-        ),
-        Err(e) => (
-            "failed",
-            serde_json::json!({
-                "error": error_message(e).log_string(),
-                "task_type": task.task_type
-            }),
-        ),
-    };
+    let claimed_at = Utc::now();
 
     // 前移 next_run_at：失败时同样前移，避免故障任务每分钟重试刷屏；
     // cron 解析失败按 1 小时退避推进（保留过期旧值会每分钟重新触发）
@@ -405,10 +395,55 @@ async fn dispatch_single_task(
             None
         }
     };
-    let effective_next_run = next_run.unwrap_or(started_at + chrono::Duration::hours(1));
+    let effective_next_run = next_run.unwrap_or(claimed_at + chrono::Duration::hours(1));
 
-    // task_logs 与状态前移是与本次执行同源的业务双写：与锁同事务提交，
-    // 任一失败整体回滚
+    // 认领即条件前移 next_run_at（同时完成到期复核）：due 列表是派发前
+    // 的快照，锁等待期间 next_run_at 可能已被并发路径前移或任务已停用，
+    // 仍处于到期状态才更新；rows_affected == 0 表示已被处理，静默返回
+    let claimed = sqlx::query(
+        "UPDATE scheduled_tasks SET next_run_at = $2
+         WHERE id = $1 AND enabled = true
+           AND next_run_at IS NOT NULL AND next_run_at <= NOW()",
+    )
+    .bind(task.id)
+    .bind(effective_next_run)
+    .execute(&mut *claim_tx)
+    .await?
+    .rows_affected();
+    if claimed == 0 {
+        return Ok(());
+    }
+    // 认领提交，咨询锁随之释放，执行阶段不再持锁
+    claim_tx.commit().await?;
+
+    // ---- 第二段：锁外执行任务体 ----
+    let started_at = Utc::now();
+    let ctx = TaskContext {
+        pool: pool.clone(),
+        config: task.config.clone(),
+        db_config: db_config.clone(),
+    };
+    let result = registry.execute(&task.task_type, &ctx).await;
+    let end_time = Utc::now();
+    let duration = i32::try_from((end_time - started_at).num_milliseconds()).unwrap_or(i32::MAX);
+    let (status, details) = match &result {
+        Ok(message) => (
+            "success",
+            serde_json::json!({ "message": message, "task_type": task.task_type }),
+        ),
+        Err(e) => (
+            "failed",
+            serde_json::json!({
+                "error": error_message(e).log_string(),
+                "task_type": task.task_type
+            }),
+        ),
+    };
+
+    // ---- 第三段：短事务写回结果 ----
+    // task_logs 与执行状态（last_run_at/last_result）是同源业务双写，
+    // 同事务原子提交；next_run_at 已在认领时前移，此处不再改动
+    let mut write_tx = pool.begin().await?;
     sqlx::query(
         r"INSERT INTO task_logs (id, task_name, status, details, start_time, end_time, duration)
            VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -420,20 +455,17 @@ async fn dispatch_single_task(
     .bind(started_at)
     .bind(end_time)
     .bind(duration)
-    .execute(&mut *lock_tx)
+    .execute(&mut *write_tx)
     .await?;
 
-    sqlx::query(
-        "UPDATE scheduled_tasks SET last_run_at = $1, next_run_at = $2, last_result = $3 WHERE id = $4",
-    )
-    .bind(started_at)
-    .bind(effective_next_run)
-    .bind(status)
-    .bind(task.id)
-    .execute(&mut *lock_tx)
-    .await?;
+    sqlx::query("UPDATE scheduled_tasks SET last_run_at = $1, last_result = $2 WHERE id = $3")
+        .bind(started_at)
+        .bind(status)
+        .bind(task.id)
+        .execute(&mut *write_tx)
+        .await?;
 
-    lock_tx.commit().await?;
+    write_tx.commit().await?;
 
     if status == "success" {
         log_info!(

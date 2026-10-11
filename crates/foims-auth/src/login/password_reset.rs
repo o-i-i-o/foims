@@ -44,10 +44,13 @@ pub async fn forgot_password<P: AuthProvider>(
             let reset_token = Uuid::new_v4().to_string();
             let expiry = Utc::now() + chrono::Duration::hours(1);
 
+            // 令牌按 SHA-256 哈希落库（与 JWT/refresh 吊销口径一致）：
+            // users.reset_token 可被任何能读表的主体直接构造重置链接接管账户，
+            // 明文落库把备份/注入泄漏升级为账户接管；邮件中仍携带原始令牌
             if let Err(e) = sqlx::query(
                 "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE email = $3",
             )
-            .bind(&reset_token)
+            .bind(foims_common::net::generate_token_hash(&reset_token))
             .bind(expiry)
             .bind(email)
             .execute(&conn)
@@ -94,7 +97,7 @@ pub async fn reset_password<P: AuthProvider>(
     let user_result = sqlx::query_as::<_, (Uuid,)>(
         "SELECT id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW() FOR UPDATE",
     )
-    .bind(&req.token)
+    .bind(foims_common::net::generate_token_hash(&req.token))
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -179,6 +182,13 @@ pub async fn change_password<P: AuthProvider>(
             AppError::Internal(msg("server.auth.password_verify_failed").with("error", e))
         })?;
     if !valid {
+        // 旧密码错误按登录失败口径计入 fail2ban（IP + 用户维度）：
+        // 否则被劫持的会话可对该端点不限速在线爆破受害者旧密码
+        crate::app_fail2ban::record_login_failure(
+            &meta.ip_address,
+            &auth.username,
+            "server.auth.old_password_incorrect",
+        );
         return Err(AppError::Validation(msg(
             "server.auth.old_password_incorrect",
         )));

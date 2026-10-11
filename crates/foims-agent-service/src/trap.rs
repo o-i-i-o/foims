@@ -4,7 +4,8 @@
 //! 本模块属服务端数据采集面（与 SNMP 轮询、agent 上报接收同处一 crate），
 //! 自资源管理模块迁入：Trap 接收是采集服务而非资源管理业务。
 //!
-//! - v1/v2c：可选 community 白名单（`communities` 为空表示接受任意）；
+//! - v1/v2c：必须配置 community 白名单（`communities` 为空时拒绝处理全部
+//!   v1/v2c 通知，防止白名单缺失导致任意伪造来源注入通知）；
 //! - v3：按 `users` 配置 USM 用户，未配置任何用户时拒绝全部 v3 通知；
 //!   引擎 ID 每次启动随机生成（发送方经发现流程自动感知，无需持久化 boots）；
 //! - inform：接受后由库自动应答 Response-PDU，业务侧无需额外处理；
@@ -16,6 +17,7 @@ use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 use async_snmp::VarBind;
+use async_snmp::Version;
 use async_snmp::notification::{Notification, NotificationReceiver, ReceivedNotification};
 use async_snmp::v3::{AuthoritativeEngine, UsmUser};
 use dashmap::DashMap;
@@ -193,6 +195,18 @@ async fn handle_notification(
         oid = trap_oid
     );
 
+    // v1/v2c 必须配置 community 白名单：库在白名单为空时接受任意 community，
+    // 无法区分合法发送方，任意伪造来源均可注入站内通知；白名单未配置时
+    // 拒绝处理并丢弃。v3 走 USM 引擎认证，不依赖 community，不受影响
+    if notification.version() != Version::V3 && config.communities.is_empty() {
+        log_warn!(
+            "log.trap.community_whitelist_empty",
+            source = source_ip,
+            version = version
+        );
+        return;
+    }
+
     if config.cooldown_secs > 0 && is_in_cooldown(cooldowns, source_ip, config.cooldown_secs) {
         log_warn!("system.snmp_trap_suppressed", source = source_ip);
         return;
@@ -216,10 +230,10 @@ async fn handle_notification(
     })
     .to_string();
 
-    // 通知目标：所有启用状态的管理员（admin/secadmin）按人各发一条，
-    // 已读状态随用户独立（与 MAC 变更通知语义一致）
+    // 通知目标：所有启用状态的管理员（admin/sysadmin/secadmin）按人各发一条，
+    // 已读状态随用户独立（与主机告警通知的收件人口径一致）
     let admin_ids: Vec<Uuid> = match sqlx::query_scalar(
-        "SELECT id FROM users WHERE status = TRUE AND role IN ('admin', 'secadmin')",
+        "SELECT id FROM users WHERE status = TRUE AND role IN ('admin', 'sysadmin', 'secadmin')",
     )
     .fetch_all(pool)
     .await
@@ -284,9 +298,15 @@ fn is_in_cooldown(
     if in_cooldown {
         return true;
     }
-    // 容量保护：条目达到上限时先清理过期来源再记录当前来源
+    // 容量保护：条目达到上限时先清理过期来源；清理后仍满载说明冷却窗口内
+    // 活跃来源数超过上限（伪造来源地址风暴），拒绝记录新冷却条目并按冷却中
+    // 处理丢弃该通知，保证冷却表规模有界
     if cooldowns.len() >= COOLDOWN_MAP_CAPACITY {
         cooldowns.retain(|_, last| now.duration_since(*last) < window);
+        if cooldowns.len() >= COOLDOWN_MAP_CAPACITY {
+            log_warn!("log.trap.cooldown_table_full", source = source);
+            return true;
+        }
     }
     cooldowns.insert(source, now);
     false

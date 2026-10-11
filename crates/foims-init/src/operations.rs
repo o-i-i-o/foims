@@ -138,13 +138,15 @@ pub enum CreateOutcome {
 /// 登录」的暴露面。所有者的隐式完整权限不受影响，pg_dump/psql/主应用等
 /// 以配置账号执行的流程均不受影响。
 pub async fn restrict_public_grants(pool: &PgPool, database: &str) -> Result<(), sqlx::Error> {
-    sqlx::query(sqlx::AssertSqlSafe(format!(
-        "REVOKE ALL ON DATABASE {} FROM PUBLIC",
-        quote_ident(database)
-    )))
-    .execute(pool)
-    .await
-    .map(|_| ())
+    // 库名为已校验标识符，quote_ident 加固后经 QueryBuilder push 拼接
+    //（REVOKE 语句不支持参数绑定）
+    sqlx::QueryBuilder::<sqlx::Postgres>::new("REVOKE ALL ON DATABASE ")
+        .push(quote_ident(database))
+        .push(" FROM PUBLIC")
+        .build()
+        .execute(pool)
+        .await
+        .map(|_| ())
 }
 
 pub async fn backup_database(config: &DatabaseConfig) -> Result<String, AppMessage> {
@@ -282,13 +284,16 @@ pub async fn drop_database(config: &DatabaseConfig) -> Result<(), AppMessage> {
 
     foims_common::log_info!("log.init.db.connections_terminated", name = config.database);
 
-    sqlx::query(sqlx::AssertSqlSafe(format!(
-        "DROP DATABASE IF EXISTS {}",
-        quote_ident(&config.database)
-    )))
-    .execute(&postgres_pool)
-    .await
-    .map_err(|e| msg("server.init.db.drop_failed").with("error", e))?;
+    // WITH (FORCE)（PG13+）：DROP 时自动断开目标库残留连接，
+    // 避免先 terminate 后新连接又挤入导致删库被阻塞。
+    // 库名为已校验标识符，quote_ident 加固后经 QueryBuilder push 拼接
+    sqlx::QueryBuilder::<sqlx::Postgres>::new("DROP DATABASE IF EXISTS ")
+        .push(quote_ident(&config.database))
+        .push(" WITH (FORCE)")
+        .build()
+        .execute(&postgres_pool)
+        .await
+        .map_err(|e| msg("server.init.db.drop_failed").with("error", e))?;
 
     postgres_pool.close().await;
     foims_common::log_info!("log.init.db.dropped", name = config.database);
@@ -330,21 +335,22 @@ pub async fn create_database(config: &DatabaseConfig) -> Result<CreateOutcome, A
         return Ok(CreateOutcome::AlreadyExists);
     }
 
-    sqlx::query(sqlx::AssertSqlSafe(format!(
-        "CREATE DATABASE {} CONNECTION LIMIT = -1",
-        quote_ident(&config.database)
-    )))
-    .execute(&postgres_pool)
-    .await
-    .map_err(|e| {
-        // AlreadyExists 是「查询时不存在、创建时被并发创建」的竞态：
-        // 幂等语义下与 AlreadyExists 等价
-        let kind = classify_create_db_error(&e);
-        if kind == CreateDbFailureKind::AlreadyExists {
-            foims_common::log_warn!("log.init.db.create_race_exists", error = e);
-        }
-        msg(kind.message_key()).with("error", e)
-    })?;
+    // 库名为已校验标识符，quote_ident 加固后经 QueryBuilder push 拼接
+    sqlx::QueryBuilder::<sqlx::Postgres>::new("CREATE DATABASE ")
+        .push(quote_ident(&config.database))
+        .push(" CONNECTION LIMIT = -1")
+        .build()
+        .execute(&postgres_pool)
+        .await
+        .map_err(|e| {
+            // AlreadyExists 是「查询时不存在、创建时被并发创建」的竞态：
+            // 幂等语义下与 AlreadyExists 等价
+            let kind = classify_create_db_error(&e);
+            if kind == CreateDbFailureKind::AlreadyExists {
+                foims_common::log_warn!("log.init.db.create_race_exists", error = e);
+            }
+            msg(kind.message_key()).with("error", e)
+        })?;
 
     // 新建库收紧 PUBLIC 授权按致命错误处理：刚建库的所有者执行 REVOKE
     // 失败意味着实例状态异常，让配置页尽快反馈而非留下可被任意角色
@@ -375,32 +381,54 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     if !tables.is_empty() {
-        sqlx::query("SET session_replication_role = 'replica'")
+        // 会话级 SET 失败降级继续而非中止：session_replication_role 仅
+        // 超级用户可设置，应用账号（非超管）清库时该语句恒定失败，
+        // 直接中止会让清库不可用；DROP 带 CASCADE 仍能正常完成，
+        // 仅损失「跳过 FK/触发器校验」的加速
+        let replica_armed = match sqlx::query("SET session_replication_role = 'replica'")
             .execute(&mut *conn)
-            .await?;
+            .await
+        {
+            Ok(_) => true,
+            Err(e) => {
+                foims_common::log_warn!("log.init.db.replication_role_set_failed", error = e);
+                false
+            }
+        };
 
         // 逐表 DROP 的结果先挂起：无论成败都必须先把会话复位回 'origin'
         // 再归还连接，避免任一 DROP 失败时连接以 replica 状态回到池中，
         // 后续借用该连接的语句静默跳过 FK 与触发器
         let drop_result: Result<(), sqlx::Error> = async {
             for table in &tables {
-                sqlx::query(sqlx::AssertSqlSafe(format!(
-                    "DROP TABLE IF EXISTS {} CASCADE",
-                    quote_ident(table)
-                )))
-                .execute(&mut *conn)
-                .await?;
+                // 表名来自 information_schema，quote_ident 加固后经
+                // QueryBuilder push 拼接（DROP TABLE 不支持参数绑定）
+                sqlx::QueryBuilder::<sqlx::Postgres>::new("DROP TABLE IF EXISTS ")
+                    .push(quote_ident(table))
+                    .push(" CASCADE")
+                    .build()
+                    .execute(&mut *conn)
+                    .await?;
             }
             Ok(())
         }
         .await;
 
-        let reset_result = sqlx::query("SET session_replication_role = 'origin'")
-            .execute(&mut *conn)
-            .await;
+        // 仅在确实进入 replica 模式时才需要复位：SET 失败时会话从未
+        // 改变，复位只会徒增一条告警
+        let reset_result: Option<Result<(), sqlx::Error>> = if replica_armed {
+            Some(
+                sqlx::query("SET session_replication_role = 'origin'")
+                    .execute(&mut *conn)
+                    .await
+                    .map(|_| ()),
+            )
+        } else {
+            None
+        };
 
         match (drop_result, reset_result) {
-            (Err(e), Err(reset_err)) => {
+            (Err(e), Some(Err(reset_err))) => {
                 // 复位失败同样不可忽略，但 DROP 的原始错误优先返回
                 foims_common::log_warn!(
                     "log.init.db.replication_role_reset_failed",
@@ -408,9 +436,9 @@ pub async fn drop_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                 );
                 Err(e)
             }
-            (Err(e), Ok(_)) => Err(e),
-            (Ok(()), Err(reset_err)) => Err(reset_err),
-            (Ok(()), Ok(_)) => Ok(()),
+            (Err(e), _) => Err(e),
+            (Ok(()), Some(Err(reset_err))) => Err(reset_err),
+            (Ok(()), None | Some(Ok(()))) => Ok(()),
         }
     } else {
         Ok(())

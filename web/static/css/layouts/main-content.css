@@ -85,7 +85,10 @@
   background: transparent;
   border: none;
   color: var(--color-text-muted);
-  transition: all var(--transition-slow);
+  transition:
+    background var(--transition-slow),
+    color var(--transition-slow),
+    box-shadow var(--transition-slow);
   flex: 1;
   text-align: center;
   position: relative;

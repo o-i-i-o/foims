@@ -2,10 +2,8 @@
 
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 
 use crate::helpers::validate_network_in_room;
 use chrono::Utc;
@@ -15,7 +13,7 @@ use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppMessage, log_error, log_info, log_warn, msg};
-use foims_models::{ApiResponse, IpDetail, IpDetailCreate, IpDetailWithNames};
+use foims_models::{IpDetail, IpDetailCreate, IpDetailWithNames};
 use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
@@ -754,13 +752,12 @@ pub async fn pull_ip_details<P: DbProvider>(
 
     if result.switch_macs_empty {
         if result.total_macs_on_switch == 0 {
-            return Ok((
-                StatusCode::OK,
-                Json(ApiResponse::<Vec<IpDetail>>::error(msg(
-                    "server.ip.no_mac_data",
-                ))),
-            )
-                .into_response());
+            // 「暂无 MAC 数据」是正常空态而非操作失败：与下方 no_managed_ips
+            // 分支同为 ok_json 空数组口径，前端展示提示文案而非错误弹窗
+            return Ok(foims_common::ok_json(
+                Vec::<IpDetail>::new(),
+                msg("server.ip.no_mac_data"),
+            ));
         }
         // 指定子网与全部子网两种口径的空匹配文案区分
         let empty_message = if req.subnet_id.is_some() {

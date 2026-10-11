@@ -543,9 +543,16 @@ pub async fn update_ldap_config<P: AuthProvider>(
         req.bind_password.clone()
     };
 
+    let url = req.url.trim_end_matches('/').to_string();
+    // 明文 ldap:// 下绑定密码可被网络窃听（除非部署侧启用 StartTLS），
+    // 属合法内网场景不做硬拒绝，保存时记录告警提示改用 ldaps://
+    if url.starts_with("ldap://") {
+        foims_common::log_warn!("log.ldap.plaintext_url", url = url);
+    }
+
     let config = LdapConfig {
         enabled: req.enabled,
-        url: req.url.trim_end_matches('/').to_string(),
+        url,
         bind_dn: req.bind_dn,
         bind_password,
         base_dn: req.base_dn,

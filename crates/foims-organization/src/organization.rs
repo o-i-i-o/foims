@@ -871,19 +871,15 @@ pub async fn delete_organization<P: DbProvider>(
         ));
     }
 
-    // 挂在该节点及其所有子孙节点下的员工随 ON DELETE CASCADE 静默销毁，
-    // 必须与子组织/房间一样显式拦截，提示先转移员工（递归 CTE 收集子树）
-    let employee_count: i64 = sqlx::query_scalar(
-        r"WITH RECURSIVE org_tree AS (
-            SELECT id FROM organizations WHERE id = $1
-            UNION ALL
-            SELECT o.id FROM organizations o JOIN org_tree t ON o.parent_id = t.id
-        )
-        SELECT COUNT(*) FROM employees WHERE org_id IN (SELECT id FROM org_tree)",
-    )
-    .bind(id)
-    .fetch_one(&mut *tx)
-    .await?;
+    // 挂在该节点下的员工随 ON DELETE CASCADE 静默销毁，必须与子组织/
+    // 房间一样显式拦截，提示先转移员工。能走到这里说明上方子组织检查
+    // 已通过（本节点为叶子节点，无子孙），直接按 org_id 计数即可，
+    // 无需递归 CTE 收集子树
+    let employee_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM employees WHERE org_id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
     if employee_count > 0 {
         return Err(AppError::Validation(
             msg("server.organization.has_employees").with("count", employee_count),

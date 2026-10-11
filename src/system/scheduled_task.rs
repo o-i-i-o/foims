@@ -90,12 +90,15 @@ pub async fn get_scheduled_tasks(
         _ => "ORDER BY created_at DESC",
     };
 
-    let tasks: Vec<ScheduledTask> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks {order_clause}"
-    )))
-    .fetch_all(&state.pool()?.get_conn())
-    .await
-    ?;
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks",
+    );
+    // 排序段为白名单常量，经 push 拼接，不拼接任何用户输入原文
+    qb.push(" ").push(order_clause);
+    let tasks: Vec<ScheduledTask> = qb
+        .build_query_as()
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
     Ok(foims_common::ok_json(tasks, "server.task.list_retrieved"))
 }

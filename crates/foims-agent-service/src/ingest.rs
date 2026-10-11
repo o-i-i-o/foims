@@ -202,8 +202,8 @@ pub async fn ingest(
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：缺少合法的 Bearer 令牌");
     };
     let token_hash = generate_token_hash(&token);
-    let row = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<DateTime<Utc>>)>(
-        "SELECT id, status, machine_id, last_seen FROM agents WHERE token_hash = $1",
+    let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
+        "SELECT id, status, machine_id FROM agents WHERE token_hash = $1",
     )
     .bind(&token_hash)
     .fetch_optional(&ctx.pool)
@@ -215,22 +215,19 @@ pub async fn ingest(
             return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库查询失败");
         }
     };
-    let Some((agent_id, status, stored_machine_id, last_seen)) = row else {
+    let Some((agent_id, status, stored_machine_id)) = row else {
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效");
     };
     if status == "disabled" || status == "revoked" {
         return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用或吊销，禁止上报");
     }
 
-    // 1b. 上报频控：last_seen 距今小于生效间隔一半时拒绝（429），
-    // 防止恶意 agent 高频写库；正常 agent 按下发间隔上报不受影响
+    // 1b. 上报频控：last_seen 距今小于生效间隔一半时拒绝（429），防止恶意
+    // agent 高频写库。闸门在入库 UPDATE 的 WHERE 中原子判定（见步骤 5），
+    // 消除「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent
+    // 按下发间隔上报不受影响
     let interval = ctx.report_interval_secs.max(MIN_REPORT_INTERVAL_SECS);
     let min_gap_secs = i64::try_from(interval / 2).unwrap_or(i64::MAX);
-    if let Some(last_seen) = last_seen
-        && (Utc::now() - last_seen).num_seconds() < min_gap_secs
-    {
-        return error_json(StatusCode::TOO_MANY_REQUESTS, "上报过于频繁，请稍后再试");
-    }
 
     // 2. 解析与校验（校验通过返回解析后的采集时刻与 trim 后的文本字段）
     let report: AgentReport = match serde_json::from_slice(body) {
@@ -304,7 +301,8 @@ pub async fn ingest(
             raw_metrics = $14,
             last_seen = NOW(),
             first_seen = COALESCE(first_seen, NOW())
-          WHERE id = $1",
+          WHERE id = $1
+            AND (last_seen IS NULL OR last_seen < NOW() - make_interval(secs => $15))",
     )
     .bind(agent_id)
     .bind(&trimmed.machine_id)
@@ -320,44 +318,68 @@ pub async fn ingest(
     .bind(temp)
     .bind(i64::try_from(report.system.uptime_secs).unwrap_or(i64::MAX))
     .bind(&raw_metrics)
+    .bind(min_gap_secs as f64)
     .execute(&mut *tx)
     .await;
-    if let Err(e) = update {
-        // machine_id 唯一索引冲突：该机已绑定到其他 token 的安装记录
-        // （同机重复下载安装包），按设计返回 409 由运营处理
-        let mid_dup = e.as_database_error().is_some_and(|db| {
-            db.is_unique_violation()
-                && db
-                    .constraint()
-                    .is_some_and(|c| c.contains("idx_agents_machine_id"))
-        });
-        if mid_dup {
-            let owner = sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM agents WHERE machine_id = $1 AND id <> $2 LIMIT 1",
-            )
-            .bind(&trimmed.machine_id)
-            .bind(agent_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .ok();
-            foims_common::log_warn!(
-                "log.agent.machine_id_conflict",
-                agent_id = agent_id,
-                stored = owner
-                    .map(|u| u.to_string())
-                    .unwrap_or_else(|| "unknown".into()),
-                reported = trimmed.machine_id
-            );
+    let updated = match update {
+        Ok(result) => result,
+        Err(e) => {
+            // machine_id 唯一索引冲突：该机已绑定到其他 token 的安装记录
+            // （同机重复下载安装包），按设计返回 409 由运营处理
+            let mid_dup = e.as_database_error().is_some_and(|db| {
+                db.is_unique_violation()
+                    && db
+                        .constraint()
+                        .is_some_and(|c| c.contains("idx_agents_machine_id"))
+            });
+            if mid_dup {
+                let owner = sqlx::query_scalar::<_, Uuid>(
+                    "SELECT id FROM agents WHERE machine_id = $1 AND id <> $2 LIMIT 1",
+                )
+                .bind(&trimmed.machine_id)
+                .bind(agent_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .ok();
+                foims_common::log_warn!(
+                    "log.agent.machine_id_conflict",
+                    agent_id = agent_id,
+                    stored = owner
+                        .map(|u| u.to_string())
+                        .unwrap_or_else(|| "unknown".into()),
+                    reported = trimmed.machine_id
+                );
+                return error_json(
+                    StatusCode::CONFLICT,
+                    "machine_id 已绑定到其他安装记录（同机重复安装），请在主机监控列表删除旧记录后重试",
+                );
+            }
+            foims_common::log_error!("log.agent.ingest_db_error", error = e);
             return error_json(
-                StatusCode::CONFLICT,
-                "machine_id 已绑定到其他安装记录（同机重复安装），请在主机监控列表删除旧记录后重试",
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "入库失败：agents 更新出错",
             );
         }
-        foims_common::log_error!("log.agent.ingest_db_error", error = e);
-        return error_json(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "入库失败：agents 更新出错",
-        );
+    };
+    // 频控闸门未放行（rows_affected == 0）：行仍存在说明 last_seen 处于最小
+    // 上报间隔内，本次上报被原子拒绝；行已消失说明令牌对应的安装记录刚被删除
+    if updated.rows_affected() == 0 {
+        let last_seen = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
+            "SELECT last_seen FROM agents WHERE id = $1",
+        )
+        .bind(agent_id)
+        .fetch_optional(&mut *tx)
+        .await;
+        match last_seen {
+            Ok(Some(_)) => {
+                return error_json(StatusCode::TOO_MANY_REQUESTS, "上报过于频繁，请稍后再试");
+            }
+            Ok(None) => return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效"),
+            Err(e) => {
+                foims_common::log_error!("log.agent.ingest_db_error", error = e);
+                return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库查询失败");
+            }
+        }
     }
     // 唯一索引 (agent_id, collected_at) 冲突时跳过：agent 重试/重放同一
     // 采集时刻的幂等去重，避免重复上报写重

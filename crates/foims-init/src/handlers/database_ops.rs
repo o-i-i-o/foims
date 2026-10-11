@@ -21,7 +21,8 @@ use crate::verification::verify_code;
 
 /// 备份并删除现有数据库（有数据时先备份），为重建做准备。
 ///
-/// 返回备份文件路径（未发生备份时为 `None`）。
+/// 返回备份文件名（不含目录，未发生备份时为 `None`）：API 响应不应
+/// 泄漏服务器文件系统绝对路径，完整路径仅入日志（backup_created）。
 async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>, InitError> {
     let db_config = ctx.db_config();
     let pool = match ensure_database_and_schema(&db_config).await {
@@ -52,7 +53,14 @@ async fn backup_and_drop_for_rebuild(ctx: &InitContext) -> Result<Option<String>
             return Err(InitError::Internal(e));
         }
 
-        Ok(backup_file)
+        // 仅回传文件名：绝对路径暴露服务器目录结构，前端只做展示。
+        // has_data 分支中备份必已发生，此处 None 仅在路径无法解析出
+        // 文件名时出现（异常路径，退化为不回传）
+        let backup_name = backup_file
+            .as_deref()
+            .and_then(|p| std::path::Path::new(p).file_name())
+            .map(|s| s.to_string_lossy().into_owned());
+        Ok(backup_name)
     } else {
         drop(pool);
 
@@ -177,7 +185,10 @@ pub async fn import_database_from_file(
         })?;
 
     const VERIFICATION_MAX: usize = 10 * 1024 * 1024;
-    const SQL_FILE_MAX: usize = 100 * 1024 * 1024;
+    // 与路由层 DefaultBodyLimit::max(50MB) 及 nginx client_max_body_size 50m
+    // 保持一致：常量再放宽也无法到达，反而让用户在上传到 100MB 时才
+    // 被中间层以晦涩的 413 拒绝
+    const SQL_FILE_MAX: usize = 50 * 1024 * 1024;
 
     while let Some(mut field) = payload.next_field().await.map_err(|e| {
         InitError::Validation(msg("server.init.db.file_read_failed").with("error", e))
@@ -328,7 +339,9 @@ pub async fn clear_database(
         return Err(InitError::Forbidden(msg("server.init.disabled")));
     }
 
-    let verification_code = match req.get("code") {
+    // 字段名与前端/其他端点统一为 verification（CreateDatabaseRequest
+    // 与 import-file 的 multipart 字段同名），避免校验失配
+    let verification_code = match req.get("verification") {
         Some(code) => code.as_str().unwrap_or(""),
         None => "",
     };

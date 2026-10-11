@@ -45,13 +45,14 @@ pub async fn get_login_logs(
             .fetch_one(&conn)
             .await?;
 
-        let logs = sqlx::query_as::<_, LoginLog>(sqlx::AssertSqlSafe(format!(
-            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs {order_clause} LIMIT $1 OFFSET $2"
-        )))
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&conn)
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs",
+        );
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let logs = qb.build_query_as::<LoginLog>().fetch_all(&conn).await?;
 
         (total, logs)
     } else {
@@ -62,14 +63,19 @@ pub async fn get_login_logs(
         .fetch_one(&conn)
         .await?;
 
-        let logs = sqlx::query_as::<_, LoginLog>(sqlx::AssertSqlSafe(format!(
-            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs WHERE username ILIKE $1 OR ip_address ILIKE $1 OR user_agent ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"
-        )))
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&conn)
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT id, username, ip_address, user_agent, success, error_message, created_at::TIMESTAMPTZ FROM login_logs WHERE username ILIKE ",
+        );
+        qb.push_bind(&search_pattern)
+            .push(" OR ip_address ILIKE ")
+            .push_bind(&search_pattern)
+            .push(" OR user_agent ILIKE ")
+            .push_bind(&search_pattern);
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let logs = qb.build_query_as::<LoginLog>().fetch_all(&conn).await?;
 
         (total, logs)
     };

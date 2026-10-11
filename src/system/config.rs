@@ -195,6 +195,14 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
     log_info!("log.config.file_written");
 
     let verify_content = tokio::fs::read_to_string(&config_path).await?;
+    if verify_content != toml_str {
+        log_error!(
+            "log.config.verify_mismatch",
+            expected = toml_str.len(),
+            actual = verify_content.len()
+        );
+        return Err("config file verification failed: content mismatch after write".into());
+    }
     log_info!("log.config.verify_read", count = verify_content.len());
 
     Ok(())
@@ -210,8 +218,9 @@ pub async fn get_system_info(
     {
         Ok(_) => "connected".to_string(),
         Err(e) => {
+            // 错误详情仅入日志，不回传客户端（避免泄漏内网拓扑）
             log_error!("log.system.db_check_failed", error = e);
-            format!("disconnected: {}", e)
+            "disconnected".to_string()
         }
     };
 
@@ -295,6 +304,9 @@ pub async fn update_system_config(
         new_config.server = server;
     }
 
+    // JWT/限流配置变更后需重启生效（jwt/rate_limit 在下方被 move，先记录标志）
+    let jwt_updated = req.jwt.is_some();
+
     if let Some(jwt) = req.jwt {
         // 防止脱敏值覆写真实密钥
         let mut jwt_config = jwt;
@@ -312,6 +324,9 @@ pub async fn update_system_config(
         }
         new_config.init = init;
     }
+
+    // 限流配置变更后需重启生效（rate_limit 在下方被 move，先记录标志）
+    let rate_limit_updated = req.rate_limit.is_some();
 
     if let Some(rate_limit) = req.rate_limit {
         new_config.rate_limit = rate_limit;
@@ -346,6 +361,11 @@ pub async fn update_system_config(
 
     // 落盘成功后刷新共享配置槽，让本进程内后续读取立即生效
     state.config.store(Arc::new(new_config.clone()));
+
+    // JwtUtils/RateLimiter 在启动时构造一次，密钥轮换与限流调整需重启生效
+    if jwt_updated || rate_limit_updated {
+        log_warn!("log.config.restart_required_for_jwt_rate_limit");
+    }
 
     // 响应中脱敏数据库密码与 JWT 密钥（与 get_system_config 一致）：
     // 回传明文 JWT secret 等同于允许接收方伪造任意管理员令牌（A-3）
@@ -769,7 +789,10 @@ pub struct SmtpConfigResponse {
     pub has_password: bool,
 }
 
-pub async fn get_smtp_config(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+pub async fn get_smtp_config(
+    State(state): State<Arc<AppState>>,
+    _user: foims_auth::extractor::AuthUser,
+) -> Result<Response, AppError> {
     // 未配置属于业务状态而非错误：返回 200 + configured=false，避免浏览器控制台出现 404
     let resp = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => SmtpConfigResponse {
@@ -918,7 +941,10 @@ pub async fn update_password_policy(
 // foims / nginx 的状态查询与管理操作见 system/services.rs
 // （GET /api/system/services、POST /api/system/services/{service}/{op}）
 
-pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+pub async fn get_dashboard_stats(
+    State(state): State<Arc<AppState>>,
+    _user: foims_auth::extractor::AuthUser,
+) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
 
     let networks_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM network_cidrs")

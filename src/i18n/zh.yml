@@ -18,6 +18,7 @@ log:
     revoke_access_token_failed: "撤销access_token失败: {{error}}"
     revoke_refresh_token_failed: "撤销refresh_token失败: {{error}}"
     revoke_token_failed: "撤销令牌失败: {{error}}"
+    refresh_token_replay: "检测到 refresh 令牌并发重放（疑似令牌盗用），已作废该用户全部会话: user_id={{user_id}}"
     save_reset_token_failed: "保存重置令牌失败: {{error}}"
     send_reset_email_failed: "发送重置邮件失败: {{error}}"
   agent:
@@ -39,8 +40,10 @@ log:
     machine_id_conflict: "Agent 上报 machine_id 冲突: agent_id={{agent_id}}, 库内={{stored}}, 上报={{reported}}"
     package_downloaded: "Agent 安装包已下载: agent_id={{agent_id}}, target={{target}}, format={{format}}, label={{label}}"
     package_failed: "Agent 安装包生成失败: {{detail}}"
+    package_rollback: "Agent 组包失败，已回删本次创建的 pending 记录: {{error}}"
     quic_connected: "Agent QUIC 连接建立: {{peer}}"
     renew_cert_mismatch: "Agent 续期请求体证书与连接证书不一致，已拒绝"
+    renew_conflict: "证书续期已在进行中，拒绝并发重复续期"
     renew_failed: "Agent client 证书续期签发失败: {{error}}"
     report_disabled: "Agent 采集上报未启用（agent.enabled=false），跳过启动"
     report_enabling: "正在启动 Agent 采集上报服务 (QUIC mTLS): {{bind}}"
@@ -49,6 +52,7 @@ log:
     report_server_failed: "Agent 采集上报服务异常退出: {{error}}"
     version_gate_blocked: "Agent 下载被版本门控拦截: {{detail}}"
   backup:
+    backup_file_remove_failed: "清理写入失败的备份文件失败: {{path}}: {{error}}"
     dir_permission_failed: "设置备份目录权限失败 {{path}}: {{error}}"
   certificate:
     ca_material_read_failed: "读取 CA 物料失败（{{kind}} {{path}}）: {{error}}"
@@ -56,7 +60,9 @@ log:
     ca_tmp_chmod_failed: "恢复 CA 临时文件权限失败: {{error}}"
     ca_tmp_remove_failed: "清理 CA 临时文件失败: {{error}}"
     cert_read_failed: "读取证书文件失败（{{path}}）: {{error}}"
+    conf_tmp_chmod_failed: "恢复 nginx 配置临时文件权限失败: {{error}}"
     conf_tmp_remove_failed: "清理 nginx 配置临时文件失败: {{error}}"
+    import_ca_cleanup_failed: "导入 CA 失败清理残留目录失败: {{path}}: {{error}}"
     san_parse_failed: "{{count}} 个 SAN 条目无法解析，已跳过"
   cleanup:
     old_backup_delete_failed: "删除旧备份文件失败: {{path}} - {{error}}"
@@ -65,7 +71,9 @@ log:
     file_written: "配置已写入文件"
     save_start: "开始保存配置到: {{path}}"
     saved: "配置已保存到: {{path}}"
+    restart_required_for_jwt_rate_limit: "JWT 密钥 / 限流配置已写入，将在服务重启后生效"
     toml_length: "配置TOML序列化完成，内容长度: {{count}}"
+    verify_mismatch: "配置文件写入校验失败：内容不一致（预期 {{expected}} 字节，实际 {{actual}} 字节）"
     verify_read: "验证读取成功，内容长度: {{count}}"
   crypto:
     key_load_failed: "加载加密密钥失败: {{{error}}}"
@@ -104,6 +112,7 @@ log:
     mac:
       query_failed: "查询MAC表失败: {{error}}"
       record_write_failed: "MAC记录写入失败 (ip={{ip}}, mac={{mac}}): {{error}}"
+    snmp_port_invalid: "SNMP 端口数据校验失败已跳过: device={{device_id}}, port={{name}}, 错误: {{error}}"
     snmp:
       auth_built: "认证构建成功"
       if_name_walk_failed: "SNMP walk 接口名称映射失败"
@@ -156,6 +165,7 @@ log:
       probe_close_failed: "关闭探测连接失败: {{{error}}}"
       public_schema_created: "public schema 创建成功"
       replication_role_reset_failed: "重置流复制角色失败: {{error}}"
+      replication_role_set_failed: "设置会话流复制角色失败（降级继续清库）: {{error}}"
       revoke_public_failed: "撤销数据库 PUBLIC 授权失败: {{{error}}}"
       schema_created: "数据库表结构初始化成功"
       schema_exists: "数据库表结构已存在，跳过初始化"
@@ -166,6 +176,7 @@ log:
       test_passed: "数据库连接测试通过: {{host}}:{{port}}/{{database}}"
     index_create_failed: "索引创建失败（可能已存在）"
     psql_check_failed: "检查 psql 安装状态失败"
+    restart_arm_restored: "重启命令下发失败，已恢复一次性重启许可: {{error}}"
     restart_requested: "收到重启程序请求，正在准备重启"
     restart_self_exit: "初始化完成，进程自退出，由 systemd Restart=always 拉起重启"
     system_initialized: "系统初始化成功，管理员用户已创建，初始化模式已禁用"
@@ -230,6 +241,7 @@ log:
   forwarding:
     load_failed: "读取日志外发配置失败，放弃本次外发: {{error}}"
     send_failed: "日志外发失败: {{error}}"
+    send_saturated: "日志外发并发已达上限，丢弃本次外发"
     test_sent: "日志外发测试报文已发送"
   smtp:
     device_notify_failed: "设备IP通知查询失败: {{error}}"
@@ -271,7 +283,9 @@ log:
     password_expiry_sync_completed: "密码有效期同步完成：自动禁用 {{count}} 个到期账户"
     next_run_calc_failed: "计算下次运行时间失败: {{error}}"
     next_run_calc_task_failed: "计算下次运行时间任务失败: {{error}}"
+    next_run_sync_skipped: "同步 next_run_at 未生效：现有值不晚于计算值（或任务已变更），保留原值: 任务={{name}}, next_run={{next_run}}"
     next_run_update_failed: "更新任务 {{name}} 的下次执行时间失败: {{error}}"
+    snmp_poll_permit_failed: "SNMP 轮询并发许可获取失败，跳过本轮: {{error}}"
     run_result_rollback_failed: "任务执行结果回滚失败: {{error}}"
     run_result_write_failed: "任务执行结果写入失败: {{error}}"
     query_failed: "查询到期定时任务失败: {{error}}"
@@ -294,6 +308,7 @@ log:
     query_failed: "读取LDAP配置失败: {{error}}"
     internal_error: "LDAP 认证内部错误（用户 {{username}}）: {{error}}"
     password_decrypt_failed: "LDAP绑定密码解密失败，LDAP配置视为不可用: {{error}}"
+    plaintext_url: "LDAP 地址使用明文 ldap://（绑定密码可能明文传输），建议改用 ldaps:// 或启用 StartTLS: {{url}}"
   sso:
     login_redirect: "SSO登录跳转授权端点: {{issuer}}"
     provider_error: "认证平台返回错误: {{error}}"

@@ -570,9 +570,11 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
 /// 检查全部必需表是否已创建（含必需视图与必需约束性索引）。
 pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
     for table in get_required_tables() {
-        let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
-            "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"
-        )))
+        // 表名为服务端常量清单值，经参数绑定传入
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1)",
+        )
+        .bind(table)
         .fetch_one(pool)
         .await
         else {
@@ -588,13 +590,16 @@ pub async fn check_required_tables_exist(pool: &sqlx::PgPool) -> bool {
     // 触发 init 路径的 create_tables 幂等补建；清单仅收唯一索引，
     // 故连 pg_index.indisunique 一并校验
     for (index, table) in get_required_indexes() {
-        let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
+        // 索引名/表名为服务端常量清单值，经参数绑定传入
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(\
                 SELECT 1 FROM pg_indexes i \
                 JOIN pg_index x ON x.indexrelid = to_regclass(format('public.%I', i.indexname)) \
-                WHERE i.schemaname = 'public' AND i.tablename = '{table}' \
-                  AND i.indexname = '{index}' AND x.indisunique)"
-        )))
+                WHERE i.schemaname = 'public' AND i.tablename = $1 \
+                  AND i.indexname = $2 AND x.indisunique)",
+        )
+        .bind(table)
+        .bind(index)
         .fetch_one(pool)
         .await
         else {
@@ -625,9 +630,11 @@ pub fn get_required_views() -> Vec<&'static str> {
 /// 检查全部必需视图是否已创建。
 pub async fn check_required_views_exist(pool: &sqlx::PgPool) -> bool {
     for view in get_required_views() {
-        let Ok(exists) = sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
-            "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema = 'public' AND table_name = '{view}')"
-        )))
+        // 视图名为服务端常量清单值，经参数绑定传入
+        let Ok(exists) = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema = 'public' AND table_name = $1)",
+        )
+        .bind(view)
         .fetch_one(pool)
         .await
         else {
@@ -646,10 +653,10 @@ pub async fn check_required_views_exist(pool: &sqlx::PgPool) -> bool {
 pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), foims_common::AppMessage> {
     for (table, columns) in get_table_columns() {
         let table_exists: bool = match sqlx::query_scalar(
-            sqlx::AssertSqlSafe(format!(
-                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}')"
-            )),
+            // 表名为服务端常量清单值，经参数绑定传入
+            "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1)",
         )
+        .bind(table)
         .fetch_one(pool)
         .await
         {
@@ -667,10 +674,11 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), foims_com
 
         for column in columns {
             let column_exists: bool = match sqlx::query_scalar(
-                sqlx::AssertSqlSafe(format!(
-                    "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{table}' AND column_name = '{column}')"
-                )),
+                // 表名/列名为服务端常量清单值，经参数绑定传入
+                "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2)",
             )
+            .bind(table)
+            .bind(column)
             .fetch_one(pool)
             .await
             {
@@ -696,10 +704,11 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), foims_com
     // 独立于逐表循环执行一次，避免随表数量重复扫描
     for (width_table, width_column, expected) in get_required_column_widths() {
         let actual: Option<Option<i32>> = match sqlx::query_scalar(
-            sqlx::AssertSqlSafe(format!(
-                "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{width_table}' AND column_name = '{width_column}'"
-            )),
+            // 表名/列名为服务端常量清单值，经参数绑定传入
+            "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2",
         )
+        .bind(width_table)
+        .bind(width_column)
         .fetch_optional(pool)
         .await
         {
@@ -730,10 +739,11 @@ pub async fn validate_table_columns(pool: &sqlx::PgPool) -> Result<(), foims_com
     // 与列宽契约同口径独立执行一次，避免随表数量重复扫描
     for (nn_table, nn_column) in get_required_not_null_columns() {
         let nullable: Option<String> = match sqlx::query_scalar(
-            sqlx::AssertSqlSafe(format!(
-                "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{nn_table}' AND column_name = '{nn_column}'"
-            )),
+            // 表名/列名为服务端常量清单值，经参数绑定传入
+            "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2",
         )
+        .bind(nn_table)
+        .bind(nn_column)
         .fetch_optional(pool)
         .await
         {

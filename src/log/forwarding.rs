@@ -6,6 +6,7 @@
 //! 报文格式遵循 RFC 3164（BSD syslog），facility 固定 local0。
 
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use axum::extract::State;
 use axum::response::Response;
@@ -88,6 +89,38 @@ fn validate(config: &LogForwardingConfig) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 配置短 TTL 缓存：外发是高频旁路动作，逐条查库会在日志风暴下放大 DB 压力。
+/// 缓存 (配置, 加载时刻)，TTL 内直接复用；`save` 时主动失效。
+static CONFIG_CACHE: OnceLock<std::sync::Mutex<Option<(LogForwardingConfig, std::time::Instant)>>> =
+    OnceLock::new();
+/// 缓存有效期：外发配置极低频变更，30s 内的滞后可接受
+const CONFIG_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30);
+/// 并发发送上限：日志风暴下限制同时外发的任务数（尽力而为，饱和即丢弃本次外发）
+static SEND_LIMIT: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+const MAX_CONCURRENT_SENDS: usize = 16;
+
+fn config_cache() -> &'static std::sync::Mutex<Option<(LogForwardingConfig, std::time::Instant)>> {
+    CONFIG_CACHE.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+fn send_limit() -> &'static tokio::sync::Semaphore {
+    SEND_LIMIT.get_or_init(|| tokio::sync::Semaphore::new(MAX_CONCURRENT_SENDS))
+}
+
+/// 先读缓存，未命中或过期时从 DB 加载并回填（DB 错误不缓存，下次重试）。
+async fn load_cached(pool: &PgPool) -> Result<LogForwardingConfig, AppError> {
+    if let Some((config, at)) = config_cache().lock().ok().and_then(|g| g.clone())
+        && at.elapsed() < CONFIG_CACHE_TTL
+    {
+        return Ok(config);
+    }
+    let config = load(pool).await?;
+    if let Ok(mut guard) = config_cache().lock() {
+        *guard = Some((config.clone(), std::time::Instant::now()));
+    }
+    Ok(config)
+}
+
 /// 保存外发配置
 pub async fn save(pool: &PgPool, config: &LogForwardingConfig) -> Result<(), AppError> {
     validate(config)?;
@@ -112,6 +145,11 @@ pub async fn save(pool: &PgPool, config: &LogForwardingConfig) -> Result<(), App
         .await?;
     }
     tx.commit().await?;
+
+    // 配置已变更：失效缓存，保证后续外发立即使用新配置
+    if let Ok(mut guard) = config_cache().lock() {
+        *guard = None;
+    }
     Ok(())
 }
 
@@ -119,9 +157,16 @@ pub async fn save(pool: &PgPool, config: &LogForwardingConfig) -> Result<(), App
 ///
 /// 配置读取失败（DB 故障）时放弃本次外发并记录日志：
 /// 宁可漏发也不以错误的默认配置发送。
+/// 并发发送受信号量上限约束：饱和时直接丢弃本次外发（尽力而为语义），
+/// 避免日志风暴下任务无界堆积。
 pub fn spawn_forward(pool: PgPool, message: String) {
+    let Ok(permit) = send_limit().try_acquire() else {
+        log_debug!("log.forwarding.send_saturated");
+        return;
+    };
     tokio::spawn(async move {
-        let config = match load(&pool).await {
+        let _permit = permit;
+        let config = match load_cached(&pool).await {
             Ok(config) => config,
             Err(e) => {
                 log_warn!("log.forwarding.load_failed", error = e);

@@ -57,11 +57,16 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     for table in &tables_with_updated_at {
         let trigger_name = format!("trg_{table}_updated_at");
-        if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "CREATE TRIGGER {trigger_name} BEFORE UPDATE ON {table} FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()"
-        )))
-        .execute(pool)
-        .await
+        // 表名/触发器名来自上方内部常量清单，经 QueryBuilder push 拼接
+        //（CREATE TRIGGER 不支持参数绑定）
+        if let Err(e) = sqlx::QueryBuilder::<sqlx::Postgres>::new("CREATE TRIGGER ")
+            .push(trigger_name)
+            .push(" BEFORE UPDATE ON ")
+            .push(table)
+            .push(" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()")
+            .build()
+            .execute(pool)
+            .await
         {
             foims_common::log_warn!("log.init.trigger_create_failed", table = table, error = e);
         }

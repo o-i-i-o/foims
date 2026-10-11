@@ -56,54 +56,68 @@ pub async fn get_devices<P: DbProvider>(
         _ => "ORDER BY d.name ASC",
     };
 
-    // Build dynamic WHERE conditions
-    let mut where_parts: Vec<String> = Vec::new();
-    let mut param_idx = 1;
-
-    if !search.is_empty() {
-        where_parts.push(format!(
-            "(d.name ILIKE ${param_idx} OR d.brand ILIKE ${param_idx} OR d.model ILIKE ${param_idx} OR d.serial_number ILIKE ${param_idx} OR d.description ILIKE ${param_idx})"
-        ));
-        param_idx += 1;
-    }
-
-    if workstation_id.is_some() {
-        where_parts.push(format!("d.workstation_id = ${param_idx}"));
-        param_idx += 1;
-    }
-
-    if position_id.is_some() {
-        where_parts.push(format!("d.position_id = ${param_idx}"));
-        param_idx += 1;
-    }
-
-    if device_type.as_ref().is_some() {
-        where_parts.push(format!("d.device_type = ${param_idx}"));
-        param_idx += 1;
-    }
-
-    if room_id.is_some() {
-        where_parts.push(format!("d.room_id = ${param_idx}"));
-        param_idx += 1;
-    }
-
-    if cabinet_id.is_some() {
-        where_parts.push(format!("d.cabinet_id = ${param_idx}"));
-        param_idx += 1;
-    }
-
-    let where_clause = if where_parts.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", where_parts.join(" AND "))
-    };
-
     let search_pattern = foims_common::net::escape_like(&search);
 
-    let count_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT COUNT(*) FROM devices_with_details d {where_clause}"
-    ));
-    let data_sql = sqlx::AssertSqlSafe(format!(
+    // 动态过滤条件统一参数化构建：全部值经 push_bind 传参，
+    // 不拼接用户输入原文（原手工 $N 编号方式废弃）
+    fn push_device_filters(
+        qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
+        search_pattern: Option<&str>,
+        workstation_id: Option<Uuid>,
+        position_id: Option<Uuid>,
+        device_type: Option<&str>,
+        room_id: Option<Uuid>,
+        cabinet_id: Option<Uuid>,
+    ) {
+        if let Some(pattern) = search_pattern {
+            qb.push(" AND (d.name ILIKE ")
+                .push_bind(pattern)
+                .push(" OR d.brand ILIKE ")
+                .push_bind(pattern)
+                .push(" OR d.model ILIKE ")
+                .push_bind(pattern)
+                .push(" OR d.serial_number ILIKE ")
+                .push_bind(pattern)
+                .push(" OR d.description ILIKE ")
+                .push_bind(pattern)
+                .push(")");
+        }
+        if let Some(ws_id) = workstation_id {
+            qb.push(" AND d.workstation_id = ").push_bind(ws_id);
+        }
+        if let Some(pos_id) = position_id {
+            qb.push(" AND d.position_id = ").push_bind(pos_id);
+        }
+        if let Some(dt) = device_type {
+            qb.push(" AND d.device_type = ").push_bind(dt);
+        }
+        if let Some(r_id) = room_id {
+            qb.push(" AND d.room_id = ").push_bind(r_id);
+        }
+        if let Some(c_id) = cabinet_id {
+            qb.push(" AND d.cabinet_id = ").push_bind(c_id);
+        }
+    }
+
+    let mut count_qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT COUNT(*) FROM devices_with_details d WHERE 1=1",
+    );
+    push_device_filters(
+        &mut count_qb,
+        (!search.is_empty()).then_some(search_pattern.as_str()),
+        workstation_id,
+        position_id,
+        device_type.as_deref(),
+        room_id,
+        cabinet_id,
+    );
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .persistent(false)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
+
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
                 d.template_id, d.seller, d.location,
@@ -117,52 +131,26 @@ pub async fn get_devices<P: DbProvider>(
                 d.template_name,
                 d.created_at::TIMESTAMPTZ, d.updated_at::TIMESTAMPTZ
          FROM devices_with_details d
-         {where_clause}
-         {order_clause}
-         LIMIT ${param_idx} OFFSET ${}",
-        param_idx + 1
-    ));
-
-    // Build and execute count query with bound params
-    let mut count_query = sqlx::query_scalar::<_, i64>(count_sql).persistent(false);
-    let mut data_query = sqlx::query_as::<_, DeviceWithDetails>(data_sql).persistent(false);
-
-    if !search.is_empty() {
-        count_query = count_query.bind(&search_pattern);
-        data_query = data_query.bind(&search_pattern);
-    }
-
-    if let Some(ws_id) = workstation_id {
-        count_query = count_query.bind(ws_id);
-        data_query = data_query.bind(ws_id);
-    }
-
-    if let Some(pos_id) = position_id {
-        count_query = count_query.bind(pos_id);
-        data_query = data_query.bind(pos_id);
-    }
-
-    if let Some(ref dt) = device_type {
-        count_query = count_query.bind(dt);
-        data_query = data_query.bind(dt);
-    }
-
-    if let Some(r_id) = room_id {
-        count_query = count_query.bind(r_id);
-        data_query = data_query.bind(r_id);
-    }
-
-    if let Some(c_id) = cabinet_id {
-        count_query = count_query.bind(c_id);
-        data_query = data_query.bind(c_id);
-    }
-
-    count_query = count_query.bind(page_size).bind(offset);
-    data_query = data_query.bind(page_size).bind(offset);
-
-    let total: i64 = count_query.fetch_one(&state.pool()?.get_conn()).await?;
-
-    let devices = data_query.fetch_all(&state.pool()?.get_conn()).await?;
+         WHERE 1=1",
+    );
+    push_device_filters(
+        &mut qb,
+        (!search.is_empty()).then_some(search_pattern.as_str()),
+        workstation_id,
+        position_id,
+        device_type.as_deref(),
+        room_id,
+        cabinet_id,
+    );
+    // 排序段为白名单常量，经 push 拼接
+    qb.push(" ").push(order_clause);
+    qb.push(" LIMIT ").push_bind(page_size);
+    qb.push(" OFFSET ").push_bind(offset);
+    let devices = qb
+        .build_query_as::<DeviceWithDetails>()
+        .persistent(false)
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
     let items: Vec<serde_json::Value> = devices
         .into_iter()

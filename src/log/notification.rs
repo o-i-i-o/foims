@@ -41,35 +41,32 @@ pub async fn get_notifications(
         _ => "ORDER BY created_at DESC",
     };
 
-    let mut where_conditions = vec!["user_id = $1".to_string()];
-
-    match status.as_str() {
-        "unread" => where_conditions.push("read = false".to_string()),
-        "read" => where_conditions.push("read = true".to_string()),
-        _ => {}
-    }
-
-    let where_clause = format!("WHERE {}", where_conditions.join(" AND "));
-
     let conn = state.pool()?.get_conn();
 
-    let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT COUNT(*) FROM notifications {where_clause}"
-    )))
-    .bind(user_id)
-    .fetch_one(&conn)
-    .await?;
+    // read 状态为白名单映射：仅追加常量条件，user_id 经 push_bind 传参
+    let read_clause = match status.as_str() {
+        "unread" => " AND read = false",
+        "read" => " AND read = true",
+        _ => "",
+    };
 
-    let notifications = sqlx::query_as::<_, Notification>(sqlx::AssertSqlSafe(format!(
-        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications {where_clause} {order_clause} LIMIT $2 OFFSET $3"
-    )))
-    .bind(user_id)
-    // page_size/offset 经参数绑定传入（与 login.rs/operation.rs 一致），
-    // 不再内插进 SQL
-    .bind(page_size)
-    .bind(offset)
-    .fetch_all(&conn)
-    .await?;
+    let mut count_qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT COUNT(*) FROM notifications WHERE user_id = ",
+    );
+    count_qb.push_bind(user_id);
+    count_qb.push(read_clause);
+    let total: i64 = count_qb.build_query_scalar().fetch_one(&conn).await?;
+
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications WHERE user_id = ",
+    );
+    qb.push_bind(user_id);
+    qb.push(read_clause);
+    // 排序段为白名单常量，经 push 拼接
+    qb.push(" ").push(order_clause);
+    qb.push(" LIMIT ").push_bind(page_size);
+    qb.push(" OFFSET ").push_bind(offset);
+    let notifications = qb.build_query_as::<Notification>().fetch_all(&conn).await?;
 
     Ok(foims_common::ok_json(
         paged_response(notifications, total, &pagination),

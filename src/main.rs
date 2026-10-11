@@ -100,14 +100,11 @@ async fn db_pool_metrics_middleware(
         return next.run(req).await;
     }
 
-    db_pool.metrics.record_request_start();
-    let start = std::time::Instant::now();
+    // begin_request 返回守卫：handler panic 展开时经 Drop 兜底回退等待计数
+    let guard = db_pool.metrics.begin_request();
     let res = next.run(req).await;
     // 按响应状态码判定成败：5xx 计入失败请求
-    db_pool.metrics.record_request_complete(
-        u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
-        !res.status().is_server_error(),
-    );
+    guard.finish(!res.status().is_server_error());
     res
 }
 

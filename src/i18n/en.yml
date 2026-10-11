@@ -18,6 +18,7 @@ log:
     revoke_access_token_failed: "Failed to revoke access token: {{error}}"
     revoke_refresh_token_failed: "Failed to revoke refresh token: {{error}}"
     revoke_token_failed: "Failed to revoke token: {{error}}"
+    refresh_token_replay: "Concurrent refresh token replay detected (possible token theft); all sessions of the user invalidated: user_id={{user_id}}"
     save_reset_token_failed: "Failed to save reset token: {{error}}"
     send_reset_email_failed: "Failed to send reset email: {{error}}"
   agent:
@@ -39,8 +40,10 @@ log:
     machine_id_conflict: "Agent report machine_id conflict: agent_id={{agent_id}}, stored={{stored}}, reported={{reported}}"
     package_downloaded: "Agent package downloaded: agent_id={{agent_id}}, target={{target}}, format={{format}}, label={{label}}"
     package_failed: "Failed to build agent package: {{detail}}"
+    package_rollback: "Agent packaging failed, pending record of this request rolled back: {{error}}"
     quic_connected: "Agent QUIC connection established: {{peer}}"
     renew_cert_mismatch: "Agent renewal request body certificate does not match the connection certificate, rejected"
+    renew_conflict: "Certificate renewal already in progress, concurrent renewal rejected"
     renew_failed: "Failed to renew agent client certificate: {{error}}"
     report_disabled: "Agent report service disabled (agent.enabled=false), skipping startup"
     report_enabling: "Starting agent report service (QUIC mTLS): {{bind}}"
@@ -49,6 +52,7 @@ log:
     report_server_failed: "Agent report service exited unexpectedly: {{error}}"
     version_gate_blocked: "Agent download blocked by version gate: {{detail}}"
   backup:
+    backup_file_remove_failed: "Failed to remove incomplete backup file: {{path}}: {{error}}"
     dir_permission_failed: "Failed to set backup directory permissions for {{path}}: {{error}}"
   certificate:
     ca_material_read_failed: "Failed to read CA material ({{kind}} {{path}}): {{error}}"
@@ -56,7 +60,9 @@ log:
     ca_tmp_chmod_failed: "Failed to restore permissions on CA temp file: {{error}}"
     ca_tmp_remove_failed: "Failed to remove CA temp file: {{error}}"
     cert_read_failed: "Failed to read certificate file ({{path}}): {{error}}"
+    conf_tmp_chmod_failed: "Failed to restore nginx config temp file permissions: {{error}}"
     conf_tmp_remove_failed: "Failed to remove nginx config temp file: {{error}}"
+    import_ca_cleanup_failed: "Failed to clean up leftover directory after failed CA import: {{path}}: {{error}}"
     san_parse_failed: "{{count}} SAN entries could not be parsed and were skipped"
   cleanup:
     old_backup_delete_failed: "Failed to delete old backup file: {{path}} - {{error}}"
@@ -65,7 +71,9 @@ log:
     file_written: "Configuration written to file"
     save_start: "Saving configuration to: {{path}}"
     saved: "Configuration saved to: {{path}}"
+    restart_required_for_jwt_rate_limit: "JWT secret / rate limit written; takes effect after service restart"
     toml_length: "Configuration TOML serialized, length: {{count}}"
+    verify_mismatch: "Config file write verification failed: content mismatch (expected {{expected}} bytes, got {{actual}} bytes)"
     verify_read: "Verification read succeeded, length: {{count}}"
   crypto:
     key_load_failed: "Failed to load the encryption key: {{{error}}}"
@@ -104,6 +112,7 @@ log:
     mac:
       query_failed: "Failed to query MAC table: {{error}}"
       record_write_failed: "MAC record write failed (ip={{ip}}, mac={{mac}}): {{error}}"
+    snmp_port_invalid: "SNMP port data failed validation and was skipped: device={{device_id}}, port={{name}}, error: {{error}}"
     snmp:
       auth_built: "Authentication built"
       if_name_walk_failed: "SNMP walk for interface name map failed"
@@ -156,6 +165,7 @@ log:
       probe_close_failed: "Failed to close the probe connection: {{{error}}}"
       public_schema_created: "public schema created successfully"
       replication_role_reset_failed: "Failed to reset streaming replication role: {{error}}"
+      replication_role_set_failed: "Failed to set session replication role (cleanup continues): {{error}}"
       revoke_public_failed: "Failed to revoke PUBLIC privileges on the database: {{{error}}}"
       schema_created: "Database schema initialized successfully"
       schema_exists: "Database schema already exists, skipping initialization"
@@ -166,6 +176,7 @@ log:
       test_passed: "Database connection test passed: {{host}}:{{port}}/{{database}}"
     index_create_failed: "Index creation failed (may already exist)"
     psql_check_failed: "Failed to check psql installation"
+    restart_arm_restored: "Restart request failed; one-shot restart permission restored: {{error}}"
     restart_requested: "Restart request received, preparing to restart"
     restart_self_exit: "Initialization completed, process exiting; systemd Restart=always will bring the service back up"
     system_initialized: "System initialized, admin user created, init mode disabled"
@@ -230,6 +241,7 @@ log:
   forwarding:
     load_failed: "Failed to load log forwarding config, dropping this forward: {{error}}"
     send_failed: "Log forwarding failed: {{error}}"
+    send_saturated: "Log forwarding concurrency limit reached, dropping this forward"
     test_sent: "Log forwarding test message sent"
   smtp:
     device_notify_failed: "Device IP notification query failed: {{error}}"
@@ -270,7 +282,9 @@ log:
     log_record_failed: "Failed to record task log: {{error}}"
     next_run_calc_failed: "Failed to calculate next run time: {{error}}"
     next_run_calc_task_failed: "Next run time calculation task failed: {{error}}"
+    next_run_sync_skipped: "next_run_at sync skipped: existing value not later than computed (or task changed), kept as-is: task={{name}}, next_run={{next_run}}"
     next_run_update_failed: "Failed to update next run time of task {{name}}: {{error}}"
+    snmp_poll_permit_failed: "SNMP poll concurrency permit acquire failed, skipped this round: {{error}}"
     password_expiry_sync_completed: "Password expiry sync completed: {{count}} expired accounts auto-disabled"
     run_result_rollback_failed: "Failed to roll back task run result: {{error}}"
     run_result_write_failed: "Failed to write task run result: {{error}}"
@@ -294,6 +308,7 @@ log:
     query_failed: "Failed to read LDAP config: {{error}}"
     internal_error: "LDAP authentication internal error (user {{username}}): {{error}}"
     password_decrypt_failed: "Failed to decrypt LDAP bind password; treating LDAP config as unavailable: {{error}}"
+    plaintext_url: "LDAP URL uses plaintext ldap:// (bind password may be transmitted in cleartext); use ldaps:// or enable StartTLS instead: {{url}}"
   sso:
     login_redirect: "SSO login redirecting to authorization endpoint: {{issuer}}"
     provider_error: "Identity provider returned an error: {{error}}"

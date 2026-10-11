@@ -26,7 +26,10 @@
 
 /* 卡片基样式（白底/边框/圆角/阴影）由 components/cards.css 的分组规则提供 */
 .dashboard-card {
-  transition: all var(--transition-fast);
+  transition:
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast),
+    border-color var(--transition-fast);
   cursor: pointer;
 }
 
@@ -65,7 +68,7 @@
   font-size: 0.8rem;
   color: var(--color-primary);
   font-weight: 500;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 
 .dashboard-card:hover .view-all {
@@ -90,7 +93,7 @@
   justify-content: space-between;
   padding: var(--space-sm) 0;
   border-bottom: 1px solid var(--color-border-light);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), margin var(--transition-fast), padding var(--transition-fast);
 }
 
 .top-list li:last-child {

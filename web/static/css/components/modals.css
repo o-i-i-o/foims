@@ -127,7 +127,11 @@
   font-size: 0.9rem;
   font-weight: 500;
   border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 /* hover/active 位移由 .btn:hover/.btn:active（buttons.css）提供，此处不重复 */
@@ -139,7 +143,10 @@
   cursor: pointer;
   line-height: 1;
   opacity: 0.8;
-  transition: all var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
   width: 36px;
   height: 36px;
   display: flex;

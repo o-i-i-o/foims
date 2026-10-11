@@ -276,7 +276,17 @@ pub async fn apply_network_config(
         .bind(now)
         .bind(now)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| {
+            // id/name 冲突（UNIQUE(device_id, name) / 主键）映射为 409，
+            // 避免并发同步或重复提交时以 500 暴露内部错误
+            if let sqlx::Error::Database(ref db_err) = e
+                && db_err.is_unique_violation()
+            {
+                return AppError::Conflict(msg("server.db.conflict"));
+            }
+            AppError::from(e)
+        })?;
 
         for (port_idx, port) in card.ports.iter().enumerate() {
             port.validate()?;
@@ -320,7 +330,16 @@ pub async fn apply_network_config(
             .bind(now)
             .bind(now)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .map_err(|e| {
+                // UNIQUE(device_id, name) / 主键冲突映射为 409
+                if let sqlx::Error::Database(ref db_err) = e
+                    && db_err.is_unique_violation()
+                {
+                    return AppError::Conflict(msg("server.device.interface.name_exists"));
+                }
+                AppError::from(e)
+            })?;
 
             for ip in &port.ips {
                 ip.validate()?;

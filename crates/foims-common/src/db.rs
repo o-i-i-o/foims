@@ -60,6 +60,17 @@ impl PoolMetrics {
         self.waiting_requests.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// 请求计数守卫：`record_request_start` 的配对封装。
+    /// 正常路径调用 [`RequestMetricGuard::finish`] 记账完整指标并消费守卫；
+    /// handler panic 展开时经 [`Drop`] 兜底回退 waiting_requests，避免指标单调虚高。
+    pub fn begin_request(&self) -> RequestMetricGuard<'_> {
+        self.record_request_start();
+        RequestMetricGuard {
+            metrics: Some(self),
+            start: std::time::Instant::now(),
+        }
+    }
+
     pub fn record_request_complete(&self, wait_time_ms: u64, success: bool) {
         self.waiting_requests.fetch_sub(1, Ordering::Relaxed);
 
@@ -118,6 +129,34 @@ impl PoolMetrics {
             avg_wait_time_ms: self.avg_wait_time_ms.load(Ordering::Relaxed),
             last_updated: self.last_updated.load(Ordering::Relaxed),
             leak_warning_count: self.leak_warning_count.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// [`PoolMetrics::begin_request`] 返回的请求计数守卫。
+/// `metrics` 为 `None` 表示已完成记账（finish 消费），Drop 时不再重复回退。
+pub struct RequestMetricGuard<'a> {
+    metrics: Option<&'a PoolMetrics>,
+    start: std::time::Instant,
+}
+
+impl RequestMetricGuard<'_> {
+    /// 正常路径完成记账：回退等待计数并累计总耗时/成败，随后消费守卫。
+    pub fn finish(mut self, success: bool) {
+        if let Some(metrics) = self.metrics.take() {
+            metrics.record_request_complete(
+                u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX),
+                success,
+            );
+        }
+    }
+}
+
+impl std::ops::Drop for RequestMetricGuard<'_> {
+    fn drop(&mut self) {
+        // panic 展开路径：完整指标无从判定，仅回退等待计数防止单调虚高
+        if let Some(metrics) = self.metrics.take() {
+            metrics.waiting_requests.fetch_sub(1, Ordering::Relaxed);
         }
     }
 }
@@ -291,15 +330,14 @@ impl DbPool {
             // 每连接执行 SET statement_timeout，使「查询超时」配置真实生效
             // （服务端中断超时语句，防止慢查询长期占用连接）。
             // SET 语句不支持绑定参数；值为经 validate() 保证 > 0 的 u64，
-            // 乘 1000 转毫秒后纯数字插值，无注入面
+            // 乘 1000 转毫秒后纯数字经 QueryBuilder push 拼接，无注入面
             .after_connect(move |conn, _meta| {
                 Box::pin(async move {
-                    sqlx::query(sqlx::AssertSqlSafe(format!(
-                        "SET statement_timeout = {}",
-                        statement_timeout_secs * 1000
-                    )))
-                    .execute(conn)
-                    .await?;
+                    sqlx::QueryBuilder::<sqlx::Postgres>::new("SET statement_timeout = ")
+                        .push(statement_timeout_secs * 1000)
+                        .build()
+                        .execute(conn)
+                        .await?;
                     Ok(())
                 })
             })

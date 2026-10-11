@@ -58,14 +58,18 @@ pub async fn get_cabinets<P: DbProvider>(
             .fetch_one(&state.pool()?.get_conn())
             .await?;
 
-        let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id {order_clause} LIMIT $1 OFFSET $2"))
-        )
-        .persistent(false)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id",
+        );
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let cabinets = qb
+            .build_query_as::<Cabinet>()
+            .persistent(false)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
         (total, cabinets)
     } else if parsed_room_id.is_some() && search.is_empty() {
@@ -74,15 +78,19 @@ pub async fn get_cabinets<P: DbProvider>(
             .fetch_one(&state.pool()?.get_conn())
             .await?;
 
-        let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 {order_clause} LIMIT $2 OFFSET $3"))
-        )
-        .persistent(false)
-        .bind(parsed_room_id)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = ",
+        );
+        qb.push_bind(parsed_room_id);
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let cabinets = qb
+            .build_query_as::<Cabinet>()
+            .persistent(false)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
         (total, cabinets)
     } else if parsed_room_id.is_some() {
@@ -94,16 +102,24 @@ pub async fn get_cabinets<P: DbProvider>(
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-        let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = $1 AND (c.name ILIKE $2 OR c.description ILIKE $2) {order_clause} LIMIT $3 OFFSET $4"))
-        )
-        .persistent(false)
-        .bind(parsed_room_id)
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = ",
+        );
+        qb.push_bind(parsed_room_id)
+            .push(" AND (c.name ILIKE ")
+            .push_bind(&search_pattern)
+            .push(" OR c.description ILIKE ")
+            .push_bind(&search_pattern)
+            .push(")");
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let cabinets = qb
+            .build_query_as::<Cabinet>()
+            .persistent(false)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
         (total, cabinets)
     } else {
@@ -114,15 +130,21 @@ pub async fn get_cabinets<P: DbProvider>(
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-        let cabinets = sqlx::query_as::<_, Cabinet>(
-            sqlx::AssertSqlSafe(format!("SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.name ILIKE $1 OR c.description ILIKE $1 {order_clause} LIMIT $2 OFFSET $3"))
-        )
-        .persistent(false)
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.pool()?.get_conn())
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.name ILIKE ",
+        );
+        qb.push_bind(&search_pattern)
+            .push(" OR c.description ILIKE ")
+            .push_bind(&search_pattern);
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let cabinets = qb
+            .build_query_as::<Cabinet>()
+            .persistent(false)
+            .fetch_all(&state.pool()?.get_conn())
+            .await?;
 
         (total, cabinets)
     };

@@ -20,6 +20,60 @@ const MODAL_Z_INDEX_STEP = 50;
 // 内的 data-tooltip（--z-tooltip 3000）都不被模态压住
 const MODAL_Z_INDEX_MAX = 2900;
 
+// 模态框打开时的触发元素：关闭时据此归还焦点（键值随模态元素移除而释放）
+const modalTriggers = new WeakMap();
+
+// 可聚焦元素选择器：焦点陷阱与首焦点定位共用
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  'input:not([disabled]):not([type="hidden"])',
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])'
+].join(", ");
+
+/**
+ * 收集模态框内当前可见的可聚焦元素（display:none 的隐藏步骤/面板会被 offsetParent 过滤）
+ * @param {HTMLElement} modal 模态框根元素
+ * @returns {HTMLElement[]}
+ */
+function getModalFocusable(modal) {
+  return Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+    (el) => el.offsetParent !== null
+  );
+}
+
+/**
+ * Tab 焦点陷阱：键盘焦点限制在当前模态框内首尾循环；
+ * 焦点落在模态框外（如点击遮罩后）时 Tab 拉回框内
+ * @param {KeyboardEvent} e
+ */
+function trapModalFocus(e) {
+  if (e.key !== "Tab") {
+    return;
+  }
+  const modal = e.currentTarget;
+  const focusable = getModalFocusable(modal);
+  if (focusable.length === 0) {
+    e.preventDefault();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  if (!modal.contains(active)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+  } else if (e.shiftKey && active === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 // 模态框清单：按功能模块分组存放于 modals/ 对应子目录。
 // 片段分两类：
 // - 标准片段（带 title/titleHtml 字段）：文件只含 .modal-body（及可选 .modal-footer），
@@ -342,6 +396,9 @@ export async function loadModal(id) {
 }
 
 export async function openModal(id, title = "") {
+  // await 之前捕获触发元素：模板加载期间焦点仍在调用按钮上，关闭时据此归还
+  const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
   let modal = document.getElementById(id);
 
   if (!modal) {
@@ -365,6 +422,16 @@ export async function openModal(id, title = "") {
     modal.style.zIndex = String(
       Math.min(MODAL_Z_INDEX_BASE + (openModalCount - 1) * MODAL_Z_INDEX_STEP, MODAL_Z_INDEX_MAX)
     );
+
+    // ARIA 语义与焦点管理：自包含片段可能缺 role，打开时统一补齐；
+    // 焦点移入框内并启用 Tab 陷阱，关闭时归还触发元素（见 closeModal）
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modalTriggers.set(modal, trigger);
+    modal.addEventListener("keydown", trapModalFocus);
+
+    const focusable = getModalFocusable(modal);
+    focusable[0]?.focus();
   }
 
   if (title) {
@@ -413,6 +480,15 @@ export function closeModal(id) {
   if (openModalCount === 0) {
     document.body.style.overflow = "";
   }
+
+  // 焦点归还触发元素：仅当焦点当前仍在本模态框内（关闭底层模态时不抢夺上层焦点）
+  if (modal.contains(document.activeElement)) {
+    const trigger = modalTriggers.get(modal);
+    if (trigger instanceof HTMLElement && document.contains(trigger)) {
+      trigger.focus();
+    }
+  }
+  modalTriggers.delete(modal);
 
   modal.remove();
   loadedModals.delete(id);

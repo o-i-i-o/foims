@@ -1,6 +1,6 @@
 [package]
 name = "foims-scheduler"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Scheduler - Cron scheduling infrastructure and task management"

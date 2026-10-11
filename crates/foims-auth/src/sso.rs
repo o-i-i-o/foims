@@ -222,8 +222,52 @@ fn resolve_redirect_uri(config: &SsoConfig) -> Result<String, AppError> {
     Ok(uri.to_string())
 }
 
+/// issuer_url scheme 校验：必须为 https，仅回环地址（localhost/127.0.0.0/8/::1）
+/// 豁免允许 http（本地测试场景）。
+/// http 配置下 OIDC 发现文档与 JWKS 经明文获取，中间人可替换签名密钥
+/// 实现完整认证绕过，故非回环 http 一律拒绝。
+fn validate_issuer_scheme(issuer_url: &str) -> Result<(), AppError> {
+    fn is_loopback_host(host: &str) -> bool {
+        let host = host.trim();
+        if host == "localhost" {
+            return true;
+        }
+        if let Some(rest) = host.strip_prefix('[') {
+            // IPv6 字面量：[::1]:8080
+            let v6 = rest.split(']').next().unwrap_or("");
+            return v6
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback());
+        }
+        host.split(':')
+            .next()
+            .unwrap_or("")
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+    }
+
+    if let Some(rest) = issuer_url.strip_prefix("https://") {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        if !authority.is_empty() {
+            return Ok(());
+        }
+    }
+    if let Some(rest) = issuer_url.strip_prefix("http://") {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        if is_loopback_host(authority) {
+            return Ok(());
+        }
+    }
+    Err(AppError::Validation(msg(
+        "server.sso.validation.issuer_https_required",
+    )))
+}
+
 /// 发现文档获取（带 1 小时缓存）。
 async fn discover_metadata(issuer_url: &str) -> Result<CoreProviderMetadata, AppError> {
+    // 双保险：保存时已校验 scheme，此处拦截存量 http 配置（非回环）
+    validate_issuer_scheme(issuer_url)?;
+
     if let Some(entry) = metadata_cache().get(issuer_url)
         && entry.fetched.elapsed() < SSO_METADATA_TTL
     {
@@ -669,6 +713,8 @@ pub async fn update_sso_config<P: AuthProvider>(
     AppJson(req): AppJson<UpdateSsoConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+    // 非回环 http 的 issuer 会以明文获取 JWKS，保存前即拒绝
+    validate_issuer_scheme(req.issuer_url.trim())?;
 
     let pool = &state.pool()?.get_conn();
     let client_secret = if req.client_secret.is_empty() {

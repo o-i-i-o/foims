@@ -53,56 +53,47 @@ pub async fn get_patch_panels<P: DbProvider>(
     let has_cabinet_filter = parsed_cabinet_id.is_some();
     let has_search = !search.is_empty();
 
-    let mut where_parts: Vec<String> = Vec::new();
-    let mut param_idx = 1;
-
+    // 动态条件全部参数化构建（原手工 $N 编号方式改为 push_bind 自动编号）
+    let mut count_qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT COUNT(*) FROM patch_panels_with_details ap WHERE 1=1",
+    );
     if has_search {
-        where_parts.push(format!("ap.name ILIKE ${param_idx}"));
-        param_idx += 1;
+        count_qb
+            .push(" AND ap.name ILIKE ")
+            .push_bind(&search_pattern);
     }
     if has_cabinet_filter {
-        where_parts.push(format!("ap.cabinet_id = ${param_idx}"));
-        param_idx += 1;
+        count_qb
+            .push(" AND ap.cabinet_id = ")
+            .push_bind(parsed_cabinet_id);
     }
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .persistent(false)
+        .fetch_one(&state.pool()?.get_conn())
+        .await?;
 
-    let where_clause = if where_parts.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", where_parts.join(" AND "))
-    };
-
-    let count_sql = sqlx::AssertSqlSafe(format!(
-        "SELECT COUNT(*) FROM patch_panels_with_details ap {where_clause}"
-    ));
-    let data_sql = sqlx::AssertSqlSafe(format!(
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         "SELECT ap.id, ap.name, ap.cabinet_id, ap.cabinet_name, ap.room_id, ap.room_name, \
          ap.created_at::TIMESTAMPTZ, ap.updated_at::TIMESTAMPTZ \
-         FROM patch_panels_with_details ap {where_clause} {order_clause} LIMIT ${param_idx} OFFSET ${}",
-        param_idx + 1
-    ));
-
-    let total: i64 = {
-        let mut q = sqlx::query_scalar::<_, i64>(count_sql).persistent(false);
-        if has_search {
-            q = q.bind(&search_pattern);
-        }
-        if has_cabinet_filter {
-            q = q.bind(parsed_cabinet_id);
-        }
-        q.fetch_one(&state.pool()?.get_conn()).await?
-    };
-
-    let patch_panels = {
-        let mut q = sqlx::query_as::<_, PatchPanelWithDetails>(data_sql).persistent(false);
-        if has_search {
-            q = q.bind(&search_pattern);
-        }
-        if has_cabinet_filter {
-            q = q.bind(parsed_cabinet_id);
-        }
-        q = q.bind(page_size).bind(offset);
-        q.fetch_all(&state.pool()?.get_conn()).await?
-    };
+         FROM patch_panels_with_details ap WHERE 1=1",
+    );
+    if has_search {
+        qb.push(" AND ap.name ILIKE ").push_bind(&search_pattern);
+    }
+    if has_cabinet_filter {
+        qb.push(" AND ap.cabinet_id = ")
+            .push_bind(parsed_cabinet_id);
+    }
+    // 排序段为白名单常量，经 push 拼接
+    qb.push(" ").push(order_clause);
+    qb.push(" LIMIT ").push_bind(page_size);
+    qb.push(" OFFSET ").push_bind(offset);
+    let patch_panels = qb
+        .build_query_as::<PatchPanelWithDetails>()
+        .persistent(false)
+        .fetch_all(&state.pool()?.get_conn())
+        .await?;
 
     Ok(foims_common::ok_json(
         paged_response(patch_panels, total, &pagination),

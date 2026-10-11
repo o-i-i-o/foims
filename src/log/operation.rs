@@ -91,26 +91,42 @@ pub async fn get_operation_logs(
         .fetch_one(&conn)
         .await?;
 
-        let logs = sqlx::query_as::<_, OperationLog>(sqlx::AssertSqlSafe(format!(
+        // 动态条件全部参数化构建，语义等价于原 ($1::text = '' OR ...) 写法：
+        // 条件为空时不追加，等价于恒真分支；条件非空时为等值/模糊匹配
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             r"SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ
                FROM operation_logs ol
                LEFT JOIN users u ON ol.user_id = u.id
-               WHERE ($1::text = '' OR ol.resource_type = $1)
-               AND ($2::uuid IS NULL OR ol.resource_id = $2)
-               AND ($3::uuid IS NULL OR ol.user_id = $3)
-               AND ($4::text = '' OR ol.action ILIKE $5 OR u.username ILIKE $5 OR ol.ip_address ILIKE $5 OR ol.resource_type ILIKE $5 OR ol.resource_id::TEXT ILIKE $5)
-               {order_clause}
-               LIMIT $6 OFFSET $7"
-        )))
-        .bind(&resource_type)
-        .bind(parsed_resource_id)
-        .bind(parsed_user_id)
-        .bind(&action)
-        .bind(&search_pattern)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&conn)
-        .await?;
+               WHERE 1=1",
+        );
+        if !resource_type.is_empty() {
+            qb.push(" AND ol.resource_type = ")
+                .push_bind(&resource_type);
+        }
+        if let Some(rid) = parsed_resource_id {
+            qb.push(" AND ol.resource_id = ").push_bind(rid);
+        }
+        if let Some(uid) = parsed_user_id {
+            qb.push(" AND ol.user_id = ").push_bind(uid);
+        }
+        if !action.is_empty() {
+            qb.push(" AND (ol.action ILIKE ")
+                .push_bind(&search_pattern)
+                .push(" OR u.username ILIKE ")
+                .push_bind(&search_pattern)
+                .push(" OR ol.ip_address ILIKE ")
+                .push_bind(&search_pattern)
+                .push(" OR ol.resource_type ILIKE ")
+                .push_bind(&search_pattern)
+                .push(" OR ol.resource_id::TEXT ILIKE ")
+                .push_bind(&search_pattern)
+                .push(")");
+        }
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let logs = qb.build_query_as::<OperationLog>().fetch_all(&conn).await?;
 
         (total, logs)
     } else {
@@ -118,13 +134,14 @@ pub async fn get_operation_logs(
             .fetch_one(&conn)
             .await?;
 
-        let logs = sqlx::query_as::<_, OperationLog>(sqlx::AssertSqlSafe(format!(
-            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id {order_clause} LIMIT $1 OFFSET $2"
-        )))
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&conn)
-        .await?;
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id",
+        );
+        // 排序段为白名单常量，经 push 拼接
+        qb.push(" ").push(order_clause);
+        qb.push(" LIMIT ").push_bind(page_size);
+        qb.push(" OFFSET ").push_bind(offset);
+        let logs = qb.build_query_as::<OperationLog>().fetch_all(&conn).await?;
 
         (total, logs)
     };
