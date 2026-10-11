@@ -1455,7 +1455,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.23.2"
+version = "0.23.3"
 dependencies = [
  "async-trait",
  "axum",
@@ -1517,7 +1517,7 @@ dependencies = [
 
 [[package]]
 name = "foims-agent-service"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -1584,7 +1584,7 @@ dependencies = [
 
 [[package]]
 name = "foims-common"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "aes-gcm",
  "arc-swap",

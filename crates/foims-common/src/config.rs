@@ -361,10 +361,6 @@ pub struct AgentConfig {
     /// 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline。
     #[serde(default = "default_agent_offline_factor")]
     pub offline_factor: u32,
-    /// 下载默认上报地址（host[:port]，缺端口由服务端补 9100）：预填下载
-    /// 面板的「上报地址覆盖」输入框；空/缺省时下载端按请求 Host 自动推导。
-    #[serde(default)]
-    pub download_server_addr: Option<String>,
 }
 
 fn default_agent_dist_dir() -> String {
@@ -401,7 +397,6 @@ impl Default for AgentConfig {
             max_report_bytes: default_agent_max_report_bytes(),
             history_retention_days: default_agent_history_retention_days(),
             offline_factor: default_agent_offline_factor(),
-            download_server_addr: None,
         }
     }
 }

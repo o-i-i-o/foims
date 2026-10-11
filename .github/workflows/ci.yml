@@ -85,10 +85,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # musl-tools 提供 x86_64 musl 的 musl-gcc（ring 的 cc-rs 按目标回退查找）
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian musl-tools
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -113,6 +114,29 @@ jobs:
       - name: 构建项目
         run: cargo build --release --verbose
 
+      # Agent 分发物料由 build-deb.sh 级联 build-agent.sh 编译：aarch64 musl
+      # 依赖 musl.cc 交叉工具链（cc-rs 编译 ring 时按目标前缀查找编译器，
+      # 缺失时报 ToolNotFound）。与 AGENT_TARGETS 默认值（x86_64,aarch64）
+      # 对应，扩充构建目标时需同步补充对应架构工具链。
+      - name: 缓存 aarch64 musl 交叉工具链
+        uses: actions/cache@v4
+        id: muslcc
+        with:
+          path: /opt/musl-cross
+          key: musl-cross-aarch64-20211123
+
+      - name: 安装 aarch64 musl 交叉工具链
+        if: steps.muslcc.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL --retry 3 -o /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          echo "MUSLCC_AARCH64_SHA256  /tmp/aarch64-linux-musl-cross.tgz" | sha256sum -c -
+          sudo mkdir -p /opt/musl-cross
+          sudo chown "$(id -u):$(id -g)" /opt/musl-cross
+          tar -xzf /tmp/aarch64-linux-musl-cross.tgz -C /opt/musl-cross
+
+      - name: 校验交叉编译器可用
+        run: /opt/musl-cross/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc --version | head -n1
+
       # 打包脚本 scripts/build-deb.sh 无需 root：产物输出至 target/foims_<版本>_<架构>.deb
       - name: 构建 DEB 安装包
         run: bash scripts/build-deb.sh
@@ -136,10 +160,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # musl-tools 提供 x86_64 musl 的 musl-gcc（ring 的 cc-rs 按目标回退查找）
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev musl-tools
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -152,6 +177,29 @@ jobs:
 
       - name: 构建发布版本
         run: cargo build --release --verbose
+
+      # Agent 分发物料由 build-deb.sh 级联 build-agent.sh 编译：aarch64 musl
+      # 依赖 musl.cc 交叉工具链（cc-rs 编译 ring 时按目标前缀查找编译器，
+      # 缺失时报 ToolNotFound）。与 AGENT_TARGETS 默认值（x86_64,aarch64）
+      # 对应，扩充构建目标时需同步补充对应架构工具链。
+      - name: 缓存 aarch64 musl 交叉工具链
+        uses: actions/cache@v4
+        id: muslcc
+        with:
+          path: /opt/musl-cross
+          key: musl-cross-aarch64-20211123
+
+      - name: 安装 aarch64 musl 交叉工具链
+        if: steps.muslcc.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL --retry 3 -o /tmp/aarch64-linux-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          echo "MUSLCC_AARCH64_SHA256  /tmp/aarch64-linux-musl-cross.tgz" | sha256sum -c -
+          sudo mkdir -p /opt/musl-cross
+          sudo chown "$(id -u):$(id -g)" /opt/musl-cross
+          tar -xzf /tmp/aarch64-linux-musl-cross.tgz -C /opt/musl-cross
+
+      - name: 校验交叉编译器可用
+        run: /opt/musl-cross/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc --version | head -n1
 
       - name: 构建 DEB 安装包
         run: bash scripts/build-deb.sh

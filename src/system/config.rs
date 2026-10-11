@@ -339,12 +339,7 @@ pub async fn update_system_config(
         new_config.snmp = snmp_config;
     }
 
-    if let Some(mut agent) = req.agent {
-        // 上报地址留空归一为 None（语义：按请求 Host 自动推导）
-        agent.download_server_addr = agent.download_server_addr.take().and_then(|addr| {
-            let trimmed = addr.trim().to_string();
-            (!trimmed.is_empty()).then_some(trimmed)
-        });
+    if let Some(agent) = req.agent {
         new_config.agent = agent;
     }
 

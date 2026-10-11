@@ -673,8 +673,6 @@
     "agent_ca_status": "Site CA",
     "agent_ca_ok": "Issued",
     "agent_ca_missing": "Not issued",
-    "agent_server_addr": "Report Address Override",
-    "agent_server_addr_hint": "Leave empty to use the current address",
     "agent_download_label": "Download Label",
     "agent_target": "Platform",
     "agent_arch": "Architecture",
@@ -856,22 +854,18 @@
     "save_error": "Failed to save notification settings"
   },
   "agent_service": {
-    "title": "Agent Report Service",
     "enabled": "Enable Receiver",
     "bind_addr": "Listen Address",
     "bind_addr_placeholder": "::",
-    "bind_addr_desc": "IPv4, hostname or bracketed IPv6; [::] enables dual stack and accepts IPv4 agents",
+    "bind_addr_desc": "IPv4, hostname or bracketed IPv6; also used as the report host baked into downloads; [::] enables dual stack and accepts IPv4 agents",
     "bind_port": "Port",
     "bind_port_desc": "QUIC/UDP port, firewall must allow it; nginx cannot proxy UDP",
     "report_interval": "Report Interval (seconds)",
     "report_interval_desc": "10-3600, pushed to agents via report responses; also drives offline detection",
-    "download_addr": "Download Default Report Address",
-    "download_addr_desc": "Pre-fills the report address override below; leave empty to auto-derive from request host",
     "invalid_bind_addr": "Invalid listen address or port",
-    "invalid_download_addr": "Invalid download default report address",
-    "save_success": "Agent report service configuration saved",
-    "save_failed": "Failed to save agent report service configuration",
-    "save_error": "Failed to save agent report service configuration"
+    "save_success": "Agent collection configuration saved",
+    "save_failed": "Failed to save agent collection configuration",
+    "save_error": "Failed to save agent collection configuration"
   },
   "snmp_trap": {
     "title": "SNMP Trap Receiver",

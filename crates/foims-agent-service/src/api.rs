@@ -22,7 +22,7 @@ use crate::manifest::{self, AgentManifest};
 use crate::packaging::{self, PackageInputs};
 
 /// 站点 CA 公钥路径取 crate 根常量（cert 模块与下载流程共用，见 lib.rs）。
-/// agent 默认上报端口（设计 §5.4：server_addr 未指定端口时取请求 Host + 9100）。
+/// 默认上报端口兜底：监听地址缺合法端口段时按 9100 补齐。
 const DEFAULT_AGENT_PORT: &str = "9100";
 
 /// 下载参数（GET /api/agents/download）。
@@ -34,8 +34,6 @@ pub struct DownloadParams {
     format: String,
     /// 下载备注（写入 agents.label）
     label: Option<String>,
-    /// 显式覆盖上报地址（host[:port]）
-    server_addr: Option<String>,
 }
 
 /// Agent 分发端点角色守卫（admin/secadmin）。
@@ -233,9 +231,10 @@ pub async fn download_agent_package<S: ConfigProvider>(
         }
     };
 
-    // 6. 上报地址：显式参数优先，否则取请求 Host/URI authority（h2c 无 Host
-    //    头）+ 默认端口；解析失败须在入库前返回，避免泄漏 pending 记录
-    let server_addr = resolve_server_addr(&params, &headers, &uri)?;
+    // 6. 上报地址：统一以监听地址推导（通配主机时按请求 Host 兜底）；
+    //    解析失败须在入库前返回，避免泄漏 pending 记录
+    let bind_addr = state.config().agent.bind_addr.clone();
+    let server_addr = resolve_server_addr(&bind_addr, &headers, &uri)?;
 
     // 7. 生成 32 字节随机 token（明文仅写入包内配置，库内存 SHA-256 哈希）
     let token = generate_token();
@@ -368,22 +367,64 @@ fn valid_server_addr(addr: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | ':' | '[' | ']' | '-' | '_'))
 }
 
-/// 显式地址缺端口时补默认端口 9100（agent 端要求 host:port 形式）。
-/// host:port 与 [v6]:port 原样返回；裸 host/IPv4 与方括号 IPv6 追加端口；
-/// 裸 IPv6（多冒号且无方括号）无法可靠判端口，保持原样交由 agent 配置校验拒绝。
-fn ensure_agent_port(addr: &str) -> String {
-    let has_port = if let Some(idx) = addr.rfind(']') {
-        addr[idx + 1..].starts_with(':')
-    } else if addr.contains(':') {
-        matches!(addr.rsplit_once(':'), Some((_, p)) if !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-    } else {
-        false
-    };
-    if has_port {
-        addr.to_string()
-    } else {
-        format!("{addr}:{DEFAULT_AGENT_PORT}")
+/// 端口段校验：非空纯数字（0 与超长段交由 agent 端配置校验拒绝）。
+fn is_port_segment(segment: &str) -> bool {
+    !segment.is_empty() && segment.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// 拆分监听地址为 (主机, 端口)。端口段非法（裸 [::]、缺端口等）时取默认
+/// 端口 9100；裸 IPv6 的末段无法与端口区分，原样视为主机段（agent 端
+/// 配置校验会拒绝非法形式）。
+fn split_bind_addr(bind_addr: &str) -> (&str, &str) {
+    if let Some(idx) = bind_addr.rfind(']') {
+        // [v6]:port 或 [v6]
+        let (host, rest) = bind_addr.split_at(idx + 1);
+        let port = rest.strip_prefix(':').filter(|p| is_port_segment(p));
+        return (host, port.unwrap_or(DEFAULT_AGENT_PORT));
     }
+    if bind_addr.contains('[') {
+        // 方括号不闭合等畸形：整体视为主机段，交白名单校验拒绝
+        return (bind_addr, DEFAULT_AGENT_PORT);
+    }
+    match bind_addr.rsplit_once(':') {
+        Some((host, port)) if is_port_segment(port) => (host, port),
+        _ => (bind_addr, DEFAULT_AGENT_PORT),
+    }
+}
+
+/// 解析上报地址：统一以监听地址（agent.bind_addr）为准——主机部分为通配
+/// 地址（[::]/::/0.0.0.0/空）时按请求 Host 推导（h2c 无 Host 头，仅
+/// :authority 伪头，故再以 URI authority 兜底），端口恒取监听端口；
+/// 最终结果经白名单校验，非法时返回参数错误。
+fn resolve_server_addr(
+    bind_addr: &str,
+    headers: &axum::http::HeaderMap,
+    uri: &axum::http::Uri,
+) -> Result<String, AppError> {
+    let (bind_host, port) = split_bind_addr(bind_addr);
+    let mut host = if matches!(bind_host, "" | "0.0.0.0" | "::" | "[::]") {
+        host_from_headers(headers)
+            .or_else(|| uri.host().map(str::to_string))
+            .ok_or_else(|| {
+                AppError::Validation(
+                    msg("server.common.invalid_param").with("param", "agent.bind_addr"),
+                )
+            })?
+    } else {
+        bind_host.to_string()
+    };
+    // 请求 Host 为 IPv6 字面量时补回方括号（host_from_headers/Uri::host 已剥去），
+    // 裸 IPv6 直接拼端口会产生歧义地址
+    if host.contains(':') && !host.starts_with('[') {
+        host = format!("[{host}]");
+    }
+    let addr = format!("{host}:{port}");
+    if !valid_server_addr(&addr) {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.bind_addr"),
+        ));
+    }
+    Ok(addr)
 }
 
 /// 从 Host 头提取主机部分（去端口、去方括号 IPv6）。
@@ -404,42 +445,6 @@ fn host_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
     } else {
         Some(host.to_string())
     }
-}
-
-/// 解析上报地址：显式 server_addr 优先（trim 非空 + 白名单校验），
-/// 否则取请求 Host 拼 9100。h2c（HTTP/2 cleartext）请求没有 Host 头
-/// （仅 :authority 伪头，不进 HeaderMap），故再以请求 URI authority 兜底；
-/// 两者皆缺时要求显式传入。
-fn resolve_server_addr(
-    params: &DownloadParams,
-    headers: &axum::http::HeaderMap,
-    uri: &axum::http::Uri,
-) -> Result<String, AppError> {
-    if let Some(explicit) = params
-        .server_addr
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        if !valid_server_addr(explicit) {
-            return Err(AppError::Validation(
-                msg("server.common.invalid_param").with("param", "server_addr"),
-            ));
-        }
-        return Ok(ensure_agent_port(explicit));
-    }
-    let host = host_from_headers(headers)
-        .or_else(|| uri.host().map(str::to_string))
-        .ok_or_else(|| {
-            AppError::Validation(msg("server.common.invalid_param").with("param", "server_addr"))
-        })?;
-    let addr = format!("{host}:{DEFAULT_AGENT_PORT}");
-    if !valid_server_addr(&addr) {
-        return Err(AppError::Validation(
-            msg("server.common.invalid_param").with("param", "server_addr"),
-        ));
-    }
-    Ok(addr)
 }
 
 /// 内置精简 install.sh：dist_dir 部署版本缺失时的兜底（zip 为按 target 定向组包，
@@ -495,27 +500,67 @@ async fn load_install_sh(dist_dir: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_agent_port, valid_server_addr};
+    use super::{resolve_server_addr, split_bind_addr, valid_server_addr};
+    use axum::http::{HeaderMap, Uri};
 
     #[test]
-    fn test_ensure_agent_port() {
-        // 已含端口：原样返回
-        assert_eq!(ensure_agent_port("127.0.0.1:9100"), "127.0.0.1:9100");
+    fn test_split_bind_addr() {
+        // 常规 host:port 与 [v6]:port：原样拆分
+        assert_eq!(split_bind_addr("127.0.0.1:9100"), ("127.0.0.1", "9100"));
+        assert_eq!(split_bind_addr("[::]:9100"), ("[::]", "9100"));
+        assert_eq!(split_bind_addr("[::1]:9443"), ("[::1]", "9443"));
+        // 缺合法端口段：端口回退默认 9100
+        assert_eq!(split_bind_addr("127.0.0.1"), ("127.0.0.1", "9100"));
+        assert_eq!(split_bind_addr("[::]"), ("[::]", "9100"));
         assert_eq!(
-            ensure_agent_port("foims.example.com:9443"),
-            "foims.example.com:9443"
+            split_bind_addr("agent.example-com_cn"),
+            ("agent.example-com_cn", "9100")
         );
-        assert_eq!(ensure_agent_port("[::1]:9100"), "[::1]:9100");
-        // 缺端口：补默认 9100
-        assert_eq!(ensure_agent_port("127.0.0.1"), "127.0.0.1:9100");
+    }
+
+    #[test]
+    fn test_resolve_server_addr() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::HOST,
+            "foims.example.com:8443".parse().unwrap(),
+        );
+        let uri: Uri = "https://foims.example.com/api/agents/download"
+            .parse()
+            .unwrap();
+
+        // 监听主机为通配地址：主机取请求 Host（忽略其端口），端口取监听端口
         assert_eq!(
-            ensure_agent_port("foims.example.com"),
+            resolve_server_addr("[::]:9100", &headers, &uri).unwrap(),
             "foims.example.com:9100"
         );
-        assert_eq!(ensure_agent_port("[::1]"), "[::1]:9100");
         assert_eq!(
-            ensure_agent_port("agent.example-com_cn"),
+            resolve_server_addr("0.0.0.0:9100", &headers, &uri).unwrap(),
+            "foims.example.com:9100"
+        );
+        // 监听主机可路由：原样作为上报地址
+        assert_eq!(
+            resolve_server_addr("agent.example-com_cn:9100", &headers, &uri).unwrap(),
             "agent.example-com_cn:9100"
+        );
+        assert_eq!(
+            resolve_server_addr("[2001:db8::1]:9100", &headers, &uri).unwrap(),
+            "[2001:db8::1]:9100"
+        );
+    }
+
+    #[test]
+    fn test_resolve_server_addr_ipv6_host_rebracket() {
+        // 请求 Host 为 IPv6 字面量：剥去的方括号应补回，避免裸 IPv6 歧义
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::HOST,
+            "[2001:db8::1]:8443".parse().unwrap(),
+        );
+        let uri: Uri = "https://[2001:db8::1]/api/agents/download".parse().unwrap();
+        assert_eq!(
+            resolve_server_addr("[::]:9100", &headers, &uri).unwrap(),
+            "[2001:db8::1]:9100"
         );
     }
 

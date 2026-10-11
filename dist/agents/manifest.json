@@ -1,9 +1,12 @@
 {
-  "version": "0.23.2",
-  "generated_at": "2026-10-11T00:33:58Z",
+  "version": "0.23.3",
+  "generated_at": "2026-10-11T01:16:07Z",
   "targets": {
     
-    "x86_64-unknown-linux-musl": { "sha256": "6b516ca1a8ee5fb6a08b062588c5c8cdbf6eb38eb3a92e866f6a92c52e1b6704", "size": 8317600 },
-    "aarch64-unknown-linux-musl": { "sha256": "82c4d44ae4372b34b10c2e62cca12126c14a31ec702cd648a6d8ec85199e9877", "size": 8253392 }
+    "x86_64-unknown-linux-musl": { "sha256": "87b85d44661f60c78a9c8ec931da90758844eceb20b9dbb8ffeed575d752d267", "size": 8317600 },
+    "aarch64-unknown-linux-musl": { "sha256": "c5b82c4d37d017c939211dbccad112c82254c8ba645ce7b75003293a42c4d2f4", "size": 8252976 },
+    "i686-unknown-linux-musl": { "sha256": "4e0613c22b6c07b09ee594c564758d9e109aa424ac1f2c63fe97a4179f920ab0", "size": 7575704 },
+    "arm-unknown-linux-musleabihf": { "sha256": "3a6c13795b744ec6c0ef24dd933cb738fbaa84bd8ffb6a35832dd8a72e10c9f9", "size": 7204876 },
+    "armv7-unknown-linux-musleabihf": { "sha256": "5801ea7d8103094283a30dfb853fc3294f3bbe29c1d82328c0c4fb0a2d9cd222", "size": 7068948 }
   }
 }

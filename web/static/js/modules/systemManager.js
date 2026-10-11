@@ -997,11 +997,6 @@ function loadAgentServiceConfig() {
       elementCache.setValue("agent-service-bind-addr", bindMatch ? bindMatch[1] : "[::]");
       elementCache.setValue("agent-service-bind-port", bindMatch ? bindMatch[2] : "9100");
       elementCache.setValue("agent-service-interval", String(agent.report_interval_secs ?? 60));
-      // 下载默认上报地址预填下载面板的「上报地址覆盖」输入框（仍允许临时修改）
-      const downloadAddr = elementCache.get("agent-server-addr");
-      if (downloadAddr) {
-        downloadAddr.value = agent.download_server_addr || "";
-      }
     } catch (error) {
       console.error("加载Agent上报服务配置失败:", error);
     }
@@ -1033,21 +1028,13 @@ async function saveAgentServiceConfig() {
     3600
   );
 
-  // 下载默认上报地址：IPv4/主机名或方括号 IPv6，可带端口；留空表示按请求 Host 推导
-  const downloadAddr = elementCache.getValue("agent-service-download-addr").trim();
-  if (downloadAddr && !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d{1,5})?$/.test(downloadAddr)) {
-    showToast(t("agent_service.invalid_download_addr"), "warning");
-    return;
-  }
-
   agentServiceConfigSaving = true;
   try {
     const agent = {
       ...currentAgentBaseConfig,
       enabled: elementCache.getChecked("agent-service-enabled"),
       bind_addr: `${bindHost}:${bindPort}`,
-      report_interval_secs: interval,
-      download_server_addr: downloadAddr || null
+      report_interval_secs: interval
     };
 
     const result = await apiPut(SYSTEM_CONFIG_API, { agent });
@@ -2442,18 +2429,15 @@ export async function loadAgentDist() {
 }
 
 // 下载 Agent 安装包（GET /api/agents/download）：文件名取自
-// Content-Disposition（服务端已组好包），备注与上报地址覆盖随查询串下发
+// Content-Disposition（服务端已组好包），备注随查询串下发；上报地址由
+// 服务端统一取监听地址（agent.bind_addr）推导，前端不再传递
 export async function downloadAgentPackage(target, format = "zip") {
-  const serverAddr = elementCache.getValue("agent-server-addr").trim();
   const label = elementCache.getValue("agent-download-label").trim();
 
   const params = new URLSearchParams({
     target,
     format
   });
-  if (serverAddr) {
-    params.set("server_addr", serverAddr);
-  }
   if (label) {
     params.set("label", label);
   }

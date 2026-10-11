@@ -158,3 +158,8 @@ v0.6.1
 v0.6.2
 2026101108544001
 1.设备网卡配置空 cards 硬编码默认网口设计缺陷修复（v0.3.1 审计遗留）：apply_network_config 删除「cards 为空自动生成默认网卡1+eth0」特例分支与 default_card_sync_item/DEFAULT_CARD_NAME/DEFAULT_PORT_NAME 常量，空 cards 改为 validate_cards_not_empty 校验拒绝（新文案键 server.device.nic.cards_required，中英文），网卡配置成为必填项、统一走正常网卡→网口校验链路；设备创建链路 req.cards.unwrap_or_default() 改为 as_deref().unwrap_or(&[])（空/未提供即 422 校验错误），更新链路 None 不动网口语义保持不变、Some(空) 由同一校验拒绝；前端设备模态框 collectData 恒提交非空 cards（至少 1 卡 1 口）不受影响。删除 nic.rs 默认配置测试并新增 test_validate_cards_not_empty；i18n 语言包变更前端资源版本同步 bump，Cargo.toml 不变
+
+v0.7.0
+2026101109143501
+1.系统页「数据采集」Agent 上报服务卡片并入 Agent 采集卡片（单卡承载启用开关/保存按钮 + 监听地址/端口/上报间隔 + 版本门控状态 + 下载面板），删除冗余的「下载默认上报地址」与「上报地址覆盖」输入框
+2.下载包内上报地址统一取监听地址推导：/api/agents/download 移除 server_addr 查询参数与 AgentConfig.download_server_addr 配置键（旧配置文件中的残留键经 serde 默认忽略，无需迁移），resolve_server_addr 改为拆分 agent.bind_addr——主机部分为通配地址（[::]/::/0.0.0.0/空）时按请求 Host（h2c 以 URI authority 兜底）推导、端口恒取监听端口，IPv6 字面量请求 Host 补回方括号；ensure_agent_port 随显式参数一并移除，新增 split_bind_addr/resolve 单测；i18n 清理 agent_service.title/download_addr*/system.agent_server_addr* 键并更新监听地址描述（中英文），agent-design.md §7.3 同步；lib 版本 0.23.2→0.23.3（y+1 → c+1），foims-common 0.3.4→0.3.5、foims-agent-service 0.1.6→0.1.7，前端资源版本同步 bump
