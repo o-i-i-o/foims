@@ -119,12 +119,18 @@ jobs:
       # 默认 x86_64,aarch64）。交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C
       # 编译器与链接器（ring 等依赖直接编），替代 musl.cc 工具链下载——该站点
       # 多次间歇不可达（v0.6.3/v0.7.2/v0.7.3 三轮修复仍失败），最终弃用。
-      # zig 经 npm 官方包锁定 minor 版本、cargo-zigbuild 走 crates.io 稳定版，
-      # 均不锁哈希（与 v0.7.2 结论一致），功能正确性由下方 --version 校验
-      # 与构建产物把关；有意升级 zig 时同步更新版本号即可。
+      # zig 由 mlugg/setup-zig 官方社区 Action 安装（minisign 验签 + 多镜像
+      # 回退 + 自动缓存，比 npm 方式更稳），锁精确版本 0.13.0（本地 e2e 已
+      # 验证该版本与 ring 兼容，有意升级时同步更新版本号）；cargo-zigbuild
+      # 走 crates.io 稳定版。均不锁哈希（与 v0.7.2 结论一致），功能正确性由
+      # 下方 --version 校验与构建产物把关。
       - name: 安装 zig 交叉后端
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: 安装 cargo-zigbuild
         run: |
-          npm install -g @ziglang/zig@0.13.0
           cargo install cargo-zigbuild --locked
           zig version
           cargo-zigbuild --version
@@ -175,12 +181,18 @@ jobs:
       # 默认 x86_64,aarch64）。交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C
       # 编译器与链接器（ring 等依赖直接编），替代 musl.cc 工具链下载——该站点
       # 多次间歇不可达（v0.6.3/v0.7.2/v0.7.3 三轮修复仍失败），最终弃用。
-      # zig 经 npm 官方包锁定 minor 版本、cargo-zigbuild 走 crates.io 稳定版，
-      # 均不锁哈希（与 v0.7.2 结论一致），功能正确性由下方 --version 校验
-      # 与构建产物把关；有意升级 zig 时同步更新版本号即可。
+      # zig 由 mlugg/setup-zig 官方社区 Action 安装（minisign 验签 + 多镜像
+      # 回退 + 自动缓存，比 npm 方式更稳），锁精确版本 0.13.0（本地 e2e 已
+      # 验证该版本与 ring 兼容，有意升级时同步更新版本号）；cargo-zigbuild
+      # 走 crates.io 稳定版。均不锁哈希（与 v0.7.2 结论一致），功能正确性由
+      # 下方 --version 校验与构建产物把关。
       - name: 安装 zig 交叉后端
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: 安装 cargo-zigbuild
         run: |
-          npm install -g @ziglang/zig@0.13.0
           cargo install cargo-zigbuild --locked
           zig version
           cargo-zigbuild --version
