@@ -364,7 +364,13 @@ export class SVGCanvasBase {
     rect.setAttribute("x", x);
     rect.setAttribute("y", y);
 
+    // 子元素按 data-rel* 相对坐标跟随。必须跳过无基准的元素：设备
+    // lucide 图标内部也有 line/circle/text 形状，它们不属于节点布局，
+    // 按 0 兜底会把图标部件挪到节点左上角（图标视觉损坏）
     element.querySelectorAll("text").forEach((text) => {
+      if (text.dataset.relY === undefined) {
+        return;
+      }
       const relX = parseFloat(text.dataset.relX || 0);
       const relY = parseFloat(text.dataset.relY || 0);
       text.setAttribute("x", x + width / 2 + relX);
@@ -372,6 +378,9 @@ export class SVGCanvasBase {
     });
 
     element.querySelectorAll("line").forEach((line) => {
+      if (line.dataset.relX1 === undefined) {
+        return;
+      }
       const relX1 = parseFloat(line.dataset.relX1 || 0);
       const relY1 = parseFloat(line.dataset.relY1 || 0);
       const relX2 = parseFloat(line.dataset.relX2 || 0);
@@ -384,6 +393,9 @@ export class SVGCanvasBase {
 
     // 圆形子元素（门把手 / 拓扑端口锚点）按 relCx/relCy 跟随
     element.querySelectorAll("circle").forEach((circle) => {
+      if (circle.dataset.relCx === undefined) {
+        return;
+      }
       const relCx = parseFloat(circle.dataset.relCx || 0);
       const relCy = parseFloat(circle.dataset.relCy || 0);
       circle.setAttribute("cx", x + relCx);

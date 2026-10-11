@@ -44,96 +44,61 @@ const HOP_STYLES = {
   patch_panel: { kind: "rect" }
 };
 
-// 按设备类型维护的彩色图标（24x24 viewBox，扁平填充风格，
-// 每种类型 2~4 种语义色，随节点一起拖动）：
-// 交换机=机身+端口+状态灯 / 网络设备=芯片 / 服务器=盘位+指示灯 /
-// 路由器=地球 / 摄像头=机身+镜头+录制灯 / 电话=话机+屏幕+键盘 /
-// 台式机=显示器+底座 / 笔记本=屏幕+键盘座 / 打印机=机身+纸张+CMY /
-// 其他=包装箱+胶带
-const DEVICE_ICONS = {
-  // 交换机：深灰机箱 + 浅灰端口排 + 绿/黄状态灯
-  switch: `
-    <rect x="1.5" y="8" width="21" height="8.5" rx="2" fill="#37474f"/>
-    <rect x="1.5" y="8" width="21" height="3" rx="1.5" fill="#546e7a"/>
-    <rect x="4.2" y="12" width="8.6" height="3" rx="0.6" fill="#b0bec5"/>
-    <path d="M5.4 13.5h6.2" stroke="#78909c" stroke-width="0.8"/>
-    <path d="M5.4 12h6.2M8.5 12v3" stroke="#90a4ae" stroke-width="0.5" fill="none"/>
-    <circle cx="16.2" cy="13.5" r="0.85" fill="#66bb6a"/>
-    <circle cx="18.4" cy="13.5" r="0.85" fill="#66bb6a"/>
-    <circle cx="20.6" cy="13.5" r="0.85" fill="#ffca28"/>`,
-  // 网络设备：深灰芯片 + 蓝色内核 + 金色引脚
-  network_device: `
-    <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" stroke="#ffb300" stroke-width="1.6" stroke-linecap="round"/>
-    <rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="#455a64"/>
-    <rect x="9" y="9" width="6" height="6" rx="1" fill="#42a5f5"/>
-    <path d="M12 9v6M9 12h6" stroke="#90caf9" stroke-width="0.8"/>`,
-  // 服务器：机架 + 三层盘位 + 绿色指示灯
-  server: `
-    <rect x="5" y="2" width="14" height="20" rx="2" fill="#37474f"/>
-    <rect x="7" y="4" width="10" height="4" rx="0.8" fill="#78909c"/>
-    <rect x="7" y="10" width="10" height="4" rx="0.8" fill="#78909c"/>
-    <rect x="7" y="16" width="10" height="4" rx="0.8" fill="#78909c"/>
-    <path d="M8.2 6h4.6M8.2 12h4.6M8.2 18h4.6" stroke="#42a5f5" stroke-width="0.9" stroke-linecap="round"/>
-    <circle cx="15.4" cy="6" r="0.8" fill="#66bb6a"/>
-    <circle cx="15.4" cy="12" r="0.8" fill="#66bb6a"/>
-    <circle cx="15.4" cy="18" r="0.8" fill="#66bb6a"/>`,
-  // 路由器：蓝色地球 + 浅色经纬网
-  router: `
-    <circle cx="12" cy="12" r="9.5" fill="#1e88e5"/>
-    <path d="M2.5 12h19M12 2.5c3 2.6 4.6 5.9 4.6 9.5s-1.6 6.9-4.6 9.5c-3-2.6-4.6-5.9-4.6-9.5s1.6-6.9 4.6-9.5zM5 6.5c1.9 1.4 4.3 2.2 7 2.2s5.1-0.8 7-2.2M5 17.5c1.9-1.4 4.3-2.2 7-2.2s5.1 0.8 7 2.2" stroke="#bbdefb" stroke-width="1.1" fill="none"/>`,
-  // 摄像头：灰机身 + 蓝镜头 + 红色录制灯 + 支架底座
-  camera: `
-    <rect x="2" y="6" width="13.5" height="7.5" rx="2" fill="#546e7a"/>
-    <rect x="2" y="6" width="13.5" height="2.4" rx="1.2" fill="#78909c"/>
-    <circle cx="13.2" cy="10.2" r="2.3" fill="#42a5f5"/>
-    <circle cx="13.2" cy="10.2" r="1" fill="#0d47a1"/>
-    <circle cx="4.4" cy="11.2" r="0.9" fill="#ef5350"/>
-    <path d="M7.5 13.5v3.2" stroke="#546e7a" stroke-width="1.8" stroke-linecap="round"/>
-    <rect x="4.5" y="16.8" width="6.5" height="2" rx="1" fill="#37474f"/>
-    <path d="M16.5 7.8l4.5-1.8v8.5l-4.5-1.8" fill="#ffca28"/>`,
-  // 电话：话机主体 + 绿色显示屏 + 键盘
-  phone: `
-    <path d="M6.8 2.2h10.4l-1.2 2.4H8z" fill="#37474f"/>
-    <rect x="5" y="4.6" width="14" height="17" rx="2.2" fill="#455a64"/>
-    <rect x="7.3" y="6.3" width="9.4" height="4.2" rx="0.8" fill="#66bb6a"/>
-    <path d="M8.6 8.4h3.2" stroke="#e8f5e9" stroke-width="0.8" stroke-linecap="round"/>
-    <g fill="#b0bec5">
-      <circle cx="8.6" cy="13.2" r="0.95"/><circle cx="12" cy="13.2" r="0.95"/><circle cx="15.4" cy="13.2" r="0.95"/>
-      <circle cx="8.6" cy="16" r="0.95"/><circle cx="12" cy="16" r="0.95"/><circle cx="15.4" cy="16" r="0.95"/>
-      <circle cx="8.6" cy="18.8" r="0.95"/><circle cx="12" cy="18.8" r="0.95"/><circle cx="15.4" cy="18.8" r="0.95"/>
-    </g>`,
-  // 台式机：深灰边框 + 蓝色屏幕 + 内容线 + 底座
-  desktop: `
-    <rect x="2.5" y="3.5" width="19" height="13" rx="1.8" fill="#455a64"/>
-    <rect x="4.2" y="5.2" width="15.6" height="9.6" rx="1" fill="#1e88e5"/>
-    <path d="M6 8.2l3-1.8 2.6 2.4 2.8-3.2 3.4 2.6" stroke="#bbdefb" stroke-width="1" fill="none" stroke-linejoin="round"/>
-    <rect x="10.8" y="16.5" width="2.4" height="3" fill="#546e7a"/>
-    <rect x="7.5" y="19.4" width="9" height="1.8" rx="0.9" fill="#455a64"/>`,
-  // 笔记本：屏幕 + 键盘底座 + 触控条
-  laptop: `
-    <rect x="4" y="3.5" width="16" height="11" rx="1.5" fill="#455a64"/>
-    <rect x="5.5" y="5" width="13" height="8" rx="0.8" fill="#1e88e5"/>
-    <path d="M7.2 10.5l2.4-2.6 2 1.8 2.6-3 2.6 2.2" stroke="#bbdefb" stroke-width="0.9" fill="none" stroke-linejoin="round"/>
-    <path d="M2.2 17.8h19.6l-2-2.6H4.2z" fill="#546e7a"/>
-    <rect x="9.5" y="16.4" width="5" height="0.9" rx="0.45" fill="#90a4ae"/>`,
-  // 打印机：机身 + 进/出纸 + 青品黄墨点 + 绿色就绪灯
-  printer: `
-    <rect x="7" y="2" width="10" height="4.2" rx="0.8" fill="#eceff1"/>
-    <path d="M8.6 3.4h6.8" stroke="#b0bec5" stroke-width="0.7" stroke-linecap="round"/>
-    <rect x="3.2" y="6.2" width="17.6" height="8.2" rx="2" fill="#546e7a"/>
-    <rect x="3.2" y="6.2" width="17.6" height="2.4" rx="1.2" fill="#78909c"/>
-    <circle cx="18.4" cy="11.8" r="0.95" fill="#66bb6a"/>
-    <rect x="7" y="14.4" width="10" height="7" rx="0.8" fill="#eceff1"/>
-    <circle cx="9.4" cy="17.9" r="0.95" fill="#29b6f6"/>
-    <circle cx="12" cy="17.9" r="0.95" fill="#ef5350"/>
-    <circle cx="14.6" cy="17.9" r="0.95" fill="#ffee58"/>`,
-  // 其他：牛皮纸包装箱 + 封箱胶带
-  other: `
-    <path d="M3.5 7.6 12 3.4l8.5 4.2v8.8L12 20.6l-8.5-4.2z" fill="#a1887f"/>
-    <path d="M3.5 7.6 12 11.8l8.5-4.2L12 3.4z" fill="#8d6e63"/>
-    <path d="M12 11.8v8.8" stroke="#6d4c41" stroke-width="0.8"/>
-    <rect x="10.9" y="3.8" width="2.2" height="16.4" rx="0.4" fill="#ffe082" opacity="0.9"/>`
+// 设备类型 → lucide 图标文件（本地图标库 /static/icons/lucide/，
+// lucide-static v1.55.0，ISC 许可证见目录内 LICENSE）
+const DEVICE_ICON_FILES = {
+  switch: "network",
+  network_device: "cpu",
+  server: "server",
+  router: "router",
+  camera: "cctv",
+  phone: "phone",
+  desktop: "monitor",
+  laptop: "laptop",
+  printer: "printer",
+  other: "package"
 };
+
+const LUCIDE_ICON_BASE = "/static/icons/lucide/";
+
+// 图标内容缓存：同一图标跨重绘只取一次文件；失败不缓存负结果，
+// 下次重绘自动重试
+const iconMarkupCache = new Map();
+
+/// 取 lucide 图标文件的内部标记（剥离根 <svg>，注入画布自带的
+/// 32×32 图标骨架）。加载/解析失败返回空串并记日志，节点其余部分不受影响。
+function loadLucideIconMarkup(type) {
+  const file = DEVICE_ICON_FILES[type] || DEVICE_ICON_FILES.other;
+  if (!iconMarkupCache.has(file)) {
+    iconMarkupCache.set(
+      file,
+      fetch(`${LUCIDE_ICON_BASE}${file}.svg`)
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          return res.text();
+        })
+        .then((text) => {
+          // lucide 发布产物结构固定：license 注释 + 单根 <svg>；
+          // 取根开标签之后、闭标签之前的内部标记
+          const start = text.indexOf("<svg");
+          const openEnd = start >= 0 ? text.indexOf(">", start) : -1;
+          const close = text.lastIndexOf("</svg>");
+          if (start < 0 || openEnd < 0 || close < 0 || close < openEnd) {
+            throw new Error("unexpected lucide svg structure");
+          }
+          return text.slice(openEnd + 1, close);
+        })
+        .catch((error) => {
+          console.error(`加载 lucide 设备图标失败: ${file}.svg`, error);
+          iconMarkupCache.delete(file);
+          return "";
+        })
+    );
+  }
+  return iconMarkupCache.get(file);
+}
 
 // 同侧边缘上相邻锚点的错开间距
 const ANCHOR_SPREAD = 18;
@@ -179,7 +144,7 @@ export class TopologyRenderer {
     rect.setAttribute("ry", 6);
     g.appendChild(rect);
 
-    // 设备类型彩色图标：左侧垂直居中，文字区右移让位
+    // 设备类型图标（lucide 线稿）：左侧垂直居中，文字区右移让位
     const ICON_SIZE = 32;
     const iconG = document.createElementNS(SVG_NS, "g");
     iconG.classList.add("device-icon");
@@ -192,10 +157,21 @@ export class TopologyRenderer {
     iconSvg.setAttribute("width", ICON_SIZE);
     iconSvg.setAttribute("height", ICON_SIZE);
     iconSvg.setAttribute("aria-hidden", "true");
-    // 图标内各形状自带语义色填充，不再统一描边色
-    iconSvg.innerHTML = DEVICE_ICONS[device.device_type] || DEVICE_ICONS.other;
+    // lucide 线稿子元素无自带描边属性，依赖根节点的描边约定；
+    // 颜色经 CSS currentColor 按设备类型供给
+    iconSvg.setAttribute("fill", "none");
+    iconSvg.setAttribute("stroke", "currentColor");
+    iconSvg.setAttribute("stroke-width", "2");
+    iconSvg.setAttribute("stroke-linecap", "round");
+    iconSvg.setAttribute("stroke-linejoin", "round");
     iconG.appendChild(iconSvg);
     g.appendChild(iconG);
+    // 图标文件异步填充：全量重绘替换旧节点后（isConnected=false）丢弃过期填充
+    loadLucideIconMarkup(device.device_type).then((markup) => {
+      if (iconSvg.isConnected) {
+        iconSvg.innerHTML = markup;
+      }
+    });
 
     const TEXT_OFFSET_X = 16;
     const nameText = document.createElementNS(SVG_NS, "text");
@@ -332,7 +308,7 @@ export class TopologyRenderer {
     } else {
       // 中间节点在两锚点之间均匀分布，路径逐段折线连接
       const points = [sourceAnchor];
-      const hopPoints = hops.map((hop, i) => {
+      const hopPoints = hops.map((_hop, i) => {
         const ratio = (i + 1) / (hops.length + 1);
         return {
           x: sourceAnchor.x + (targetAnchor.x - sourceAnchor.x) * ratio,

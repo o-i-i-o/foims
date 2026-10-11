@@ -143,10 +143,12 @@
   stroke: var(--chart-blue-border-strong);
 }
 
-/* 选中态（虚线主色描边）：三类节点共用 */
-.workstation-element.selected rect,
-.cabinet-position-element.selected rect,
-.topology-device-node.selected rect {
+/* 选中态（虚线主色描边）：三类节点共用。
+   必须用直接子选择器：设备图标的内部 rect 深藏在节点 g 内，
+   后代选择器会给图标所有部件描虚线（图标视觉损坏） */
+.workstation-element.selected > rect,
+.cabinet-position-element.selected > rect,
+.topology-device-node.selected > rect {
   stroke: var(--color-primary);
   stroke-width: 2;
   stroke-dasharray: 5 5;
@@ -504,9 +506,48 @@
   border-color: var(--color-primary);
 }
 
-/* 设备类型图标：绘制于节点左侧，线稿颜色由 SVG 属性控制 */
+/* 设备类型图标：绘制于节点左侧，lucide 线稿 stroke=currentColor，
+   按设备类型着色（与节点卡片描边色系一致） */
 .device-icon {
   pointer-events: none;
+}
+
+.topology-device-node.type-switch .device-type-icon {
+  color: var(--chart-blue-border-strong);
+}
+
+.topology-device-node.type-network_device .device-type-icon {
+  color: var(--chart-blue-border-strongest);
+}
+
+.topology-device-node.type-server .device-type-icon {
+  color: var(--chart-green-border);
+}
+
+.topology-device-node.type-router .device-type-icon {
+  color: var(--chart-orange-border);
+}
+
+.topology-device-node.type-camera .device-type-icon {
+  color: var(--color-danger-text);
+}
+
+.topology-device-node.type-phone .device-type-icon {
+  color: var(--chart-violet-border);
+}
+
+/* 桌面/其他：同款中性灰图标 */
+.topology-device-node.type-desktop .device-type-icon,
+.topology-device-node.type-other .device-type-icon {
+  color: var(--chart-node-border);
+}
+
+.topology-device-node.type-laptop .device-type-icon {
+  color: var(--chart-node-border-strong);
+}
+
+.topology-device-node.type-printer .device-type-icon {
+  color: var(--color-warning);
 }
 
 .topology-detail-body {

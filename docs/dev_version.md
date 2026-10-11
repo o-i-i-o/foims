@@ -183,3 +183,10 @@ v0.7.3
 v0.7.4
 2026101110391501
 1.CI 交叉编译后端弃用 musl.cc 工具链改用 cargo-zigbuild（.github/workflows/ci.yml + scripts/build-agent.sh + scripts/build-deb.sh）：musl.cc 下载历经 v0.6.3/v0.7.2/v0.7.3 三轮修复仍间歇不可达（wget --timeout=1200 仍失败），评估 cargo-zigbuild 与 cross 两方案后选 zigbuild——无需 Docker、cargo-zigbuild 走 crates.io 稳定版 --locked，供应链全部高可用且免镜像版本漂移；build-agent.sh 新增 AGENT_BACKEND=zigbuild 环境变量开关（与 AGENT_TARGETS 透传惯例一致，仅影响 tier1/2，zig cc 兼任交叉 C 编译器与链接器免注入 CC_*/LINKER），CI 两 job 删除 musl-tools 安装与 musl.cc 缓存/下载/校验三步，zig 本体经 mlugg/setup-zig@v2 官方社区 Action 安装并锁精确版本 0.13.0（minisign 验签 + 多镜像回退 + 自动缓存，比 npm 方式更稳，本地 e2e 已验证该版本与 ring 兼容）+ cargo install cargo-zigbuild --locked + zig version 与 cargo-zigbuild --version 双校验（修正 cargo zigbuild --version 不受支持的命令形式），build-deb.sh 以 AGENT_BACKEND=zigbuild 调用；本地 gcc 后端与 5 目标矩阵行为不变，本地 e2e 实测 zigbuild 两目标 2m17s 产出静态 musl 二进制（x86_64 试运行 --version 正常、aarch64 ELF 架构正确）；纯构建脚本与 CI 配置修改，Cargo.toml 与前端资源版本不变
+
+v0.8.0
+2026101122191301
+1.设备可视化全局拓扑设备图标替换为 lucide 图标集：lucide-static v1.55.0 完整图标（2141 个 SVG + LICENSE，ISC 许可）缓存至 web/static/icons/lucide/，TopologyRenderer 删除 10 种设备类型的内联彩色 SVG 字符串，改 DEVICE_ICON_FILES 映射（switch→network、network_device→cpu、server→server、router→router、camera→cctv、phone→phone、desktop→monitor、laptop→laptop、printer→printer、other→package）+ fetch 异步加载并内存缓存（截取 <svg> 内部标记填充骨架，isConnected 守卫丢弃过期填充，加载失败回退空图标记 console.error）；visualization.css 按设备类型以 --chart-*/--color-* 变量对 .device-type-icon 着色（stroke=currentColor 与节点卡片描边色系一致）
+2.修复点击设备图标导致图标损坏（三根因）：svgCanvasBase._setElementPosition 的 text/line/circle 跟随遍历补「无 data-rel* 基准则跳过」防护（原缺省按 0 兜底会把 lucide 图标内部形状挪到节点左上角）；visualization.css 选中态虚线改直接子选择器 > rect（原后代选择器给图标内部 rect 描虚线）；TopologyModal 浮窗关闭监听从 click 改 mousedown（浮窗由节点 mouseup 打开，浏览器补发的 click 命中刚出现的全屏 overlay 导致一闪而过；浮窗与 overlay 为 body 兄弟节点，点浮窗内部不冒泡不受影响）
+3.e2e 验证通过（合成事件绕开 IDE WebView CDP 坐标偏移）：节点点击打开浮窗、补发 click 不关闭、mousedown 正常关闭、拖动节点图标内部形状坐标零变化
+4.顺带修正 TopologyRenderer hops.map 未用参数告警（(hop, i) → (_hop, i)）；前端资源版本同步 bump，lib 版本 0.23.3→0.23.4（y+1 → c+1）

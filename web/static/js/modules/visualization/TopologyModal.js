@@ -75,7 +75,10 @@ export class TopologyModal {
 
     this.overlay = document.createElement("div");
     this.overlay.className = "topology-detail-overlay";
-    this.overlay.addEventListener("click", () => this.close());
+    // 用 mousedown 关闭：浮窗由节点 mouseup 打开，浏览器随后补发的 click
+    // 事件会命中刚出现的全屏 overlay，click 监听会让浮窗一闪而过；
+    // mousedown 只响应 overlay 上真实的新按下动作，不受该 click 影响
+    this.overlay.addEventListener("mousedown", () => this.close());
 
     const wrap = document.createElement("div");
     wrap.innerHTML = html;
