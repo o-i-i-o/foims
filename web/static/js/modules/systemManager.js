@@ -996,10 +996,22 @@ function loadAgentServiceConfig() {
       elementCache.setValue("agent-service-bind-addr", bindMatch ? bindMatch[1] : "[::]");
       elementCache.setValue("agent-service-bind-port", bindMatch ? bindMatch[2] : "9100");
       elementCache.setValue("agent-service-interval", String(agent.report_interval_secs ?? 60));
+      // 上报地址模式：开=自动取系统公共URL；关=手动覆盖地址（输入框联动展开）
+      elementCache.setChecked("agent-use-public-url", Boolean(agent.use_public_url));
+      elementCache.setValue("agent-report-url-override", agent.report_url_override || "");
+      syncAgentReportOverrideVisibility();
     } catch (error) {
       console.error("加载Agent上报服务配置失败:", error);
     }
   })();
+}
+
+// 上报地址开关联动：开=自动取公共URL，关=展开手动覆盖地址输入框
+function syncAgentReportOverrideVisibility() {
+  const group = elementCache.get("agent-report-override-group");
+  if (group) {
+    group.hidden = elementCache.getChecked("agent-use-public-url");
+  }
 }
 
 // 保存 Agent 上报服务配置（接收器随服务启动，监听地址/开关保存后需重启生效；
@@ -1027,13 +1039,22 @@ async function saveAgentServiceConfig() {
     3600
   );
 
+  // 上报地址模式：开关关时允许手动覆盖（host:port，留空回退监听地址推导）
+  const reportOverride = elementCache.getValue("agent-report-url-override").trim();
+  if (!elementCache.getChecked("agent-use-public-url") && reportOverride && !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d+)?$/.test(reportOverride)) {
+    showToast(t("agent_service.invalid_report_override"), "warning");
+    return;
+  }
+
   agentServiceConfigSaving = true;
   try {
     const agent = {
       ...currentAgentBaseConfig,
       enabled: elementCache.getChecked("agent-service-enabled"),
       bind_addr: `${bindHost}:${bindPort}`,
-      report_interval_secs: interval
+      report_interval_secs: interval,
+      use_public_url: elementCache.getChecked("agent-use-public-url"),
+      report_url_override: reportOverride
     };
 
     const result = await apiPut(SYSTEM_CONFIG_API, { agent });
@@ -2278,14 +2299,9 @@ function formatAgentSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// 渲染版本/门控/CA 状态与可下载平台列表
+// 渲染版本/CA 状态与可下载平台列表（版本门控已移除，仅 Agent 版本展示）
 function renderAgentDist(data) {
   setTextById("agent-dist-version", data.agent_version || "-");
-  setTextById("agent-server-version", data.server_version || "-");
-  setTextById(
-    "agent-gate-status",
-    data.gate_ok ? t("system.agent_gate_ok") : t("system.agent_gate_blocked")
-  );
   setTextById(
     "agent-ca-status",
     data.ca_ok ? t("system.agent_ca_ok") : t("system.agent_ca_missing")
@@ -2302,16 +2318,16 @@ function renderAgentDist(data) {
     return;
   }
 
-  // 门控未通过或 CA 未生成：置顶提示并禁用下载（状态行已展示原因）
-  const blocked = !data.gate_ok || !data.ca_ok;
+  // CA 未生成：置顶提示并禁用下载（状态行已展示原因）
+  const blocked = !data.ca_ok;
   if (messageEl) {
-    messageEl.textContent = blocked ? t(data.message || "system.agent_gate_blocked") : "";
+    messageEl.textContent = blocked ? t(data.message || "system.agent_ca_missing") : "";
     messageEl.hidden = !blocked;
   }
   renderAgentTargets(data.targets || [], blocked);
 }
 
-// 最近一次加载的产物列表与门控状态（平台/架构/格式三级联动选择的数据源）
+// 最近一次加载的产物列表与下载可用状态（平台/架构/格式三级联动选择的数据源）
 let currentAgentTargets = [];
 let agentDistBlocked = false;
 
@@ -2321,7 +2337,7 @@ function agentTargetOs(target) {
   return segments.length >= 3 ? segments[2] : "";
 }
 
-// 渲染平台下拉：按 OS 去重排序；无产物或被门控时整体禁用
+// 渲染平台下拉：按 OS 去重排序；无产物或 CA 缺失时整体禁用
 function renderAgentTargets(targets, blocked) {
   currentAgentTargets = Array.isArray(targets) ? targets : [];
   agentDistBlocked = Boolean(blocked);
@@ -2410,7 +2426,7 @@ function syncAgentDistSelection() {
   }
 }
 
-// 加载 Agent 分发摘要（GET /api/agents/dist）：版本/门控/CA + 平台列表
+// 加载 Agent 分发摘要（GET /api/agents/dist）：版本/CA + 平台列表
 export async function loadAgentDist() {
   try {
     const result = await apiRequest("/api/agents/dist");
@@ -2429,7 +2445,7 @@ export async function loadAgentDist() {
 
 // 下载 Agent 安装包（GET /api/agents/download）：文件名取自
 // Content-Disposition（服务端已组好包），备注随查询串下发；上报地址由
-// 服务端统一取监听地址（agent.bind_addr）推导，前端不再传递
+// 服务端按「公共URL开关 → 手动覆盖 → 监听地址推导」顺序解析，前端不再传递
 export async function downloadAgentPackage(target, format = "zip") {
   const label = elementCache.getValue("agent-download-label").trim();
 
@@ -2457,8 +2473,13 @@ export async function downloadAgentPackage(target, format = "zip") {
   }
 }
 
-// 平台/架构/格式三级联动 + 下载按钮
+// 平台/架构/格式三级联动 + 下载按钮 + 上报地址开关联动
 function initAgentDistEvents() {
+  const publicUrlSwitch = elementCache.get("agent-use-public-url");
+  if (publicUrlSwitch) {
+    publicUrlSwitch.addEventListener("change", syncAgentReportOverrideVisibility);
+  }
+
   const platformSelect = elementCache.get("agent-dist-platform");
   if (platformSelect) {
     platformSelect.addEventListener("change", syncAgentArchOptions);

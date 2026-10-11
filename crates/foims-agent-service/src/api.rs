@@ -64,7 +64,6 @@ pub async fn get_agent_dist<S: ConfigProvider>(
     _user: foims_auth::extractor::AdminOrSecAdminUser,
 ) -> Result<Response, AppError> {
     let dist_dir = state.config().agent.dist_dir.clone();
-    let server_version = state.server_version();
 
     // 清单读取为同步 IO，移入阻塞线程避免卡住异步 worker
     let manifest_path = std::path::Path::new(&dist_dir).to_path_buf();
@@ -83,9 +82,6 @@ pub async fn get_agent_dist<S: ConfigProvider>(
                 .into_response());
         }
     };
-
-    // 版本门控（设计 §6.2）：manifest.version >= 主程序版本才允许下载
-    let gate_ok = manifest::gate_check(&manifest.version, server_version).is_ok();
 
     // 站点 CA 是否已生成（证书管理页生成后即可下载）
     let ca_ok = tokio::fs::metadata(crate::SITE_CA_PATH).await.is_ok();
@@ -121,18 +117,11 @@ pub async fn get_agent_dist<S: ConfigProvider>(
     let mut body = serde_json::json!({
         "available": true,
         "agent_version": manifest.version,
-        "server_version": server_version,
-        "gate_ok": gate_ok,
         "ca_ok": ca_ok,
         "targets": targets,
     });
-    if !gate_ok {
-        body["message"] = serde_json::json!(
-            msg("server.agent.version_gate")
-                .with("agent_version", &manifest.version)
-                .with("server_version", server_version)
-                .key()
-        );
+    if !ca_ok {
+        body["message"] = serde_json::json!(msg("server.agent.ca_missing").key());
     }
 
     Ok((StatusCode::OK, Json(body)).into_response())
@@ -140,7 +129,7 @@ pub async fn get_agent_dist<S: ConfigProvider>(
 
 /// GET /api/agents/download：创建 pending agent 并动态组包返回。
 ///
-/// 流程（设计 §6.3）：清单 → 版本门控 → 目标/格式校验 → CA → 二进制校验
+/// 流程（设计 §6.3）：清单 → 目标/格式校验 → CA → 二进制校验
 /// → 解析上报地址 → 生成 token（库存哈希）→ 建记录 → 生成 agent.toml
 /// → 组包 → 流式返回。
 pub async fn download_agent_package<S: ConfigProvider>(
@@ -151,7 +140,6 @@ pub async fn download_agent_package<S: ConfigProvider>(
     uri: axum::http::Uri,
 ) -> Result<Response, AppError> {
     let dist_dir = state.config().agent.dist_dir.clone();
-    let server_version = state.server_version();
 
     // 1. 清单加载（同步 IO 移入阻塞线程）
     let manifest_path = std::path::Path::new(&dist_dir).to_path_buf();
@@ -163,17 +151,7 @@ pub async fn download_agent_package<S: ConfigProvider>(
         }
     };
 
-    // 2. 版本门控：agent 版本不得低于主程序版本
-    if let Err(e) = manifest::gate_check(&manifest.version, server_version) {
-        log_warn!("log.agent.version_gate_blocked", detail = e);
-        return Err(AppError::Conflict(
-            msg("server.agent.version_gate")
-                .with("agent_version", &manifest.version)
-                .with("server_version", server_version),
-        ));
-    }
-
-    // 3. 目标平台与格式校验
+    // 2. 目标平台与格式校验
     if !manifest.targets.contains_key(&params.target) {
         return Err(AppError::NotFound(
             msg("server.agent.unknown_target").with("target", &params.target),
@@ -199,12 +177,12 @@ pub async fn download_agent_package<S: ConfigProvider>(
         ));
     }
 
-    // 4. 站点 CA（未生成 CA 时拒绝下载，提示先在证书管理页生成）
+    // 3. 站点 CA（未生成 CA 时拒绝下载，提示先在证书管理页生成）
     let ca_pem = tokio::fs::read(crate::SITE_CA_PATH)
         .await
         .map_err(|_| AppError::Conflict(msg("server.agent.ca_missing")))?;
 
-    // 4b. Agent 客户端证书（mTLS 上报身份；未生成时提示先启用 Agent 采集）
+    // 3b. Agent 客户端证书（mTLS 上报身份；未生成时提示先启用 Agent 采集）
     let certs_dir = std::path::Path::new(crate::cert::AGENT_CERT_DIR);
     let client_cert_pem = tokio::fs::read_to_string(certs_dir.join(crate::cert::CLIENT_CERT))
         .await
@@ -213,7 +191,7 @@ pub async fn download_agent_package<S: ConfigProvider>(
         .await
         .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
 
-    // 5. 二进制校验（sha256 + size 与清单一致；逐块哈希为 CPU/IO 密集同步
+    // 4. 二进制校验（sha256 + size 与清单一致；逐块哈希为 CPU/IO 密集同步
     //    操作，移入阻塞线程避免卡住异步 worker）
     let verify_manifest = manifest.clone();
     let verify_dir = std::path::Path::new(&dist_dir).to_path_buf();
@@ -231,16 +209,24 @@ pub async fn download_agent_package<S: ConfigProvider>(
         }
     };
 
-    // 6. 上报地址：统一以监听地址推导（通配主机时按请求 Host 兜底）；
-    //    解析失败须在入库前返回，避免泄漏 pending 记录
-    let bind_addr = state.config().agent.bind_addr.clone();
-    let server_addr = resolve_server_addr(&bind_addr, &headers, &uri)?;
+    // 5. 上报地址：公共URL开关 → 手动覆盖 → 监听地址推导（通配主机时按
+    //    请求 Host 兜底）；解析失败须在入库前返回，避免泄漏 pending 记录
+    let agent = state.config().agent.clone();
+    let public_url = state.config().server.public_url.clone();
+    let server_addr = resolve_report_addr(
+        agent.use_public_url,
+        &agent.report_url_override,
+        &public_url,
+        &agent.bind_addr,
+        &headers,
+        &uri,
+    )?;
 
-    // 7. 生成 32 字节随机 token（明文仅写入包内配置，库内存 SHA-256 哈希）
+    // 6. 生成 32 字节随机 token（明文仅写入包内配置，库内存 SHA-256 哈希）
     let token = generate_token();
     let token_hash = foims_common::net::generate_token_hash(&token);
 
-    // 8. 创建 pending agent 记录（machine_id 首报激活时回填）
+    // 7. 创建 pending agent 记录（machine_id 首报激活时回填）
     let label = normalize_label(&params.label);
     let pool = state.pool()?.get_conn();
     let agent_id: uuid::Uuid =
@@ -261,7 +247,7 @@ pub async fn download_agent_package<S: ConfigProvider>(
     // install.sh：优先 dist_dir 下的部署版本，缺失时回退内置精简脚本
     let install_sh = load_install_sh(&dist_dir).await;
 
-    // 9. 组包
+    // 8. 组包
     let inputs = PackageInputs {
         binary: &binary,
         target: &params.target,
@@ -392,10 +378,90 @@ fn split_bind_addr(bind_addr: &str) -> (&str, &str) {
     }
 }
 
-/// 解析上报地址：统一以监听地址（agent.bind_addr）为准——主机部分为通配
-/// 地址（[::]/::/0.0.0.0/空）时按请求 Host 推导（h2c 无 Host 头，仅
-/// :authority 伪头，故再以 URI authority 兜底），端口恒取监听端口；
-/// 最终结果经白名单校验，非法时返回参数错误。
+/// 解析下载包内上报地址，优先级：
+/// 1. 公共URL开关开启：主机名取系统配置 server.public_url（未配置则返回
+///    参数错误），端口取监听端口——监听地址/端口可能经代理、NAT 映射，
+///    并非 agent 可达的真实上报地址；
+/// 2. 开关关闭且填写覆盖地址：直接使用（缺端口补监听端口，裸 IPv6 拒绝）；
+/// 3. 其余：按监听地址推导（通配主机按请求 Host 兜底）。
+fn resolve_report_addr(
+    use_public_url: bool,
+    report_url_override: &str,
+    public_url: &str,
+    bind_addr: &str,
+    headers: &axum::http::HeaderMap,
+    uri: &axum::http::Uri,
+) -> Result<String, AppError> {
+    let listen_port = split_bind_addr(bind_addr).1;
+    if use_public_url {
+        let host = host_from_public_url(public_url)
+            .ok_or_else(|| AppError::Validation(msg("server.agent.public_url_missing")))?;
+        let addr = format!("{host}:{listen_port}");
+        if !valid_server_addr(&addr) {
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", "server.public_url"),
+            ));
+        }
+        return Ok(addr);
+    }
+    let override_addr = report_url_override.trim();
+    if !override_addr.is_empty() {
+        if !valid_override_addr(override_addr) {
+            return Err(AppError::Validation(msg(
+                "server.agent.invalid_report_override",
+            )));
+        }
+        let (host, _) = split_bind_addr(override_addr);
+        // host == 原串说明无显式端口段（host 或 [v6]），补监听端口
+        let addr = if host == override_addr {
+            format!("{host}:{listen_port}")
+        } else {
+            override_addr.to_string()
+        };
+        return Ok(addr);
+    }
+    resolve_server_addr(bind_addr, headers, uri)
+}
+
+/// 校验手动覆盖地址为严格 host[:port] 形式：主机名/IPv4 或方括号 IPv6，
+/// 端口段须为纯数字；裸 IPv6（多冒号无方括号）因与端口歧义直接拒绝。
+fn valid_override_addr(addr: &str) -> bool {
+    if addr.starts_with('[') {
+        let Some(end) = addr.find(']') else {
+            return false;
+        };
+        let rest = &addr[end + 1..];
+        return rest.is_empty() || (rest.starts_with(':') && is_port_segment(&rest[1..]));
+    }
+    if addr.contains('[') {
+        // 方括号不闭合等畸形：整体视为主机段，交白名单校验拒绝
+        return valid_server_addr(addr);
+    }
+    match addr.split_once(':') {
+        None => valid_server_addr(addr),
+        Some((host, port)) => !host.is_empty() && is_port_segment(port) && valid_server_addr(addr),
+    }
+}
+
+/// 从系统配置 server.public_url 提取主机名段：剥 scheme 与路径/查询，
+/// 丢弃 URL 自带端口（端口统一取监听端口）；方括号 IPv6 保留方括号。
+fn host_from_public_url(public_url: &str) -> Option<String> {
+    let raw = public_url.trim();
+    let rest = raw.split_once("://").map_or(raw, |(_, r)| r);
+    let host = rest.split(['/', '?', '#']).next()?;
+    if host.starts_with('[') {
+        let end = host.find(']')? + 1;
+        let v6 = &host[..end];
+        return (!v6.is_empty()).then(|| v6.to_string());
+    }
+    let host = host.split_once(':').map_or(host, |(h, _)| h);
+    (!host.is_empty()).then(|| host.to_string())
+}
+
+/// 监听地址推导分支（优先级 3）：统一以监听地址（agent.bind_addr）为准——
+/// 主机部分为通配地址（[::]/::/0.0.0.0/空）时按请求 Host 推导（h2c 无
+/// Host 头，仅 :authority 伪头，故再以 URI authority 兜底），端口恒取
+/// 监听端口；最终结果经白名单校验，非法时返回参数错误。
 fn resolve_server_addr(
     bind_addr: &str,
     headers: &axum::http::HeaderMap,
@@ -500,7 +566,10 @@ async fn load_install_sh(dist_dir: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_server_addr, split_bind_addr, valid_server_addr};
+    use super::{
+        host_from_public_url, resolve_report_addr, resolve_server_addr, split_bind_addr,
+        valid_override_addr, valid_server_addr,
+    };
     use axum::http::{HeaderMap, Uri};
 
     #[test]
@@ -582,5 +651,135 @@ mod tests {
         assert!(!valid_server_addr(""));
         assert!(!valid_server_addr("host\n.example.com"));
         assert!(!valid_server_addr("host\"; rm -rf /"));
+    }
+
+    #[test]
+    fn test_host_from_public_url() {
+        // scheme / 路径 / 端口 / 尾斜杠均剥离，仅留主机名；端口统一取监听端口
+        assert_eq!(
+            host_from_public_url("https://foims.example.com"),
+            Some("foims.example.com".into())
+        );
+        assert_eq!(
+            host_from_public_url("https://foims.example.com:8443/console/"),
+            Some("foims.example.com".into())
+        );
+        assert_eq!(host_from_public_url("localhost/"), Some("localhost".into()));
+        assert_eq!(
+            host_from_public_url("http://127.0.0.1"),
+            Some("127.0.0.1".into())
+        );
+        // 方括号 IPv6 保留方括号；空值/纯 scheme 返回 None
+        assert_eq!(
+            host_from_public_url("https://[2001:db8::1]/x"),
+            Some("[2001:db8::1]".into())
+        );
+        assert_eq!(host_from_public_url(""), None);
+        assert_eq!(host_from_public_url("  "), None);
+        assert_eq!(host_from_public_url("https://"), None);
+    }
+
+    #[test]
+    fn test_valid_override_addr() {
+        // 合法：host / host:port / [v6] / [v6]:port
+        assert!(valid_override_addr("agent.example.com"));
+        assert!(valid_override_addr("agent.example.com:9100"));
+        assert!(valid_override_addr("127.0.0.1:9100"));
+        assert!(valid_override_addr("[2001:db8::1]"));
+        assert!(valid_override_addr("[2001:db8::1]:9100"));
+        // 非法：裸 IPv6 歧义 / 尾冒号 / 畸形端口 / 空串
+        assert!(!valid_override_addr("2001:db8::1"));
+        assert!(!valid_override_addr("host:"));
+        assert!(!valid_override_addr("host:abc"));
+        assert!(!valid_override_addr("[2001:db8::1"));
+        assert!(!valid_override_addr(""));
+        assert!(!valid_override_addr("host\"; rm -rf /"));
+    }
+
+    #[test]
+    fn test_resolve_report_addr() {
+        let empty_headers = HeaderMap::new();
+        let uri: Uri = "https://foims.example.com/api/agents/download"
+            .parse()
+            .unwrap();
+
+        // 优先级 1：公共URL开关 → 公共URL主机 + 监听端口
+        assert_eq!(
+            resolve_report_addr(
+                true,
+                "",
+                "https://foims.example.com:8443/",
+                "[::]:9100",
+                &empty_headers,
+                &uri
+            )
+            .unwrap(),
+            "foims.example.com:9100"
+        );
+        assert_eq!(
+            resolve_report_addr(true, "", "", "[::]:9100", &empty_headers, &uri)
+                .unwrap_err()
+                .status_code(),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+
+        // 优先级 2：手动覆盖地址；缺端口补监听端口，带端口原样
+        assert_eq!(
+            resolve_report_addr(
+                false,
+                "relay.example.com",
+                "",
+                "[::]:9100",
+                &empty_headers,
+                &uri
+            )
+            .unwrap(),
+            "relay.example.com:9100"
+        );
+        assert_eq!(
+            resolve_report_addr(
+                false,
+                "relay.example.com:9443",
+                "",
+                "[::]:9100",
+                &empty_headers,
+                &uri
+            )
+            .unwrap(),
+            "relay.example.com:9443"
+        );
+        assert_eq!(
+            resolve_report_addr(
+                false,
+                "[2001:db8::1]",
+                "",
+                "[::]:9100",
+                &empty_headers,
+                &uri
+            )
+            .unwrap(),
+            "[2001:db8::1]:9100"
+        );
+        // 覆盖地址非法：400
+        assert_eq!(
+            resolve_report_addr(false, "2001:db8::1", "", "[::]:9100", &empty_headers, &uri)
+                .unwrap_err()
+                .status_code(),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+
+        // 优先级 3：覆盖为空 → 监听地址推导（可路由主机原样采用）
+        assert_eq!(
+            resolve_report_addr(
+                false,
+                "",
+                "",
+                "agent.example-com_cn:9100",
+                &empty_headers,
+                &uri
+            )
+            .unwrap(),
+            "agent.example-com_cn:9100"
+        );
     }
 }

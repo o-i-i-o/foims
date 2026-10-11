@@ -50,7 +50,6 @@ log:
     report_listening: "Agent report service listening on: {{bind}}"
     report_request_failed: "Failed to handle agent report request: {{peer}} {{error}}"
     report_server_failed: "Agent report service exited unexpectedly: {{error}}"
-    version_gate_blocked: "Agent download blocked by version gate: {{detail}}"
   backup:
     backup_file_remove_failed: "Failed to remove incomplete backup file: {{path}}: {{error}}"
     dir_permission_failed: "Failed to set backup directory permissions for {{path}}: {{error}}"

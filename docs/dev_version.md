@@ -190,3 +190,11 @@ v0.8.0
 2.修复点击设备图标导致图标损坏（三根因）：svgCanvasBase._setElementPosition 的 text/line/circle 跟随遍历补「无 data-rel* 基准则跳过」防护（原缺省按 0 兜底会把 lucide 图标内部形状挪到节点左上角）；visualization.css 选中态虚线改直接子选择器 > rect（原后代选择器给图标内部 rect 描虚线）；TopologyModal 浮窗关闭监听从 click 改 mousedown（浮窗由节点 mouseup 打开，浏览器补发的 click 命中刚出现的全屏 overlay 导致一闪而过；浮窗与 overlay 为 body 兄弟节点，点浮窗内部不冒泡不受影响）
 3.e2e 验证通过（合成事件绕开 IDE WebView CDP 坐标偏移）：节点点击打开浮窗、补发 click 不关闭、mousedown 正常关闭、拖动节点图标内部形状坐标零变化
 4.顺带修正 TopologyRenderer hops.map 未用参数告警（(hop, i) → (_hop, i)）；前端资源版本同步 bump，lib 版本 0.23.3→0.23.4（y+1 → c+1）
+
+v0.8.1
+2026101123021001
+1.系统页「数据管理」Agent 采集卡片重构为「Agent 配置」（i18n 键 agent_collect_card→agent_config_card）：参考日志管理卡片 data-management-container 分节布局，拆为「Agent 服务配置」（监听地址/端口/上报间隔/站点 CA 状态）与「Agent 配置」（上报地址模式/Agent 版本/下载面板）两节，保存按钮与启用开关保留卡片头部
+2.上报地址模式新增「使用公共URL作为上报地址」开关：开=下载包内上报地址自动取系统配置 server.public_url 的主机名+监听端口（监听地址/端口可能经代理、NAT 映射，并非 agent 可达的真实上报地址），公共URL未配置时报参数错误；关=展开「上报地址覆盖」输入框手动填写（host:port，缺端口补监听端口，裸 IPv6 歧义拒绝需方括号包裹）；两者均空回退监听地址推导（原逻辑）。AgentConfig 新增 use_public_url/report_url_override 字段（serde default 兼容旧配置文件），resolve_report_addr 三级优先解析（公共URL→覆盖→监听推导）+ host_from_public_url/valid_override_addr 校验与 3 组单测，前端 systemManager 加载/保存/开关联动显隐
+3.彻底移除 agent 版本门控：api.rs dist/download 删 gate_check 调用与 server_version/gate_ok 响应字段、manifest.rs 删 gate_check 函数及 4 个单测、ConfigProvider trait 与 AppState 删 server_version 方法、foims-agent-service 移除 semver 依赖；dist 响应改为 ca_ok=false 时附 message，前端删除主程序版本/版本门控两行 dl 与对应 JS 处理，下载面板仅按 CA 与产物可用性禁用
+4.i18n：zh/en 新增 agent_service.section_service/section_agent/use_public_url/use_public_url_desc/report_url_override/report_url_override_desc/invalid_report_override 与 server.agent.public_url_missing/invalid_report_override，删除 system.agent_collect_card/agent_server_version/agent_gate_status/agent_gate_ok/agent_gate_blocked 与 server.agent.version_gate、log.agent.version_gate_blocked；config.toml.example agent 段补 use_public_url/report_url_override 示例；agent-module-analysis.md 同步
+5.cargo fmt + clippy -D warnings 全 workspace 通过，foims-agent-service 65 测试全绿；lib 版本 0.23.4→0.23.5（y+1 → c+1），foims-common 0.3.5→0.3.6、foims-agent-service 0.1.7→0.1.8，前端资源版本同步 bump

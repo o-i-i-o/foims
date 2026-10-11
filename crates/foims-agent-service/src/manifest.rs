@@ -111,38 +111,6 @@ pub fn verify_binary(
     Ok(content)
 }
 
-/// 版本门控（设计 §6.2）：agent 产物版本不得低于主程序版本。
-///
-/// 两者均可按 semver 解析时做 `>=` 比较（`>` 允许现场先行更新产物的运维操作）；
-/// 任一解析失败时退化为要求完全相等，避免错放不可比的版本。
-pub fn gate_check(manifest_version: &str, server_version: &str) -> Result<(), String> {
-    match (
-        semver::Version::parse(manifest_version),
-        semver::Version::parse(server_version),
-    ) {
-        (Ok(manifest), Ok(server)) => {
-            if manifest < server {
-                Err(format!(
-                    "Agent 产物版本 {manifest_version} 低于主程序版本 {server_version}，\
-                     请检查 agent 产物目录或重新部署分发产物"
-                ))
-            } else {
-                Ok(())
-            }
-        }
-        _ => {
-            if manifest_version == server_version {
-                Ok(())
-            } else {
-                Err(format!(
-                    "Agent 产物版本 {manifest_version} 与主程序版本 {server_version} 不一致 \
-                     （版本号无法按语义化版本比较）"
-                ))
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,28 +246,5 @@ mod tests {
             .unwrap_or_else(|e| panic!("删除产物失败: {e}"));
         assert!(verify_binary(&dir, &manifest, "x86_64-unknown-linux-musl").is_err());
         std::fs::remove_dir_all(&dir).unwrap_or_else(|e| panic!("清理临时目录失败: {e}"));
-    }
-
-    #[test]
-    fn gate_产物低于主程序时拒绝() {
-        assert!(gate_check("0.21.13", "0.21.14").is_err());
-    }
-
-    #[test]
-    fn gate_相等时放行() {
-        assert!(gate_check("0.21.14", "0.21.14").is_ok());
-    }
-
-    #[test]
-    fn gate_产物高于主程序时放行() {
-        assert!(gate_check("0.21.15", "0.21.14").is_ok());
-    }
-
-    #[test]
-    fn gate_无法解析时要求完全相等() {
-        // 完全相等 → 放行
-        assert!(gate_check("dev", "dev").is_ok());
-        // 不相等且无法比较 → 拒绝
-        assert!(gate_check("dev", "0.21.14").is_err());
     }
 }

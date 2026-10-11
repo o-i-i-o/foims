@@ -120,3 +120,8 @@ max_report_bytes = 262144
 history_retention_days = 30
 # 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline
 offline_factor = 3
+# 上报地址开关：开启后下载包内上报地址取 server.public_url 的主机名 + 监听端口
+#（监听地址/端口可能经代理、NAT 映射，并非 agent 可达的真实上报地址）
+use_public_url = false
+# 手动上报地址覆盖（开关关闭时生效）：host:port 形式，留空回退监听地址推导
+report_url_override = ""

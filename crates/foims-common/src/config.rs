@@ -361,6 +361,13 @@ pub struct AgentConfig {
     /// 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline。
     #[serde(default = "default_agent_offline_factor")]
     pub offline_factor: u32,
+    /// 上报地址模式开关：开启后下载包内上报地址取系统配置 server.public_url
+    /// 的主机名 + 监听端口（监听地址端口可能经代理/NAT 映射，并非真实上报地址）。
+    #[serde(default)]
+    pub use_public_url: bool,
+    /// 手动上报地址覆盖（开关关闭时生效）：host:port 形式，留空回退监听地址推导。
+    #[serde(default)]
+    pub report_url_override: String,
 }
 
 fn default_agent_dist_dir() -> String {
@@ -397,6 +404,8 @@ impl Default for AgentConfig {
             max_report_bytes: default_agent_max_report_bytes(),
             history_retention_days: default_agent_history_retention_days(),
             offline_factor: default_agent_offline_factor(),
+            use_public_url: false,
+            report_url_override: String::new(),
         }
     }
 }

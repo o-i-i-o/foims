@@ -17,12 +17,8 @@ pub trait DbProvider: Clone + Send + Sync + 'static {
 /// 配置访问边界 trait（依赖倒置）。
 ///
 /// 与 [`DbProvider`] 同理：业务 crate 的 handler 经此 trait 读取共享配置槽
-/// 最新快照与主程序版本，避免业务 crate 反向依赖主程序。
+/// 最新快照，避免业务 crate 反向依赖主程序。
 pub trait ConfigProvider: DbProvider {
     /// 共享配置槽最新快照（写盘端点刷新后即为最新）。
     fn config(&self) -> Arc<Config>;
-
-    /// 主程序版本（`env!("CARGO_PKG_VERSION")`，由主 crate 实现时展开），
-    /// 供 agent 分发的版本门控比较。
-    fn server_version(&self) -> &'static str;
 }

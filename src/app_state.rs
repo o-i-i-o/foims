@@ -88,10 +88,6 @@ impl foims_common::ConfigProvider for AppState {
     fn config(&self) -> Arc<Config> {
         self.config_snapshot()
     }
-
-    fn server_version(&self) -> &'static str {
-        env!("CARGO_PKG_VERSION")
-    }
 }
 
 impl AuthProvider for AppState {

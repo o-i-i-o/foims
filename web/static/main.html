@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791726621">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791726621">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791730863">
 </head>
 <body class="main-body">
   <div id="app">
@@ -1130,7 +1130,7 @@
                 <header class="config-card-header">
                   <div class="config-card-title">
                     <span class="icon">📦</span>
-                    <span data-i18n="system.agent_collect_card">Agent Collection</span>
+                    <span data-i18n="system.agent_config_card">Agent Configuration</span>
                   </div>
                   <div class="config-switch">
                     <label for="agent-service-enabled">
@@ -1140,72 +1140,87 @@
                     <button type="submit" class="btn btn-primary btn-sm" data-i18n="common.save">Save Configuration</button>
                   </div>
                 </header>
-                <!-- 服务参数：监听地址同时作为下载包内上报地址的来源 -->
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="agent-service-bind-addr" data-i18n="agent_service.bind_addr">Listen Address</label>
-                    <input type="text" id="agent-service-bind-addr" placeholder="0.0.0.0" data-i18n-placeholder="agent_service.bind_addr_placeholder" autocomplete="off" aria-label="Agent listen address" data-i18n-aria-label="agent_service.bind_addr">
-                    <span class="hint-text" data-i18n="agent_service.bind_addr_desc">IPv4, hostname or bracketed IPv6; used as report host in downloads; [::] enables dual stack</span>
-                  </div>
-                  <div class="form-group">
-                    <label for="agent-service-bind-port" data-i18n="agent_service.bind_port">Port</label>
-                    <input type="number" id="agent-service-bind-port" min="1" max="65535" placeholder="9100" aria-label="Agent listen port" data-i18n-aria-label="agent_service.bind_port">
-                    <span class="hint-text" data-i18n="agent_service.bind_port_desc">QUIC/UDP port, firewall must allow it; nginx cannot proxy UDP</span>
-                  </div>
-                  <div class="form-group">
-                    <label for="agent-service-interval" data-i18n="agent_service.report_interval">Report Interval (seconds)</label>
-                    <input type="number" id="agent-service-interval" min="10" max="3600" placeholder="60" aria-label="Agent report interval in seconds" data-i18n-aria-label="agent_service.report_interval">
-                    <span class="hint-text" data-i18n="agent_service.report_interval_desc">Pushed to agents via report responses, 10-3600; also drives offline detection</span>
-                  </div>
+                <div class="data-management-container">
+                  <!-- 上报接收服务参数：监听地址作为默认上报地址来源 -->
+                  <section class="section">
+                    <h3 data-i18n="agent_service.section_service">Agent Service</h3>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="agent-service-bind-addr" data-i18n="agent_service.bind_addr">Listen Address</label>
+                        <input type="text" id="agent-service-bind-addr" placeholder="0.0.0.0" data-i18n-placeholder="agent_service.bind_addr_placeholder" autocomplete="off" aria-label="Agent listen address" data-i18n-aria-label="agent_service.bind_addr">
+                        <span class="hint-text" data-i18n="agent_service.bind_addr_desc">IPv4, hostname or bracketed IPv6; default source of report host; [::] enables dual stack</span>
+                      </div>
+                      <div class="form-group">
+                        <label for="agent-service-bind-port" data-i18n="agent_service.bind_port">Port</label>
+                        <input type="number" id="agent-service-bind-port" min="1" max="65535" placeholder="9100" aria-label="Agent listen port" data-i18n-aria-label="agent_service.bind_port">
+                        <span class="hint-text" data-i18n="agent_service.bind_port_desc">QUIC/UDP port, firewall must allow it; nginx cannot proxy UDP</span>
+                      </div>
+                      <div class="form-group">
+                        <label for="agent-service-interval" data-i18n="agent_service.report_interval">Report Interval (seconds)</label>
+                        <input type="number" id="agent-service-interval" min="10" max="3600" placeholder="60" aria-label="Agent report interval in seconds" data-i18n-aria-label="agent_service.report_interval">
+                        <span class="hint-text" data-i18n="agent_service.report_interval_desc">Pushed to agents via report responses, 10-3600; also drives offline detection</span>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <dl class="config-field">
+                        <dt data-i18n="system.agent_ca_status">Site CA</dt>
+                        <dd class="field-value" id="agent-ca-status">-</dd>
+                      </dl>
+                    </div>
+                  </section>
+                  <!-- Agent 客户端配置：上报地址模式 / 版本 / 分发下载 -->
+                  <section class="section">
+                    <h3 data-i18n="agent_service.section_agent">Agent Settings</h3>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="checkbox-label" for="agent-use-public-url">
+                          <input type="checkbox" id="agent-use-public-url" class="form-checkbox">
+                          <span data-i18n="agent_service.use_public_url">Use public URL as report address</span>
+                        </label>
+                        <span class="hint-text" data-i18n="agent_service.use_public_url_desc">Enabled: report host comes from the system Public URL; disabled: fill in a custom report address below</span>
+                      </div>
+                      <div class="form-group" id="agent-report-override-group" hidden>
+                        <label for="agent-report-url-override" data-i18n="agent_service.report_url_override">Report Address Override</label>
+                        <input type="text" id="agent-report-url-override" placeholder="agent.example.com:9100" autocomplete="off" aria-label="Agent report address override" data-i18n-aria-label="agent_service.report_url_override">
+                        <span class="hint-text" data-i18n="agent_service.report_url_override_desc">Real report address behind proxy/NAT, host:port; empty falls back to listen address</span>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <dl class="config-field">
+                        <dt data-i18n="system.agent_dist_version">Agent Version</dt>
+                        <dd class="field-value" id="agent-dist-version">-</dd>
+                      </dl>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="agent-dist-platform" data-i18n="system.agent_target">Platform</label>
+                        <select id="agent-dist-platform" class="form-control" disabled aria-label="Agent platform">
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label for="agent-dist-arch" data-i18n="system.agent_arch">Architecture</label>
+                        <select id="agent-dist-arch" class="form-control" disabled aria-label="Agent architecture">
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label for="agent-dist-format" data-i18n="system.agent_format">Format</label>
+                        <select id="agent-dist-format" class="form-control" disabled aria-label="Agent package format">
+                        </select>
+                      </div>
+                      <!-- 下载选项：备注 -->
+                      <div class="form-group">
+                        <label for="agent-download-label" data-i18n="system.agent_download_label">Download Label</label>
+                        <input type="text" id="agent-download-label" class="form-control" maxlength="100">
+                      </div>
+                      <div class="form-group">
+                          <span id="agent-dist-size" class="hint-text" aria-live="polite">-</span>
+                          <button type="button" id="agent-dist-download-btn" class="btn btn-primary" data-i18n="system.agent_download" disabled>Download</button>
+                      </div>
+                    </div>
+                  </section>
                 </div>
-                <!-- 版本与门控状态（/api/agents/dist） -->
-                <div class="form-row">
-                  <dl class="config-field">
-                    <dt data-i18n="system.agent_dist_version">Agent Version</dt>
-                    <dd class="field-value" id="agent-dist-version">-</dd>
-                  </dl>
-                  <dl class="config-field">
-                    <dt data-i18n="system.agent_server_version">Server Version</dt>
-                    <dd class="field-value" id="agent-server-version">-</dd>
-                  </dl>
-                  <dl class="config-field">
-                    <dt data-i18n="system.agent_gate_status">Version Gate</dt>
-                    <dd class="field-value" id="agent-gate-status">-</dd>
-                  </dl>
-                  <dl class="config-field">
-                    <dt data-i18n="system.agent_ca_status">Site CA</dt>
-                    <dd class="field-value" id="agent-ca-status">-</dd>
-                  </dl>
-                </div>
-                <!-- 产物不可用/门控未通过提示（hidden 属性控制显隐） -->
+                <!-- 产物不可用提示（hidden 属性控制显隐） -->
                 <p id="agent-dist-message" class="config-hint config-hint-danger" hidden></p>
-
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="agent-dist-platform" data-i18n="system.agent_target">Platform</label>
-                    <select id="agent-dist-platform" class="form-control" disabled aria-label="Agent platform">
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label for="agent-dist-arch" data-i18n="system.agent_arch">Architecture</label>
-                    <select id="agent-dist-arch" class="form-control" disabled aria-label="Agent architecture">
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label for="agent-dist-format" data-i18n="system.agent_format">Format</label>
-                    <select id="agent-dist-format" class="form-control" disabled aria-label="Agent package format">
-                    </select>
-                  </div>
-                  <!-- 下载选项：备注 -->
-                  <div class="form-group">
-                    <label for="agent-download-label" data-i18n="system.agent_download_label">Download Label</label>
-                    <input type="text" id="agent-download-label" class="form-control" maxlength="100">
-                  </div>                  
-                  <div class="form-group">
-                      <span id="agent-dist-size" class="hint-text" aria-live="polite">-</span>
-                      <button type="button" id="agent-dist-download-btn" class="btn btn-primary" data-i18n="system.agent_download" disabled>Download</button>
-                  </div>
-                </div>
               </section>
             </form>
 
@@ -1630,6 +1645,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791726621"></script>
+  <script type="module" src="/static/js/app.js?v=1791730863"></script>
 </body>
 </html>

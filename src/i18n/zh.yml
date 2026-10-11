@@ -50,7 +50,6 @@ log:
     report_listening: "Agent 采集上报服务已监听: {{bind}}"
     report_request_failed: "Agent 上报请求处理失败: {{peer}} {{error}}"
     report_server_failed: "Agent 采集上报服务异常退出: {{error}}"
-    version_gate_blocked: "Agent 下载被版本门控拦截: {{detail}}"
   backup:
     backup_file_remove_failed: "清理写入失败的备份文件失败: {{path}}: {{error}}"
     dir_permission_failed: "设置备份目录权限失败 {{path}}: {{error}}"

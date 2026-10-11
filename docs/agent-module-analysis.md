@@ -19,7 +19,7 @@
 ### 1.2 端到端数据流
 
 ```
-【下载分发】  管理页(前端) --GET /api/agents/dist|download--> manifest 门控校验 → 生成 token(库存哈希)
+【下载分发】  管理页(前端) --GET /api/agents/dist|download--> manifest 加载 → 生成 token(库存哈希)
               → 建 agents(pending) 行 → 动态组包 zip/deb/rpm(二进制+agent.toml+ca.pem+client.pem/key+install.sh) → 流式返回
 
 【指标上报】  foims-agent(被监控机)  --QUIC/H3 mTLS POST /agent/v1/report-->  report_server
@@ -122,11 +122,11 @@
 
 ### 3.5 分发下载（[api.rs](../crates/foims-agent-service/src/api.rs)、[manifest.rs](../crates/foims-agent-service/src/manifest.rs)、[packaging.rs](../crates/foims-agent-service/src/packaging.rs))
 
-- `GET /api/agents/dist`：清单摘要 `{available, agent_version, server_version, gate_ok, ca_ok, targets[]}`；产物目录不可用仍 200（available=false 供前端置灰）。
-- `GET /api/agents/download?target=&format=&label=`：清单 → **版本门控**（`manifest.version ≥ server_version`，否则 409）→ 目标/格式校验（zip 恒可；deb/rpm 按架构映射）→ 站点 CA 与 client 证书读取 → 二进制 sha256+size 校验（阻塞线程）→ **上报地址解析**（以 `agent.bind_addr` 为准：通配主机取请求 Host/URI authority 兜底，端口恒取监听端口，白名单校验）→ 生成 32 字节 token（库存 SHA-256 哈希）→ INSERT agents(pending) → 生成 agent.toml（server_addr+token+interval 60）→ 组包 zip/deb/rpm → 流式返回（Content-Disposition）。
+- `GET /api/agents/dist`：清单摘要 `{available, agent_version, ca_ok, message?, targets[]}`；产物目录不可用仍 200（available=false 供前端置灰）。
+- `GET /api/agents/download?target=&format=&label=`：清单 → 目标/格式校验（zip 恒可；deb/rpm 按架构映射）→ 站点 CA 与 client 证书读取 → 二进制 sha256+size 校验（阻塞线程）→ **上报地址解析**（三级优先：`use_public_url` 开关开启取 `server.public_url` 主机名+监听端口（未配置公共URL报参数错误）→ `report_url_override` 手动覆盖（host:port，缺端口补监听端口，裸 IPv6 拒绝）→ 监听地址推导（通配主机取请求 Host/URI authority 兜底）），白名单校验 → 生成 32 字节 token（库存 SHA-256 哈希）→ INSERT agents(pending) → 生成 agent.toml（server_addr+token+interval 60）→ 组包 zip/deb/rpm → 流式返回（Content-Disposition）。
 - 失败回滚：组包失败/防御分支按返回 id 精确回删 pending 行（**地址解析失败发生在入库前**，不泄漏 pending 记录）。
 - install.sh：优先 dist_dir 部署版本，缺失回退内置精简脚本（含 systemd unit 内联）。
-- manifest.json 由 `scripts/build-agent.sh` 构建期产出（版本/各 target 二进制 sha256/size）；agent 版本已独立自管理，门控保留为零成本保险丝。
+- manifest.json 由 `scripts/build-agent.sh` 构建期产出（版本/各 target 二进制 sha256/size）；agent 版本独立自管理，版本门控已于 v0.8.1 彻底移除（ConfigProvider::server_version 与 semver 依赖一并删除）。
 
 ### 3.6 agents_api：管理接口（[agents_api.rs](../crates/foims-agent-service/src/agents_api.rs)）
 
@@ -248,7 +248,7 @@ pending --首报成功--> active --agent_offline 超时--> offline --再上报--
 | GET /alert-thresholds | | 阈值配置（AdminOrSecAdminUser 提取器） |
 | PUT /alert-thresholds | | 保存并异步全量评估一轮 |
 | GET /dist | | 清单摘要（available=false 不报错） |
-| GET /download | | 组包下载（版本门控 409；组包失败回删 pending） |
+| GET /download | | 组包下载（组包失败回删 pending；上报地址按公共URL→覆盖→监听推导解析） |
 
 挂载：[src/routes/mod.rs](../src/routes/mod.rs) `nest("/api/agents")` + `route_layer(agent_admin_guard)`。
 
@@ -267,15 +267,17 @@ pending --首报成功--> active --agent_offline 超时--> offline --再上报--
 | max_report_bytes | 262144 | 上报/续期请求体上限（413） |
 | history_retention_days | 30 | history 保留期 |
 | offline_factor | 3 | 离线判定倍数 |
+| use_public_url | false | 下载包上报地址取 server.public_url 主机名+监听端口（v0.8.1） |
+| report_url_override | "" | 手动上报地址覆盖 host:port，缺端口补监听端口（v0.8.1） |
 
 ### 6.2 agent 客户端 agent.toml（下载时服务端生成）
 
-`server_addr`（由 bind_addr + 请求 Host 推导）、`token`（64hex 明文）、`report_interval_secs = 60`；未知字段容忍（便于扩展）；证书三件套固定在 cert_dir：client.pem / client.key / ca.pem。
+`server_addr`（按 公共URL开关 → 覆盖地址 → 监听地址推导 三级解析）、`token`（64hex 明文）、`report_interval_secs = 60`；未知字段容忍（便于扩展）；证书三件套固定在 cert_dir：client.pem / client.key / ca.pem。
 
 ### 6.3 前端
 
 - 主机监控页：[web/static/js/modules/agents.js](../web/static/js/modules/agents.js)——列表（SNMP 徽标 + agent 操作分流：禁用/启用/吊销对 snmp 行隐藏）、详情弹窗（2×2 迷你曲线）、告警阈值弹窗（GET/PUT alert-thresholds）、下载面板（dist 驱动）。
-- 系统页 Agent 采集卡片：[web/static/main.html](../web/static/main.html)（启用/监听地址/端口/上报间隔）+ [web/static/js/modules/systemManager.js](../web/static/js/modules/systemManager.js) 加载保存。
+- 系统页 Agent 配置卡片（v0.8.1 重构，「Agent 服务配置」+「Agent 配置」两节）：[web/static/main.html](../web/static/main.html)（服务：启用/监听地址/端口/上报间隔/CA 状态；Agent：公共URL上报开关+覆盖地址/版本/下载面板）+ [web/static/js/modules/systemManager.js](../web/static/js/modules/systemManager.js) 加载保存。
 
 ---
 
@@ -287,7 +289,7 @@ pending --首报成功--> active --agent_offline 超时--> offline --再上报--
 | 上报身份 | Bearer token（64hex）→ SHA-256 库存哈希；machine_id 绑定防令牌复用；频控原子闸门防写库风暴 |
 | 续期 | 请求体 PEM ≡ 连接 leaf；<90 天窗口；签发互斥；agent 端坏物料拒绝落盘 |
 | Web API | JWT 中间件 + agent_admin_guard + `_user` 提取器三层；keyword `escape_like`；status 白名单；payload 上限 413 |
-| 分发 | 版本门控；二进制 sha256 校验；server_addr 白名单防配置注入；token 明文仅入包；组包失败回滚 pending |
+| 分发 | 二进制 sha256 校验；上报地址三级解析 + 白名单防配置注入；token 明文仅入包；组包失败回滚 pending |
 | 证书 | CA 指纹复用校验（轮换自动重签）；私钥 0600 独占创建；client 证书无 SAN（身份由链保证） |
 | SNMP | trap community 白名单 / v3 USM / 冷却限流；轮询差值状态持久化 |
 | 校验 | collected_at 时钟偏差 ≤300s；数值范围与 NUMERIC 精度对齐（温度 [-100,250] 等） |
