@@ -171,3 +171,11 @@ v0.6.3
 v0.7.1
 2026101109385301
 1.系统页「数据采集」子标签取消：Agent 采集与 SNMP Trap 接收两张卡片整体迁入「数据管理」子标签（置于数据管理卡片之前，HTML 原样移动），子标签按钮与空容器删除；子标签激活分支 agent-collect 的三个加载调用（loadAgentDist/loadAgentServiceConfig/loadSnmpTrapConfig）并入 data-management 分支；i18n 移除不再使用的 system.agent_collect 键（中英文），agent-design.md §7.3 标题同步；纯前端结构调整，Cargo.toml 不变，前端资源版本同步 bump
+
+v0.7.2
+2026101109513801
+1.CI musl 工具链下载移除硬编码 sha256 校验（.github/workflows/ci.yml，修正 v0.6.3 设计缺陷）：锁哈希会把上游 musl.cc 工具链更新变成 CI 必然失败；改为不锁哈希，完整性由 HTTPS 传输与 tar 解包校验兜底、功能正确性由「校验交叉编译器可用」步骤（--version）把关，有意升级工具链时更新缓存 key 强制刷新；两 job 同步，纯 CI 配置修改，Cargo.toml 与前端资源版本不变
+
+v0.7.3
+2026101109533801
+1.CI musl 工具链下载命令 curl 改 wget（.github/workflows/ci.yml，实测 curl 在网络可达时仍下载失败）：wget --timeout=60 --tries=3 -O 落盘 /tmp/aarch64-linux-musl-cross.tgz，两 job 同步；纯 CI 配置修改，Cargo.toml 与前端资源版本不变
