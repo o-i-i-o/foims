@@ -1908,6 +1908,7 @@
       "room_power_exceeded": "设备功耗超过房间总功率：已分配 {{allocated}} 瓦，本设备 {{power}} 瓦，上限 {{total}} 瓦",
       "nic": {
         "card_type_invalid": "网卡类型必须是pcie、onboard、usb、virtual、wwan、wifi或other",
+        "cards_required": "网卡配置不能为空，请至少提交一张网卡",
         "fetched": "网卡配置获取成功",
         "interface_role_invalid": "网口接口角色必须是management、business、loopback、uplink或other",
         "not_found": "网卡不存在",

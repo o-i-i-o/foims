@@ -17,13 +17,8 @@ use foims_common::DbProvider;
 use foims_common::{AppError, msg};
 use foims_models::{
     DeviceInterface, DeviceNetworkConfigSync, IpDetail, NetworkCard, NetworkCardSyncItem,
-    PortSyncItem,
 };
 
-/// 默认网卡名称
-pub const DEFAULT_CARD_NAME: &str = "网卡1";
-/// 默认网口名称
-pub const DEFAULT_PORT_NAME: &str = "eth0";
 /// 自动生成网卡（板卡）的排序基值：排在设备模态框手工网卡之后
 const AUTO_NIC_SORT_ORDER: i32 = 1000;
 /// device_nics.name 列宽（VARCHAR(50)，与校验规则一致）
@@ -148,8 +143,9 @@ pub async fn sync_device_network_config<P: DbProvider>(
 
 /// 应用网卡配置：整体替换设备模态框托管的网口（device_managed=TRUE），
 /// 保留端口模态框/SNMP 生成的端口（device_managed=FALSE）及其网卡；
-/// 清理不再被任何网口引用的网卡。若 cards 为空，则自动生成一张默认
-/// 网卡 + 一个默认网口（托管）。提交的网口名与幸存非托管网口重名
+/// 清理不再被任何网口引用的网卡。cards 为空属于非法请求，直接拒绝，
+/// 由调用方提交真实的网卡配置，不提供硬编码默认网卡/网口。
+/// 提交的网口名与幸存非托管网口重名
 /// （或请求内网卡间重名）时返回冲突错误。
 ///
 /// 物理布线（cable_links）仅对本次被移除的托管网口清理：请求中保留
@@ -161,14 +157,9 @@ pub async fn apply_network_config(
     cards: &[NetworkCardSyncItem],
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // cards 为空时自动生成默认可管理网卡 + 网口（借用切片，避免整树拷贝）
-    let default_cards;
-    let effective_cards: &[NetworkCardSyncItem] = if cards.is_empty() {
-        default_cards = [default_card_sync_item()];
-        &default_cards
-    } else {
-        cards
-    };
+    // 空 cards 属于非法请求：网卡/网口必须由调用方显式提交，
+    // 不再回退硬编码默认配置（网卡1 + eth0）
+    validate_cards_not_empty(cards)?;
 
     // 幸存的非托管网口（SNMP/端口模态框来源）与本次提交的托管网口共用
     // (device_id, name) 唯一约束：预检重名返回精确错误，避免 INSERT 撞
@@ -182,7 +173,7 @@ pub async fn apply_network_config(
     .into_iter()
     .collect();
     let mut seen_names: HashSet<&str> = HashSet::new();
-    for card in effective_cards {
+    for card in cards {
         for port in &card.ports {
             if !seen_names.insert(port.name.as_str()) || surviving_names.contains(&port.name) {
                 return Err(AppError::Conflict(msg(
@@ -224,7 +215,7 @@ pub async fn apply_network_config(
     .bind(device_id)
     .fetch_all(&mut *tx)
     .await?;
-    let kept_ids: HashSet<Uuid> = effective_cards
+    let kept_ids: HashSet<Uuid> = cards
         .iter()
         .flat_map(|card| card.ports.iter())
         .filter_map(|port| port.id)
@@ -257,7 +248,7 @@ pub async fn apply_network_config(
     .execute(&mut *tx)
     .await?;
 
-    for (card_idx, card) in effective_cards.iter().enumerate() {
+    for (card_idx, card) in cards.iter().enumerate() {
         card.validate()?;
         let card_id = card.id.unwrap_or_else(Uuid::new_v4);
         let card_type = card.card_type.as_deref().unwrap_or("pcie");
@@ -529,23 +520,15 @@ pub async fn get_device_nics<P: DbProvider>(
     ))
 }
 
-fn default_card_sync_item() -> NetworkCardSyncItem {
-    NetworkCardSyncItem {
-        id: None,
-        name: DEFAULT_CARD_NAME.to_string(),
-        card_type: Some("pcie".to_string()),
-        description: None,
-        ports: vec![PortSyncItem {
-            id: None,
-            name: DEFAULT_PORT_NAME.to_string(),
-            physical_type: Some("rj45".to_string()),
-            interface_role: Some("business".to_string()),
-            mac_address: None,
-            vlan_id: None,
-            description: None,
-            ips: vec![],
-        }],
+/// 空 cards 校验：网卡配置必须由调用方显式提交（创建/同步/更新均同规），
+/// 不允许回退硬编码默认网卡/网口
+fn validate_cards_not_empty(cards: &[NetworkCardSyncItem]) -> Result<(), AppError> {
+    if cards.is_empty() {
+        return Err(AppError::Validation(msg(
+            "server.device.nic.cards_required",
+        )));
     }
+    Ok(())
 }
 
 fn validate_card_type(card_type: &str) -> Result<(), AppError> {
@@ -711,43 +694,23 @@ mod tests {
         assert_eq!(port_group_prefix("/0/1"), "/0/");
     }
 
-    // ==================== 默认网卡配置 ====================
+    // ==================== 空 cards 校验 ====================
 
     #[test]
-    fn test_default_card_sync_item_matches_constants() {
-        // 空同步请求自动生成的默认配置应与常量及默认类型一致
-        assert_eq!(DEFAULT_CARD_NAME, "网卡1");
-        assert_eq!(DEFAULT_PORT_NAME, "eth0");
+    fn test_validate_cards_not_empty() {
+        // 空配置（未提交网卡）必须被拒绝，不允许回退默认网卡/网口
+        let err = validate_cards_not_empty(&[])
+            .err()
+            .unwrap_or_else(|| panic!("空 cards 应被拒绝"));
+        assert!(
+            matches!(err, AppError::Validation(_)),
+            "应返回 Validation 错误，实际: {err}"
+        );
 
-        let item = default_card_sync_item();
-        assert_eq!(item.name, DEFAULT_CARD_NAME);
-        assert_eq!(
-            item.card_type.as_deref(),
-            Some("pcie"),
-            "默认网卡类型应为 pcie"
-        );
-        assert_eq!(item.id, None, "默认生成项不应携带 id");
-        assert_eq!(item.description, None);
-        assert_eq!(item.ports.len(), 1, "默认配置应含一个网口");
-
-        let port = item
-            .ports
-            .first()
-            .unwrap_or_else(|| panic!("默认网口应存在"));
-        assert_eq!(port.name, DEFAULT_PORT_NAME);
-        assert_eq!(
-            port.physical_type.as_deref(),
-            Some("rj45"),
-            "默认物理类型应为 rj45"
-        );
-        assert_eq!(
-            port.interface_role.as_deref(),
-            Some("business"),
-            "默认角色应为 business"
-        );
-        assert_eq!(port.id, None);
-        assert_eq!(port.mac_address, None);
-        assert_eq!(port.vlan_id, None);
-        assert!(port.ips.is_empty(), "默认网口不应携带 IP");
+        // 非空配置（名称合法性由模型 validate 把关）直接放行
+        let ok_item: NetworkCardSyncItem =
+            serde_json::from_value(serde_json::json!({ "name": "网卡1" }))
+                .unwrap_or_else(|e| panic!("合法网卡应反序列化成功: {e}"));
+        assert!(validate_cards_not_empty(&[ok_item]).is_ok());
     }
 }

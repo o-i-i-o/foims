@@ -383,9 +383,10 @@ pub async fn create_device<P: DbProvider>(
         AppError::from(e)
     })?;
 
-    // 应用网卡配置（网卡 → 网口 → IP），未提供时自动生成默认可管理网卡+网口
-    let cards = req.cards.unwrap_or_default();
-    super::nic::apply_network_config(&mut tx, id, req.room_id, &cards, now).await?;
+    // 应用网卡配置（网卡 → 网口 → IP）：网卡配置为必填项，空/未提供
+    // 由 apply_network_config 统一校验拒绝（不回退默认网卡/网口）
+    let cards = req.cards.as_deref().unwrap_or(&[]);
+    super::nic::apply_network_config(&mut tx, id, req.room_id, cards, now).await?;
     let ip_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
     )

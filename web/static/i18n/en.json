@@ -1909,6 +1909,7 @@
       "room_power_exceeded": "Device power exceeds room total power: allocated {{allocated}} W, this device {{power}} W, limit {{total}} W",
       "nic": {
         "card_type_invalid": "Card type must be one of pcie, onboard, usb, virtual, wwan, wifi, other",
+        "cards_required": "NIC configuration is required: at least one network card must be submitted",
         "fetched": "NIC configuration retrieved successfully",
         "interface_role_invalid": "Interface role must be one of management, business, loopback, uplink, other",
         "not_found": "Network card not found",

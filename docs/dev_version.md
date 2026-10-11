@@ -123,6 +123,7 @@ v0.4.0
 2.agent 版本独立自管理：FOIMS_AGENT_VERSION 不再绑定主程序版本（VERSION = env!("CARGO_PKG_VERSION") 读 foims-agent 自身版本），版本门控保留（manifest.version 语义为「产物对齐的服务端版本」，gate_check/build-deb.sh 不动）
 3.系统页「数据采集」新增 Agent 服务端配置持久化：agent.enabled/bind_addr/report_interval_secs/download_server_addr 存系统配置（新键 download_server_addr），前端表单校验（bind host:port 正则、interval clamp [10,3600]、下载地址可选）+ sessionStorage 重启提示，下载地址缺端口安装链路 ensure_agent_port 自动补 9100
 4.Agent 分发下载列表改平台×架构两级联动下拉（架构选项随平台动态过滤，包体大小提示、门控禁用状态跨重入保持），替换原全量表格
+
 5.新增证书续期协议（POST /agent/v1/renew，docs/agent-design.md §3.4）：服务端 mTLS-only 鉴权 + 请求体 PEM 与对端 leaf DER 逐字节一致 + 剩余寿命 <90 天才签发（renew.rs，x509-parser 0.18 解析，foims-common 新增 x509::cert_remaining 共享辅助与 CertRenewRequest/CertRenewResponse 类型），issue_client_material 重签后原子替换磁盘 CLIENT_CERT/CLIENT_KEY（QUIC 监听端只锚定 CA 无需重启）；agent 端每轮上报成功后检查剩余 <30 天自动续期（reporter.rs 抽出 h3_exchange 共用收发链路，report_uri 泛化 request_uri
 ，续期产物临时文件+rename 原子落盘 证书 0644/私钥 0600，下一轮上报重读新证书生效）；证书已过期（握手即失败）无法自救需人工重签记入文档；lib 版本 0.22.2→0.23.0（x+1 → b+1 c 归零），foims-common 0.3.2→0.3.3、foims-agent 0.1.3→0.1.4、foims-agent-service 0.1.3→0.1.4，前端资源版本同步 bump
 
@@ -153,3 +154,7 @@ v0.6.1
 1.发布检查脚本 test-scripts/release_check.sh 按 CI 工作流（.github/workflows/ci.yml）重写：前端段对齐 frontend job（lint 依赖/npm ci、JS 模块语法、i18n JSON、ESLint、Stylelint、HTMLHint 双轮、Prettier、Jest、Depcheck，Node 缺失时明确报错并跳过该段），后端段对齐 build job（cargo fmt --check、clippy --release -D warnings、test --release、build --release），末段对齐 build-deb 步骤（bash scripts/build-deb.sh，AGENT_TARGETS 环境变量透传）；检查输出落临时日志、失败时展示末尾 30 行便于诊断，退出即清理
 2.cargo test 已知环境性失败降级为警告不阻断：/etc/foims/encryption.key 为 root 0600 时非 root 用户下 crypto::tests 固定权限拒绝（CI 无此文件与代码无关），判定标准=全部 FAILED 测试均属 crypto::tests 且输出含 Permission denied
 3.顺带修复脚本首跑暴露的前端阻断项（CI 同样拦截）：organization.js 组织树展开按钮 aria-expanded 嵌套三元提取独立变量（sonarjs/no-nested-conditional）、systemManager.js /api/system/config 字面量提取 SYSTEM_CONFIG_API 常量（sonarjs/no-duplicate-string，6 处）、agents.js 与 systemManager.js prettier --write 格式修复；纯开发工具脚本与前端 lint 修复，Cargo.toml 不变，前端资源版本因 JS 变更同步 bump
+
+v0.6.2
+2026101108544001
+1.设备网卡配置空 cards 硬编码默认网口设计缺陷修复（v0.3.1 审计遗留）：apply_network_config 删除「cards 为空自动生成默认网卡1+eth0」特例分支与 default_card_sync_item/DEFAULT_CARD_NAME/DEFAULT_PORT_NAME 常量，空 cards 改为 validate_cards_not_empty 校验拒绝（新文案键 server.device.nic.cards_required，中英文），网卡配置成为必填项、统一走正常网卡→网口校验链路；设备创建链路 req.cards.unwrap_or_default() 改为 as_deref().unwrap_or(&[])（空/未提供即 422 校验错误），更新链路 None 不动网口语义保持不变、Some(空) 由同一校验拒绝；前端设备模态框 collectData 恒提交非空 cards（至少 1 卡 1 口）不受影响。删除 nic.rs 默认配置测试并新增 test_validate_cards_not_empty；i18n 语言包变更前端资源版本同步 bump，Cargo.toml 不变
