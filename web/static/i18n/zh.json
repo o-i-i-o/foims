@@ -663,7 +663,6 @@
     "uptime": "运行时间",
     "scheduled_tasks": "定时任务",
     "security": "安全",
-    "agent_collect": "数据采集",
     "agent_collect_card": "Agent 采集",
     "agent_dist_version": "Agent 版本",
     "agent_server_version": "主程序版本",

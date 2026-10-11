@@ -663,7 +663,6 @@
     "uptime": "System Uptime",
     "scheduled_tasks": "Scheduled Tasks",
     "security": "Security",
-    "agent_collect": "Data Collection",
     "agent_collect_card": "Agent Collection",
     "agent_dist_version": "Agent Version",
     "agent_server_version": "Server Version",

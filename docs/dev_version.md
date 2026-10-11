@@ -163,3 +163,11 @@ v0.7.0
 2026101109143501
 1.系统页「数据采集」Agent 上报服务卡片并入 Agent 采集卡片（单卡承载启用开关/保存按钮 + 监听地址/端口/上报间隔 + 版本门控状态 + 下载面板），删除冗余的「下载默认上报地址」与「上报地址覆盖」输入框
 2.下载包内上报地址统一取监听地址推导：/api/agents/download 移除 server_addr 查询参数与 AgentConfig.download_server_addr 配置键（旧配置文件中的残留键经 serde 默认忽略，无需迁移），resolve_server_addr 改为拆分 agent.bind_addr——主机部分为通配地址（[::]/::/0.0.0.0/空）时按请求 Host（h2c 以 URI authority 兜底）推导、端口恒取监听端口，IPv6 字面量请求 Host 补回方括号；ensure_agent_port 随显式参数一并移除，新增 split_bind_addr/resolve 单测；i18n 清理 agent_service.title/download_addr*/system.agent_server_addr* 键并更新监听地址描述（中英文），agent-design.md §7.3 同步；lib 版本 0.23.2→0.23.3（y+1 → c+1），foims-common 0.3.4→0.3.5、foims-agent-service 0.1.6→0.1.7，前端资源版本同步 bump
+
+v0.6.3
+2026101109343901
+1.CI agent 多平台构建修复（.github/workflows/ci.yml）：build 与 release job 未安装 musl 交叉工具链，build-deb.sh 级联 build-agent.sh 时 ring 的 cc-rs 报 ToolNotFound（x86_64 缺 musl-gcc、aarch64 缺 musl.cc 工具链），默认 AGENT_TARGETS 两目标全部失败且无任何产物；修复为系统依赖补装 musl-tools（x86_64 musl 的 musl-gcc，cc-rs 对 musl 目标按回退链查找），并新增 aarch64 musl.cc 工具链安装步骤（下载后 sha256 校验、解压至 /opt/musl-cross 与 build-agent.sh cc_for_target 固化路径一致，actions/cache 按工具链缓存避免每次重复下载 108MB，末尾校验交叉编译器可执行），build 与 release 两个 job 同步补齐；纯 CI 配置修改，Cargo.toml 与前端资源版本不变
+
+v0.7.1
+2026101109385301
+1.系统页「数据采集」子标签取消：Agent 采集与 SNMP Trap 接收两张卡片整体迁入「数据管理」子标签（置于数据管理卡片之前，HTML 原样移动），子标签按钮与空容器删除；子标签激活分支 agent-collect 的三个加载调用（loadAgentDist/loadAgentServiceConfig/loadSnmpTrapConfig）并入 data-management 分支；i18n 移除不再使用的 system.agent_collect 键（中英文），agent-design.md §7.3 标题同步；纯前端结构调整，Cargo.toml 不变，前端资源版本同步 bump

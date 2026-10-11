@@ -56,15 +56,14 @@ export function initSystemTabs() {
         } else if (tabId === "data-management") {
           loadLogsStats();
           loadLogForwarding();
+          loadAgentDist();
+          loadAgentServiceConfig();
+          loadSnmpTrapConfig();
         } else if (tabId === "scheduled-tasks") {
           initScheduledTasksTab();
         } else if (tabId === "security") {
           initSecurityTab();
           loadPasswordPolicy();
-        } else if (tabId === "agent-collect") {
-          loadAgentDist();
-          loadAgentServiceConfig();
-          loadSnmpTrapConfig();
         }
       });
     });
