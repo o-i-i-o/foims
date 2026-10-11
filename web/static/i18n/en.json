@@ -882,7 +882,7 @@
     "communities_desc": "Comma separated; empty accepts any community (intranet only)",
     "users": "v3 USM Users",
     "add_user": "Add User",
-    "users_desc": "v3 notifications are rejected when no user is configured; a privacy protocol must be paired with an auth protocol; received traps go to Logs - Notifications.",
+    "users_desc": "v3 notifications are rejected when no user is configured; received traps go to Logs - Notifications.",
     "username": "Username",
     "auth_protocol": "Auth Protocol",
     "auth_password": "Auth Password",

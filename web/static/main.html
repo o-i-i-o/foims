@@ -1249,8 +1249,10 @@
                   </div>
                 </div>
                 <div class="form-row">
-                  <div class="form-group form-group-block">
+                  <div class="form-group">
                     <span class="group-label" data-i18n="snmp_trap.users">v3 USM Users</span>
+                    <p class="config-hint" data-i18n="snmp_trap.users_desc">v3 notifications are rejected when no user is configured; a privacy protocol must be paired with an auth protocol; received traps go to Logs - Notifications.</p>
+                    <button type="button" id="snmp-trap-add-user-btn" class="btn btn-secondary btn-sm" data-i18n="snmp_trap.add_user">Add User</button>
                     <div class="table-container snmp-trap-users-container">
                       <table id="snmp-trap-users-table" class="data-table" aria-label="SNMP trap v3 USM users">
                         <thead>
@@ -1266,8 +1268,6 @@
                         <tbody></tbody>
                       </table>
                     </div>
-                    <button type="button" id="snmp-trap-add-user-btn" class="btn btn-secondary btn-sm" data-i18n="snmp_trap.add_user">Add User</button>
-                    <p class="config-hint" data-i18n="snmp_trap.users_desc">v3 notifications are rejected when no user is configured; a privacy protocol must be paired with an auth protocol; received traps go to Logs - Notifications.</p>
                   </div>
                 </div>
               </section>

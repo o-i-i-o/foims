@@ -881,7 +881,7 @@
     "communities_desc": "多个以逗号分隔；留空表示接受任意 community（仅建议内网环境）",
     "users": "v3 USM 用户",
     "add_user": "添加用户",
-    "users_desc": "不配置用户时拒绝全部 v3 通知；加密协议必须与认证协议配套；收到的 Trap/Inform 写入「日志-通知」。",
+    "users_desc": "不配置用户时拒绝全部 v3 通知；收到的 Trap/Inform 写入「日志-通知」。",
     "username": "用户名",
     "auth_protocol": "认证协议",
     "auth_password": "认证密码",
