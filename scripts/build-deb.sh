@@ -80,7 +80,9 @@ fi
 # 版本（语义为「本批产物对齐的服务端版本」，供下载门控与新鲜度校验），
 # 产物与 manifest.json 归集到 dist/agents/。默认编译 x86_64/aarch64 两个 musl
 # 静态目标（覆盖绝大多数部署场景）；可用环境变量 AGENT_TARGETS 覆盖目标列表，
-# AGENT_TARGETS=none 跳过（此时包内无 agent 分发物料，下载面板显示不可用）
+# AGENT_TARGETS=none 跳过（此时包内无 agent 分发物料，下载面板显示不可用）。
+# 交叉后端经 AGENT_BACKEND 环境变量透传给 build-agent.sh（AGENT_BACKEND=zigbuild
+# 走 zig cc，CI 用；默认 gcc 后端走本地 musl 交叉工具链）
 AGENT_TARGETS="${AGENT_TARGETS:-x86_64-unknown-linux-musl,aarch64-unknown-linux-musl}"
 if [ "$AGENT_TARGETS" != "none" ]; then
     echo ""

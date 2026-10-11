@@ -179,3 +179,7 @@ v0.7.2
 v0.7.3
 2026101109533801
 1.CI musl 工具链下载命令 curl 改 wget（.github/workflows/ci.yml，实测 curl 在网络可达时仍下载失败）：wget --timeout=60 --tries=3 -O 落盘 /tmp/aarch64-linux-musl-cross.tgz，两 job 同步；纯 CI 配置修改，Cargo.toml 与前端资源版本不变
+
+v0.7.4
+2026101110391501
+1.CI 交叉编译后端弃用 musl.cc 工具链改用 cargo-zigbuild（.github/workflows/ci.yml + scripts/build-agent.sh + scripts/build-deb.sh）：musl.cc 下载历经 v0.6.3/v0.7.2/v0.7.3 三轮修复仍间歇不可达（wget --timeout=1200 仍失败），评估 cargo-zigbuild 与 cross 两方案后选 zigbuild——无需 Docker、zig 走 npm 官方包锁定 0.13.0、cargo-zigbuild 走 crates.io 稳定版 --locked，供应链全部高可用且免镜像版本漂移；build-agent.sh 新增 AGENT_BACKEND=zigbuild 环境变量开关（与 AGENT_TARGETS 透传惯例一致，仅影响 tier1/2，zig cc 兼任交叉 C 编译器与链接器免注入 CC_*/LINKER），CI 两 job 删除 musl-tools 安装与 musl.cc 缓存/下载/校验三步替换为「安装 zig 交叉后端」（npm install @ziglang/zig@0.13.0 + cargo install cargo-zigbuild --locked + 双 --version 校验，修正 cargo zigbuild --version 不受支持的命令形式），build-deb.sh 以 AGENT_BACKEND=zigbuild 调用；本地 gcc 后端与 5 目标矩阵行为不变，本地 e2e 实测 zigbuild 两目标 2m17s 产出静态 musl 二进制（x86_64 试运行 --version 正常、aarch64 ELF 架构正确）；纯构建脚本与 CI 配置修改，Cargo.toml 与前端资源版本不变

@@ -6,6 +6,7 @@
 #   bash scripts/build-agent.sh --tier3          # 追加 tier3 目标（需 musl 交叉工具链）
 #   bash scripts/build-agent.sh --list           # 仅列出目标矩阵
 #   bash scripts/build-agent.sh --only x86_64-unknown-linux-musl[,其他]
+#   AGENT_BACKEND=zigbuild bash scripts/build-agent.sh   # zig 交叉后端（CI 用）
 #
 # 产物：
 #   dist/agents/<target>/foims-agent             # 每目标一个静态二进制
@@ -15,8 +16,11 @@
 # 设计约束：
 #   - 主体为纯 Rust 实现（rustix 走 linux 内联 syscall），musl 目标由
 #     rust-lld 自含链接（Rust 1.71+ 默认）；但依赖链中含 C 代码（ring 的
-#     密码学实现），交叉编译时需按目标注入 musl 交叉 C 编译器（见
-#     cc_for_target：x86_64 用 musl-tools，其余用 musl.cc 工具链）
+#     密码学实现）。gcc 后端（默认）交叉编译时按目标注入 musl 交叉 C 编译器
+#     （见 cc_for_target：x86_64 用 musl-tools，其余用 musl.cc 工具链）；
+#     zig 后端（AGENT_BACKEND=zigbuild，CI 用）改由 zig cc 兼任交叉 C 编译器
+#     与链接器，免装 musl 交叉工具链（musl.cc 下载多次间歇不可达后弃用），
+#     仅影响 tier1/2
 #   - tier1/2 目标：stable 直编，缺 std 组件时 rustup target add；
 #     国内镜像源缺组件（404）时自动回退官方源离线安装（校验 sha256）
 #   - tier3 目标：需 nightly + rust-src，用 -Z build-std 现场构建 std
@@ -90,6 +94,14 @@ esac
 VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$PROJECT_DIR/Cargo.toml" | head -n1)
 [ -n "$VERSION" ] || { echo "错误：无法从 Cargo.toml 解析版本号" >&2; exit 1; }
 
+# 交叉后端选择：AGENT_BACKEND=zigbuild 时 tier1/2 改用 cargo zigbuild
+# （zig cc 兼任交叉 C 编译器与链接器，无需注入 CC_*/LINKER）；默认 gcc 后端。
+# 用环境变量而非命令行开关，便于 build-deb.sh 透传（与 AGENT_TARGETS 惯例一致）
+ZIGBUILD=0
+if [ "${AGENT_BACKEND:-}" = "zigbuild" ]; then
+    ZIGBUILD=1
+fi
+
 mkdir -p "$DIST_DIR"
 
 # 按 --only 过滤目标（保持矩阵顺序）
@@ -160,18 +172,25 @@ cc_for_target() {
 }
 
 # 构建 tier1/2：stable 直编。
-# 链接器统一用 rustc 自带的 rust-lld（除 x86_64 musl 已默认外，其余目标
-# 默认调用 cc，交叉场景下宿主 gcc 无法链接异构 musl 目标）；
+# gcc 后端（默认）：链接器统一用 rustc 自带的 rust-lld（除 x86_64 musl 已
+# 默认外，其余目标默认调用 cc，交叉场景下宿主 gcc 无法链接异构 musl 目标）；
 # C 依赖（ring）按目标注入交叉编译器，未就位时警告并继续（仅纯 Rust 可过）。
+# zig 后端（AGENT_BACKEND=zigbuild）：zig cc 兼任交叉 C 编译器与链接器，
+# 无需任何注入；仅影响 tier1/2（tier3 仍走 build-std + rust-lld）。
 build_tier12() {
     local target="$1"
+    if ! target_std_installed "$target"; then
+        rustup target add "$target" || install_target_offline "$target"
+    fi
+    if [ "$ZIGBUILD" -eq 1 ]; then
+        (cd "$PROJECT_DIR" && \
+            cargo zigbuild --release -p "$CRATE" --target "$target")
+        return
+    fi
     local linker_var cc_var cc
     linker_var="CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_LINKER"
     # cc-rs 认小写形式（如 CC_aarch64_unknown_linux_musl），大写不生效
     cc_var="CC_$(echo "$target" | tr '.' '_')"
-    if ! target_std_installed "$target"; then
-        rustup target add "$target" || install_target_offline "$target"
-    fi
     cc="$(cc_for_target "$target")"
     if [ -n "$cc" ] && [ -x "$cc" ]; then
         (cd "$PROJECT_DIR" && env "$linker_var=rust-lld" "$cc_var=$cc" \
