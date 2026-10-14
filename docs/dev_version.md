@@ -203,3 +203,8 @@ v0.8.2
 2026101422461101
 1.build-agent.sh：manifest 生成后同步拷贝 deploy/agent/install.sh 到 dist/agents/（0755，源文件缺失时 fail-fast 退出），与 build-deb.sh 的部署拷贝同源，消除 dist_dir 场景缺 install.sh 触发的 install_sh_fallback 回退（下载包改用内置精简脚本）；当前联调目录 dist/agents/ 已补齐
 2.存量数据修复：devices 表「办公电脑」的 snmp_community 为 2026-10-07 建档时期的明文值（后续代码已改 AES-256-GCM 加密存储，存量无迁移），导致 snmp_poll 每 5 分钟 decrypt_failed；经 PUT /api/resources/devices/{id} 重新保存凭据转为密文（24 字节 nonce+GCM 密文，base64 48 字符），轮询解密恢复
+
+v0.9.0
+2026101423403201
+1.仪表盘新增「主机负载」卡片（CPU/内存/温度三页签，10 秒自动轮播、悬停暂停、手动切换后停止轮播）：后端新增 GET /api/agents/top-metrics 聚合端点（agents 快照列 cpu_usage/mem_usage_pct/max_temp 各取 status='active' 且非空的前 N 条，limit 1..=10 默认 5，列名走代码白名单 + QueryBuilder 绑定参数，一次返回三类榜单），与 /api/agents 同 nest 经 agent_admin_guard（admin/secadmin）；前端 dashboard.js 接入榜单（主机监控不可见角色经 getHiddenSections 跳过请求并整卡 hidden，不产生 403 噪音）、复用主机监控页 agent-usage 迷你条与 >85 红/>60 橙分档渲染 CPU/内存榜、温度榜显示 ℃ 一位小数，榜单行显示排名序号+主机名+备注/IP；main.html 卡片骨架 data-nav="agents"（点卡跳主机监控页）、dashboard.css 页签样式；i18n zh/en 新增 dashboard.host_metrics/metric_cpu/metric_memory/metric_temperature/no_host_metrics_data 与 server.agent.top_metrics_retrieved
+2.lib 版本 0.23.5→0.23.6（y+1 → c+1），foims-agent-service 0.1.8→0.1.9，前端资源版本同步 bump

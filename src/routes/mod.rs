@@ -854,6 +854,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                     get(foims_agent_service::agents_api::list_agents::<AppState>),
                 )
                 .route(
+                    "/top-metrics",
+                    get(foims_agent_service::agents_api::get_top_metrics::<AppState>),
+                )
+                .route(
                     "/{id}",
                     get(foims_agent_service::agents_api::get_agent_detail::<AppState>)
                         .patch(foims_agent_service::agents_api::patch_agent::<AppState>)

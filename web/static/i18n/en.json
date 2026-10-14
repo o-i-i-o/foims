@@ -420,6 +420,11 @@
     "no_room_data": "No room data",
     "no_cabinet_data": "No cabinet data",
     "no_log_data": "No recent activity",
+    "host_metrics": "Host Load",
+    "metric_cpu": "CPU",
+    "metric_memory": "Memory",
+    "metric_temperature": "Temperature",
+    "no_host_metrics_data": "No host monitoring data",
     "unit_workstation": "workstations",
     "unit_position": "positions"
   },
@@ -1732,6 +1737,7 @@
       "list_retrieved": "Agent list retrieved",
       "detail_retrieved": "Agent detail retrieved",
       "history_retrieved": "Agent history retrieved",
+      "top_metrics_retrieved": "Host load rankings retrieved",
       "alert_thresholds_retrieved": "Alert threshold config retrieved",
       "alert_thresholds_updated": "Alert thresholds saved, all hosts evaluated once"
     },

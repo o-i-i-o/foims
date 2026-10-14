@@ -2,6 +2,7 @@
 //!
 //! 挂载于 /api/agents（与分发下载同 nest，经 agent_admin_guard 纵深防御）：
 //! - `GET  /api/agents`：分页列表（keyword 匹配 hostname/label/ip，不含 raw_metrics）；
+//! - `GET  /api/agents/top-metrics`：主机负载 Top 榜（CPU/内存/温度各前 N，仪表盘用）；
 //! - `GET  /api/agents/{id}`：详情（含 raw_metrics）；
 //! - `GET  /api/agents/{id}/history`：曲线数据（hours 1..=168，超 200 点均匀抽样）；
 //! - `PATCH /api/agents/{id}`：改 label/status（status 白名单 active|disabled|revoked）；
@@ -174,6 +175,66 @@ pub async fn list_agents<S: ConfigProvider>(
     Ok(foims_common::ok_json(
         paged_response(items, total, &pagination),
         msg("server.agent.list_retrieved"),
+    ))
+}
+
+/// GET /api/agents/top-metrics 查询参数。
+#[derive(Debug, Deserialize)]
+pub struct TopMetricsQuery {
+    /// 每类榜单条数（1..=10，默认 5）
+    limit: Option<i64>,
+}
+
+/// GET /api/agents/top-metrics 支持的指标列白名单（列名来自代码常量，非用户输入）。
+const TOP_METRIC_COLUMNS: &[(&str, &str)] = &[
+    ("cpu", "cpu_usage"),
+    ("memory", "mem_usage_pct"),
+    ("temperature", "max_temp"),
+];
+
+/// GET /api/agents/top-metrics：主机负载 Top 榜（CPU/内存/温度，各取快照值
+/// 最高的前 N 台，仅统计 active 且指标非空的行）。供仪表盘「主机负载」
+/// 卡片消费，一次返回三类榜单避免三次往返。
+pub async fn get_top_metrics<S: ConfigProvider>(
+    State(state): State<Arc<S>>,
+    _user: AdminOrSecAdminUser,
+    Query(query): Query<TopMetricsQuery>,
+) -> Result<Response, AppError> {
+    let pool = state.pool()?.get_conn();
+    let limit = query.limit.unwrap_or(5).clamp(1, 10);
+
+    let mut body = serde_json::Map::new();
+    for (key, column) in TOP_METRIC_COLUMNS {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
+            r#"SELECT id, hostname, label, ip,
+                      {column}::float8 AS value, last_seen
+                 FROM agents
+                WHERE status = 'active' AND {column} IS NOT NULL
+                ORDER BY {column} DESC
+                LIMIT "#
+        ));
+        builder.push_bind(limit);
+        let rows = builder.build().fetch_all(&pool).await?;
+
+        let items: Vec<Value> = rows
+            .iter()
+            .map(|row| {
+                json!({
+                    "id": row.get::<Uuid, _>("id"),
+                    "hostname": row.get::<Option<String>, _>("hostname"),
+                    "label": row.get::<Option<String>, _>("label"),
+                    "ip": row.get::<Option<String>, _>("ip"),
+                    "value": row.get::<Option<f64>, _>("value"),
+                    "last_seen": row.get::<Option<DateTime<Utc>>, _>("last_seen").map(rfc3339),
+                })
+            })
+            .collect();
+        body.insert((*key).to_string(), Value::Array(items));
+    }
+
+    Ok(foims_common::ok_json(
+        Value::Object(body),
+        msg("server.agent.top_metrics_retrieved"),
     ))
 }
 

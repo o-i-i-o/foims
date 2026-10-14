@@ -420,6 +420,11 @@
     "no_room_data": "暂无房间数据",
     "no_cabinet_data": "暂无机柜数据",
     "no_log_data": "暂无活动记录",
+    "host_metrics": "主机负载",
+    "metric_cpu": "CPU",
+    "metric_memory": "内存",
+    "metric_temperature": "温度",
+    "no_host_metrics_data": "暂无主机监控数据",
     "unit_workstation": "工位",
     "unit_position": "机位"
   },
@@ -1731,6 +1736,7 @@
       "list_retrieved": "主机列表已获取",
       "detail_retrieved": "主机详情已获取",
       "history_retrieved": "历史曲线数据已获取",
+      "top_metrics_retrieved": "主机负载榜单已获取",
       "alert_thresholds_retrieved": "告警阈值配置已获取",
       "alert_thresholds_updated": "告警阈值已保存，已按当前指标评估一轮"
     },

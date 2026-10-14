@@ -149,6 +149,41 @@
 
 /* 状态色由 components/badges.css 的 .status-active/.status-inactive/.status-reserved 全局提供 */
 
+/* ===== 主机负载卡片（CPU/内存/温度 页签轮播） ===== */
+
+.host-metrics-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.host-metrics-tab {
+  flex: 1;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--color-border-light);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.host-metrics-tab:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.host-metrics-tab.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
 .loading-item {
   padding: var(--space-sm) 0;
 }

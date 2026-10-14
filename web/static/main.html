@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791730863">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791730863">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1791992377">
 </head>
 <body class="main-body">
   <div id="app">
@@ -228,6 +228,26 @@
             </header>
             <div class="dashboard-card-body">
               <ul class="top-list" id="top-cabinets-list">
+                <li class="loading-item"><span class="skeleton"></span></li>
+                <li class="loading-item"><span class="skeleton"></span></li>
+                <li class="loading-item"><span class="skeleton"></span></li>
+              </ul>
+            </div>
+          </article>
+
+          <!-- 主机负载：CPU/内存/温度 三页签轮播（无权限角色由 JS 隐藏） -->
+          <article class="dashboard-card host-metrics-card" data-nav="agents">
+            <header class="dashboard-card-header">
+              <h3><span class="card-icon">🖥️</span><span data-i18n="dashboard.host_metrics">Host Load</span></h3>
+              <button type="button" class="view-all" data-i18n="dashboard.view_all">View All →</button>
+            </header>
+            <div class="dashboard-card-body host-metrics-body">
+              <div class="host-metrics-tabs" role="tablist" data-i18n-aria-label="dashboard.host_metrics">
+                <button type="button" class="host-metrics-tab active" data-metric="cpu" role="tab" aria-selected="true" data-i18n="dashboard.metric_cpu">CPU</button>
+                <button type="button" class="host-metrics-tab" data-metric="memory" role="tab" aria-selected="false" data-i18n="dashboard.metric_memory">Memory</button>
+                <button type="button" class="host-metrics-tab" data-metric="temperature" role="tab" aria-selected="false" data-i18n="dashboard.metric_temperature">Temperature</button>
+              </div>
+              <ul class="top-list" id="top-host-metrics-list">
                 <li class="loading-item"><span class="skeleton"></span></li>
                 <li class="loading-item"><span class="skeleton"></span></li>
                 <li class="loading-item"><span class="skeleton"></span></li>
@@ -1643,6 +1663,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791730863"></script>
+  <script type="module" src="/static/js/app.js?v=1791992377"></script>
 </body>
 </html>
