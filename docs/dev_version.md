@@ -198,3 +198,8 @@ v0.8.1
 3.彻底移除 agent 版本门控：api.rs dist/download 删 gate_check 调用与 server_version/gate_ok 响应字段、manifest.rs 删 gate_check 函数及 4 个单测、ConfigProvider trait 与 AppState 删 server_version 方法、foims-agent-service 移除 semver 依赖；dist 响应改为 ca_ok=false 时附 message，前端删除主程序版本/版本门控两行 dl 与对应 JS 处理，下载面板仅按 CA 与产物可用性禁用
 4.i18n：zh/en 新增 agent_service.section_service/section_agent/use_public_url/use_public_url_desc/report_url_override/report_url_override_desc/invalid_report_override 与 server.agent.public_url_missing/invalid_report_override，删除 system.agent_collect_card/agent_server_version/agent_gate_status/agent_gate_ok/agent_gate_blocked 与 server.agent.version_gate、log.agent.version_gate_blocked；config.toml.example agent 段补 use_public_url/report_url_override 示例；agent-module-analysis.md 同步
 5.cargo fmt + clippy -D warnings 全 workspace 通过，foims-agent-service 65 测试全绿；lib 版本 0.23.4→0.23.5（y+1 → c+1），foims-common 0.3.5→0.3.6、foims-agent-service 0.1.7→0.1.8，前端资源版本同步 bump
+
+v0.8.2
+2026101422461101
+1.build-agent.sh：manifest 生成后同步拷贝 deploy/agent/install.sh 到 dist/agents/（0755，源文件缺失时 fail-fast 退出），与 build-deb.sh 的部署拷贝同源，消除 dist_dir 场景缺 install.sh 触发的 install_sh_fallback 回退（下载包改用内置精简脚本）；当前联调目录 dist/agents/ 已补齐
+2.存量数据修复：devices 表「办公电脑」的 snmp_community 为 2026-10-07 建档时期的明文值（后续代码已改 AES-256-GCM 加密存储，存量无迁移），导致 snmp_poll 每 5 分钟 decrypt_failed；经 PUT /api/resources/devices/{id} 重新保存凭据转为密文（24 字节 nonce+GCM 密文，base64 48 字符），轮询解密恢复

@@ -284,6 +284,16 @@ if command -v python3 >/dev/null 2>&1; then
 fi
 echo "-- manifest.json 已生成（version=$VERSION, targets=$(grep -c '"sha256"' "$DIST_DIR/manifest.json")）"
 
+# install.sh：zip 下载组包用（服务端 load_install_sh 优先读 dist_dir 版本，
+# 缺失回退内置精简脚本；与 build-deb.sh 同源，均出自 deploy/agent/install.sh）
+if [ ! -f "$PROJECT_DIR/deploy/agent/install.sh" ]; then
+    echo "错误：缺少 deploy/agent/install.sh（zip 下载组包依赖）" >&2
+    exit 1
+fi
+cp "$PROJECT_DIR/deploy/agent/install.sh" "$DIST_DIR/install.sh"
+chmod 755 "$DIST_DIR/install.sh"
+echo "-- install.sh 已就位 $DIST_DIR/install.sh"
+
 echo "=== 构建汇总：成功 ${#BUILT[@]} / 失败 ${#FAILED[@]} ==="
 if [ "${#FAILED[@]}" -gt 0 ]; then
     echo "失败目标: ${FAILED[*]}" >&2

@@ -330,6 +330,7 @@ pending --首报成功--> active --agent_offline 超时--> offline --再上报--
 | 16 | report_server 单连接请求串行处理（循环 accept） | 当前 agent 单连接单请求，无影响；若 #4 连接复用落地需同步改并发处理 |
 | 17 | `agent.toml` 模板硬编码 `report_interval_secs = 60` | 改为读取 AgentConfig.report_interval_secs，与控制面初始值一致 |
 | 18 | agents 快照列 NUMERIC 与 API float8 cast 分散多处 | 可抽共享 SELECT 片段常量，减少口径漂移 |
+| 19 | **GET /download 即建 pending 行**（v0.8.1 排查实证）：每次点击下载都生成新 token 并 INSERT 一条 pending（哪怕不安装/重复下载），页面累积「未激活、无数据」幽灵条目（2026-10-11 实际发生） | ① 下载时复用同 target+label 且未过期的 pending 行 token 重新组包；② 或离线调度器附带清理超期（如 7 天）未激活 pending；③ 或改 POST 表达明确下载意图 |
 
 ---
 
