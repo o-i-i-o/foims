@@ -620,7 +620,7 @@ impl<P: Platform> Reporter<P> {
             .with_webpki_verifier(verifier)
             .with_client_auth_cert(certs, key)
             .map_err(|error| ReporterError::Config(format!("装载客户端证书/私钥: {error}")))?;
-        // HTTP/3 要求 ALPN 协议名 "h3"（与 h3_demo 一致）
+        // HTTP/3 要求 ALPN 协议名 "h3"
         tls.alpn_protocols = vec![b"h3".to_vec()];
         Ok(tls)
     }

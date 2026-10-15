@@ -5,7 +5,7 @@
 //! 仅放行 `POST /agent/v1/report`，读满请求体（超限回 413）后交由
 //! [`crate::ingest::ingest`] 处理并回 JSON。
 //!
-//! h3 0.0.8 accept 形态与 agent 工作空间 foims-agent/examples/h3_demo.rs 保持一致：
+//! h3 0.0.8 accept 形态：
 //! Incoming → Connection → accept() → Option<RequestResolver> → resolve_request()。
 
 use std::sync::Arc;

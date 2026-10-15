@@ -39,3 +39,16 @@
 3.验证：cargo test --workspace 173 测试全绿、clippy --release -D warnings
   与 fmt --check 通过；x86_64-pc-windows-gnu 交叉编译实测产出 PE32+ 二进制
   （11.6 MiB，--only 与全量构建均验证归集与 SHA256SUMS/manifest 生成）。
+
+# v0.2.1
+
+# 2026101523493401
+# 2026年10月15日23点49分34秒 第1次修改
+
+1.清理 HTTP/3 上报可行性 demo 残留：删除 examples/h3_demo.rs（server/client
+  双子命令验证性代码，假设已由 foims-agent-core transport 与主仓
+  foims-agent-service report_server 正式实现承载）及仅服务该 demo 的
+  dev-dependencies（bytes/h3/h3-quinn/http/quinn/rustls/tokio，正式链路依赖
+  均在 foims-agent-core [dependencies]），同步修正 reporter.rs 与
+  report_smoke.rs 中对 h3_demo / gen-h3-demo-certs.sh 的注释引用；
+  report_smoke 冒烟示例（走正式 Reporter）保留。

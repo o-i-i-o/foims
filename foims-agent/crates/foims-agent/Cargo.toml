@@ -28,14 +28,6 @@ rustix = { workspace = true }
 [dev-dependencies]
 # machine-id / 续期落盘等测试的自签证书
 rcgen = "0.14"
-# h3_demo 示例的独立 HTTP/3 链路（不进入正式依赖，发布二进制不受影响）
-bytes = { workspace = true }
-h3 = { workspace = true }
-h3-quinn = { workspace = true }
-http = { workspace = true }
-quinn = { workspace = true }
-rustls = { workspace = true }
-tokio = { workspace = true }
 
 [lints]
 workspace = true

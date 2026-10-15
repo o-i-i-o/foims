@@ -28,3 +28,7 @@ v0.0.1
 1. 将原agent代码迁移到foims-agent目录下成为初始版本
 2. 新增windows版本的agent代码，支持x86_64和aarch64架构
 
+v0.0.2
+2026101523493401
+1. 清理agent工作空间HTTP/3上报可行性demo残留（examples/h3_demo.rs及专用dev-dependencies），主仓侧同步修正report_server.rs中h3_demo注释引用
+

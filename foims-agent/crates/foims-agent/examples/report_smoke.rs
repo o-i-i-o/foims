@@ -1,7 +1,7 @@
 //! 上报冒烟客户端：采集本机指标并经 HTTP/3 mTLS 上报一次，打印服务端响应。
 //!
-//! 联调前置：使用 scripts/gen-h3-demo-certs.sh 或正式证书体系准备
-//! cert-dir（client.pem / client.key / ca.pem）与服务端（foims-agent-service）。
+//! 联调前置：准备 cert-dir（client.pem / client.key / ca.pem，可从 Web 端
+//! Agent 配置卡片下载安装包解包获取）与服务端（foims-agent-service）。
 //!
 //! 运行（参数与环境变量两种方式，参数优先）：
 //! - `cargo run -p foims-agent --example report_smoke -- 127.0.0.1:9100 <64hex-token> --cert-dir /tmp/certs`
