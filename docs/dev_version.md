@@ -32,3 +32,9 @@ v0.0.2
 2026101523493401
 1. 清理agent工作空间HTTP/3上报可行性demo残留（examples/h3_demo.rs及专用dev-dependencies），主仓侧同步修正report_server.rs中h3_demo注释引用
 
+v0.1.0
+2026101601004501
+1. Agent上报架构改造（模块级x+1，采集/上报解耦+批量上报）：服务端ingest批量兼容——请求体批量优先单帧回退、一次鉴权逐帧校验入库（非法帧丢弃计数）、主机快照取批次最后一帧、collected_at校验放宽（未来≤300s/过去≤24h，修复长断网补报必400）、上报路径body上限提升至9MiB；新增log.agent.ingest_batch/ingest_invalid_frames观测日志（中英i18n）
+2. 配置面：AgentConfig新增collect_interval_secs采集间隔（1-60s默认5，serde缺省兼容旧配置），系统配置保存校验、/api/agents/download生成的agent.toml模板同步携带，前端Agent服务配置卡新增采集间隔表单项（中英i18n）
+3. 联动：根Cargo.toml 0.23.6→0.24.0，foims-common 0.3.6→0.3.7，foims-agent-service 0.1.9→0.1.10；前端资源版本经bump_static_version.sh刷新；agent工作空间同步v0.3.0（AgentReportBatch协议双副本+批量上报+连接复用）
+

@@ -111,6 +111,11 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
                 .with("param", "agent.report_interval_secs (10-3600)"),
         ));
     }
+    if !(1..=60).contains(&agent.collect_interval_secs) {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.collect_interval_secs (1-60)"),
+        ));
+    }
     if agent.max_report_bytes < 1024 {
         return Err(AppError::Validation(
             msg("server.common.invalid_param")

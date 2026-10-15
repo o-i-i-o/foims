@@ -860,6 +860,8 @@
     "bind_port": "端口",
     "report_interval": "上报间隔（秒）",
     "report_interval_desc": "10-3600，经上报响应下发给 agent，同时驱动离线判定阈值",
+    "collect_interval": "采集间隔（秒）",
+    "collect_interval_desc": "1-60，agent 本机高频采集节奏，帧先入本地队列、按上报间隔整批发送",
     "section_service": "Agent 服务配置",
     "section_agent": "Agent 配置",
     "use_public_url": "使用公共URL作为上报地址",

@@ -352,6 +352,10 @@ pub struct AgentConfig {
     /// 上报间隔下限（秒）：响应控制面下发的 report_interval 不低于该值。
     #[serde(default = "default_agent_report_interval")]
     pub report_interval_secs: u64,
+    /// 采集间隔（秒）：agent 本机高频采集节奏，与上报间隔解耦后帧先入
+    /// 本地队列，按上报间隔整批发送（生效时 clamp [1,60]）。
+    #[serde(default = "default_agent_collect_interval")]
+    pub collect_interval_secs: u64,
     /// 单条上报 payload 上限（字节），超出返回 413。
     #[serde(default = "default_agent_max_report_bytes")]
     pub max_report_bytes: usize,
@@ -382,6 +386,10 @@ const fn default_agent_report_interval() -> u64 {
     60
 }
 
+const fn default_agent_collect_interval() -> u64 {
+    5
+}
+
 const fn default_agent_max_report_bytes() -> usize {
     262_144
 }
@@ -401,6 +409,7 @@ impl Default for AgentConfig {
             enabled: false,
             bind_addr: default_agent_bind_addr(),
             report_interval_secs: default_agent_report_interval(),
+            collect_interval_secs: default_agent_collect_interval(),
             max_report_bytes: default_agent_max_report_bytes(),
             history_retention_days: default_agent_history_retention_days(),
             offline_factor: default_agent_offline_factor(),

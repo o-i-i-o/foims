@@ -110,6 +110,20 @@ pub struct AgentReport {
     pub processes: u32,
 }
 
+/// `POST /agent/v1/report` 批量请求体：agent 采集（高频）与上报（低频）解耦后，
+/// 一个上报周期内的多帧采集快照打包一次发送。
+///
+/// 兼容性：单帧 `AgentReport` 仍被服务端接受（旧版 agent 平滑过渡）；
+/// 服务端按请求体形态自动区分（含 `frames` 字段视为批量）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentReportBatch {
+    /// 本批次帧序列（按采集时间升序；空批次无意义，服务端拒绝）。
+    pub frames: Vec<AgentReport>,
+    /// 组批以来因本机队列满被丢弃的帧数（观测用，不影响入库）。
+    #[serde(default)]
+    pub dropped: u64,
+}
+
 /// 上报响应控制面：服务端远程调整上报间隔与采集器开关、通告最新版本；
 /// agent 下一轮生效。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -202,6 +216,22 @@ mod tests {
         assert!(!json.is_empty());
         let parsed: AgentReport = serde_json::from_str(&json).unwrap_or_else(|_| sample_report());
         assert_eq!(parsed, report);
+    }
+
+    #[test]
+    fn batch_json_roundtrip() {
+        let batch = AgentReportBatch {
+            frames: vec![sample_report()],
+            dropped: 3,
+        };
+        let json = serde_json::to_string(&batch).unwrap_or_default();
+        let parsed: AgentReportBatch = serde_json::from_str(&json).unwrap_or(batch.clone());
+        assert_eq!(parsed, batch);
+
+        // dropped 缺省视为 0（服务端容忍精简请求）
+        let minimal: AgentReportBatch = serde_json::from_str(r#"{"frames": []}"#).unwrap_or(batch);
+        assert!(minimal.frames.is_empty());
+        assert_eq!(minimal.dropped, 0);
     }
 
     #[test]

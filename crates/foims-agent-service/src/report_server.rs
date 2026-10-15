@@ -25,8 +25,11 @@ use crate::renew;
 
 /// 上报端点路径（协议约定 §3.3）
 pub const REPORT_PATH: &str = "/agent/v1/report";
-/// 客户端证书续期端点路径（协议约定 §3.4，mTLS 鉴权）
+/// 证书续期端点路径（协议约定 §3.4，mTLS 鉴权）
 pub const RENEW_PATH: &str = "/agent/v1/renew";
+/// 批量上报请求体上限（9 MiB）：agent 单批 8 MiB 之上留余量；
+/// 上报路径实际生效上限为 max_report_bytes 与该值取大者
+const BATCH_BODY_LIMIT_BYTES: usize = 9 * 1024 * 1024;
 
 /// h3 请求流类型（h3 0.0.x API 变动以本别名隔离）
 type AgentStream = h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
@@ -245,7 +248,13 @@ async fn handle_request(
         .await;
     }
 
-    // 读请求体（链路为 TLS 1.3 密文，此处为解密后明文），超限即拒绝
+    // 读请求体（链路为 TLS 1.3 密文，此处为解密后明文），超限即拒绝；
+    // 上报路径放宽至批量上限（agent 单批 8 MiB），续期路径保持单条上限
+    let body_limit = if path == REPORT_PATH {
+        ctx.max_report_bytes.max(BATCH_BODY_LIMIT_BYTES)
+    } else {
+        ctx.max_report_bytes
+    };
     let mut body: Vec<u8> = Vec::new();
     while let Some(chunk) = stream
         .recv_data()
@@ -253,7 +262,7 @@ async fn handle_request(
         .map_err(|e| format!("读取请求体失败: {e}"))?
     {
         body.extend_from_slice(chunk.chunk());
-        if body.len() > ctx.max_report_bytes {
+        if body.len() > body_limit {
             return send_json(
                 &mut stream,
                 StatusCode::PAYLOAD_TOO_LARGE,

@@ -15,8 +15,11 @@ use uuid::Uuid;
 
 use crate::report_server::ReportContext;
 
-/// 采集时刻与服务端时钟允许的最大偏差（秒，设计 §3.3）
+/// 采集时刻超前服务端时钟允许的最大偏差（秒，设计 §3.3：时钟漂移防护）
 const MAX_CLOCK_SKEW_SECS: i64 = 300;
+/// 采集时刻允许的最大历史深度（秒）：断网恢复后批量补报的历史帧
+/// （agent 侧队列上限 120 帧，正常深度远小于该防御性上限）
+const MAX_PAST_AGE_SECS: i64 = 86_400;
 /// 上报间隔下限（秒，响应控制面不低于该值）
 const MIN_REPORT_INTERVAL_SECS: u64 = 10;
 /// 温度读数业务范围（℃）：越界视为明显异常，且会溢出 max_temp 的 NUMERIC(5,1)
@@ -83,16 +86,23 @@ fn max_temp(sensors: &[foims_common::report::ReportSensor]) -> Option<f64> {
         .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m| m.max(v))))
 }
 
-/// 校验采集时刻：RFC 3339 可解析且与服务端时钟偏差不超过 5 分钟。
+/// 校验采集时刻：RFC 3339 可解析；未来方向偏差 ≤5 分钟（时钟漂移防护），
+/// 过去方向放宽至 24 小时（容纳断网恢复后批量补报的历史帧）。
 /// 解析失败/超差返回 Err（纯函数，now 注入便于单测）。
 fn validate_collected_at(collected_at: &str, now: DateTime<Utc>) -> Result<DateTime<Utc>, String> {
     let parsed = DateTime::parse_from_rfc3339(collected_at)
         .map_err(|e| format!("collected_at 非法（RFC 3339）: {e}"))?
         .with_timezone(&Utc);
-    let skew = (parsed - now).num_seconds().abs();
-    if skew > MAX_CLOCK_SKEW_SECS {
+    let offset_secs = (parsed - now).num_seconds();
+    if offset_secs > MAX_CLOCK_SKEW_SECS {
         return Err(format!(
-            "collected_at 与服务端时钟偏差 {skew} 秒，超过 {MAX_CLOCK_SKEW_SECS} 秒上限"
+            "collected_at 超前服务端时钟 {offset_secs} 秒，超过 {MAX_CLOCK_SKEW_SECS} 秒上限"
+        ));
+    }
+    if -offset_secs > MAX_PAST_AGE_SECS {
+        return Err(format!(
+            "collected_at 滞后服务端时钟 {} 秒，超过 {MAX_PAST_AGE_SECS} 秒上限",
+            -offset_secs
         ));
     }
     Ok(parsed)
@@ -184,12 +194,27 @@ fn normalize_report(report: &AgentReport) -> Result<TrimmedReport, String> {
     })
 }
 
-/// 处理单条指标上报：鉴权 → 解析 → 校验 → 机器标识比对 → 事务入库。
+/// 解析请求体为帧序列：含 `frames` 字段视为批量（AgentReportBatch），
+/// 否则按单帧解析（旧版 agent 平滑兼容）。空批量返回空序列由调用方拒绝
+/// （纯函数，单测覆盖）。
+fn parse_frames(body: &[u8]) -> Result<(Vec<AgentReport>, u64), String> {
+    match serde_json::from_slice::<foims_common::report::AgentReportBatch>(body) {
+        Ok(batch) => Ok((batch.frames, batch.dropped)),
+        Err(_) => {
+            let report: AgentReport =
+                serde_json::from_slice(body).map_err(|e| format!("上报 JSON 解析失败: {e}"))?;
+            Ok((vec![report], 0))
+        }
+    }
+}
+
+/// 处理指标上报（批量或单帧）：鉴权（一次）→ 解析 → 逐帧校验 →
+/// 机器标识比对 → 单事务入库。
 ///
 /// 入库（单事务）：
-/// - agents 主行刷新快照列（pending/offline 首报即翻转 active，machine_id
-///   缺失时回填，last_seen/first_seen 置位）；
-/// - agent_metrics_history 追加曲线精简快照
+/// - agents 主行刷新快照列（取最后一帧；pending/offline 首报即翻转
+///   active，machine_id 缺失时回填，last_seen/first_seen 置位）；
+/// - agent_metrics_history 逐帧追加曲线精简快照
 ///   {"cpu","mem","disk","temp","rx_bps","tx_bps"}。
 pub async fn ingest(
     ctx: &ReportContext,
@@ -229,53 +254,79 @@ pub async fn ingest(
     let interval = ctx.report_interval_secs.max(MIN_REPORT_INTERVAL_SECS);
     let min_gap_secs = i64::try_from(interval / 2).unwrap_or(i64::MAX);
 
-    // 2. 解析与校验（校验通过返回解析后的采集时刻与 trim 后的文本字段）
-    let report: AgentReport = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(e) => return error_json(StatusCode::BAD_REQUEST, &format!("上报 JSON 解析失败: {e}")),
-    };
-    let (collected_at, trimmed) = match validate_report(&report, Utc::now()) {
-        Ok(t) => t,
+    // 2. 解析为帧序列：含 frames 字段视为批量（AgentReportBatch），
+    //    否则按单帧解析（旧版 agent 平滑兼容）
+    let (frames, dropped) = match parse_frames(body) {
+        Ok(parsed) => parsed,
         Err(e) => return error_json(StatusCode::BAD_REQUEST, &e),
     };
+    if frames.is_empty() {
+        return error_json(StatusCode::BAD_REQUEST, "上报批次为空");
+    }
 
-    // 3. 机器标识比对：NULL 首报回填；非空且不一致视为令牌被复用到其他机器
-    if let Some(existing) = stored_machine_id.as_deref()
-        && existing != trimmed.machine_id
-    {
+    // 3. 逐帧校验：非法帧丢弃计数（整批全非法才拒绝，合法帧继续入库；
+    //    单帧路径整批即一条，语义与旧版一致）
+    let now = Utc::now();
+    let mut valid: Vec<(AgentReport, DateTime<Utc>, TrimmedReport)> =
+        Vec::with_capacity(frames.len());
+    let mut invalid_count = 0usize;
+    let mut first_error: Option<String> = None;
+    for report in frames {
+        match validate_report(&report, now) {
+            Ok((collected_at, trimmed)) => valid.push((report, collected_at, trimmed)),
+            Err(e) => {
+                invalid_count += 1;
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+        }
+    }
+    if valid.is_empty() {
+        let Some(e) = first_error else {
+            return error_json(StatusCode::BAD_REQUEST, "上报内容非法");
+        };
+        return error_json(StatusCode::BAD_REQUEST, &e);
+    }
+    if invalid_count > 0 {
         foims_common::log_warn!(
-            "log.agent.machine_id_conflict",
+            "log.agent.ingest_invalid_frames",
             agent_id = agent_id,
-            stored = existing,
-            reported = trimmed.machine_id
-        );
-        return error_json(
-            StatusCode::CONFLICT,
-            "machine_id 与既有绑定不一致，疑似令牌被复用到其他机器",
+            invalid = invalid_count,
+            total = valid.len() + invalid_count
         );
     }
 
-    // 4. 快照列计算
-    let mem_pct = mem_usage_pct(report.memory.total, report.memory.used);
-    let disk_pct = disk_usage_pct(&report.disks);
-    let temp = max_temp(&report.sensors);
-    // 流量合计（bit/s）：各网卡速率求和，无网卡 → null（与 SNMP 轮询
-    // 路径的快照键保持一致，供详情网络曲线共用）
-    let sum_bps = |get: fn(&foims_common::report::ReportNet) -> f64| -> Option<f64> {
-        (!report.nets.is_empty()).then(|| report.nets.iter().map(get).sum())
+    // 4. 机器标识比对：任一帧与既有绑定不一致视为令牌被复用到其他机器，
+    //    整批拒绝（正常批量各帧 machine_id 相同）
+    for (_, _, trimmed) in &valid {
+        if let Some(existing) = stored_machine_id.as_deref()
+            && existing != trimmed.machine_id
+        {
+            foims_common::log_warn!(
+                "log.agent.machine_id_conflict",
+                agent_id = agent_id,
+                stored = existing,
+                reported = trimmed.machine_id
+            );
+            return error_json(
+                StatusCode::CONFLICT,
+                "machine_id 与既有绑定不一致，疑似令牌被复用到其他机器",
+            );
+        }
+    }
+
+    // 5. 快照列计算：以最后一帧（最新）刷新 agents 主行快照与告警评估
+    let Some((last_report, _, last_trimmed)) = valid.last() else {
+        return error_json(StatusCode::BAD_REQUEST, "上报批次为空");
     };
-    let raw_metrics = serde_json::to_value(&report).unwrap_or(Value::Null);
-    let history_snapshot = json!({
-        "cpu": report.cpu.usage_pct,
-        "mem": mem_pct,
-        "disk": disk_pct,
-        "temp": temp,
-        "rx_bps": sum_bps(|n| n.rx_bps),
-        "tx_bps": sum_bps(|n| n.tx_bps),
-    });
+    let mem_pct = mem_usage_pct(last_report.memory.total, last_report.memory.used);
+    let disk_pct = disk_usage_pct(&last_report.disks);
+    let temp = max_temp(&last_report.sensors);
+    let raw_metrics = serde_json::to_value(last_report).unwrap_or(Value::Null);
     let ip = normalize_ipv4_address(peer_ip);
 
-    // 5. 单事务入库
+    // 6. 单事务入库：agents 快照（含频控闸门）+ 逐帧历史写入
     let mut tx = match ctx.pool.begin().await {
         Ok(tx) => tx,
         Err(e) => {
@@ -305,18 +356,18 @@ pub async fn ingest(
             AND (last_seen IS NULL OR last_seen < NOW() - make_interval(secs => $15))",
     )
     .bind(agent_id)
-    .bind(&trimmed.machine_id)
-    .bind(&trimmed.hostname)
+    .bind(&last_trimmed.machine_id)
+    .bind(&last_trimmed.hostname)
     .bind(&ip)
-    .bind(&trimmed.os)
-    .bind(&trimmed.kernel)
-    .bind(&trimmed.arch)
-    .bind(&trimmed.agent_version)
-    .bind(report.cpu.usage_pct)
+    .bind(&last_trimmed.os)
+    .bind(&last_trimmed.kernel)
+    .bind(&last_trimmed.arch)
+    .bind(&last_trimmed.agent_version)
+    .bind(last_report.cpu.usage_pct)
     .bind(mem_pct)
     .bind(disk_pct)
     .bind(temp)
-    .bind(i64::try_from(report.system.uptime_secs).unwrap_or(i64::MAX))
+    .bind(i64::try_from(last_report.system.uptime_secs).unwrap_or(i64::MAX))
     .bind(&raw_metrics)
     .bind(min_gap_secs as f64)
     .execute(&mut *tx)
@@ -336,7 +387,7 @@ pub async fn ingest(
                 let owner = sqlx::query_scalar::<_, Uuid>(
                     "SELECT id FROM agents WHERE machine_id = $1 AND id <> $2 LIMIT 1",
                 )
-                .bind(&trimmed.machine_id)
+                .bind(&last_trimmed.machine_id)
                 .bind(agent_id)
                 .fetch_one(&ctx.pool)
                 .await
@@ -347,7 +398,7 @@ pub async fn ingest(
                     stored = owner
                         .map(|u| u.to_string())
                         .unwrap_or_else(|| "unknown".into()),
-                    reported = trimmed.machine_id
+                    reported = last_trimmed.machine_id
                 );
                 return error_json(
                     StatusCode::CONFLICT,
@@ -381,39 +432,68 @@ pub async fn ingest(
             }
         }
     }
-    // 唯一索引 (agent_id, collected_at) 冲突时跳过：agent 重试/重放同一
-    // 采集时刻的幂等去重，避免重复上报写重
-    let insert = sqlx::query(
-        r"INSERT INTO agent_metrics_history (agent_id, collected_at, metrics)
-          VALUES ($1, $2, $3) ON CONFLICT (agent_id, collected_at) DO NOTHING",
-    )
-    .bind(agent_id)
-    .bind(collected_at)
-    .bind(&history_snapshot)
-    .execute(&mut *tx)
-    .await;
-    if let Err(e) = insert {
-        foims_common::log_error!("log.agent.ingest_db_error", error = e);
-        return error_json(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "入库失败：历史指标写入出错",
-        );
+    // 逐帧写入历史曲线：每帧独立精简快照；唯一索引 (agent_id, collected_at)
+    // 冲突时跳过（agent 重试/重放同一采集时刻的幂等去重，避免重复上报写重）
+    for (report, collected_at, _) in &valid {
+        let mem = mem_usage_pct(report.memory.total, report.memory.used);
+        let disk = disk_usage_pct(&report.disks);
+        let frame_temp = max_temp(&report.sensors);
+        // 流量合计（bit/s）：各网卡速率求和，无网卡 → null（与 SNMP 轮询
+        // 路径的快照键保持一致，供详情网络曲线共用）
+        let sum_bps = |get: fn(&foims_common::report::ReportNet) -> f64| -> Option<f64> {
+            (!report.nets.is_empty()).then(|| report.nets.iter().map(get).sum())
+        };
+        let snapshot = json!({
+            "cpu": report.cpu.usage_pct,
+            "mem": mem,
+            "disk": disk,
+            "temp": frame_temp,
+            "rx_bps": sum_bps(|n| n.rx_bps),
+            "tx_bps": sum_bps(|n| n.tx_bps),
+        });
+        let insert = sqlx::query(
+            r"INSERT INTO agent_metrics_history (agent_id, collected_at, metrics)
+              VALUES ($1, $2, $3) ON CONFLICT (agent_id, collected_at) DO NOTHING",
+        )
+        .bind(agent_id)
+        .bind(*collected_at)
+        .bind(&snapshot)
+        .execute(&mut *tx)
+        .await;
+        if let Err(e) = insert {
+            foims_common::log_error!("log.agent.ingest_db_error", error = e);
+            return error_json(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "入库失败：历史指标写入出错",
+            );
+        }
     }
     if let Err(e) = tx.commit().await {
         foims_common::log_error!("log.agent.ingest_db_error", error = e);
         return error_json(StatusCode::INTERNAL_SERVER_ERROR, "入库失败：事务提交出错");
     }
 
-    // 6. 告警评估：入库成功后按全局阈值评估本条快照（超阈值边沿发站内
+    // 7. 批量观测日志：帧数/丢弃数（单帧上报不产生噪音）
+    if valid.len() > 1 || dropped > 0 {
+        foims_common::log_info!(
+            "log.agent.ingest_batch",
+            agent_id = agent_id,
+            frames = valid.len(),
+            dropped = dropped
+        );
+    }
+
+    // 8. 告警评估：入库成功后按全局阈值评估最后一帧快照（超阈值边沿发站内
     // 通知）；评估失败仅记日志，不影响已成功的上报响应
     let values = crate::alerts::MetricValues {
-        cpu_pct: Some(report.cpu.usage_pct),
+        cpu_pct: Some(last_report.cpu.usage_pct),
         mem_pct,
         disk_pct,
         temp_c: temp,
     };
     if let Err(e) =
-        crate::alerts::evaluate_report(&ctx.pool, agent_id, &trimmed.hostname, &ip, values).await
+        crate::alerts::evaluate_report(&ctx.pool, agent_id, &last_trimmed.hostname, &ip, values)
+            .await
     {
         foims_common::log_error!(
             "log.agent.alert_evaluate_failed",
@@ -422,7 +502,7 @@ pub async fn ingest(
         );
     }
 
-    // 7. 响应控制面：下发上报间隔（不低于下限）与最新版本通告
+    // 9. 响应控制面：下发上报间隔（不低于下限）与最新版本通告
     (
         StatusCode::OK,
         Json(json!(foims_common::report::ReportResponse {
@@ -449,18 +529,68 @@ mod tests {
     fn collected_at_偏差超五分钟拒绝() {
         let now = Utc::now();
         let future = (now + chrono::Duration::seconds(MAX_CLOCK_SKEW_SECS + 1)).to_rfc3339();
-        let past = (now - chrono::Duration::seconds(MAX_CLOCK_SKEW_SECS + 1)).to_rfc3339();
         assert!(
             validate_collected_at(&future, now).is_err(),
             "未来超差应拒绝"
         );
-        assert!(validate_collected_at(&past, now).is_err(), "过去超差应拒绝");
+    }
+
+    #[test]
+    fn collected_at_历史帧24小时内通过超限拒绝() {
+        let now = Utc::now();
+        // 断网补报：过去 5 分钟 ~ 24 小时内均应放行
+        let past_5min = (now - chrono::Duration::seconds(MAX_CLOCK_SKEW_SECS + 1)).to_rfc3339();
+        let past_23h = (now - chrono::Duration::hours(23)).to_rfc3339();
+        assert!(
+            validate_collected_at(&past_5min, now).is_ok(),
+            "过去 5 分钟的历史帧应放行"
+        );
+        assert!(
+            validate_collected_at(&past_23h, now).is_ok(),
+            "过去 23 小时的历史帧应放行"
+        );
+        // 超过 24 小时拒绝
+        let past_25h = (now - chrono::Duration::hours(25)).to_rfc3339();
+        assert!(
+            validate_collected_at(&past_25h, now).is_err(),
+            "过去 25 小时应拒绝"
+        );
     }
 
     #[test]
     fn collected_at_格式非法拒绝() {
         assert!(validate_collected_at("not-a-time", Utc::now()).is_err());
         assert!(validate_collected_at("", Utc::now()).is_err());
+    }
+
+    #[test]
+    fn 请求体解析_批量优先单帧回退() {
+        let report = sample_report();
+        // 单帧 JSON：回退解析为一帧
+        let single = serde_json::to_vec(&report).unwrap();
+        let (frames, dropped) = parse_frames(&single).unwrap();
+        assert_eq!(frames.len(), 1);
+        assert_eq!(dropped, 0);
+        assert_eq!(frames[0].machine_id, report.machine_id);
+
+        // 批量 JSON：含 dropped 计数
+        let batch = foims_common::report::AgentReportBatch {
+            frames: vec![report.clone(), report],
+            dropped: 5,
+        };
+        let batch_json = serde_json::to_vec(&batch).unwrap();
+        let (frames, dropped) = parse_frames(&batch_json).unwrap();
+        assert_eq!(frames.len(), 2);
+        assert_eq!(dropped, 5);
+
+        // 空批量：解析成功但空序列，由调用方拒绝
+        let (frames, dropped) = parse_frames(br#"{"frames": []}"#).unwrap();
+        assert!(frames.is_empty());
+        assert_eq!(dropped, 0);
+
+        // 非法 JSON：报错
+        assert!(parse_frames(br#"{"nope": 1}"#).is_err());
+        assert!(parse_frames(b"not-json").is_err());
     }
 
     #[test]

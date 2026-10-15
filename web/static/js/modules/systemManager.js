@@ -996,6 +996,10 @@ function loadAgentServiceConfig() {
       elementCache.setValue("agent-service-bind-addr", bindMatch ? bindMatch[1] : "[::]");
       elementCache.setValue("agent-service-bind-port", bindMatch ? bindMatch[2] : "9100");
       elementCache.setValue("agent-service-interval", String(agent.report_interval_secs ?? 60));
+      elementCache.setValue(
+        "agent-service-collect-interval",
+        String(agent.collect_interval_secs ?? 5)
+      );
       // 上报地址模式：开=自动取系统公共URL；关=手动覆盖地址（输入框联动展开）
       elementCache.setChecked("agent-use-public-url", Boolean(agent.use_public_url));
       elementCache.setValue("agent-report-url-override", agent.report_url_override || "");
@@ -1039,6 +1043,12 @@ async function saveAgentServiceConfig() {
     3600
   );
 
+  // 采集间隔 clamp 到 1-60（与 agent 端 clamp 对齐）
+  const collectInterval = Math.min(
+    Math.max(parseInt(elementCache.getValue("agent-service-collect-interval"), 10) || 0, 1),
+    60
+  );
+
   // 上报地址模式：开关关时允许手动覆盖（host:port，留空回退监听地址推导）
   const reportOverride = elementCache.getValue("agent-report-url-override").trim();
   if (!elementCache.getChecked("agent-use-public-url") && reportOverride && !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d+)?$/.test(reportOverride)) {
@@ -1053,6 +1063,7 @@ async function saveAgentServiceConfig() {
       enabled: elementCache.getChecked("agent-service-enabled"),
       bind_addr: `${bindHost}:${bindPort}`,
       report_interval_secs: interval,
+      collect_interval_secs: collectInterval,
       use_public_url: elementCache.getChecked("agent-use-public-url"),
       report_url_override: reportOverride
     };

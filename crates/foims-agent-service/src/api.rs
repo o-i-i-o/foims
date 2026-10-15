@@ -24,6 +24,12 @@ use crate::packaging::{self, PackageInputs};
 /// 站点 CA 公钥路径取 crate 根常量（cert 模块与下载流程共用，见 lib.rs）。
 /// 默认上报端口兜底：监听地址缺合法端口段时按 9100 补齐。
 const DEFAULT_AGENT_PORT: &str = "9100";
+/// agent.toml 采集间隔 clamp 范围（与 agent 侧 foims-agent-core 保持一致）
+const COLLECT_INTERVAL_MIN_SECS: u64 = 1;
+const COLLECT_INTERVAL_MAX_SECS: u64 = 60;
+/// agent.toml 上报间隔 clamp 范围（与 agent 侧控制面 clamp 保持一致）
+const REPORT_INTERVAL_MIN_SECS: u64 = 10;
+const REPORT_INTERVAL_MAX_SECS: u64 = 3600;
 
 /// 下载参数（GET /api/agents/download）。
 #[derive(Debug, Deserialize)]
@@ -236,12 +242,20 @@ pub async fn download_agent_package<S: ConfigProvider>(
             .fetch_one(&pool)
             .await?;
 
-    // agent.toml（由服务端下载时自动生成）
+    // agent.toml（由服务端下载时自动生成；采集/上报间隔均取系统配置并 clamp）
+    let agent = state.config().agent.clone();
+    let collect_interval = agent
+        .collect_interval_secs
+        .clamp(COLLECT_INTERVAL_MIN_SECS, COLLECT_INTERVAL_MAX_SECS);
+    let report_interval = agent
+        .report_interval_secs
+        .clamp(REPORT_INTERVAL_MIN_SECS, REPORT_INTERVAL_MAX_SECS);
     let agent_toml = format!(
         "# FOIMS Agent 配置（由 FOIMS 服务端下载时自动生成）\n\
          server_addr = \"{server_addr}\"\n\
          token = \"{token}\"\n\
-         report_interval_secs = 60\n"
+         report_interval_secs = {report_interval}\n\
+         collect_interval_secs = {collect_interval}\n"
     );
 
     // install.sh：优先 dist_dir 下的部署版本，缺失时回退内置精简脚本

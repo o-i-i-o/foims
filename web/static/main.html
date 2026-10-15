@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1791992377">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1791992377">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1792083789">
 </head>
 <body class="main-body">
   <div id="app">
@@ -1179,6 +1179,11 @@
                         <input type="number" id="agent-service-interval" min="10" max="3600" placeholder="60" aria-label="Agent report interval in seconds" data-i18n-aria-label="agent_service.report_interval">
                         <span class="hint-text" data-i18n="agent_service.report_interval_desc">Pushed to agents via report responses, 10-3600; also drives offline detection</span>
                       </div>
+                      <div class="form-group">
+                        <label for="agent-service-collect-interval" data-i18n="agent_service.collect_interval">Collect Interval (seconds)</label>
+                        <input type="number" id="agent-service-collect-interval" min="1" max="60" placeholder="5" aria-label="Agent collect interval in seconds" data-i18n-aria-label="agent_service.collect_interval">
+                        <span class="hint-text" data-i18n="agent_service.collect_interval_desc">Local high-frequency sampling cadence, 1-60; frames queue up and are batched at each report</span>
+                      </div>
                     </div>
                     <div class="form-row">
                       <dl class="config-field">
@@ -1663,6 +1668,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1791992377"></script>
+  <script type="module" src="/static/js/app.js?v=1792083789"></script>
 </body>
 </html>

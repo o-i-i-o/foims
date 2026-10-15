@@ -861,6 +861,8 @@
     "bind_port": "Port",
     "report_interval": "Report Interval (seconds)",
     "report_interval_desc": "10-3600, pushed to agents via report responses; also drives offline detection",
+    "collect_interval": "Collect Interval (seconds)",
+    "collect_interval_desc": "1-60, local high-frequency sampling cadence; frames queue up and are batched at each report",
     "section_service": "Agent Service",
     "section_agent": "Agent Settings",
     "use_public_url": "Use public URL as report address",

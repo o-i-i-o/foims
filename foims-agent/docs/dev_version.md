@@ -52,3 +52,25 @@
   均在 foims-agent-core [dependencies]），同步修正 reporter.rs 与
   report_smoke.rs 中对 h3_demo / gen-h3-demo-certs.sh 的注释引用；
   report_smoke 冒烟示例（走正式 Reporter）保留。
+
+# v0.3.0
+
+# 2026101601004501
+# 2026年10月16日01点00分45秒 第1次修改
+
+1.采集/上报解耦 + 批量上报（大规模主机部署负载优化，模块级 x+1）：
+  - 采集与上报解耦：新增 collect_interval_secs 采集间隔（默认 5s，
+    clamp 1-60），ConfigFile/ReporterConfig 扩展该字段（build 四参签名
+    不变、缺省 5）；独立采集任务周期采帧入内存队列，主循环仍按
+    report_interval 批量出队上报，采集频率不再受上报间隔拖累；
+  - FrameQueue 内存帧队列（上限 120 帧 / 8MiB，超限弃最旧，dropped
+    计数随响应回执观测）；上报失败整批放回并按时间序对半拆分逐级
+    降批量（最终退化为单帧），兼容旧服务端与 413 容量拒绝；
+  - H3Transport QUIC 连接复用：空闲 ≥120s 自动关闭重建，复用失败重建
+    重试一次；证书续期成功后立即关闭连接使新证书生效；删除断网磁盘
+    缓存重放（PENDING_CACHE_CAP/cache_push/replay_pending）；
+  - report_once（--once）保持单帧单报不变；
+2.foims-protocol 受控双副本同步：AgentReportBatch{frames, dropped}
+  批量帧协议（主仓 foims-common report.rs 同步，roundtrip 测试双侧覆盖）；
+3.验证：cargo test --workspace 178 测试全绿，clippy --release
+  -D warnings 与 fmt 通过。
