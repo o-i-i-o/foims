@@ -2,6 +2,11 @@
 //!
 //! agent 与服务端共享的请求/响应结构。硬性规则：跨 crate 共享类型
 //! 统一放 `foims-common`，不得复制副本。
+//!
+//! ⚠ 双副本同步义务：agent 拆出为主仓根下独立工作空间 `foims-agent/`，其
+//! `foims-protocol` crate 持有本文件的受控副本（协议侧无 foims 依赖，
+//! 无法引用主仓）。修改本文件的结构与字段时，必须同步修改
+//! `foims-agent/crates/foims-protocol/src/report.rs`，两侧保持逐字一致。
 
 use serde::{Deserialize, Serialize};
 

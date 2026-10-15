@@ -1,6 +1,6 @@
 //! 构建期产物清单（manifest.json）解析与版本门控。
 //!
-//! manifest.json 由 `scripts/build-agent.sh` 在 CI 打包时生成，位于
+//! manifest.json 由 agent 工作空间的 `scripts/build-agent.sh` 在 CI 打包时生成，位于
 //! `[agent].dist_dir`（默认 /opt/foims/agents），是运行期分发的唯一事实来源。
 //! Schema（固定）：
 //!

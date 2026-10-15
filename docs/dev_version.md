@@ -208,3 +208,18 @@ v0.9.0
 2026101423403201
 1.仪表盘新增「主机负载」卡片（CPU/内存/温度三页签，10 秒自动轮播、悬停暂停、手动切换后停止轮播）：后端新增 GET /api/agents/top-metrics 聚合端点（agents 快照列 cpu_usage/mem_usage_pct/max_temp 各取 status='active' 且非空的前 N 条，limit 1..=10 默认 5，列名走代码白名单 + QueryBuilder 绑定参数，一次返回三类榜单），与 /api/agents 同 nest 经 agent_admin_guard（admin/secadmin）；前端 dashboard.js 接入榜单（主机监控不可见角色经 getHiddenSections 跳过请求并整卡 hidden，不产生 403 噪音）、复用主机监控页 agent-usage 迷你条与 >85 红/>60 橙分档渲染 CPU/内存榜、温度榜显示 ℃ 一位小数，榜单行显示排名序号+主机名+备注/IP；main.html 卡片骨架 data-nav="agents"（点卡跳主机监控页）、dashboard.css 页签样式；i18n zh/en 新增 dashboard.host_metrics/metric_cpu/metric_memory/metric_temperature/no_host_metrics_data 与 server.agent.top_metrics_retrieved
 2.lib 版本 0.23.5→0.23.6（y+1 → c+1），foims-agent-service 0.1.8→0.1.9，前端资源版本同步 bump
+
+v0.9.1
+2026101516425101
+1.Agent 源码拆出至独立工作空间 ../foims-agent（与主程序仅网络通信，4 crates：foims-agent-core 平台无关上报传输/foims-protocol 协议受控副本/foims-agent Linux 采集/foims-agent-windows Windows 采集）：主仓根 Cargo.toml members 删除 crates/foims-agent 并清理仅 agent 使用的 workspace 依赖（rustix/semver），删除主仓 crates/foims-agent/ 目录、scripts/build-agent.sh、docs/agent-porting.md（均迁移至新工作空间）；.gitignore 删 crates/foims-agent/tests/fixtures/ 行
+2.build-deb.sh 级联构建改造：agent 构建段与装包段改读独立工作空间（AGENT_WS=${AGENT_WORKSPACE:-$PROJECT_DIR/../foims-agent}，缺失即失败退出并提示），删除 manifest 版本与主程序一致性校验（agent 版本独立自管理，版本门控已移除），install.sh 仍从主仓 deploy/agent/ 读取装包
+3.CI（.github/workflows/ci.yml）build/release 两 job 新增「检出 agent 工作空间」步骤（与主仓同 org 的 foims-agent 仓，AGENT_WORKSPACE=$GITHUB_WORKSPACE/foims-agent 传入 build-deb.sh），级联注释同步
+4.foims-common 的 report.rs/x509.rs 头注释新增「与 ../foims-agent 的 foims-protocol 双副本同步」义务（agent 工作空间持受控副本）；code-style.md §2.1 工程结构删 foims-agent 行并注明拆出去向；agent-service 两处失效注释路径更新
+5.主仓 cargo fmt + clippy --release -D warnings 全绿、frontend_consistency 测试通过；主程序功能零变化，lib 版本不动，前端资源版本不变
+
+v0.9.2
+2026101523371801
+1.foims-agent 工作空间移入主仓根目录下（../foims-agent → foims-agent/），保持独立 Cargo workspace 不进 members（members 为显式列表，不引用即被 cargo 忽略，主程序编译与结构零影响）；共享主仓代码规范文档（docs/code-style.md、AGENTS.md）并利于 agent 与服务端联调
+2.build-deb.sh 级联默认路径改 $PROJECT_DIR/foims-agent（AGENT_WORKSPACE 环境变量覆盖保留）；CI build/release 两 job 删除「检出 agent 工作空间」单独步骤（agent 随主仓同一次 checkout 检出），构建命令恢复 AGENT_BACKEND=zigbuild bash scripts/build-deb.sh
+3.文档同步：agent AGENTS.md（独立工作空间位于主仓根下）、code-style.md §2.1、foims-common report.rs/x509.rs 双副本注释均改新路径；agent .gitignore 嵌套规则验证（/target 与 dist/ 锚定于该 .gitignore 所在目录，git check-ignore 确认生效）
+4.验证：主仓 fmt + clippy --release -D warnings + 测试全绿；agent workspace 173 测试全绿——mv 保留 mtime 使 cargo 沿用旧路径编译产物（env!(CARGO_MANIFEST_DIR) 编译期常量指向已删除旧路径，fixture 比对测试 40 个失败、总测试数 115≠173），cargo clean -p 四 crate 后恢复，教训：移动 Cargo 工作空间目录后必须 clean 受影响 crate 再跑测试；lib 版本不动，前端资源版本不变

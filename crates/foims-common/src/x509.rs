@@ -2,6 +2,10 @@
 //!
 //! 服务端续期端点校验请求证书剩余寿命、agent 端触发续期检查均依赖
 //! 同一解析口径，集中于此避免两 crate 复制副本。
+//!
+//! ⚠ 双副本同步义务：agent 拆出为主仓根下独立工作空间 `foims-agent/`，其
+//! `foims-protocol` crate 持有本文件的受控副本。修改本文件时必须同步
+//! `foims-agent/crates/foims-protocol/src/x509.rs`，两侧保持逐字一致。
 
 use x509_parser::pem::parse_x509_pem;
 

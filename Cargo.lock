@@ -1491,31 +1491,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "foims-agent"
-version = "0.1.5"
-dependencies = [
- "bytes",
- "chrono",
- "foims-common",
- "h3",
- "h3-quinn",
- "http",
- "quinn",
- "rand 0.10.3",
- "rcgen",
- "rustix",
- "rustls",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "toml 1.1.6+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "foims-agent-service"
 version = "0.1.9"
 dependencies = [

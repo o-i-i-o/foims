@@ -34,8 +34,10 @@ foims（bin/lib）             应用组装层：路由装配/系统管理/日�
 ├── crates/foims-x509-management 证书管理
 ├── crates/foims-services        systemd 服务管理（foims/nginx）
 ├── crates/foims-scheduler       定时任务
-├── crates/foims-agent           主机指标采集 Agent（node_exporter 的 Rust 重写，独立分发）
-└── crates/foims-agent-service   Agent 服务端（清单版本门控/zip-deb-rpm 动态组包/下载 API）
+├── crates/foims-agent-service   Agent 服务端（zip-deb-rpm 动态组包/下载 API/上报接收）
+└── （原 crates/foims-agent 已拆出至主仓根下独立工作空间 foims-agent/
+    （独立 Cargo workspace，不进 members）：
+    foims-agent-core/foims-protocol/foims-agent/foims-agent-windows 四 crate）
 ```
 
 - 依赖方向自上而下，禁止反向依赖与环。

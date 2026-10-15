@@ -115,7 +115,8 @@ jobs:
       - name: 构建项目
         run: cargo build --release --verbose
 
-      # Agent 分发物料由 build-deb.sh 级联 build-agent.sh 编译（AGENT_TARGETS
+      # Agent 分发物料由 build-deb.sh 级联主仓根下的独立工作空间
+      # foims-agent/（随本仓检出）的 build-agent.sh 编译（AGENT_TARGETS
       # 默认 x86_64,aarch64）。交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C
       # 编译器与链接器（ring 等依赖直接编），替代 musl.cc 工具链下载——该站点
       # 多次间歇不可达（v0.6.3/v0.7.2/v0.7.3 三轮修复仍失败），最终弃用。
@@ -177,7 +178,8 @@ jobs:
       - name: 构建发布版本
         run: cargo build --release --verbose
 
-      # Agent 分发物料由 build-deb.sh 级联 build-agent.sh 编译（AGENT_TARGETS
+      # Agent 分发物料由 build-deb.sh 级联主仓根下的独立工作空间
+      # foims-agent/（随本仓检出）的 build-agent.sh 编译（AGENT_TARGETS
       # 默认 x86_64,aarch64）。交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C
       # 编译器与链接器（ring 等依赖直接编），替代 musl.cc 工具链下载——该站点
       # 多次间歇不可达（v0.6.3/v0.7.2/v0.7.3 三轮修复仍失败），最终弃用。
