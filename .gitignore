@@ -13,3 +13,4 @@ node_exporter/
 .zcodeignore
 crates/foims-agent/tests/fixtures/
 dist/agents/
+windows_exporter/
