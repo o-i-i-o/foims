@@ -313,9 +313,12 @@ pub fn reg_read_string(root: HKEY, subkey: &str, value: &str) -> Result<String, 
         };
         // WIN32_ERROR 为结构体 newtype，不能作 match 模式，改用 if/else 比较
         if status == ERROR_SUCCESS {
+            // as_chunks 按 2 字节组切分（剩余不足一组的尾部不参与解码）
             let chars: Vec<u16> = buffer[..size as usize]
-                .chunks_exact(2)
-                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| u16::from_le_bytes(*pair))
                 .take_while(|unit| *unit != 0)
                 .collect();
             return String::from_utf16(&chars).map_err(|_| FfiError::String {

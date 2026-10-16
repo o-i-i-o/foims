@@ -81,3 +81,7 @@ v0.4.0
 v0.3.4
 2026101622450501
 1. Agent配置包安装闭环修正（仅z，crates/foims-agent-service/packaging.rs）：deb侧Depends: foims-agent本已存在（实为补充确证），rpm侧补Requires: foims-agent（rpm::Dependency::any，任意版本约束——配置包Version取主程序版本而程序包版本由agent工作空间独立管理，两版本空间不同不可锁版本）；RESTART_SNIPPET由try-restart改为enable+restart foims-agent——try-restart对未运行服务是no-op，依赖强制安装顺序（程序包在前）后配置包装完时agent必然未启动，旧脚本导致首次安装服务永不拉起，改为enable（设自启）+restart（重启一次使新配置即刻生效，首次安装直接拉起）；zip包README.txt补Windows服务重启说明（sc.exe stop/start）；模块头与agent工作空间build-agent.sh分发模型注释同步；测试同步：deb control断言Depends、postinst断言enable+restart且显式拒绝try-restart回潮、rpm回读断言requires含foims-agent；cargo test -p foims-agent-service 57全绿、clippy -D warnings与fmt通过
+
+v0.3.5
+2026101623060801
+1. Agent配置包zip形态补Linux卸载脚本 + agent程序包Windows服务模式配套（仅z，主仓侧只动foims-agent-service打包与注释）：packaging.rs新增UNINSTALL_SH（uninstall.sh随zip包下发，0755）——配置经deb/rpm安装（foims-agent-config）时拒绝执行提示用包管理器卸载（防双轨残留），手动解压路径则stop+disable服务并删除/etc/foims-agent/，程序本体始终提示用系统包管理器卸载；ZIP_README重写为linux+Windows双平台安装/卸载说明（Linux复制到/etc/foims-agent/+systemctl restart、Windows经程序包install.cmd注册服务）；zip测试条目5→6（uninstall.sh权限0o755）；api.rs模块头/格式校验注释「exe」→「zip」双平台同步；agent工作空间侧为SCM服务模式改造（--service + install.cmd/uninstall.cmd + Windows产物回归zip），agent 0.4.2→0.5.0独立版本记录；cargo test -p foims-agent-service全绿、clippy -D warnings与fmt通过

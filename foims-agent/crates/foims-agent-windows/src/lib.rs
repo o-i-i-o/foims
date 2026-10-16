@@ -12,6 +12,9 @@
 pub mod collectors;
 pub mod ffi;
 pub mod platform;
+// Windows SCM 服务模式：仅 windows 目标编译（Linux 宿主无 SCM 概念）
+#[cfg(target_os = "windows")]
+pub mod service;
 
 use std::sync::Arc;
 

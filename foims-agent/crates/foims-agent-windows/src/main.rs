@@ -3,6 +3,7 @@
 //! CLI 与 Linux 版逐项对齐，仅默认配置路径/证书目录/平台实现不同：
 //! - `foims-agent-windows`：默认 HTTP/3 上报模式
 //!   （读取 C:\ProgramData\foims-agent\agent.toml 常驻循环）
+//! - `--service`：以 Windows 服务模式运行（SCM 状态机，install.cmd 安装）
 //! - `--config PATH`：指定配置文件路径
 //! - `--cert-dir DIR`：指定证书目录（或 FOIMS_AGENT_CERT_DIR）
 //! - `--once`：采集 + 上报一次即退出（联调/测试）
@@ -48,6 +49,9 @@ struct Cli {
     config: Option<String>,
     cert_dir: Option<String>,
     once: bool,
+    /// Windows 服务模式（SCM 状态机；服务模式固定常驻上报，忽略
+    /// --once/--format/--listen 等一次性/输出参数）
+    service: bool,
 }
 
 fn main() -> ExitCode {
@@ -63,7 +67,7 @@ fn main() -> ExitCode {
     }
 }
 
-const USAGE: &str = "用法: foims-agent-windows [--version] [--list] [--only 名称,名称] [--format prometheus|json] [--listen ADDR:PORT]\n      默认（无 --list/--format/--listen）: HTTP/3 上报模式 [--config PATH] [--cert-dir DIR] [--once]";
+const USAGE: &str = "用法: foims-agent-windows [--version] [--list] [--only 名称,名称] [--format prometheus|json] [--listen ADDR:PORT]\n      默认（无 --list/--format/--listen）: HTTP/3 上报模式 [--config PATH] [--cert-dir DIR] [--once]\n      服务模式: --service [--config PATH] [--cert-dir DIR]（由 install.cmd 经 sc.exe 安装，勿手动运行）";
 
 /// 初始化日志：默认 info 级，可用 RUST_LOG 覆盖；写入 stderr 避免污染指标输出
 fn init_tracing() {
@@ -86,6 +90,7 @@ fn parse_cli(args: &[String]) -> Result<Cli, String> {
         config: None,
         cert_dir: None,
         once: false,
+        service: false,
     };
     let mut index = 0;
     while index < args.len() {
@@ -142,6 +147,7 @@ fn parse_cli(args: &[String]) -> Result<Cli, String> {
                 cli.cert_dir = Some(value.clone());
             }
             "--once" => cli.once = true,
+            "--service" => cli.service = true,
             "--help" | "-h" => {
                 stderr_line(USAGE);
                 std::process::exit(0);
@@ -161,6 +167,20 @@ fn run(cli: Cli) -> ExitCode {
         // 与 --help 一致走 stderr（本 CLI 约定 stdout 只承载指标数据）
         stderr_line(&format!("foims-agent-windows {VERSION}"));
         return ExitCode::SUCCESS;
+    }
+    if cli.service {
+        // Windows 服务模式：SCM 状态机常驻上报，忽略 --once/--format/--listen
+        let (config_path, cert_dir) = resolve_paths(&cli);
+        #[cfg(target_os = "windows")]
+        {
+            return foims_agent_windows::service::run_as_service(&config_path, &cert_dir);
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (&config_path, &cert_dir);
+            stderr_line("--service 服务模式仅支持 Windows 目标（由 install.cmd 经 sc.exe 安装）");
+            return ExitCode::FAILURE;
+        }
     }
     // 校验 --only 名称合法性（不存在的名称直接报错，避免静默空输出）
     if let Some(names) = &cli.only {
@@ -201,8 +221,8 @@ fn run(cli: Cli) -> ExitCode {
     }
 }
 
-/// 上报模式：加载配置 → 构建运行时 → 常驻循环或 --once 单次
-fn run_reporter(cli: &Cli) -> ExitCode {
+/// 从 CLI 解析配置文件与证书目录路径（上报模式与服务模式共用）
+fn resolve_paths(cli: &Cli) -> (PathBuf, PathBuf) {
     let config_path = cli
         .config
         .clone()
@@ -214,6 +234,12 @@ fn run_reporter(cli: &Cli) -> ExitCode {
         .map(PathBuf::from)
         .or_else(|| std::env::var(ENV_CERT_DIR).ok().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from(DEFAULT_CERT_DIR));
+    (config_path, cert_dir)
+}
+
+/// 上报模式：加载配置 → 构建运行时 → 常驻循环或 --once 单次
+fn run_reporter(cli: &Cli) -> ExitCode {
+    let (config_path, cert_dir) = resolve_paths(cli);
     let config = match ReporterConfig::load(&config_path, cert_dir) {
         Ok(config) => config,
         Err(error) => {
@@ -462,6 +488,7 @@ mod tests {
         assert!(cli.config.is_none());
         assert!(cli.cert_dir.is_none());
         assert!(!cli.once);
+        assert!(!cli.service);
     }
 
     #[test]
@@ -511,6 +538,21 @@ mod tests {
         assert!(cli.once);
         // 上报模式判定：无 --list/--format/--listen
         assert!(cli.listen.is_none() && cli.format.is_none() && !cli.list);
+    }
+
+    #[test]
+    fn test_parse_cli_service_flag() {
+        let args = vec!["--service".to_string()];
+        let cli = parse_cli(&args).unwrap_or_else(|e| panic!("解析失败: {e}"));
+        assert!(cli.service);
+        // 服务模式可与 --config/--cert-dir 共存（运行期忽略 --once 等输出参数）
+        let args2: Vec<String> = vec!["--service", "--config", r"C:\Temp\agent.toml"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let cli2 = parse_cli(&args2).unwrap_or_else(|e| panic!("解析失败: {e}"));
+        assert!(cli2.service);
+        assert_eq!(cli2.config.as_deref(), Some(r"C:\Temp\agent.toml"));
     }
 
     #[test]

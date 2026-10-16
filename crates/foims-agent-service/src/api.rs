@@ -74,7 +74,7 @@ pub async fn download_config_package<S: ConfigProvider>(
     headers: axum::http::HeaderMap,
     uri: axum::http::Uri,
 ) -> Result<Response, AppError> {
-    // 1. 格式校验（deb/rpm 由包管理器安装配置文件，zip 通用/Windows）
+    // 1. 格式校验（deb/rpm 由包管理器安装配置文件，zip 双平台通用）
     let format = params.format.as_str();
     if !matches!(format, "deb" | "rpm" | "zip") {
         return Err(AppError::Validation(

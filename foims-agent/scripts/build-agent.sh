@@ -12,15 +12,16 @@
 #   dist/bin/<target>/foims-agent[.exe]          # 每目标一个静态二进制（组装原料）
 #   dist/packages/foims-agent_<版本>_<deb架构>.deb   # Linux 程序包（systemd）
 #   dist/packages/foims-agent-<版本>-1.<rpm架构>.rpm # Linux 程序包（systemd）
-#   dist/packages/foims-agent-<版本>-windows-amd64.exe # Windows 程序包（免解压直用）
+#   dist/packages/foims-agent-<版本>-windows-amd64.zip # Windows 程序包（服务模式）
 #   dist/packages/SHA256SUMS                     # 全部系统包校验和
 #
 # 分发模型：系统包由 CI 上传至发布页（Release）供用户按需下载；服务端
 # web 页只现场组「配置包」（agent.toml + mTLS 证书），不再打包二进制。
-# 程序包只含二进制与 systemd unit（Windows 为裸 exe），配置由
-# 服务端下发的配置包装入 /etc/foims-agent/（配置包强制依赖本包：
-# deb Depends / rpm Requires，安装顺序必为程序包在前；配置包
-# postinst 统一 enable + restart 拉起 agent 使配置即刻生效）。
+# 程序包只含二进制与 systemd unit（Windows 为 zip：exe + sc.exe 服务
+# 安装/卸载脚本 + README），配置由服务端下发的配置包装入
+# /etc/foims-agent/（配置包强制依赖本包：deb Depends / rpm Requires，
+# 安装顺序必为程序包在前；配置包 postinst 统一 enable + restart 拉起
+# agent 使配置即刻生效）。
 #
 # 设计约束：
 #   - 主体为纯 Rust 实现（rustix 走 linux 内联 syscall），musl 目标由
@@ -52,8 +53,11 @@ BIN_DIR="$PROJECT_DIR/dist/bin"
 PKG_DIR="$PROJECT_DIR/dist/packages"
 CRATE="foims-agent"
 CRATE_WINDOWS="foims-agent-windows"
-# systemd unit：包内物料的唯一来源
+# 包内物料的唯一来源（unit：Linux deb/rpm；其余三件：Windows zip）
 UNIT_SRC="$PROJECT_DIR/deploy/agent/foims-agent.service"
+README_WIN_SRC="$PROJECT_DIR/deploy/agent/README-windows.txt"
+INSTALL_CMD_SRC="$PROJECT_DIR/deploy/agent/install.cmd"
+UNINSTALL_CMD_SRC="$PROJECT_DIR/deploy/agent/uninstall.cmd"
 OFFICIAL_DIST="https://static.rust-lang.org/dist"
 
 # tier1/2：rustup 直接提供 std，stable 直编。
@@ -129,10 +133,12 @@ if [ "${AGENT_BACKEND:-}" = "zigbuild" ]; then
 fi
 
 # 包内物料唯一来源检查：缺失即失败退出，不带缺口发版
-if [ ! -f "$UNIT_SRC" ]; then
-    echo "错误：缺少包内物料 $UNIT_SRC" >&2
-    exit 1
-fi
+for material in "$UNIT_SRC" "$README_WIN_SRC" "$INSTALL_CMD_SRC" "$UNINSTALL_CMD_SRC"; do
+    if [ ! -f "$material" ]; then
+        echo "错误：缺少包内物料 $material" >&2
+        exit 1
+    fi
+done
 
 # 目标的 deb 包架构名（Debian 官方架构表）；未适配返回空串
 deb_arch_of() {
@@ -386,6 +392,10 @@ if [ "$NEED_LINUX" -eq 1 ]; then
         fi
     done
 fi
+if [ "$NEED_WINDOWS" -eq 1 ] && ! command -v zip >/dev/null 2>&1; then
+    echo "错误：缺少 zip（Windows 程序包组装需要）" >&2
+    exit 1
+fi
 
 # deb postinst：加载 unit；配置包已就位时启用并重启服务，未就位时提示
 # 先装配置包（两包解耦：先装程序包还是先装配置包均可闭环）
@@ -529,11 +539,22 @@ SPEC_EOF
     rm -rf "$top"
 }
 
-# Windows 程序包：裸 exe 直接落发布目录，免解压下载即用（部署步骤见
-# 仓库 foims-agent/deploy/agent/README-windows.txt）
-package_windows_exe() {
-    install -m 755 "$BIN_DIR/$1/$CRATE.exe" \
-        "$PKG_DIR/$CRATE-$VERSION-windows-amd64.exe"
+# Windows 程序包：zip 平铺（exe + sc.exe 服务安装/卸载脚本 + README），
+# 解压后以管理员运行 install.cmd 注册 SCM 服务（步骤见包内 README.txt）
+package_windows_zip() {
+    local target="$1" pkgtmp
+    pkgtmp="$(mktemp -d)"
+    install -m 755 "$BIN_DIR/$target/$CRATE.exe" "$pkgtmp/foims-agent.exe"
+    install -m 644 "$README_WIN_SRC" "$pkgtmp/README.txt"
+    install -m 755 "$INSTALL_CMD_SRC" "$pkgtmp/install.cmd"
+    install -m 755 "$UNINSTALL_CMD_SRC" "$pkgtmp/uninstall.cmd"
+    # 失败显式 return 1（if 条件上下文调用时 set -e 失效，见 package_linux_rpm 注释）
+    if ! (cd "$pkgtmp" && zip -q -X "$PKG_DIR/$CRATE-$VERSION-windows-amd64.zip" \
+        foims-agent.exe install.cmd uninstall.cmd README.txt); then
+        rm -rf "$pkgtmp"
+        return 1
+    fi
+    rm -rf "$pkgtmp"
 }
 
 mkdir -p "$PKG_DIR"
@@ -547,10 +568,10 @@ for target in "${BUILT[@]:-}"; do
     fi
     echo "-- [$target] 组装系统包"
     if is_windows "$target"; then
-        if package_windows_exe "$target"; then
-            echo "-- [$target] exe 完成"
+        if package_windows_zip "$target"; then
+            echo "-- [$target] zip 完成"
         else
-            echo "错误：[$target] exe 组装失败" >&2
+            echo "错误：[$target] zip 组装失败" >&2
             PACK_FAILED+=("$target")
         fi
     else
@@ -565,7 +586,7 @@ done
 
 # 系统包校验和（覆盖全部产物，随发布页一同上传供下载方校验）
 : > "$PKG_DIR/SHA256SUMS"
-for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.exe; do
+for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.zip; do
     [ -e "$pkg" ] || continue
     (cd "$PKG_DIR" && sha256sum "$(basename "$pkg")") >> "$PKG_DIR/SHA256SUMS"
 done

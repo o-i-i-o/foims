@@ -126,3 +126,25 @@
   正确分发渠道；构建矩阵收缩为 4 Linux（x86_64/aarch64/i686/armv7）
   + 1 Windows，deb_arch_of/rpm_arch_of/cc_for_target 同步清理对应
   armv6 分支（armhfp 映射随之删除）。
+
+# v0.5.0
+
+# 2026101623033201
+# 2026年10月16日23点03分32秒 第1次修改
+
+1.Windows exe 产物改造为 Windows SCM 服务程序（模块级 x+1）：
+  - 新增 foims-agent-windows service 模块（--service）：SCM 状态机
+    START_PENDING → RUNNING（接受 STOP）→ STOP_PENDING → STOPPED，
+    StartServiceCtrlDispatcherW + RegisterServiceCtrlHandlerExW，
+    上报循环复用 Reporter 常驻 task（Reporter::run 无停止协议，
+    STOP 时 abort + shutdown_timeout(3s) 兜底回收）；配置加载失败
+    服务空转等停止指令（错误由日志暴露），避免反复重启；
+  - install.cmd/uninstall.cmd（deploy/agent/ 包内物料）：install.cmd
+    经 sc.exe 注册服务（binPath 内层 \" 转义 + cert-dir 尾加点防
+    \" 解析）、写 description、stop+delete 前置保证幂等重装；
+    README-windows.txt 重写为 zip 服务模式安装流程；
+  - build-agent.sh Windows 产物回归 zip（exe + install.cmd +
+    uninstall.cmd + README.txt 平铺），组包工具链重新依赖 zip；
+  - console 模式（--once/--format/--listen）保留不变，调试用。
+2.验证：cargo test --workspace 全绿（Linux 宿主 parse_cli 用例）、
+  x86_64-pc-windows-gnu 交叉编译 + 组包实测（zip 形态 + SHA256SUMS）。

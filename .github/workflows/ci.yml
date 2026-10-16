@@ -134,7 +134,7 @@ jobs:
 
   # Agent 交叉编译任务：与主程序 build 并行。agent 独立工作空间 foims-agent/
   # （随本仓检出）的 build-agent.sh 编译多平台静态二进制并组装 OS 系统包
-  # （Linux 每目标 deb/rpm、Windows 裸 exe），由 release 任务与主程序产物一并
+  # （Linux 每目标 deb/rpm、Windows zip：exe + 服务安装/卸载脚本），由 release 任务与主程序产物一并
   # 上传发布页供用户按需下载；主程序 DEB 不含 agent，服务端 web 页只现场组
   # 配置包。
   #
@@ -184,7 +184,7 @@ jobs:
           zig version
           cargo-zigbuild --version
 
-      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出裸 exe，
+      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出 zip（exe+服务脚本），
       # 产物归集到 foims-agent/dist/packages/
       - name: 构建 Agent 多平台安装包
         run: AGENT_BACKEND=zigbuild bash foims-agent/scripts/build-agent.sh

@@ -1,9 +1,10 @@
 //! Agent 配置包组包（zip / deb / rpm）。
 //!
-//! 二进制安装包由 agent 工作空间 CI 直出（deb/rpm/exe，按需从 Release 页
+//! 二进制安装包由 agent 工作空间 CI 直出（deb/rpm/zip，按需从 Release 页
 //! 下载）；本模块只按 Web 页所选操作系统现场组「配置包」，内容统一为
 //! agent.toml + ca.pem + client.pem + client.key：
-//! - zip：linux + Windows 通用（文件平铺，解压到 foims-agent.exe 同目录）；
+//! - zip：linux + Windows 通用（文件平铺，解压到 foims-agent.exe 同目录，
+//!   Linux 随附 uninstall.sh 卸载脚本）；
 //! - deb：Architecture: all，强制依赖 foims-agent，文件落 /etc/foims-agent/
 //!   （权限 0600/0644）；
 //! - rpm：noarch，Requires foims-agent，内容与 deb 等价，agent.toml 标记
@@ -31,24 +32,32 @@ pub struct PackageInputs<'a> {
     pub client_key_pem: &'a str,
 }
 
-/// zip 包内 README.txt（Windows 安装说明）。
+/// zip 包内 README.txt（linux + Windows 通用安装/卸载说明）。
 pub const ZIP_README: &str = r#"FOIMS Agent 配置包
 ==================
 
 本压缩包仅含配置与 mTLS 证书，需配合 foims-agent 程序本体使用
-（程序本体请从发布页按平台下载）：
+（程序本体请从发布页按平台下载安装）：
 
-  agent.toml   上报配置（server_addr/token/采集与上报间隔）
-  ca.pem       站点 CA 证书（mTLS 信任锚）
-  client.pem   客户端证书
-  client.key   客户端私钥（敏感物料，请勿泄露）
+  agent.toml    上报配置（server_addr/token/采集与上报间隔）
+  ca.pem        站点 CA 证书（mTLS 信任锚）
+  client.pem    客户端证书
+  client.key    客户端私钥（敏感物料，请勿泄露）
+  uninstall.sh  Linux 卸载脚本（Windows 用不到，可忽略）
 
-安装：将四个文件放到 foims-agent.exe 同一目录（或自定义目录），运行：
-  foims-agent.exe --config <目录>\agent.toml --cert-dir <目录>
+Linux 安装：以 root 将四个配置文件复制到 /etc/foims-agent/ 后重启服务：
+  systemctl restart foims-agent
+（服务由 foims-agent 程序包提供；配置更新后同样重启生效。）
 
-已注册为 Windows 服务时，配置更新后重启服务生效：
+Windows 安装：将四个配置文件解压到 foims-agent.exe 同一目录，经程序包
+内 install.cmd 注册 Windows 服务；配置更新后重启服务生效：
   sc.exe stop foims-agent
   sc.exe start foims-agent
+
+卸载：
+  Linux：以 root 运行本包内 uninstall.sh（停止并禁用服务、删除
+  /etc/foims-agent；程序本体请用系统包管理器卸载）。
+  Windows：以管理员运行程序包内 uninstall.cmd。
 
 注意：client.key 与 agent.toml 中的 token 属敏感物料，请妥善保管。
 "#;
@@ -64,6 +73,36 @@ if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files foims-agent
     systemctl enable foims-agent.service >/dev/null 2>&1 || true
     systemctl restart foims-agent.service || true
 fi
+"#;
+
+/// zip 配置包随附的 Linux 卸载脚本（uninstall.sh，仅手动解压安装路径用）：
+/// 配置经 deb/rpm 安装（foims-agent-config）时交回包管理器，拒绝双轨
+/// 卸载；否则停止并禁用服务、删除 /etc/foims-agent/。程序本体（unit、
+/// /usr/bin/foims-agent）属程序包，始终提示用系统包管理器卸载。
+pub const UNINSTALL_SH: &str = r#"#!/bin/sh
+# FOIMS Agent 配置卸载脚本（Linux 通用 zip 配置包随附；需 root 执行）
+set -e
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "错误：请以 root 身份运行本脚本。" >&2
+    exit 1
+fi
+
+# 配置经系统包管理器安装时交回包管理器，避免双轨卸载残留
+if dpkg -s foims-agent-config >/dev/null 2>&1 || rpm -q foims-agent-config >/dev/null 2>&1; then
+    echo "错误：配置包已由系统包管理器安装（foims-agent-config），请用 apt/rpm 卸载，不要运行本脚本。" >&2
+    exit 1
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop foims-agent.service 2>/dev/null || true
+    systemctl disable foims-agent.service 2>/dev/null || true
+    systemctl daemon-reload 2>/dev/null || true
+fi
+
+rm -rf /etc/foims-agent
+echo "卸载完成：服务已停止并禁用，配置目录 /etc/foims-agent 已删除。"
+echo "程序本体（foims-agent）请用系统包管理器卸载：apt remove foims-agent 或 rpm -e foims-agent。"
 "#;
 
 /// deb 包控制文件 control 文本（配置包，Architecture: all）。
@@ -166,8 +205,8 @@ fn data_tar(inputs: &PackageInputs<'_>) -> Result<Vec<u8>, String> {
     })
 }
 
-/// 组装 zip 配置包（Windows 通用）：四个文件平铺 + README.txt，文件名不带
-/// 目录前缀。
+/// 组装 zip 配置包（linux + Windows 通用）：四个配置文件平铺 + README.txt +
+/// uninstall.sh（Linux 卸载脚本，0755），文件名不带目录前缀。
 pub fn build_zip(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
     fn start(
         writer: &mut zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
@@ -207,6 +246,11 @@ pub fn build_zip(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
     writer
         .write_all(ZIP_README.as_bytes())
         .map_err(|e| format!("zip 写入 README.txt 内容失败: {e}"))?;
+
+    start(&mut writer, "uninstall.sh", 0o755)?;
+    writer
+        .write_all(UNINSTALL_SH.as_bytes())
+        .map_err(|e| format!("zip 写入 uninstall.sh 内容失败: {e}"))?;
 
     writer
         .finish()
@@ -404,6 +448,7 @@ mod tests {
             ("client.pem", 0o644),
             ("client.key", 0o600),
             ("README.txt", 0o644),
+            ("uninstall.sh", 0o755),
         ];
         assert_eq!(archive.len(), expected.len(), "zip 条目数应一致");
         for (name, mode) in expected {
