@@ -134,7 +134,7 @@ jobs:
 
   # Agent 交叉编译任务：与主程序 build 并行。agent 独立工作空间 foims-agent/
   # （随本仓检出）的 build-agent.sh 编译多平台静态二进制并组装 OS 系统包
-  # （Linux 每目标 deb/rpm、Windows zip+裸 exe），由 release 任务与主程序产物一并
+  # （Linux 每目标 deb/rpm、Windows 裸 exe），由 release 任务与主程序产物一并
   # 上传发布页供用户按需下载；主程序 DEB 不含 agent，服务端 web 页只现场组
   # 配置包。
   #
@@ -156,7 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # dpkg-deb/zip 为 ubuntu-latest 自带；rpm 提供 rpmbuild（Agent rpm 组装）
+      # dpkg-deb 为 ubuntu-latest 自带；rpm 提供 rpmbuild（Agent rpm 组装）
       - name: 安装系统依赖
         run: |
           sudo apt-get update
@@ -184,7 +184,7 @@ jobs:
           zig version
           cargo-zigbuild --version
 
-      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出 zip，
+      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出裸 exe，
       # 产物归集到 foims-agent/dist/packages/
       - name: 构建 Agent 多平台安装包
         run: AGENT_BACKEND=zigbuild bash foims-agent/scripts/build-agent.sh
@@ -206,27 +206,27 @@ jobs:
       contents: write
 
     steps:
-      # artifact 内保留相对主仓根的目录结构（target/ 与 foims-agent/dist/packages/）
+      # artifact 内部为文件平铺（upload-artifact v4 以各 path 的公共祖先为
+      # 根，target/ 与 packages/ 目录层级不进 artifact），按目录落位后
+      # files 用目录级通配，避免子路径 glob 落空静默丢产物
       - name: 下载主程序构建产物
         uses: actions/download-artifact@v4
         with:
           name: foims-release
-          path: release-assets
+          path: release-assets/main
 
       - name: 下载 Agent 构建产物
         uses: actions/download-artifact@v4
         with:
           name: agent-release
-          path: release-assets/foims-agent/dist/packages
+          path: release-assets/agent
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release-assets/target/foims_*.deb
-            release-assets/target/foims-*.rpm
-            release-assets/target/foims_*.zip
-            release-assets/foims-agent/dist/packages/*
+            release-assets/main/*
+            release-assets/agent/*
           generate_release_notes: true
           draft: false
         env:

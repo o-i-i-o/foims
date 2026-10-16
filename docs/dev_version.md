@@ -67,3 +67,8 @@ v0.3.2
 2026101619480601
 1.主程序打包格式补齐（仅z）：scripts/build-deb.sh更名build-pkgs.sh并扩展为多格式打包——deb（原有）+ rpm（rpmbuild复用deb staging打Source tar，_dbpath用户态免root，%pre运行环境强检/%post建用户证书自签nginx对齐/%preun停启用/%postun对齐purge，与deb维护脚本逐一同语义，%config(noreplace)保护本地配置）+ zip（裸二进制，替代原CI内联tar.gz）；agent侧Windows目标补裸exe产物（与zip同二进制）纳入SHA256SUMS，agent工作空间0.4.0→0.4.1；ci.yml主程序任务改跑build-pkgs.sh（artifact与release上传glob同步rpm/zip），release_check.sh恢复Agent构建检查并对齐新脚本名；同步更新foims.service与foims-services两处注释引用
 
+
+v0.3.3
+2026101620295001
+1. 发布产物修正（仅z）：修复release任务主程序产物从未上传发布页的缺陷——upload-artifact v4多path以公共祖先为根剥离目录（target/不进artifact，artifact内平铺），而files按release-assets/target/子路径glob匹配落空且静默跳过；改为两artifact分别落release-assets/main与release-assets/agent、files改目录级通配（agent包SHA256SUMS随发布页一同上传）；agent侧Windows产物删除zip包装形态只留裸exe（README-windows.txt保留于仓库deploy/agent/作部署说明，组包工具链不再依赖zip），agent工作空间0.4.1→0.4.2；release_check.sh与ci.yml注释同步对齐
+2. 修复agent多架构rpm静默丢失（产物清点时暴露的既有缺陷）：rpmbuild spec显式BuildArch在rpm 6起「可构建架构」收窄到宿主同族（compatible build archs仅x86_64系）后对异族架构报No compatible architectures found for build，aarch64/i686/armhfp/armv7hl四个rpm从未产出且失败被函数末尾rm -rf兜底掩盖为返回0（if条件上下文禁用set -e）；修复为spec删BuildArch行（包架构由--target决定，实测包元数据Architecture正确）+ rpmbuild/mv失败显式return 1；全量重跑验证5架构rpm全部产出，主仓build-pkgs.sh的spec本就无BuildArch行不受影响

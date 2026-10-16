@@ -234,7 +234,7 @@ main() {
     # 打包检查（对齐 CI build 与 agent-build 任务）
     echo "──────── 打包检查（CI build / agent-build 步骤）────────"
     run_check "主程序打包（deb/rpm/zip）" "bash scripts/build-pkgs.sh"
-    run_check "Agent 多平台安装包（deb/rpm/zip/exe）" "bash foims-agent/scripts/build-agent.sh"
+    run_check "Agent 多平台安装包（deb/rpm/exe）" "bash foims-agent/scripts/build-agent.sh"
 
     summary
 }

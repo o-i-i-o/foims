@@ -12,13 +12,12 @@
 #   dist/bin/<target>/foims-agent[.exe]          # 每目标一个静态二进制（组装原料）
 #   dist/packages/foims-agent_<版本>_<deb架构>.deb   # Linux 程序包（systemd）
 #   dist/packages/foims-agent-<版本>-1.<rpm架构>.rpm # Linux 程序包（systemd）
-#   dist/packages/foims-agent-<版本>-windows-amd64.zip # Windows 程序包
-#   dist/packages/foims-agent-<版本>-windows-amd64.exe # Windows 裸 exe（免解压直用）
+#   dist/packages/foims-agent-<版本>-windows-amd64.exe # Windows 程序包（免解压直用）
 #   dist/packages/SHA256SUMS                     # 全部系统包校验和
 #
 # 分发模型：系统包由 CI 上传至发布页（Release）供用户按需下载；服务端
 # web 页只现场组「配置包」（agent.toml + mTLS 证书），不再打包二进制。
-# 程序包只含二进制与 systemd unit（Windows 为 exe + 说明），配置由
+# 程序包只含二进制与 systemd unit（Windows 为裸 exe），配置由
 # 服务端下发的配置包装入 /etc/foims-agent/（两包解耦：程序包不依赖
 # 配置包，先装谁都可以；配置包 postinst 会拉起已装的 agent）。
 #
@@ -42,8 +41,7 @@
 #     与包内 Version 字段
 #   - 单个目标失败不中断整体构建，结尾汇总并以非零码退出（便于 CI 感知）
 #   - 组包工具缺失即失败退出（不带缺口发版）：Linux 需要 dpkg-deb 与
-#     rpmbuild（Debian 系：apt install rpm；RHEL 系自带 rpm-build），
-#     Windows 包需要 zip
+#     rpmbuild（Debian 系：apt install rpm；RHEL 系自带 rpm-build）
 
 set -euo pipefail
 
@@ -53,9 +51,8 @@ BIN_DIR="$PROJECT_DIR/dist/bin"
 PKG_DIR="$PROJECT_DIR/dist/packages"
 CRATE="foims-agent"
 CRATE_WINDOWS="foims-agent-windows"
-# systemd unit 与 Windows 说明：包内物料的唯一来源
+# systemd unit：包内物料的唯一来源
 UNIT_SRC="$PROJECT_DIR/deploy/agent/foims-agent.service"
-README_WIN_SRC="$PROJECT_DIR/deploy/agent/README-windows.txt"
 OFFICIAL_DIST="https://static.rust-lang.org/dist"
 
 # tier1/2：rustup 直接提供 std，stable 直编
@@ -129,12 +126,10 @@ if [ "${AGENT_BACKEND:-}" = "zigbuild" ]; then
 fi
 
 # 包内物料唯一来源检查：缺失即失败退出，不带缺口发版
-for asset in "$UNIT_SRC" "$README_WIN_SRC"; do
-    if [ ! -f "$asset" ]; then
-        echo "错误：缺少包内物料 $asset" >&2
-        exit 1
-    fi
-done
+if [ ! -f "$UNIT_SRC" ]; then
+    echo "错误：缺少包内物料 $UNIT_SRC" >&2
+    exit 1
+fi
 
 # 目标的 deb 包架构名（Debian 官方架构表）；未适配返回空串
 deb_arch_of() {
@@ -390,10 +385,6 @@ if [ "$NEED_LINUX" -eq 1 ]; then
         fi
     done
 fi
-if [ "$NEED_WINDOWS" -eq 1 ] && ! command -v zip >/dev/null 2>&1; then
-    echo "错误：缺少 zip（Windows 程序包组装需要；Debian 系执行 sudo apt install zip）" >&2
-    exit 1
-fi
 
 # deb postinst：加载 unit；配置包已就位时启用并重启服务，未就位时提示
 # 先装配置包（两包解耦：先装程序包还是先装配置包均可闭环）
@@ -462,7 +453,10 @@ package_linux_deb() {
     rm -rf "$pkgtmp"
 }
 
-# 组装 rpm 程序包（rpmbuild，用户态 _topdir，无需 root）：内容与 deb 等价
+# 组装 rpm 程序包（rpmbuild，用户态 _topdir，无需 root）：内容与 deb 等价。
+# spec 不写 BuildArch：包架构由 --target 决定；rpm 6 起「可构建架构」收窄
+# 到宿主同族（compatible build archs），spec 显式声明异族 BuildArch 会报
+# No compatible architectures found for build（实测 Debian rpm 6.0.1）
 package_linux_rpm() {
     local target="$1"
     local arch src top
@@ -482,7 +476,6 @@ Version:        $VERSION
 Release:        1
 Summary:        FOIMS Agent host metrics collector
 License:        GPL-3.0-or-later
-BuildArch:      $arch
 
 Source0:        $CRATE
 Source1:        foims-agent.service
@@ -520,31 +513,25 @@ fi
 %dir %attr(755,root,root) /etc/foims-agent
 SPEC_EOF
     # _dbpath 指向临时目录：组包是纯文件操作，不需要系统 rpm 数据库；
-    # Debian 宿主的 /var/lib/rpm 未初始化，缺该定义 rpmbuild 会报 sqlite 错
-    rpmbuild -bb --quiet --define "_topdir $top" --define "_dbpath $top/rpmdb" \
-        --target "$arch" "$top/SPECS/$CRATE.spec" >/dev/null
-    mv "$top/RPMS/$arch/$CRATE-$VERSION-1.$arch.rpm" "$PKG_DIR/"
+    # Debian 宿主的 /var/lib/rpm 未初始化，缺该定义 rpmbuild 会报 sqlite 错。
+    # 失败显式 return 1：函数经 if 条件上下文调用时 set -e 失效，末尾的
+    # rm -rf 成功会把失败掩盖成返回 0，导致产物静默丢失（实锤过的坑）
+    if ! rpmbuild -bb --quiet --define "_topdir $top" --define "_dbpath $top/rpmdb" \
+        --target "$arch" "$top/SPECS/$CRATE.spec" >/dev/null; then
+        rm -rf "$top"
+        return 1
+    fi
+    if ! mv "$top/RPMS/$arch/$CRATE-$VERSION-1.$arch.rpm" "$PKG_DIR/"; then
+        rm -rf "$top"
+        return 1
+    fi
     rm -rf "$top"
 }
 
-# 组装 Windows 程序包（zip）：exe + 说明文件平铺
-package_windows_zip() {
-    local target="$1"
-    local src ztmp
-    src="$BIN_DIR/$target/$CRATE.exe"
-    ztmp="$(mktemp -d)"
-    install -m 755 "$src" "$ztmp/$CRATE.exe"
-    install -m 644 "$README_WIN_SRC" "$ztmp/README.txt"
-    (cd "$ztmp" && zip -X -q \
-        "$PKG_DIR/$CRATE-$VERSION-windows-amd64.zip" "$CRATE.exe" README.txt)
-    rm -rf "$ztmp"
-}
-
-# 裸 exe 产物：与 zip 同一二进制的独立发布形态，供免解压直接下载运行
-# （服务注册等部署步骤见发布页 README 或 zip 内 README.txt）
+# Windows 程序包：裸 exe 直接落发布目录，免解压下载即用（部署步骤见
+# 仓库 foims-agent/deploy/agent/README-windows.txt）
 package_windows_exe() {
-    local target="$1"
-    install -m 755 "$BIN_DIR/$target/$CRATE.exe" \
+    install -m 755 "$BIN_DIR/$1/$CRATE.exe" \
         "$PKG_DIR/$CRATE-$VERSION-windows-amd64.exe"
 }
 
@@ -559,10 +546,10 @@ for target in "${BUILT[@]:-}"; do
     fi
     echo "-- [$target] 组装系统包"
     if is_windows "$target"; then
-        if package_windows_zip "$target" && package_windows_exe "$target"; then
-            echo "-- [$target] zip/exe 完成"
+        if package_windows_exe "$target"; then
+            echo "-- [$target] exe 完成"
         else
-            echo "错误：[$target] zip/exe 组装失败" >&2
+            echo "错误：[$target] exe 组装失败" >&2
             PACK_FAILED+=("$target")
         fi
     else
@@ -577,7 +564,7 @@ done
 
 # 系统包校验和（覆盖全部产物，随发布页一同上传供下载方校验）
 : > "$PKG_DIR/SHA256SUMS"
-for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.zip "$PKG_DIR"/*.exe; do
+for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.exe; do
     [ -e "$pkg" ] || continue
     (cd "$PKG_DIR" && sha256sum "$(basename "$pkg")") >> "$PKG_DIR/SHA256SUMS"
 done

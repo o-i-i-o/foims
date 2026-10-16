@@ -101,3 +101,18 @@
   同一二进制 install 拷贝，免解压直接下载运行），纳入 SHA256SUMS 校验和；
   CI release 上传 glob 为 dist/packages/* 自动覆盖无需改动；版本
   0.4.0→0.4.1。
+
+# 2026年10月16日20点29分50秒 第1次修改
+
+1.Windows 发布产物收敛为裸 exe（构建链，agent 程序代码零改动）：删除
+  zip 包装形态（exe + README.txt），部署说明 README-windows.txt 保留于
+  仓库 deploy/agent/ 不再进包；组包工具链不再依赖 zip（NEED_WINDOWS
+  的 zip 命令检查删除）；版本 0.4.1→0.4.2。
+2.修复多架构 rpm 静默丢失（产物清点时暴露的既有缺陷）：rpm 6 起可构建
+  架构收窄到宿主同族（compatible build archs 仅 x86_64 系），spec 显式
+  BuildArch 对异族架构直接报 No compatible architectures found for
+  build，aarch64/i686/armhfp/armv7hl 四个 rpm 从未产出；spec 删
+  BuildArch 行（包架构由 --target 决定，实测包元数据 Architecture 正确）；
+  package_linux_rpm 的 rpmbuild/mv 失败显式 return 1（函数经 if 条件
+  上下文调用时 set -e 失效，末尾 rm -rf 成功曾把失败掩盖为返回 0）；
+  全量重跑验证 5 架构 rpm 全部产出且 SHA256SUMS 校验通过。
