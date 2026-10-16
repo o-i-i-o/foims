@@ -73,3 +73,7 @@ v0.3.3
 1. 发布产物修正（仅z）：修复release任务主程序产物从未上传发布页的缺陷——upload-artifact v4多path以公共祖先为根剥离目录（target/不进artifact，artifact内平铺），而files按release-assets/target/子路径glob匹配落空且静默跳过；改为两artifact分别落release-assets/main与release-assets/agent、files改目录级通配（agent包SHA256SUMS随发布页一同上传）；agent侧Windows产物删除zip包装形态只留裸exe（README-windows.txt保留于仓库deploy/agent/作部署说明，组包工具链不再依赖zip），agent工作空间0.4.1→0.4.2；release_check.sh与ci.yml注释同步对齐
 2. 修复agent多架构rpm静默丢失（产物清点时暴露的既有缺陷）：rpmbuild spec显式BuildArch在rpm 6起「可构建架构」收窄到宿主同族（compatible build archs仅x86_64系）后对异族架构报No compatible architectures found for build，aarch64/i686/armhfp/armv7hl四个rpm从未产出且失败被函数末尾rm -rf兜底掩盖为返回0（if条件上下文禁用set -e）；修复为spec删BuildArch行（包架构由--target决定，实测包元数据Architecture正确）+ rpmbuild/mv失败显式return 1；全量重跑验证5架构rpm全部产出，主仓build-pkgs.sh的spec本就无BuildArch行不受影响
 3. agent构建矩阵删除arm-unknown-linux-musleabihf（ARMv6）目标：deb_arch_of曾将它与armv7目标折叠映射到同一armhf架构名致deb互相覆盖，且deb/rpm生态无armv6形态（Debian armhf与RHEL armhfp均为armv7语义），armv6包无正确分发渠道；矩阵收缩为4 Linux+1 Windows（agent侧dev_version v0.4.2第2次修改同步记录）
+
+v0.4.0
+2026101621443601
+1. 修复可视化画布偶发整页冻结（功能bug，y+1）：svgCanvasBase._renderGridRuler 网格绘制循环以 gx += step 累积推进且无条数上限——节点坐标异常（保存坐标仅拒绝负值无上限）经 fitView 计算出 1e8 级 viewBox 后按 step=100 逐条创建 SVG 节点可达百万级，主线程冻结至 F5；且累积量超过 2^53 浮点精度时 += step 不再前进形成真死循环。修复为按索引有界循环（每轴条数封顶500，合法最大视野约300条不受影响）并前置非有限 viewBox 防护；机柜视图（SVGCore）与拓扑视图（TopologyCore）共用基类同步受益；前端资源版本经bump_static_version.sh刷新，根Cargo.toml 0.25.1→0.25.2

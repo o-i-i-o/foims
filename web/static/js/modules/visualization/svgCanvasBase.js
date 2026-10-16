@@ -222,8 +222,23 @@ export class SVGCanvasBase {
     const fontSize = Math.max(9, Math.min(14, cover.width / this.rulerFontDivisor));
     const endX = cover.x + cover.width;
     const endY = cover.y + cover.height;
-
-    for (let gx = Math.floor(cover.x / step) * step; gx <= endX; gx += step) {
+    // 异常视野防护：节点坐标异常（超大/非有限值）经 fit 后 viewBox 可达 1e8 级，
+    // 按 step 逐条建线会创建百万级 SVG 节点直接冻结页面（仅 F5 可恢复）。
+    // 非有限值直接跳过主网格；条数封顶保证渲染有界（合法最大视野约 300 条，封顶不影响正常使用）
+    if (
+      !Number.isFinite(cover.x) ||
+      !Number.isFinite(cover.y) ||
+      !Number.isFinite(cover.width) ||
+      !Number.isFinite(cover.height)
+    ) {
+      return;
+    }
+    const MAX_GRID_LINES = 500;
+    // 按索引循环：gx += step 累积在浮点精度停滞时（gx 大于 2^53 后加 step 不变）会死循环
+    const lineCountX = Math.min(Math.ceil((endX - Math.floor(cover.x / step) * step) / step), MAX_GRID_LINES);
+    const startX = Math.floor(cover.x / step) * step;
+    for (let i = 0; i < lineCountX; i++) {
+      const gx = startX + i * step;
       const line = document.createElementNS(SVG_NS, "line");
       line.setAttribute("x1", gx);
       line.setAttribute("y1", cover.y);
@@ -241,7 +256,10 @@ export class SVGCanvasBase {
       group.appendChild(label);
     }
 
-    for (let gy = Math.floor(cover.y / step) * step; gy <= endY; gy += step) {
+    const lineCountY = Math.min(Math.ceil((endY - Math.floor(cover.y / step) * step) / step), MAX_GRID_LINES);
+    const startY = Math.floor(cover.y / step) * step;
+    for (let j = 0; j < lineCountY; j++) {
+      const gy = startY + j * step;
       const line = document.createElementNS(SVG_NS, "line");
       line.setAttribute("x1", cover.x);
       line.setAttribute("y1", gy);
