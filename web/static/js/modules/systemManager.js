@@ -1050,7 +1050,11 @@ async function saveAgentServiceConfig() {
 
   // 上报地址模式：开关关时允许手动覆盖（host:port，留空回退监听地址推导）
   const reportOverride = elementCache.getValue("agent-report-url-override").trim();
-  if (!elementCache.getChecked("agent-use-public-url") && reportOverride && !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d+)?$/.test(reportOverride)) {
+  if (
+    !elementCache.getChecked("agent-use-public-url") &&
+    reportOverride &&
+    !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d+)?$/.test(reportOverride)
+  ) {
     showToast(t("agent_service.invalid_report_override"), "warning");
     return;
   }
@@ -2352,10 +2356,7 @@ export async function loadAgentDist() {
       setTextById("agent-enrollment-token", tokenResult.data.enrollment_token);
     } else {
       setTextById("agent-enrollment-token", t("system.agent_token_missing"));
-      showToast(
-        `${t("system.agent_token_load_failed")}: ${tokenResult.message || ""}`,
-        "error"
-      );
+      showToast(`${t("system.agent_token_load_failed")}: ${tokenResult.message || ""}`, "error");
     }
     if (infoResult.success) {
       setTextById("agent-dist-version", infoResult.data?.version || "-");
