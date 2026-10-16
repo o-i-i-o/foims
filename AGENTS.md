@@ -35,5 +35,5 @@
   `resourceLoader.js` 的 `MODULE_VERSION`（时间戳格式，一键脚本
   `bash test-scripts/bump_static_version.sh`；一致性由 `cargo test` 强制）。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
-- 开发直接测试：`./test/pak.sh`；
+- 开发直接测试：`./test-scripts/pak.sh`；
 - 测试用户 admin / admin123。
