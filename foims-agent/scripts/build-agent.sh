@@ -1,17 +1,25 @@
 #!/bin/bash
-# FOIMS Agent 多平台构建矩阵脚本
+# FOIMS Agent 多平台构建矩阵脚本（编译 + OS 系统包组装）
 #
 # 用法：
-#   bash scripts/build-agent.sh                  # 构建全部 tier1/2 目标
+#   bash scripts/build-agent.sh                  # 构建全部 tier1/2 目标并组装系统包
 #   bash scripts/build-agent.sh --tier3          # 追加 tier3 目标（需 musl 交叉工具链）
 #   bash scripts/build-agent.sh --list           # 仅列出目标矩阵
 #   bash scripts/build-agent.sh --only x86_64-unknown-linux-musl[,其他]
 #   AGENT_BACKEND=zigbuild bash scripts/build-agent.sh   # zig 交叉后端（CI 用）
 #
-# 产物：
-#   dist/agents/<target>/foims-agent[.exe]   # 每目标一个静态二进制
-#   dist/agents/manifest.json                # 运行期分发的版本事实来源
-#   dist/agents/SHA256SUMS                   # 全部二进制的校验和
+# 产物（全部自持于本工作空间 dist/）：
+#   dist/bin/<target>/foims-agent[.exe]          # 每目标一个静态二进制（组装原料）
+#   dist/packages/foims-agent_<版本>_<deb架构>.deb   # Linux 程序包（systemd）
+#   dist/packages/foims-agent-<版本>-1.<rpm架构>.rpm # Linux 程序包（systemd）
+#   dist/packages/foims-agent-<版本>-windows-amd64.zip # Windows 程序包
+#   dist/packages/SHA256SUMS                     # 全部系统包校验和
+#
+# 分发模型：系统包由 CI 上传至发布页（Release）供用户按需下载；服务端
+# web 页只现场组「配置包」（agent.toml + mTLS 证书），不再打包二进制。
+# 程序包只含二进制与 systemd unit（Windows 为 exe + 说明），配置由
+# 服务端下发的配置包装入 /etc/foims-agent/（两包解耦：程序包不依赖
+# 配置包，先装谁都可以；配置包 postinst 会拉起已装的 agent）。
 #
 # 设计约束：
 #   - 主体为纯 Rust 实现（rustix 走 linux 内联 syscall），musl 目标由
@@ -29,17 +37,24 @@
 #   - tier3 目标：需 nightly + rust-src，用 -Z build-std 现场构建 std
 #     （与 node_exporter .promu.yml 的 crossbuild 矩阵对齐，OpenBSD 另行处理）
 #   - 版本策略：agent 版本独立自管理（版本号取本工作空间根 Cargo.toml 的
-#     [workspace.package] version，即 agent 家族版本）；manifest.json 的
-#     version 同写该值。版本门控已移除，服务端仅展示 manifest 版本
+#     [workspace.package] version，即 agent 家族版本），体现在系统包文件名
+#     与包内 Version 字段
 #   - 单个目标失败不中断整体构建，结尾汇总并以非零码退出（便于 CI 感知）
+#   - 组包工具缺失即失败退出（不带缺口发版）：Linux 需要 dpkg-deb 与
+#     rpmbuild（Debian 系：apt install rpm；RHEL 系自带 rpm-build），
+#     Windows 包需要 zip
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DIST_DIR="$PROJECT_DIR/dist/agents"
+BIN_DIR="$PROJECT_DIR/dist/bin"
+PKG_DIR="$PROJECT_DIR/dist/packages"
 CRATE="foims-agent"
 CRATE_WINDOWS="foims-agent-windows"
+# systemd unit 与 Windows 说明：包内物料的唯一来源
+UNIT_SRC="$PROJECT_DIR/deploy/agent/foims-agent.service"
+README_WIN_SRC="$PROJECT_DIR/deploy/agent/README-windows.txt"
 OFFICIAL_DIST="https://static.rust-lang.org/dist"
 
 # tier1/2：rustup 直接提供 std，stable 直编
@@ -106,13 +121,60 @@ VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$PROJECT_DIR/Cargo.toml" | head 
 
 # 交叉后端选择：AGENT_BACKEND=zigbuild 时 tier1/2 改用 cargo zigbuild
 # （zig cc 兼任交叉 C 编译器与链接器，无需注入 CC_*/LINKER）；默认 gcc 后端。
-# 用环境变量而非命令行开关，便于 build-deb.sh 透传（与 AGENT_TARGETS 惯例一致）
+# 用环境变量而非命令行开关，便于 CI 透传（与 AGENT_TARGETS 惯例一致）
 ZIGBUILD=0
 if [ "${AGENT_BACKEND:-}" = "zigbuild" ]; then
     ZIGBUILD=1
 fi
 
-mkdir -p "$DIST_DIR"
+# 包内物料唯一来源检查：缺失即失败退出，不带缺口发版
+for asset in "$UNIT_SRC" "$README_WIN_SRC"; do
+    if [ ! -f "$asset" ]; then
+        echo "错误：缺少包内物料 $asset" >&2
+        exit 1
+    fi
+done
+
+# 目标的 deb 包架构名（Debian 官方架构表）；未适配返回空串
+deb_arch_of() {
+    case "$1" in
+        x86_64-unknown-linux-musl)      echo amd64 ;;
+        aarch64-unknown-linux-musl)     echo arm64 ;;
+        i686-unknown-linux-musl)        echo i386 ;;
+        arm-unknown-linux-musleabihf | armv7-unknown-linux-musleabihf) echo armhf ;;
+        powerpc64le-unknown-linux-musl) echo ppc64el ;;
+        s390x-unknown-linux-musl)       echo s390x ;;
+        riscv64gc-unknown-linux-musl)   echo riscv64 ;;
+        loongarch64-unknown-linux-musl) echo loongarch64 ;;
+        mips-unknown-linux-musl)        echo mips ;;
+        mipsel-unknown-linux-musl)      echo mipsel ;;
+        mips64-unknown-linux-muslabi64) echo mips64 ;;
+        mips64el-unknown-linux-muslabi64) echo mips64el ;;
+        powerpc-unknown-linux-musl)     echo powerpc ;;
+        *) echo "" ;;
+    esac
+}
+
+# 目标的 rpm 包架构名（rpm 官方架构表）；未适配返回空串
+rpm_arch_of() {
+    case "$1" in
+        x86_64-unknown-linux-musl)      echo x86_64 ;;
+        aarch64-unknown-linux-musl)     echo aarch64 ;;
+        i686-unknown-linux-musl)        echo i686 ;;
+        arm-unknown-linux-musleabihf)   echo armhfp ;;
+        armv7-unknown-linux-musleabihf) echo armv7hl ;;
+        powerpc64le-unknown-linux-musl) echo ppc64le ;;
+        s390x-unknown-linux-musl)       echo s390x ;;
+        riscv64gc-unknown-linux-musl)   echo riscv64 ;;
+        loongarch64-unknown-linux-musl) echo loongarch64 ;;
+        mips-unknown-linux-musl)        echo mips ;;
+        mipsel-unknown-linux-musl)      echo mipsel ;;
+        mips64-unknown-linux-muslabi64) echo mips64 ;;
+        mips64el-unknown-linux-muslabi64) echo mips64el ;;
+        powerpc-unknown-linux-musl)     echo ppc ;;
+        *) echo "" ;;
+    esac
+}
 
 # 按 --only 过滤目标（保持矩阵顺序）
 is_selected() {
@@ -192,7 +254,7 @@ cc_for_target() {
 }
 
 # 目标的归集产物名：windows 目标经 [[bin]] name = "foims-agent" 统一为
-# foims-agent（cargo 对 windows 目标自动追加 .exe），与服务端组包逻辑一致
+# foims-agent（cargo 对 windows 目标自动追加 .exe），与系统包组包逻辑一致
 product_name_of() {
     case "$1" in
         *windows*) echo "$CRATE.exe" ;;
@@ -293,63 +355,238 @@ for target in "${TIER12_TARGETS[@]}" "${WINDOWS_TARGETS[@]}" "${TIER3_TARGETS[@]
     fi
 done
 
-# 归集产物 + 校验和 + manifest.json（运行期分发的版本事实来源）
-: > "$DIST_DIR/SHA256SUMS"
-MANIFEST_TMP="$(mktemp)"
-# 收集阶段先落 JSON 片段，全部成功后一次性写 manifest.json（防半写清单）
-: > "$MANIFEST_TMP"
+# 归集产物到 dist/bin/<target>/（系统包组装的原料）
 for target in "${BUILT[@]:-}"; do
     [ -n "$target" ] || continue
     bin_name="$(product_name_of "$target")"
     src="$PROJECT_DIR/target/$target/release/$bin_name"
-    dst_dir="$DIST_DIR/$target"
+    dst_dir="$BIN_DIR/$target"
     if [ ! -f "$src" ]; then
         echo "警告：[$target] 产物缺失 $src" >&2
         continue
     fi
     mkdir -p "$dst_dir"
     cp "$src" "$dst_dir/$bin_name"
-    (cd "$DIST_DIR" && sha256sum "$target/$bin_name") >> "$DIST_DIR/SHA256SUMS"
-    sha="$(sha256sum "$dst_dir/$bin_name" | awk '{print $1}')"
-    size="$(stat -c %s "$dst_dir/$bin_name")"
-    printf ',\n    "%s": { "sha256": "%s", "size": %s }' "$target" "$sha" "$size" >> "$MANIFEST_TMP"
     echo "-- [$target] 归集完成"
 done
 
-if [ ! -s "$MANIFEST_TMP" ]; then
-    echo "错误：无任何构建产物，未生成 manifest.json" >&2
-    rm -f "$MANIFEST_TMP"
+# 组包工具前置检查：只要求本次构建涉及的工具链，缺失即失败退出
+NEED_LINUX=0
+NEED_WINDOWS=0
+for target in "${BUILT[@]:-}"; do
+    [ -n "$target" ] || continue
+    if is_windows "$target"; then
+        NEED_WINDOWS=1
+    else
+        NEED_LINUX=1
+    fi
+done
+if [ "$NEED_LINUX" -eq 1 ]; then
+    for cmd in dpkg-deb rpmbuild; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            echo "错误：缺少 $cmd（Linux 系统包组装需要；Debian 系执行 sudo apt install rpm，RHEL 系安装 rpm-build）" >&2
+            exit 1
+        fi
+    done
+fi
+if [ "$NEED_WINDOWS" -eq 1 ] && ! command -v zip >/dev/null 2>&1; then
+    echo "错误：缺少 zip（Windows 程序包组装需要；Debian 系执行 sudo apt install zip）" >&2
     exit 1
 fi
 
-# 组装清单骨架：片段首字符为分隔逗号，首行替换为缩进并补齐骨架字段
-{
-    printf '{\n  "version": "%s",\n  "generated_at": "%s",\n  "targets": {' \
-        "$VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    sed '1s/^,/\n    /' "$MANIFEST_TMP"
-    printf '\n  }\n}\n'
-} > "$DIST_DIR/manifest.json"
-rm -f "$MANIFEST_TMP"
-# 语法自检：清单必须可被 python 解析（存在 python3 的环境即校验，CI 必有）
-if command -v python3 >/dev/null 2>&1; then
-    python3 -c "import json,sys; json.load(open('$DIST_DIR/manifest.json'))" \
-        || { echo "错误：manifest.json 语法非法" >&2; exit 1; }
+# deb postinst：加载 unit；配置包已就位时启用并重启服务，未就位时提示
+# 先装配置包（两包解耦：先装程序包还是先装配置包均可闭环）
+DEB_POSTINST='#!/bin/sh
+# 安装/升级后：加载 unit；服务端下发的配置包已就位时启用并重启服务
+set -e
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+    if [ -f /etc/foims-agent/agent.toml ]; then
+        systemctl enable foims-agent.service >/dev/null 2>&1 || true
+        systemctl try-restart foims-agent.service || true
+    else
+        echo "提示：尚未安装 FOIMS 配置包（/etc/foims-agent/agent.toml 缺失），请从服务端下载配置包安装后再启动服务。"
+    fi
 fi
-echo "-- manifest.json 已生成（version=$VERSION, targets=$(grep -c '"sha256"' "$DIST_DIR/manifest.json")）"
+'
 
-# install.sh：zip 下载组包用（服务端 load_install_sh 优先读 dist_dir 版本，
-# 缺失回退内置精简脚本；与 build-deb.sh 同源，均出自 deploy/agent/install.sh）
-if [ ! -f "$PROJECT_DIR/deploy/agent/install.sh" ]; then
-    echo "错误：缺少 deploy/agent/install.sh（zip 下载组包依赖）" >&2
+# deb prerm：卸载（remove）时停止并禁用服务；升级（upgrade）不动，
+# 由 postinst 负责拉起
+DEB_PRERM='#!/bin/sh
+# 卸载时停止并禁用服务（升级路径不经过本分支，由 postinst 拉起新进程）
+set -e
+if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl stop foims-agent.service 2>/dev/null || true
+    systemctl disable foims-agent.service 2>/dev/null || true
+fi
+'
+
+# 组装 deb 程序包（dpkg-deb，无需 root）：二进制 + systemd unit + 空配置目录
+package_linux_deb() {
+    local target="$1"
+    local arch src pkgtmp
+    arch="$(deb_arch_of "$target")"
+    if [ -z "$arch" ]; then
+        echo "错误：[$target] 未适配 deb 架构映射" >&2
+        return 1
+    fi
+    src="$BIN_DIR/$target/$CRATE"
+    pkgtmp="$(mktemp -d)"
+    mkdir -p "$pkgtmp/DEBIAN" \
+        "$pkgtmp/usr/bin" \
+        "$pkgtmp/usr/lib/systemd/system" \
+        "$pkgtmp/etc/foims-agent"
+    install -m 755 "$src" "$pkgtmp/usr/bin/$CRATE"
+    install -m 644 "$UNIT_SRC" "$pkgtmp/usr/lib/systemd/system/foims-agent.service"
+    {
+        echo "Package: $CRATE"
+        echo "Version: $VERSION"
+        echo "Section: net"
+        echo "Priority: optional"
+        echo "Architecture: $arch"
+        echo "Maintainer: oi-io <boss@oi-io.cc>"
+        echo "Description: FOIMS Agent host metrics collector"
+        echo " Installed on managed hosts; reports metrics to the FOIMS"
+        echo " server over HTTP/3 (QUIC mTLS). Configure via the"
+        echo " server-issued configuration package (foims-agent-config)."
+        echo "Installed-Size: $(du -sk "$pkgtmp/usr" | cut -f1)"
+    } > "$pkgtmp/DEBIAN/control"
+    printf '%s\n' "$DEB_POSTINST" > "$pkgtmp/DEBIAN/postinst"
+    printf '%s\n' "$DEB_PRERM" > "$pkgtmp/DEBIAN/prerm"
+    chmod 755 "$pkgtmp/DEBIAN/postinst" "$pkgtmp/DEBIAN/prerm"
+    # 目录权限归一 755（mktemp 根目录默认 700、mkdir 随 umask 落 775）
+    find "$pkgtmp" -type d -exec chmod 755 {} +
+    dpkg-deb --root-owner-group --build "$pkgtmp" \
+        "$PKG_DIR/${CRATE}_${VERSION}_${arch}.deb" >/dev/null
+    rm -rf "$pkgtmp"
+}
+
+# 组装 rpm 程序包（rpmbuild，用户态 _topdir，无需 root）：内容与 deb 等价
+package_linux_rpm() {
+    local target="$1"
+    local arch src top
+    arch="$(rpm_arch_of "$target")"
+    if [ -z "$arch" ]; then
+        echo "错误：[$target] 未适配 rpm 架构映射" >&2
+        return 1
+    fi
+    src="$BIN_DIR/$target/$CRATE"
+    top="$(mktemp -d)"
+    mkdir -p "$top/BUILD" "$top/RPMS" "$top/SOURCES" "$top/SPECS" "$top/SRPMS"
+    install -m 755 "$src" "$top/SOURCES/$CRATE"
+    install -m 644 "$UNIT_SRC" "$top/SOURCES/foims-agent.service"
+    cat > "$top/SPECS/$CRATE.spec" << SPEC_EOF
+Name:           $CRATE
+Version:        $VERSION
+Release:        1
+Summary:        FOIMS Agent host metrics collector
+License:        GPL-3.0-or-later
+BuildArch:      $arch
+
+Source0:        $CRATE
+Source1:        foims-agent.service
+
+%description
+Installed on managed hosts; reports metrics to the FOIMS server over
+HTTP/3 (QUIC mTLS). Configure via the server-issued configuration
+package (foims-agent-config).
+
+%install
+install -Dm755 "%{SOURCE0}" "%{buildroot}/usr/bin/$CRATE"
+install -Dm644 "%{SOURCE1}" "%{buildroot}/usr/lib/systemd/system/foims-agent.service"
+mkdir -p "%{buildroot}/etc/foims-agent"
+
+%post
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+    if [ -f /etc/foims-agent/agent.toml ]; then
+        systemctl enable foims-agent.service >/dev/null 2>&1 || true
+        systemctl try-restart foims-agent.service || true
+    else
+        echo "提示：尚未安装 FOIMS 配置包（/etc/foims-agent/agent.toml 缺失），请从服务端下载配置包安装后再启动服务。"
+    fi
+fi
+
+%preun
+if [ "\$1" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl stop foims-agent.service 2>/dev/null || true
+    systemctl disable foims-agent.service 2>/dev/null || true
+fi
+
+%files
+%attr(755,root,root) /usr/bin/$CRATE
+/usr/lib/systemd/system/foims-agent.service
+%dir %attr(755,root,root) /etc/foims-agent
+SPEC_EOF
+    # _dbpath 指向临时目录：组包是纯文件操作，不需要系统 rpm 数据库；
+    # Debian 宿主的 /var/lib/rpm 未初始化，缺该定义 rpmbuild 会报 sqlite 错
+    rpmbuild -bb --quiet --define "_topdir $top" --define "_dbpath $top/rpmdb" \
+        --target "$arch" "$top/SPECS/$CRATE.spec" >/dev/null
+    mv "$top/RPMS/$arch/$CRATE-$VERSION-1.$arch.rpm" "$PKG_DIR/"
+    rm -rf "$top"
+}
+
+# 组装 Windows 程序包（zip）：exe + 说明文件平铺
+package_windows_zip() {
+    local target="$1"
+    local src ztmp
+    src="$BIN_DIR/$target/$CRATE.exe"
+    ztmp="$(mktemp -d)"
+    install -m 755 "$src" "$ztmp/$CRATE.exe"
+    install -m 644 "$README_WIN_SRC" "$ztmp/README.txt"
+    (cd "$ztmp" && zip -X -q \
+        "$PKG_DIR/$CRATE-$VERSION-windows-amd64.zip" "$CRATE.exe" README.txt)
+    rm -rf "$ztmp"
+}
+
+mkdir -p "$PKG_DIR"
+PACK_FAILED=()
+for target in "${BUILT[@]:-}"; do
+    [ -n "$target" ] || continue
+    bin_name="$(product_name_of "$target")"
+    if [ ! -f "$BIN_DIR/$target/$bin_name" ]; then
+        echo "警告：[$target] 无归集产物，跳过系统包组装" >&2
+        continue
+    fi
+    echo "-- [$target] 组装系统包"
+    if is_windows "$target"; then
+        if package_windows_zip "$target"; then
+            echo "-- [$target] zip 完成"
+        else
+            echo "错误：[$target] zip 组装失败" >&2
+            PACK_FAILED+=("$target")
+        fi
+    else
+        if package_linux_deb "$target" && package_linux_rpm "$target"; then
+            echo "-- [$target] deb/rpm 完成"
+        else
+            echo "错误：[$target] deb/rpm 组装失败" >&2
+            PACK_FAILED+=("$target")
+        fi
+    fi
+done
+
+# 系统包校验和（覆盖全部产物，随发布页一同上传供下载方校验）
+: > "$PKG_DIR/SHA256SUMS"
+for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.zip; do
+    [ -e "$pkg" ] || continue
+    (cd "$PKG_DIR" && sha256sum "$(basename "$pkg")") >> "$PKG_DIR/SHA256SUMS"
+done
+
+if [ ! -s "$PKG_DIR/SHA256SUMS" ]; then
+    echo "错误：无任何系统包产物" >&2
     exit 1
 fi
-cp "$PROJECT_DIR/deploy/agent/install.sh" "$DIST_DIR/install.sh"
-chmod 755 "$DIST_DIR/install.sh"
-echo "-- install.sh 已就位 $DIST_DIR/install.sh"
 
-echo "=== 构建汇总：成功 ${#BUILT[@]} / 失败 ${#FAILED[@]} ==="
+echo "=== 构建汇总：编译成功 ${#BUILT[@]} / 编译失败 ${#FAILED[@]} / 组包失败 ${#PACK_FAILED[@]} ==="
 if [ "${#FAILED[@]}" -gt 0 ]; then
-    echo "失败目标: ${FAILED[*]}" >&2
+    echo "编译失败目标: ${FAILED[*]}" >&2
+fi
+if [ "${#PACK_FAILED[@]}" -gt 0 ]; then
+    echo "组包失败目标: ${PACK_FAILED[*]}" >&2
+fi
+if [ "${#FAILED[@]}" -gt 0 ] || [ "${#PACK_FAILED[@]}" -gt 0 ]; then
     exit 1
 fi
-echo "产物目录: $DIST_DIR"
+echo "产物目录: $PKG_DIR"
+ls -lh "$PKG_DIR"

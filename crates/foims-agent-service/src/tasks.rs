@@ -30,7 +30,7 @@ fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
 }
 
 /// Agent 离线判定任务执行器：last_seen 超过 上报间隔 × 倍数 的
-/// active agent 置为 offline（pending/disabled/revoked 不参与判定）。
+/// active agent 置为 offline（disabled 不参与判定）。
 /// 仅对 source='agent' 生效：SNMP 采集行轮询间隔更长（默认 5 分钟），
 /// 由 snmp_poll 按自身间隔 × 2 独立判定离线。
 ///

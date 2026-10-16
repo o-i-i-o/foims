@@ -77,6 +77,10 @@ export const ICONS = {
   // 打印（打印机）
   printer: svg(
     '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'
+  ),
+  // 帮助中心（圆圈问号）
+  help: svg(
+    '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
   )
 };
 
@@ -87,6 +91,22 @@ export const ICONS = {
  */
 export function getIcon(name) {
   return ICONS[name] || "";
+}
+
+/**
+ * 生成帮助中心「?」按钮 HTML（卡片标题/弹窗标题旁，见 helpManager.js）
+ * aria-label 与 tooltip 的翻译由 data-i18n-* 属性在注入后统一填充
+ * @param {string} helpKey 帮助中心目标键（i18n help 命名空间）
+ * @param {string} titleKey 帮助弹窗标题的 i18n 键
+ * @returns {string} 按钮 HTML
+ */
+export function helpButton(helpKey, titleKey) {
+  return (
+    `<button type="button" class="help-btn" data-help="${helpKey}"` +
+    ` data-help-title="${titleKey}" data-icon="help"` +
+    ' data-i18n-aria-label="common.help" aria-label="帮助"' +
+    ' data-i18n-tooltip="common.help" data-tooltip="帮助"></button>'
+  );
 }
 
 /**

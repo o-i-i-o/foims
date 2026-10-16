@@ -536,7 +536,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         vec![
             "id",
             "machine_id",
-            "token_hash",
             "source",
             "device_id",
             "label",
@@ -824,7 +823,7 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         ("ips", "device_interface_id"),
         // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）
         ("ips", "subnet_id"),
-        // agent 状态机（pending|active|offline|disabled|revoked）必须有值
+        // agent 状态机（active|offline|disabled）必须有值
         ("agents", "status"),
         // 数据来源（agent|snmp）必须有值：区分 Agent 上报与 SNMP 轮询记录
         ("agents", "source"),

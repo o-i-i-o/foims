@@ -103,11 +103,12 @@ cooldown_secs = 30
 # priv_protocol = "aes128"
 # priv_password = "privpass123"
 
-# 主机采集 Agent 分发：deb 包内置多平台二进制与 manifest.json，
-# 系统设置「Agent 采集」页签按 OS/架构动态组包供下载
+# 主机采集 Agent 接收：agent 安装包由发布页（Release）按需下载，
+# 服务端 web 页仅按所选操作系统现场打包配置包（agent.toml + mTLS 证书）
 [agent]
-# 预编译 agent 产物目录（manifest.json + <target>/foims-agent + install.sh）
-dist_dir = "/opt/foims/agents"
+# 注册令牌（64 位十六进制）：agent 配置包与上报共用的入网凭据，
+# 留空时服务启动自动生成并写回本文件；系统设置页可查看与重新生成
+enrollment_token = ""
 # QUIC 上报接收开关（agent 经 HTTP/3 mTLS 上报指标，UDP 端口需防火墙放行）
 enabled = false
 # QUIC 监听地址（UDP；[::] 双栈，IPv4-mapped 兼容 IPv4 agent）

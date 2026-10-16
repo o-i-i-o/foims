@@ -26,17 +26,15 @@ const historySeq = createSeqGuard();
 // 当前页码（自动刷新沿用，不重置用户所在页）
 let currentPage = 1;
 
-// 状态元数据：状态点样式类 + 名称 i18n 键
+// 状态元数据：状态点样式类 + 名称 i18n 键（active/offline 由上报自动翻转）
 const STATUS_META = {
-  pending: { dot: "agent-dot-pending", label: "agents.status_pending" },
   active: { dot: "agent-dot-active", label: "agents.status_active" },
   offline: { dot: "agent-dot-offline", label: "agents.status_offline" },
-  disabled: { dot: "agent-dot-disabled", label: "agents.status_disabled" },
-  revoked: { dot: "agent-dot-revoked", label: "agents.status_revoked" }
+  disabled: { dot: "agent-dot-disabled", label: "agents.status_disabled" }
 };
 
-// 行操作 → PATCH 目标状态（pending 不可设置，仅禁用/启用/吊销三向切换）
-const ACTION_STATUS = { disable: "disabled", enable: "active", revoke: "revoked" };
+// 行操作 → PATCH 目标状态（禁用=拒收该机上报，启用=恢复接收）
+const ACTION_STATUS = { disable: "disabled", enable: "active" };
 
 // 自动刷新定时器与 visibilitychange 绑定标志（模块级单例，防重复定时器）
 let refreshTimer = null;
@@ -86,7 +84,7 @@ function bindToolbarEvents(section) {
   });
 }
 
-/** 行操作事件委托：详情/禁用/启用/吊销/删除按钮动态渲染，统一在 tbody 上监听 */
+/** 行操作事件委托：详情/禁用/启用/删除按钮动态渲染，统一在 tbody 上监听 */
 function bindRowActions() {
   const tbody = document.querySelector("#agents-table tbody");
   if (!tbody) {
@@ -231,7 +229,7 @@ function renderAgentRow(agent) {
     : "";
   return `
     <td class="col-center">
-      <span class="agent-status-wrap"><span class="agent-status-dot ${meta ? meta.dot : "agent-dot-pending"}" aria-hidden="true"></span>${escapeHtml(statusText)}</span>
+      <span class="agent-status-wrap"><span class="agent-status-dot ${meta?.dot ?? ""}" aria-hidden="true"></span>${escapeHtml(statusText)}</span>
     </td>
     <td>${escapeHtml(agent.hostname) || "-"}${sourceBadge}${labelBadge}</td>
     <td>${escapeHtml(agent.ip) || "-"}</td>
@@ -278,8 +276,8 @@ function renderTemp(temp) {
   return `${Number(temp).toFixed(1)}℃`;
 }
 
-/** 行内操作按钮：按 status 动态显隐（吊销与删除需确认）；
- * SNMP 采集行无下发令牌，禁用/启用/吊销仅对 Agent 行有意义，予以隐藏 */
+/** 行内操作按钮：按 status 动态显隐（删除需确认）；
+ * SNMP 采集行不经上报鉴权，禁用/启用仅对 Agent 行有意义，予以隐藏 */
 function renderRowActions(agent) {
   const isSnmp = agent.source === "snmp";
   const buttons = [
@@ -290,7 +288,7 @@ function renderRowActions(agent) {
       attrs: `data-agent-action="detail" data-id="${agent.id}"`
     })
   ];
-  if (!isSnmp && (agent.status === "active" || agent.status === "pending")) {
+  if (!isSnmp && agent.status === "active") {
     buttons.push(
       iconButton({
         icon: "lock",
@@ -310,16 +308,6 @@ function renderRowActions(agent) {
       })
     );
   }
-  if (!isSnmp && agent.status !== "revoked") {
-    buttons.push(
-      iconButton({
-        icon: "shield",
-        label: t("agents.btn_revoke"),
-        cls: "agent-act-revoke",
-        attrs: `data-agent-action="revoke" data-id="${agent.id}"`
-      })
-    );
-  }
   buttons.push(
     iconButton({
       icon: "trash",
@@ -335,21 +323,11 @@ function renderRowActions(agent) {
 // 行内管理操作
 // ==========================================
 
-/** 修改主机状态（禁用/启用/吊销）：吊销先确认——token 立即失效不可恢复 */
+/** 修改主机状态（禁用/启用）：禁用后该机上报被 403 拒收，再启用即恢复 */
 async function changeAgentStatus(id, action) {
   const status = ACTION_STATUS[action];
   if (!status) {
     return;
-  }
-  if (action === "revoke") {
-    const confirmed = await showConfirm(t("agents.confirm_revoke"), {
-      title: t("agents.btn_revoke"),
-      confirmText: t("agents.btn_revoke"),
-      danger: true
-    });
-    if (!confirmed) {
-      return;
-    }
   }
   try {
     const result = await apiRequest(`/api/agents/${id}`, {

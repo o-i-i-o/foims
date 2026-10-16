@@ -22,9 +22,10 @@ use crate::log::notification::{
 use crate::log::{get_login_logs, get_operation_logs};
 use crate::system::certificate;
 use crate::system::config::{
-    backup_config, disable_init_mode, get_dashboard_stats, get_notification_settings,
-    get_page_timeout_config, get_password_policy, get_session_timeout_config, get_smtp_config,
-    get_supported_languages, get_system_config, get_system_info, restore_config, send_system_email,
+    backup_config, disable_init_mode, get_dashboard_stats, get_enrollment_token,
+    get_notification_settings, get_page_timeout_config, get_password_policy,
+    get_session_timeout_config, get_smtp_config, get_supported_languages, get_system_config,
+    get_system_info, regenerate_enrollment_token, restore_config, send_system_email,
     test_smtp_connection as test_smtp, update_language_setting, update_notification_settings,
     update_page_timeout_config, update_password_policy, update_session_timeout_config,
     update_smtp_config, update_system_config,
@@ -873,12 +874,12 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                         .put(foims_agent_service::alerts::put_alert_thresholds::<AppState>),
                 )
                 .route(
-                    "/dist",
-                    get(foims_agent_service::api::get_agent_dist::<AppState>),
+                    "/config-package",
+                    get(foims_agent_service::api::download_config_package::<AppState>),
                 )
                 .route(
-                    "/download",
-                    get(foims_agent_service::api::download_agent_package::<AppState>),
+                    "/enrollment-token",
+                    get(get_enrollment_token).post(regenerate_enrollment_token),
                 )
                 .route_layer(middleware::from_fn(
                     foims_agent_service::api::agent_admin_guard,

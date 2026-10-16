@@ -356,7 +356,7 @@ async fn main() -> std::io::Result<()> {
 
     // 先加载配置：日志系统的语言（log_language / logfiles_i18n_out）依赖配置。
     // 配置加载失败时尚无订阅器，先以默认英文初始化日志系统，记录错误后退出
-    let config = match Config::load() {
+    let mut config = match Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
             let _ = tokio::task::block_in_place(|| foims::log::setup_logging(None));
@@ -373,6 +373,26 @@ async fn main() -> std::io::Result<()> {
     foims_common::log_info!("system.start");
 
     foims_common::log_info!("system.config_loaded");
+
+    // Agent 注册令牌引导：为空或格式非法（存量配置缺字段）时自动生成并写回
+    // 配置文件。令牌是 agent 上报鉴权与配置包生成的凭据，缺失时两链路均
+    // 不可用；写盘失败仅记错误不阻塞启动（运行期内存值生效，重启前可经
+    // 配置页重新生成落盘）
+    if !foims_common::net::valid_enrollment_token(config.agent.enrollment_token.trim()) {
+        config.agent.enrollment_token = foims_common::net::generate_enrollment_token();
+        let config_path = foims_common::config::get_config_file_path();
+        match toml::to_string_pretty(&config)
+            .map_err(|e| e.into())
+            .and_then(|text| {
+                std::fs::write(&config_path, text)
+                    .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
+            }) {
+            Ok(()) => {
+                foims_common::log_info!("system.enrollment_token_generated", path = config_path)
+            }
+            Err(e) => foims_common::log_error!("system.enrollment_token_write_failed", error = e),
+        }
+    }
 
     if let Err(e) = foims_common::crypto::check_key_integrity() {
         foims_common::log_error!("system.key_integrity_check_failed", error = e);
@@ -645,11 +665,12 @@ async fn main() -> std::io::Result<()> {
         .start_cache_cleanup_task(shutdown.subscribe());
 
     // Agent 监控上报服务（QUIC mTLS，UDP 9100）：数据库可用且配置启用时后台启动；
-    // 证书签发或端口绑定失败仅在任务内记录日志，不阻塞主服务进程
+    // 证书签发或端口绑定失败仅在任务内记录日志，不阻塞主服务进程。
+    // 传共享配置槽：注册令牌/上报间隔每请求读取，配置页修改即时生效
     if let Some(db_pool) = pool.as_ref() {
         foims_agent_service::report_server::spawn_report_server_task(
             db_pool.get_conn(),
-            app_state.config_snapshot().agent.clone(),
+            app_state.config.clone(),
             env!("CARGO_PKG_VERSION"),
         );
     }

@@ -1,24 +1,25 @@
 //! 主机采集 Agent（agents）与指标历史（agent_metrics_history）表结构创建。
 //!
-//! 设计 docs/agent-design.md §5.2：agents 由下载 API 创建 pending 记录
-//! （machine_id 未知，首报激活时回填）；唯一性用 partial unique index
-//! （仅对已回填行生效）。agent_metrics_history 存 JSONB 全量指标供
-//! 详情页曲线渲染，保留期由调度任务清理。
+//! 设计 docs/agent-design.md §5.2：agent 首报凭共享注册令牌鉴权后自动注册
+//! （INSERT ... ON CONFLICT (machine_id) DO UPDATE），行初始 active，无
+//! pending/激活流程，亦无 per-install token（token_hash 列已移除，上报
+//! 鉴权比对系统配置的 enrollment_token 哈希）；唯一性用 partial unique
+//! index（仅对已回填 machine_id 行生效）。agent_metrics_history 存 JSONB
+//! 全量指标供详情页曲线渲染，保留期由调度任务清理。
 //!
 //! source 区分数据来源：'agent'（FOIMS Agent 主动上报）/'snmp'（服务端
-//! SNMP 轮询设备，machine_id 合成 'snmp:{device_id}'，无 token 故
-//! token_hash 可空）；device_id 关联 devices，设备删除级联清理。
+//! SNMP 轮询设备，machine_id 合成 'snmp:{device_id}'，不经上报鉴权）；
+//! device_id 关联 devices，设备删除级联清理。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"CREATE TABLE IF NOT EXISTS agents (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             machine_id TEXT,
-            token_hash TEXT UNIQUE,
             source TEXT NOT NULL DEFAULT 'agent',
             device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
             label TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
+            status TEXT NOT NULL DEFAULT 'active',
             hostname TEXT,
             ip TEXT,
             os TEXT,
@@ -39,7 +40,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 同机重复安装判重：machine_id 可空（下载时未知），仅对已回填行唯一
+    // 同机重复上报判重：machine_id 首报自动注册后恒非空，仅对非空行唯一
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_machine_id
             ON agents (machine_id) WHERE machine_id IS NOT NULL",

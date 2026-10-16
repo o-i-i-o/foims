@@ -133,6 +133,15 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
             msg("server.common.invalid_param").with("param", "agent.offline_factor (at least 2)"),
         ));
     }
+    // 注册令牌：空/非法值落盘会让 agent 上报鉴权整体失效（持久化自伤）。
+    // 该值由启动引导自动生成，配置端点中掩码展示，更新/恢复时空值或掩码
+    // 均按磁盘值还原，走到这里的应始终是合法的 64 位十六进制
+    if !foims_common::net::valid_enrollment_token(agent.enrollment_token.trim()) {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param")
+                .with("param", "agent.enrollment_token (64 hex chars)"),
+        ));
+    }
 
     Ok(())
 }
@@ -266,6 +275,7 @@ pub async fn get_system_config(
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
+    config.agent.enrollment_token = "***".to_string();
     mask_snmp_trap_secrets(&mut config);
     Ok(foims_common::ok_json(
         config,
@@ -344,7 +354,13 @@ pub async fn update_system_config(
         new_config.snmp = snmp_config;
     }
 
-    if let Some(agent) = req.agent {
+    if let Some(mut agent) = req.agent {
+        // 防止脱敏掩码/空值覆写真实令牌：掩码按磁盘值还原；空值视同「未携带」
+        // （升级窗口期旧版前端缓存提交的 agent 段不含该字段，serde 缺省为空串，
+        // 若直接落盘会使所有 agent 上报鉴权失效）
+        if agent.enrollment_token == "***" || agent.enrollment_token.is_empty() {
+            agent.enrollment_token = new_config.agent.enrollment_token.clone();
+        }
         new_config.agent = agent;
     }
 
@@ -372,6 +388,7 @@ pub async fn update_system_config(
     let mut masked = new_config;
     masked.database.password = "***".to_string();
     masked.jwt.secret = "***".to_string();
+    masked.agent.enrollment_token = "***".to_string();
     mask_snmp_trap_secrets(&mut masked);
 
     Ok(foims_common::ok_json(
@@ -436,6 +453,7 @@ pub async fn backup_config(
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
+    config.agent.enrollment_token = "***".to_string();
     mask_snmp_trap_secrets(&mut config);
     let config_json = serde_json::to_string_pretty(&config).map_err(|e| {
         AppError::Internal(msg("server.system.config_serialize_failed").with("error", e))
@@ -493,6 +511,11 @@ pub async fn restore_config(
     if new_config.jwt.secret == "***" {
         new_config.jwt.secret = current_config.jwt.secret.clone();
     }
+    // 备份文件中的注册令牌同为掩码（旧版备份则缺字段为空串）：
+    // 掩码/空值一律还原为磁盘真实令牌
+    if new_config.agent.enrollment_token == "***" || new_config.agent.enrollment_token.is_empty() {
+        new_config.agent.enrollment_token = current_config.agent.enrollment_token.clone();
+    }
     // 备份文件中的 USM 密码同为掩码：还原为磁盘真实密码
     restore_snmp_trap_secrets(
         &mut new_config.snmp.trap.users,
@@ -518,6 +541,65 @@ pub async fn restore_config(
     state.config.store(Arc::new(new_config));
 
     Ok(foims_common::ok_json((), "server.system.config_restored"))
+}
+
+/// GET /api/agents/enrollment-token：查看共享注册令牌（明文仅本端点返回，
+/// 系统配置端点中该字段与数据库密码/JWT 密钥同口径掩码展示）。
+pub async fn get_enrollment_token(
+    State(state): State<Arc<AppState>>,
+    _user: foims_auth::extractor::AdminOrSecAdminUser,
+) -> Result<Response, AppError> {
+    let config = state.config_snapshot();
+    let token = config.agent.enrollment_token.trim().to_string();
+    if !foims_common::net::valid_enrollment_token(&token) {
+        return Err(AppError::Conflict(msg(
+            "server.agent.enrollment_token_missing",
+        )));
+    }
+    Ok(foims_common::ok_json(
+        serde_json::json!({ "enrollment_token": token }),
+        "server.agent.enrollment_token_retrieved",
+    ))
+}
+
+/// POST /api/agents/enrollment-token/regenerate：重新生成共享注册令牌。
+/// 共享槽刷新后旧令牌即刻失效：已部署 agent 的上报将被 401 拒收，需
+/// 重新下载配置包覆盖安装；不写库，仅改配置文件与内存槽。
+pub async fn regenerate_enrollment_token(
+    State(state): State<Arc<AppState>>,
+    _user: foims_auth::extractor::AdminOrSecAdminUser,
+) -> Result<Response, AppError> {
+    // 配置写锁：与其他「读-改-写盘」端点互斥
+    let _write_guard = state.config_write_lock.lock().await;
+
+    // 以磁盘最新配置为基底（同 restore_config，防旧快照丢更新）
+    let mut new_config = tokio::task::spawn_blocking(Config::load)
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_task_failed").with("error", e))
+        })?
+        .map_err(|e| {
+            AppError::Internal(msg("server.system.config_load_failed").with("error", e))
+        })?;
+
+    new_config.agent.enrollment_token = foims_common::net::generate_enrollment_token();
+
+    // 落盘前校验（与其他写盘端点同口径）
+    validate_config_for_save(&new_config)?;
+
+    save_config_to_file(&new_config).await.map_err(|e| {
+        AppError::Internal(msg("server.system.config_save_failed").with("error", e))
+    })?;
+
+    // 落盘成功后刷新共享配置槽：上报鉴权即刻启用新令牌
+    state.config.store(Arc::new(new_config.clone()));
+
+    log_info!("log.system.enrollment_token_regenerated");
+
+    Ok(foims_common::ok_json(
+        serde_json::json!({ "enrollment_token": new_config.agent.enrollment_token }),
+        "server.agent.enrollment_token_regenerated",
+    ))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]

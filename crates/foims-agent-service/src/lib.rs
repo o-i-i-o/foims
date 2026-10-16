@@ -1,10 +1,8 @@
-//! FOIMS 数据采集服务 crate（agent 分发/接收 + SNMP 采集，设计
-//! docs/agent-design.md §3.3/§5/§6）。
+//! FOIMS 数据采集服务 crate（agent 接收 + SNMP 采集）。
 //!
 //! 本 crate 承载服务端数据采集面：
-//! - [`manifest`]：构建期产物清单（manifest.json）解析与版本门控；
-//! - [`packaging`]：按操作系统/架构动态组包（zip / deb / rpm）；
-//! - [`api`]：分发下载 Web API（/api/agents/dist、/api/agents/download）；
+//! - [`packaging`]：配置包现场组装（zip / deb / rpm，仅证书与配置文件，
+//!   二进制安装包由 CI 直发 OS 系统包）；
 //! - [`cert`]：Agent 服务端/客户端证书签发与续期（站点 CA 签发，mTLS 物料）；
 //! - [`report_server`]：QUIC/HTTP3 指标接收监听（强制客户端证书，
 //!   同时承载 [`renew`] 续期端点的路由分发）；
@@ -28,7 +26,6 @@ pub mod alerts;
 pub mod api;
 pub mod cert;
 pub mod ingest;
-pub mod manifest;
 pub mod packaging;
 pub mod renew;
 pub mod report_server;

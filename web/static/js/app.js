@@ -14,6 +14,7 @@ import { initEventListeners, initModals } from "./modules/eventManager.js";
 import { initUserEvents } from "./modules/userManager.js";
 import { initTooltip } from "./utils/tooltip.js";
 import { initSelectSearch } from "./utils/selectSearch.js";
+import { initHelpButtons } from "./utils/helpManager.js";
 import {
   displayCurrentUser,
   initAutoRefresh,
@@ -45,6 +46,7 @@ async function initApp() {
     initEventListeners();
     initUserEvents();
     initTooltip();
+    initHelpButtons();
 
     displayCurrentUser();
     initLogout();

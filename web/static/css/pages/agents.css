@@ -32,16 +32,8 @@
   background: var(--color-danger);
 }
 
-.agent-dot-pending {
-  background: var(--color-text-muted);
-}
-
 .agent-dot-disabled {
   background: var(--color-warning);
-}
-
-.agent-dot-revoked {
-  background: var(--color-danger-hover);
 }
 
 /* 主机名旁的备注标签 */
@@ -141,22 +133,10 @@
   border: 1px solid var(--color-danger-border);
 }
 
-.agent-badge-pending {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-light);
-}
-
 .agent-badge-disabled {
   background: var(--color-warning-bg);
   color: var(--color-warning-text);
   border: 1px solid var(--color-warning-border);
-}
-
-.agent-badge-revoked {
-  background: var(--color-danger-bg);
-  color: var(--color-danger-text);
-  border: 1px solid var(--color-danger-border);
 }
 
 .agent-detail-ip {

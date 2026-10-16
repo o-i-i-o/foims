@@ -146,14 +146,6 @@
   box-sizing: border-box;
 }
 
-.clear-logs-hint {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  margin-bottom: 1rem;
-  line-height: 1.5;
-  overflow-wrap: break-word;
-}
-
 @media (width <= 576px) {
   .clear-logs-form .form-row {
     grid-template-columns: 1fr;

@@ -66,12 +66,10 @@
       <div class="form-group hidden" id="log-cleanup-config">
         <label for="scheduled-task-keep-days"><span data-i18n="scheduled_tasks.config_fields.keep_days">Keep Days</span></label>
         <input type="number" id="scheduled-task-keep-days" name="scheduled_task_keep_days" value="30" min="0">
-        <small class="hint-text" data-i18n="scheduled_tasks.config_fields.keep_days_hint">Delete logs older than specified days, 0 means delete all</small>
       </div>
       <div class="form-group hidden" id="ip-status-sync-config">
         <label for="scheduled-task-stale-days"><span data-i18n="scheduled_tasks.config_fields.stale_days">Stale Days</span></label>
         <input type="number" id="scheduled-task-stale-days" name="scheduled_task_stale_days" value="30" min="1">
-        <small class="hint-text" data-i18n="scheduled_tasks.config_fields.stale_days_hint">Mark IPs as inactive when not observed for the specified days; they recover automatically once seen again</small>
       </div>
     </div>
 

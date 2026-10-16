@@ -16,7 +16,6 @@ use http::{Method, Request, Response, StatusCode, header};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde_json::Value;
 
-use foims_common::config::AgentConfig;
 use foims_common::net::normalize_ipv4_address;
 use foims_common::{log_debug, log_error, log_info, log_warn};
 
@@ -34,36 +33,48 @@ const BATCH_BODY_LIMIT_BYTES: usize = 9 * 1024 * 1024;
 /// h3 请求流类型（h3 0.0.x API 变动以本别名隔离）
 type AgentStream = h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
 
-/// 接收服务上下文：连接池与配置快照。
+/// 接收服务上下文：连接池、共享配置槽与服务版本。
 #[derive(Clone)]
 pub struct ReportContext {
     /// 应用数据库连接池
     pub pool: sqlx::PgPool,
-    /// 上报间隔下限（秒，响应控制面下发值不低于该值）
-    pub report_interval_secs: u64,
-    /// 单条上报 payload 上限（字节，超出 413）
-    pub max_report_bytes: usize,
+    /// 共享配置槽：注册令牌/上报间隔/payload 上限每请求读取，
+    /// 配置页修改与令牌重新生成后即时生效，无需重启
+    pub config: foims_common::config::SharedConfig,
     /// 服务端版本（响应 latest_version 通告）
     pub server_version: String,
+}
+
+impl ReportContext {
+    /// 上报间隔下限（秒，响应控制面下发值不低于该值）。
+    pub fn report_interval_secs(&self) -> u64 {
+        self.config.load().agent.report_interval_secs
+    }
+
+    /// 单条上报 payload 上限（字节，超出 413）。
+    pub fn max_report_bytes(&self) -> usize {
+        self.config.load().agent.max_report_bytes
+    }
 }
 
 /// 启动入口（main.rs 调用）：`agent.enabled` 为真时异步完成证书准备并拉起
 /// 监听；证书缺失/绑定失败仅记错误日志，不影响主服务进程。
 pub fn spawn_report_server_task(
     pool: sqlx::PgPool,
-    agent: AgentConfig,
+    config: foims_common::config::SharedConfig,
     server_version: &'static str,
 ) {
-    if !agent.enabled {
+    let agent_enabled = config.load().agent.enabled;
+    if !agent_enabled {
         log_debug!("log.agent.report_disabled");
         return;
     }
-    log_info!("log.agent.report_enabling", bind = agent.bind_addr);
+    let bind_addr = config.load().agent.bind_addr.clone();
+    log_info!("log.agent.report_enabling", bind = bind_addr);
     tokio::spawn(async move {
         let ctx = ReportContext {
             pool,
-            report_interval_secs: agent.report_interval_secs,
-            max_report_bytes: agent.max_report_bytes,
+            config,
             server_version: server_version.to_string(),
         };
         // 证书物料缺失时拒绝启动监听（mTLS 无法建立），不 panic
@@ -76,7 +87,7 @@ pub fn spawn_report_server_task(
         };
         if let Err(e) = run(
             ctx,
-            agent.bind_addr.clone(),
+            bind_addr.clone(),
             material.server_cert_path,
             material.server_key_path,
         )
@@ -251,9 +262,9 @@ async fn handle_request(
     // 读请求体（链路为 TLS 1.3 密文，此处为解密后明文），超限即拒绝；
     // 上报路径放宽至批量上限（agent 单批 8 MiB），续期路径保持单条上限
     let body_limit = if path == REPORT_PATH {
-        ctx.max_report_bytes.max(BATCH_BODY_LIMIT_BYTES)
+        ctx.max_report_bytes().max(BATCH_BODY_LIMIT_BYTES)
     } else {
-        ctx.max_report_bytes
+        ctx.max_report_bytes()
     };
     let mut body: Vec<u8> = Vec::new();
     while let Some(chunk) = stream

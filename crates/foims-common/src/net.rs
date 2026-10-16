@@ -155,6 +155,21 @@ pub fn generate_token_hash(token: &str) -> String {
     encode(hash_bytes)
 }
 
+/// 生成 32 字节随机注册令牌的 64 位小写十六进制字符串（agent 注册令牌）。
+#[must_use]
+pub fn generate_enrollment_token() -> String {
+    use rand::Rng;
+    let mut bytes = vec![0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// 校验注册令牌格式：64 位十六进制（与上报 Bearer 令牌同口径）。
+#[must_use]
+pub fn valid_enrollment_token(token: &str) -> bool {
+    token.len() == 64 && token.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 // ==================== HTTP 请求处理 ====================
 
 /// 从 axum 请求 parts 中获取真实客户端 IP

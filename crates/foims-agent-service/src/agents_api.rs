@@ -1,11 +1,11 @@
 //! Agent 监控 Web API（设计 docs/agent-design.md §5.3）。
 //!
-//! 挂载于 /api/agents（与分发下载同 nest，经 agent_admin_guard 纵深防御）：
+//! 挂载于 /api/agents（与配置包下载同 nest，经 agent_admin_guard 纵深防御）：
 //! - `GET  /api/agents`：分页列表（keyword 匹配 hostname/label/ip，不含 raw_metrics）；
 //! - `GET  /api/agents/top-metrics`：主机负载 Top 榜（CPU/内存/温度各前 N，仪表盘用）；
 //! - `GET  /api/agents/{id}`：详情（含 raw_metrics）；
 //! - `GET  /api/agents/{id}/history`：曲线数据（hours 1..=168，超 200 点均匀抽样）；
-//! - `PATCH /api/agents/{id}`：改 label/status（status 白名单 active|disabled|revoked）；
+//! - `PATCH /api/agents/{id}`：改 label/status（status 白名单 active|disabled）；
 //! - `DELETE /api/agents/{id}`：删除（history 经 FK CASCADE 级联清理）。
 
 use std::sync::Arc;
@@ -34,7 +34,7 @@ const HISTORY_MAX_POINTS: usize = 200;
 pub struct ListAgentsQuery {
     page: Option<i64>,
     page_size: Option<i64>,
-    /// 按状态精确过滤（pending/active/offline/disabled/revoked）
+    /// 按状态精确过滤（active/offline/disabled）
     status: Option<String>,
     /// 模糊匹配 hostname / label / ip
     keyword: Option<String>,
@@ -45,12 +45,12 @@ pub struct ListAgentsQuery {
 pub struct PatchAgentBody {
     /// 备注（trim 后 ≤100 字符）
     label: Option<String>,
-    /// 目标状态：仅允许 active | disabled | revoked（pending 不可手工设置）
+    /// 目标状态：仅允许 active | disabled（disabled 拒收该机上报）
     status: Option<String>,
 }
 
-/// PATCH 状态白名单（pending 不可手工设置，离线/激活由上报自动翻转）
-const PATCHABLE_STATUSES: &[&str] = &["active", "disabled", "revoked"];
+/// PATCH 状态白名单（在线/离线由上报自动翻转，仅禁用需人工设置）
+const PATCHABLE_STATUSES: &[&str] = &["active", "disabled"];
 
 /// 校验 PATCH 的 status 取值：缺省通过，越界值返回 Err（纯函数，单测覆盖）。
 fn normalize_patch_status(status: Option<&str>) -> Result<Option<String>, String> {
@@ -109,7 +109,7 @@ fn push_filters(
     }
 }
 
-/// GET /api/agents：分页列表（不含 raw_metrics，pending 空值行同样返回）。
+/// GET /api/agents：分页列表（不含 raw_metrics）。
 pub async fn list_agents<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -357,8 +357,7 @@ pub async fn get_agent_history<S: ConfigProvider>(
     ))
 }
 
-/// PATCH /api/agents/{id}：更新备注与状态（status 白名单，
-/// pending 不可手工设置），行不存在返回 404。
+/// PATCH /api/agents/{id}：更新备注与状态（status 白名单），行不存在返回 404。
 pub async fn patch_agent<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -452,15 +451,15 @@ mod tests {
             Ok(Some("active".to_string())),
             "容忍首尾空白"
         );
-        for ok in ["active", "disabled", "revoked"] {
+        for ok in ["active", "disabled"] {
             assert_eq!(
                 normalize_patch_status(Some(ok)),
                 Ok(Some(ok.to_string())),
                 "{ok} 应在白名单内"
             );
         }
-        // pending 不可手工设置，未知值一律拒绝
-        for bad in ["pending", "offline", "unknown", "Active"] {
+        // offline 由上报自动翻转，未知值一律拒绝
+        for bad in ["offline", "revoked", "pending", "unknown", "Active"] {
             assert!(normalize_patch_status(Some(bad)).is_err(), "{bad} 应被拒绝");
         }
     }

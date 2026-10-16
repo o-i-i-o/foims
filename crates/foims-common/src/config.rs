@@ -338,11 +338,11 @@ pub struct Config {
 /// Agent 采集（foims-agent 分发/接收）配置段（docs/agent-design.md）。
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct AgentConfig {
-    /// 预编译 agent 产物目录（manifest.json + <target>/foims-agent +
-    /// install.sh），build-deb.sh 打包时装入 /opt/foims/agents；
-    /// 源码部署场景可指向 dist/agents。
-    #[serde(default = "default_agent_dist_dir")]
-    pub dist_dir: String,
+    /// 注册令牌（64 位十六进制明文，与 jwt.secret 同级敏感）：agent 上报
+    /// Bearer 令牌与配置包内 token 共用该值，首报自动注册按 machine_id
+    /// 判重。启动为空时自动生成并写回配置文件；配置页可查看/重新生成。
+    #[serde(default)]
+    pub enrollment_token: String,
     /// QUIC 上报监听开关（UDP 9100，nginx 不代理 UDP，需防火墙放行）。
     #[serde(default)]
     pub enabled: bool,
@@ -374,10 +374,6 @@ pub struct AgentConfig {
     pub report_url_override: String,
 }
 
-fn default_agent_dist_dir() -> String {
-    "/opt/foims/agents".to_string()
-}
-
 fn default_agent_bind_addr() -> String {
     "[::]:9100".to_string()
 }
@@ -405,7 +401,7 @@ const fn default_agent_offline_factor() -> u32 {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            dist_dir: default_agent_dist_dir(),
+            enrollment_token: String::new(),
             enabled: false,
             bind_addr: default_agent_bind_addr(),
             report_interval_secs: default_agent_report_interval(),

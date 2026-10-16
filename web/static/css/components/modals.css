@@ -313,3 +313,22 @@
   max-height: 21.875rem;
   overflow-y: auto;
 }
+
+/* 帮助弹窗正文：段落与列表排版（内容由 helpManager 动态渲染） */
+.help-modal-body {
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.help-modal-body p {
+  margin: 0 0 var(--space-sm);
+}
+
+.help-modal-body ul {
+  margin: 0 0 var(--space-sm);
+  padding-left: 1.25rem;
+}
+
+.help-modal-body li {
+  margin-bottom: var(--space-xs);
+}

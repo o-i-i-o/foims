@@ -33,7 +33,6 @@ async function loadAppFail2banStatus() {
   const statusBadge = elementCache.get("app-fail2ban-status-badge");
   const bannedTbody = elementCache.get("app-fail2ban-banned-tbody");
   const trackedTbody = elementCache.get("app-fail2ban-tracked-tbody");
-  const logPathHint = elementCache.get("app-fail2ban-log-path-hint");
 
   if (bannedTbody) {
     bannedTbody.innerHTML = `<tr class="empty-row"><td colspan="3" class="text-center">${t("common.loading")}</td></tr>`;
@@ -80,13 +79,6 @@ async function loadAppFail2banStatus() {
     }
     if (bantimeInput) {
       bantimeInput.value = status.bantime ?? "";
-    }
-
-    // 日志路径提示
-    if (logPathHint) {
-      const logPath = status.log_path || "/var/log/foims/auth.log";
-      const hint = t("security.os_integration_desc");
-      logPathHint.textContent = `${hint} ${logPath}`;
     }
 
     // 已封禁 IP

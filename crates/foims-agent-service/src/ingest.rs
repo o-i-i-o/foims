@@ -1,14 +1,19 @@
 //! Agent 上报入库（设计 docs/agent-design.md §3.3）。
 //!
 //! 本模块面向 agent 的机器接口（QUIC/HTTP3，无 ApiResponse 信封），错误
-//! 以 `{"error": "..."}` 简单格式返回，状态码语义：401 令牌无效、403 已禁用/
-//! 吊销、400 请求非法、409 机器标识冲突、413 体积超限、429 上报过于频繁、
-//! 500 入库失败。
+//! 以 `{"error": "..."}` 简单格式返回，状态码语义：401 令牌无效、403 已禁用、
+//! 400 请求非法、413 体积超限、429 上报过于频繁、500 入库失败。
+//!
+//! 认证模型（共享注册令牌）：所有 agent 使用配置文件中的同一注册令牌
+//! （`agent.enrollment_token`，经配置包分发）作 Bearer 凭据，服务端比对
+//! SHA-256 哈希；不再按安装包逐台签发令牌。注册模型：首报自动注册
+//! （按 machine_id upsert，行初始 active、label 取 hostname），删除页面
+//! 记录后同机可再次注册，无「激活」流程；IP 仅作展示字段。
 
 use axum::Json;
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{DateTime, Utc};
-use foims_common::net::{generate_token_hash, normalize_ipv4_address};
+use foims_common::net::{generate_token_hash, normalize_ipv4_address, valid_enrollment_token};
 use foims_common::report::AgentReport;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -208,12 +213,13 @@ fn parse_frames(body: &[u8]) -> Result<(Vec<AgentReport>, u64), String> {
     }
 }
 
-/// 处理指标上报（批量或单帧）：鉴权（一次）→ 解析 → 逐帧校验 →
-/// 机器标识比对 → 单事务入库。
+/// 处理指标上报（批量或单帧）：鉴权（共享注册令牌，一次）→ 解析 → 逐帧
+/// 校验 → 帧间机器标识一致性 → 单事务 upsert 入库。
 ///
 /// 入库（单事务）：
-/// - agents 主行刷新快照列（取最后一帧；pending/offline 首报即翻转
-///   active，machine_id 缺失时回填，last_seen/first_seen 置位）；
+/// - agents 主行：首报自动注册（INSERT，status='active'、label 取 hostname），
+///   已注册行刷新快照列（取最后一帧；offline 首报即翻转 active；disabled
+///   行前置拒收不写库）；删除记录后同机可再次注册；
 /// - agent_metrics_history 逐帧追加曲线精简快照
 ///   {"cpu","mem","disk","temp","rx_bps","tx_bps"}。
 pub async fn ingest(
@@ -222,40 +228,36 @@ pub async fn ingest(
     body: &[u8],
     peer_ip: &str,
 ) -> IngestResult {
-    // 1. Bearer 令牌 → SHA-256 哈希 → 查 agents 行
+    // 1. Bearer 令牌 → SHA-256 → 与共享注册令牌哈希比对（每请求读共享配置
+    //    槽，令牌重新生成后即时生效，无需重启）
     let Some(token) = bearer_token(headers) else {
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：缺少合法的 Bearer 令牌");
     };
-    let token_hash = generate_token_hash(&token);
-    let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-        "SELECT id, status, machine_id FROM agents WHERE token_hash = $1",
-    )
-    .bind(&token_hash)
-    .fetch_optional(&ctx.pool)
-    .await;
-    let row = match row {
-        Ok(r) => r,
-        Err(e) => {
-            foims_common::log_error!("log.agent.ingest_db_error", error = e);
-            return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库查询失败");
-        }
-    };
-    let Some((agent_id, status, stored_machine_id)) = row else {
+    let config = ctx.config.load();
+    let enrollment = config.agent.enrollment_token.trim();
+    if !valid_enrollment_token(enrollment) {
+        return error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "服务端注册令牌未配置，请在系统配置中生成后再上报",
+        );
+    }
+    if generate_token_hash(&token) != generate_token_hash(enrollment) {
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效");
-    };
-    if status == "disabled" || status == "revoked" {
-        return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用或吊销，禁止上报");
     }
 
     // 1b. 上报频控：last_seen 距今小于生效间隔一半时拒绝（429），防止恶意
-    // agent 高频写库。闸门在入库 UPDATE 的 WHERE 中原子判定（见步骤 5），
+    // agent 高频写库。闸门在入库 upsert 的 WHERE 中原子判定（见步骤 6），
     // 消除「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent
     // 按下发间隔上报不受影响
-    let interval = ctx.report_interval_secs.max(MIN_REPORT_INTERVAL_SECS);
+    let interval = config
+        .agent
+        .report_interval_secs
+        .max(MIN_REPORT_INTERVAL_SECS);
     let min_gap_secs = i64::try_from(interval / 2).unwrap_or(i64::MAX);
+    drop(config);
 
     // 2. 解析为帧序列：含 frames 字段视为批量（AgentReportBatch），
-    //    否则按单帧解析（旧版 agent 平滑兼容）
+    //    否则按单帧解析（agent --once 单帧上报兼容，在用链路非历史兼容）
     let (frames, dropped) = match parse_frames(body) {
         Ok(parsed) => parsed,
         Err(e) => return error_json(StatusCode::BAD_REQUEST, &e),
@@ -291,42 +293,30 @@ pub async fn ingest(
     if invalid_count > 0 {
         foims_common::log_warn!(
             "log.agent.ingest_invalid_frames",
-            agent_id = agent_id,
             invalid = invalid_count,
             total = valid.len() + invalid_count
         );
     }
 
-    // 4. 机器标识比对：任一帧与既有绑定不一致视为令牌被复用到其他机器，
-    //    整批拒绝（正常批量各帧 machine_id 相同）
-    for (_, _, trimmed) in &valid {
-        if let Some(existing) = stored_machine_id.as_deref()
-            && existing != trimmed.machine_id
-        {
-            foims_common::log_warn!(
-                "log.agent.machine_id_conflict",
-                agent_id = agent_id,
-                stored = existing,
-                reported = trimmed.machine_id
-            );
-            return error_json(
-                StatusCode::CONFLICT,
-                "machine_id 与既有绑定不一致，疑似令牌被复用到其他机器",
-            );
-        }
-    }
-
-    // 5. 快照列计算：以最后一帧（最新）刷新 agents 主行快照与告警评估
+    // 4. 帧间机器标识一致性：正常批量各帧 machine_id 相同，不一致说明
+    //    请求体被拼装篡改，整批拒绝
     let Some((last_report, _, last_trimmed)) = valid.last() else {
         return error_json(StatusCode::BAD_REQUEST, "上报批次为空");
     };
+    let machine_id = last_trimmed.machine_id.clone();
+    if valid.iter().any(|(_, _, t)| t.machine_id != machine_id) {
+        return error_json(StatusCode::BAD_REQUEST, "批量帧 machine_id 不一致");
+    }
+
+    // 5. 快照列计算：以最后一帧（最新）刷新 agents 主行快照与告警评估
     let mem_pct = mem_usage_pct(last_report.memory.total, last_report.memory.used);
     let disk_pct = disk_usage_pct(&last_report.disks);
     let temp = max_temp(&last_report.sensors);
     let raw_metrics = serde_json::to_value(last_report).unwrap_or(Value::Null);
     let ip = normalize_ipv4_address(peer_ip);
 
-    // 6. 单事务入库：agents 快照（含频控闸门）+ 逐帧历史写入
+    // 6. 单事务入库：禁用拒收检查 + 首报自动注册/快照刷新（含频控闸门）
+    //    + 逐帧历史写入
     let mut tx = match ctx.pool.begin().await {
         Ok(tx) => tx,
         Err(e) => {
@@ -334,29 +324,55 @@ pub async fn ingest(
             return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库事务开启失败");
         }
     };
-    let update = sqlx::query(
-        r"UPDATE agents SET
-            status = CASE WHEN status IN ('pending', 'offline') THEN 'active' ELSE status END,
-            machine_id = COALESCE(machine_id, $2),
-            hostname = $3,
-            ip = $4,
-            os = $5,
-            kernel = $6,
-            arch = $7,
-            agent_version = $8,
-            cpu_usage = $9,
-            mem_usage_pct = $10,
-            disk_usage_pct = $11,
-            max_temp = $12,
-            uptime_secs = $13,
-            raw_metrics = $14,
-            last_seen = NOW(),
-            first_seen = COALESCE(first_seen, NOW())
-          WHERE id = $1
-            AND (last_seen IS NULL OR last_seen < NOW() - make_interval(secs => $15))",
+    // 6a. 禁用行前置拒收：不刷新快照、不写历史（禁用即完全断供）
+    let existing =
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, status FROM agents WHERE machine_id = $1")
+            .bind(&machine_id)
+            .fetch_optional(&mut *tx)
+            .await;
+    let existing = match existing {
+        Ok(row) => row,
+        Err(e) => {
+            foims_common::log_error!("log.agent.ingest_db_error", error = e);
+            return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库查询失败");
+        }
+    };
+    if existing
+        .as_ref()
+        .is_some_and(|(_, status)| status == "disabled")
+    {
+        return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用，禁止上报");
+    }
+
+    // 6b. 首报自动注册 / 快照刷新：INSERT（新机，status/label 初始）+
+    //     ON CONFLICT 刷新（既有行；label 不覆盖，用户备注保留；offline 翻转
+    //     active；频控闸门 WHERE 原子判定，0 行即 429）。冲突目标须带
+    //     partial index 谓词（machine_id 仅对非空行唯一）
+    let upsert = sqlx::query_as::<_, (Uuid, String)>(
+        r"INSERT INTO agents (machine_id, source, status, label, hostname, ip, os, kernel,
+                              arch, agent_version, cpu_usage, mem_usage_pct, disk_usage_pct,
+                              max_temp, uptime_secs, raw_metrics, first_seen, last_seen)
+          VALUES ($1, 'agent', 'active', $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+          ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
+              status = CASE WHEN agents.status = 'offline' THEN 'active' ELSE agents.status END,
+              hostname = EXCLUDED.hostname,
+              ip = EXCLUDED.ip,
+              os = EXCLUDED.os,
+              kernel = EXCLUDED.kernel,
+              arch = EXCLUDED.arch,
+              agent_version = EXCLUDED.agent_version,
+              cpu_usage = EXCLUDED.cpu_usage,
+              mem_usage_pct = EXCLUDED.mem_usage_pct,
+              disk_usage_pct = EXCLUDED.disk_usage_pct,
+              max_temp = EXCLUDED.max_temp,
+              uptime_secs = EXCLUDED.uptime_secs,
+              raw_metrics = EXCLUDED.raw_metrics,
+              last_seen = NOW(),
+              first_seen = COALESCE(agents.first_seen, NOW())
+          WHERE agents.last_seen IS NULL OR agents.last_seen < NOW() - make_interval(secs => $14)
+          RETURNING id, status",
     )
-    .bind(agent_id)
-    .bind(&last_trimmed.machine_id)
+    .bind(&machine_id)
     .bind(&last_trimmed.hostname)
     .bind(&ip)
     .bind(&last_trimmed.os)
@@ -370,67 +386,25 @@ pub async fn ingest(
     .bind(i64::try_from(last_report.system.uptime_secs).unwrap_or(i64::MAX))
     .bind(&raw_metrics)
     .bind(min_gap_secs as f64)
-    .execute(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await;
-    let updated = match update {
-        Ok(result) => result,
+    let (agent_id, status) = match upsert {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            // 冲突路径 + 频控闸门未放行：last_seen 处于最小上报间隔内
+            return error_json(StatusCode::TOO_MANY_REQUESTS, "上报过于频繁，请稍后再试");
+        }
         Err(e) => {
-            // machine_id 唯一索引冲突：该机已绑定到其他 token 的安装记录
-            // （同机重复下载安装包），按设计返回 409 由运营处理
-            let mid_dup = e.as_database_error().is_some_and(|db| {
-                db.is_unique_violation()
-                    && db
-                        .constraint()
-                        .is_some_and(|c| c.contains("idx_agents_machine_id"))
-            });
-            if mid_dup {
-                let owner = sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM agents WHERE machine_id = $1 AND id <> $2 LIMIT 1",
-                )
-                .bind(&last_trimmed.machine_id)
-                .bind(agent_id)
-                .fetch_one(&ctx.pool)
-                .await
-                .ok();
-                foims_common::log_warn!(
-                    "log.agent.machine_id_conflict",
-                    agent_id = agent_id,
-                    stored = owner
-                        .map(|u| u.to_string())
-                        .unwrap_or_else(|| "unknown".into()),
-                    reported = last_trimmed.machine_id
-                );
-                return error_json(
-                    StatusCode::CONFLICT,
-                    "machine_id 已绑定到其他安装记录（同机重复安装），请在主机监控列表删除旧记录后重试",
-                );
-            }
             foims_common::log_error!("log.agent.ingest_db_error", error = e);
             return error_json(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "入库失败：agents 更新出错",
+                "入库失败：agents 写入出错",
             );
         }
     };
-    // 频控闸门未放行（rows_affected == 0）：行仍存在说明 last_seen 处于最小
-    // 上报间隔内，本次上报被原子拒绝；行已消失说明令牌对应的安装记录刚被删除
-    if updated.rows_affected() == 0 {
-        let last_seen = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
-            "SELECT last_seen FROM agents WHERE id = $1",
-        )
-        .bind(agent_id)
-        .fetch_optional(&mut *tx)
-        .await;
-        match last_seen {
-            Ok(Some(_)) => {
-                return error_json(StatusCode::TOO_MANY_REQUESTS, "上报过于频繁，请稍后再试");
-            }
-            Ok(None) => return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效"),
-            Err(e) => {
-                foims_common::log_error!("log.agent.ingest_db_error", error = e);
-                return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库查询失败");
-            }
-        }
+    // 注册竞态窗口内被禁用（步骤 6a 之后、upsert 之前被置 disabled）：同样拒收
+    if status == "disabled" {
+        return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用，禁止上报");
     }
     // 逐帧写入历史曲线：每帧独立精简快照；唯一索引 (agent_id, collected_at)
     // 冲突时跳过（agent 重试/重放同一采集时刻的幂等去重，避免重复上报写重）
@@ -506,7 +480,7 @@ pub async fn ingest(
     (
         StatusCode::OK,
         Json(json!(foims_common::report::ReportResponse {
-            report_interval: ctx.report_interval_secs.max(MIN_REPORT_INTERVAL_SECS),
+            report_interval: ctx.report_interval_secs(),
             collectors: std::collections::BTreeMap::new(),
             latest_version: ctx.server_version.clone(),
         })),

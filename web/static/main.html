@@ -11,34 +11,34 @@
   
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/static/css/variables.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/reset.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/forms.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/modals.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/tables.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/cards.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/badges.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1792083789">
-  <link rel="stylesheet" href="/static/css/responsive.css?v=1792083789">
+  <link rel="stylesheet" href="/static/css/variables.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/reset.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/buttons.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/forms.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/modals.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/tables.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/tooltips.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/cards.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/badges.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/toasts.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/components/select-search.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/modals/network-config.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/network-usage.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/modals/network-card-manager.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/modals/unified-device-ports.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/modals/cable-label-print.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/layouts/sidebar.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/layouts/main-content.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/organization.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/modals/network-region.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/system-config.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/data-management.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/logs.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/pages/agents.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/utilities/animations.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/utilities/helpers.css?v=1792114078">
+  <link rel="stylesheet" href="/static/css/responsive.css?v=1792114078">
 </head>
 <body class="main-body">
   <div id="app">
@@ -610,9 +610,7 @@
             <option value="" data-i18n="common.all">全部</option>
             <option value="active" data-i18n="agents.status_active">在线</option>
             <option value="offline" data-i18n="agents.status_offline">离线</option>
-            <option value="pending" data-i18n="agents.status_pending">待激活</option>
             <option value="disabled" data-i18n="agents.status_disabled">已禁用</option>
-            <option value="revoked" data-i18n="agents.status_revoked">已吊销</option>
           </select>
           <input type="text" id="agents-keyword" class="form-control form-control-sm w-auto" data-i18n-placeholder="agents.search_placeholder" placeholder="搜索主机名 / IP / 标签..." aria-label="Search agents" data-i18n-aria-label="agents.search_placeholder">
           <button id="agents-query-btn" type="button" class="btn btn-primary btn-sm" data-i18n="agents.query">查询</button>
@@ -771,9 +769,9 @@
                 <div class="config-card-title">
                   <span class="icon">🧾</span>
                   <span data-i18n="system.license">Commercial License</span>
+                  <button type="button" class="help-btn" data-help="card.license" data-help-title="system.license" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
               </header>
-              <p class="license-note" data-i18n="system.license_note">Free forever for personal use. For commercial use, please purchase a license (the program is under development; commercial licenses are not yet for sale).</p>
               <!-- 占位按钮：注册/购买入口暂未开放，不绑定任何真实连接 -->
               <div class="license-actions">
                 <button type="button" id="license-register-btn" class="btn btn-primary btn-sm" data-i18n="system.license_register">Register</button>
@@ -840,6 +838,7 @@
                   <div class="config-card-title">
                     <span class="icon">⏱️</span>
                     <span data-i18n="config.session_settings">Session Settings</span>
+                    <button type="button" class="help-btn" data-help="card.session" data-help-title="config.session_settings" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <button type="submit" class="btn btn-primary" data-i18n="common.save">Save Configuration</button>
                 </header>
@@ -847,12 +846,10 @@
                   <div class="form-group">
                     <label for="page-timeout" data-i18n="config.page_timeout">Page Timeout (minutes)</label>
                     <input type="number" id="page-timeout" name="page_timeout" min="1" max="1440" placeholder="30" aria-label="Page timeout">
-                    <span class="hint-text" data-i18n="config.page_timeout_desc">Auto logout time after inactivity</span>
                   </div>
                   <div class="form-group">
                     <label for="public-url" data-i18n="config.public_url">Public URL</label>
                     <input type="url" id="public-url" name="public_url" placeholder="https://example.com" aria-label="Public URL">
-                    <span class="hint-text" data-i18n="config.public_url_desc">Server public URL for reset links and notifications</span>
                   </div>
                 </div>
               </section>
@@ -863,6 +860,7 @@
                 <div class="config-card-title">
                   <span class="icon">⚙️</span>
                   <span data-i18n="services.title">Service Management</span>
+                  <button type="button" class="help-btn" data-help="card.services" data-help-title="services.title" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
                 <div class="card-header-actions">
                   <button type="button" id="services-refresh-btn" class="btn btn-secondary btn-sm" data-i18n="common.refresh">Refresh</button>
@@ -894,22 +892,13 @@
                 <div class="config-card-title">
                   <span class="icon">🔐</span>
                   <span data-i18n="cert.manager_title">Certificate Management</span>
+                  <button type="button" class="help-btn" data-help="card.cert" data-help-title="cert.manager_title" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
               </header>
 
               <div class="cert-section">
                 <div class="cert-section-header">
                   <h4 class="cert-section-title" data-i18n="cert.ca_section">Site Root CA</h4>
-                  <details class="cert-ca-help">
-                    <summary data-i18n="cert.ca_help_title">How to trust the site root CA</summary>
-                    <div class="cert-ca-help-body">
-                      <p data-i18n="cert.ca_help_windows">Windows: run "certutil -addstore -f Root foims-root-ca.crt" as administrator, or double-click the .cer file and import into Trusted Root Certification Authorities. Chrome/Edge/Firefox will all trust it after a browser restart.</p>
-                      <p data-i18n="cert.ca_help_linux">Debian/Ubuntu: sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates; RHEL/Fedora: sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ &amp;&amp; sudo update-ca-trust extract (the file must be PEM with .crt extension).</p>
-                      <p data-i18n="cert.ca_help_chrome">Linux Chrome/Chromium does not read the system trust store; additionally run: certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "FOIMS-RootCA" -i foims-root-ca.crt (requires libnss3-tools/nss-tools).</p>
-                      <p data-i18n="cert.ca_help_firefox">Linux Firefox uses its own certificate store: import the CA manually under Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates, or configure the p11-kit trust module via enterprise policy.</p>
-                      <p data-i18n="cert.ca_help_note">Import the root CA (not the site certificate); certificates must contain SAN entries. With a private CA, Chrome does not use local trust anchors for HTTP/3 (QUIC) and automatically falls back to TCP - this is expected behavior.</p>
-                    </div>
-                  </details>
                   <div class="card-header-actions">
                     <button type="button" id="ca-generate-btn" class="btn btn-primary btn-sm" data-i18n="cert.ca_generate_title">Generate Root CA</button>
                     <button type="button" id="ca-import-btn" class="btn btn-secondary btn-sm" data-i18n="cert.ca_import_title">Import CA</button>
@@ -970,6 +959,7 @@
                   <div class="config-card-title">
                     <span class="icon">🗂️</span>
                     <span data-i18n="ldap.title">LDAP Configuration</span>
+                    <button type="button" class="help-btn" data-help="card.ldap" data-help-title="ldap.title" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <div class="config-switch">
                     <label for="ldap-enabled">
@@ -984,7 +974,6 @@
                   <div class="form-group">
                     <label for="ldap-url" data-i18n="ldap.server_url">LDAP Server Address</label>
                     <input type="text" id="ldap-url" name="url" placeholder="ldap://ds.example.com:389" data-i18n-placeholder="ldap.server_url_placeholder" aria-label="LDAP server address" data-i18n-aria-label="ldap.server_url">
-                    <span class="hint-text" data-i18n="ldap.server_url_desc">ldap:// plaintext or ldaps:// encrypted</span>
                   </div>
                   <div class="form-group">
                     <label for="ldap-base-dn" data-i18n="ldap.base_dn">Base DN</label>
@@ -995,7 +984,6 @@
                   <div class="form-group">
                     <label for="ldap-bind-dn" data-i18n="ldap.bind_dn">Service Account DN</label>
                     <input type="text" id="ldap-bind-dn" name="bind_dn" placeholder="cn=admin,dc=example,dc=com" data-i18n-placeholder="ldap.bind_dn_placeholder" aria-label="Service account DN" data-i18n-aria-label="ldap.bind_dn">
-                    <span class="hint-text" data-i18n="ldap.bind_dn_desc">Optional; empty for anonymous bind</span>
                   </div>
                   <div class="form-group">
                     <label for="ldap-bind-password" data-i18n="ldap.bind_password">Service Account Password</label>
@@ -1006,7 +994,6 @@
                   <div class="form-group">
                     <label for="ldap-user-filter" data-i18n="ldap.user_filter">User Search Filter</label>
                     <input type="text" id="ldap-user-filter" name="user_filter" placeholder="(&amp;(objectClass=person)(uid=%s))" data-i18n-placeholder="ldap.user_filter_placeholder" aria-label="User search filter" data-i18n-aria-label="ldap.user_filter">
-                    <span class="hint-text" data-i18n="ldap.user_filter_desc">%s or {username} as the username placeholder</span>
                   </div>
                   <div class="form-group">
                     <label for="ldap-default-role" data-i18n="ldap.default_role">Default Role for New Users</label>
@@ -1025,6 +1012,7 @@
                   <div class="config-card-title">
                     <span class="icon">🔐</span>
                     <span data-i18n="sso.title">SSO Configuration (OIDC)</span>
+                    <button type="button" class="help-btn" data-help="card.sso" data-help-title="sso.title" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <div class="config-switch">
                     <label for="sso-enabled">
@@ -1039,7 +1027,6 @@
                   <div class="form-group">
                     <label for="sso-issuer-url" data-i18n="sso.issuer_url">Issuer URL</label>
                     <input type="url" id="sso-issuer-url" name="issuer_url" placeholder="https://sso.example.com" data-i18n-placeholder="sso.issuer_url_placeholder" aria-label="Issuer URL" data-i18n-aria-label="sso.issuer_url">
-                    <span class="hint-text" data-i18n="sso.issuer_url_desc">Discovery document fetched from /.well-known/openid-configuration</span>
                   </div>
                   <div class="form-group">
                     <label for="sso-client-id" data-i18n="sso.client_id">Client ID</label>
@@ -1054,7 +1041,6 @@
                   <div class="form-group">
                     <label for="sso-redirect-uri" data-i18n="sso.redirect_uri">Redirect URI</label>
                     <input type="url" id="sso-redirect-uri" name="redirect_uri" placeholder="https://foims.example.com/api/auth/sso/callback" data-i18n-placeholder="sso.redirect_uri_placeholder" aria-label="Redirect URI" data-i18n-aria-label="sso.redirect_uri">
-                    <span class="hint-text" data-i18n="sso.redirect_uri_desc">Optional; derived from the request host when empty. Register the same URI in the IdP</span>
                   </div>
                 </div>
                 <div class="form-row">
@@ -1079,6 +1065,7 @@
                   <div class="config-card-title">
                     <span class="icon">📧</span>
                     <span data-i18n="smtp.server_settings">SMTP Server Settings</span>
+                    <button type="button" class="help-btn" data-help="card.smtp" data-help-title="smtp.server_settings" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <div class="card-header-actions">
                     <button id="test-smtp-btn" type="button" class="btn btn-secondary" data-i18n="smtp.test_connection">Test Connection</button>
@@ -1128,6 +1115,7 @@
                   <div class="config-card-title">
                     <span class="icon">🔔</span>
                     <span data-i18n="notification.mac_change_settings">MAC Address Change Notification</span>
+                    <button type="button" class="help-btn" data-help="card.notify_mac" data-help-title="notification.mac_change_settings" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <button id="save-notification-settings-btn" type="button" class="btn btn-primary" data-i18n="common.save">Save Settings</button>
                 </header>
@@ -1135,7 +1123,6 @@
                   <div class="form-group form-group-block">
                     <span class="group-label" data-i18n="notification.email_recipients">Email Recipients for MAC Change Notifications</span>
                     <div id="notification-users-list" class="users-checkbox-list"></div>
-                    <p class="config-hint" data-i18n="notification.recipients_hint">Select users who will receive email notifications when MAC address changes are detected.</p>
                   </div>
                 </div>
               </section>
@@ -1151,6 +1138,7 @@
                   <div class="config-card-title">
                     <span class="icon">📦</span>
                     <span data-i18n="system.agent_config_card">Agent Configuration</span>
+                    <button type="button" class="help-btn" data-help="card.agent" data-help-title="system.agent_config_card" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <div class="config-switch">
                     <label for="agent-service-enabled">
@@ -1168,7 +1156,6 @@
                       <div class="form-group">
                         <label for="agent-service-bind-addr" data-i18n="agent_service.bind_addr">Listen Address</label>
                         <input type="text" id="agent-service-bind-addr" placeholder="0.0.0.0" data-i18n-placeholder="agent_service.bind_addr_placeholder" autocomplete="off" aria-label="Agent listen address" data-i18n-aria-label="agent_service.bind_addr">
-                        <span class="hint-text" data-i18n="agent_service.bind_addr_desc">IPv4, hostname or bracketed IPv6; default source of report host; [::] enables dual stack</span>
                       </div>
                       <div class="form-group">
                         <label for="agent-service-bind-port" data-i18n="agent_service.bind_port">Port</label>
@@ -1177,12 +1164,10 @@
                       <div class="form-group">
                         <label for="agent-service-interval" data-i18n="agent_service.report_interval">Report Interval (seconds)</label>
                         <input type="number" id="agent-service-interval" min="10" max="3600" placeholder="60" aria-label="Agent report interval in seconds" data-i18n-aria-label="agent_service.report_interval">
-                        <span class="hint-text" data-i18n="agent_service.report_interval_desc">Pushed to agents via report responses, 10-3600; also drives offline detection</span>
                       </div>
                       <div class="form-group">
                         <label for="agent-service-collect-interval" data-i18n="agent_service.collect_interval">Collect Interval (seconds)</label>
                         <input type="number" id="agent-service-collect-interval" min="1" max="60" placeholder="5" aria-label="Agent collect interval in seconds" data-i18n-aria-label="agent_service.collect_interval">
-                        <span class="hint-text" data-i18n="agent_service.collect_interval_desc">Local high-frequency sampling cadence, 1-60; frames queue up and are batched at each report</span>
                       </div>
                     </div>
                     <div class="form-row">
@@ -1201,12 +1186,10 @@
                           <input type="checkbox" id="agent-use-public-url" class="form-checkbox">
                           <span data-i18n="agent_service.use_public_url">Use public URL as report address</span>
                         </label>
-                        <span class="hint-text" data-i18n="agent_service.use_public_url_desc">Enabled: report host comes from the system Public URL; disabled: fill in a custom report address below</span>
                       </div>
                       <div class="form-group" id="agent-report-override-group" hidden>
                         <label for="agent-report-url-override" data-i18n="agent_service.report_url_override">Report Address Override</label>
                         <input type="text" id="agent-report-url-override" placeholder="agent.example.com:9100" autocomplete="off" aria-label="Agent report address override" data-i18n-aria-label="agent_service.report_url_override">
-                        <span class="hint-text" data-i18n="agent_service.report_url_override_desc">Real report address behind proxy/NAT, host:port; empty falls back to listen address</span>
                       </div>
                     </div>
                     <div class="form-row">
@@ -1216,35 +1199,29 @@
                       </dl>
                     </div>
                     <div class="form-row">
+                      <dl class="config-field">
+                        <dt data-i18n="system.agent_enrollment_token">Enrollment Token</dt>
+                        <dd class="field-value" id="agent-enrollment-token">-</dd>
+                      </dl>
                       <div class="form-group">
-                        <label for="agent-dist-platform" data-i18n="system.agent_target">Platform</label>
-                        <select id="agent-dist-platform" class="form-control" disabled aria-label="Agent platform">
-                        </select>
+                        <button type="button" id="agent-token-regenerate-btn" class="btn btn-secondary btn-sm" data-i18n="system.agent_token_regenerate">Regenerate Token</button>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="agent-dist-os" data-i18n="system.agent_os">Operating System</label>
+                        <select id="agent-dist-os" class="form-control" aria-label="Agent operating system"></select>
                       </div>
                       <div class="form-group">
-                        <label for="agent-dist-arch" data-i18n="system.agent_arch">Architecture</label>
-                        <select id="agent-dist-arch" class="form-control" disabled aria-label="Agent architecture">
-                        </select>
+                        <label for="agent-dist-format" data-i18n="system.agent_format">Package Format</label>
+                        <select id="agent-dist-format" class="form-control" aria-label="Agent package format"></select>
                       </div>
                       <div class="form-group">
-                        <label for="agent-dist-format" data-i18n="system.agent_format">Format</label>
-                        <select id="agent-dist-format" class="form-control" disabled aria-label="Agent package format">
-                        </select>
-                      </div>
-                      <!-- 下载选项：备注 -->
-                      <div class="form-group">
-                        <label for="agent-download-label" data-i18n="system.agent_download_label">Download Label</label>
-                        <input type="text" id="agent-download-label" class="form-control" maxlength="100">
-                      </div>
-                      <div class="form-group">
-                          <span id="agent-dist-size" class="hint-text" aria-live="polite">-</span>
-                          <button type="button" id="agent-dist-download-btn" class="btn btn-primary" data-i18n="system.agent_download" disabled>Download</button>
+                        <button type="button" id="agent-dist-download-btn" class="btn btn-primary" data-i18n="system.agent_download_config" disabled>Download Config Package</button>
                       </div>
                     </div>
                   </section>
                 </div>
-                <!-- 产物不可用提示（hidden 属性控制显隐） -->
-                <p id="agent-dist-message" class="config-hint config-hint-danger" hidden></p>
               </section>
             </form>
 
@@ -1254,6 +1231,7 @@
                   <div class="config-card-title">
                     <span class="icon">📡</span>
                     <span data-i18n="snmp_trap.title">SNMP Trap Receiver</span>
+                    <button type="button" class="help-btn" data-help="card.snmp_trap" data-help-title="snmp_trap.title" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                   </div>
                   <div class="config-switch">
                     <label for="snmp-trap-enabled">
@@ -1267,7 +1245,6 @@
                   <div class="form-group">
                     <label for="snmp-trap-bind-addr" data-i18n="snmp_trap.bind_addr">Listen Address</label>
                     <input type="text" id="snmp-trap-bind-addr" placeholder="0.0.0.0" data-i18n-placeholder="snmp_trap.bind_addr_placeholder" autocomplete="off" aria-label="Trap listen address" data-i18n-aria-label="snmp_trap.bind_addr">
-                    <span class="hint-text" data-i18n="snmp_trap.bind_addr_desc">IPv4, hostname or bracketed IPv6</span>
                   </div>
                   <div class="form-group">
                     <label for="snmp-trap-bind-port" data-i18n="snmp_trap.bind_port">Port</label>
@@ -1276,20 +1253,17 @@
                   <div class="form-group">
                     <label for="snmp-trap-cooldown" data-i18n="snmp_trap.cooldown_secs">Cooldown Window (seconds)</label>
                     <input type="number" id="snmp-trap-cooldown" min="0" max="86400" placeholder="30" aria-label="Cooldown window in seconds" data-i18n-aria-label="snmp_trap.cooldown_secs">
-                    <span class="hint-text" data-i18n="snmp_trap.cooldown_desc">Subsequent notifications from the same source within the window are logged only</span>
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
                     <label for="snmp-trap-communities" data-i18n="snmp_trap.communities">v1/v2c Community Whitelist</label>
                     <input type="text" id="snmp-trap-communities" placeholder="public" data-i18n-placeholder="snmp_trap.communities_placeholder" autocomplete="off" aria-label="Community whitelist" data-i18n-aria-label="snmp_trap.communities">
-                    <span class="hint-text" data-i18n="snmp_trap.communities_desc">Comma separated; empty accepts any community (intranet only)</span>
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
                     <span class="group-label" data-i18n="snmp_trap.users">v3 USM Users</span>
-                    <p class="config-hint" data-i18n="snmp_trap.users_desc">v3 notifications are rejected when no user is configured; a privacy protocol must be paired with an auth protocol; received traps go to Logs - Notifications.</p>
                     <button type="button" id="snmp-trap-add-user-btn" class="btn btn-secondary btn-sm" data-i18n="snmp_trap.add_user">Add User</button>
                     <div class="table-container snmp-trap-users-container">
                       <table id="snmp-trap-users-table" class="data-table" aria-label="SNMP trap v3 USM users">
@@ -1316,6 +1290,7 @@
                 <div class="config-card-title">
                   <span class="icon">🗃️</span>
                   <span data-i18n="data-management.data_management">Data Management</span>
+                  <button type="button" class="help-btn" data-help="card.data_mgmt" data-help-title="data-management.data_management" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
               </header>
               <div class="data-management-container">
@@ -1340,17 +1315,6 @@
                     <button id="export-csv-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_csv">Export CSV</button>
                   </div>
                 </section>
-                <section class="section">
-                  <div class="import-hint">
-                    <p data-i18n="data-management.instructions">Instructions:</p>
-                    <ul>
-                      <li data-i18n="data-management.hint_module1">Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row</li>
-                      <li data-i18n="data-management.hint_module2">Full import runs in order: Organization &rarr; Room &rarr; Network Region &rarr; Cabinet &rarr; Device &rarr; Cable Link &rarr; Visualization</li>
-                      <li data-i18n="data-management.hint_module3">References use business names (e.g. room/device); missing referenced resources abort and roll back</li>
-                      <li data-i18n="data-management.hint_module4">Rows are matched by business key: existing rows update, new rows insert with server-generated UUIDs; fields are trimmed automatically</li>
-                    </ul>
-                  </div>
-                </section>
               </div>
             </section>
 
@@ -1359,6 +1323,7 @@
                 <div class="config-card-title">
                   <span class="icon">🗄️</span>
                   <span data-i18n="data-management.database_management">Database Management</span>
+                  <button type="button" class="help-btn" data-help="card.db_mgmt" data-help-title="data-management.database_management" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
               </header>
               <div class="database-management-container">
@@ -1366,16 +1331,6 @@
                   <h3 data-i18n="data-management.db_export">Database Export</h3>
                   <div class="export-actions">
                     <button id="export-database-btn" class="btn btn-primary btn-sm" data-i18n="data-management.export_database">Export Database</button>
-                  </div>
-                </section>
-                <section class="section">
-                  <div class="export-hint">
-                    <p data-i18n="data-management.instructions">Instructions:</p>
-                    <ul>
-                      <li data-i18n="data-management.db_export_hint1">Exports as PostgreSQL SQL file</li>
-                      <li data-i18n="data-management.db_export_hint2">Contains complete database structure and data</li>
-                      <li data-i18n="data-management.db_export_hint3">Can be used for migration or disaster recovery</li>
-                    </ul>
                   </div>
                 </section>
               </div>
@@ -1386,6 +1341,7 @@
                 <div class="config-card-title">
                   <span class="icon">📋</span>
                   <span data-i18n="logs.manager">Log Management</span>
+                  <button type="button" class="help-btn" data-help="card.logs" data-help-title="logs.manager" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
               </header>
               <div class="data-management-container">
@@ -1424,7 +1380,6 @@
                         <input type="number" id="clear-log-days" value="30" min="0" max="365" placeholder="0=全部删除" data-i18n-placeholder="logs.clear_zero_hint">
                       </div>
                     </div>
-                    <p class="clear-logs-hint" data-i18n="logs.clear_hint">Delete logs older than specified days. Enter 0 to delete all logs. This action cannot be undone.</p>
                     <button id="clear-logs-btn" class="btn btn-danger" data-i18n="logs.clear">Clear</button>
                   </div>
                 </section>
@@ -1454,7 +1409,6 @@
                       <input type="number" id="log-forwarding-port" class="form-control" min="1" max="65535" placeholder="514">
                     </div>
                   </div>
-                  <span class="hint-text" data-i18n="logs.forwarding_hint">Operation and login logs are forwarded in real time as syslog (facility local0, RFC 3164) to the collector; forwarding failures do not affect local storage</span>
                   <div class="action-buttons">
                     <button id="log-forwarding-test-btn" class="btn btn-secondary btn-sm" data-i18n="logs.forwarding_test">Send Test</button>
                     <button id="log-forwarding-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
@@ -1492,6 +1446,7 @@
                 <div class="config-card-title">
                   <span class="icon">🚦</span>
                   <span data-i18n="config.rate_limit_settings">Rate Limit Settings</span>
+                  <button type="button" class="help-btn" data-help="card.rate_limit" data-help-title="config.rate_limit_settings" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
                 <button id="rate-limit-save-config-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
               </header>
@@ -1536,6 +1491,7 @@
                 <div class="config-card-title">
                   <span class="icon">🔑</span>
                   <span data-i18n="config.password_policy">Password Policy</span>
+                  <button type="button" class="help-btn" data-help="card.password_policy" data-help-title="config.password_policy" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
                 <button id="password-policy-save-btn" class="btn btn-primary btn-sm" data-i18n="common.save">Save</button>
               </header>
@@ -1585,6 +1541,7 @@
                 <div class="config-card-title">
                   <span class="icon">🛡️</span>
                   <span data-i18n="security.app_fail2ban">Application Fail2ban</span>
+                  <button type="button" class="help-btn" data-help="card.fail2ban" data-help-title="security.app_fail2ban" data-icon="help" data-i18n-aria-label="common.help" aria-label="帮助" data-i18n-tooltip="common.help" data-tooltip="帮助"></button>
                 </div>
                 <div class="card-header-actions">
                   <span id="app-fail2ban-status-badge" class="status-badge status-inactive" data-i18n="security.status_unknown">Unknown</span>
@@ -1615,9 +1572,6 @@
                   <input type="number" id="app-fail2ban-bantime" class="form-control" min="60" max="604800">
                 </div>
               </div>
-
-              <!-- 日志路径提示 -->
-              <p id="app-fail2ban-log-path-hint" class="hint-text"></p>
 
               <!-- 已封禁 IP -->
               <h4 class="mt-md" data-i18n="security.banned_ips">Banned IPs</h4>
@@ -1668,6 +1622,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=1792083789"></script>
+  <script type="module" src="/static/js/app.js?v=1792114078"></script>
 </body>
 </html>

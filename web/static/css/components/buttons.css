@@ -238,3 +238,44 @@
     min-width: 60px;
   }
 }
+
+/* ==========================================
+   帮助中心按钮（卡片/弹窗标题旁 ? 图标，见 helpManager.js）
+   ========================================== */
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.help-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.help-btn:hover {
+  color: var(--color-primary);
+}
+
+.help-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* 弹窗深色标题栏内反白 */
+.modal-header .help-btn {
+  color: rgb(255 255 255 / 65%);
+}
+
+.modal-header .help-btn:hover {
+  color: rgb(255 255 255 / 100%);
+}

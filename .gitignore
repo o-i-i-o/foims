@@ -11,5 +11,4 @@ chrome-headless-shell-linux64/
 guanwang/
 node_exporter/
 .zcodeignore
-dist/agents/
 windows_exporter/

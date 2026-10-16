@@ -969,7 +969,7 @@ async function saveSnmpTrapConfig() {
 
 // ==================== Agent 上报服务配置 ====================
 
-// 最近一次加载的 Agent 基础参数（分发目录/上报上限/历史保留/离线倍数等与
+// 最近一次加载的 Agent 基础参数（上报上限/历史保留/离线倍数等与
 // 监听无关的字段）：PUT /api/system/config 会整体替换 agent 段，保存时原样带回
 let currentAgentBaseConfig = null;
 
@@ -983,7 +983,6 @@ function loadAgentServiceConfig() {
       }
       const agent = result.data.agent;
       currentAgentBaseConfig = {
-        dist_dir: agent.dist_dir,
         max_report_bytes: agent.max_report_bytes,
         history_retention_days: agent.history_retention_days,
         offline_factor: agent.offline_factor
@@ -2296,226 +2295,148 @@ function initCertificateManager() {
 }
 
 // ==========================================
-// Agent 采集分发（系统设置子页签，设计 docs/agent-design.md §7.3/§6.3）
+// Agent 配置包下载与注册令牌（系统设置子页签，设计 docs/agent-design.md §6.3）
+// 二进制安装包由 CI 直出发布到 Release 页按需下载；Web 端仅现场组
+// 「配置包」（agent.toml + 站点 CA + 客户端证书），按所选操作系统选格式
 // ==========================================
 
-// 产物大小格式化：字节 → 可读文本
-function formatAgentSize(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "-";
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(0)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+// 操作系统 → 可用包格式（deb/rpm 为 Linux 系统包格式，zip 为 Windows 通用包）
+const AGENT_OS_FORMATS = {
+  linux: ["deb", "rpm"],
+  windows: ["zip"]
+};
 
-// 渲染版本/CA 状态与可下载平台列表（版本门控已移除，仅 Agent 版本展示）
-function renderAgentDist(data) {
-  setTextById("agent-dist-version", data.agent_version || "-");
-  setTextById(
-    "agent-ca-status",
-    data.ca_ok ? t("system.agent_ca_ok") : t("system.agent_ca_missing")
-  );
-
-  const messageEl = elementCache.get("agent-dist-message");
-  if (!data.available) {
-    // 产物目录不可用：显示后端下发的 i18n 文案并清空平台列表
-    if (messageEl) {
-      messageEl.textContent = t(data.message || "system.agent_dist_unavailable");
-      messageEl.hidden = false;
-    }
-    renderAgentTargets([], false);
-    return;
-  }
-
-  // CA 未生成：置顶提示并禁用下载（状态行已展示原因）
-  const blocked = !data.ca_ok;
-  if (messageEl) {
-    messageEl.textContent = blocked ? t(data.message || "system.agent_ca_missing") : "";
-    messageEl.hidden = !blocked;
-  }
-  renderAgentTargets(data.targets || [], blocked);
-}
-
-// 最近一次加载的产物列表与下载可用状态（平台/架构/格式三级联动选择的数据源）
-let currentAgentTargets = [];
-let agentDistBlocked = false;
-
-// 从 target 三元组取 OS 段（x86_64-unknown-linux-musl → linux）
-function agentTargetOs(target) {
-  const segments = String(target || "").split("-");
-  return segments.length >= 3 ? segments[2] : "";
-}
-
-// 渲染平台下拉：按 OS 去重排序；无产物或 CA 缺失时整体禁用
-function renderAgentTargets(targets, blocked) {
-  currentAgentTargets = Array.isArray(targets) ? targets : [];
-  agentDistBlocked = Boolean(blocked);
-
-  const platformSelect = elementCache.get("agent-dist-platform");
-  const archSelect = elementCache.get("agent-dist-arch");
+// 渲染操作系统下拉并联动格式下拉（配置包无平台×架构产物维度，
+// 数据源为前端常量；可用性由服务端在下载时校验令牌/证书并报错）
+function renderAgentOsOptions() {
+  const osSelect = elementCache.get("agent-dist-os");
   const formatSelect = elementCache.get("agent-dist-format");
   const downloadBtn = elementCache.get("agent-dist-download-btn");
-  if (!platformSelect || !archSelect || !formatSelect || !downloadBtn) {
+  if (!osSelect || !formatSelect || !downloadBtn) {
     return;
   }
-
-  const platforms = [
-    ...new Set(currentAgentTargets.map((item) => agentTargetOs(item.target)).filter(Boolean))
-  ].sort();
-  platformSelect.innerHTML = platforms.length
-    ? platforms.map((os) => `<option value="${escapeHtml(os)}">${escapeHtml(os)}</option>`).join("")
-    : `<option value="">${escapeHtml(t("common.no_data"))}</option>`;
-
-  const disabled = agentDistBlocked || !platforms.length;
-  [platformSelect, archSelect, formatSelect, downloadBtn].forEach((el) => {
-    el.disabled = disabled;
-  });
-  syncAgentArchOptions();
+  osSelect.innerHTML = Object.keys(AGENT_OS_FORMATS)
+    .map((os) => `<option value="${escapeHtml(os)}">${escapeHtml(os)}</option>`)
+    .join("");
+  syncAgentFormatOptions();
 }
 
-// 平台选中后刷新架构下拉（联动）
-function syncAgentArchOptions() {
-  const platformSelect = elementCache.get("agent-dist-platform");
-  const archSelect = elementCache.get("agent-dist-arch");
-  if (!platformSelect || !archSelect) {
+// 操作系统切换后刷新格式下拉（Windows 仅 zip，单项时禁用切换）
+function syncAgentFormatOptions() {
+  const osSelect = elementCache.get("agent-dist-os");
+  const formatSelect = elementCache.get("agent-dist-format");
+  const downloadBtn = elementCache.get("agent-dist-download-btn");
+  if (!osSelect || !formatSelect || !downloadBtn) {
     return;
   }
-  const os = platformSelect.value;
-  const archs = [
-    ...new Set(
-      currentAgentTargets
-        .filter((item) => agentTargetOs(item.target) === os)
-        .map((item) => item.arch)
-        .filter(Boolean)
+  const formats = AGENT_OS_FORMATS[osSelect.value] || [];
+  formatSelect.innerHTML = formats
+    .map(
+      (format) =>
+        `<option value="${escapeHtml(format)}">${escapeHtml(format.toUpperCase())}</option>`
     )
-  ].sort();
-  archSelect.innerHTML = archs.length
-    ? archs
-        .map((arch) => `<option value="${escapeHtml(arch)}">${escapeHtml(arch)}</option>`)
-        .join("")
-    : `<option value="">${escapeHtml(t("system.agent_dist_no_arch"))}</option>`;
-  syncAgentDistSelection();
+    .join("");
+  formatSelect.disabled = formats.length <= 1;
+  downloadBtn.disabled = !formats.length;
 }
 
-// 按平台×架构选中项刷新格式下拉、大小与下载按钮可用性
-function syncAgentDistSelection() {
-  const platformSelect = elementCache.get("agent-dist-platform");
-  const archSelect = elementCache.get("agent-dist-arch");
-  const formatSelect = elementCache.get("agent-dist-format");
-  const downloadBtn = elementCache.get("agent-dist-download-btn");
-  const sizeEl = elementCache.get("agent-dist-size");
-  if (!platformSelect || !archSelect || !formatSelect || !downloadBtn) {
-    return;
-  }
-
-  const target = currentAgentTargets.find(
-    (item) => agentTargetOs(item.target) === platformSelect.value && item.arch === archSelect.value
-  );
-  if (target && !agentDistBlocked) {
-    const formats =
-      Array.isArray(target.formats) && target.formats.length ? target.formats : ["zip"];
-    formatSelect.innerHTML = formats
-      .map(
-        (format) =>
-          `<option value="${escapeHtml(format)}">${escapeHtml(format.toUpperCase())}</option>`
-      )
-      .join("");
-    formatSelect.disabled = false;
-    downloadBtn.disabled = false;
-    if (sizeEl) {
-      sizeEl.textContent = `${t("system.agent_size")}: ${formatAgentSize(target.size)}`;
-    }
-  } else {
-    formatSelect.innerHTML = `<option value="">-</option>`;
-    formatSelect.disabled = true;
-    downloadBtn.disabled = true;
-    if (sizeEl) {
-      sizeEl.textContent = "-";
-    }
-  }
-}
-
-// 加载 Agent 分发摘要（GET /api/agents/dist）：版本/CA + 平台列表
+// 加载 Agent 配置包面板：注册令牌（明文，仅 admin/secadmin 可见）+
+// 配置包版本（与服务端一致，取 /api/system/info）
 export async function loadAgentDist() {
   try {
-    const result = await apiRequest("/api/agents/dist");
-    // 成功响应为裸 JSON（available 字段承担成败语义）；非 200 时
-    // apiClient 归一为 { success: false, message } 对象，无 available 字段
-    if (result.available === undefined) {
-      showToast(`${t("system.agent_dist_load_failed")}: ${result.message || ""}`, "error");
-      return;
+    const [tokenResult, infoResult] = await Promise.all([
+      apiRequest("/api/agents/enrollment-token"),
+      apiRequest("/api/system/info")
+    ]);
+    if (tokenResult.success && tokenResult.data?.enrollment_token) {
+      setTextById("agent-enrollment-token", tokenResult.data.enrollment_token);
+    } else {
+      setTextById("agent-enrollment-token", t("system.agent_token_missing"));
+      showToast(
+        `${t("system.agent_token_load_failed")}: ${tokenResult.message || ""}`,
+        "error"
+      );
     }
-    renderAgentDist(result);
+    if (infoResult.success) {
+      setTextById("agent-dist-version", infoResult.data?.version || "-");
+    }
+    renderAgentOsOptions();
   } catch (error) {
-    console.error("加载Agent分发信息失败:", error);
-    showToast(`${t("system.agent_dist_load_failed")}: ${error.message}`, "error");
+    console.error("加载Agent配置包信息失败:", error);
+    showToast(`${t("system.agent_token_load_failed")}: ${error.message}`, "error");
   }
 }
 
-// 下载 Agent 安装包（GET /api/agents/download）：文件名取自
-// Content-Disposition（服务端已组好包），备注随查询串下发；上报地址由
-// 服务端按「公共URL开关 → 手动覆盖 → 监听地址推导」顺序解析，前端不再传递
-export async function downloadAgentPackage(target, format = "zip") {
-  const label = elementCache.getValue("agent-download-label").trim();
-
-  const params = new URLSearchParams({
-    target,
-    format
-  });
-  if (label) {
-    params.set("label", label);
-  }
-
+// 下载配置包（GET /api/agents/config-package）：agent.toml（携共享注册
+// 令牌）与证书由服务端现场组包，文件名取自 Content-Disposition
+export async function downloadConfigPackage(format) {
   try {
-    const result = await apiRequest(`/api/agents/download?${params.toString()}`);
+    const result = await apiRequest(
+      `/api/agents/config-package?format=${encodeURIComponent(format)}`
+    );
     if (!result.success) {
-      showToast(`${t("system.agent_download_failed")}: ${result.message || ""}`, "error");
+      showToast(`${t("system.agent_config_download_failed")}: ${result.message || ""}`, "error");
       return;
     }
     if (!result.isBlob) {
       return;
     }
-    downloadBlobResult(result, `foims-agent-${target}.${format}`);
+    downloadBlobResult(result, `foims-agent-config.${format}`);
   } catch (error) {
-    console.error("下载Agent安装包失败:", error);
-    showToast(`${t("system.agent_download_failed")}: ${error.message}`, "error");
+    console.error("下载Agent配置包失败:", error);
+    showToast(`${t("system.agent_config_download_failed")}: ${error.message}`, "error");
   }
 }
 
-// 平台/架构/格式三级联动 + 下载按钮 + 上报地址开关联动
+// 重新生成注册令牌：确认后 POST，旧令牌即刻失效（已部署 agent 需重新
+// 下载配置包覆盖安装后方可继续上报）
+async function regenerateEnrollmentToken() {
+  const confirmed = await showConfirm(t("system.agent_token_regenerate_confirm"), {
+    title: t("system.agent_token_regenerate"),
+    confirmText: t("system.agent_token_regenerate"),
+    danger: true
+  });
+  if (!confirmed) {
+    return;
+  }
+  try {
+    const result = await apiRequest("/api/agents/enrollment-token", { method: "POST" });
+    if (result.success && result.data?.enrollment_token) {
+      setTextById("agent-enrollment-token", result.data.enrollment_token);
+      showToast(t("system.agent_token_regenerated"), "success");
+      return;
+    }
+    showToast(result.message || t("common.operation_failed"), "error");
+  } catch (error) {
+    console.error("重新生成注册令牌失败:", error);
+    showToast(t("common.operation_failed_retry"), "error");
+  }
+}
+
+// OS/格式联动 + 下载按钮 + 令牌重生成 + 上报地址开关联动
 function initAgentDistEvents() {
   const publicUrlSwitch = elementCache.get("agent-use-public-url");
   if (publicUrlSwitch) {
     publicUrlSwitch.addEventListener("change", syncAgentReportOverrideVisibility);
   }
 
-  const platformSelect = elementCache.get("agent-dist-platform");
-  if (platformSelect) {
-    platformSelect.addEventListener("change", syncAgentArchOptions);
-  }
-
-  const archSelect = elementCache.get("agent-dist-arch");
-  if (archSelect) {
-    archSelect.addEventListener("change", syncAgentDistSelection);
+  const osSelect = elementCache.get("agent-dist-os");
+  if (osSelect) {
+    osSelect.addEventListener("change", syncAgentFormatOptions);
   }
 
   const downloadBtn = elementCache.get("agent-dist-download-btn");
   if (downloadBtn) {
     downloadBtn.addEventListener("click", () => {
-      const os = elementCache.getValue("agent-dist-platform");
-      const arch = elementCache.getValue("agent-dist-arch");
       const formatSelect = elementCache.get("agent-dist-format");
-      if (!os || !arch || !formatSelect) {
-        return;
-      }
-      const target = currentAgentTargets.find(
-        (item) => agentTargetOs(item.target) === os && item.arch === arch
-      );
-      if (target) {
-        downloadAgentPackage(target.target, formatSelect.value || "zip");
+      if (formatSelect?.value) {
+        downloadConfigPackage(formatSelect.value);
       }
     });
+  }
+
+  const regenerateBtn = elementCache.get("agent-token-regenerate-btn");
+  if (regenerateBtn) {
+    regenerateBtn.addEventListener("click", regenerateEnrollmentToken);
   }
 }

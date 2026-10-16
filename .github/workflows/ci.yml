@@ -86,11 +86,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # build-essential/pkg-config/libssl-dev/libpq-dev 为主程序构建依赖，
-      # lintian 为 DEB 包检查；agent 交叉编译走 zig 后端（见下），无需 musl 工具链
+      # lintian 为 DEB 包检查；rpm 提供 rpmbuild（Agent rpm 程序包组装），
+      # agent 交叉编译走 zig 后端（见下），无需 musl 工具链
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian rpm
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -115,16 +116,17 @@ jobs:
       - name: 构建项目
         run: cargo build --release --verbose
 
-      # Agent 分发物料由 build-deb.sh 级联主仓根下的独立工作空间
-      # foims-agent/（随本仓检出）的 build-agent.sh 编译（AGENT_TARGETS
-      # 默认 x86_64,aarch64）。交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C
-      # 编译器与链接器（ring 等依赖直接编），替代 musl.cc 工具链下载——该站点
-      # 多次间歇不可达（v0.6.3/v0.7.2/v0.7.3 三轮修复仍失败），最终弃用。
-      # zig 由 mlugg/setup-zig 官方社区 Action 安装（minisign 验签 + 多镜像
-      # 回退 + 自动缓存，比 npm 方式更稳），锁精确版本 0.13.0（本地 e2e 已
-      # 验证该版本与 ring 兼容，有意升级时同步更新版本号）；cargo-zigbuild
-      # 走 crates.io 稳定版。均不锁哈希（与 v0.7.2 结论一致），功能正确性由
-      # 下方 --version 校验与构建产物把关。
+      # Agent 分发模型：agent 独立工作空间 foims-agent/（随本仓检出）的
+      # build-agent.sh 编译多平台静态二进制并组装 OS 系统包（deb/rpm/zip），
+      # 由下方 Release 任务上传发布页供用户按需下载；主程序 DEB 不再级联
+      # 打包 agent 二进制，服务端 web 页只现场组配置包。交叉后端用
+      # cargo-zigbuild：zig cc 兼任交叉 C 编译器与链接器（ring 等依赖直接
+      # 编），替代 musl.cc 工具链下载——该站点多次间歇不可达（v0.6.3/v0.7.2/
+      # v0.7.3 三轮修复仍失败），最终弃用。zig 由 mlugg/setup-zig 官方社区
+      # Action 安装（minisign 验签 + 多镜像回退 + 自动缓存，比 npm 方式更稳），
+      # 锁精确版本 0.13.0（本地 e2e 已验证该版本与 ring 兼容，有意升级时同步
+      # 更新版本号）；cargo-zigbuild 走 crates.io 稳定版。均不锁哈希（与
+      # v0.7.2 结论一致），功能正确性由 --version 校验与构建产物把关。
       - name: 安装 zig 交叉后端
         uses: mlugg/setup-zig@v2
         with:
@@ -138,15 +140,28 @@ jobs:
 
       # 打包脚本 scripts/build-deb.sh 无需 root：产物输出至 target/foims_<版本>_<架构>.deb
       - name: 构建 DEB 安装包
-        run: AGENT_BACKEND=zigbuild bash scripts/build-deb.sh
+        run: bash scripts/build-deb.sh
+
+      # Agent 系统包：全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出 zip，
+      # 产物归集到 foims-agent/dist/packages/
+      - name: 构建 Agent 多平台安装包
+        run: AGENT_BACKEND=zigbuild bash foims-agent/scripts/build-agent.sh
+
+      # 主程序裸二进制压缩包（tar.gz）：版本取根 Cargo.toml（本 job 也运行于
+      # 分支 push，不能依赖 tag 名）；由 release 任务随 DEB 与 Agent 包一并发布
+      - name: 打包主程序压缩包
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)
+          tar -czf "foims_${VERSION}_$(dpkg --print-architecture).tar.gz" -C target/release foims
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: foims-ubuntu-build
+          name: foims-release
           path: |
-            target/release/foims
             target/foims_*.deb
+            foims_*.tar.gz
+            foims-agent/dist/packages/*
           retention-days: 30
 
   release:
@@ -157,67 +172,22 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      # build-essential/pkg-config/libssl-dev/libpq-dev 为主程序构建依赖；
-      # agent 交叉编译走 zig 后端（见下），无需 musl 工具链
-      - name: 安装系统依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev
-
-      - name: 安装 Rust
-        uses: dtolnay/rust-toolchain@stable
+      # 发布物全部来自 build 任务的 artifact（主程序 DEB/tar.gz + Agent 系统包），
+      # 本任务不再重复构建
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
         with:
-          toolchain: stable
-          target: x86_64-unknown-linux-gnu
+          name: foims-release
+          path: release-assets
 
-      - name: 缓存依赖
-        uses: Swatinem/rust-cache@v2
-
-      - name: 构建发布版本
-        run: cargo build --release --verbose
-
-      # Agent 分发物料由 build-deb.sh 级联主仓根下的独立工作空间
-      # foims-agent/（随本仓检出）的 build-agent.sh 编译（AGENT_TARGETS
-      # 默认 x86_64,aarch64）。交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C
-      # 编译器与链接器（ring 等依赖直接编），替代 musl.cc 工具链下载——该站点
-      # 多次间歇不可达（v0.6.3/v0.7.2/v0.7.3 三轮修复仍失败），最终弃用。
-      # zig 由 mlugg/setup-zig 官方社区 Action 安装（minisign 验签 + 多镜像
-      # 回退 + 自动缓存，比 npm 方式更稳），锁精确版本 0.13.0（本地 e2e 已
-      # 验证该版本与 ring 兼容，有意升级时同步更新版本号）；cargo-zigbuild
-      # 走 crates.io 稳定版。均不锁哈希（与 v0.7.2 结论一致），功能正确性由
-      # 下方 --version 校验与构建产物把关。
-      - name: 安装 zig 交叉后端
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.13.0
-
-      - name: 安装 cargo-zigbuild
-        run: |
-          cargo install cargo-zigbuild --locked
-          zig version
-          cargo-zigbuild --version
-
-      - name: 构建 DEB 安装包
-        run: AGENT_BACKEND=zigbuild bash scripts/build-deb.sh
-
-      - name: 获取版本号
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-
-      - name: 打包发布文件
-        run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
-          ARCH=$(dpkg --print-architecture)
-          tar -czf "foims_${VERSION}_${ARCH}.tar.gz" -C target/release foims
-
+      # artifact 内保留相对主仓根的目录结构（target/、foims-agent/dist/packages/）
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            foims_*.tar.gz
-            target/foims_*.deb
+            release-assets/target/foims_*.deb
+            release-assets/foims_*.tar.gz
+            release-assets/foims-agent/dist/packages/*
           generate_release_notes: true
           draft: false
         env:

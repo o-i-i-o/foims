@@ -25,6 +25,7 @@
 - 后端日志统一 `tracing`，禁止 `println!`；前端通知统一 `showToast`，禁止 `alert()`。
 - 动态 SQL 用 `sqlx::QueryBuilder`；跨 crate 共享类型放 `foims-common`，不得复制副本。
 - 分页响应用 `paged_response`（键固定 `items/total/page/page_size/total_pages`）。
+- 业务代码每一个回退逻辑（保底逻辑）都需要评估，禁止惯性通过回退逻辑保留无效或没必要的旧代码。
 
 ## 版本与测试
 

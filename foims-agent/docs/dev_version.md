@@ -74,3 +74,22 @@
   批量帧协议（主仓 foims-common report.rs 同步，roundtrip 测试双侧覆盖）；
 3.验证：cargo test --workspace 178 测试全绿，clippy --release
   -D warnings 与 fmt 通过。
+
+# v0.4.0
+
+# 2026101608304901
+# 2026年10月16日08点30分49秒 第1次修改
+
+1.分发模型重构（构建链，agent 程序代码零改动）：build-agent.sh 新增 OS
+  系统包组装——Linux 每目标 deb（dpkg-deb）+ rpm（rpmbuild，_dbpath 指向
+  临时库免系统 rpmdb 依赖），Windows zip（exe + README.txt），产物归集
+  dist/packages/ 并生成 SHA256SUMS；systemd unit（foims-agent.service）与
+  Windows 说明为 deploy/agent/ 包内物料唯一来源；删 manifest.json 与
+  install.sh 归集（服务端动态组二进制链路已移除，无消费者）；产物结构
+  dist/agents/ → dist/bin/（二进制原料）+ dist/packages/（系统包）；
+2.程序包/配置包解耦语义：程序包只含二进制 + systemd unit + 空配置目录
+  /etc/foims-agent/（postinst 检测服务端下发的配置包已就位即 enable +
+  try-restart，prerm 卸载时 stop/disable）；配置由主程序 /api/agents/
+  config-package 现场组包安装到同目录；
+3.CI：ci.yml build 任务独立跑 build-agent.sh（AGENT_BACKEND=zigbuild），
+  release 任务改下载 build 任务 artifact 直传发布页，不再重复编译。

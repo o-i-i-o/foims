@@ -1,5 +1,5 @@
 import { updatePageTranslations, t } from "./i18n.js";
-import { getIcon } from "./icons.js";
+import { getIcon, helpButton } from "./icons.js";
 import { MODULE_VERSION } from "./resourceLoader.js";
 import { showToast } from "./toast.js";
 
@@ -86,6 +86,11 @@ function trapModalFocus(e) {
 const MODAL_REGISTRY = {
   // 公共
   "confirm-modal": { path: "/static/modals/common/confirm-modal.html" },
+  // 帮助中心（? 按钮弹出，标题与正文由 helpManager 按目标动态填充）
+  "help-modal": {
+    path: "/static/modals/common/help-modal.html",
+    title: "common.help"
+  },
   "simple-list-modal": {
     path: "/static/modals/common/simple-list-modal.html",
     contentClass: "modal-lg",
@@ -132,7 +137,9 @@ const MODAL_REGISTRY = {
     path: "/static/modals/organization/employee-modal.html",
     contentClass: "modal-lg",
     titleHtml:
-      '<span data-i18n="employee.manager_title"></span><span id="employee-modal-org-name" class="employee-modal-org"></span>'
+      '<span data-i18n="employee.manager_title"></span><span id="employee-modal-org-name" class="employee-modal-org"></span>',
+    help: "modal.employee",
+    helpTitle: "employee.manager_title"
   },
   "employee-edit-modal": {
     path: "/static/modals/organization/employee-edit-modal.html",
@@ -145,7 +152,8 @@ const MODAL_REGISTRY = {
   },
   "workstation-modal": {
     path: "/static/modals/workstation/workstation-modal.html",
-    title: "workstation.add_workstation"
+    title: "workstation.add_workstation",
+    help: "modal.workstation"
   },
   "cabinet-modal": {
     path: "/static/modals/cabinet/cabinet-modal.html",
@@ -195,12 +203,14 @@ const MODAL_REGISTRY = {
   },
   "cable-label-print-modal": {
     path: "/static/modals/cable/cable-label-print-modal.html",
-    title: "cable_link.print_labels"
+    title: "cable_link.print_labels",
+    help: "modal.cable_label_print"
   },
   // 可视化
   "topology-connection-modal": {
     path: "/static/modals/visualization/topology-connection-modal.html",
-    title: "viz.create_connection_title"
+    title: "viz.create_connection_title",
+    help: "modal.topology_connection"
   },
   "topology-connection-detail-modal": {
     path: "/static/modals/visualization/topology-connection-detail-modal.html",
@@ -208,7 +218,8 @@ const MODAL_REGISTRY = {
   },
   "topology-container-modal": {
     path: "/static/modals/visualization/topology-container-modal.html",
-    title: "viz.container_coords"
+    title: "viz.container_coords",
+    help: "modal.topology_container"
   },
   "topology-detail-modal": { path: "/static/modals/visualization/topology-detail-modal.html" },
   // 主机监控（标题栏主机名由 JS 写入 #agent-detail-title-host）
@@ -221,7 +232,8 @@ const MODAL_REGISTRY = {
   // 主机资源告警阈值配置（启用开关在 footer，保存即评估一轮）
   "agent-alert-threshold-modal": {
     path: "/static/modals/agents/agent-alert-threshold-modal.html",
-    title: "agents.alert_threshold"
+    title: "agents.alert_threshold",
+    help: "modal.agent_alert"
   },
   // 日志
   "log-details-modal": {
@@ -237,11 +249,13 @@ const MODAL_REGISTRY = {
   // 系统
   "user-modal": {
     path: "/static/modals/system/user-modal.html",
-    title: "user.add_user"
+    title: "user.add_user",
+    help: "modal.user"
   },
   "scheduled-task-modal": {
     path: "/static/modals/system/scheduled-task-modal.html",
-    title: "scheduled_tasks.create_task"
+    title: "scheduled_tasks.create_task",
+    help: "modal.scheduled_task"
   },
   "cron-examples-modal": {
     path: "/static/modals/system/cron-examples-modal.html",
@@ -249,23 +263,28 @@ const MODAL_REGISTRY = {
   },
   "cert-generate-modal": {
     path: "/static/modals/system/cert-generate-modal.html",
-    title: "cert.generate_title"
+    title: "cert.generate_title",
+    help: "modal.cert_generate"
   },
   "cert-import-modal": {
     path: "/static/modals/system/cert-import-modal.html",
-    title: "cert.import_title"
+    title: "cert.import_title",
+    help: "modal.cert_import"
   },
   "ca-generate-modal": {
     path: "/static/modals/system/ca-generate-modal.html",
-    title: "cert.ca_generate_title"
+    title: "cert.ca_generate_title",
+    help: "modal.ca_generate"
   },
   "ca-import-modal": {
     path: "/static/modals/system/ca-import-modal.html",
-    title: "cert.ca_import_title"
+    title: "cert.ca_import_title",
+    help: "modal.ca_import"
   },
   "change-password-modal": {
     path: "/static/modals/system/change-password-modal.html",
-    title: "auth.change_password"
+    title: "auth.change_password",
+    help: "modal.change_password"
   },
   "open-source-modal": {
     path: "/static/modals/system/open-source-modal.html",
@@ -281,17 +300,20 @@ const MODAL_REGISTRY = {
  * 片段只提供 .modal-body 与可选 .modal-footer。
  * 标题元素保留 {id}-title 供 aria-labelledby 与 JS 按需写入；
  * data-i18n 标题由 loadModal 注入后的 updatePageTranslations 即时填充。
+ * entry.help 为帮助中心目标键（help 命名空间），存在时标题后追加 ? 按钮；
+ * helpTitle 为按钮弹窗标题的 i18n 键，缺省复用 entry.title。
  */
 function buildModalShell(id, entry, innerHtml) {
   const titleI18nAttr = entry.titleHtml || !entry.title ? "" : ` data-i18n="${entry.title}"`;
   const titleContent = entry.titleHtml || "";
   const contentClass = entry.contentClass ? ` ${entry.contentClass}` : "";
+  const helpBtn = entry.help ? helpButton(entry.help, entry.helpTitle || entry.title || "") : "";
 
   return `<div id="${id}" class="modal" role="dialog" aria-modal="true" aria-labelledby="${id}-title">
   <div class="modal-content${contentClass}">
     <header class="modal-header">
       <h3 class="modal-title" id="${id}-title"${titleI18nAttr}>${titleContent}</h3>
-      <button type="button" class="close" data-modal-id="${id}" aria-label="Close">&times;</button>
+      ${helpBtn}<button type="button" class="close" data-modal-id="${id}" aria-label="Close">&times;</button>
     </header>
 ${innerHtml}
   </div>

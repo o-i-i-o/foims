@@ -3,7 +3,7 @@
 //! 周期任务：扫描 devices 表中已配置 SNMP 凭据（community/username）且带
 //! 管理 IP 的设备，逐台采集并 upsert 为 `source='snmp'` 的 agents 行：
 //! - machine_id 合成 `snmp:{device_id}`（与 agent machine_id 命名空间隔离）；
-//! - 无下发 token，token_hash 置空（agent 上报路径凭 token 查行，天然隔离）；
+//! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
 //! - 单台成功即 last_seen=NOW() 并翻转 offline → active；连续失败超过
 //!   离线阈值（轮询间隔 × 2，即连续两轮未成功）由本模块统一置 offline，
 //!   agent_offline 任务仅对 source='agent' 生效，互不干扰；
@@ -203,11 +203,11 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
 
     // upsert：热列仅在采得新值时覆盖（COALESCE），raw_metrics 整体写回
     let upsert = sqlx::query_scalar::<_, uuid::Uuid>(
-        r"INSERT INTO agents (machine_id, token_hash, source, device_id, status,
+        r"INSERT INTO agents (machine_id, source, device_id, status,
                               hostname, ip, os, uptime_secs,
                               cpu_usage, mem_usage_pct, disk_usage_pct, max_temp,
                               raw_metrics, first_seen, last_seen)
-          VALUES ($1, NULL, 'snmp', $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+          VALUES ($1, 'snmp', $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
           ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
               status = CASE WHEN agents.status = 'offline' THEN 'active' ELSE agents.status END,
               hostname = EXCLUDED.hostname,
