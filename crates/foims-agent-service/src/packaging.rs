@@ -1,11 +1,16 @@
 //! Agent 配置包组包（zip / deb / rpm）。
 //!
-//! 二进制安装包由 agent 工作空间 CI 直出（deb/rpm/zip，按需从 Release 页
+//! 二进制安装包由 agent 工作空间 CI 直出（deb/rpm/exe，按需从 Release 页
 //! 下载）；本模块只按 Web 页所选操作系统现场组「配置包」，内容统一为
 //! agent.toml + ca.pem + client.pem + client.key：
-//! - zip：Windows 通用（文件平铺，解压到 foims-agent.exe 同目录）；
-//! - deb：Architecture: all，文件落 /etc/foims-agent/（权限 0600/0644）；
-//! - rpm：noarch，内容与 deb 等价，agent.toml 标记 config。
+//! - zip：linux + Windows 通用（文件平铺，解压到 foims-agent.exe 同目录）；
+//! - deb：Architecture: all，强制依赖 foims-agent，文件落 /etc/foims-agent/
+//!   （权限 0600/0644）；
+//! - rpm：noarch，Requires foims-agent，内容与 deb 等价，agent.toml 标记
+//!   config。
+//!
+//! 安装闭环：依赖强制程序包先装，配置包 postinst/%post 统一 enable +
+//! restart foims-agent 服务使配置即刻生效（首次安装直接拉起）。
 //!
 //! 全部在内存中完成，不落临时文件。
 
@@ -30,7 +35,8 @@ pub struct PackageInputs<'a> {
 pub const ZIP_README: &str = r#"FOIMS Agent 配置包
 ==================
 
-本压缩包仅含配置与 mTLS 证书（agent 程序本体请从发布页按平台下载）：
+本压缩包仅含配置与 mTLS 证书，需配合 foims-agent 程序本体使用
+（程序本体请从发布页按平台下载）：
 
   agent.toml   上报配置（server_addr/token/采集与上报间隔）
   ca.pem       站点 CA 证书（mTLS 信任锚）
@@ -40,17 +46,23 @@ pub const ZIP_README: &str = r#"FOIMS Agent 配置包
 安装：将四个文件放到 foims-agent.exe 同一目录（或自定义目录），运行：
   foims-agent.exe --config <目录>\agent.toml --cert-dir <目录>
 
+已注册为 Windows 服务时，配置更新后重启服务生效：
+  sc.exe stop foims-agent
+  sc.exe start foims-agent
+
 注意：client.key 与 agent.toml 中的 token 属敏感物料，请妥善保管。
 "#;
 
-/// systemd unit 重启脚本片段（deb postinst / rpm post scriptlet 共用）：
-/// 配置包安装后重启已装的 foims-agent 使新配置生效；agent 程序未安装时
-/// 静默跳过（后续安装程序包后手动 systemctl start）。
+/// systemd 服务重启脚本片段（deb postinst / rpm post scriptlet 共用）：
+/// 配置包强制依赖 foims-agent（deb Depends / rpm Requires），安装时程序包
+/// 与 unit 文件必然已就位；此处确保服务自启并重启一次，使新配置即刻生效
+/// （首次安装由本脚本直接拉起，升级安装则无缝换用新配置，无需手动操作）。
 pub const RESTART_SNIPPET: &str = r#"#!/bin/sh
 set -e
 if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files foims-agent.service >/dev/null 2>&1; then
     systemctl daemon-reload || true
-    systemctl try-restart foims-agent.service || true
+    systemctl enable foims-agent.service >/dev/null 2>&1 || true
+    systemctl restart foims-agent.service || true
 fi
 "#;
 
@@ -267,6 +279,7 @@ pub fn build_rpm(agent_version: &str, inputs: &PackageInputs<'_>) -> Result<Vec<
             rpm::FileOptions::new("/etc/foims-agent/client.key").permissions(0o600),
         )
         .map_err(|e| format!("rpm 添加 client.key 失败: {e}"))?;
+    builder.requires(rpm::Dependency::any("foims-agent"));
     builder.post_install_script(RESTART_SNIPPET);
 
     let package = builder.build().map_err(|e| format!("rpm 构建失败: {e}"))?;
@@ -430,11 +443,21 @@ mod tests {
         assert!(control_text.contains("Package: foims-agent-config"));
         assert!(control_text.contains(&format!("Version: {VERSION}")));
         assert!(control_text.contains("Architecture: all"));
+        assert!(
+            control_text.contains("Depends: foims-agent"),
+            "配置包应强制依赖 foims-agent 程序包"
+        );
         assert_eq!(control_entries[1].0, "postinst");
         assert_eq!(control_entries[1].1, 0o755);
+        let postinst = String::from_utf8_lossy(&control_entries[1].2);
         assert!(
-            String::from_utf8_lossy(&control_entries[1].2)
-                .contains("try-restart foims-agent.service")
+            postinst.contains("systemctl enable foims-agent.service")
+                && postinst.contains("systemctl restart foims-agent.service"),
+            "postinst 应启用并重启 foims-agent 使配置即刻生效（首次安装直接拉起）"
+        );
+        assert!(
+            !postinst.contains("try-restart"),
+            "try-restart 对未运行的服务是 no-op，不得用于首次拉起"
         );
 
         // data.tar.gz：/etc/foims-agent/ 四文件与权限
@@ -492,5 +515,15 @@ mod tests {
         assert_eq!(name, "foims-agent-config");
         assert_eq!(version, VERSION);
         assert_eq!(arch, "noarch");
+
+        // Requires 应包含对 foims-agent 的强制依赖（任意版本）
+        let requires = package
+            .metadata
+            .get_requires()
+            .unwrap_or_else(|e| panic!("读取 requires 失败: {e}"));
+        assert!(
+            requires.iter().any(|d| d.name == "foims-agent"),
+            "rpm 配置包应强制依赖 foims-agent 程序包，实际: {requires:?}"
+        );
     }
 }

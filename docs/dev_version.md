@@ -77,3 +77,7 @@ v0.3.3
 v0.4.0
 2026101621443601
 1. 修复可视化画布偶发整页冻结（功能bug，y+1）：svgCanvasBase._renderGridRuler 网格绘制循环以 gx += step 累积推进且无条数上限——节点坐标异常（保存坐标仅拒绝负值无上限）经 fitView 计算出 1e8 级 viewBox 后按 step=100 逐条创建 SVG 节点可达百万级，主线程冻结至 F5；且累积量超过 2^53 浮点精度时 += step 不再前进形成真死循环。修复为按索引有界循环（每轴条数封顶500，合法最大视野约300条不受影响）并前置非有限 viewBox 防护；机柜视图（SVGCore）与拓扑视图（TopologyCore）共用基类同步受益；前端资源版本经bump_static_version.sh刷新，根Cargo.toml 0.25.1→0.25.2
+
+v0.3.4
+2026101622450501
+1. Agent配置包安装闭环修正（仅z，crates/foims-agent-service/packaging.rs）：deb侧Depends: foims-agent本已存在（实为补充确证），rpm侧补Requires: foims-agent（rpm::Dependency::any，任意版本约束——配置包Version取主程序版本而程序包版本由agent工作空间独立管理，两版本空间不同不可锁版本）；RESTART_SNIPPET由try-restart改为enable+restart foims-agent——try-restart对未运行服务是no-op，依赖强制安装顺序（程序包在前）后配置包装完时agent必然未启动，旧脚本导致首次安装服务永不拉起，改为enable（设自启）+restart（重启一次使新配置即刻生效，首次安装直接拉起）；zip包README.txt补Windows服务重启说明（sc.exe stop/start）；模块头与agent工作空间build-agent.sh分发模型注释同步；测试同步：deb control断言Depends、postinst断言enable+restart且显式拒绝try-restart回潮、rpm回读断言requires含foims-agent；cargo test -p foims-agent-service 57全绿、clippy -D warnings与fmt通过

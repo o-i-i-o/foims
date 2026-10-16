@@ -18,8 +18,9 @@
 # 分发模型：系统包由 CI 上传至发布页（Release）供用户按需下载；服务端
 # web 页只现场组「配置包」（agent.toml + mTLS 证书），不再打包二进制。
 # 程序包只含二进制与 systemd unit（Windows 为裸 exe），配置由
-# 服务端下发的配置包装入 /etc/foims-agent/（两包解耦：程序包不依赖
-# 配置包，先装谁都可以；配置包 postinst 会拉起已装的 agent）。
+# 服务端下发的配置包装入 /etc/foims-agent/（配置包强制依赖本包：
+# deb Depends / rpm Requires，安装顺序必为程序包在前；配置包
+# postinst 统一 enable + restart 拉起 agent 使配置即刻生效）。
 #
 # 设计约束：
 #   - 主体为纯 Rust 实现（rustix 走 linux 内联 syscall），musl 目标由
