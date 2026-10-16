@@ -55,12 +55,14 @@ CRATE_WINDOWS="foims-agent-windows"
 UNIT_SRC="$PROJECT_DIR/deploy/agent/foims-agent.service"
 OFFICIAL_DIST="https://static.rust-lang.org/dist"
 
-# tier1/2：rustup 直接提供 std，stable 直编
+# tier1/2：rustup 直接提供 std，stable 直编。
+# 不含 arm-unknown-linux-musleabihf（ARMv6）：deb/rpm 生态无 armv6 形态
+# （Debian armhf 与 RHEL armhfp 均为 armv7 语义），此前两目标折叠映射
+# 同一 armhf 架构名导致 deb 互相覆盖，armv6 包装机也无法运行 armv7 指令
 TIER12_TARGETS=(
     x86_64-unknown-linux-musl
     aarch64-unknown-linux-musl
     i686-unknown-linux-musl
-    arm-unknown-linux-musleabihf
     armv7-unknown-linux-musleabihf
 )
 
@@ -137,7 +139,7 @@ deb_arch_of() {
         x86_64-unknown-linux-musl)      echo amd64 ;;
         aarch64-unknown-linux-musl)     echo arm64 ;;
         i686-unknown-linux-musl)        echo i386 ;;
-        arm-unknown-linux-musleabihf | armv7-unknown-linux-musleabihf) echo armhf ;;
+        armv7-unknown-linux-musleabihf) echo armhf ;;
         powerpc64le-unknown-linux-musl) echo ppc64el ;;
         s390x-unknown-linux-musl)       echo s390x ;;
         riscv64gc-unknown-linux-musl)   echo riscv64 ;;
@@ -157,7 +159,6 @@ rpm_arch_of() {
         x86_64-unknown-linux-musl)      echo x86_64 ;;
         aarch64-unknown-linux-musl)     echo aarch64 ;;
         i686-unknown-linux-musl)        echo i686 ;;
-        arm-unknown-linux-musleabihf)   echo armhfp ;;
         armv7-unknown-linux-musleabihf) echo armv7hl ;;
         powerpc64le-unknown-linux-musl) echo ppc64le ;;
         s390x-unknown-linux-musl)       echo s390x ;;
@@ -241,7 +242,6 @@ cc_for_target() {
         x86_64-unknown-linux-musl)    command -v musl-gcc || true ;;
         aarch64-unknown-linux-musl)   echo "/opt/musl-cross/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc" ;;
         i686-unknown-linux-musl)      echo "/opt/musl-cross/i686-linux-musl-cross/bin/i686-linux-musl-gcc" ;;
-        arm-unknown-linux-musleabihf) echo "/opt/musl-cross/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc" ;;
         armv7-unknown-linux-musleabihf)
             echo "/opt/musl-cross/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc" ;;
         x86_64-pc-windows-gnu)        command -v x86_64-w64-mingw32-gcc || true ;;

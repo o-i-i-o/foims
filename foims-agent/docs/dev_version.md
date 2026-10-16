@@ -116,3 +116,13 @@
   package_linux_rpm 的 rpmbuild/mv 失败显式 return 1（函数经 if 条件
   上下文调用时 set -e 失效，末尾 rm -rf 成功曾把失败掩盖为返回 0）；
   全量重跑验证 5 架构 rpm 全部产出且 SHA256SUMS 校验通过。
+
+# 2026年10月16日21点09分57秒 第2次修改
+
+1.删除 arm-unknown-linux-musleabihf（ARMv6）构建目标：deb_arch_of 曾将
+  它与 armv7 目标折叠映射到同一 armhf 架构名，deb 包文件名相同互相
+  覆盖；且 deb/rpm 生态无 armv6 形态（Debian armhf 与 RHEL armhfp 均
+  为 armv7 语义），armv7 二进制在 armv6 设备上无法运行，armv6 包无
+  正确分发渠道；构建矩阵收缩为 4 Linux（x86_64/aarch64/i686/armv7）
+  + 1 Windows，deb_arch_of/rpm_arch_of/cc_for_target 同步清理对应
+  armv6 分支（armhfp 映射随之删除）。
