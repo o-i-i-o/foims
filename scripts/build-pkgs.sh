@@ -1,12 +1,19 @@
 #!/bin/bash
-# FOIMS DEB 打包脚本（Debian 规范）
+# FOIMS 主程序多格式打包脚本（deb / rpm / zip）
 #
-# 用法：bash scripts/build-deb.sh
-# 产物：target/foims_<版本>_<架构>.deb
+# 用法：bash scripts/build-pkgs.sh
+# 产物：
+#   target/foims_<版本>_<架构>.deb    # Debian 系安装包（dpkg-deb）
+#   target/foims-<版本>-1.<架构>.rpm  # RedHat 系安装包（rpmbuild，与 deb 同内容）
+#   target/foims_<版本>_<架构>.zip    # 裸二进制压缩包（无包管理器环境手动部署）
 #
 # 设计约束：
-#   - 仅打包不安装：dpkg-deb --root-owner-group 归一化属主，全程无需 root，
-#     可在 CI 与普通用户环境直接运行
+#   - 仅打包不安装：dpkg-deb --root-owner-group 归一化属主、rpmbuild 用户态
+#     _topdir/_dbpath，全程无需 root，可在 CI 与普通用户环境直接运行
+#   - rpm 复用 deb 的 staging 目录打包（--exclude DEBIAN 与 lintian 覆盖），
+#     两格式内容天然一致；rpm 脚本语义与 deb 维护脚本逐一对齐
+#     （%pre 运行环境强检 / %post 建用户与证书自签 / %preun 停启用 /
+#     %postun 对齐 purge 清理）
 #   - systemd 单元唯一来源为 deploy/services/foims.service，本脚本不再内嵌副本
 #   - web 目录仅打包 static/（package.json、tests、eslint 等开发工具链文件不进包）
 #   - 配置文件以 config.toml.example 副本为基础打包（去除 .example 后缀）：
@@ -678,7 +685,7 @@ echo "19. 构建 DEB 包..."
 dpkg-deb --root-owner-group --build "$DEBPAK_DIR" "$PROJECT_DIR/target/$DEB_NAME"
 
 echo ""
-echo "=== 打包完成 ==="
+echo "=== DEB 完成 ==="
 echo "DEB 包: $PROJECT_DIR/target/$DEB_NAME"
 ls -lh "$PROJECT_DIR/target/$DEB_NAME"
 
@@ -691,9 +698,205 @@ else
     echo "提示：未安装 lintian，跳过静态检查"
 fi
 
+echo ""
+echo "20. 构建 RPM 包（复用 DEB staging，内容一致；rpmbuild 用户态无需 root）..."
+if ! command -v rpmbuild >/dev/null 2>&1; then
+    echo "错误：缺少 rpmbuild（Debian/Ubuntu 安装：sudo apt-get install rpm）" >&2
+    exit 1
+fi
+# deb 架构 → rpm 架构映射（同机编译，架构与宿主一致）
+case "$ARCH" in
+    amd64) RPM_ARCH=x86_64 ;;
+    arm64) RPM_ARCH=aarch64 ;;
+    armhf) RPM_ARCH=armv7hl ;;
+    i386)  RPM_ARCH=i686 ;;
+    *)     RPM_ARCH="$ARCH" ;;
+esac
+RPM_NAME="foims-${VERSION}-1.${RPM_ARCH}.rpm"
+RPMTOP="$PROJECT_DIR/target/rpmtop"
+rm -rf "$RPMTOP"
+mkdir -p "$RPMTOP/BUILD" "$RPMTOP/RPMS" "$RPMTOP/SOURCES" "$RPMTOP/SPECS" "$RPMTOP/SRPMS" "$RPMTOP/rpmdb"
+# staging 整体作为 Source（排除 DEBIAN 控制目录与 lintian 覆盖等 deb 专有内容）
+tar -czf "$RPMTOP/SOURCES/pak.tar.gz" -C "$DEBPAK_DIR" \
+    --exclude=./DEBIAN --exclude=./usr/share/lintian .
+cat > "$RPMTOP/SPECS/foims.spec" << SPEC_EOF
+Name:           foims
+Version:        $VERSION
+Release:        1
+Summary:        Organization IT Information Management System
+License:        GPL-3.0-or-later
+URL:            https://github.com/example/foims
+Source0:        pak.tar.gz
+Requires:       systemd openssl
+Recommends:     fail2ban
+Suggests:       nginx >= 1.28.1 postgresql-server >= 15
+
+%description
+FOIMS - Organization IT Information Management System based on Rust
+Axum and PostgreSQL, with web interface. Features include IP
+allocation and tracking, switch management with SNMP support,
+network topology visualization, and cabinet/workstation management.
+
+%install
+mkdir -p "%{buildroot}"
+tar -xzf "%{SOURCE0}" -C "%{buildroot}"
+
+# 安装前：运行环境强检（与 DEB preinst 同语义，不做包记录检查，
+# 只认 systemd 服务单元或运行中进程）＋升级时（\$1=2）停旧服务
+%pre
+check_runtime_component() {
+    name="\$1"
+    proc_name="\$2"
+    unit_pattern="\$3"
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-unit-files --type=service 2>/dev/null | grep -q "\$unit_pattern"; then
+            echo "已检测到 \$name（systemd 服务单元）"
+            return 0
+        fi
+    fi
+    if command -v pgrep >/dev/null 2>&1; then
+        if pgrep -x "\$proc_name" >/dev/null 2>&1; then
+            echo "已检测到 \$name（运行中的 \$proc_name 进程）"
+            return 0
+        fi
+    elif ps -eo comm= 2>/dev/null | grep -qx "\$proc_name"; then
+        echo "已检测到 \$name（运行中的 \$proc_name 进程）"
+        return 0
+    fi
+    echo "错误：未检测到 \$name 运行环境（既无 systemd 服务单元，也无运行中的 \$proc_name 进程）" >&2
+    echo "      FOIMS 需要 \$name：请完成安装并确保其已注册服务或正在运行后重试" >&2
+    return 1
+}
+check_runtime_component "nginx" "nginx" "^nginx\\.service" || exit 1
+check_runtime_component "PostgreSQL" "postgres" "postgresql.*\\.service" || exit 1
+if [ "\$1" -eq 2 ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl stop foims.service 2>/dev/null || true
+fi
+
+# 安装后：建用户/目录/权限、nginx worker 属组对齐、自签默认证书、
+# nginx 校验重载、启用并拉起服务（与 DEB postinst 同语义）
+%post
+NOLOGIN=/usr/sbin/nologin
+[ -x "\$NOLOGIN" ] || NOLOGIN=/sbin/nologin
+getent group foims >/dev/null 2>&1 || groupadd -r foims
+id foims >/dev/null 2>&1 || useradd -r -g foims -s "\$NOLOGIN" -d /opt/foims -M -c "FOIMS Service Account" foims
+install -d -o foims -g foims -m 755 /var/log/foims /opt/foims /etc/foims
+install -d -o foims -g foims -m 750 /etc/ssl/foims-ca /etc/ssl/foims-certs
+if [ -f /etc/foims/config.toml ]; then
+    chown foims:foims /etc/foims/config.toml
+    chmod 640 /etc/foims/config.toml
+fi
+NGINX_USER=""
+if [ -f /etc/nginx/nginx.conf ]; then
+    NGINX_USER=\$(sed -n 's/^[[:space:]]*user[[:space:]]\{1,\}\([^[:space:];]\{1,\}\).*/\1/p' /etc/nginx/nginx.conf | head -n1)
+fi
+if [ -z "\$NGINX_USER" ] || ! getent passwd "\$NGINX_USER" >/dev/null 2>&1; then
+    NGINX_USER=www-data
+fi
+NGINX_GROUP=\$(id -gn "\$NGINX_USER" 2>/dev/null || echo "\$NGINX_USER")
+if [ -f /etc/foims/config.toml ] && grep -q '^uds_group' /etc/foims/config.toml; then
+    sed -i "s|^uds_group[[:space:]]*=.*|uds_group = \"\$NGINX_USER\"|" /etc/foims/config.toml
+fi
+install -d -m 755 /etc/systemd/system/foims.service.d
+cat > /etc/systemd/system/foims.service.d/uds-group.conf <<FOIMS_EOF
+# 由 foims 包 post 脚本按检测到的 nginx worker 用户自动生成（勿手工编辑）：
+# 使 foims 进程能将 UDS socket 属组改为反代进程的组
+[Service]
+SupplementaryGroups=\$NGINX_GROUP
+FOIMS_EOF
+FOIMS_CERT=/etc/ssl/foims-certs/default_cert.pem
+FOIMS_KEY=/etc/ssl/foims-certs/default_cert.key
+if [ -f "\$FOIMS_CERT" ] && [ -f "\$FOIMS_KEY" ] \\
+    && openssl x509 -checkend 86400 -noout -in "\$FOIMS_CERT" >/dev/null 2>&1; then
+    echo "nginx 默认证书已存在且有效，跳过生成"
+else
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \\
+        -keyout "\$FOIMS_KEY" -out "\$FOIMS_CERT" -days 3650 \\
+        -subj "/O=FOIMS/CN=\$(hostname)" \\
+        -addext "subjectAltName=DNS:\$(hostname),DNS:localhost,IP:127.0.0.1,IP:::1"
+    chmod 644 "\$FOIMS_CERT"
+    chmod 600 "\$FOIMS_KEY"
+fi
+if [ -f /etc/nginx/conf.d/foims.conf ] && command -v nginx >/dev/null 2>&1; then
+    nginx -t || {
+        echo "错误：nginx 配置校验失败（/etc/nginx/conf.d/foims.conf）" >&2
+        exit 1
+    }
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        systemctl reload nginx || true
+    fi
+fi
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl enable foims.service >/dev/null 2>&1 || true
+    systemctl restart foims.service >/dev/null 2>&1 || true
+fi
+
+# 卸载前（erase 卸载 \$1=0 停用并取消自启；升级 \$1=1 不动作，由 %post
+# 的 restart 无缝拉起新版）
+%preun
+if [ "\$1" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl stop foims.service 2>/dev/null || true
+    systemctl disable foims.service >/dev/null 2>&1 || true
+fi
+
+# 卸载后（erase，对齐 DEB purge 语义：彻底清除数据与运行生成物；
+# %config(noreplace) 修改过的配置留 .rpmsave 由运维自行处置）
+%postun
+if [ "\$1" -eq 0 ]; then
+    rm -rf /opt/foims/*
+    rm -rf /etc/ssl/foims-ca /etc/ssl/foims-certs /etc/ssl/foims-import-certs /etc/ssl/foims-import-cas
+    rm -f /etc/systemd/system/foims.service.d/uds-group.conf
+    rmdir --ignore-fail-on-non-empty /etc/systemd/system/foims.service.d 2>/dev/null || true
+    id foims >/dev/null 2>&1 && userdel foims || true
+fi
+
+%files
+%attr(755,root,root) /usr/bin/foims
+/opt/foims/web/static
+/var/log/foims
+%dir /etc/foims
+%config(noreplace) /etc/foims/config.toml
+/etc/nginx/conf.d/foims.conf
+/usr/lib/systemd/system/foims.service
+/usr/share/foims/deploy
+/usr/share/foims/scripts
+/usr/share/doc/foims
+/usr/share/man/man1/foims.1.gz
+/usr/share/polkit-1/actions/cc.example.foims.policy
+/usr/share/polkit-1/rules.d/foims.rules
+SPEC_EOF
+# _dbpath 指向临时库：Debian 宿主 /var/lib/rpm 未初始化，缺该定义 rpmbuild
+# 会报 sqlite 错（与 agent 侧 rpmbuild 同解法）
+rpmbuild -bb --quiet --define "_topdir $RPMTOP" --define "_dbpath $RPMTOP/rpmdb" \
+    --target "$RPM_ARCH" "$RPMTOP/SPECS/foims.spec"
+mv "$RPMTOP/RPMS/$RPM_ARCH/$RPM_NAME" "$PROJECT_DIR/target/$RPM_NAME"
+rm -rf "$RPMTOP"
+
+echo ""
+echo "=== RPM 完成 ==="
+echo "RPM 包: $PROJECT_DIR/target/$RPM_NAME"
+ls -lh "$PROJECT_DIR/target/$RPM_NAME"
+
+echo ""
+echo "21. 打包 ZIP（裸二进制，供无包管理器环境手动部署）..."
+ZIP_NAME="foims_${VERSION}_${ARCH}.zip"
+(cd "$DEBPAK_DIR/usr/bin" && zip -X -q "$PROJECT_DIR/target/$ZIP_NAME" "$BINARY_NAME")
+
+echo ""
+echo "=== 打包完成 ==="
+echo "DEB 包: $PROJECT_DIR/target/$DEB_NAME"
+echo "RPM 包: $PROJECT_DIR/target/$RPM_NAME"
+echo "ZIP 包: $PROJECT_DIR/target/$ZIP_NAME"
+ls -lh "$PROJECT_DIR/target/$DEB_NAME" "$PROJECT_DIR/target/$RPM_NAME" "$PROJECT_DIR/target/$ZIP_NAME"
+
+echo ""
+echo "验证 RPM 包..."
+rpm -qpi "$PROJECT_DIR/target/$RPM_NAME" 2>/dev/null || true
+
 rm -rf "$DEBPAK_DIR"
 echo "已删除临时目录: $DEBPAK_DIR"
 
 echo ""
-echo "安装命令: sudo dpkg -i target/$DEB_NAME"
-echo "查看内容: dpkg -c target/$DEB_NAME"
+echo "安装命令: sudo dpkg -i target/$DEB_NAME  或  sudo rpm -Uvh target/$RPM_NAME"
+echo "查看内容: dpkg -c target/$DEB_NAME  或  rpm -qpl target/$RPM_NAME"

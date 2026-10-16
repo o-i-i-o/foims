@@ -93,3 +93,11 @@
   config-package 现场组包安装到同目录；
 3.CI：ci.yml build 任务独立跑 build-agent.sh（AGENT_BACKEND=zigbuild），
   release 任务改下载 build 任务 artifact 直传发布页，不再重复编译。
+
+# 2026年10月16日19点48分06秒 第1次修改
+
+1.发布产物补齐裸 exe（构建链，agent 程序代码零改动）：Windows 目标在
+  zip 之外新增独立发布形态 foims-agent-<版本>-windows-amd64.exe（与 zip
+  同一二进制 install 拷贝，免解压直接下载运行），纳入 SHA256SUMS 校验和；
+  CI release 上传 glob 为 dist/packages/* 自动覆盖无需改动；版本
+  0.4.0→0.4.1。

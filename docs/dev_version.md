@@ -59,3 +59,11 @@ v0.3.0
 4. 清理：删除迁移后无引用的 i18n 键52个（zh/en 同步，含 cert.ca_help_* 六键、data-management 导入说明/库导出说明、agent_service/sso/ldap/snmp_trap 各 *_desc、agents.alert_hint、workstation.position_hint 等）与无引用孤儿键 user.role_readonly_hint；CSS 删除失用规则 .config-hint/.cert-ca-help*/.license-note/.import-hint/.export-hint/.clear-logs-hint（.hint-text 保留给动态功能性提示）；fail2banManager.js 删除 log-path-hint 引用与渲染块
 5. 联动：根Cargo.toml 0.25.0→0.25.1；前端资源版本经bump_static_version.sh刷新
 
+v0.3.1
+2026101619381001
+1. CI/CD拆分优化（仅z）：ci.yml的build任务拆为主程序build与agent-build两个并行独立任务（主程序fmt/clippy/test/DEB/tar.gz；agent交叉编译zig+zigbuild+deb/rpm/zip，各自独立系统依赖与rust-cache缓存域），产物经两个artifact（foims-release/agent-release）汇入同一release任务统一上传发布页；agent任务去掉无需的主程序依赖（libpq/lintian等），主程序任务去掉rpm/zig交叉依赖；各目标rust-std由build-agent.sh内部rustup target add，agent任务工具链最小化
+
+v0.3.2
+2026101619480601
+1.主程序打包格式补齐（仅z）：scripts/build-deb.sh更名build-pkgs.sh并扩展为多格式打包——deb（原有）+ rpm（rpmbuild复用deb staging打Source tar，_dbpath用户态免root，%pre运行环境强检/%post建用户证书自签nginx对齐/%preun停启用/%postun对齐purge，与deb维护脚本逐一同语义，%config(noreplace)保护本地配置）+ zip（裸二进制，替代原CI内联tar.gz）；agent侧Windows目标补裸exe产物（与zip同二进制）纳入SHA256SUMS，agent工作空间0.4.0→0.4.1；ci.yml主程序任务改跑build-pkgs.sh（artifact与release上传glob同步rpm/zip），release_check.sh恢复Agent构建检查并对齐新脚本名；同步更新foims.service与foims-services两处注释引用
+

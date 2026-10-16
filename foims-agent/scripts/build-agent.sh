@@ -13,6 +13,7 @@
 #   dist/packages/foims-agent_<版本>_<deb架构>.deb   # Linux 程序包（systemd）
 #   dist/packages/foims-agent-<版本>-1.<rpm架构>.rpm # Linux 程序包（systemd）
 #   dist/packages/foims-agent-<版本>-windows-amd64.zip # Windows 程序包
+#   dist/packages/foims-agent-<版本>-windows-amd64.exe # Windows 裸 exe（免解压直用）
 #   dist/packages/SHA256SUMS                     # 全部系统包校验和
 #
 # 分发模型：系统包由 CI 上传至发布页（Release）供用户按需下载；服务端
@@ -539,6 +540,14 @@ package_windows_zip() {
     rm -rf "$ztmp"
 }
 
+# 裸 exe 产物：与 zip 同一二进制的独立发布形态，供免解压直接下载运行
+# （服务注册等部署步骤见发布页 README 或 zip 内 README.txt）
+package_windows_exe() {
+    local target="$1"
+    install -m 755 "$BIN_DIR/$target/$CRATE.exe" \
+        "$PKG_DIR/$CRATE-$VERSION-windows-amd64.exe"
+}
+
 mkdir -p "$PKG_DIR"
 PACK_FAILED=()
 for target in "${BUILT[@]:-}"; do
@@ -550,10 +559,10 @@ for target in "${BUILT[@]:-}"; do
     fi
     echo "-- [$target] 组装系统包"
     if is_windows "$target"; then
-        if package_windows_zip "$target"; then
-            echo "-- [$target] zip 完成"
+        if package_windows_zip "$target" && package_windows_exe "$target"; then
+            echo "-- [$target] zip/exe 完成"
         else
-            echo "错误：[$target] zip 组装失败" >&2
+            echo "错误：[$target] zip/exe 组装失败" >&2
             PACK_FAILED+=("$target")
         fi
     else
@@ -568,7 +577,7 @@ done
 
 # 系统包校验和（覆盖全部产物，随发布页一同上传供下载方校验）
 : > "$PKG_DIR/SHA256SUMS"
-for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.zip; do
+for pkg in "$PKG_DIR"/*.deb "$PKG_DIR"/*.rpm "$PKG_DIR"/*.zip "$PKG_DIR"/*.exe; do
     [ -e "$pkg" ] || continue
     (cd "$PKG_DIR" && sha256sum "$(basename "$pkg")") >> "$PKG_DIR/SHA256SUMS"
 done
