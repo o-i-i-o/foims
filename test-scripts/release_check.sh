@@ -76,7 +76,7 @@ fe_htmlhint() {
     )
 }
 
-fe_prettier()   { ( cd web && npx prettier --check static/js tests eslint.config.mjs jest.config.mjs babel.config.cjs ); }
+fe_prettier()   { ( cd web && npx prettier --check static/js tests eslint.config.mjs jest.config.mjs babel.config.cjs --write); }
 fe_jest()       { ( cd web && npx jest ); }
 fe_depcheck()   { ( cd web && npx depcheck ); }
 
