@@ -129,7 +129,7 @@
 
 .toolbar {
   display: flex;
-  gap: var(--space-lg);
+  gap: var(--space-sm);
   align-items: center;
 }
 
