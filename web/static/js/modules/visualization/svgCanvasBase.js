@@ -235,7 +235,10 @@ export class SVGCanvasBase {
     }
     const MAX_GRID_LINES = 500;
     // 按索引循环：gx += step 累积在浮点精度停滞时（gx 大于 2^53 后加 step 不变）会死循环
-    const lineCountX = Math.min(Math.ceil((endX - Math.floor(cover.x / step) * step) / step), MAX_GRID_LINES);
+    const lineCountX = Math.min(
+      Math.ceil((endX - Math.floor(cover.x / step) * step) / step),
+      MAX_GRID_LINES
+    );
     const startX = Math.floor(cover.x / step) * step;
     for (let i = 0; i < lineCountX; i++) {
       const gx = startX + i * step;
@@ -256,7 +259,10 @@ export class SVGCanvasBase {
       group.appendChild(label);
     }
 
-    const lineCountY = Math.min(Math.ceil((endY - Math.floor(cover.y / step) * step) / step), MAX_GRID_LINES);
+    const lineCountY = Math.min(
+      Math.ceil((endY - Math.floor(cover.y / step) * step) / step),
+      MAX_GRID_LINES
+    );
     const startY = Math.floor(cover.y / step) * step;
     for (let j = 0; j < lineCountY; j++) {
       const gy = startY + j * step;
