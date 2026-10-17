@@ -14,6 +14,7 @@ use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppMessage, log_error, log_info, log_warn, msg};
 use foims_models::{IpDetail, IpDetailCreate, IpDetailWithNames};
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
@@ -814,23 +815,32 @@ pub async fn sync_ip_status_by_staleness(
     Ok(stale)
 }
 
-/// 「默认拉取设备」存储键位（system_configs）：拉取模态框每次成功拉取后
-/// 将本次设备集合持久化，下次打开模态框按其预选。
+/// 「默认拉取配置」存储键位（system_configs）：拉取模态框每次成功拉取后
+/// 将本次设备集合与子网选择持久化，下次打开模态框按其预选。
 const MAC_PULL_CONFIG_TYPE: &str = "mac_pull";
-const MAC_PULL_DEFAULT_DEVICES_KEY: &str = "default_device_ids";
+const MAC_PULL_DEFAULTS_KEY: &str = "default_pull";
 
-async fn save_pull_default_devices(
+/// 默认拉取配置：设备集合（1..=100）与子网选择（None 表示全部子网）
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct MacPullDefaults {
+    #[serde(default)]
+    pub device_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub subnet_id: Option<Uuid>,
+}
+
+async fn save_pull_defaults(
     conn: &sqlx::PgPool,
-    device_ids: &[Uuid],
+    defaults: &MacPullDefaults,
 ) -> Result<(), AppError> {
-    let value = serde_json::to_string(device_ids)
+    let value = serde_json::to_string(defaults)
         .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
     sqlx::query(
         "INSERT INTO system_configs (config_type, key, value) VALUES ($1, $2, $3)
          ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value",
     )
     .bind(MAC_PULL_CONFIG_TYPE)
-    .bind(MAC_PULL_DEFAULT_DEVICES_KEY)
+    .bind(MAC_PULL_DEFAULTS_KEY)
     .bind(&value)
     .execute(conn)
     .await
@@ -838,31 +848,31 @@ async fn save_pull_default_devices(
     Ok(())
 }
 
-/// GET /api/resources/ip/pull-defaults：返回「默认拉取设备」ID 列表
-///（未配置返回空数组）。仅作拉取模态框预选回显，不做设备存在性过滤——
-/// 已删除的设备由前端与设备选项求交时自然剔除。
+/// GET /api/resources/ip/pull-defaults：返回「默认拉取配置」（设备集合 + 子网，
+/// 未配置返回空默认）。仅作拉取模态框预选回显，不做设备存在性过滤——
+/// 已删除的设备由前端与设备选项求交时自然剔除；存量值损坏时降级为空默认。
 pub async fn get_pull_default_devices<P: DbProvider>(
     State(state): State<Arc<P>>,
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
-    let ids: Vec<Uuid> = match sqlx::query_scalar::<_, String>(
+    let defaults = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = $1 AND key = $2",
     )
     .bind(MAC_PULL_CONFIG_TYPE)
-    .bind(MAC_PULL_DEFAULT_DEVICES_KEY)
+    .bind(MAC_PULL_DEFAULTS_KEY)
     .fetch_optional(&state.pool()?.get_conn())
     .await
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?
     {
-        Some(value) => serde_json::from_str(&value).map_err(|e| {
+        Some(value) => serde_json::from_str(&value).unwrap_or_else(|e| {
             foims_common::log_error!("log.ip.pull_defaults_parse_failed", error = e);
-            AppError::Internal(msg("server.ip.pull_defaults_parse_failed").with("error", e))
-        })?,
-        None => Vec::new(),
+            MacPullDefaults::default()
+        }),
+        None => MacPullDefaults::default(),
     };
 
     Ok(foims_common::ok_json(
-        ids,
+        defaults,
         "server.ip.pull_defaults_retrieved",
     ))
 }
@@ -904,8 +914,15 @@ pub async fn pull_ip_details<P: DbProvider>(
         }
     }
 
-    // 本次设备集合持久化为「默认拉取设备」（所有成功路径均保存，含空态）
-    save_pull_default_devices(&conn, &device_ids).await?;
+    // 本次设备集合与子网选择持久化为「默认拉取配置」（所有成功路径均保存，含空态）
+    save_pull_defaults(
+        &conn,
+        &MacPullDefaults {
+            device_ids: device_ids.clone(),
+            subnet_id: req.subnet_id,
+        },
+    )
+    .await?;
 
     if total.switch_macs_empty {
         if total.total_macs_on_switch == 0 {

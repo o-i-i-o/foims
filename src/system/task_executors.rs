@@ -142,29 +142,37 @@ impl TaskExecutor for MacSyncTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let device_id = ctx
+        // 设备集合：任务自身 config 持久化的 device_ids 数组（1..=100），
+        // 依次同步、后设备观测覆盖先设备写入；子网缺省同步全部子网
+        let device_ids: Vec<Uuid> = ctx
             .config
-            .get("device_id")
-            .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok());
-        // subnet_id 可选：缺省（含旧配置缺失/损坏）时同步该设备的全部子网
+            .get("device_ids")
+            .cloned()
+            .map(serde_json::from_value::<Vec<Uuid>>)
+            .transpose()
+            .map_err(|e| {
+                SchedulerError::Validation(
+                    msg("server.task.mac_sync_invalid_config").with("error", e),
+                )
+            })?
+            .unwrap_or_default();
+        if device_ids.is_empty() {
+            return Err(SchedulerError::Validation(msg(
+                "server.task.mac_sync_missing_config",
+            )));
+        }
         let subnet_id = ctx
             .config
             .get("subnet_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
 
-        match device_id {
-            Some(device_id) => {
-                foims_resource::ip::pull_ip_details_internal(&ctx.pool, device_id, subnet_id)
-                    .await
-                    .map(|()| "server.task.mac_sync_completed".to_string())
-                    .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))
-            }
-            None => Err(SchedulerError::Validation(msg(
-                "server.task.mac_sync_missing_config",
-            ))),
+        for device_id in &device_ids {
+            foims_resource::ip::pull_ip_details_internal(&ctx.pool, *device_id, subnet_id)
+                .await
+                .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))?;
         }
+        Ok("server.task.mac_sync_completed".to_string())
     }
 }
 

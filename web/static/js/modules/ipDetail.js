@@ -47,7 +47,8 @@ const PULL_MAC_DEVICE_LIST_ID = "pull-mac-device-list";
 // ====== IP详情 ======
 
 // 加载设备复选列表到拉取MAC模态框（仅列出配置了 SNMP 的设备，
-// 勾选一个或多个作为本次拉取设备；「默认拉取设备」按服务端保存值预选）
+// 勾选一个或多个作为本次拉取设备；「默认拉取配置」按服务端保存值预选），
+// 返回默认配置供模态框预选子网
 async function loadDevicesForPullMac() {
   // 设备列表走 resources.js 的共享下拉缓存（10s TTL，写操作成功后自动失效），
   // page_size=1000 全量拉取语义与原实现一致
@@ -65,41 +66,45 @@ async function loadDevicesForPullMac() {
     if (list) {
       list.innerHTML = `<div class="user-checkbox-item">${escapeHtml(t("ip.load_failed_short"))}</div>`;
     }
-    return;
+    return { device_ids: [], subnet_id: null };
   }
 
   // success=false 时与原实现一致：仅保留占位项
   const devices = result.success ? (result.data?.items ?? []) : null;
   if (devices === null) {
     renderPullMacDevices(list, [], t("ip.select_device"));
-    return;
+    return { device_ids: [], subnet_id: null };
   }
   if (devices.length === 0) {
     renderPullMacDevices(list, [], t("ip.no_device_data"));
-    return;
+    return { device_ids: [], subnet_id: null };
   }
 
   // snmp_community 在列表响应中已脱敏为 null，判定用后端提供的 snmp_configured 标记
   const snmpDevices = devices.filter((dev) => dev.snmp_configured);
   if (snmpDevices.length === 0) {
     renderPullMacDevices(list, [], t("ip.no_snmp_device"));
-    return;
+    return { device_ids: [], subnet_id: null };
   }
 
-  // 默认拉取设备：服务端保存的上次拉取集合，与现存可选项求交后预选
-  //（已删除的设备自然剔除）；读取失败不阻塞模态框，仅不预选
-  let defaultIds = [];
+  // 默认拉取配置：服务端保存的上次拉取设备集合与子网，设备与现存可选项求交后
+  // 预选（已删除的设备自然剔除）；读取失败不阻塞模态框，仅不预选
+  let defaults = { device_ids: [], subnet_id: null };
   try {
     const defaultsResult = await apiGet("/api/resources/ip/pull-defaults");
-    if (defaultsResult.success && Array.isArray(defaultsResult.data)) {
+    if (defaultsResult.success && defaultsResult.data) {
       const validIds = new Set(snmpDevices.map((dev) => dev.id));
-      defaultIds = defaultsResult.data.filter((id) => validIds.has(id));
+      defaults = {
+        device_ids: (defaultsResult.data.device_ids || []).filter((id) => validIds.has(id)),
+        subnet_id: defaultsResult.data.subnet_id || null
+      };
     }
   } catch (error) {
-    console.debug("加载默认拉取设备失败:", error);
+    console.debug("加载默认拉取配置失败:", error);
   }
 
-  renderPullMacDevices(list, snmpDevices, null, defaultIds);
+  renderPullMacDevices(list, snmpDevices, null, defaults.device_ids);
+  return defaults;
 }
 
 // 渲染拉取设备复选列表（placeholder 非空时渲染占位提示，否则渲染设备项）
@@ -187,7 +192,13 @@ async function openPullMacModal() {
     return;
   }
 
-  await Promise.all([loadDevicesForPullMac(), loadNetworksForPullMac()]);
+  // 两个加载均就绪后再预选默认子网（此时子网选项已存在，value 赋值生效）；
+  // 默认子网已被删除时赋值自然回落为空值选项（全部子网）
+  const [, defaults] = await Promise.all([loadDevicesForPullMac(), loadNetworksForPullMac()]);
+  const networkSelect = document.getElementById("pull-mac-network-select");
+  if (networkSelect && defaults?.subnet_id) {
+    networkSelect.value = defaults.subnet_id;
+  }
 
   const form = document.getElementById("pull-mac-form");
   form.onsubmit = async (e) => {

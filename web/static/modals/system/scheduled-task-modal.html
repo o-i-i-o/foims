@@ -46,16 +46,14 @@
         <code id="scheduled-task-cron-preview">0 */6 * * *</code>
         <a href="#" id="cron-examples-link" data-i18n="scheduled_tasks.cron_hint_link">View cron expression examples</a></small>
     </div>
-    <div class="form-row">
-      <div class="form-group hidden" id="mac-sync-config">
-        <label for="scheduled-task-device-id"><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></label>
-        <select id="scheduled-task-device-id" name="scheduled_task_device_id">
-          <option value="" data-i18n="scheduled_tasks.config_fields.select_device">Select Device</option>
-        </select>
+    <!-- MAC 同步配置：两列布局，左侧设备复选列表，右侧子网下拉
+        （与 IP 页拉取模态框同布局；窄屏由 form-row auto-fit 自动回落单列） -->
+    <div class="form-row hidden" id="mac-sync-config">
+      <div class="form-group form-group-block">
+        <span class="group-label"><span data-i18n="scheduled_tasks.config_fields.device">Device</span><span class="required">*</span></span>
+        <div id="scheduled-task-device-list" class="users-checkbox-list"></div>
       </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group hidden" id="mac-sync-network-config">
+      <div class="form-group form-group-block">
         <label for="scheduled-task-subnet-id"><span data-i18n="scheduled_tasks.config_fields.network">Network</span></label>
         <select id="scheduled-task-subnet-id" name="scheduled_task_subnet_id">
           <option value="" data-i18n="scheduled_tasks.config_fields.all_networks">All Subnets</option>

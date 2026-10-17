@@ -11,7 +11,7 @@ import {
 
 import { t } from "../utils/i18n.js";
 import { openModal, closeModal } from "../utils/modalLoader.js";
-import { fillSelect } from "../utils/resources.js";
+import { fillSelect, fetchOptionItems } from "../utils/resources.js";
 import { iconButton } from "../utils/icons.js";
 import { showConfirm } from "../utils/confirm.js";
 
@@ -92,7 +92,6 @@ async function handleTaskTypeChange(e) {
   const isMacSync = taskType === "mac_sync";
 
   document.getElementById("mac-sync-config")?.classList.toggle("hidden", !isMacSync);
-  document.getElementById("mac-sync-network-config")?.classList.toggle("hidden", !isMacSync);
   document
     .getElementById("log-cleanup-config")
     ?.classList.toggle("hidden", taskType !== "log_cleanup");
@@ -102,20 +101,12 @@ async function handleTaskTypeChange(e) {
 
   if (isMacSync) {
     // 选项就绪后再返回，编辑场景的调用方依赖此时序回显选中值
-    await Promise.all([populateDeviceSelect(), populateNetworkSelect()]);
+    await Promise.all([populateDeviceCheckList(), populateNetworkSelect()]);
   }
 }
 
 // 下拉选项改由 resources.js 的 fillSelect 按需拉取（10s TTL 共享缓存），
 // 不再于页面初始化时整表预载
-function populateDeviceSelect() {
-  return fillSelect("scheduled-task-device-id", "/api/resources/devices?page_size=1000", {
-    placeholderKey: "scheduled_tasks.config_fields.select_device",
-    itemToLabel: (dev) => dev.name || dev.hostname || dev.id,
-    errorLabelKey: "common.device"
-  });
-}
-
 function populateNetworkSelect() {
   // 空值选项即“全部子网”：不选具体子网时同步该设备的全部子网
   return fillSelect("scheduled-task-subnet-id", "/api/resources/networks", {
@@ -123,6 +114,63 @@ function populateNetworkSelect() {
     itemToLabel: (net) => net.name || net.id,
     errorLabelKey: "common.subnet"
   });
+}
+
+// MAC 同步设备复选列表：与 IP 页拉取模态框同布局同口径，仅列出配置了 SNMP
+// 的设备；返回设备数组供编辑场景校验 config 中已删设备
+async function populateDeviceCheckList() {
+  let result = null;
+  try {
+    result = await fetchOptionItems("/api/resources/devices?page_size=1000");
+  } catch (error) {
+    console.error("加载设备列表失败:", error);
+  }
+
+  const list = document.getElementById("scheduled-task-device-list");
+  const devices = result?.success ? (result.data?.items ?? []) : [];
+  const snmpDevices = devices.filter((dev) => dev.snmp_configured);
+
+  if (!list) {
+    return snmpDevices;
+  }
+  if (result === null) {
+    list.innerHTML = `<div class="user-checkbox-item">${escapeHtml(t("ip.load_failed_short"))}</div>`;
+    return snmpDevices;
+  }
+  if (snmpDevices.length === 0) {
+    list.innerHTML = `<div class="user-checkbox-item">${escapeHtml(t("ip.no_snmp_device"))}</div>`;
+    return snmpDevices;
+  }
+
+  list.innerHTML = "";
+  snmpDevices.forEach((dev) => {
+    const item = document.createElement("div");
+    item.className = "user-checkbox-item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = `scheduled-task-device-${dev.id}`;
+    checkbox.value = dev.id;
+
+    const label = document.createElement("label");
+    label.htmlFor = checkbox.id;
+    label.className = "user-info";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "user-name";
+    nameSpan.textContent = dev.name || dev.hostname || dev.id;
+
+    const ipSpan = document.createElement("span");
+    ipSpan.className = "user-email";
+    ipSpan.textContent = dev.ip_address || "-";
+
+    label.appendChild(nameSpan);
+    label.appendChild(ipSpan);
+    item.appendChild(checkbox);
+    item.appendChild(label);
+    list.appendChild(item);
+  });
+  return snmpDevices;
 }
 
 async function loadScheduledTasks(sortBy = null, sortOrder = null) {
@@ -241,7 +289,15 @@ async function editScheduledTask(id) {
     await handleTaskTypeChange({ target: { value: task.task_type } });
 
     if (task.task_type === "mac_sync" && task.config) {
-      document.getElementById("scheduled-task-device-id").value = task.config.device_id || "";
+      // 勾选设备：config.device_ids 与现存复选项求交，已删除设备自然剔除
+      (task.config.device_ids || []).forEach((id) => {
+        const checkbox = document.querySelector(
+          `#scheduled-task-device-list input[value="${CSS.escape(id)}"]`
+        );
+        if (checkbox) {
+          checkbox.checked = true;
+        }
+      });
       document.getElementById("scheduled-task-subnet-id").value = task.config.subnet_id || "";
     } else if (task.task_type === "log_cleanup" && task.config) {
       document.getElementById("scheduled-task-keep-days").value = task.config.days || 30;
@@ -372,14 +428,17 @@ async function saveScheduledTask() {
   let config = {};
 
   if (taskType === "mac_sync") {
-    const deviceId = document.getElementById("scheduled-task-device-id").value;
-    // 子网可缺省：空值表示全部子网，仅设备必选
+    // 勾选设备集合：多设备依次同步、后设备观测覆盖先设备写入
+    const deviceIds = [
+      ...document.querySelectorAll("#scheduled-task-device-list input[type=checkbox]:checked")
+    ].map((cb) => cb.value);
+    // 子网可缺省：空值表示全部子网，设备至少勾选一台
     const subnetId = document.getElementById("scheduled-task-subnet-id").value;
-    if (!deviceId) {
+    if (deviceIds.length === 0) {
       showToast(t("scheduled_tasks.required_fields"), "warning");
       return;
     }
-    config = subnetId ? { device_id: deviceId, subnet_id: subnetId } : { device_id: deviceId };
+    config = subnetId ? { device_ids: deviceIds, subnet_id: subnetId } : { device_ids: deviceIds };
   } else if (taskType === "log_cleanup") {
     const keepDays = parseInt(document.getElementById("scheduled-task-keep-days").value, 10) || 30;
     config = { days: keepDays };

@@ -115,3 +115,10 @@ v0.6.0
 2. IP 判活优化：sync_switch_macs 在观测写入后将判活范围内未被本次观测匹配的 active IP 置 inactive（指定子网取该子网、全部子网模式仅取观测触达子网避免未覆盖网段误杀；ARP 缓存为空不判活），同步结果新增 deactivated 计数并入完成消息；sync_ip_status_by_staleness 移除按陈旧 last_seen 的反向恢复逻辑（与新判活互相翻转），仅保留 active→inactive 陈旧翻转
 3. 通知配置矩阵化（系统模块小功能）：「MAC地址变更通知」卡片改为「通知配置」矩阵表格（行=MAC地址变更/主机告警，列=邮件通知/Webhook 占位徽标待实现）；NotificationMethods（mac_change/agent_alert，serde 缺省全开保持存量行为）存 system_configs（notification/methods），GET/PUT /api/system/notification/settings 联动读写；MAC 变更邮件与站内通知增加来源设备注明（send_mac_change_email 加 source_device 参数），主机告警 notify_admins 接入 send_host_alert_email 邮件发送（方式开关门控，失败仅记日志不阻塞状态翻转）；前端 systemManager 读写 methods，i18n zh/en 补齐，帮助键 card.notify_mac 更名 card.notify
 4. 联动：根 Cargo.toml 0.26.0→0.26.1，foims-models 0.2.9→0.2.10，foims-resource 0.1.7→0.1.8，foims-auth 0.1.3→0.1.4，foims-agent-service 0.1.11→0.1.12；前端资源版本经 bump_static_version.sh 刷新
+
+v0.7.0
+2026101716380501
+1. 默认拉取配置扩展为设备+子网（IP模块小功能）：system_configs 存储由 default_device_ids JSON 数组改为 default_pull 对象 {device_ids, subnet_id}（MacPullDefaults 结构，损坏降级空默认不再报错），GET /api/resources/ip/pull-defaults 返回对象、pull_ip_details 成功路径保存本次设备集合与子网选择；拉取模态框改两列布局（左设备复选列表、右子网下拉，form-row auto-fit 窄屏自动回落单列），打开时按默认配置预选设备与子网
+2. 定时任务 MAC 同步多设备化（系统模块小功能，与手动拉取默认配置不共享）：任务 config 由单 device_id 改为 device_ids 数组（1..=100 语义同手动拉取），执行器依次调用 pull_ip_details_internal、后设备观测覆盖先设备写入，任一失败即任务失败；前端任务弹窗同两列布局（设备复选列表+子网下拉，仅列 snmp_configured 设备），回填按 device_ids 勾选（已删设备自然剔除）、提交保存 device_ids+subnet_id 至任务 config
+3. 死键与文案清理：删 scheduled_tasks.config_fields.select_device 与 server.ip.pull_defaults_parse_failed（均无引用）；server.task.mac_sync_missing_config 文案改 device_ids 口径，新增 server.task.mac_sync_invalid_config（配置解析失败）
+4. 联动：根 Cargo.toml 0.26.1→0.26.2，foims-resource 0.1.8→0.1.9；前端资源版本经 bump_static_version.sh 刷新

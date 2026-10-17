@@ -1391,7 +1391,6 @@
     },
     "config_fields": {
       "device": "Device",
-      "select_device": "Select Device",
       "network": "Subnet",
       "all_networks": "All Subnets",
       "keep_days": "Keep Days",
@@ -2073,8 +2072,7 @@
       "no_managed_ips": "No managed IP addresses found in this subnet",
       "no_managed_ips_all": "No managed IP addresses matched this device's MAC table",
       "no_physical_interface": "Device has no available physical interface; create one first or specify device_interface_id",
-      "pull_defaults_parse_failed": "Failed to parse default pull devices config: {{error}}",
-      "pull_defaults_retrieved": "Default pull devices retrieved",
+      "pull_defaults_retrieved": "Default pull config retrieved",
       "validation": {
         "device_ids_range": "Number of pull devices must be between 1 and 100",
         "ip_address_invalid": "Please enter a valid IP address",
@@ -2411,7 +2409,8 @@
       "log_cleanup_completed": "Log records cleaned",
       "logs_retrieved": "Task logs retrieved",
       "mac_sync_completed": "MAC sync completed",
-      "mac_sync_missing_config": "MAC sync task requires device_id (subnet optional; defaults to all subnets)",
+      "mac_sync_missing_config": "MAC sync task requires device_ids list (subnet optional; defaults to all subnets)",
+      "mac_sync_invalid_config": "Invalid MAC sync task config: {{error}}",
       "next_run_calc_task_failed": "Failed to spawn next-run calculation task",
       "next_run_update_failed": "Failed to update next run time",
       "not_found": "Scheduled task not found",

@@ -1391,7 +1391,6 @@
     },
     "config_fields": {
       "device": "设备",
-      "select_device": "选择设备",
       "network": "子网",
       "all_networks": "全部子网",
       "keep_days": "保留天数",
@@ -2073,8 +2072,7 @@
       "no_managed_ips": "未发现属于该子网的已管理IP地址",
       "no_managed_ips_all": "该设备的MAC表未匹配到任何已管理IP地址",
       "no_physical_interface": "设备没有可用的物理接口，请先创建接口或指定 device_interface_id",
-      "pull_defaults_parse_failed": "默认拉取设备配置解析失败: {{error}}",
-      "pull_defaults_retrieved": "默认拉取设备获取成功",
+      "pull_defaults_retrieved": "获取默认拉取配置成功",
       "validation": {
         "device_ids_range": "拉取设备数量必须在1到100之间",
         "ip_address_invalid": "请输入有效的IP地址",
@@ -2411,7 +2409,8 @@
       "log_cleanup_completed": "已清理日志记录",
       "logs_retrieved": "获取任务日志成功",
       "mac_sync_completed": "MAC同步成功",
-      "mac_sync_missing_config": "MAC同步任务需要配置device_id（子网可选，缺省同步全部子网）",
+      "mac_sync_missing_config": "MAC同步任务需要配置设备列表device_ids（子网可选，缺省同步全部子网）",
+      "mac_sync_invalid_config": "MAC同步任务配置无效: {{error}}",
       "next_run_calc_task_failed": "计算下次执行时间任务失败",
       "next_run_update_failed": "更新下次执行时间失败",
       "not_found": "定时任务不存在",

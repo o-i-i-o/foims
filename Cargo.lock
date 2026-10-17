@@ -1455,7 +1455,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "async-trait",
  "axum",
@@ -1652,7 +1652,7 @@ dependencies = [
 
 [[package]]
 name = "foims-resource"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "async-snmp",
  "axum",
