@@ -1,7 +1,9 @@
-//! 设备 MAC/LLDP 表（snmp_macs、device_lldps）结构创建。
+//! 设备 SNMP 采集域（snmp_macs、device_lldps）表结构创建。
 //!
 //! snmp_macs 存储设备 SNMP 观测到的 ARP/FDB 条目（IP ↔ MAC ↔
-//! 学习端口 ↔ VLAN），与端口台账表 device_interfaces 无重复语义。
+//! 学习端口 ↔ VLAN），device_lldps 存储设备 LLDP 邻居发现条目；
+//! 二者同源于设备 SNMP 采集，与端口台账表 device_interfaces
+//! 的 mac_address/vlan_id 配置语义无重复。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(

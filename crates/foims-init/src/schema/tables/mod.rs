@@ -5,9 +5,10 @@ mod cabinets;
 mod cable_links;
 mod device_interfaces;
 mod device_nics;
+mod device_snmp;
 mod device_templates;
 mod devices;
-mod element;
+mod element_layouts;
 mod employees;
 mod indexes;
 mod ips;
@@ -18,10 +19,9 @@ mod notifications;
 mod org_templates;
 mod organizations;
 mod patch_panels;
+mod revoked_tokens;
 mod rooms;
-mod snmp_macs;
 mod system;
-mod tokens;
 mod topology;
 mod triggers;
 mod users;
@@ -58,13 +58,13 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     workstations::create(pool).await?;
 
     // 布局元素（引用 rooms）
-    element::create(pool).await?;
+    element_layouts::create(pool).await?;
 
     // 设备（引用 workstations/positions/device_templates）
     devices::create(pool).await?;
 
-    // 设备 MAC/LLDP（引用 devices）
-    snmp_macs::create(pool).await?;
+    // 设备 SNMP 采集域：MAC 观测/LLDP 邻居（引用 devices）
+    device_snmp::create(pool).await?;
 
     // 设备网卡（引用 devices，先于 device_interfaces 创建）
     device_nics::create(pool).await?;
@@ -89,7 +89,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 日志/令牌/通知（引用 users）
     logs::create(pool).await?;
-    tokens::create(pool).await?;
+    revoked_tokens::create(pool).await?;
     notifications::create(pool).await?;
 
     // 主机采集 Agent（device_id 引用 devices；history 引用 agents）

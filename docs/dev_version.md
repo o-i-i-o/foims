@@ -98,3 +98,7 @@ v0.4.1
 2026101710045801
 1. 表名消歧义（普通修改z+1）：device_macs 改名 snmp_macs——该表存储设备 SNMP 观测到的 ARP/FDB 条目（IP↔MAC↔学习端口↔VLAN），原名易与端口台账 device_interfaces 的 mac_address/vlan_id 字段语义混淆；列结构与数据不变
 2. 联动：foims-init 建表模块改名 snmp_macs.rs（mod/索引/updated_at触发器注册/check.rs 表与列清单同步）；mac.rs/ip.rs/topology.rs 全部 SQL 引用改表名；数据导入导出表注册名 device→snmp_macs（spec.rs/modules.rs）；模型 DeviceMac 改名 SnmpMac；新增 upgrade/0.25/upgrade_0.25.1.sql（RENAME 表+3索引，旧备份 device_macs 表导入失败属预期，观测数据可重新同步拉取）；API 路径与前端不变
+
+v0.4.2
+2026101710221801
+1. 初始化模块建表文件命名对齐领域聚合惯例（纯文件组织调整，无数据库对象变化）：评估确认一表一文件方案不采纳（建表代码原按领域/模块聚合——agents/cabinets/logs/network/rooms/system/topology/users/workstations 均为领域名+同域附属表，单表文件文件名=表名）；snmp_macs.rs 改名 device_snmp.rs（文件实际承载设备 SNMP 采集域两张表：snmp_macs MAC 观测 + device_lldps LLDP 邻居，按主表命名重演歧义）；同类命名偏差一并修正：element.rs→element_layouts.rs、tokens.rs→revoked_tokens.rs（单表文件文件名=表名）；mod.rs 与头注释同步
