@@ -162,6 +162,9 @@ function createPortItem(iface) {
   if (ipList.length) {
     tipParts.push(`IP: ${ipList.join(", ")}`);
   }
+  if (iface.vlan_id) {
+    tipParts.push(`${t("device.vlan_id")}: ${iface.vlan_id}`);
+  }
   if (iface.status && iface.status !== "up") {
     tipParts.push(`${t("ip.status")}: ${iface.status}`);
   }

@@ -114,6 +114,7 @@ log:
     snmp:
       auth_built: "认证构建成功"
       if_name_walk_failed: "SNMP walk 接口名称映射失败"
+      ports_walk_failed: "SNMP walk 端口采集表失败，相关字段留空"
       private_ip_allowed: "目标IP {{ip}} 为私有地址，允许连接"
       test_connecting: "开始连接: {{addr}} (超时: {{timeout}}秒)"
       test_params: "测试参数: ip={{ip}}, port={{port}}, version={{version}}, community={{community}}, username={{username}}"

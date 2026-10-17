@@ -85,3 +85,11 @@ v0.3.4
 v0.3.5
 2026101623060801
 1. Agent配置包zip形态补Linux卸载脚本 + agent程序包Windows服务模式配套（仅z，主仓侧只动foims-agent-service打包与注释）：packaging.rs新增UNINSTALL_SH（uninstall.sh随zip包下发，0755）——配置经deb/rpm安装（foims-agent-config）时拒绝执行提示用包管理器卸载（防双轨残留），手动解压路径则stop+disable服务并删除/etc/foims-agent/，程序本体始终提示用系统包管理器卸载；ZIP_README重写为linux+Windows双平台安装/卸载说明（Linux复制到/etc/foims-agent/+systemctl restart、Windows经程序包install.cmd注册服务）；zip测试条目5→6（uninstall.sh权限0o755）；api.rs模块头/格式校验注释「exe」→「zip」双平台同步；agent工作空间侧为SCM服务模式改造（--service + install.cmd/uninstall.cmd + Windows产物回归zip），agent 0.4.2→0.5.0独立版本记录；cargo test -p foims-agent-service全绿、clippy -D warnings与fmt通过
+
+v0.4.0
+2026101709380901
+1. SNMP端口二层属性采集实现（小功能y+1）：get_device_ports_via_snmp由仅walk ifDescr扩展为完整采集——ifAdminStatus/ifOperStatus推导status（admin-down优先、oper 2..=6归down）、ifHighSpeed优先ifSpeed兜底格式化speed（整千Gbps/其余Mbps）、dot1dBasePortIfIndex+dot1qPvid采集access VLAN、dot1qVlanStaticEgressPorts位图展开按VLAN成员数推导port_type（>1 trunk、=1 access，非交换设备字段留NULL）；新增walk_index_value_map单弧索引表通用walk与log.device.snmp.ports_walk_failed日志键（zh/en）
+2. 端口同步改UPDATE+INSERT双语句同事务：先以本批采集值COALESCE刷新已存在端口的port_type/status/speed/vlan_id（采集缺失保留原值，避免无VLAN表设备手动配置被默认值覆盖），再ON CONFLICT DO NOTHING插入新端口；同步消息文案改「新增/更新/跳过无效」口径（zh/en三键重写），skipped语义改为校验未通过的无效端口数
+3. 前端补齐：设备MAC表加VLAN列（deviceMacLldp.js）、统一端口tooltip加VLAN行（unifiedDevicePorts.js）、拓扑详情端口表加VLAN与速率列（TopologyModal.js）
+4. 死代码清理：删除无引用结构体DeviceMacCreate及其反序列化测试、仅其使用的validate_ip_address_string（后端yml本就无其引用的ip_format/interface_length键，佐证死代码）
+5. 联动：根Cargo.toml 0.25.2→0.25.3，foims-models 0.2.8→0.2.9，foims-resource 0.1.6→0.1.7；前端资源版本经bump_static_version.sh刷新

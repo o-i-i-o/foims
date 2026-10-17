@@ -233,6 +233,8 @@ export class TopologyModal {
             <th>${t("visualization.port_number")}</th>
             <th>${t("visualization.port_name")}</th>
             <th>${t("visualization.port_status")}</th>
+            <th>${t("device.vlan_id")}</th>
+            <th>${t("device.speed")}</th>
           </tr>
         </thead>
         <tbody>
@@ -243,6 +245,8 @@ export class TopologyModal {
               <td>${escapeHtml(p.name || "")}</td>
               <td>${escapeHtml(p.description || "")}</td>
               <td>${escapeHtml(p.status || "")}</td>
+              <td>${escapeHtml(p.vlan_id != null ? String(p.vlan_id) : "")}</td>
+              <td>${escapeHtml(p.speed || "")}</td>
             </tr>`
             )
             .join("")}

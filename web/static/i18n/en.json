@@ -1841,9 +1841,9 @@
         "port_type_invalid": "Port type must be one of: access, trunk, uplink, stack, console",
         "snmp_no_ports": "No port information retrieved",
         "status_invalid": "Port status must be one of: up, down, admin-down",
-        "sync_all_skipped": "All {{skipped}} ports already exist, skipped",
-        "sync_partial": "Saved {{saved}} ports, skipped {{skipped}} existing ports",
-        "sync_saved": "Saved {{saved}} ports to database",
+        "sync_all_skipped": "All {{skipped}} ports are invalid, nothing synced",
+        "sync_partial": "Added {{saved}} ports, updated {{updated}} ports, skipped {{skipped}} invalid ports",
+        "sync_saved": "Sync complete: {{saved}} ports added, {{updated}} ports updated",
         "updated": "Interface updated successfully"
       },
       "list_retrieved": "Device list retrieved successfully",

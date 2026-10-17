@@ -3,10 +3,10 @@
 //! 设备端口与设备网口已合并：接口按 `physical_type`（物理形态：
 //! rj45/sfp/.../virtual）与 `interface_role`（角色：management/
 //! business/...）两个正交维度描述；网络设备的二层属性（port_type/
-//! status/speed）由 SNMP 同步维护。`device_managed` 标记网口是否由
-//! 设备编辑模态框托管（设备模态框新建为 true，端口模态框与 SNMP
-//! 同步生成的为 false）。未显式指定网卡的端口按名称前缀自动生成
-//! 板卡网卡（如 `xg1/0/0/1` → `设备名-xg1`）。
+//! status/speed/vlan_id）由 SNMP 同步维护。`device_managed` 标记
+//! 网口是否由设备编辑模态框托管（设备模态框新建为 true，端口模态框
+//! 与 SNMP 同步生成的为 false）。未显式指定网卡的端口按名称前缀
+//! 自动生成板卡网卡（如 `xg1/0/0/1` → `设备名-xg1`）。
 //!
 //! 更新时字段缺失表示不修改，可空字段（MAC/描述等）以 `Some(None)`
 //! 显式置空。列表过滤使用 sqlx `QueryBuilder` 动态拼接，全部用户
@@ -548,10 +548,16 @@ fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
 
 /// 从 SNMP 同步设备端口（批量入库，未指定类型时回退默认值）。
 ///
-/// 以 `(device_id, name)` 唯一约束做批量 `INSERT ... ON CONFLICT
-/// DO NOTHING`：已存在的接口跳过，未知的入库，单次往返完成。
-/// 网卡按端口名前缀自动生成板卡；同步来源接口一律不托管
-/// （`device_managed = false`，不进设备模态框）。
+/// 两语句同事务，先 UPDATE 后 INSERT：
+/// 1. UPDATE 以本批 SNMP 采集值刷新已存在端口的二层属性
+///    （port_type/status/speed/vlan_id，`COALESCE` 使采集缺失的字段
+///    保留原值，避免无 VLAN 表设备上的手动配置被默认值覆盖）；
+/// 2. INSERT 对不存在的新端口以 `(device_id, name)` 唯一约束
+///    `ON CONFLICT DO NOTHING` 入库（单次往返），网卡按端口名前缀
+///    自动生成板卡；同步来源接口一律不托管（`device_managed = false`，
+///    不进设备模态框）。
+///
+/// UPDATE 先行保证 INSERT 的新行不会被同一事务再次更新。
 pub async fn sync_ports_from_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -594,6 +600,8 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
 
     let now = Utc::now();
     let mut saved_count = 0usize;
+    let mut updated_count = 0usize;
+    let mut skipped_count = 0usize;
     if !ports.is_empty() {
         let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -605,6 +613,7 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
             // 设备侧数据不可信：vlan_id 超出 1..=4094 等非法端口跳过，
             // 避免单条异常数据导致整批 INSERT 失败
             if let Err(e) = req.validate() {
+                skipped_count += 1;
                 foims_common::log_warn!(
                     "log.device.snmp_port_invalid",
                     device_id = device_id,
@@ -622,6 +631,48 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
                 id
             };
             port_rows.push((req, nic_id));
+        }
+
+        // 先以 SNMP 采集值刷新已存在端口的二层属性（None 保留原值）；
+        // 须在 INSERT 之前执行，使新插入行不会出现在本语句的更新范围
+        if !port_rows.is_empty() {
+            let mut update_builder = QueryBuilder::<Postgres>::new(
+                r"UPDATE device_interfaces di SET
+                    port_type = COALESCE(v.port_type, di.port_type),
+                    status = COALESCE(v.status, di.status),
+                    speed = COALESCE(v.speed, di.speed),
+                    vlan_id = COALESCE(v.vlan_id, di.vlan_id),
+                    updated_at = ",
+            );
+            update_builder.push_bind(now).push(" FROM (VALUES ");
+            for (idx, (req, _)) in port_rows.iter().enumerate() {
+                if idx > 0 {
+                    update_builder.push(", ");
+                }
+                update_builder
+                    .push("(")
+                    .push_bind(device_id)
+                    .push(", ")
+                    .push_bind(&req.name)
+                    .push(", ")
+                    .push_bind(req.port_type.as_deref())
+                    .push(", ")
+                    .push_bind(req.status.as_deref())
+                    .push(", ")
+                    .push_bind(&req.speed)
+                    .push(", ")
+                    .push_bind(req.vlan_id)
+                    .push(")");
+            }
+            update_builder.push(
+                ") AS v(device_id, name, port_type, status, speed, vlan_id)
+                  WHERE di.device_id = v.device_id AND di.name = v.name",
+            );
+            updated_count = update_builder
+                .build()
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as usize;
         }
 
         let mut builder = QueryBuilder::<Postgres>::new(
@@ -654,7 +705,7 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
         saved_count = builder.build().execute(&mut *tx).await?.rows_affected() as usize;
         tx.commit().await?;
     }
-    let skipped_count = ports.len() - saved_count;
+    // 无效端口（校验未通过被跳过）不参与更新与入库
 
     let saved_interfaces = sqlx::query_as::<_, DeviceInterface>(
         "SELECT * FROM device_interfaces WHERE device_id = $1 ORDER BY name",
@@ -663,15 +714,20 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    // 按同步结果构造消息：区分无数据 / 部分保存 / 全部保存 / 全部已存在
+    // 按同步结果构造消息：区分无数据 / 含无效端口 / 全部无效
     let message = if ports.is_empty() {
         msg("server.device.interface.snmp_no_ports")
-    } else if saved_count > 0 && skipped_count > 0 {
-        msg("server.device.interface.sync_partial")
-            .with("saved", saved_count)
-            .with("skipped", skipped_count)
-    } else if saved_count > 0 {
-        msg("server.device.interface.sync_saved").with("saved", saved_count)
+    } else if saved_count > 0 || updated_count > 0 {
+        if skipped_count > 0 {
+            msg("server.device.interface.sync_partial")
+                .with("saved", saved_count)
+                .with("updated", updated_count)
+                .with("skipped", skipped_count)
+        } else {
+            msg("server.device.interface.sync_saved")
+                .with("saved", saved_count)
+                .with("updated", updated_count)
+        }
     } else {
         msg("server.device.interface.sync_all_skipped").with("skipped", skipped_count)
     };

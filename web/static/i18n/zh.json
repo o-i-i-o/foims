@@ -1841,9 +1841,9 @@
         "port_type_invalid": "端口类型必须是以下之一: access、trunk、uplink、stack、console",
         "snmp_no_ports": "未获取到端口信息",
         "status_invalid": "端口状态必须是 up、down、admin-down 之一",
-        "sync_all_skipped": "所有 {{skipped}} 个端口已存在，跳过保存",
-        "sync_partial": "成功保存 {{saved}} 个端口，跳过 {{skipped}} 个已存在的端口",
-        "sync_saved": "成功保存 {{saved}} 个端口到数据库",
+        "sync_all_skipped": "全部 {{skipped}} 个端口数据无效，未同步",
+        "sync_partial": "新增 {{saved}} 个端口，更新 {{updated}} 个端口，跳过 {{skipped}} 个无效端口",
+        "sync_saved": "同步完成：新增 {{saved}} 个端口，更新 {{updated}} 个端口",
         "updated": "更新接口成功"
       },
       "list_retrieved": "设备列表获取成功",

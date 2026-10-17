@@ -188,9 +188,9 @@ function renderMacTable(entries, type) {
       </div>
       <div id="${groupId}" class="network-group-content collapsed">
         <table class="mac-group-table">
-          <tr><th>${t("device.ip_address")}</th><th>${t("device.mac_address")}</th></tr>`;
+          <tr><th>${t("device.ip_address")}</th><th>${t("device.mac_address")}</th><th>${t("device.vlan_id")}</th></tr>`;
     items.forEach((entry) => {
-      html += `<tr><td>${escapeHtml(entry.ip_address)}</td><td>${escapeHtml(entry.mac_address)}</td></tr>`;
+      html += `<tr><td>${escapeHtml(entry.ip_address)}</td><td>${escapeHtml(entry.mac_address)}</td><td>${escapeHtml(entry.vlan_id != null ? String(entry.vlan_id) : "-")}</td></tr>`;
     });
     html += "</table></div></div>";
     groupIndex++;

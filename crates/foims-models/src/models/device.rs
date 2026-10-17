@@ -253,26 +253,6 @@ pub struct DeviceMac {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
-pub struct DeviceMacCreate {
-    /// INET 列格式兜底（handler 亦校验，模型层防御纵深）
-    #[validate(custom(
-        function = "crate::models::validate_ip_address_string",
-        message = "server.common.validation.ip_format"
-    ))]
-    pub ip_address: String,
-    #[validate(length(min = 1, max = 17, message = "server.device.validation.mac_format"))]
-    #[validate(custom(
-        function = "crate::models::validate_mac_address_string",
-        message = "server.device.validation.mac_format"
-    ))]
-    pub mac_address: String,
-    #[validate(length(max = 50, message = "server.device.validation.interface_length"))]
-    pub interface: Option<String>,
-    #[validate(range(min = 1, max = 4094, message = "vlan_id_range"))]
-    pub vlan_id: Option<i32>,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct DeviceLldp {
     pub id: Uuid,
@@ -1052,17 +1032,6 @@ mod tests {
         let back: LldpNeighbor = serde_json::from_value(first.clone())?;
         let second = serde_json::to_value(&back)?;
         assert_eq!(first, second);
-        Ok(())
-    }
-
-    #[test]
-    fn test_device_mac_create_deserialize() -> Result<(), serde_json::Error> {
-        let req: DeviceMacCreate = serde_json::from_value(serde_json::json!({
-            "ip_address": "192.168.1.20",
-            "mac_address": "aa:bb:cc:00:00:01"
-        }))?;
-        assert_eq!(req.interface, None);
-        assert_eq!(req.vlan_id, None);
         Ok(())
     }
 

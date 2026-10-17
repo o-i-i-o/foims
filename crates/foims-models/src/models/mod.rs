@@ -125,15 +125,6 @@ pub fn validate_ip_version_option(version: i16) -> Result<(), ValidationError> {
     }
 }
 
-/// IP 地址格式（IPv4/IPv6）校验：供 MAC/LLDP 记录等 INET 列字段使用
-pub fn validate_ip_address_string(value: &str) -> Result<(), ValidationError> {
-    if value.parse::<std::net::IpAddr>().is_ok() {
-        Ok(())
-    } else {
-        Err(ValidationError::new("server.common.validation.ip_format"))
-    }
-}
-
 /// MAC 地址格式校验：冒号/横线分隔的 6 组十六进制（如 aa:bb:cc:dd:ee:ff）
 pub fn validate_mac_address_string(value: &str) -> Result<(), ValidationError> {
     let normalized = value.replace('-', ":");
