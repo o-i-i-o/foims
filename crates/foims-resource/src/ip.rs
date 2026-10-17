@@ -271,11 +271,12 @@ pub async fn create_device_ip<P: DbProvider>(
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.device.not_found").with("id", id)))?;
 
-    let existing_ip: Option<Uuid> =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)")
-            .bind(&req.ip_address)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let existing_ip: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)",
+    )
+    .bind(&req.ip_address)
+    .fetch_optional(&mut *tx)
+    .await?;
 
     if existing_ip.is_some() {
         return Err(AppError::Conflict(
@@ -1208,20 +1209,21 @@ pub async fn batch_create_ip_details<P: DbProvider>(
     let mut duplicate_errors: Vec<AppMessage> = Vec::new();
 
     for (index, ip_req, id, ip_version_num) in &valid_requests {
-        let existing: Option<Uuid> =
-            match sqlx::query_scalar("SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)")
-                .bind(&ip_req.ip_address)
-                .fetch_optional(tx.as_mut())
-                .await
-            {
-                Ok(opt) => opt,
-                Err(err) => {
-                    log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
-                    duplicate_errors
-                        .push(msg("server.ip.batch_record_query_failed").with("index", index + 1));
-                    continue;
-                }
-            };
+        let existing: Option<Uuid> = match sqlx::query_scalar(
+            "SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)",
+        )
+        .bind(&ip_req.ip_address)
+        .fetch_optional(tx.as_mut())
+        .await
+        {
+            Ok(opt) => opt,
+            Err(err) => {
+                log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                duplicate_errors
+                    .push(msg("server.ip.batch_record_query_failed").with("index", index + 1));
+                continue;
+            }
+        };
 
         if existing.is_some() {
             duplicate_errors.push(
@@ -1277,8 +1279,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
                 if let Err(err) = validate_ip_in_subnet(tx.as_mut(), nid, &ip_req.ip_address).await
                 {
                     log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
-                    duplicate_errors
-                        .push(msg("server.ip.not_in_subnet").with("index", index + 1));
+                    duplicate_errors.push(msg("server.ip.not_in_subnet").with("index", index + 1));
                     continue;
                 }
                 nid

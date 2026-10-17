@@ -282,12 +282,13 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
 /// 读取上一轮差值状态（raw_metrics 私有键 `_snmp_state`）；行不存在/
 /// 键缺失/结构不合法时返回 None（首轮不出差值指标，状态本轮重建）。
 async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics::SnmpState> {
-    let row: Option<Option<Value>> =
-        sqlx::query_scalar("SELECT raw_metrics -> '_snmp_state' FROM monitored_hosts WHERE machine_id = $1")
-            .bind(machine_id)
-            .fetch_optional(pool)
-            .await
-            .ok()?;
+    let row: Option<Option<Value>> = sqlx::query_scalar(
+        "SELECT raw_metrics -> '_snmp_state' FROM monitored_hosts WHERE machine_id = $1",
+    )
+    .bind(machine_id)
+    .fetch_optional(pool)
+    .await
+    .ok()?;
     row.flatten().and_then(|v| serde_json::from_value(v).ok())
 }
 

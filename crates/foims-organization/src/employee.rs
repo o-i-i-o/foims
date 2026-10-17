@@ -303,16 +303,14 @@ pub async fn delete_employee<P: DbProvider>(
 ) -> Result<Response, AppError> {
     // 预检工位管理人引用：FK 为 RESTRICT，直接删除会报数据库级错误，
     // 这里提前计数并映射为带数量的校验错误，提示先变更工位管理人
-    let managed: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM workstations WHERE manager_employee_id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.pool()?.get_conn())
-    .await?;
+    let managed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE manager_employee_id = $1")
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
     if managed > 0 {
         return Err(AppError::Validation(
-            msg("server.employee.in_use_by_workstation")
-                .with("count", managed.to_string()),
+            msg("server.employee.in_use_by_workstation").with("count", managed.to_string()),
         ));
     }
 

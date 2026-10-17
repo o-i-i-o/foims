@@ -173,10 +173,9 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
     .fetch_all(&mut *conn)
     .await?;
 
-    let employees: Vec<(String, String)> =
-        sqlx::query_as("SELECT id::text, name FROM employees")
-            .fetch_all(&mut *conn)
-            .await?;
+    let employees: Vec<(String, String)> = sqlx::query_as("SELECT id::text, name FROM employees")
+        .fetch_all(&mut *conn)
+        .await?;
 
     let mut room_scoped: HashMap<&'static str, HashMap<String, String>> = HashMap::new();
     for table in ["workstations", "cabinets"] {

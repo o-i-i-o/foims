@@ -271,7 +271,10 @@ mod tests {
         }))?;
         assert!(ok.validate().is_ok());
 
-        let bad: WorkstationSyncItem = serde_json::from_value(serde_json::json!({ "name": "" }))?;
+        let bad: WorkstationSyncItem = serde_json::from_value(serde_json::json!({
+            "name": "",
+            "manager_employee_id": Uuid::new_v4()
+        }))?;
         assert!(bad.validate().is_err());
         Ok(())
     }
@@ -384,8 +387,9 @@ mod tests {
         assert!(empty.workstations.is_none());
 
         // nested 校验生效：子项非法（空工位名 / 越界容量）时容器校验失败
-        let bad_ws: RoomChildrenSync =
-            serde_json::from_value(serde_json::json!({ "workstations": [{ "name": "" }] }))?;
+        let bad_ws: RoomChildrenSync = serde_json::from_value(serde_json::json!({
+            "workstations": [{ "name": "", "manager_employee_id": Uuid::new_v4() }]
+        }))?;
         assert!(bad_ws.validate().is_err(), "空工位名应使容器被拒绝");
 
         let bad_cab: RoomChildrenSync = serde_json::from_value(serde_json::json!({

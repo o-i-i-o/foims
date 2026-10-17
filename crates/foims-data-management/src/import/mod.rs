@@ -141,7 +141,12 @@ const ENUM_WHITELISTS: &[(&str, &str, bool, &[&str])] = &[
         false,
         &["ethernet", "fiber", "console"],
     ),
-    ("interface_ips", "status", false, &["active", "inactive", "reserved"]),
+    (
+        "interface_ips",
+        "status",
+        false,
+        &["active", "inactive", "reserved"],
+    ),
     (
         "topology_connections",
         "connection_type",

@@ -102,3 +102,9 @@ v0.4.1
 v0.4.2
 2026101710221801
 1. 初始化模块建表文件命名对齐领域聚合惯例（纯文件组织调整，无数据库对象变化）：评估确认一表一文件方案不采纳（建表代码原按领域/模块聚合——agents/cabinets/logs/network/rooms/system/topology/users/workstations 均为领域名+同域附属表，单表文件文件名=表名）；snmp_macs.rs 改名 device_snmp.rs（文件实际承载设备 SNMP 采集域两张表：snmp_macs MAC 观测 + device_lldps LLDP 邻居，按主表命名重演歧义）；同类命名偏差一并修正：element.rs→element_layouts.rs、tokens.rs→revoked_tokens.rs（单表文件文件名=表名）；mod.rs 与头注释同步
+
+v0.5.0
+2026101712315401
+1. 全库命名与语义统一批次（schema 审计修复，x+1，含破坏性 schema 变更）：①操作日志删 operation_type 冗余别名，前后端统一 action 字段；②工位管理人重构——删除 manager 手动文本列（迁移时按名字匹配 employees 回填 manager_employee_id，无法回填行删除），manager_employee_id 置必填并收紧 ON DELETE RESTRICT，前端改组织人员选择、导入导出按姓名内容匹配而非 ID；③工位改房间时同事务清理对应 workstation_layouts 行；④IP 归属校验补齐——显式子网单条与批量路径均校验 IP⊆子网（子网⊆区域已有）；⑤device_interfaces.trunk_id 改名 native_vlan_id；⑥五表改名消歧义：agents→monitored_hosts、agent_metrics_history→host_metrics_history、agent_alert_states→host_alert_states、snmp_macs→snmp_arp_entries、ips→interface_ips，索引/约束/视图/check/spec/导入导出注册名全链路联动，API 路径 /api/agents 与前端文件名不变；⑦布尔列语义化：users.status→enabled、operation_logs.result→success（与 login_logs.success 对齐），排序参数 data-sort、操作日志排序白名单与仪表盘统计 SQL 同步；⑧monitored_hosts 补 status IN (active,offline,disabled) 与 source IN (agent,snmp) CHECK 约束；⑨前端统一端口 tooltip 补显端口类型（port_type i18n 映射，未知枚举回显原值）
+2. 命名规范固化进 docs/code-style.md §2.3「数据库命名规范（强制）」：表名用语义实体命名不绑定实现载体、布尔列用形容词（enabled/success）禁用 status/result 通用名词、命名歧义必须全链路统一彻底清理旧名禁止兼容别名层
+3. 联动：根 Cargo.toml 0.25.3→0.26.0；新增 upgrade/0.26/upgrade_0.26.0.sql（基于 0.25.3 库：workstations 回填+删列+约束重建、trunk_id 改名、五表 RENAME+索引/约束联动、补 CHECK、users/operation_logs 列改名，单事务）；前端资源版本经 bump_static_version.sh 刷新

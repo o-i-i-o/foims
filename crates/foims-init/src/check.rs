@@ -871,6 +871,9 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ("idx_monitored_hosts_device_id", "monitored_hosts"),
         // 指标历史 (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING
         // 幂等去重，防重复上报写重（agents.rs 建表时创建）
-        ("idx_host_metrics_history_agent_time", "host_metrics_history"),
+        (
+            "idx_host_metrics_history_agent_time",
+            "host_metrics_history",
+        ),
     ]
 }

@@ -1037,18 +1037,20 @@ pub async fn get_dashboard_stats(
         .fetch_one(&conn)
         .await?;
 
-    let ips_total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips")
+    let ips_total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM interface_ips")
         .fetch_one(&conn)
         .await?;
 
-    let ips_active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ips WHERE status = 'active'")
-        .fetch_one(&conn)
-        .await?;
+    let ips_active: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM interface_ips WHERE status = 'active'")
+            .fetch_one(&conn)
+            .await?;
 
     // IP 状态分布（status 为自由字符串，按实际取值分组返回）
-    let ip_status_rows = sqlx::query("SELECT status, COUNT(*) AS cnt FROM ips GROUP BY status")
-        .fetch_all(&conn)
-        .await?;
+    let ip_status_rows =
+        sqlx::query("SELECT status, COUNT(*) AS cnt FROM interface_ips GROUP BY status")
+            .fetch_all(&conn)
+            .await?;
     let ip_by_status: serde_json::Map<String, serde_json::Value> = ip_status_rows
         .iter()
         .map(|r| {
@@ -1099,7 +1101,7 @@ pub async fn get_dashboard_stats(
         .fetch_one(&conn)
         .await?;
 
-    let users_active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE status = TRUE")
+    let users_active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE enabled = TRUE")
         .fetch_one(&conn)
         .await?;
 

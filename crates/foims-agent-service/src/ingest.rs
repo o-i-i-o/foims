@@ -325,11 +325,12 @@ pub async fn ingest(
         }
     };
     // 6a. 禁用行前置拒收：不刷新快照、不写历史（禁用即完全断供）
-    let existing =
-        sqlx::query_as::<_, (Uuid, String)>("SELECT id, status FROM monitored_hosts WHERE machine_id = $1")
-            .bind(&machine_id)
-            .fetch_optional(&mut *tx)
-            .await;
+    let existing = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, status FROM monitored_hosts WHERE machine_id = $1",
+    )
+    .bind(&machine_id)
+    .fetch_optional(&mut *tx)
+    .await;
     let existing = match existing {
         Ok(row) => row,
         Err(e) => {

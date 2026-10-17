@@ -547,7 +547,7 @@ async fn main() -> std::io::Result<()> {
                     foims_common::log_error!("system.register_agent_offline_job_failed", error = e);
                 }
 
-                // Agent 历史指标清理（每日 03:40，删除超保留期的 agent_metrics_history 行）
+                // Agent 历史指标清理（每日 03:40，删除超保留期的 host_metrics_history 行）
                 if let Err(e) = state
                     .add_system_job(
                         "system_agent_history_cleanup",
