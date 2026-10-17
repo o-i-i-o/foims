@@ -574,7 +574,7 @@ async fn resolve_row<P: DataProvider>(
 }
 
 /// 专项校验：IP 地址必须属于设备所在房间绑定的网段
-/// （房间未绑定任何网段时不做归属限制；device_macs 为 SNMP 发现数据，
+/// （房间未绑定任何网段时不做归属限制；snmp_macs 为 SNMP 发现数据，
 /// 可能含外来地址，不做此校验）。
 async fn validate_ip_in_room(
     conn: &mut PgConnection,

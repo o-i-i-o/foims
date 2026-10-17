@@ -340,7 +340,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         key: &["room_id", "name"],
     },
     TableSpec {
-        table: "device_macs",
+        table: "snmp_macs",
         columns: &[
             Col::Ref {
                 csv: "device",

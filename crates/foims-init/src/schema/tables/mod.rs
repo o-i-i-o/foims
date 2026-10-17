@@ -4,7 +4,6 @@ mod agents;
 mod cabinets;
 mod cable_links;
 mod device_interfaces;
-mod device_macs;
 mod device_nics;
 mod device_templates;
 mod devices;
@@ -20,6 +19,7 @@ mod org_templates;
 mod organizations;
 mod patch_panels;
 mod rooms;
+mod snmp_macs;
 mod system;
 mod tokens;
 mod topology;
@@ -64,7 +64,7 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     devices::create(pool).await?;
 
     // 设备 MAC/LLDP（引用 devices）
-    device_macs::create(pool).await?;
+    snmp_macs::create(pool).await?;
 
     // 设备网卡（引用 devices，先于 device_interfaces 创建）
     device_nics::create(pool).await?;

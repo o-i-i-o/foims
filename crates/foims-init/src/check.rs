@@ -34,7 +34,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "devices",
         "device_nics",
         "device_interfaces",
-        "device_macs",
+        "snmp_macs",
         "device_lldps",
         "net_outlets",
         "patch_panels",
@@ -309,7 +309,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "device_macs",
+        "snmp_macs",
         vec![
             "id",
             "device_id",

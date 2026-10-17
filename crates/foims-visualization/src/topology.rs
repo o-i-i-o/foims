@@ -169,7 +169,7 @@ pub async fn get_topology_nodes(pool: &PgPool) -> Result<Response, Visualization
                  r.id AS room_id, r.name AS room_name,
                  o.id AS org_id, o.name AS org_name,
                  c.id AS cabinet_id, c.name AS cabinet_name,
-                 (SELECT dm.ip_address::TEXT FROM device_macs dm
+                 (SELECT dm.ip_address::TEXT FROM snmp_macs dm
                    WHERE dm.device_id = d.id
                    ORDER BY dm.updated_at DESC LIMIT 1) AS ip_address
           FROM topology_nodes tn

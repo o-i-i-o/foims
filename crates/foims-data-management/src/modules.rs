@@ -44,7 +44,7 @@ pub const MODULES: &[ModuleDef] = &[
         tables: &[
             "device_templates",
             "devices",
-            "device_macs",
+            "snmp_macs",
             "device_lldps",
             "device_nics",
             "device_interfaces",

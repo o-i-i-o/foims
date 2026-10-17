@@ -93,3 +93,8 @@ v0.4.0
 3. 前端补齐：设备MAC表加VLAN列（deviceMacLldp.js）、统一端口tooltip加VLAN行（unifiedDevicePorts.js）、拓扑详情端口表加VLAN与速率列（TopologyModal.js）
 4. 死代码清理：删除无引用结构体DeviceMacCreate及其反序列化测试、仅其使用的validate_ip_address_string（后端yml本就无其引用的ip_format/interface_length键，佐证死代码）
 5. 联动：根Cargo.toml 0.25.2→0.25.3，foims-models 0.2.8→0.2.9，foims-resource 0.1.6→0.1.7；前端资源版本经bump_static_version.sh刷新
+
+v0.4.1
+2026101710045801
+1. 表名消歧义（普通修改z+1）：device_macs 改名 snmp_macs——该表存储设备 SNMP 观测到的 ARP/FDB 条目（IP↔MAC↔学习端口↔VLAN），原名易与端口台账 device_interfaces 的 mac_address/vlan_id 字段语义混淆；列结构与数据不变
+2. 联动：foims-init 建表模块改名 snmp_macs.rs（mod/索引/updated_at触发器注册/check.rs 表与列清单同步）；mac.rs/ip.rs/topology.rs 全部 SQL 引用改表名；数据导入导出表注册名 device→snmp_macs（spec.rs/modules.rs）；模型 DeviceMac 改名 SnmpMac；新增 upgrade/0.25/upgrade_0.25.1.sql（RENAME 表+3索引，旧备份 device_macs 表导入失败属预期，观测数据可重新同步拉取）；API 路径与前端不变

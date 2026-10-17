@@ -241,8 +241,9 @@ pub struct LldpNeighbor {
     pub neighbor_sys_desc: Option<String>,
 }
 
+/// SNMP 观测表 snmp_macs 行模型：设备 ARP/FDB 学到的 IP ↔ MAC 条目
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
-pub struct DeviceMac {
+pub struct SnmpMac {
     pub id: Uuid,
     pub device_id: Uuid,
     pub ip_address: String,

@@ -488,7 +488,7 @@ async fn sync_switch_macs(
                 r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
                       i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
                       di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
-              FROM device_macs sm
+              FROM snmp_macs sm
               INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
               INNER JOIN device_interfaces di ON i.device_interface_id = di.id
               INNER JOIN devices dv ON di.device_id = dv.id
@@ -504,7 +504,7 @@ async fn sync_switch_macs(
                 r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
                       i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
                       di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
-              FROM device_macs sm
+              FROM snmp_macs sm
               INNER JOIN ips i ON sm.ip_address = i.ip_address
               INNER JOIN device_interfaces di ON i.device_interface_id = di.id
               INNER JOIN devices dv ON di.device_id = dv.id
@@ -518,7 +518,7 @@ async fn sync_switch_macs(
 
     if observed.is_empty() {
         let total_macs: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM device_macs WHERE device_id = $1")
+            sqlx::query_scalar("SELECT COUNT(*) FROM snmp_macs WHERE device_id = $1")
                 .bind(device_id)
                 .fetch_one(&mut *tx)
                 .await?;

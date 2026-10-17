@@ -1,8 +1,11 @@
-//! 设备 MAC/LLDP 表（device_macs、device_lldps）结构创建。
+//! 设备 MAC/LLDP 表（snmp_macs、device_lldps）结构创建。
+//!
+//! snmp_macs 存储设备 SNMP 观测到的 ARP/FDB 条目（IP ↔ MAC ↔
+//! 学习端口 ↔ VLAN），与端口台账表 device_interfaces 无重复语义。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS device_macs (
+        r"CREATE TABLE IF NOT EXISTS snmp_macs (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             ip_address INET NOT NULL,
