@@ -5,7 +5,7 @@
 //! - [`crate::ingest`] 入库成功后按本条快照评估（实时性）；
 //! - PUT 保存阈值后对全部 active agent 的快照列评估一轮（调低阈值立即生效）。
 //!
-//! 通知策略：边沿触发——`agent_alert_states.alerting` false→true 时向全部
+//! 通知策略：边沿触发——`host_alert_states.alerting` false→true 时向全部
 //! 启用状态管理员（admin/sysadmin/secadmin）发一条站内通知；true→false
 //! （回落或读数缺失）静默复位，再次超标才再发。单台主机各指标状态独立。
 
@@ -31,7 +31,7 @@ const NOTIFICATION_TYPE: &str = "agent_alert";
 /// 通知标题 i18n key（前端按用户语言翻译，key 见 web/static/i18n JSON）
 const NOTIFICATION_TITLE_KEY: &str = "server.notification.agent_alert.title";
 
-/// 告警指标名（agent_alert_states.metric 列）与通知正文 key 成对定义
+/// 告警指标名（host_alert_states.metric 列）与通知正文 key 成对定义
 const METRIC_CPU: &str = "cpu";
 const METRIC_MEM: &str = "mem";
 const METRIC_DISK: &str = "disk";
@@ -130,7 +130,7 @@ pub async fn load_thresholds(pool: &sqlx::PgPool) -> AlertThresholds {
 /// 通知接收人：所有启用状态的管理员（admin/sysadmin/secadmin，用户口径）。
 async fn admin_recipient_ids(pool: &sqlx::PgPool) -> Result<Vec<Uuid>, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT id FROM users WHERE status = TRUE AND role IN ('admin', 'sysadmin', 'secadmin')",
+        "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'sysadmin', 'secadmin')",
     )
     .fetch_all(pool)
     .await
@@ -149,7 +149,7 @@ async fn evaluate_agent(
     admin_ids: &[Uuid],
 ) -> Result<usize, sqlx::Error> {
     let existing: Vec<(String, bool)> =
-        sqlx::query_as("SELECT metric, alerting FROM agent_alert_states WHERE agent_id = $1")
+        sqlx::query_as("SELECT metric, alerting FROM host_alert_states WHERE agent_id = $1")
             .bind(agent_id)
             .fetch_all(pool)
             .await?;
@@ -178,7 +178,7 @@ async fn evaluate_agent(
             newly_alerted += 1;
         }
         sqlx::query(
-            r"INSERT INTO agent_alert_states (agent_id, metric, alerting)
+            r"INSERT INTO host_alert_states (agent_id, metric, alerting)
                VALUES ($1, $2, $3)
                ON CONFLICT (agent_id, metric) DO UPDATE SET alerting = EXCLUDED.alerting",
         )
@@ -195,7 +195,7 @@ async fn evaluate_agent(
 struct AlertEvent<'a> {
     hostname: &'a str,
     ip: &'a str,
-    /// 指标名（agent_alert_states.metric）
+    /// 指标名（host_alert_states.metric）
     metric: &'a str,
     /// 通知正文 i18n key
     body_key: &'a str,
@@ -295,7 +295,7 @@ pub async fn evaluate_all(pool: &sqlx::PgPool) {
     >(
         "SELECT id, hostname, ip, cpu_usage::float8, mem_usage_pct::float8, \
              disk_usage_pct::float8, max_temp::float8 \
-             FROM agents WHERE source = 'agent' AND status = 'active'",
+             FROM monitored_hosts WHERE source = 'agent' AND status = 'active'",
     )
     .fetch_all(pool)
     .await;

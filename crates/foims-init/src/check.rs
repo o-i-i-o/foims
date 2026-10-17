@@ -34,13 +34,13 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "devices",
         "device_nics",
         "device_interfaces",
-        "snmp_macs",
+        "snmp_arp_entries",
         "device_lldps",
         "net_outlets",
         "patch_panels",
         // 链路与 IP
         "cable_links",
-        "ips",
+        "interface_ips",
         // 拓扑
         "topology_nodes",
         "topology_connections",
@@ -55,9 +55,9 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "workstation_layouts",
         "cabinet_layouts",
         // 主机采集 Agent
-        "agents",
-        "agent_metrics_history",
-        "agent_alert_states",
+        "monitored_hosts",
+        "host_metrics_history",
+        "host_alert_states",
     ]
 }
 
@@ -77,7 +77,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "password_hash",
             "email",
             "role",
-            "status",
+            "enabled",
             "auth_provider",
             "reset_token",
             "reset_token_expiry",
@@ -162,7 +162,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "id",
             "name",
             "room_id",
-            "manager",
             "manager_employee_id",
             "description",
             "created_at",
@@ -302,14 +301,14 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "port_type",
             "status",
             "speed",
-            "trunk_id",
+            "native_vlan_id",
             "device_managed",
             "created_at",
             "updated_at",
         ],
     );
     columns.insert(
-        "snmp_macs",
+        "snmp_arp_entries",
         vec![
             "id",
             "device_id",
@@ -353,7 +352,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "ips",
+        "interface_ips",
         vec![
             "id",
             "device_interface_id",
@@ -415,7 +414,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "resource_type",
             "resource_id",
             "details",
-            "result",
+            "success",
             "ip_address",
             "created_at",
         ],
@@ -532,7 +531,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "agents",
+        "monitored_hosts",
         vec![
             "id",
             "machine_id",
@@ -558,10 +557,10 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         ],
     );
     columns.insert(
-        "agent_metrics_history",
+        "host_metrics_history",
         vec!["id", "agent_id", "collected_at", "metrics"],
     );
-    columns.insert("agent_alert_states", vec!["agent_id", "metric", "alerting"]);
+    columns.insert("host_alert_states", vec!["agent_id", "metric", "alerting"]);
 
     columns
 }
@@ -820,21 +819,21 @@ pub fn get_required_column_widths() -> Vec<(&'static str, &'static str, i32)> {
 pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
     vec![
         // IP 必须挂载在网口下（网口删除级联删除 IP）
-        ("ips", "device_interface_id"),
+        ("interface_ips", "device_interface_id"),
         // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）
-        ("ips", "subnet_id"),
+        ("interface_ips", "subnet_id"),
         // agent 状态机（active|offline|disabled）必须有值
-        ("agents", "status"),
+        ("monitored_hosts", "status"),
         // 数据来源（agent|snmp）必须有值：区分 Agent 上报与 SNMP 轮询记录
-        ("agents", "source"),
+        ("monitored_hosts", "source"),
         // 指标历史必须归属 agent 且带采集时间与指标载荷
-        ("agent_metrics_history", "agent_id"),
-        ("agent_metrics_history", "collected_at"),
-        ("agent_metrics_history", "metrics"),
+        ("host_metrics_history", "agent_id"),
+        ("host_metrics_history", "collected_at"),
+        ("host_metrics_history", "metrics"),
         // 告警状态必须归属 agent 且带指标名与告警态（状态翻转检测依据）
-        ("agent_alert_states", "agent_id"),
-        ("agent_alert_states", "metric"),
-        ("agent_alert_states", "alerting"),
+        ("host_alert_states", "agent_id"),
+        ("host_alert_states", "metric"),
+        ("host_alert_states", "alerting"),
     ]
 }
 
@@ -862,19 +861,16 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ),
         // IP 地址全域唯一（ips.rs 建表约束 UNIQUE(ip_address)）：
         // 单条创建与批量导入的并发去重均依赖该唯一索引兜底
-        ("uq_ips_ip_address", "ips"),
+        ("uq_interface_ips_ip_address", "interface_ips"),
         // 同房间设备名唯一（devices.rs 建表后补建）：
         // 兜底创建/更新/导入路径的并发判重窗口
         ("uq_devices_room_name", "devices"),
         // 同机重复安装判重：machine_id 仅对已回填行唯一（agents.rs 部分唯一索引）
-        ("idx_agents_machine_id", "agents"),
+        ("idx_monitored_hosts_machine_id", "monitored_hosts"),
         // 一台设备至多一条 SNMP 采集记录（agents.rs 部分唯一索引）
-        ("idx_agents_device_id", "agents"),
+        ("idx_monitored_hosts_device_id", "monitored_hosts"),
         // 指标历史 (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING
         // 幂等去重，防重复上报写重（agents.rs 建表时创建）
-        (
-            "idx_agent_metrics_history_agent_time",
-            "agent_metrics_history",
-        ),
+        ("idx_host_metrics_history_agent_time", "host_metrics_history"),
     ]
 }

@@ -40,6 +40,9 @@ pub enum Target {
     /// 本列值为网段名，与行内 `region_name` 伴随列组成 (区域, 网段) 业务键
     /// 指向 network_cidrs（该表名称不唯一，须靠区域消歧）。
     Cidr,
+    /// 本列值为员工姓名，指向 employees（姓名仅同组织内唯一，全库同名
+    /// 时无法从工位行推断组织，按歧义错误拒绝）。仅 workstations.manager 使用。
+    EmployeeName,
     /// 本列值为 "房间/名称"，指向 workstations 或 cabinets。
     RoomScoped { table: &'static str },
     /// 本列值为 "房间/机柜/机位名"，指向 positions。
@@ -156,7 +159,13 @@ pub const TABLE_SPECS: &[TableSpec] = &[
                 },
             },
             Col::Plain("name"),
-            Col::Plain("manager"),
+            // 管理人为必填外键：CSV 写员工姓名，导入按姓名解析（NOT NULL 列
+            // 空值由导入端 required_field_missing 拦截）
+            Col::Ref {
+                csv: "manager",
+                db: "manager_employee_id",
+                target: Target::EmployeeName,
+            },
             Col::Plain("description"),
         ],
         key: &["room_id", "name"],
@@ -340,7 +349,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         key: &["room_id", "name"],
     },
     TableSpec {
-        table: "snmp_macs",
+        table: "snmp_arp_entries",
         columns: &[
             Col::Ref {
                 csv: "device",
@@ -404,7 +413,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
             Col::Plain("interface_role"),
             Col::Plain("mac_address"),
             Col::Plain("vlan_id"),
-            Col::Plain("trunk_id"),
+            Col::Plain("native_vlan_id"),
             Col::Plain("description"),
             Col::Plain("sort_order"),
             Col::Plain("port_type"),
@@ -415,7 +424,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         key: &["device_id", "name"],
     },
     TableSpec {
-        table: "ips",
+        table: "interface_ips",
         columns: &[
             Col::Info("device"),
             Col::Ref {

@@ -107,6 +107,22 @@ let total: i64 = builder
 - 事务约定：**多步写操作（存在性检查 + 写入 + 回读）必须包在同一事务**；
   单条 UPDATE/DELETE 可直接执行并以 `rows_affected()==0` 判 NotFound。
 
+#### 数据库命名规范（强制）
+
+- **表名用语义实体命名**，不绑定实现载体：表名应描述其存储的领域实体
+  （如 `monitored_hosts`、`snmp_arp_entries`、`interface_ips`），禁止用
+  过窄的实现载体命名（如 `agents`、`ips` 这类同名异义或缩写歧义词）。
+  索引/约束/视图/触发器名随表名联动。
+- **布尔列用形容词命名**（`enabled`、`success`、`active`、`read`），
+  **禁止用 `status`/`result` 等通用名词承载布尔语义**——同名词在别处
+  常为枚举（`monitored_hosts.status` 是 active/offline/disabled 枚举），
+  同名异义会污染前端字段消费与排序参数。多态结果（如 serde `Result`
+  的 `ok`/`err` 形状）不受此限，但必须注释说明。
+- **命名歧义必须全链路统一**：一旦发现 DB 列名、Rust 字段、前端 JSON
+  消费、i18n 键、文档术语之间语义漂移（如同义双列、别名冗余），统一
+  术语后彻底清理旧名，禁止保留兼容别名层；破坏性 schema 变更在开发
+  阶段允许，按 AGENTS.md 迁移规则出 upgrade SQL。
+
 ### 2.4 API 响应
 
 - 响应体统一 `foims_common::ApiResponse { success, message, data }`，

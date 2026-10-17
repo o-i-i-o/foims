@@ -90,8 +90,8 @@ export async function loadUsersData(page = currentUserPage, sortBy = null, sortO
           <td>${escapeHtml(user.email)}</td>
           <td class="col-center">${roleLabel(user.role)}</td>
           <td class="col-center">
-            <span class="status-badge ${user.status ? "status-active" : "status-inactive"}">
-              ${user.status ? t("user.status_enabled") : t("user.status_disabled")}
+            <span class="status-badge ${user.enabled ? "status-active" : "status-inactive"}">
+              ${user.enabled ? t("user.status_enabled") : t("user.status_disabled")}
             </span>
           </td>
           <td class="col-center">
@@ -232,7 +232,7 @@ async function loadUserData(userId) {
       elementCache.setValue("user-username", user.username);
       elementCache.setValue("user-email", user.email);
       elementCache.setValue("user-role", user.role);
-      elementCache.setValue("user-status", user.status.toString());
+      elementCache.setValue("user-status", user.enabled.toString());
       elementCache.setValue("user-password-expiry", String(user.password_expiry_days ?? 0));
     }
   } catch (error) {
@@ -611,7 +611,7 @@ async function submitUserForm() {
     username: formData.get("username"),
     email: formData.get("email"),
     role: formData.get("role"),
-    status: formData.get("status") === "true",
+    enabled: formData.get("enabled") === "true",
     password_expiry_days: parseInt(formData.get("password_expiry_days"), 10) || 0
   };
 

@@ -249,7 +249,7 @@ pub async fn is_expired(pool: &PgPool, user_id: Uuid) -> Result<bool, AppError> 
 /// 单个账户到期禁用：仅当仍处启用态时翻转状态并吊销令牌
 async fn disable_user(pool: &PgPool, user_id: Uuid) -> Result<(), AppError> {
     let result = sqlx::query(
-        "UPDATE users SET status = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
+        "UPDATE users SET enabled = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
          WHERE id = $1 AND status = TRUE",
     )
     .bind(user_id)
@@ -265,7 +265,7 @@ async fn disable_user(pool: &PgPool, user_id: Uuid) -> Result<(), AppError> {
 /// 批量禁用已过有效期的启用账户，返回禁用数量（供定时任务周期扫描）
 pub async fn disable_expired(pool: &PgPool) -> Result<u64, AppError> {
     let result = sqlx::query(
-        "UPDATE users SET status = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
+        "UPDATE users SET enabled = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
          WHERE status = TRUE AND password_expiry_days > 0
            AND NOW() > password_changed_at + make_interval(days => password_expiry_days)",
     )

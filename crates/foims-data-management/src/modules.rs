@@ -44,11 +44,11 @@ pub const MODULES: &[ModuleDef] = &[
         tables: &[
             "device_templates",
             "devices",
-            "snmp_macs",
+            "snmp_arp_entries",
             "device_lldps",
             "device_nics",
             "device_interfaces",
-            "ips",
+            "interface_ips",
         ],
     },
     // 线路模块：跳接线路（端点为多态引用，导入前校验端点存在）

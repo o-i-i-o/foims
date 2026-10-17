@@ -217,10 +217,10 @@ fn parse_frames(body: &[u8]) -> Result<(Vec<AgentReport>, u64), String> {
 /// 校验 → 帧间机器标识一致性 → 单事务 upsert 入库。
 ///
 /// 入库（单事务）：
-/// - agents 主行：首报自动注册（INSERT，status='active'、label 取 hostname），
+/// - monitored_hosts 主行：首报自动注册（INSERT，status='active'、label 取 hostname），
 ///   已注册行刷新快照列（取最后一帧；offline 首报即翻转 active；disabled
 ///   行前置拒收不写库）；删除记录后同机可再次注册；
-/// - agent_metrics_history 逐帧追加曲线精简快照
+/// - host_metrics_history 逐帧追加曲线精简快照
 ///   {"cpu","mem","disk","temp","rx_bps","tx_bps"}。
 pub async fn ingest(
     ctx: &ReportContext,
@@ -308,7 +308,7 @@ pub async fn ingest(
         return error_json(StatusCode::BAD_REQUEST, "批量帧 machine_id 不一致");
     }
 
-    // 5. 快照列计算：以最后一帧（最新）刷新 agents 主行快照与告警评估
+    // 5. 快照列计算：以最后一帧（最新）刷新 monitored_hosts 主行快照与告警评估
     let mem_pct = mem_usage_pct(last_report.memory.total, last_report.memory.used);
     let disk_pct = disk_usage_pct(&last_report.disks);
     let temp = max_temp(&last_report.sensors);
@@ -326,7 +326,7 @@ pub async fn ingest(
     };
     // 6a. 禁用行前置拒收：不刷新快照、不写历史（禁用即完全断供）
     let existing =
-        sqlx::query_as::<_, (Uuid, String)>("SELECT id, status FROM agents WHERE machine_id = $1")
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, status FROM monitored_hosts WHERE machine_id = $1")
             .bind(&machine_id)
             .fetch_optional(&mut *tx)
             .await;
@@ -349,12 +349,12 @@ pub async fn ingest(
     //     active；频控闸门 WHERE 原子判定，0 行即 429）。冲突目标须带
     //     partial index 谓词（machine_id 仅对非空行唯一）
     let upsert = sqlx::query_as::<_, (Uuid, String)>(
-        r"INSERT INTO agents (machine_id, source, status, label, hostname, ip, os, kernel,
+        r"INSERT INTO monitored_hosts (machine_id, source, status, label, hostname, ip, os, kernel,
                               arch, agent_version, cpu_usage, mem_usage_pct, disk_usage_pct,
                               max_temp, uptime_secs, raw_metrics, first_seen, last_seen)
           VALUES ($1, 'agent', 'active', $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
           ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
-              status = CASE WHEN agents.status = 'offline' THEN 'active' ELSE agents.status END,
+              status = CASE WHEN monitored_hosts.status = 'offline' THEN 'active' ELSE monitored_hosts.status END,
               hostname = EXCLUDED.hostname,
               ip = EXCLUDED.ip,
               os = EXCLUDED.os,
@@ -368,8 +368,8 @@ pub async fn ingest(
               uptime_secs = EXCLUDED.uptime_secs,
               raw_metrics = EXCLUDED.raw_metrics,
               last_seen = NOW(),
-              first_seen = COALESCE(agents.first_seen, NOW())
-          WHERE agents.last_seen IS NULL OR agents.last_seen < NOW() - make_interval(secs => $14)
+              first_seen = COALESCE(monitored_hosts.first_seen, NOW())
+          WHERE monitored_hosts.last_seen IS NULL OR monitored_hosts.last_seen < NOW() - make_interval(secs => $14)
           RETURNING id, status",
     )
     .bind(&machine_id)
@@ -398,7 +398,7 @@ pub async fn ingest(
             foims_common::log_error!("log.agent.ingest_db_error", error = e);
             return error_json(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "入库失败：agents 写入出错",
+                "入库失败：monitored_hosts 写入出错",
             );
         }
     };
@@ -426,7 +426,7 @@ pub async fn ingest(
             "tx_bps": sum_bps(|n| n.tx_bps),
         });
         let insert = sqlx::query(
-            r"INSERT INTO agent_metrics_history (agent_id, collected_at, metrics)
+            r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
               VALUES ($1, $2, $3) ON CONFLICT (agent_id, collected_at) DO NOTHING",
         )
         .bind(agent_id)

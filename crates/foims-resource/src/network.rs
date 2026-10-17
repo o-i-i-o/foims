@@ -721,7 +721,7 @@ pub async fn update_network<P: DbProvider>(
     // 修改 CIDR 后校验存量 IP 仍在新网段内：有越界 IP 时拒绝（422）并列出数量
     if req.ipv4_cidr.is_some() || req.ipv6_cidr.is_some() {
         let outside_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM ips \
+            "SELECT COUNT(*) FROM interface_ips \
              WHERE subnet_id = $1 \
              AND NOT ( \
                  (CAST($2 AS CIDR) IS NOT NULL AND ip_address <<= CAST($2 AS CIDR)) \
@@ -839,7 +839,7 @@ pub async fn delete_network<P: DbProvider>(
     }
 
     let ip_count: i64 =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM ips WHERE subnet_id = $1")
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM interface_ips WHERE subnet_id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;

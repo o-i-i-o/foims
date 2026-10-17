@@ -46,8 +46,8 @@ pub async fn get_users<P: AuthProvider>(
         ("email", _) => "ORDER BY email ASC",
         ("role", "desc") => "ORDER BY role DESC, username ASC",
         ("role", _) => "ORDER BY role ASC, username ASC",
-        ("status", "desc") => "ORDER BY status DESC, username ASC",
-        ("status", _) => "ORDER BY status ASC, username ASC",
+        ("enabled", "desc") => "ORDER BY enabled DESC, username ASC",
+        ("enabled", _) => "ORDER BY enabled ASC, username ASC",
         ("two_factor_enabled", "desc") => "ORDER BY two_factor_enabled DESC, username ASC",
         ("two_factor_enabled", _) => "ORDER BY two_factor_enabled ASC, username ASC",
         ("created_at", "asc") => "ORDER BY created_at ASC",
@@ -63,7 +63,7 @@ pub async fn get_users<P: AuthProvider>(
             .await?;
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-            "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users",
+            "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users",
         );
         // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
@@ -85,7 +85,7 @@ pub async fn get_users<P: AuthProvider>(
         .await?;
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-            "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE ",
+            "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE ",
         );
         qb.push_bind(&search_pattern)
             .push(" OR email ILIKE ")
@@ -156,7 +156,7 @@ pub async fn create_user<P: AuthProvider>(
     let mut tx = conn.begin().await?;
 
     let insert_result = sqlx::query(
-        "INSERT INTO users (id, username, password_hash, email, role, status, password_expiry_days, created_at, updated_at)
+        "INSERT INTO users (id, username, password_hash, email, role, enabled, password_expiry_days, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(id)
@@ -212,7 +212,7 @@ pub async fn create_user<P: AuthProvider>(
         username: req.username.clone(),
         email: req.email.clone(),
         role: req.role.clone(),
-        status: true,
+        enabled: true,
         password_expiry_days: req.password_expiry_days.unwrap_or(0),
         two_factor_enabled: false,
         two_factor_verified: false,
@@ -231,7 +231,7 @@ pub async fn get_user<P: AuthProvider>(
     let conn = state.pool()?.get_conn();
 
     let user = sqlx::query_as::<_, User>(
-        "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
+        "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
     )
     .bind(id)
     .fetch_optional(&conn)
@@ -253,13 +253,13 @@ pub async fn update_user<P: AuthProvider>(
     let conn = state.pool()?.get_conn();
 
     // 提权防护与启用防护判定需要目标当前角色/状态/有效期
-    let (current_role, current_status, current_expiry_days, password_changed_at): (
+    let (current_role, current_enabled, current_expiry_days, password_changed_at): (
         String,
         bool,
         i32,
         chrono::DateTime<Utc>,
     ) = sqlx::query_as(
-        "SELECT role, status, password_expiry_days, password_changed_at FROM users WHERE id = $1",
+        "SELECT role, enabled, password_expiry_days, password_changed_at FROM users WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(&conn)
@@ -270,8 +270,8 @@ pub async fn update_user<P: AuthProvider>(
     // password_changed_at 仍早于到期点，下轮定时扫描或下次登录会立即再次
     // 禁用（静默回滚）。此处显式 409 引导管理员先重置密码或调整有效期
     let effective_expiry_days = req.password_expiry_days.unwrap_or(current_expiry_days);
-    if req.status == Some(true)
-        && !current_status
+    if req.enabled == Some(true)
+        && !current_enabled
         && effective_expiry_days > 0
         && Utc::now() > password_changed_at + chrono::Duration::days(effective_expiry_days as i64)
     {
@@ -309,7 +309,7 @@ pub async fn update_user<P: AuthProvider>(
     // 判定会每次编辑都吊销——管理员编辑自己的邮箱/密码有效期时会把
     // 自己踢下线，后续请求 401 且 refresh 同样被拒，表现为强制跳登录页
     let role_changed = req.role.as_deref().is_some_and(|r| r != current_role);
-    let disabling = req.status == Some(false) && current_status;
+    let disabling = req.enabled == Some(false) && current_enabled;
 
     // 权限/启用状态/有效期变更单语句完成：状态或角色变更时同语句吊销
     // 历史令牌（强制重新登录）；拆成两条语句时第二条失败会导致降权已
@@ -318,7 +318,7 @@ pub async fn update_user<P: AuthProvider>(
         "UPDATE users SET
          email = COALESCE($1, email),
          role = COALESCE($2, role),
-         status = COALESCE($3, status),
+         enabled = COALESCE($3, enabled),
          password_expiry_days = COALESCE($6, password_expiry_days),
          tokens_invalidated_at = CASE WHEN $7::BOOLEAN THEN NOW() ELSE tokens_invalidated_at END,
          updated_at = $4
@@ -326,7 +326,7 @@ pub async fn update_user<P: AuthProvider>(
     )
     .bind(&req.email)
     .bind(&req.role)
-    .bind(req.status)
+    .bind(req.enabled)
     .bind(now)
     .bind(id)
     .bind(req.password_expiry_days)
@@ -344,12 +344,12 @@ pub async fn update_user<P: AuthProvider>(
         AppError::from(e)
     })?;
 
-    let details = json!({"email": req.email, "role": req.role, "status": req.status, "password_expiry_days": req.password_expiry_days});
+    let details = json!({"email": req.email, "role": req.role, "enabled": req.enabled, "password_expiry_days": req.password_expiry_days});
     log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;
     log_info!("log.user.updated", id = id);
 
     let user = sqlx::query_as::<_, User>(
-        "SELECT id, username, email, role, status, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
+        "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
     )
     .bind(id)
     .fetch_one(&conn)

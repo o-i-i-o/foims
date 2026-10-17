@@ -324,7 +324,7 @@ pub fn ip_in_cidr(ip: std::net::IpAddr, cidr_addr: std::net::IpAddr, prefix: u8)
     }
 }
 
-/// 由地址自动推导 IP 版本号（ips.ip_version 列 4/6；非法地址返回校验错误）
+/// 由地址自动推导 IP 版本号（interface_ips.ip_version 列 4/6；非法地址返回校验错误）
 pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     match ip.parse::<std::net::IpAddr>() {
         Ok(std::net::IpAddr::V6(_)) => Ok(6),

@@ -183,25 +183,25 @@ pub async fn apply_network_config(
         }
     }
 
-    // 快照托管网口的二层运行属性（端口类型/状态/速率/Trunk id，由端口
+    // 快照托管网口的二层运行属性（端口类型/状态/速率/Native VLAN，由端口
     // 模态框或 SNMP 维护）：设备表单整体替换网口后按 id 回填，避免被默认值重置
     let runtime_attrs: HashMap<Uuid, (String, String, Option<String>, Option<i32>)> =
         sqlx::query_as::<_, (Uuid, String, String, Option<String>, Option<i32>)>(
-            "SELECT id, port_type, status, speed, trunk_id FROM device_interfaces WHERE device_id = $1 AND device_managed",
+            "SELECT id, port_type, status, speed, native_vlan_id FROM device_interfaces WHERE device_id = $1 AND device_managed",
         )
         .bind(device_id)
         .fetch_all(&mut *tx)
         .await?
         .into_iter()
-        .map(|(id, port_type, status, speed, trunk_id)| {
-            (id, (port_type, status, speed, trunk_id))
+        .map(|(id, port_type, status, speed, native_vlan_id)| {
+            (id, (port_type, status, speed, native_vlan_id))
         })
         .collect();
 
     // 删除托管网口的关联数据（顺序：IP → cable_links → 网口）；
     // 非托管网口（SNMP/端口模态框来源）不受设备表单同步影响
     sqlx::query(
-        "DELETE FROM ips WHERE device_interface_id IN (
+        "DELETE FROM interface_ips WHERE device_interface_id IN (
             SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed)",
     )
     .bind(device_id)
@@ -295,13 +295,13 @@ pub async fn apply_network_config(
             let interface_role = port.interface_role.as_deref().unwrap_or("business");
             validate_interface_role(interface_role)?;
             // 设备表单不含二层属性：存量端口恢复快照值，新端口用默认值
-            let (port_type, status, speed, trunk_id) = match runtime_attrs.get(&port_id) {
-                Some((pt, st, sp, tid)) => (pt.clone(), st.clone(), sp.clone(), *tid),
+            let (port_type, status, speed, native_vlan_id) = match runtime_attrs.get(&port_id) {
+                Some((pt, st, sp, vid)) => (pt.clone(), st.clone(), sp.clone(), *vid),
                 None => ("access".to_string(), "up".to_string(), None, None),
             };
 
             sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, trunk_id, device_managed, created_at, updated_at)
+                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, native_vlan_id, device_managed, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, TRUE, $15, $16)",
             )
             .bind(port_id)
@@ -317,7 +317,7 @@ pub async fn apply_network_config(
             .bind(&port_type)
             .bind(&status)
             .bind(&speed)
-            .bind(trunk_id)
+            .bind(native_vlan_id)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)
@@ -336,7 +336,7 @@ pub async fn apply_network_config(
                 ip.validate()?;
 
                 let existing_ip: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)",
+                    "SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)",
                 )
                 .bind(&ip.ip_address)
                 .fetch_optional(&mut *tx)
@@ -353,7 +353,7 @@ pub async fn apply_network_config(
                     nid
                 } else {
                     // 未显式指定时按房间绑定子网探测；IP 必须归属子网
-                    //（ips.subnet_id NOT NULL），探测不中直接报错回滚
+                    //（interface_ips.subnet_id NOT NULL），探测不中直接报错回滚
                     sqlx::query_scalar(
                         r"SELECT nc.id
                             FROM room_networks rn
@@ -379,7 +379,7 @@ pub async fn apply_network_config(
                 let ip_version = detect_ip_version(&ip.ip_address)?;
 
                 sqlx::query(
-                    "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+                    "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
                      VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
                 )
                 .bind(Uuid::new_v4())
@@ -396,7 +396,7 @@ pub async fn apply_network_config(
                 .await
                 .map_err(|e| {
                     // 与其他并发路径（单条创建/自动分配/导入）之间的判重窗口
-                    // 由 ips.ip_address 唯一索引兜底，映射为 409
+                    // 由 interface_ips.ip_address 唯一索引兜底，映射为 409
                     if let sqlx::Error::Database(ref db_err) = e
                         && db_err.is_unique_violation()
                     {
@@ -441,7 +441,7 @@ pub async fn fetch_device_network_config(
                 host(m.ip_address) as ip_address,
                 m.ip_version, di.mac_address AS mac_address, m.description,
                 m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-              FROM ips m
+              FROM interface_ips m
               JOIN device_interfaces di ON m.device_interface_id = di.id
               LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
               LEFT JOIN network_regions nr ON nc.network_region_id = nr.id

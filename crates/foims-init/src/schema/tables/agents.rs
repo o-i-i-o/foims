@@ -1,25 +1,28 @@
-//! 主机采集 Agent（agents）与指标历史（agent_metrics_history）表结构创建。
+//! 主机监控（monitored_hosts）与指标历史（host_metrics_history）表结构创建。
 //!
 //! 设计 docs/agent-design.md §5.2：agent 首报凭共享注册令牌鉴权后自动注册
 //! （INSERT ... ON CONFLICT (machine_id) DO UPDATE），行初始 active，无
 //! pending/激活流程，亦无 per-install token（token_hash 列已移除，上报
 //! 鉴权比对系统配置的 enrollment_token 哈希）；唯一性用 partial unique
-//! index（仅对已回填 machine_id 行生效）。agent_metrics_history 存 JSONB
+//! index（仅对已回填 machine_id 行生效）。host_metrics_history 存 JSONB
 //! 全量指标供详情页曲线渲染，保留期由调度任务清理。
 //!
 //! source 区分数据来源：'agent'（FOIMS Agent 主动上报）/'snmp'（服务端
 //! SNMP 轮询设备，machine_id 合成 'snmp:{device_id}'，不经上报鉴权）；
-//! device_id 关联 devices，设备删除级联清理。
+//! device_id 关联 devices，设备删除级联清理。status/source 均有 CHECK
+//! 约束白名单，与其余枚举列风格一致。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS agents (
+        r"CREATE TABLE IF NOT EXISTS monitored_hosts (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             machine_id TEXT,
-            source TEXT NOT NULL DEFAULT 'agent',
+            source TEXT NOT NULL DEFAULT 'agent'
+                CONSTRAINT chk_monitored_hosts_source CHECK (source IN ('agent', 'snmp')),
             device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
             label TEXT,
-            status TEXT NOT NULL DEFAULT 'active',
+            status TEXT NOT NULL DEFAULT 'active'
+                CONSTRAINT chk_monitored_hosts_status CHECK (status IN ('active', 'offline', 'disabled')),
             hostname TEXT,
             ip TEXT,
             os TEXT,
@@ -42,24 +45,24 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 同机重复上报判重：machine_id 首报自动注册后恒非空，仅对非空行唯一
     sqlx::query(
-        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_machine_id
-            ON agents (machine_id) WHERE machine_id IS NOT NULL",
+        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_monitored_hosts_machine_id
+            ON monitored_hosts (machine_id) WHERE machine_id IS NOT NULL",
     )
     .execute(pool)
     .await?;
 
     // 一台设备至多一条 SNMP 采集记录（snmp_poll upsert 判重锚点）
     sqlx::query(
-        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_device_id
-            ON agents (device_id) WHERE device_id IS NOT NULL",
+        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_monitored_hosts_device_id
+            ON monitored_hosts (device_id) WHERE device_id IS NOT NULL",
     )
     .execute(pool)
     .await?;
 
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS agent_metrics_history (
+        r"CREATE TABLE IF NOT EXISTS host_metrics_history (
             id BIGSERIAL PRIMARY KEY,
-            agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+            agent_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
             collected_at TIMESTAMP WITH TIME ZONE NOT NULL,
             metrics JSONB NOT NULL
         )",
@@ -70,8 +73,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING 幂等去重，
     // 防止 agent 重试/重放同一采集时刻重复写重；兼顾曲线查询范围扫描
     sqlx::query(
-        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_history_agent_time
-            ON agent_metrics_history (agent_id, collected_at)",
+        r"CREATE UNIQUE INDEX IF NOT EXISTS idx_host_metrics_history_agent_time
+            ON host_metrics_history (agent_id, collected_at)",
     )
     .execute(pool)
     .await?;
@@ -79,8 +82,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     // 告警状态表：记录每台主机各指标当前的告警态（状态翻转检测的持久依据），
     // 超阈值边沿 false→true 时发站内通知；主机删除级联清理
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS agent_alert_states (
-            agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        r"CREATE TABLE IF NOT EXISTS host_alert_states (
+            agent_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
             metric TEXT NOT NULL,
             alerting BOOLEAN NOT NULL DEFAULT FALSE,
             PRIMARY KEY (agent_id, metric)

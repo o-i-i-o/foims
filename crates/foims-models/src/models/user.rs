@@ -14,7 +14,8 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub role: String,
-    pub status: bool,
+    /// 账户启用开关：false 表示被禁用（登录与令牌刷新均拒绝）
+    pub enabled: bool,
     /// 单独密码有效期（天），0 表示不启用；到期后账户自动禁用
     pub password_expiry_days: i32,
     pub two_factor_enabled: bool,
@@ -66,7 +67,7 @@ pub struct UserUpdate {
         message = "server.user.validation.role_invalid"
     ))]
     pub role: Option<String>,
-    pub status: Option<bool>,
+    pub enabled: Option<bool>,
     /// 单独密码有效期（天），None 表示不修改
     #[validate(range(
         min = 0,
@@ -336,7 +337,7 @@ mod tests {
         assert!(req.validate().is_ok());
         assert_eq!(req.email, None);
         assert_eq!(req.role, None);
-        assert_eq!(req.status, None);
+        assert_eq!(req.enabled, None);
         Ok(())
     }
 
@@ -345,10 +346,10 @@ mod tests {
         let req: UserUpdate = serde_json::from_value(serde_json::json!({
             "email": "bob@example.com",
             "role": "user",
-            "status": false
+            "enabled": false
         }))?;
         assert!(req.validate().is_ok());
-        assert_eq!(req.status, Some(false));
+        assert_eq!(req.enabled, Some(false));
         Ok(())
     }
 
@@ -567,7 +568,7 @@ mod tests {
             username: "alice".to_string(),
             email: "alice@example.com".to_string(),
             role: "admin".to_string(),
-            status: true,
+            enabled: true,
             password_expiry_days: 0,
             two_factor_enabled: false,
             two_factor_verified: false,

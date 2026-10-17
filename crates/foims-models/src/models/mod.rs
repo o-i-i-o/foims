@@ -183,11 +183,6 @@ pub fn validate_description_opt(value: &&String) -> Result<(), ValidationError> 
     validate_length_str(value, 255, "server.common.validation.description_length")
 }
 
-/// WorkstationUpdate.manager（VARCHAR(50)）
-pub fn validate_manager_opt(value: &&String) -> Result<(), ValidationError> {
-    validate_length_str(value, 50, "server.workstation.validation.manager_length")
-}
-
 /// EmployeeUpdate.phone（VARCHAR(20)）
 pub fn validate_phone_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 20, "server.employee.validation.phone_length")
@@ -245,7 +240,7 @@ pub fn validate_power_watts(value: i32) -> Result<(), ValidationError> {
 }
 
 /// IP 状态取值白名单：active（使用中）/ inactive（停用）/ reserved（保留）。
-/// ips.status 为 VARCHAR(20) 且 DB 侧有 chk_ips_status CHECK 约束兜底，
+/// interface_ips.status 为 VARCHAR(20) 且 DB 侧有 chk_interface_ips_status CHECK 约束兜底，
 /// 应用层前置拦截非法值；
 /// 合法值集合与前端 formatter 的状态文案键保持一致。
 pub fn validate_ip_status_string(status: &str) -> Result<(), ValidationError> {

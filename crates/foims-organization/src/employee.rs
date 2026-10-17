@@ -295,12 +295,27 @@ pub async fn update_employee<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.employee.updated"))
 }
 
-/// 删除员工（工位上的 manager_employee_id 因 ON DELETE SET NULL 自动解绑）。
+/// 删除员工（工位管理人引用采用 ON DELETE RESTRICT，删除前预检并给出可读错误）。
 pub async fn delete_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
+    // 预检工位管理人引用：FK 为 RESTRICT，直接删除会报数据库级错误，
+    // 这里提前计数并映射为带数量的校验错误，提示先变更工位管理人
+    let managed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM workstations WHERE manager_employee_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.pool()?.get_conn())
+    .await?;
+    if managed > 0 {
+        return Err(AppError::Validation(
+            msg("server.employee.in_use_by_workstation")
+                .with("count", managed.to_string()),
+        ));
+    }
+
     let result = sqlx::query("DELETE FROM employees WHERE id = $1")
         .bind(id)
         .execute(&state.pool()?.get_conn())

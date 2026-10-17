@@ -120,7 +120,7 @@ pub async fn list_agents<S: ConfigProvider>(
 
     // 总数
     let mut count_builder =
-        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM agents WHERE 1=1");
+        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM monitored_hosts WHERE 1=1");
     push_filters(
         &mut count_builder,
         query.status.as_deref(),
@@ -136,7 +136,7 @@ pub async fn list_agents<S: ConfigProvider>(
                   disk_usage_pct::float8 AS disk_usage_pct,
                   max_temp::float8 AS max_temp,
                   uptime_secs, last_seen
-             FROM agents WHERE 1=1"#,
+             FROM monitored_hosts WHERE 1=1"#,
     );
     push_filters(
         &mut rows_builder,
@@ -208,7 +208,7 @@ pub async fn get_top_metrics<S: ConfigProvider>(
         let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
             r#"SELECT id, hostname, label, ip,
                       {column}::float8 AS value, last_seen
-                 FROM agents
+                 FROM monitored_hosts
                 WHERE status = 'active' AND {column} IS NOT NULL
                 ORDER BY {column} DESC
                 LIMIT "#
@@ -253,7 +253,7 @@ pub async fn get_agent_detail<S: ConfigProvider>(
                   disk_usage_pct::float8 AS disk_usage_pct,
                   max_temp::float8 AS max_temp,
                   uptime_secs, raw_metrics, first_seen, last_seen, created_at
-             FROM agents WHERE id = $1"#,
+             FROM monitored_hosts WHERE id = $1"#,
     )
     .bind(id)
     .fetch_optional(&pool)
@@ -319,7 +319,7 @@ pub async fn get_agent_history<S: ConfigProvider>(
                SELECT collected_at, metrics,
                       row_number() OVER (ORDER BY collected_at) AS rn,
                       count(*) OVER () AS n
-                 FROM agent_metrics_history
+                 FROM host_metrics_history
                 WHERE agent_id = "#,
     );
     qb.push_bind(id)
@@ -386,7 +386,7 @@ pub async fn patch_agent<S: ConfigProvider>(
     }
 
     let pool = state.pool()?.get_conn();
-    let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("UPDATE agents SET ");
+    let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("UPDATE monitored_hosts SET ");
     {
         let mut separated = builder.separated(", ");
         if let Some(label) = &label {
@@ -424,7 +424,7 @@ pub async fn delete_agent<S: ConfigProvider>(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let pool = state.pool()?.get_conn();
-    let result = sqlx::query("DELETE FROM agents WHERE id = $1")
+    let result = sqlx::query("DELETE FROM monitored_hosts WHERE id = $1")
         .bind(id)
         .execute(&pool)
         .await?;

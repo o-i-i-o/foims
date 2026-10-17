@@ -100,7 +100,7 @@ pub async fn login<P: AuthProvider>(
             chrono::DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, auth_provider, created_at, updated_at FROM users WHERE username = $1 OR email = $1",
+        "SELECT id, username, password_hash, email, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at FROM users WHERE username = $1 OR email = $1",
     )
     .bind(login_identifier)
     .fetch_optional(&conn)
@@ -128,7 +128,7 @@ pub async fn login<P: AuthProvider>(
         password_hash,
         email,
         role,
-        status,
+        enabled,
         two_factor_enabled,
         auth_provider,
         created_at,
@@ -144,7 +144,7 @@ pub async fn login<P: AuthProvider>(
         ));
     }
 
-    if !status {
+    if !enabled {
         // 与用户不存在/外部账户分支同口径：等价 bcrypt 校验抹平耗时侧信道，
         // 防止以响应时间区分「账户存在且被禁用」（账户枚举）
         dummy_bcrypt_verify(&req.password).await;
@@ -271,7 +271,7 @@ pub async fn login<P: AuthProvider>(
         username: username.clone(),
         email,
         role: role.clone(),
-        status,
+        enabled,
         // 登录响应不回传有效期，0 占位
         password_expiry_days: 0,
         two_factor_enabled,

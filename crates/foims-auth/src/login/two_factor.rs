@@ -136,7 +136,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
             DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, password_hash, email, role, status, two_factor_enabled, two_factor_secret, created_at, updated_at FROM users WHERE username = $1",
+        "SELECT id, username, password_hash, email, role, enabled, two_factor_enabled, two_factor_secret, created_at, updated_at FROM users WHERE username = $1",
     )
     .bind(login_identifier)
     .fetch_optional(&conn)
@@ -176,7 +176,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
         password_hash,
         email,
         role,
-        status,
+        enabled,
         two_factor_enabled,
         secret,
         created_at,
@@ -212,7 +212,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
         return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 
-    if !status {
+    if !enabled {
         crate::app_fail2ban::record_login_failure(
             client_ip,
             login_identifier,
@@ -383,7 +383,7 @@ pub async fn login_with_two_factor<P: AuthProvider>(
         username,
         email,
         role,
-        status,
+        enabled,
         // 登录响应不回传有效期，0 占位
         password_expiry_days: 0,
         two_factor_enabled,

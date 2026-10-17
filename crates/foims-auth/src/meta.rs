@@ -81,7 +81,7 @@ pub struct OperationLogParams<'a> {
     pub resource_type: &'a str,
     pub resource_id: Option<&'a Uuid>,
     pub details: &'a serde_json::Value,
-    pub result: bool,
+    pub success: bool,
 }
 
 pub async fn log_system_operation(
@@ -91,7 +91,7 @@ pub async fn log_system_operation(
     // 用户存在性校验复用 utils 的唯一定义，不存在则使用 NULL
     let valid_user_id = crate::jwt::resolve_valid_user_id(pool, params.user_id).await?;
 
-    sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, result, ip_address, created_at)
+    sqlx::query(r"INSERT INTO operation_logs (id, user_id, action, resource_type, resource_id, details, success, ip_address, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
         .bind(Uuid::new_v4())
         .bind(valid_user_id)
@@ -99,7 +99,7 @@ pub async fn log_system_operation(
         .bind(params.resource_type)
         .bind(params.resource_id)
         .bind(params.details)
-        .bind(params.result)
+        .bind(params.success)
         .bind(params.ip_address)
         .bind(chrono::Utc::now())
         .execute(pool)
@@ -110,7 +110,7 @@ pub async fn log_system_operation(
 /// 尽力而为地记录操作日志：失败时仅打印警告，不影响主流程。
 ///
 /// 用于替代各 handler 中重复的 `if let Err(e) = log_system_operation(...).await { warn!(...) }` 样板。
-/// 所有调用点均使用 `result: true`（失败路径由各 handler 自行返回错误）。
+/// 所有调用点均使用 `success: true`（失败路径由各 handler 自行返回错误）。
 pub async fn log_op_best_effort(
     pool: &sqlx::PgPool,
     meta: &RequestMeta,
@@ -128,7 +128,7 @@ pub async fn log_op_best_effort(
             resource_type,
             resource_id,
             details,
-            result: true,
+            success: true,
         },
     )
     .await

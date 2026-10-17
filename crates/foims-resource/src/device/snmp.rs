@@ -147,7 +147,7 @@ pub async fn get_device_ip_address(
     device_id: &Uuid,
 ) -> Result<Option<String>, SwitchConfigError> {
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(i.ip_address) FROM ips i
+        r"SELECT host(i.ip_address) FROM interface_ips i
            JOIN device_interfaces di ON i.device_interface_id = di.id
            WHERE di.device_id = $1
            ORDER BY i.created_at LIMIT 1",

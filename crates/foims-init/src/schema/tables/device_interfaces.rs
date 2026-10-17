@@ -27,7 +27,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             status VARCHAR(20) NOT NULL DEFAULT 'up'
                 CONSTRAINT chk_device_interfaces_status CHECK (status IN ('up', 'down', 'admin-down')),
             speed VARCHAR(20),
-            trunk_id INTEGER,
+            native_vlan_id INTEGER,
             device_managed BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

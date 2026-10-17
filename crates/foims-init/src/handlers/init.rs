@@ -101,7 +101,7 @@ pub async fn init_system(
     }
 
     if let Err(e) = sqlx::query(
-        r"INSERT INTO users (id, username, password_hash, email, role, status)
+        r"INSERT INTO users (id, username, password_hash, email, role, enabled)
                VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(user_id)

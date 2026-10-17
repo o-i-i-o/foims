@@ -141,7 +141,7 @@ const ENUM_WHITELISTS: &[(&str, &str, bool, &[&str])] = &[
         false,
         &["ethernet", "fiber", "console"],
     ),
-    ("ips", "status", false, &["active", "inactive", "reserved"]),
+    ("interface_ips", "status", false, &["active", "inactive", "reserved"]),
     (
         "topology_connections",
         "connection_type",
@@ -230,7 +230,7 @@ pub async fn import_csv<P: DataProvider>(
                             .with("row", row.row_no),
                     ));
                 }
-                if *table == "ips" {
+                if *table == "interface_ips" {
                     validate_ip_in_room(&mut tx, &mut room_cidr_cache, &values, row).await?;
                 }
                 let (row_id, is_update) = upsert_row(&mut tx, spec, &meta, &values).await?;
@@ -532,7 +532,7 @@ async fn resolve_row<P: DataProvider>(
 
     // ip_version 由地址自动推导（与 API 的 detect_ip_version 同一实现）：
     // CSV 提供的手工值可能与地址族不一致，落库后破坏按版本过滤的查询
-    if spec.table == "ips"
+    if spec.table == "interface_ips"
         && let Some(Some(addr)) = values.get("ip_address")
     {
         let version: i16 = foims_common::net::detect_ip_version(addr)
@@ -574,7 +574,7 @@ async fn resolve_row<P: DataProvider>(
 }
 
 /// 专项校验：IP 地址必须属于设备所在房间绑定的网段
-/// （房间未绑定任何网段时不做归属限制；snmp_macs 为 SNMP 发现数据，
+/// （房间未绑定任何网段时不做归属限制；snmp_arp_entries 为 SNMP 发现数据，
 /// 可能含外来地址，不做此校验）。
 async fn validate_ip_in_room(
     conn: &mut PgConnection,
@@ -595,7 +595,7 @@ async fn validate_ip_in_room(
     let Some(ip) = crate::names::parse_inet(&ip_str) else {
         return Err(DataError::Validation(
             msg("server.import_export.field_invalid")
-                .with("table", "ips")
+                .with("table", "interface_ips")
                 .with("row", row.row_no)
                 .with("column", "ip_address")
                 .with("value", &ip_str)
@@ -606,7 +606,7 @@ async fn validate_ip_in_room(
     let Some((_, room_id)) = resolve::interface_owner(conn, &interface_id).await? else {
         return Err(DataError::Validation(
             msg("server.import_export.ref_not_found")
-                .with("table", "ips")
+                .with("table", "interface_ips")
                 .with("row", row.row_no)
                 .with("column", "interface_name")
                 .with(
@@ -625,7 +625,7 @@ async fn validate_ip_in_room(
     };
     if cidrs.is_empty() {
         // 房间未绑定网段：无法做房间归属校验，跳过（IP 归属子网本身
-        // 已由 ips.subnet_id NOT NULL 与 CSV network_name 必填保证）
+        // 已由 interface_ips.subnet_id NOT NULL 与 CSV network_name 必填保证）
         return Ok(());
     }
 
@@ -638,7 +638,7 @@ async fn validate_ip_in_room(
         let room_name = resolve::room_name_of(conn, &room_id).await;
         return Err(DataError::Validation(
             msg("server.import_export.ip_not_in_room_subnet")
-                .with("table", "ips")
+                .with("table", "interface_ips")
                 .with("row", row.row_no)
                 .with("ip", &ip_str)
                 .with("room", room_name),

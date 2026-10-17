@@ -359,7 +359,7 @@ pub struct AgentConfig {
     /// 单条上报 payload 上限（字节），超出返回 413。
     #[serde(default = "default_agent_max_report_bytes")]
     pub max_report_bytes: usize,
-    /// agent_metrics_history 保留天数（清理任务按此删除旧行）。
+    /// host_metrics_history 保留天数（清理任务按此删除旧行）。
     #[serde(default = "default_agent_history_retention_days")]
     pub history_retention_days: u32,
     /// 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline。

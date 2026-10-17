@@ -137,7 +137,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
             DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, email, role, status, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider, created_at, updated_at FROM users WHERE email = $1",
+        "SELECT id, username, email, role, enabled, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider, created_at, updated_at FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(&conn)
@@ -163,7 +163,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
         username,
         email,
         role,
-        status,
+        enabled,
         two_factor_enabled,
         code,
         expiry,
@@ -188,7 +188,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
         )));
     }
 
-    if !status {
+    if !enabled {
         // 禁用账户同样计入 fail2ban（与本地密码登录的禁用分支口径一致）
         crate::app_fail2ban::record_login_failure(
             client_ip,
@@ -310,7 +310,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
         username: username.clone(),
         email,
         role: role.clone(),
-        status,
+        enabled,
         // 登录响应不回传有效期，0 占位
         password_expiry_days: 0,
         two_factor_enabled,
@@ -353,7 +353,7 @@ pub async fn send_login_code<P: AuthProvider>(
     enforce_email_send_limit(&meta.ip_address, email)?;
 
     let user_row = match sqlx::query_as::<sqlx::Postgres, (Uuid, String, bool)>(
-        "SELECT id, username, status FROM users WHERE email = $1",
+        "SELECT id, username, enabled FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(&conn)
@@ -365,9 +365,9 @@ pub async fn send_login_code<P: AuthProvider>(
         }
     };
 
-    let (id, _username, status) = user_row;
+    let (id, _username, enabled) = user_row;
 
-    if !status {
+    if !enabled {
         return Ok(foims_common::ok_json((), "server.auth.code_sent"));
     }
 

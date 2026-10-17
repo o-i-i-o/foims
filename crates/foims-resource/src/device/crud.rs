@@ -388,7 +388,7 @@ pub async fn create_device<P: DbProvider>(
     let cards = req.cards.as_deref().unwrap_or(&[]);
     super::nic::apply_network_config(&mut tx, id, req.room_id, cards, now).await?;
     let ip_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
+        "SELECT COUNT(*) FROM interface_ips WHERE device_interface_id IN (SELECT id FROM device_interfaces WHERE device_id = $1)",
     )
         .bind(id)
         .fetch_one(&mut *tx)
@@ -671,7 +671,7 @@ pub async fn update_device<P: DbProvider>(
     if resolved_room_id != current_room_id && req.cards.is_none() {
         let stale_ip_count: i64 = sqlx::query_scalar(
             r"SELECT COUNT(*)
-               FROM ips i
+               FROM interface_ips i
                JOIN device_interfaces di ON di.id = i.device_interface_id
                WHERE di.device_id = $1
                  AND NOT EXISTS (

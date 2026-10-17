@@ -2,9 +2,9 @@
 //!
 //! 由主程序 TaskRegistry 注册、系统级定时任务驱动：
 //! - `agent_offline`：每分钟按 上报间隔 × 离线倍数 将失联 active agent 置为 offline；
-//! - `agent_history_cleanup`：每日清理超过保留期的 agent_metrics_history；
+//! - `agent_history_cleanup`：每日清理超过保留期的 host_metrics_history；
 //! - `agent_snmp_poll`：周期轮询已配置 SNMP 的设备，采集结果以 source='snmp'
-//!   的 agents 行呈现于主机监控页（详见 [`crate::snmp_poll`]）。
+//!   的 monitored_hosts 行呈现于主机监控页（详见 [`crate::snmp_poll`]）。
 
 use async_trait::async_trait;
 use foims_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
@@ -70,7 +70,7 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
         let seconds = interval_secs.saturating_mul(factor);
 
         let result = sqlx::query(
-            r"UPDATE agents SET status = 'offline'
+            r"UPDATE monitored_hosts SET status = 'offline'
                WHERE status = 'active'
                  AND source = 'agent'
                  AND last_seen IS NOT NULL
@@ -92,7 +92,7 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
 }
 
 /// Agent 历史指标清理任务执行器：删除 collected_at 超过保留期的
-/// agent_metrics_history 行（曲线快照体积随时间增长，需滚动清理）。
+/// host_metrics_history 行（曲线快照体积随时间增长，需滚动清理）。
 pub struct AgentHistoryCleanupTaskExecutor;
 
 #[async_trait]
@@ -115,7 +115,7 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
             .unwrap_or(DEFAULT_RETENTION_DAYS);
 
         let result = sqlx::query(
-            r"DELETE FROM agent_metrics_history
+            r"DELETE FROM host_metrics_history
                WHERE collected_at < NOW() - make_interval(days => $1)",
         )
         .bind(i32::try_from(days).unwrap_or(i32::MAX))
@@ -136,7 +136,7 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
 }
 
 /// SNMP 设备轮询任务执行器：采集已配置 SNMP 的设备（MIB-II 系统组），
-/// 结果以 source='snmp' 的 agents 行呈现于主机监控页，并按
+/// 结果以 source='snmp' 的 monitored_hosts 行呈现于主机监控页，并按
 /// 轮询间隔 × 2 翻转连续失联设备为 offline。
 pub struct AgentSnmpPollTaskExecutor;
 

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 
-use crate::helpers::validate_network_in_room;
+use crate::helpers::{validate_ip_in_subnet, validate_network_in_room};
 use chrono::Utc;
 use foims_auth::meta::{RequestMeta, log_op_best_effort};
 use foims_common::AppError;
@@ -238,7 +238,7 @@ pub async fn get_device_ips<P: DbProvider>(
             host(m.ip_address) as ip_address,
             m.ip_version, di.mac_address AS mac_address, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-        FROM ips m
+        FROM interface_ips m
         JOIN device_interfaces di ON m.device_interface_id = di.id
         LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
         LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
@@ -272,7 +272,7 @@ pub async fn create_device_ip<P: DbProvider>(
         .ok_or_else(|| AppError::NotFound(msg("server.device.not_found").with("id", id)))?;
 
     let existing_ip: Option<Uuid> =
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)")
             .bind(&req.ip_address)
             .fetch_optional(&mut *tx)
             .await?;
@@ -304,12 +304,15 @@ pub async fn create_device_ip<P: DbProvider>(
     let subnet_id = match req.subnet_id {
         Some(nid) => {
             validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
+            // 显式指定子网时还须校验 IP 落在该子网 CIDR 内（自动探测
+            // 路径按 <<= 匹配天然满足，显式路径可能挂错网段）
+            validate_ip_in_subnet(&mut *tx, nid, &req.ip_address).await?;
             nid
         }
         None => match subnet_id {
             Some(nid) => nid,
             // 自动探测不中且请求未显式指定子网：IP 必须归属子网
-            //（ips.subnet_id NOT NULL），不再放行 NULL
+            //（interface_ips.subnet_id NOT NULL），不再放行 NULL
             None => {
                 return Err(AppError::Validation(
                     msg("server.ip.network_required").with("ip", &req.ip_address),
@@ -351,7 +354,7 @@ pub async fn create_device_ip<P: DbProvider>(
     };
 
     sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+        "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
     )
     .bind(ip_id)
@@ -367,7 +370,7 @@ pub async fn create_device_ip<P: DbProvider>(
     .execute(&mut *tx)
     .await
     .map_err(|e| {
-        // 预检与写入间存在并发窗口，23505（uq_ips_ip_address）兜底映射为冲突
+        // 预检与写入间存在并发窗口，23505（uq_interface_ips_ip_address）兜底映射为冲突
         //（与 auto_assign_ip 的写法对齐）
         if let sqlx::Error::Database(ref db_err) = e
             && db_err.is_unique_violation()
@@ -480,16 +483,16 @@ async fn sync_switch_macs(
         }
     }
 
-    // subnet_id 为 None（全部子网）时不对 ips.subnet_id 过滤；
-    // ips.ip_address 全局唯一，同一观测行至多命中一条 IP 记录
+    // subnet_id 为 None（全部子网）时不对 interface_ips.subnet_id 过滤；
+    // interface_ips.ip_address 全局唯一，同一观测行至多命中一条 IP 记录
     let observed: Vec<ObservedMacRow> = match subnet_id {
         Some(subnet_id) => {
             sqlx::query_as(
                 r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
                       i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
                       di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
-              FROM snmp_macs sm
-              INNER JOIN ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
+              FROM snmp_arp_entries sm
+              INNER JOIN interface_ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
               INNER JOIN device_interfaces di ON i.device_interface_id = di.id
               INNER JOIN devices dv ON di.device_id = dv.id
               WHERE sm.device_id = $1",
@@ -504,8 +507,8 @@ async fn sync_switch_macs(
                 r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
                       i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
                       di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
-              FROM snmp_macs sm
-              INNER JOIN ips i ON sm.ip_address = i.ip_address
+              FROM snmp_arp_entries sm
+              INNER JOIN interface_ips i ON sm.ip_address = i.ip_address
               INNER JOIN device_interfaces di ON i.device_interface_id = di.id
               INNER JOIN devices dv ON di.device_id = dv.id
               WHERE sm.device_id = $1",
@@ -518,7 +521,7 @@ async fn sync_switch_macs(
 
     if observed.is_empty() {
         let total_macs: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM snmp_macs WHERE device_id = $1")
+            sqlx::query_scalar("SELECT COUNT(*) FROM snmp_arp_entries WHERE device_id = $1")
                 .bind(device_id)
                 .fetch_one(&mut *tx)
                 .await?;
@@ -581,7 +584,7 @@ async fn sync_switch_macs(
     for (iface_id, iface) in &interfaces {
         // MAC 冲突检测：同一 MAC 已被其他设备的网口使用则跳过
         let mac_conflict: Option<String> = sqlx::query_scalar(
-            r"SELECT host(i.ip_address) FROM ips i
+            r"SELECT host(i.ip_address) FROM interface_ips i
                JOIN device_interfaces di ON i.device_interface_id = di.id
                WHERE di.mac_address = $1
                AND di.device_id != $2
@@ -604,7 +607,7 @@ async fn sync_switch_macs(
         // 观测到的 IP 行刷新 last_seen，并即时把先前判为停用的地址恢复活跃
         // （reserved 为人工保留语义，自动化不触碰；updated_at 由触发器维护）
         sqlx::query(
-            "UPDATE ips SET last_seen = $1, status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END
+            "UPDATE interface_ips SET last_seen = $1, status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END
              WHERE id = ANY($2)",
         )
         .bind(now)
@@ -722,7 +725,7 @@ pub async fn sync_ip_status_by_staleness(
     stale_days: i32,
 ) -> Result<(u64, u64), sqlx::Error> {
     let stale = sqlx::query(
-        "UPDATE ips SET status = 'inactive'
+        "UPDATE interface_ips SET status = 'inactive'
          WHERE status = 'active' AND last_seen < NOW() - make_interval(days => $1)",
     )
     .bind(stale_days)
@@ -731,7 +734,7 @@ pub async fn sync_ip_status_by_staleness(
     .rows_affected();
 
     let recovered = sqlx::query(
-        "UPDATE ips SET status = 'active'
+        "UPDATE interface_ips SET status = 'active'
          WHERE status = 'inactive' AND last_seen >= NOW() - make_interval(days => $1)",
     )
     .bind(stale_days)
@@ -777,7 +780,7 @@ pub async fn pull_ip_details<P: DbProvider>(
                    nc.name AS network_name, nr.name AS network_region,
                    host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
                    m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-                   FROM ips m
+                   FROM interface_ips m
                    JOIN device_interfaces di ON m.device_interface_id = di.id
                    LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
                    LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
@@ -794,7 +797,7 @@ pub async fn pull_ip_details<P: DbProvider>(
                    nc.name AS network_name, nr.name AS network_region,
                    host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
                    m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-                   FROM ips m
+                   FROM interface_ips m
                    JOIN device_interfaces di ON m.device_interface_id = di.id
                    LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
                    LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
@@ -844,7 +847,7 @@ pub async fn pull_ip_details_internal(
     Ok(())
 }
 
-// IP 版本推导（ips.ip_version 4/6）真身定义在 foims-common::net，
+// IP 版本推导（interface_ips.ip_version 4/6）真身定义在 foims-common::net，
 // 与导入导出的行级校验共用同一口径
 pub use foims_common::net::detect_ip_version;
 
@@ -912,7 +915,7 @@ pub async fn get_available_ips<P: DbProvider>(
         .and_then(|row| crate::helpers::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
-        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE subnet_id = $1")
+        sqlx::query_scalar("SELECT host(ip_address) FROM interface_ips WHERE subnet_id = $1")
             .bind(subnet_id)
             .fetch_all(&state.pool()?.get_conn())
             .await?;
@@ -990,7 +993,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
         .and_then(|row| crate::helpers::parse_network_from_row(&row))?;
 
     let used_ips: Vec<String> =
-        sqlx::query_scalar("SELECT host(ip_address) FROM ips WHERE subnet_id = $1")
+        sqlx::query_scalar("SELECT host(ip_address) FROM interface_ips WHERE subnet_id = $1")
             .bind(req_subnet_id)
             .fetch_all(&mut *tx)
             .await?;
@@ -1047,7 +1050,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
     };
 
     let insert_result = sqlx::query(
-        "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+        "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
          VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
@@ -1206,7 +1209,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
 
     for (index, ip_req, id, ip_version_num) in &valid_requests {
         let existing: Option<Uuid> =
-            match sqlx::query_scalar("SELECT id FROM ips WHERE ip_address = CAST($1 AS INET)")
+            match sqlx::query_scalar("SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)")
                 .bind(&ip_req.ip_address)
                 .fetch_optional(tx.as_mut())
                 .await
@@ -1239,7 +1242,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             }
         };
 
-        // 网段归属校验：IP 必须归属子网（ips.subnet_id NOT NULL），
+        // 网段归属校验：IP 必须归属子网（interface_ips.subnet_id NOT NULL），
         // 未显式指定的记录直接报错；显式指定时与单条路径（create_device_ip）
         // 保持一致：校验子网属于设备所在房间，防止跨房间挂载
         let subnet_id = match ip_req.subnet_id {
@@ -1268,6 +1271,14 @@ pub async fn batch_create_ip_details<P: DbProvider>(
                     log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
                     duplicate_errors
                         .push(msg("server.network.not_in_room").with("index", index + 1));
+                    continue;
+                }
+                // 子网在房间内还须包含该 IP（与单条路径 validate_ip_in_subnet 对齐）
+                if let Err(err) = validate_ip_in_subnet(tx.as_mut(), nid, &ip_req.ip_address).await
+                {
+                    log_warn!("log.ip.batch_record_failed", index = index + 1, error = err);
+                    duplicate_errors
+                        .push(msg("server.ip.not_in_subnet").with("index", index + 1));
                     continue;
                 }
                 nid
@@ -1337,7 +1348,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
         };
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
+            "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
              VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
         )
         .bind(*id)

@@ -77,7 +77,7 @@ pub struct DeviceInterface {
     /// 端口速率（SNMP 维护）
     pub speed: Option<String>,
     /// Trunk 端口的 Native VLAN id（仅 trunk/hybrid 类型使用）
-    pub trunk_id: Option<i32>,
+    pub native_vlan_id: Option<i32>,
     /// 是否由设备模态框托管（在设备编辑界面展示）
     pub device_managed: bool,
     pub created_at: DateTime<Utc>,
@@ -100,7 +100,7 @@ pub struct DeviceInterfaceWithDevice {
     pub port_type: String,
     pub status: String,
     pub speed: Option<String>,
-    pub trunk_id: Option<i32>,
+    pub native_vlan_id: Option<i32>,
     pub device_managed: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -141,7 +141,7 @@ pub struct DeviceInterfaceCreate {
         function = "crate::models::validate_vlan_id_option",
         message = "server.device.validation.vlan_id_range"
     ))]
-    pub trunk_id: Option<i32>,
+    pub native_vlan_id: Option<i32>,
     /// 设备模态框托管标记；缺省 false（端口模态框/SNMP 来源）
     pub device_managed: Option<bool>,
 }
@@ -190,7 +190,7 @@ pub struct DeviceInterfaceUpdate {
         function = "crate::models::validate_vlan_id_option",
         message = "server.device.validation.vlan_id_range"
     ))]
-    pub trunk_id: Option<Option<i32>>,
+    pub native_vlan_id: Option<Option<i32>>,
     /// 缺省表示不修改（SNMP 覆盖同步时保留原值）
     pub device_managed: Option<bool>,
 }
@@ -241,7 +241,7 @@ pub struct LldpNeighbor {
     pub neighbor_sys_desc: Option<String>,
 }
 
-/// SNMP 观测表 snmp_macs 行模型：设备 ARP/FDB 学到的 IP ↔ MAC 条目
+/// SNMP 观测表 snmp_arp_entries 行模型：设备 ARP/FDB 学到的 IP ↔ MAC 条目
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct SnmpMac {
     pub id: Uuid,
@@ -1081,7 +1081,7 @@ mod tests {
 
     #[test]
     fn test_device_interface_vlan_id_range() -> Result<(), serde_json::Error> {
-        // 创建路径：vlan_id / trunk_id 仅允许 1..=4094
+        // 创建路径：vlan_id / native_vlan_id 仅允许 1..=4094
         for bad_vlan in [0i32, -1, 4095] {
             let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
                 "name": "eth0",
@@ -1094,17 +1094,17 @@ mod tests {
 
             let req: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
                 "name": "eth0",
-                "trunk_id": bad_vlan
+                "native_vlan_id": bad_vlan
             }))?;
             let Err(errors) = req.validate() else {
-                panic!("trunk_id={bad_vlan} 应被拒绝");
+                panic!("native_vlan_id={bad_vlan} 应被拒绝");
             };
-            assert!(errors.errors().contains_key("trunk_id"));
+            assert!(errors.errors().contains_key("native_vlan_id"));
         }
         let ok: DeviceInterfaceCreate = serde_json::from_value(serde_json::json!({
             "name": "eth0",
             "vlan_id": 1,
-            "trunk_id": 4094
+            "native_vlan_id": 4094
         }))?;
         assert!(ok.validate().is_ok());
         Ok(())
@@ -1112,7 +1112,7 @@ mod tests {
 
     #[test]
     fn test_device_interface_update_vlan_id_range() -> Result<(), serde_json::Error> {
-        // 更新路径：vlan_id 与 trunk_id 均为双层 Option，数值均限 1..=4094
+        // 更新路径：vlan_id 与 native_vlan_id 均为双层 Option，数值均限 1..=4094
         let bad: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
             "vlan_id": 4096
         }))?;
@@ -1122,12 +1122,12 @@ mod tests {
         assert!(errors.errors().contains_key("vlan_id"));
 
         let bad_trunk: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
-            "trunk_id": 0
+            "native_vlan_id": 0
         }))?;
         let Err(errors) = bad_trunk.validate() else {
-            panic!("trunk_id=0 应被拒绝");
+            panic!("native_vlan_id=0 应被拒绝");
         };
-        assert!(errors.errors().contains_key("trunk_id"));
+        assert!(errors.errors().contains_key("native_vlan_id"));
 
         // null 清除（Some(None)）与缺失（None）均跳过校验
         let null_vlan: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
@@ -1137,9 +1137,9 @@ mod tests {
         assert!(null_vlan.validate().is_ok());
 
         let null_trunk: DeviceInterfaceUpdate = serde_json::from_value(serde_json::json!({
-            "trunk_id": null
+            "native_vlan_id": null
         }))?;
-        assert_eq!(null_trunk.trunk_id, Some(None));
+        assert_eq!(null_trunk.native_vlan_id, Some(None));
         assert!(null_trunk.validate().is_ok());
         Ok(())
     }

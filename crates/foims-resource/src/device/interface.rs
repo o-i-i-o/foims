@@ -39,7 +39,7 @@ use foims_models::{
 /// 接口联表查询列（含所属设备名），列表与单条查询共用。
 const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,
                 di.nic_id, di.name, di.physical_type, di.interface_role, di.mac_address, di.vlan_id,
-                di.description, di.sort_order, di.port_type, di.status, di.speed, di.trunk_id,
+                di.description, di.sort_order, di.port_type, di.status, di.speed, di.native_vlan_id,
                 di.device_managed, di.created_at, di.updated_at";
 
 /// 校验二层端口类型枚举（与 device_interfaces.port_type CHECK 一致）。
@@ -232,7 +232,7 @@ pub async fn create_device_interface<P: DbProvider>(
     sqlx::query(
         r"INSERT INTO device_interfaces (
             id, device_id, nic_id, name, physical_type, interface_role, mac_address,
-            vlan_id, description, port_type, status, speed, trunk_id, device_managed, sort_order,
+            vlan_id, description, port_type, status, speed, native_vlan_id, device_managed, sort_order,
             created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, $16)",
     )
@@ -248,7 +248,7 @@ pub async fn create_device_interface<P: DbProvider>(
     .bind(port_type)
     .bind(status)
     .bind(&req.speed)
-    .bind(req.trunk_id)
+    .bind(req.native_vlan_id)
     .bind(req.device_managed.unwrap_or(false))
     .bind(now)
     .bind(now)
@@ -378,8 +378,9 @@ pub async fn update_device_interface<P: DbProvider>(
         if let Some(speed) = &req.speed {
             sep.push("speed = ").push_bind_unseparated(speed);
         }
-        if let Some(trunk_id) = req.trunk_id {
-            sep.push("trunk_id = ").push_bind_unseparated(trunk_id);
+        if let Some(native_vlan_id) = req.native_vlan_id {
+            sep.push("native_vlan_id = ")
+                .push_bind_unseparated(native_vlan_id);
         }
         if let Some(device_managed) = req.device_managed {
             sep.push("device_managed = ")
@@ -466,7 +467,7 @@ pub async fn delete_device_interface<P: DbProvider>(
             .await?;
 
     // 先删除相关的 IP 地址
-    sqlx::query("DELETE FROM ips WHERE device_interface_id = $1")
+    sqlx::query("DELETE FROM interface_ips WHERE device_interface_id = $1")
         .bind(interface_id)
         .execute(&mut *tx)
         .await?;
@@ -541,7 +542,7 @@ fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
         status: port.status.clone(),
         speed: port.speed.clone(),
         // SNMP 同步来源不涉及 hybrid 端口的 Native VLAN 配置
-        trunk_id: None,
+        native_vlan_id: None,
         device_managed: Some(false),
     }
 }
@@ -576,7 +577,7 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
     .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(i.ip_address) FROM ips i
+        r"SELECT host(i.ip_address) FROM interface_ips i
            JOIN device_interfaces di ON i.device_interface_id = di.id
            WHERE di.device_id = $1
            ORDER BY i.created_at LIMIT 1",

@@ -68,7 +68,7 @@ export class SVGRenderer {
       {
         relY: 105,
         label: `${t("viz.manager_label")}: `,
-        value: workstation.manager || t("viz.no_manager"),
+        value: workstation.manager_name,
         valueClass: "workstation-manager"
       }
     ];
@@ -80,7 +80,7 @@ export class SVGRenderer {
       `${t("viz.workstation_label")}: ${workstation.name}`,
       `IP: ${ipAddress}`,
       `${t("viz.port_label")}: ${portInfo}`,
-      `${t("viz.manager_label")}: ${workstation.manager || t("viz.no_manager")}`
+      `${t("viz.manager_label")}: ${workstation.manager_name}`
     ];
     if (ipDetail && (ipDetail.network_name || ipDetail.network_region)) {
       const netParts = [ipDetail.network_region, ipDetail.network_name].filter(Boolean).join(" / ");

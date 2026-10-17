@@ -233,7 +233,7 @@ async fn handle_notification(
     // 通知目标：所有启用状态的管理员（admin/sysadmin/secadmin）按人各发一条，
     // 已读状态随用户独立（与主机告警通知的收件人口径一致）
     let admin_ids: Vec<Uuid> = match sqlx::query_scalar(
-        "SELECT id FROM users WHERE status = TRUE AND role IN ('admin', 'sysadmin', 'secadmin')",
+        "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'sysadmin', 'secadmin')",
     )
     .fetch_all(pool)
     .await

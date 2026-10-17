@@ -23,10 +23,10 @@ use foims_models::{
     IpDetail, Workstation, WorkstationCreate, WorkstationUpdate, WorkstationWithDetails,
 };
 
-/// 工位基础查询列（含房间名联表），列表与单条查询共用。
+/// 工位基础查询列（含房间名与管理人姓名联表），列表与单条查询共用。
 const WORKSTATION_COLUMNS: &str = "w.id, w.name, w.room_id,
         r.name as room_name,
-        w.manager, w.manager_employee_id, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ";
+        e.name as manager_name, w.manager_employee_id, w.description, w.created_at::TIMESTAMPTZ, w.updated_at::TIMESTAMPTZ";
 
 /// 追加工位列表过滤条件（关键字 + 机房），供 COUNT 与数据查询共用。
 fn push_workstation_filters(
@@ -39,7 +39,7 @@ fn push_workstation_filters(
         builder
             .push(" WHERE (w.name ILIKE ")
             .push_bind(pattern)
-            .push(" OR w.manager ILIKE ")
+            .push(" OR e.name ILIKE ")
             .push_bind(pattern)
             .push(" OR w.description ILIKE ")
             .push_bind(pattern)
@@ -80,18 +80,22 @@ pub async fn get_workstations<P: DbProvider>(
         ("name", "desc") => "ORDER BY w.name DESC",
         ("room_name", "desc") => "ORDER BY room_name DESC, w.name ASC",
         ("room_name", _) => "ORDER BY room_name ASC, w.name ASC",
-        ("manager", "desc") => "ORDER BY w.manager DESC, w.name ASC",
-        ("manager", _) => "ORDER BY w.manager ASC, w.name ASC",
+        ("manager_name", "desc") => "ORDER BY manager_name DESC, w.name ASC",
+        ("manager_name", _) => "ORDER BY manager_name ASC, w.name ASC",
         ("created_at", "desc") => "ORDER BY w.created_at DESC",
         ("created_at", _) => "ORDER BY w.created_at ASC",
         _ => "ORDER BY w.name ASC",
     };
 
-    let mut count_builder = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM workstations w");
+    let mut count_builder = QueryBuilder::<Postgres>::new(
+        "SELECT COUNT(*) FROM workstations w
+        JOIN employees e ON w.manager_employee_id = e.id",
+    );
     let mut data_builder = QueryBuilder::<Postgres>::new(format!(
         "SELECT {WORKSTATION_COLUMNS}
         FROM workstations w
-        LEFT JOIN rooms r ON w.room_id = r.id"
+        JOIN rooms r ON w.room_id = r.id
+        JOIN employees e ON w.manager_employee_id = e.id"
     ));
 
     push_workstation_filters(
@@ -159,22 +163,30 @@ pub async fn create_workstation<P: DbProvider>(
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    // 指定员工时管理人以员工姓名为准（员工被删除时回退文本值）；
-    // RETURNING 取库中实际值，保证返回体与后续查询一致
-    let actual_manager: Option<String> = sqlx::query_scalar::<_, Option<String>>(
-        "INSERT INTO workstations (id, name, room_id, manager, manager_employee_id, description, created_at, updated_at)
-         VALUES ($1, $2, $3, COALESCE((SELECT name FROM employees WHERE id = $4), $5), $4, $6, $7, $8)
-         RETURNING manager",
+    // 管理人员工引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
+    let manager_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)")
+            .bind(req.manager_employee_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if !manager_exists {
+        return Err(AppError::Validation(msg(
+            "server.workstation.manager_employee_not_found",
+        )));
+    }
+
+    sqlx::query(
+        "INSERT INTO workstations (id, name, room_id, manager_employee_id, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(req.room_id)
     .bind(req.manager_employee_id)
-    .bind(&req.manager)
     .bind(&req.description)
     .bind(now)
     .bind(now)
-    .fetch_one(&mut *tx)
+    .execute(&mut *tx)
     .await
     .map_err(|e| {
         // 并发写入竞态兜底：uq_workstations_room_name 冲突映射为 409
@@ -193,7 +205,6 @@ pub async fn create_workstation<P: DbProvider>(
         name: req.name.clone(),
         room_id: req.room_id,
         room_name: None,
-        manager: actual_manager,
         manager_employee_id: req.manager_employee_id,
         description: req.description.clone(),
         created_at: now,
@@ -203,7 +214,7 @@ pub async fn create_workstation<P: DbProvider>(
     let details = serde_json::json!({
         "name": workstation.name,
         "room_id": workstation.room_id,
-        "manager": workstation.manager,
+        "manager_employee_id": workstation.manager_employee_id,
         "description": workstation.description
     });
     log_op_best_effort(
@@ -231,7 +242,8 @@ async fn fetch_workstation_base(
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
         "SELECT {WORKSTATION_COLUMNS}
         FROM workstations w
-        LEFT JOIN rooms r ON w.room_id = r.id
+        JOIN rooms r ON w.room_id = r.id
+        JOIN employees e ON w.manager_employee_id = e.id
         WHERE w.id = "
     ));
     qb.push_bind(id);
@@ -254,7 +266,7 @@ async fn fetch_workstation_ips(
             host(m.ip_address) as ip_address,
             m.ip_version, di.mac_address AS mac_address, m.description,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
-        FROM ips m
+        FROM interface_ips m
         JOIN device_interfaces di ON m.device_interface_id = di.id
         JOIN devices d ON di.device_id = d.id
         LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
@@ -284,9 +296,8 @@ pub async fn get_workstation<P: DbProvider>(
     ))
 }
 
-/// 更新工位（名称/房间缺省保留旧值；管理人/描述为双层 Option 三态：
-/// 缺省不修改、`null` 清空、赋值设置。管理人设置时以员工 id 为准，
-/// 组织人员是该字段唯一来源，员工不存在时回退提交文本）。
+/// 更新工位（名称/房间/管理人缺省保留旧值，管理人从组织人员中选择；
+/// 房间变更时同事务清理工位布局，布局坐标随房间失效）。
 pub async fn update_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -306,6 +317,12 @@ pub async fn update_workstation<P: DbProvider>(
         return Err(AppError::NotFound(msg("server.workstation.not_found")));
     }
 
+    // 旧房间 id：room_id 变更时用于清理工位布局（布局坐标随房间失效）
+    let old_room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+
     // room_id 引用存在性校验（缺省沿用现值）
     if let Some(room_id) = req.room_id {
         let room_exists: bool =
@@ -318,17 +335,23 @@ pub async fn update_workstation<P: DbProvider>(
         }
     }
 
+    // 管理人员工引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
+    if let Some(manager_employee_id) = req.manager_employee_id {
+        let manager_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)")
+                .bind(manager_employee_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !manager_exists {
+            return Err(AppError::Validation(msg(
+                "server.workstation.manager_employee_not_found",
+            )));
+        }
+    }
+
     // 重名预检：以最终生效房间为口径（UNIQUE(room_id, name)）
     if let Some(name) = &req.name {
-        let effective_room_id: Uuid = match req.room_id {
-            Some(room_id) => room_id,
-            None => {
-                sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await?
-            }
-        };
+        let effective_room_id: Uuid = req.room_id.unwrap_or(old_room_id);
         crate::helpers::ensure_unique_name(
             &mut *tx,
             "workstations",
@@ -342,11 +365,8 @@ pub async fn update_workstation<P: DbProvider>(
     }
 
     // 三态更新（QueryBuilder 动态拼接，None 不进 SET）：
-    // - name/room_id：单层 Option，缺省保留旧值（COALESCE 语义等价）
-    // - manager：双层 Option——外层 None 不修改；Some(None) 清空管理人
-    //   （manager 与 manager_employee_id 一并置 NULL）；Some(Some(v)) 设置，
-    //   管理人以员工 id 解析姓名优先、文本回退（与创建路径一致）；
-    //   manager_employee_id 是 manager 的唯一权威来源，仅随 Some(_) 分支参与
+    // - name/room_id/manager_employee_id：单层 Option，缺省保留旧值
+    //   （manager_employee_id 为必填字段，不支持清空）
     // - description：双层 Option，Some(None) SET NULL、Some(Some(v)) SET v
     let mut builder = QueryBuilder::new("UPDATE workstations SET updated_at = ");
     builder.push_bind(Utc::now());
@@ -356,20 +376,10 @@ pub async fn update_workstation<P: DbProvider>(
     if let Some(room_id) = req.room_id {
         builder.push(", room_id = ").push_bind(room_id);
     }
-    if let Some(manager) = &req.manager {
-        match manager {
-            None => {
-                builder.push(", manager = NULL, manager_employee_id = NULL");
-            }
-            Some(text) => {
-                builder.push(", manager = COALESCE((SELECT name FROM employees WHERE id = ");
-                builder.push_bind(req.manager_employee_id);
-                builder.push("), ");
-                builder.push_bind(text);
-                builder.push("), manager_employee_id = ");
-                builder.push_bind(req.manager_employee_id);
-            }
-        }
+    if let Some(manager_employee_id) = req.manager_employee_id {
+        builder
+            .push(", manager_employee_id = ")
+            .push_bind(manager_employee_id);
     }
     if let Some(description) = &req.description {
         builder.push(", description = ").push_bind(description);
@@ -391,6 +401,14 @@ pub async fn update_workstation<P: DbProvider>(
             AppError::from(e)
         })?;
 
+    // 房间变更时布局坐标随房间失效：同一事务内清理工位布局
+    if req.room_id.is_some_and(|room_id| room_id != old_room_id) {
+        sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     let mut result = fetch_workstation_base(&mut *tx, id)
         .await?
         .ok_or_else(|| AppError::Internal(msg("server.workstation.detail_query_failed")))?;
@@ -401,7 +419,7 @@ pub async fn update_workstation<P: DbProvider>(
     let details = serde_json::json!({
         "name": result.name,
         "room_id": result.room_id,
-        "manager": result.manager,
+        "manager_employee_id": result.manager_employee_id,
         "description": result.description
     });
     log_op_best_effort(

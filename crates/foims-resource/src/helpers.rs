@@ -170,6 +170,37 @@ where
     Ok(())
 }
 
+/// IP 与子网一致性校验：ip_address 必须落在子网的同族 CIDR 内
+///（PostgreSQL `<<=` 语义，跨族比较为 false），防止显式指定子网时
+/// 把 IP 挂到不含它的网段。子网不存在或同族 CIDR 缺失时同样拒绝。
+pub async fn validate_ip_in_subnet<'e, E>(
+    executor: E,
+    subnet_id: Uuid,
+    ip_address: &str,
+) -> Result<(), AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let contained: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM network_cidrs
+            WHERE id = $1
+              AND ((ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= ipv4_cidr::inet)
+                OR (ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= ipv6_cidr::inet))
+        )",
+    )
+    .bind(subnet_id)
+    .bind(ip_address)
+    .fetch_one(executor)
+    .await?;
+
+    if !contained {
+        return Err(AppError::Validation(msg("server.ip.not_in_subnet")));
+    }
+
+    Ok(())
+}
+
 // ==================== 功率容量校验 ====================
 
 /// 功率上限作用域：机柜按机位关联设备求和，房间按归属设备求和。
@@ -392,7 +423,7 @@ pub async fn send_mac_change_notification(
     // 已读状态随用户独立；此前统一写 user_id = NULL 的行不匹配任何人的
     // 查询条件（user_id = $1），通知列表对所有用户恒为空
     let admin_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM users WHERE status = TRUE AND role IN ('admin', 'secadmin')",
+        "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'secadmin')",
     )
     .fetch_all(pool)
     .await?;

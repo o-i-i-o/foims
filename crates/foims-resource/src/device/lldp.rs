@@ -41,7 +41,7 @@ pub async fn get_lldp_neighbors(
     .ok_or_else(|| AppError::NotFound(msg("server.device.not_found")))?;
 
     let ip_address: Option<String> = sqlx::query_scalar(
-        r"SELECT host(i.ip_address) FROM ips i
+        r"SELECT host(i.ip_address) FROM interface_ips i
            JOIN device_interfaces di ON i.device_interface_id = di.id
            WHERE di.device_id = $1
            ORDER BY i.created_at LIMIT 1",

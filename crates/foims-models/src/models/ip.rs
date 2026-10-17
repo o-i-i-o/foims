@@ -158,7 +158,7 @@ pub struct AutoAssignIpRequest {
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PullIpDetailsRequest {
     pub device_id: Uuid,
-    /// None 表示全部子网：同步时不限定 ips.subnet_id（前端“全部子网”选项）
+    /// None 表示全部子网：同步时不限定 interface_ips.subnet_id（前端“全部子网”选项）
     pub subnet_id: Option<Uuid>,
 }
 

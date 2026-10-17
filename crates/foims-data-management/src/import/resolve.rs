@@ -159,6 +159,32 @@ impl Resolver {
                 )
                 .await?
             }
+            Target::EmployeeName => {
+                // 员工姓名仅同组织内唯一：全库同名时无法从工位行推断组织，
+                // 先计数检测歧义，再按唯一姓名取 id（fetch_optional 对多行
+                // 会静默取首行，必须显式拦截）
+                let matches: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM employees WHERE name = $1")
+                        .bind(&value)
+                        .fetch_one(&mut *conn)
+                        .await?;
+                if matches > 1 {
+                    return Err(ref_error(
+                        "server.import_export.ambiguous_ref",
+                        table,
+                        row_no,
+                        own_col,
+                        &display,
+                    ));
+                }
+                self.cached_lookup(
+                    conn,
+                    cache_key(&["employee", &value]),
+                    "SELECT id::text FROM employees WHERE name = $1".to_string(),
+                    vec![value],
+                )
+                .await?
+            }
             Target::RoomScoped { table: ref_table } => {
                 let Some((room, name)) = names::split_room_scoped(&value) else {
                     return Err(bad(&value));

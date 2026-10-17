@@ -11,12 +11,12 @@
 //!   Counter32 回绕校正后按 Δbytes×8/elapsed 算速率；
 //! - 负载：UCD laLoad.1/2/3（字符串形式浮点）。
 //!
-//! 计数器差值依赖上一轮状态：调用方自 agents.raw_metrics 私有键
+//! 计数器差值依赖上一轮状态：调用方自 monitored_hosts.raw_metrics 私有键
 //! `_snmp_state` 读取 [`SnmpState`]，采集完成后新状态随 raw_metrics 写回
 //! （差值算不出时状态仍更新，保证下一轮可用）。
 //!
 //! 单轮失败容忍：任一指标类采集/解析失败仅该类为空，不影响其他类；
-//! agents 热列由 upsert 的 COALESCE 保留上一轮旧值。
+//! monitored_hosts 热列由 upsert 的 COALESCE 保留上一轮旧值。
 
 use std::collections::BTreeMap;
 
@@ -93,7 +93,7 @@ pub struct IfaceCounters {
     pub out_octets: u64,
 }
 
-/// 上一轮 SNMP 采集状态（agents.raw_metrics 私有键 `_snmp_state`）。
+/// 上一轮 SNMP 采集状态（monitored_hosts.raw_metrics 私有键 `_snmp_state`）。
 ///
 /// 字段全部 `default`：旧版本 raw_metrics 无此键、或历史数据缺字段时
 /// 反序列化降级为 None，首轮不出差值指标。

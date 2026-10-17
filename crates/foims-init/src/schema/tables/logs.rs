@@ -9,7 +9,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             resource_type VARCHAR(50) NOT NULL,
             resource_id UUID,
             details JSONB NOT NULL DEFAULT '{}',
-            result BOOLEAN NOT NULL,
+            success BOOLEAN NOT NULL,
             ip_address VARCHAR(50) NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )",

@@ -90,6 +90,8 @@ struct NameContext {
     orgs: HashMap<String, (Option<String>, String)>,
     /// network_cidrs：id → (区域名, 网段名)
     cidrs: HashMap<String, (String, String)>,
+    /// employees：id → 姓名（工位管理人引用导出）
+    employees: HashMap<String, String>,
     /// 房间内名称表：workstations / cabinets：id → "房间/名称"
     room_scoped: HashMap<&'static str, HashMap<String, String>>,
     /// positions：id → "房间/机柜/机位名"
@@ -171,6 +173,11 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
     .fetch_all(&mut *conn)
     .await?;
 
+    let employees: Vec<(String, String)> =
+        sqlx::query_as("SELECT id::text, name FROM employees")
+            .fetch_all(&mut *conn)
+            .await?;
+
     let mut room_scoped: HashMap<&'static str, HashMap<String, String>> = HashMap::new();
     for table in ["workstations", "cabinets"] {
         // 表名来自静态白名单，经 QueryBuilder push 拼接
@@ -233,6 +240,7 @@ async fn load_name_context(conn: &mut PgConnection) -> DataResult<NameContext> {
         simple,
         orgs: orgs.into_iter().map(|(i, p, n)| (i, (p, n))).collect(),
         cidrs: cidrs.into_iter().map(|(i, r, n)| (i, (r, n))).collect(),
+        employees: employees.into_iter().collect(),
         room_scoped,
         positions: positions.into_iter().collect(),
         patch_panels: patch_panels.into_iter().collect(),
@@ -290,6 +298,9 @@ fn ref_to_csv(ctx: &NameContext, target: &Target, row: &Value, db_col: &str) -> 
             DataError::Internal(msg("server.import_export.name_resolve_failed").with("id", id))
         })?,
         Target::Cidr => ctx.cidrs.get(id).map(|(_, n)| n.clone()).ok_or_else(|| {
+            DataError::Internal(msg("server.import_export.name_resolve_failed").with("id", id))
+        })?,
+        Target::EmployeeName => ctx.employees.get(id).cloned().ok_or_else(|| {
             DataError::Internal(msg("server.import_export.name_resolve_failed").with("id", id))
         })?,
         Target::RoomScoped { table } => ctx
@@ -392,7 +403,7 @@ fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> Da
             &id_of("subnet_id"),
             ctx.cidrs.get(&id_of("subnet_id")).map(|(r, _)| r.clone()),
         )),
-        ("ips", "device") => {
+        ("interface_ips", "device") => {
             let iface = id_of("device_interface_id");
             let device = ctx
                 .interfaces
@@ -400,7 +411,7 @@ fn info_to_csv(ctx: &NameContext, table: &str, csv_col: &str, row: &Value) -> Da
                 .and_then(|(d, _)| ctx.devices.get(d).cloned());
             Ok(resolve_or_warn(&iface, device))
         }
-        ("ips", "region_name") => Ok(resolve_or_warn(
+        ("interface_ips", "region_name") => Ok(resolve_or_warn(
             &id_of("subnet_id"),
             ctx.cidrs.get(&id_of("subnet_id")).map(|(r, _)| r.clone()),
         )),

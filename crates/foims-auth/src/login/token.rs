@@ -137,7 +137,7 @@ pub async fn refresh_token<P: AuthProvider>(
     // 重新校验用户当前状态与角色（防止禁用/降权/删除后旧令牌仍可刷新），
     // 并强制在 tokens_invalidated_at 之后签发的令牌才能刷新（密码重置/权限变更后吊销历史令牌）
     let user_state = sqlx::query_as::<_, (String, bool, chrono::DateTime<chrono::Utc>)>(
-        "SELECT role, status, tokens_invalidated_at FROM users WHERE id = $1",
+        "SELECT role, enabled, tokens_invalidated_at FROM users WHERE id = $1",
     )
     .bind(user_id)
     .fetch_optional(&conn)
@@ -145,8 +145,8 @@ pub async fn refresh_token<P: AuthProvider>(
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
     let current_role = match user_state {
-        Some((role, status, invalidated_at)) => {
-            if !status {
+        Some((role, enabled, invalidated_at)) => {
+            if !enabled {
                 return Err(AppError::Unauthorized(msg("server.auth.account_disabled")));
             }
             // 令牌签发时间不晚于吊销时间点 → 已被吊销。
@@ -271,7 +271,7 @@ pub(crate) struct ExternalUser {
     pub(crate) username: String,
     pub(crate) email: String,
     pub(crate) role: String,
-    pub(crate) status: bool,
+    pub(crate) enabled: bool,
     pub(crate) two_factor_enabled: bool,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) updated_at: DateTime<Utc>,
@@ -309,14 +309,14 @@ pub(crate) async fn find_or_create_external_user(
             DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, email, role, status, two_factor_enabled, auth_provider, created_at, updated_at
+        "SELECT id, username, email, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at
            FROM users WHERE username = $1",
     )
     .bind(username)
     .fetch_optional(conn)
     .await?
     {
-        let (id, db_username, mut db_email, role, status, two_factor_enabled, auth_provider, created_at, updated_at) = row;
+        let (id, db_username, mut db_email, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at) = row;
         if auth_provider != provider {
             return Err(AppError::Conflict(msg("server.auth.provider_mismatch")));
         }
@@ -341,7 +341,7 @@ pub(crate) async fn find_or_create_external_user(
             username: db_username,
             email: db_email,
             role,
-            status,
+            enabled,
             two_factor_enabled,
             created_at,
             updated_at,
@@ -382,9 +382,9 @@ pub(crate) async fn find_or_create_external_user(
             DateTime<Utc>,
         ),
     >(
-        "INSERT INTO users (username, password_hash, email, role, status, auth_provider)
+        "INSERT INTO users (username, password_hash, email, role, enabled, auth_provider)
          VALUES ($1, $2, $3, $4, TRUE, $5)
-         RETURNING id, username, email, role, status, two_factor_enabled, created_at, updated_at",
+         RETURNING id, username, email, role, enabled, two_factor_enabled, created_at, updated_at",
     )
     .bind(username)
     .bind(&password_hash)
@@ -395,7 +395,7 @@ pub(crate) async fn find_or_create_external_user(
     .await;
 
     match inserted {
-        Ok((id, username, email, role, status, two_factor_enabled, created_at, updated_at)) => {
+        Ok((id, username, email, role, enabled, two_factor_enabled, created_at, updated_at)) => {
             foims_common::log_info!(
                 "log.auth.external_user_created",
                 username = username,
@@ -406,7 +406,7 @@ pub(crate) async fn find_or_create_external_user(
                 username,
                 email,
                 role,
-                status,
+                enabled,
                 two_factor_enabled,
                 created_at,
                 updated_at,
@@ -420,7 +420,7 @@ pub(crate) async fn find_or_create_external_user(
                 .is_some_and(sqlx::error::DatabaseError::is_unique_violation);
             if unique_violation {
                 let placeholder = format!("{username}@{provider}.invalid");
-                let (id, username, email, role, status, two_factor_enabled, created_at, updated_at) =
+                let (id, username, email, role, enabled, two_factor_enabled, created_at, updated_at) =
                     sqlx::query_as::<
                         sqlx::Postgres,
                         (
@@ -434,9 +434,9 @@ pub(crate) async fn find_or_create_external_user(
                             DateTime<Utc>,
                         ),
                     >(
-                        "INSERT INTO users (username, password_hash, email, role, status, auth_provider)
+                        "INSERT INTO users (username, password_hash, email, role, enabled, auth_provider)
                          VALUES ($1, $2, $3, $4, TRUE, $5)
-                         RETURNING id, username, email, role, status, two_factor_enabled, created_at, updated_at",
+                         RETURNING id, username, email, role, enabled, two_factor_enabled, created_at, updated_at",
                     )
                     .bind(username)
                     .bind(&password_hash)
@@ -455,7 +455,7 @@ pub(crate) async fn find_or_create_external_user(
                     username,
                     email,
                     role,
-                    status,
+                    enabled,
                     two_factor_enabled,
                     created_at,
                     updated_at,
@@ -512,7 +512,7 @@ pub(crate) async fn issue_external_login_tokens<P: AuthProvider>(
 ) -> Result<LoginTokens, AppError> {
     let conn = state.pool()?.get_conn();
 
-    if !external.status {
+    if !external.enabled {
         return Err(AppError::Unauthorized(msg("server.auth.login_failed")));
     }
 

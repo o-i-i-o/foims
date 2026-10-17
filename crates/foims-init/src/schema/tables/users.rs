@@ -10,7 +10,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             role VARCHAR(20) NOT NULL
                 CONSTRAINT chk_users_role
                 CHECK (role IN ('admin', 'sysadmin', 'secadmin', 'auditor', 'user')),
-            status BOOLEAN NOT NULL DEFAULT TRUE,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
             auth_provider VARCHAR(20) NOT NULL DEFAULT 'local',
             reset_token VARCHAR(255),
             reset_token_expiry TIMESTAMP WITH TIME ZONE,

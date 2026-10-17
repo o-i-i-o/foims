@@ -14,11 +14,11 @@ pub struct OperationLog {
     pub user_id: Option<Uuid>,
     pub username: Option<String>,
     pub action: String,
-    pub operation_type: String,
     pub resource_type: String,
     pub resource_id: Option<Uuid>,
     pub details: Option<serde_json::Value>,
-    pub result: bool,
+    /// 操作结果：true 成功 / false 失败（与 login_logs.success 同语义）
+    pub success: bool,
     pub ip_address: String,
     pub created_at: DateTime<Utc>,
 }
@@ -170,11 +170,10 @@ mod tests {
             user_id: Some(Uuid::new_v4()),
             username: Some("admin".to_string()),
             action: "create".to_string(),
-            operation_type: "create".to_string(),
             resource_type: "device".to_string(),
             resource_id: Some(Uuid::new_v4()),
             details: Some(serde_json::json!({ "name": "核心交换机" })),
-            result: true,
+            success: true,
             ip_address: "192.168.1.10".to_string(),
             created_at: Utc::now(),
         };

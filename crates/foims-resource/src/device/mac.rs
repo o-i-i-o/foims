@@ -285,7 +285,7 @@ fn simplify_ipv6(ip: &str) -> String {
         .unwrap_or_else(|_| ip.to_string())
 }
 
-/// snmp_macs.interface 列宽（VARCHAR(50)，与建表契约一致）
+/// snmp_arp_entries.interface 列宽（VARCHAR(50)，与建表契约一致）
 const INTERFACE_MAX_CHARS: usize = 50;
 
 pub async fn get_device_mac_table<P: DbProvider>(
@@ -325,12 +325,12 @@ pub async fn get_device_mac_table<P: DbProvider>(
         // 此前任一行失败会令 PostgreSQL 事务进入 aborted 状态，后续语句全部失败
         let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
         let result = sqlx::query(
-            r"INSERT INTO snmp_macs (id, device_id, ip_address, mac_address, interface, vlan_id, created_at, updated_at)
+            r"INSERT INTO snmp_arp_entries (id, device_id, ip_address, mac_address, interface, vlan_id, created_at, updated_at)
                VALUES ($1, $2, CAST($3 AS INET), $4, $5, $6, $7, $7)
                ON CONFLICT (device_id, ip_address)
                DO UPDATE SET mac_address = EXCLUDED.mac_address,
-                             interface = COALESCE(EXCLUDED.interface, snmp_macs.interface),
-                             vlan_id = COALESCE(EXCLUDED.vlan_id, snmp_macs.vlan_id),
+                             interface = COALESCE(EXCLUDED.interface, snmp_arp_entries.interface),
+                             vlan_id = COALESCE(EXCLUDED.vlan_id, snmp_arp_entries.vlan_id),
                              updated_at = EXCLUDED.updated_at",
         )
         .bind(id)
@@ -367,7 +367,7 @@ pub async fn get_device_mac_table<P: DbProvider>(
     // 删除本次同步中未出现的陈旧记录
     if !seen_ips.is_empty() {
         sqlx::query(
-            "DELETE FROM snmp_macs WHERE device_id = $1 AND host(ip_address) NOT IN (SELECT unnest($2::text[]))",
+            "DELETE FROM snmp_arp_entries WHERE device_id = $1 AND host(ip_address) NOT IN (SELECT unnest($2::text[]))",
         )
         .bind(device_id)
         .bind(&seen_ips)
@@ -379,7 +379,7 @@ pub async fn get_device_mac_table<P: DbProvider>(
 
     let saved_macs: Vec<SnmpMac> = sqlx::query_as::<_, SnmpMac>(
         r"SELECT id, device_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
-           FROM snmp_macs WHERE device_id = $1 ORDER BY ip_address",
+           FROM snmp_arp_entries WHERE device_id = $1 ORDER BY ip_address",
     )
     .bind(device_id)
     .fetch_all(&state.pool()?.get_conn())
@@ -414,7 +414,7 @@ pub async fn get_device_macs_from_db<P: DbProvider>(
 
     let macs: Vec<SnmpMac> = sqlx::query_as::<_, SnmpMac>(
         r"SELECT id, device_id, host(ip_address) as ip_address, mac_address, interface, vlan_id, created_at, updated_at
-           FROM snmp_macs WHERE device_id = $1 ORDER BY ip_address",
+           FROM snmp_arp_entries WHERE device_id = $1 ORDER BY ip_address",
     )
     .bind(device_id)
     .fetch_all(&conn)

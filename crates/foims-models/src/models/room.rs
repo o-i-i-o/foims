@@ -51,8 +51,9 @@ pub struct RoomWithNetworks {
 pub struct WorkstationBrief {
     pub id: Uuid,
     pub name: String,
-    pub manager: Option<String>,
-    pub manager_employee_id: Option<Uuid>,
+    /// 管理人姓名（联查 employees，manager_employee_id NOT NULL + FK 保证存在）
+    pub manager_name: String,
+    pub manager_employee_id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -270,8 +271,8 @@ mod tests {
             workstations: Some(vec![WorkstationBrief {
                 id: Uuid::new_v4(),
                 name: "工位 1".to_string(),
-                manager: None,
-                manager_employee_id: None,
+                manager_name: "张三".to_string(),
+                manager_employee_id: Uuid::new_v4(),
             }]),
             cabinets: Some(vec![CabinetBrief {
                 id: Uuid::new_v4(),

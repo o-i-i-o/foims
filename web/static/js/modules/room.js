@@ -383,7 +383,7 @@ async function loadRoomOrgEmployees(orgId) {
 function renderManagerControl(data = {}) {
   const managerId = data.manager_employee_id || "";
   const options = [
-    `<option value="">${t("workstation.manager_unassigned")}</option>`,
+    `<option value="" disabled selected>${t("workstation.manager_placeholder")}</option>`,
     ...roomOrgEmployees.map(
       (emp) =>
         `<option value="${emp.id}" ${managerId === emp.id ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
@@ -392,16 +392,13 @@ function renderManagerControl(data = {}) {
   return `<select class="child-manager form-control" autocomplete="off">${options.join("")}</select>`;
 }
 
-/** 收集单个管理人控件的值：选中员工时仅提交员工 id */
+/** 收集单个管理人控件的值：仅提交员工 id（管理人为必填，校验在 validateRoomChildren） */
 function collectManagerValue(item) {
   const control = item.querySelector(".child-manager");
   if (!control || control.tagName !== "SELECT") {
-    return { manager: null, manager_employee_id: null };
+    return { manager_employee_id: null };
   }
-  const value = control.value;
-  return value
-    ? { manager: null, manager_employee_id: value }
-    : { manager: null, manager_employee_id: null };
+  return { manager_employee_id: control.value || null };
 }
 
 /** 组织切换后按新员工列表重建管理人下拉，仍有效的员工选择保持不变 */
@@ -936,7 +933,7 @@ export async function openRoomChildrenListModal(roomId) {
       await openSimpleListModal({
         title: `${room.name} - ${t("room.workstations")}`,
         columns: [{ label: t("common.name") }, { label: t("workstation.manager") }],
-        rows: workstations.map((ws) => [ws.name || "-", ws.manager || "-"])
+        rows: workstations.map((ws) => [ws.name || "-", ws.manager_name || "-"])
       });
     } else {
       const cabinets = room.cabinets || [];
@@ -1138,6 +1135,10 @@ function validateRoomChildren(childrenData, roomType) {
     for (const ws of childrenData.workstations || []) {
       if (!ws.name) {
         return t("room.child_name_required");
+      }
+      // 管理人必填：从组织人员中选择
+      if (!ws.manager_employee_id) {
+        return t("workstation.manager_placeholder");
       }
     }
   }

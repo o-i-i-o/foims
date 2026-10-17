@@ -377,7 +377,7 @@ pub async fn get_room_brief<P: DbProvider>(
         .bind(id)
         .fetch_all(&conn),
         // 工位/机柜/信息点按房型由前端过滤展示，这里统一取全量保证"其他"房型两类子项齐全
-        sqlx::query("SELECT id, name, manager, manager_employee_id FROM workstations WHERE room_id = $1 ORDER BY name")
+        sqlx::query("SELECT w.id, w.name, e.name AS manager_name, w.manager_employee_id FROM workstations w JOIN employees e ON w.manager_employee_id = e.id WHERE w.room_id = $1 ORDER BY w.name")
             .bind(id)
             .fetch_all(&conn),
         sqlx::query("SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name")
@@ -396,7 +396,7 @@ pub async fn get_room_brief<P: DbProvider>(
         .map(|r| WorkstationBrief {
             id: r.get("id"),
             name: r.get("name"),
-            manager: r.get("manager"),
+            manager_name: r.get("manager_name"),
             manager_employee_id: r.get("manager_employee_id"),
         })
         .collect();
@@ -484,7 +484,7 @@ pub async fn get_room<P: DbProvider>(
             async {
                 if is_office {
                     sqlx::query(
-                        "SELECT id, name, manager, manager_employee_id FROM workstations WHERE room_id = $1 ORDER BY name",
+                        "SELECT w.id, w.name, e.name AS manager_name, w.manager_employee_id FROM workstations w JOIN employees e ON w.manager_employee_id = e.id WHERE w.room_id = $1 ORDER BY w.name",
                     )
                     .bind(room.id)
                     .fetch_all(&conn)
@@ -529,7 +529,7 @@ pub async fn get_room<P: DbProvider>(
                 .map(|r| WorkstationBrief {
                     id: r.get("id"),
                     name: r.get("name"),
-                    manager: r.get("manager"),
+                    manager_name: r.get("manager_name"),
                     manager_employee_id: r.get("manager_employee_id"),
                 })
                 .collect::<Vec<_>>(),
@@ -694,7 +694,7 @@ pub async fn update_room<P: DbProvider>(
         // 拒绝变更（不变量：设备 IP 必须归属其所在房间绑定的子网）
         let stale_ip_count: i64 = sqlx::query_scalar(
             r"SELECT COUNT(*)
-               FROM ips i
+               FROM interface_ips i
                JOIN device_interfaces di ON di.id = i.device_interface_id
                JOIN devices d ON d.id = di.device_id
                WHERE d.room_id = $1
@@ -1084,14 +1084,12 @@ async fn sync_workstation_children(
             // 携带其他房间的 id 时按未找到处理，避免跨父资源静默搬移
             let updated = sqlx::query(
                 "UPDATE workstations SET name = $1,
-                    manager = COALESCE((SELECT name FROM employees WHERE id = $2), $3),
                     manager_employee_id = $2,
-                    room_id = $4, updated_at = $5
-                 WHERE id = $6 AND room_id = $7",
+                    room_id = $3, updated_at = $4
+                 WHERE id = $5 AND room_id = $6",
             )
             .bind(&item.name)
             .bind(item.manager_employee_id)
-            .bind(&item.manager)
             .bind(room_id)
             .bind(now)
             .bind(item_id)
@@ -1104,14 +1102,13 @@ async fn sync_workstation_children(
         } else {
             let new_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO workstations (id, name, room_id, manager, manager_employee_id, created_at, updated_at)
-                 VALUES ($1, $2, $3, COALESCE((SELECT name FROM employees WHERE id = $4), $5), $4, $6, $7)",
+                "INSERT INTO workstations (id, name, room_id, manager_employee_id, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6)",
             )
             .bind(new_id)
             .bind(&item.name)
             .bind(room_id)
             .bind(item.manager_employee_id)
-            .bind(&item.manager)
             .bind(now)
             .bind(now)
             .execute(&mut *tx)

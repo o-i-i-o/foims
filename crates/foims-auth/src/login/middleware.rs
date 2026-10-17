@@ -101,14 +101,14 @@ pub async fn auth_middleware<P: AuthProvider>(
                     }
                 };
                 match sqlx::query_as::<_, (bool, chrono::DateTime<Utc>)>(
-                    "SELECT status, tokens_invalidated_at FROM users WHERE id = $1",
+                    "SELECT enabled, tokens_invalidated_at FROM users WHERE id = $1",
                 )
                 .bind(user_id)
                 .fetch_optional(&pool.get_conn())
                 .await
                 {
-                    Ok(Some((status, invalidated_at))) => {
-                        if !status {
+                    Ok(Some((enabled, invalidated_at))) => {
+                        if !enabled {
                             return (
                                 StatusCode::UNAUTHORIZED,
                                 Json(foims_common::ApiResponse::<()>::error(msg(

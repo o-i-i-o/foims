@@ -37,7 +37,7 @@ async function loadManagerOptions(orgId, selectedEmployeeId = "") {
     }
   }
   select.innerHTML = [
-    `<option value="">${t("workstation.manager_unassigned")}</option>`,
+    `<option value="" disabled selected>${t("workstation.manager_placeholder")}</option>`,
     ...employees.map(
       (emp) =>
         `<option value="${emp.id}" ${emp.id === selectedEmployeeId ? "selected" : ""}>${escapeHtml(emp.name)}</option>`
@@ -124,10 +124,16 @@ export async function submitWorkstationForm() {
     return;
   }
 
+  // 管理人必填：从组织人员中选择
+  if (!managerEmployeeId) {
+    showToast(t("workstation.manager_placeholder"), "warning");
+    return;
+  }
+
   const workstationData = {
     name: name.trim(),
     room_id: roomId,
-    manager_employee_id: managerEmployeeId || null,
+    manager_employee_id: managerEmployeeId,
     description: description.trim() || null
   };
 

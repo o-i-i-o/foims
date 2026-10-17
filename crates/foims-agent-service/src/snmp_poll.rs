@@ -1,19 +1,19 @@
 //! SNMP 设备轮询采集（设计 docs/agent-design.md「SNMP 设备纳入主机监控」）。
 //!
 //! 周期任务：扫描 devices 表中已配置 SNMP 凭据（community/username）且带
-//! 管理 IP 的设备，逐台采集并 upsert 为 `source='snmp'` 的 agents 行：
+//! 管理 IP 的设备，逐台采集并 upsert 为 `source='snmp'` 的 monitored_hosts 行：
 //! - machine_id 合成 `snmp:{device_id}`（与 agent machine_id 命名空间隔离）；
 //! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
 //! - 单台成功即 last_seen=NOW() 并翻转 offline → active；连续失败超过
 //!   离线阈值（轮询间隔 × 2，即连续两轮未成功）由本模块统一置 offline，
 //!   agent_offline 任务仅对 source='agent' 生效，互不干扰；
-//! - 设备删除时 agents 行经 device_id 外键级联清理。
+//! - 设备删除时 monitored_hosts 行经 device_id 外键级联清理。
 //!
 //! 采集范围（二期）：一期系统组（sysName/sysDescr/sysUpTime）+ 二期性能
 //! 指标（CPU/内存/磁盘/温度/流量/负载，见 [`snmp_metrics`]）。热列
 //! （cpu_usage/mem_usage_pct/disk_usage_pct/max_temp）仅在采得新值时
 //! 覆盖（COALESCE 保留旧值），raw_metrics 总是整体写回（含
-//! `_snmp_state` 差值状态）；同时向 agent_metrics_history 追加曲线
+//! `_snmp_state` 差值状态）；同时向 host_metrics_history 追加曲线
 //! 快照（cpu/mem/disk/temp/rx_bps/tx_bps）。
 
 use std::sync::Arc;
@@ -106,7 +106,7 @@ pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
     // 离线翻转：连续两轮（间隔 × 2）未成功的 active SNMP 行置 offline
     let threshold = interval_secs.saturating_mul(2);
     let _ = sqlx::query(
-        r"UPDATE agents SET status = 'offline'
+        r"UPDATE monitored_hosts SET status = 'offline'
            WHERE source = 'snmp'
              AND status = 'active'
              AND last_seen < NOW() - make_interval(secs => $1)",
@@ -135,7 +135,7 @@ async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Er
              FROM devices d
              LEFT JOIN LATERAL (
                  SELECT host(i.ip_address) AS ip
-                   FROM ips i
+                   FROM interface_ips i
                    JOIN device_interfaces di ON i.device_interface_id = di.id
                   WHERE di.device_id = d.id
                   ORDER BY i.created_at
@@ -148,7 +148,7 @@ async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Er
     .await
 }
 
-/// 采集单台设备并 upsert 对应 agents 行 + 追加历史快照：任一步失败仅
+/// 采集单台设备并 upsert 对应 monitored_hosts 行 + 追加历史快照：任一步失败仅
 /// 记录日志，由调用方计入失败数（该行 last_seen 不刷新，累积触发离线
 /// 翻转）。
 async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
@@ -203,21 +203,21 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
 
     // upsert：热列仅在采得新值时覆盖（COALESCE），raw_metrics 整体写回
     let upsert = sqlx::query_scalar::<_, uuid::Uuid>(
-        r"INSERT INTO agents (machine_id, source, device_id, status,
+        r"INSERT INTO monitored_hosts (machine_id, source, device_id, status,
                               hostname, ip, os, uptime_secs,
                               cpu_usage, mem_usage_pct, disk_usage_pct, max_temp,
                               raw_metrics, first_seen, last_seen)
           VALUES ($1, 'snmp', $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
           ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
-              status = CASE WHEN agents.status = 'offline' THEN 'active' ELSE agents.status END,
+              status = CASE WHEN monitored_hosts.status = 'offline' THEN 'active' ELSE monitored_hosts.status END,
               hostname = EXCLUDED.hostname,
               ip = EXCLUDED.ip,
               os = EXCLUDED.os,
               uptime_secs = EXCLUDED.uptime_secs,
-              cpu_usage = COALESCE(EXCLUDED.cpu_usage, agents.cpu_usage),
-              mem_usage_pct = COALESCE(EXCLUDED.mem_usage_pct, agents.mem_usage_pct),
-              disk_usage_pct = COALESCE(EXCLUDED.disk_usage_pct, agents.disk_usage_pct),
-              max_temp = COALESCE(EXCLUDED.max_temp, agents.max_temp),
+              cpu_usage = COALESCE(EXCLUDED.cpu_usage, monitored_hosts.cpu_usage),
+              mem_usage_pct = COALESCE(EXCLUDED.mem_usage_pct, monitored_hosts.mem_usage_pct),
+              disk_usage_pct = COALESCE(EXCLUDED.disk_usage_pct, monitored_hosts.disk_usage_pct),
+              max_temp = COALESCE(EXCLUDED.max_temp, monitored_hosts.max_temp),
               raw_metrics = EXCLUDED.raw_metrics,
               last_seen = NOW()
           RETURNING id",
@@ -259,7 +259,7 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
         "tx_bps": tx_bps,
     });
     let insert = sqlx::query(
-        r"INSERT INTO agent_metrics_history (agent_id, collected_at, metrics)
+        r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
           VALUES ($1, $2, $3) ON CONFLICT (agent_id, collected_at) DO NOTHING",
     )
     .bind(agent_id)
@@ -283,7 +283,7 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
 /// 键缺失/结构不合法时返回 None（首轮不出差值指标，状态本轮重建）。
 async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics::SnmpState> {
     let row: Option<Option<Value>> =
-        sqlx::query_scalar("SELECT raw_metrics -> '_snmp_state' FROM agents WHERE machine_id = $1")
+        sqlx::query_scalar("SELECT raw_metrics -> '_snmp_state' FROM monitored_hosts WHERE machine_id = $1")
             .bind(machine_id)
             .fetch_optional(pool)
             .await

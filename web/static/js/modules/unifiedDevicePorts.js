@@ -140,7 +140,7 @@ function createPortItem(iface) {
   portItem.dataset.portType = iface.port_type || "access";
   portItem.dataset.status = iface.status || "up";
   portItem.dataset.speed = iface.speed || "";
-  portItem.dataset.trunkId = iface.trunk_id || "";
+  portItem.dataset.nativeVlanId = iface.native_vlan_id || "";
 
   // 显示端口名中的末尾数字段；不含数字的名称显示全名，空名显示 ?
   const display = extractPortLastNumber(iface.name) || (iface.name || "?").slice(0, 3);
@@ -164,6 +164,12 @@ function createPortItem(iface) {
   }
   if (iface.vlan_id) {
     tipParts.push(`${t("device.vlan_id")}: ${iface.vlan_id}`);
+  }
+  if (iface.port_type) {
+    const typeKey = `device.port_type_${iface.port_type}`;
+    const typeText = t(typeKey);
+    // 未注册的枚举值直接回显原值，避免键名字面量露出
+    tipParts.push(`${t("device.port_type")}: ${typeText === typeKey ? iface.port_type : typeText}`);
   }
   if (iface.status && iface.status !== "up") {
     tipParts.push(`${t("ip.status")}: ${iface.status}`);
@@ -232,7 +238,7 @@ function bindModalButtons(deviceId) {
         portType: portItem.dataset.portType,
         status: portItem.dataset.status,
         speed: portItem.dataset.speed,
-        trunkId: portItem.dataset.trunkId
+        nativeVlanId: portItem.dataset.nativeVlanId
       });
     });
   }
@@ -281,7 +287,7 @@ async function openPortDetailModal(portData) {
   elementCache.setValue("device-port-porttype-expanded", portData.portType || "access");
   elementCache.setValue("device-port-status-expanded", portData.status || "up");
   elementCache.setValue("device-port-speed-expanded", portData.speed || "");
-  elementCache.setValue("device-port-trunkid-expanded", portData.trunkId || "");
+  elementCache.setValue("device-port-nativevlan-expanded", portData.nativeVlanId || "");
   const managedCheckbox = elementCache.get("device-port-managed-expanded");
   if (managedCheckbox) {
     managedCheckbox.checked = portData.deviceManaged === true;
@@ -306,7 +312,7 @@ async function openPortDetailModal(portData) {
 function collectPortFormData() {
   const vlanRaw = elementCache.getValue("device-port-vlan-expanded");
   const speedRaw = elementCache.getValue("device-port-speed-expanded");
-  const trunkIdRaw = elementCache.getValue("device-port-trunkid-expanded");
+  const nativeVlanIdRaw = elementCache.getValue("device-port-nativevlan-expanded");
   return {
     id: elementCache.getValue("device-port-id-expanded"),
     deviceId: elementCache.getValue("device-port-device-id-expanded"),
@@ -320,7 +326,7 @@ function collectPortFormData() {
     port_type: elementCache.getValue("device-port-porttype-expanded") || "access",
     status: elementCache.getValue("device-port-status-expanded") || "up",
     speed: speedRaw?.trim() || null,
-    trunk_id: trunkIdRaw ? parseInt(trunkIdRaw, 10) : null
+    native_vlan_id: nativeVlanIdRaw ? parseInt(nativeVlanIdRaw, 10) : null
   };
 }
 
@@ -340,10 +346,10 @@ async function submitPortForm() {
     return;
   }
   if (
-    data.trunk_id !== null &&
-    (isNaN(data.trunk_id) || data.trunk_id < 1 || data.trunk_id > 4094)
+    data.native_vlan_id !== null &&
+    (isNaN(data.native_vlan_id) || data.native_vlan_id < 1 || data.native_vlan_id > 4094)
   ) {
-    showToast(t("device.trunk_invalid"), "warning");
+    showToast(t("device.native_vlan_invalid"), "warning");
     return;
   }
 
@@ -358,7 +364,7 @@ async function submitPortForm() {
     port_type: data.port_type,
     status: data.status,
     speed: data.speed,
-    trunk_id: data.trunk_id
+    native_vlan_id: data.native_vlan_id
   };
 
   const saveBtn = elementCache.get("save-port-btn");

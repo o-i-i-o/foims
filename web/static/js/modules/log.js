@@ -287,9 +287,9 @@ export async function loadLogsData(logType = "operation", searchParams = {}) {
         (log, index) => {
           let rowHtml = `<td class="index-column">${startIndex + index + 1}</td>`;
           if (logType === "operation") {
-            const operationTypeText = getOperationTypeText(log.operation_type);
+            const operationTypeText = getOperationTypeText(log.action);
             const resourceTypeText = getResourceTypeText(log.resource_type);
-            const resultText = log.result ? t("common.success") : t("common.failed");
+            const resultText = log.success ? t("common.success") : t("common.failed");
 
             // 安全地处理日志详情数据：整行 JSON 编码后挂到 data-log，
             // 详情弹窗解码回对象（见 view-log-details 点击委托）
@@ -549,9 +549,9 @@ function initLogSortEvents() {
 
 // 显示日志详情弹窗（模板位于 modals/log/log-details-modal.html）
 async function showLogDetails(log) {
-  const operationTypeText = getOperationTypeText(log.operation_type);
+  const operationTypeText = getOperationTypeText(log.action);
   const resourceTypeText = getResourceTypeText(log.resource_type);
-  const resultText = log.result ? t("common.success") : t("common.failed");
+  const resultText = log.success ? t("common.success") : t("common.failed");
 
   const modal = await openModal("log-details-modal");
   if (!modal) {
@@ -574,7 +574,7 @@ async function showLogDetails(log) {
 
   const resultEl = modal.querySelector("#log-detail-result");
   if (resultEl) {
-    resultEl.innerHTML = `<span class="status-badge ${log.result ? "status-active" : "status-inactive"}">${resultText}</span>`;
+    resultEl.innerHTML = `<span class="status-badge ${log.success ? "status-active" : "status-inactive"}">${resultText}</span>`;
   }
 
   const detailsEl = modal.querySelector("#log-detail-details");

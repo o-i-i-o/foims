@@ -33,8 +33,8 @@ pub async fn get_operation_logs(
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("username", "desc") => "ORDER BY u.username DESC NULLS LAST, ol.created_at DESC",
         ("username", _) => "ORDER BY u.username ASC NULLS LAST, ol.created_at DESC",
-        ("operation_type", "desc") => "ORDER BY ol.action DESC, ol.created_at DESC",
-        ("operation_type", _) => "ORDER BY ol.action ASC, ol.created_at DESC",
+        ("action", "desc") => "ORDER BY ol.action DESC, ol.created_at DESC",
+        ("action", _) => "ORDER BY ol.action ASC, ol.created_at DESC",
         ("resource_type", "desc") => {
             "ORDER BY ol.resource_type DESC NULLS LAST, ol.created_at DESC"
         }
@@ -94,7 +94,7 @@ pub async fn get_operation_logs(
         // 动态条件全部参数化构建，语义等价于原 ($1::text = '' OR ...) 写法：
         // 条件为空时不追加，等价于恒真分支；条件非空时为等值/模糊匹配
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-            r"SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ
+            r"SELECT ol.id, ol.user_id, u.username, ol.action, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ
                FROM operation_logs ol
                LEFT JOIN users u ON ol.user_id = u.id
                WHERE 1=1",
@@ -135,7 +135,7 @@ pub async fn get_operation_logs(
             .await?;
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.action as operation_type, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id",
+            "SELECT ol.id, ol.user_id, u.username, ol.action, ol.resource_type, ol.resource_id, ol.details, ol.result, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id",
         );
         // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
