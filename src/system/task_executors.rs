@@ -186,7 +186,7 @@ impl TaskExecutor for IpStatusSyncTaskExecutor {
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
         let days = parse_days_config(&ctx.config)?;
 
-        let (stale, recovered) = foims_resource::ip::sync_ip_status_by_staleness(&ctx.pool, days)
+        let stale = foims_resource::ip::sync_ip_status_by_staleness(&ctx.pool, days)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(msg("server.task.ip_status_sync_failed").with("error", e))
@@ -195,7 +195,6 @@ impl TaskExecutor for IpStatusSyncTaskExecutor {
         log_debug!(
             "log.task.ip_status_sync_completed",
             stale = stale,
-            recovered = recovered,
             days = days
         );
         Ok("server.task.ip_status_sync_completed".to_string())

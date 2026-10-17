@@ -1277,6 +1277,20 @@ export async function loadNotificationSettings() {
         ? settingsResult.data.email_recipients || []
         : [];
 
+    // 通知方式开关：后端未配置或字段缺失时默认全开（与后端 serde 默认值一致）
+    const methods =
+      settingsResult.success && settingsResult.data && settingsResult.data.methods
+        ? settingsResult.data.methods
+        : {};
+    const macChangeToggle = elementCache.get("notify-method-mac-change");
+    if (macChangeToggle) {
+      macChangeToggle.checked = methods.mac_change !== false;
+    }
+    const agentAlertToggle = elementCache.get("notify-method-agent-alert");
+    if (agentAlertToggle) {
+      agentAlertToggle.checked = methods.agent_alert !== false;
+    }
+
     users.forEach((user) => {
       const item = document.createElement("div");
       item.className = "user-checkbox-item";
@@ -1324,9 +1338,16 @@ export async function saveNotificationSettings() {
       "#notification-users-list input[type='checkbox']:checked"
     );
     const userIds = Array.from(checkboxes).map((cb) => cb.value);
+    const macChangeCheckbox = document.getElementById("notify-method-mac-change");
+    const agentAlertCheckbox = document.getElementById("notify-method-agent-alert");
 
+    // 通知方式矩阵：仅邮件方式可配置，webhook 为前端占位不提交后端字段
     const result = await apiPut("/api/system/notification/settings", {
-      email_recipients: userIds
+      email_recipients: userIds,
+      methods: {
+        mac_change: macChangeCheckbox.checked,
+        agent_alert: agentAlertCheckbox.checked
+      }
     });
 
     if (result.success) {

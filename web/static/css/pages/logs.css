@@ -21,6 +21,37 @@
   margin-top: 2rem;
 }
 
+/* 通知方式矩阵：行=通知类型，列=通知方式 */
+.notification-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+}
+
+.notification-matrix th,
+.notification-matrix td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: left;
+}
+
+.notification-matrix th {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.notification-matrix input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+
+/* 占位徽章收缩为内容宽度，避免撑满整列 */
+.notification-matrix .status-badge {
+  display: inline-flex;
+}
+
 .users-checkbox-list {
   max-height: 200px;
   overflow-y: auto;

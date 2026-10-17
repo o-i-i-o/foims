@@ -799,6 +799,8 @@ pub async fn update_page_timeout_config(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NotificationSettings {
     pub email_recipients: Vec<Uuid>,
+    /// 通知方式矩阵开关（类型 × 邮件，webhook 为前端占位待实现）
+    pub methods: foims_auth::smtp::NotificationMethods,
 }
 
 pub async fn get_notification_settings(
@@ -831,6 +833,8 @@ pub async fn get_notification_settings(
     Ok(foims_common::ok_json(
         NotificationSettings {
             email_recipients: recipients,
+            // 未配置时为全启用默认值，与发送侧口径一致
+            methods: foims_auth::smtp::load_notification_methods(&state.pool()?.get_conn()).await,
         },
         "server.notification.settings_retrieved",
     ))
@@ -852,6 +856,8 @@ pub async fn update_notification_settings(
     .execute(&state.pool()?.get_conn())
     .await
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
+
+    foims_auth::smtp::save_notification_methods(&state.pool()?.get_conn(), &req.methods).await?;
 
     Ok(foims_common::ok_json(
         (),

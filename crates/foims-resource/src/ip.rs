@@ -435,6 +435,8 @@ struct MacSyncResult {
     updated_count: usize,
     unchanged_count: usize,
     skipped_count: usize,
+    /// 本次拉取被判失活的 active 地址数（判活范围内未观测到的地址）
+    deactivated_count: usize,
     switch_macs_empty: bool,
     total_macs_on_switch: i64,
 }
@@ -459,10 +461,20 @@ struct ObservedMacRow {
     ip: String,
     mac: String,
     ip_row_id: Uuid,
+    ip_subnet_id: Option<Uuid>,
     iface_id: Uuid,
     iface_mac: Option<String>,
     iface_device_id: Uuid,
     workstation_id: Option<Uuid>,
+}
+
+/// MAC 变更通知上下文（观测设备名随通知注明，便于定位变更由哪台设备导致）。
+struct MacChangeNotice {
+    workstation_id: Uuid,
+    ips: String,
+    old_mac: String,
+    new_mac: String,
+    source_device: String,
 }
 
 async fn sync_switch_macs(
@@ -484,13 +496,22 @@ async fn sync_switch_macs(
         }
     }
 
+    // 设备 ARP 缓存总量：为 0 说明该设备从未同步过观测数据，无观测即无
+    // 判活依据，直接按空态返回（不翻转任何地址，避免误杀）
+    let total_macs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM snmp_arp_entries WHERE device_id = $1")
+            .bind(device_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
     // subnet_id 为 None（全部子网）时不对 interface_ips.subnet_id 过滤；
     // interface_ips.ip_address 全局唯一，同一观测行至多命中一条 IP 记录
     let observed: Vec<ObservedMacRow> = match subnet_id {
         Some(subnet_id) => {
             sqlx::query_as(
                 r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
-                      i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
+                      i.id AS ip_row_id, i.subnet_id AS ip_subnet_id,
+                      di.id AS iface_id, di.mac_address AS iface_mac,
                       di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
               FROM snmp_arp_entries sm
               INNER JOIN interface_ips i ON sm.ip_address = i.ip_address AND i.subnet_id = $2
@@ -506,7 +527,8 @@ async fn sync_switch_macs(
         None => {
             sqlx::query_as(
                 r"SELECT host(sm.ip_address) AS ip, sm.mac_address AS mac,
-                      i.id AS ip_row_id, di.id AS iface_id, di.mac_address AS iface_mac,
+                      i.id AS ip_row_id, i.subnet_id AS ip_subnet_id,
+                      di.id AS iface_id, di.mac_address AS iface_mac,
                       di.device_id AS iface_device_id, dv.workstation_id AS workstation_id
               FROM snmp_arp_entries sm
               INNER JOIN interface_ips i ON sm.ip_address = i.ip_address
@@ -520,21 +542,58 @@ async fn sync_switch_macs(
         }
     };
 
-    if observed.is_empty() {
-        let total_macs: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM snmp_arp_entries WHERE device_id = $1")
-                .bind(device_id)
-                .fetch_one(&mut *tx)
-                .await?;
+    // ============ IP 判活 ============
+    // 判活范围：指定子网取该子网；全部子网模式仅取本次观测触达的子网
+    //（设备 ARP 表未覆盖的网段不参与判活，避免误杀无关网段地址）。
+    // 范围内未被本次观测命中的 active 地址判为失活；reserved 为人工保留
+    // 语义不参与自动化，未命中行不刷新 last_seen（保留真实最后在线时间）。
+    let observed_ip_ids: Vec<Uuid> = observed.iter().map(|r| r.ip_row_id).collect();
+    let flip_scope: Vec<Uuid> = match subnet_id {
+        Some(subnet_id) => vec![subnet_id],
+        None => {
+            let mut scope: Vec<Uuid> = Vec::new();
+            for sid in observed.iter().filter_map(|r| r.ip_subnet_id) {
+                if !scope.contains(&sid) {
+                    scope.push(sid);
+                }
+            }
+            scope
+        }
+    };
+    let mut deactivated_count = 0usize;
+    if !flip_scope.is_empty() {
+        // observed_ip_ids 为空时 `id != ALL('{}')` 恒真，全范围判活
+        let flipped = sqlx::query(
+            "UPDATE interface_ips SET status = 'inactive'
+             WHERE status = 'active' AND subnet_id = ANY($1) AND id != ALL($2)",
+        )
+        .bind(&flip_scope)
+        .bind(&observed_ip_ids)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        deactivated_count = usize::try_from(flipped).unwrap_or(usize::MAX);
+    }
 
+    if observed.is_empty() {
         return Ok(MacSyncResult {
             updated_count: 0,
             unchanged_count: 0,
             skipped_count: 0,
+            deactivated_count,
             switch_macs_empty: true,
             total_macs_on_switch: total_macs,
         });
     }
+
+    // 来源设备名随通知注明；设备已删除时降级为 UUID 字符串
+    let device_name: String =
+        sqlx::query_scalar::<_, Option<String>>("SELECT name FROM devices WHERE id = $1")
+            .bind(device_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .flatten()
+            .unwrap_or_else(|| device_id.to_string());
 
     let now = Utc::now();
     let mut updated_count = 0usize;
@@ -542,13 +601,15 @@ async fn sync_switch_macs(
     let mut skipped_count = 0usize;
     let mut interfaces: std::collections::HashMap<Uuid, InterfaceSyncState> =
         std::collections::HashMap::new();
-    let mut pending_notifications: Vec<(Uuid, String, String, String)> = Vec::new();
+    let mut pending_notifications: Vec<MacChangeNotice> = Vec::new();
 
     for row in observed {
+        // ip_subnet_id 仅用于判活范围推导，此处不再使用
         let ObservedMacRow {
             ip,
             mac,
             ip_row_id,
+            ip_subnet_id: _,
             iface_id,
             iface_mac,
             iface_device_id,
@@ -684,12 +745,13 @@ async fn sync_switch_macs(
                         old_mac = old,
                         new_mac = iface.new_mac
                     );
-                    pending_notifications.push((
-                        ws_id,
+                    pending_notifications.push(MacChangeNotice {
+                        workstation_id: ws_id,
                         ips,
-                        old.to_string(),
-                        iface.new_mac.clone(),
-                    ));
+                        old_mac: old.to_string(),
+                        new_mac: iface.new_mac.clone(),
+                        source_device: device_name.clone(),
+                    });
                 }
             }
         }
@@ -697,13 +759,24 @@ async fn sync_switch_macs(
 
     tx.commit().await?;
 
-    for (ws_id, ip, old_mac, new_mac) in pending_notifications {
-        match crate::helpers::send_mac_change_notification(pool, &ws_id, &ip, &old_mac, &new_mac)
-            .await
+    for notice in pending_notifications {
+        match crate::helpers::send_mac_change_notification(
+            pool,
+            &notice.workstation_id,
+            &notice.ips,
+            &notice.old_mac,
+            &notice.new_mac,
+            &notice.source_device,
+        )
+        .await
         {
-            Ok(()) => log_info!("log.ip.mac_change_notification_sent", ip = ip),
+            Ok(()) => log_info!("log.ip.mac_change_notification_sent", ip = notice.ips),
             Err(e) => {
-                log_error!("log.ip.mac_change_notification_failed", ip = ip, error = e)
+                log_error!(
+                    "log.ip.mac_change_notification_failed",
+                    ip = notice.ips,
+                    error = e
+                )
             }
         }
     }
@@ -712,19 +785,23 @@ async fn sync_switch_macs(
         updated_count,
         unchanged_count,
         skipped_count,
+        deactivated_count,
         switch_macs_empty: false,
         total_macs_on_switch: 0,
     })
 }
 
 /// 按 last_seen 新鲜度同步 IP 状态（供 ip_status_sync 定时任务调用）：
-/// 超过 stale_days 未观测到的 active 地址翻转为 inactive，
-/// 反向（inactive 且仍在阈值内）作为兜底恢复，保证两侧口径一致。
-/// reserved 为人工保留语义，自动化不触碰。返回（转停用数, 恢复活跃数）。
+/// 超过 stale_days 未观测到的 active 地址翻转为 inactive。
+/// reserved 为人工保留语义，自动化不触碰。返回转停用数。
+///
+/// 不设反向恢复：MAC 拉取判活（sync_switch_macs）已按观测即时恢复活跃
+/// 地址，旧的「inactive 且 last_seen 在阈值内则恢复」兜底会把拉取判活的
+/// 地址按陈旧 last_seen 复活，与新判活互相打架（每日来回翻转）。
 pub async fn sync_ip_status_by_staleness(
     pool: &sqlx::PgPool,
     stale_days: i32,
-) -> Result<(u64, u64), sqlx::Error> {
+) -> Result<u64, sqlx::Error> {
     let stale = sqlx::query(
         "UPDATE interface_ips SET status = 'inactive'
          WHERE status = 'active' AND last_seen < NOW() - make_interval(days => $1)",
@@ -734,28 +811,104 @@ pub async fn sync_ip_status_by_staleness(
     .await?
     .rows_affected();
 
-    let recovered = sqlx::query(
-        "UPDATE interface_ips SET status = 'active'
-         WHERE status = 'inactive' AND last_seen >= NOW() - make_interval(days => $1)",
-    )
-    .bind(stale_days)
-    .execute(pool)
-    .await?
-    .rows_affected();
+    Ok(stale)
+}
 
-    Ok((stale, recovered))
+/// 「默认拉取设备」存储键位（system_configs）：拉取模态框每次成功拉取后
+/// 将本次设备集合持久化，下次打开模态框按其预选。
+const MAC_PULL_CONFIG_TYPE: &str = "mac_pull";
+const MAC_PULL_DEFAULT_DEVICES_KEY: &str = "default_device_ids";
+
+async fn save_pull_default_devices(
+    conn: &sqlx::PgPool,
+    device_ids: &[Uuid],
+) -> Result<(), AppError> {
+    let value = serde_json::to_string(device_ids)
+        .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
+    sqlx::query(
+        "INSERT INTO system_configs (config_type, key, value) VALUES ($1, $2, $3)
+         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value",
+    )
+    .bind(MAC_PULL_CONFIG_TYPE)
+    .bind(MAC_PULL_DEFAULT_DEVICES_KEY)
+    .bind(&value)
+    .execute(conn)
+    .await
+    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
+    Ok(())
+}
+
+/// GET /api/resources/ip/pull-defaults：返回「默认拉取设备」ID 列表
+///（未配置返回空数组）。仅作拉取模态框预选回显，不做设备存在性过滤——
+/// 已删除的设备由前端与设备选项求交时自然剔除。
+pub async fn get_pull_default_devices<P: DbProvider>(
+    State(state): State<Arc<P>>,
+    _user: foims_auth::extractor::AuthUser,
+) -> Result<Response, AppError> {
+    let ids: Vec<Uuid> = match sqlx::query_scalar::<_, String>(
+        "SELECT value FROM system_configs WHERE config_type = $1 AND key = $2",
+    )
+    .bind(MAC_PULL_CONFIG_TYPE)
+    .bind(MAC_PULL_DEFAULT_DEVICES_KEY)
+    .fetch_optional(&state.pool()?.get_conn())
+    .await
+    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?
+    {
+        Some(value) => serde_json::from_str(&value).map_err(|e| {
+            foims_common::log_error!("log.ip.pull_defaults_parse_failed", error = e);
+            AppError::Internal(msg("server.ip.pull_defaults_parse_failed").with("error", e))
+        })?,
+        None => Vec::new(),
+    };
+
+    Ok(foims_common::ok_json(
+        ids,
+        "server.ip.pull_defaults_retrieved",
+    ))
 }
 
 pub async fn pull_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
+    _user: foims_auth::extractor::AuthUser,
     AppJson(req): AppJson<foims_models::PullIpDetailsRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    let result = sync_switch_macs(&state.pool()?.get_conn(), req.device_id, req.subnet_id).await?;
+    // 去重保序：同一设备只同步一次，按提交顺序依次拉取，
+    // 后同步设备的观测结果直接覆盖先同步设备的写入
+    let mut device_ids: Vec<Uuid> = Vec::with_capacity(req.device_ids.len());
+    for id in req.device_ids {
+        if !device_ids.contains(&id) {
+            device_ids.push(id);
+        }
+    }
 
-    if result.switch_macs_empty {
-        if result.total_macs_on_switch == 0 {
+    let conn = state.pool()?.get_conn();
+    let mut total = MacSyncResult {
+        updated_count: 0,
+        unchanged_count: 0,
+        skipped_count: 0,
+        deactivated_count: 0,
+        switch_macs_empty: true,
+        total_macs_on_switch: 0,
+    };
+    for device_id in &device_ids {
+        let result = sync_switch_macs(&conn, *device_id, req.subnet_id).await?;
+        total.updated_count += result.updated_count;
+        total.unchanged_count += result.unchanged_count;
+        total.skipped_count += result.skipped_count;
+        total.deactivated_count += result.deactivated_count;
+        total.total_macs_on_switch += result.total_macs_on_switch;
+        if !result.switch_macs_empty {
+            total.switch_macs_empty = false;
+        }
+    }
+
+    // 本次设备集合持久化为「默认拉取设备」（所有成功路径均保存，含空态）
+    save_pull_default_devices(&conn, &device_ids).await?;
+
+    if total.switch_macs_empty {
+        if total.total_macs_on_switch == 0 {
             // 「暂无 MAC 数据」是正常空态而非操作失败：与下方 no_managed_ips
             // 分支同为 ok_json 空数组口径，前端展示提示文案而非错误弹窗
             return Ok(foims_common::ok_json(
@@ -772,7 +925,7 @@ pub async fn pull_ip_details<P: DbProvider>(
         return Ok(foims_common::ok_json(Vec::<IpDetail>::new(), empty_message));
     }
 
-    // 全部子网模式返回该设备名下的全部 IP 行，避免全量返回所有子网
+    // 全部子网模式返回所选设备名下的全部 IP 行，避免全量返回所有子网
     let results: Vec<IpDetail> = match req.subnet_id {
         Some(subnet_id) => {
             sqlx::query_as::<_, IpDetail>(
@@ -788,7 +941,7 @@ pub async fn pull_ip_details<P: DbProvider>(
                    WHERE m.subnet_id = $1",
             )
             .bind(subnet_id)
-            .fetch_all(&state.pool()?.get_conn())
+            .fetch_all(&conn)
             .await?
         }
         None => {
@@ -802,23 +955,24 @@ pub async fn pull_ip_details<P: DbProvider>(
                    JOIN device_interfaces di ON m.device_interface_id = di.id
                    LEFT JOIN network_cidrs nc ON m.subnet_id = nc.id
                    LEFT JOIN network_regions nr ON nc.network_region_id = nr.id
-                   WHERE di.device_id = $1",
+                   WHERE di.device_id = ANY($1)",
             )
-            .bind(req.device_id)
-            .fetch_all(&state.pool()?.get_conn())
+            .bind(&device_ids)
+            .fetch_all(&conn)
             .await?
         }
     };
 
     // 同步结果以 key + 计数参数返回，由前端按语言翻译汇总文案
     let message =
-        if result.updated_count == 0 && result.unchanged_count == 0 && result.skipped_count == 0 {
+        if total.updated_count == 0 && total.unchanged_count == 0 && total.skipped_count == 0 {
             msg("server.ip.mac_sync_no_change")
         } else {
             msg("server.ip.mac_sync_completed")
-                .with("updated", result.updated_count)
-                .with("unchanged", result.unchanged_count)
-                .with("skipped", result.skipped_count)
+                .with("updated", total.updated_count)
+                .with("unchanged", total.unchanged_count)
+                .with("skipped", total.skipped_count)
+                .with("deactivated", total.deactivated_count)
         };
 
     Ok(foims_common::ok_json(results, message))

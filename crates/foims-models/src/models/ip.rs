@@ -157,7 +157,10 @@ pub struct AutoAssignIpRequest {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PullIpDetailsRequest {
-    pub device_id: Uuid,
+    /// 拉取设备列表（1..=100）：多设备按提交顺序依次同步，
+    /// 后同步设备的观测结果直接覆盖先同步设备的写入
+    #[validate(length(min = 1, max = 100, message = "server.ip.validation.device_ids_range"))]
+    pub device_ids: Vec<Uuid>,
     /// None 表示全部子网：同步时不限定 interface_ips.subnet_id（前端“全部子网”选项）
     pub subnet_id: Option<Uuid>,
 }
@@ -366,22 +369,28 @@ mod tests {
         assert_eq!(assign.device_interface_id, None);
 
         let pull: PullIpDetailsRequest = serde_json::from_value(serde_json::json!({
-            "device_id": Uuid::new_v4(),
+            "device_ids": [Uuid::new_v4(), Uuid::new_v4()],
             "subnet_id": Uuid::new_v4()
         }))?;
         assert!(pull.validate().is_ok());
+        assert_eq!(pull.device_ids.len(), 2);
 
         // subnet_id 缺省即全部子网，同样合法
         let pull_all: PullIpDetailsRequest =
-            serde_json::from_value(serde_json::json!({ "device_id": Uuid::new_v4() }))?;
+            serde_json::from_value(serde_json::json!({ "device_ids": [Uuid::new_v4()] }))?;
         assert!(pull_all.validate().is_ok());
         assert_eq!(pull_all.subnet_id, None);
+
+        // 空设备列表校验拒绝
+        let pull_empty: PullIpDetailsRequest =
+            serde_json::from_value(serde_json::json!({ "device_ids": [] }))?;
+        assert!(pull_empty.validate().is_err());
         Ok(())
     }
 
     #[test]
     fn test_pull_request_missing_fields_rejected() {
-        // device_id 必填，缺失时反序列化失败
+        // device_ids 必填，缺失时反序列化失败
         let result: Result<PullIpDetailsRequest, _> =
             serde_json::from_value(serde_json::json!({ "subnet_id": Uuid::new_v4() }));
         assert!(result.is_err());

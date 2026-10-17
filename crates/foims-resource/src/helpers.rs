@@ -385,13 +385,16 @@ pub async fn create_notification(
     Ok(())
 }
 
-/// 工作站 MAC 变更告警：站内通知全部管理员并发送邮件（SMTP 未配置时降级）。
+/// 工作站 MAC 变更告警：站内通知全部管理员；邮件方式按「通知配置」中
+/// MAC 地址变更的邮件开关决定是否发送（SMTP 未配置时降级）。
+/// `source_device` 为拉取该 MAC 的来源设备名，站内通知与邮件均注明。
 pub async fn send_mac_change_notification(
     pool: &sqlx::PgPool,
     workstation_id: &Uuid,
     ip_address: &str,
     old_mac: &str,
     new_mac: &str,
+    source_device: &str,
 ) -> Result<(), sqlx::Error> {
     let workstation_name =
         match sqlx::query_scalar::<_, String>("SELECT name FROM workstations WHERE id = $1")
@@ -417,6 +420,7 @@ pub async fn send_mac_change_notification(
             ("ip", ip_address),
             ("old_mac", old_mac),
             ("new_mac", new_mac),
+            ("device", source_device),
         ],
     );
     // 通知目标：所有启用状态的管理员（admin/secadmin）按人各发一条，
@@ -445,34 +449,31 @@ pub async fn send_mac_change_notification(
         recipients = admin_ids.len()
     );
 
-    match foims_auth::smtp::send_mac_change_email(
-        pool,
-        &workstation_name,
-        ip_address,
-        old_mac,
-        new_mac,
-    )
-    .await
+    // 邮件方式开关关闭时跳过发送（站内通知不受影响）
+    if foims_auth::smtp::load_notification_methods(pool)
+        .await
+        .mac_change
     {
-        Ok(()) => {
-            log_info!("log.mac_change.email_sent", workstation = workstation_name)
-        }
-        // SMTP 未配置实际返回 Validation 错误（走下方兜底记录）；
-        // 收件人缺失已在 send_mac_change_email 内降级为 Ok(())，此分支
-        // 当前不可达，保留作兜底
-        Err(AppError::NotFound(m)) => {
-            log_warn!(
-                "log.mac_change.email_skipped",
-                workstation = workstation_name,
-                reason = m.key()
-            );
-        }
-        Err(e) => {
-            log_error!(
-                "log.mac_change.email_send_failed",
-                workstation = workstation_name,
-                error = e
-            );
+        match foims_auth::smtp::send_mac_change_email(
+            pool,
+            source_device,
+            &workstation_name,
+            ip_address,
+            old_mac,
+            new_mac,
+        )
+        .await
+        {
+            Ok(()) => {
+                log_info!("log.mac_change.email_sent", workstation = workstation_name)
+            }
+            Err(e) => {
+                log_error!(
+                    "log.mac_change.email_send_failed",
+                    workstation = workstation_name,
+                    error = e
+                );
+            }
         }
     }
 

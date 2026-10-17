@@ -205,6 +205,8 @@ struct AlertEvent<'a> {
 
 /// 向全部管理员写一条指标超标通知（单条失败即整体失败，由调用方保持
 /// 状态不翻转以待重试；标题/正文为前端翻译 key，见 web/static/i18n JSON）。
+/// 邮件方式按「通知配置」中主机告警的邮件开关决定是否发送，发送失败
+/// 仅记日志（邮件丢失可接受，站内通知失败才阻塞状态翻转）。
 async fn notify_admins(
     pool: &sqlx::PgPool,
     admin_ids: &[Uuid],
@@ -237,6 +239,29 @@ async fn notify_admins(
         metric = event.metric,
         recipients = admin_ids.len()
     );
+
+    // 邮件方式开关门控：关闭时跳过；发送失败仅记日志不阻塞告警状态翻转
+    if foims_auth::smtp::load_notification_methods(pool)
+        .await
+        .agent_alert
+        && let Err(e) = foims_auth::smtp::send_host_alert_email(
+            pool,
+            event.hostname,
+            event.ip,
+            event.metric,
+            event.value,
+            event.threshold,
+        )
+        .await
+    {
+        foims_common::log_error!(
+            "log.agent.alert_email_send_failed",
+            hostname = event.hostname,
+            metric = event.metric,
+            error = e
+        );
+    }
+
     Ok(())
 }
 

@@ -41,14 +41,15 @@ const ipTableState = createSortState("updated_at", "desc");
 // 旧请求的宽过滤响应可能晚于新请求到达并覆盖表格，响应返回时序号不符则丢弃
 const ipListSeq = createSeqGuard();
 
-// 拉取MAC模态框的下拉元素 id（多处引用，抽为常量）
-const PULL_MAC_DEVICE_SELECT_ID = "pull-mac-device-select";
+// 拉取MAC模态框的设备复选列表元素 id（多处引用，抽为常量）
+const PULL_MAC_DEVICE_LIST_ID = "pull-mac-device-list";
 
 // ====== IP详情 ======
 
-// 加载设备列表到拉取MAC模态框（仅列出配置了 SNMP 的设备）
+// 加载设备复选列表到拉取MAC模态框（仅列出配置了 SNMP 的设备，
+// 勾选一个或多个作为本次拉取设备；「默认拉取设备」按服务端保存值预选）
 async function loadDevicesForPullMac() {
-  // 拉取走 resources.js 的共享下拉缓存（10s TTL，写操作成功后自动失效），
+  // 设备列表走 resources.js 的共享下拉缓存（10s TTL，写操作成功后自动失效），
   // page_size=1000 全量拉取语义与原实现一致
   let result = null;
   try {
@@ -57,12 +58,12 @@ async function loadDevicesForPullMac() {
     console.error("加载设备列表失败:", error);
   }
 
-  // 请求异常时与原实现一致：置入失败短提示占位项（fillSelect 的失败路径
-  // 固定用 common.load_failed，无法表达该专属文案，故此处单独处理）
+  const list = document.getElementById(PULL_MAC_DEVICE_LIST_ID);
+
+  // 请求异常时与原实现一致：置入失败短提示占位项
   if (!result) {
-    const select = document.getElementById(PULL_MAC_DEVICE_SELECT_ID);
-    if (select) {
-      select.innerHTML = `<option value="">${t("ip.load_failed_short")}</option>`;
+    if (list) {
+      list.innerHTML = `<div class="user-checkbox-item">${escapeHtml(t("ip.load_failed_short"))}</div>`;
     }
     return;
   }
@@ -70,25 +71,77 @@ async function loadDevicesForPullMac() {
   // success=false 时与原实现一致：仅保留占位项
   const devices = result.success ? (result.data?.items ?? []) : null;
   if (devices === null) {
-    await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, { placeholderKey: "ip.select_device" });
+    renderPullMacDevices(list, [], t("ip.select_device"));
     return;
   }
   if (devices.length === 0) {
-    await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, { placeholderKey: "ip.no_device_data" });
+    renderPullMacDevices(list, [], t("ip.no_device_data"));
     return;
   }
 
   // snmp_community 在列表响应中已脱敏为 null，判定用后端提供的 snmp_configured 标记
   const snmpDevices = devices.filter((dev) => dev.snmp_configured);
   if (snmpDevices.length === 0) {
-    await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, { placeholderKey: "ip.no_snmp_device" });
+    renderPullMacDevices(list, [], t("ip.no_snmp_device"));
     return;
   }
 
-  await fillSelect(PULL_MAC_DEVICE_SELECT_ID, null, {
-    items: snmpDevices,
-    placeholderKey: "ip.select_device",
-    itemToLabel: (dev) => `${dev.name} (${dev.ip_address || "-"})`
+  // 默认拉取设备：服务端保存的上次拉取集合，与现存可选项求交后预选
+  //（已删除的设备自然剔除）；读取失败不阻塞模态框，仅不预选
+  let defaultIds = [];
+  try {
+    const defaultsResult = await apiGet("/api/resources/ip/pull-defaults");
+    if (defaultsResult.success && Array.isArray(defaultsResult.data)) {
+      const validIds = new Set(snmpDevices.map((dev) => dev.id));
+      defaultIds = defaultsResult.data.filter((id) => validIds.has(id));
+    }
+  } catch (error) {
+    console.debug("加载默认拉取设备失败:", error);
+  }
+
+  renderPullMacDevices(list, snmpDevices, null, defaultIds);
+}
+
+// 渲染拉取设备复选列表（placeholder 非空时渲染占位提示，否则渲染设备项）
+function renderPullMacDevices(list, devices, placeholder = null, defaultIds = []) {
+  if (!list) {
+    return;
+  }
+  if (placeholder !== null) {
+    list.innerHTML = `<div class="user-checkbox-item">${escapeHtml(placeholder)}</div>`;
+    return;
+  }
+
+  const checkedIds = new Set(defaultIds);
+  list.innerHTML = "";
+  devices.forEach((dev) => {
+    const item = document.createElement("div");
+    item.className = "user-checkbox-item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = `pull-mac-device-${dev.id}`;
+    checkbox.value = dev.id;
+    checkbox.checked = checkedIds.has(dev.id);
+
+    const label = document.createElement("label");
+    label.htmlFor = checkbox.id;
+    label.className = "user-info";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "user-name";
+    nameSpan.textContent = dev.name || dev.hostname || dev.id;
+
+    const ipSpan = document.createElement("span");
+    ipSpan.className = "user-email";
+    ipSpan.textContent = dev.ip_address || "-";
+
+    label.appendChild(nameSpan);
+    label.appendChild(ipSpan);
+
+    item.appendChild(checkbox);
+    item.appendChild(label);
+    list.appendChild(item);
   });
 }
 
@@ -145,12 +198,16 @@ async function openPullMacModal() {
   openModal("pull-mac-modal");
 }
 
-// 拉取IP MAC数据（目标设备与网段取自拉取MAC模态框）
+// 拉取IP MAC数据（目标设备集合与网段取自拉取MAC模态框，多设备依次拉取）
 async function pullIpMacData() {
-  const deviceSelect = document.getElementById(PULL_MAC_DEVICE_SELECT_ID);
-  const deviceId = deviceSelect ? deviceSelect.value : "";
+  const deviceList = document.getElementById(PULL_MAC_DEVICE_LIST_ID);
+  const deviceIds = deviceList
+    ? Array.from(
+        deviceList.querySelectorAll("input[type='checkbox']:checked")
+      ).map((cb) => cb.value)
+    : [];
 
-  if (!deviceId) {
+  if (deviceIds.length === 0) {
     showToast(t("ip.select_device_first"), "warning");
     return;
   }
@@ -165,8 +222,9 @@ async function pullIpMacData() {
     btn.innerHTML = `<span class="loading"></span> ${t("ip.pulling")}`;
     btn.disabled = true;
 
-    // 子网可缺省：空值表示全部子网，后端不做 ips.subnet_id 过滤
-    const payload = { device_id: deviceId };
+    // 子网可缺省：空值表示全部子网，后端不做 ips.subnet_id 过滤；
+    // 多设备按勾选顺序依次同步，后同步设备的观测结果覆盖先同步设备
+    const payload = { device_ids: deviceIds };
     if (subnetId) {
       payload.subnet_id = subnetId;
     }

@@ -1455,7 +1455,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -1492,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "foims-agent-service"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -1529,7 +1529,7 @@ dependencies = [
 
 [[package]]
 name = "foims-auth"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "axum",
  "axum-extra",
@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "foims-models"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "chrono",
  "foims-common",
@@ -1652,7 +1652,7 @@ dependencies = [
 
 [[package]]
 name = "foims-resource"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "async-snmp",
  "axum",

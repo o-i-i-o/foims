@@ -310,57 +310,178 @@ pub async fn send_email_to_users(
     send_with_timeout(transport, email).await
 }
 
-/// 发送 MAC 地址变更告警邮件。
+/// 通知方式开关（存储于 system_configs：config_type='notification'，key='methods'）。
 ///
-/// 收件人列表存于 `system_configs`（config_type='notification'，
-/// key='email_recipients'，JSON 数组），未配置时静默跳过。
-pub async fn send_mac_change_email(
+/// 按通知类型记录各方式（目前仅邮件）是否启用；前端「通知配置」卡片矩阵
+/// 逐格对应。未配置（历史存量）时全部视为启用，保持既有发送行为不变。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct NotificationMethods {
+    /// MAC 地址变更通知的邮件方式开关
+    #[serde(default = "default_true")]
+    pub mac_change: bool,
+    /// 主机资源告警通知的邮件方式开关
+    #[serde(default = "default_true")]
+    pub agent_alert: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for NotificationMethods {
+    fn default() -> Self {
+        Self {
+            mac_change: true,
+            agent_alert: true,
+        }
+    }
+}
+
+/// 通知方式开关在 system_configs 中的存储位置
+const NOTIFICATION_CONFIG_TYPE: &str = "notification";
+const NOTIFICATION_METHODS_KEY: &str = "methods";
+
+/// 读取通知方式开关：未配置返回全启用默认值；JSON 损坏时记错误日志并
+/// 按默认值处理（通知多发的代价远小于静默漏报）。
+pub async fn load_notification_methods(pool: &PgPool) -> NotificationMethods {
+    let row = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM system_configs WHERE config_type = $1 AND key = $2",
+    )
+    .bind(NOTIFICATION_CONFIG_TYPE)
+    .bind(NOTIFICATION_METHODS_KEY)
+    .fetch_optional(pool)
+    .await;
+    match row {
+        Ok(Some(value)) => match serde_json::from_str(&value) {
+            Ok(methods) => methods,
+            Err(e) => {
+                log_error!("log.smtp.notification_methods_parse_failed", error = e);
+                NotificationMethods::default()
+            }
+        },
+        Ok(None) => NotificationMethods::default(),
+        Err(e) => {
+            log_error!("log.smtp.notification_methods_query_failed", error = e);
+            NotificationMethods::default()
+        }
+    }
+}
+
+/// 保存通知方式开关（供系统设置端点写入，与读取同键位）。
+pub async fn save_notification_methods(
     pool: &PgPool,
-    workstation_name: &str,
-    ip_address: &str,
-    old_mac: &str,
-    new_mac: &str,
+    methods: &NotificationMethods,
 ) -> Result<(), AppError> {
-    let user_ids = match sqlx::query_scalar::<_, String>(
+    let value = serde_json::to_string(methods)
+        .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
+    sqlx::query(
+        "INSERT INTO system_configs (config_type, key, value) VALUES ($1, $2, $3)
+         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value",
+    )
+    .bind(NOTIFICATION_CONFIG_TYPE)
+    .bind(NOTIFICATION_METHODS_KEY)
+    .bind(&value)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
+    Ok(())
+}
+
+/// 读取通知邮件收件人（system_configs 的 UUID 列表）。
+///
+/// 返回 None 表示「收件人未配置/读取失败，静默跳过发送」：配置缺失是正常
+/// 业务状态；配置损坏或查询失败降级为跳过但必须留痕，不得伪装成已发送。
+async fn notification_recipient_ids(pool: &PgPool) -> Option<Vec<Uuid>> {
+    let value = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
     .fetch_optional(pool)
     .await
     {
-        Ok(Some(recips)) => {
-            // 收件人以 JSON 数组形式存储（与 system/config.rs update_notification_settings 写入格式一致）
-            match serde_json::from_str::<Vec<Uuid>>(&recips) {
-                Ok(ids) => ids,
-                Err(e) => {
-                    // 配置损坏时降级为空列表（跳过发送），但必须留痕而非静默吞掉
-                    log_error!("log.smtp.recipients_parse_failed", error = e);
-                    Vec::new()
-                }
-            }
-        }
+        Ok(Some(value)) => value,
         Ok(None) => {
             log_warn!("log.smtp.no_recipients_configured");
-            return Ok(());
+            return None;
         }
         Err(e) => {
             log_error!("log.smtp.recipients_query_failed", error = e);
-            return Ok(());
+            return None;
         }
     };
-
-    if user_ids.is_empty() {
-        log_warn!("log.smtp.recipients_empty");
-        return Ok(());
+    match serde_json::from_str::<Vec<Uuid>>(&value) {
+        Ok(ids) if !ids.is_empty() => Some(ids),
+        Ok(_) => {
+            log_warn!("log.smtp.recipients_empty");
+            None
+        }
+        Err(e) => {
+            // 配置损坏时降级为跳过发送，但必须留痕而非静默吞掉
+            log_error!("log.smtp.recipients_parse_failed", error = e);
+            None
+        }
     }
+}
 
+/// 向通知收件人发送一封邮件（收件人未配置时静默跳过）。
+async fn send_notification_email(pool: &PgPool, subject: &str, body: &str) -> Result<(), AppError> {
+    let Some(user_ids) = notification_recipient_ids(pool).await else {
+        return Ok(());
+    };
+    send_email_to_users(pool, &user_ids, subject, body).await
+}
+
+/// 发送 MAC 地址变更告警邮件。
+///
+/// 收件人列表存于 `system_configs`（config_type='notification'，
+/// key='email_recipients'，JSON 数组），未配置时静默跳过。
+/// `source_device` 为拉取该 MAC 的来源设备名，注明变更由哪台设备的
+/// 观测导致。
+pub async fn send_mac_change_email(
+    pool: &PgPool,
+    source_device: &str,
+    workstation_name: &str,
+    ip_address: &str,
+    old_mac: &str,
+    new_mac: &str,
+) -> Result<(), AppError> {
     let email_body = format!(
-        "尊敬的管理员：\n\n工位 {workstation_name} 的MAC地址已发生变更，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+        "尊敬的管理员：\n\n工位 {workstation_name} 的MAC地址已发生变更，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
     );
 
-    send_email_to_users(
+    send_notification_email(
         pool,
-        &user_ids,
         &format!("MAC地址变更通知 - 工位: {workstation_name}"),
+        &email_body,
+    )
+    .await
+}
+
+/// 发送主机资源告警邮件（CPU/内存/磁盘/温度阈值超标）。
+///
+/// `metric` 为 host_alert_states 的指标名（cpu/mem/disk/temp），
+/// 值与阈值单位随指标变化（温度 ℃，其余 %）。
+pub async fn send_host_alert_email(
+    pool: &PgPool,
+    hostname: &str,
+    ip_address: &str,
+    metric: &str,
+    value: f64,
+    threshold: u8,
+) -> Result<(), AppError> {
+    let (label, unit) = match metric {
+        "cpu" => ("CPU使用率", "%"),
+        "mem" => ("内存使用率", "%"),
+        "disk" => ("磁盘使用率", "%"),
+        "temp" => ("温度", "℃"),
+        _ => ("指标", ""),
+    };
+    let email_body = format!(
+        "尊敬的管理员：\n\n主机 {hostname} 触发资源告警，详情如下：\n主机名称：{hostname}\nIP地址：{ip_address}\n告警指标：{label}\n当前值：{value:.1}{unit}\n告警阈值：{threshold}{unit}\n\n请及时确认处理。\n\n此致，\nFOIMS系统"
+    );
+
+    send_notification_email(
+        pool,
+        &format!("主机资源告警 - {hostname}: {label}超标"),
         &email_body,
     )
     .await
