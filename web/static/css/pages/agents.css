@@ -7,7 +7,7 @@
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
   }
 
   /* 状态点：绿=在线 红=离线 灰=待激活 橙=已禁用 深红=已吊销 */
