@@ -12,3 +12,5 @@ foims-portal/
 node_exporter/
 .zcodeignore
 windows_exporter/
+frontend/dist/
+frontend/node_modules/
