@@ -215,7 +215,7 @@ css 代码规范位于 docs/CSS-style.md
   必须同号（由 `tests/frontend_consistency.rs` 强制校验，漏 bump 直接挂
   `cargo test`）。
 - 版本号为 Unix 时间戳（秒）：递增、唯一，重复 bump 不冲突。用
-  `bash test-scripts/bump_static_version.sh` 一键 bump（同秒重复或时钟
+  `bash da-scripts/bump_static_version.sh` 一键 bump（同秒重复或时钟
   回拨时自动取 当前+1 保证单调），`--check`/`--show` 可单独校验/查看；
   也可传纯数字参数写入指定版本号。
 

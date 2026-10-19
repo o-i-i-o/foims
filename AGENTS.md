@@ -33,7 +33,7 @@
   仅当该文件 y/x 段变化时才联动 bump（z 段普通修改不动 Cargo.toml）；
   前端资源同步 bump 三个入口页（main/index/init_index）的 `?v=` 与
   `resourceLoader.js` 的 `MODULE_VERSION`（时间戳格式，一键脚本
-  `bash test-scripts/bump_static_version.sh`；一致性由 `cargo test` 强制）。
+  `bash da-scripts/bump_static_version.sh`；一致性由 `cargo test` 强制）。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
-- 开发直接测试：`./test-scripts/pak.sh`；
+- 开发直接测试：`./da-scripts/pak.sh`；
 - 测试用户 admin / admin123。
