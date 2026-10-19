@@ -1,99 +1,101 @@
-/* 导入导出 / 数据管理 / 备份恢复样式 */
+@layer pages {
+  /* 导入导出 / 数据管理 / 备份恢复样式 */
 
-.data-management-container,
-.database-management-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-lg);
-  min-width: 0;
-}
-
-.data-management-container .section,
-.database-management-container .section {
-  background: var(--color-bg);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
-  border: 1px solid var(--color-border-light);
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* 数据管理/日志管理卡片化后：子区块置于 config-card 灰底之上，改用白底保持层次 */
-.config-card .data-management-container .section,
-.config-card .database-management-container .section {
-  background: var(--color-bg-white);
-}
-
-.data-management-container .section h3,
-.database-management-container .section h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: var(--space-md);
-  padding-bottom: var(--space-xs);
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.import-actions,
-.export-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-}
-
-.export-actions select {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 0.85rem;
-  min-width: 0;
-}
-
-.import-actions .btn,
-.export-actions .btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-
-.import-result-list {
-  max-height: 400px;
-  overflow-y: auto;
-  padding: var(--space-sm);
-}
-
-.import-result-item {
-  padding: var(--space-sm) var(--space-md);
-  margin-bottom: var(--space-xs);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  border-left: 3px solid var(--color-primary);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.import-result-item:nth-child(odd) {
-  background: var(--color-bg-white);
-}
-
-@media (width <= 768px) {
   .data-management-container,
   .database-management-container {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    min-width: 0;
   }
-}
 
-/* 窄屏：导入导出操作区纵向堆叠（原 responsive.css 组件级规则迁回） */
-@media (width <= 768px) {
+  .data-management-container .section,
+  .database-management-container .section {
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    border: 1px solid var(--color-border-light);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* 数据管理/日志管理卡片化后：子区块置于 config-card 灰底之上，改用白底保持层次 */
+  .config-card .data-management-container .section,
+  .config-card .database-management-container .section {
+    background: var(--color-bg-white);
+  }
+
+  .data-management-container .section h3,
+  .database-management-container .section h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
   .import-actions,
   .export-actions {
-    flex-direction: column;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
   }
 
-  .action-buttons {
-    width: 100%;
-    justify-content: space-between;
+  .export-actions select {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    font-size: 0.85rem;
+    min-width: 0;
+  }
+
+  .import-actions .btn,
+  .export-actions .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .import-result-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: var(--space-sm);
+  }
+
+  .import-result-item {
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-xs);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    border-left: 3px solid var(--color-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .import-result-item:nth-child(odd) {
+    background: var(--color-bg-white);
+  }
+
+  @media (width <= 768px) {
+    .data-management-container,
+    .database-management-container {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* 窄屏：导入导出操作区纵向堆叠（原 responsive.css 组件级规则迁回） */
+  @media (width <= 768px) {
+    .import-actions,
+    .export-actions {
+      flex-direction: column;
+    }
+
+    .action-buttons {
+      width: 100%;
+      justify-content: space-between;
+    }
   }
 }

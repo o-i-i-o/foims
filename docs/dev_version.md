@@ -122,3 +122,22 @@ v0.7.0
 2. 定时任务 MAC 同步多设备化（系统模块小功能，与手动拉取默认配置不共享）：任务 config 由单 device_id 改为 device_ids 数组（1..=100 语义同手动拉取），执行器依次调用 pull_ip_details_internal、后设备观测覆盖先设备写入，任一失败即任务失败；前端任务弹窗同两列布局（设备复选列表+子网下拉，仅列 snmp_configured 设备），回填按 device_ids 勾选（已删设备自然剔除）、提交保存 device_ids+subnet_id 至任务 config
 3. 死键与文案清理：删 scheduled_tasks.config_fields.select_device 与 server.ip.pull_defaults_parse_failed（均无引用）；server.task.mac_sync_missing_config 文案改 device_ids 口径，新增 server.task.mac_sync_invalid_config（配置解析失败）
 4. 联动：根 Cargo.toml 0.26.1→0.26.2，foims-resource 0.1.8→0.1.9；前端资源版本经 bump_static_version.sh 刷新
+
+v0.7.1
+2026101921484101
+1. 新增前端静态审计工具链（脱离 Node 环境）：JS 侧 oxlint v1.88.0（独立 musl 二进制装 ~/.local/bin，仓库新增 .oxlintrc.json：correctness+suspicious 双档 warn、browser env、排除 icons 与 target）；CSS 侧 biome v2.5.15（独立二进制装 ~/.local/bin，仓库新增 biome.json：仅扫 web/static 排除 icons/lucide SVG、关闭 a11y 组噪音、CSS 格式化对齐 docs/CSS-style.md 2 空格约定、allowWrongLineComments 兼容行内注释）；两工具均有基线扫描结果（CSS 20 处 noDescendingSpecificity/noImportantStyles，JS 0 error 323 条口味告警留待甄别）
+2. 本次仅新增开发工具配置文件，未触碰任何 web/static 资源与 Rust 代码，前端 ？v= 与 Cargo.toml 均不联动
+
+v0.7.2
+2026101922071401
+1. 前端审计工具链严格化：.oxlintrc.json correctness/suspicious 升为 error 并新增 perf=warn（no-await-in-loop），关闭两条与项目私有约定冲突的口味规则（no-underscore-dangle 下划线私有字段、consistent-function-scoping 模块内函数），biome.json 试开 nursery 后确认均为迁移类噪音（useLayeredStyles 1303 处 @layer 改写、useLogicalProperties 904 处逻辑属性改写）而移除，CSS 侧保持 recommended 全量真实 bug 检测
+2. app.js waitForStylesheets 的 cssRules 跨域探测处补行内注释与 oxlint 行内豁免（唯一 correctness 误报点，故意读取 cssRules 触发安全错误探测加载完成）；前端 ？v= 经 bump_static_version.sh 刷新，frontend_consistency 5 测试通过
+3. docs/CSS-style.md 头部新增优先级声明：文档仅作意图说明，与 biome.json 冲突一律以 biome.json 为准；标注 web/.stylelintrc.json（Node 时代）已废弃。SVG 报错根因确认为 biome 将 SVG 按 HTML 解析命中 a11y noSvgWithoutTitle（vendored lucide 图标 1700+ 文件），根治即配置排除 icons 目录，不改上游图标
+4. 严格档基线：biome 49 error/169 warn/19 info（useIterableCallbackReturn 49、noThisInStatic 51、useOptionalChain 41、CSS noDescendingSpecificity 33、noImportantStyles 8 等），oxlint 51 条（prefer-add-event-listener 28、no-await-in-loop 14、no-array-sort 4、no-shadow 3、no-map-spread 2）；本条为文档与配置变更，Cargo.toml 不联动
+
+v0.8.0
+2026101923204501
+1. 前端 CSS @layer 层叠层重构（架构优化，y+1）：web/static/css 全部 31 个文件纳入统一层序 variables < reset < components < modals < layouts < pages < utilities < responsive（层序声明语句位于 variables.css 顶部），层序取代跨文件特异性竞争成为级联第一决定因素；styleLoader 动态加载的 visualization.css 单独成文件顶层 @layer 块，与静态引入文件层序一致（嵌套 @layer 会生成子层，跨层规则必须置于文件顶层）；foims_init.css 因不加载 reset.css 将通配重置就地归入 reset 层，避免越层覆盖组件样式
+2. 重构保真验证：静态候选 19439 对选择器交叉对，经真实 DOM 运行时 matches 扫描（登录页/init 页/主页面全 DOM/8 个 section/网络区域模态）收敛至 26 组同元素双命中，逐对按「原级联胜者=保真目标」判定；除下述修复外其余均为值等价翻转（1rem==16px 等）或被更高优先级规则掩蔽，无视觉变化
+3. 层序反转修复 7 处（保现行视觉）：responsive.css 表单标签组两选择器分别改 .checkbox-label 限定与 :not(.modal *) 排除（模态内非复选标签维持 forms.css 弹窗变体居中窄版，原级联下 responsive 规则从未实际胜出）；logs.css 删 .clear-logs-form label 死代码声明与被完全压制的 select/input 规则；organization.css .btn-add-child 系列加 :not(.icon-btn) 排除图标形态（着色归 buttons.css）；tables.css 的 .data-table th .btn 与 visualization.css 的页签紧凑尺寸/缩放按钮规则移至各自文件末尾顶层 @layer responsive 块，防通用移动端规则按层序反超
+4. 联动：根 Cargo.toml 0.26.2→0.26.3（crate 版本不变）；前端 ？v= 与 MODULE_VERSION 经 bump_static_version.sh 刷新，frontend_consistency 5 测试通过；biome 全量 49 error/169 warn/19 info 与基线持平，cargo fmt/clippy --release -D warnings 零告警

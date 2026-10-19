@@ -1,165 +1,169 @@
-/* ==========================================
+@layer modals {
+  /* ==========================================
  * 模态框动态列表（机房关联网段/工位/机柜/信息点、机柜机位/配线架共用）：
  * 卡片容器 + 单行条目 + 行内列布局。行结构由各模块 JS 模板生成，
  * 容器挂 .dyn-list 类、条目挂 .dyn-list-item 类接入本组样式，
  * 各列表的业务类（network-config-item 等）仅供 JS 查询与差异规则使用
  * ========================================== */
 
-/* 动态列表容器：统一卡片样式；width:100% 保证容器始终位于标题下方 */
-.dyn-list {
-  background: var(--color-bg);
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-light);
-  box-sizing: border-box;
-  width: 100%;
-}
+  /* 动态列表容器：统一卡片样式；width:100% 保证容器始终位于标题下方 */
+  .dyn-list {
+    background: var(--color-bg);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
+    box-sizing: border-box;
+    width: 100%;
+  }
 
-/* 单个列表项：仅作为容器内的一行，无独立卡片样式 */
-.dyn-list-item {
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--color-border-light);
-  box-sizing: border-box;
-}
+  /* 单个列表项：仅作为容器内的一行，无独立卡片样式 */
+  .dyn-list-item {
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--color-border-light);
+    box-sizing: border-box;
+  }
 
-.dyn-list-item:last-child {
-  border-bottom: none;
-}
+  .dyn-list-item:last-child {
+    border-bottom: none;
+  }
 
-/* 覆盖 modal 中 .form-row 的布局，使用 flex 让输入控件占满剩余空间 */
-.modal .dyn-list-item .form-row {
-  display: flex;
-  gap: var(--space-md);
-  align-items: end;
-  margin: 0;
-}
+  /* 覆盖 modal 中 .form-row 的布局，使用 flex 让输入控件占满剩余空间 */
+  .modal .dyn-list-item .form-row {
+    display: flex;
+    gap: var(--space-md);
+    align-items: end;
+    margin: 0;
+  }
 
-/* 输入列：flex: 1 让其占据剩余空间；position:relative 供必填星号 ::after 定位 */
-.modal .dyn-list-item .form-group {
-  display: block;
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  position: relative;
-}
+  /* 输入列：flex: 1 让其占据剩余空间；position:relative 供必填星号 ::after 定位 */
+  .modal .dyn-list-item .form-group {
+    display: block;
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
 
-/* 覆盖 modal 中 input 的同行扩展，让输入框占满列宽 */
-.modal .dyn-list-item .form-group input {
-  width: 100%;
-  flex: none;
-  min-width: 0;
-}
+  /* 覆盖 modal 中 input 的同行扩展，让输入框占满列宽 */
+  .modal .dyn-list-item .form-group input {
+    width: 100%;
+    flex: none;
+    min-width: 0;
+  }
 
-/* 网段行：区域/网段下拉占满列宽（基样式见 forms.css） */
-.modal .network-config-item .form-group select {
-  width: 100%;
-  flex: none;
-  min-width: 0;
-}
+  /* 网段行：区域/网段下拉占满列宽（基样式见 forms.css） */
+  .modal .network-config-item .form-group select {
+    width: 100%;
+    flex: none;
+    min-width: 0;
+  }
 
-/* 按钮组列：flex: none 仅占内容宽度，让输入控件占据更多空间 */
-.modal .dyn-list-item .form-group:is(
-    .network-config-actions,
-    .room-children-actions,
-    .room-net-outlets-actions,
-    .cabinet-item-actions
-  ) {
-  display: flex;
-  min-width: 0;
-  width: auto;
-  flex: none;
-}
+  /* 按钮组列：flex: none 仅占内容宽度，让输入控件占据更多空间 */
+  .modal
+    .dyn-list-item
+    .form-group:is(
+      .network-config-actions,
+      .room-children-actions,
+      .room-net-outlets-actions,
+      .cabinet-item-actions
+    ) {
+    display: flex;
+    min-width: 0;
+    width: auto;
+    flex: none;
+  }
 
-/* 必填提示：select 未选择（:invalid）时显示红色 *。
+  /* 必填提示：select 未选择（:invalid）时显示红色 *。
    行内无 label 可挂 .required，故锚定在 select 右缘、下拉箭头左侧——
    不按占位文字宽度定位，i18n 文案长度变化不会错位
    （14px 为 forms.css 中 select 自定义箭头的 background-size） */
-.modal .dyn-list-item .form-group:has(select:invalid)::after {
-  content: "*";
-  color: var(--color-danger);
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  right: calc(var(--control-padding-x) + 14px + var(--space-xs));
-  pointer-events: none;
-  font-weight: 700;
-  font-size: 0.95rem;
-  line-height: 1;
-}
+  .modal .dyn-list-item .form-group:has(select:invalid)::after {
+    content: "*";
+    color: var(--color-danger);
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    right: calc(var(--control-padding-x) + 14px + var(--space-xs));
+    pointer-events: none;
+    font-weight: 700;
+    font-size: 0.95rem;
+    line-height: 1;
+  }
 
-.network-config-wrapper {
-  width: 100%;
-  flex: 1 !important; /* stylelint-disable-line declaration-no-important -- 压制表单控件默认宽度 */
-  min-width: 0;
-}
+  .network-config-wrapper {
+    width: 100%;
+    flex: 1 !important; /* stylelint-disable-line declaration-no-important -- 压制表单控件默认宽度 */
+    min-width: 0;
+  }
 
-/* 列表标题行：标题居左、「添加」按钮居右 */
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-sm);
-  width: 100%;
-}
+  /* 列表标题行：标题居左、「添加」按钮居右 */
+  .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+  }
 
-/* 标题行内 label 覆盖 modal 的定宽居中规则，按内容自适应；
+  /* 标题行内 label 覆盖 modal 的定宽居中规则，按内容自适应；
    .list-title 为原无控件可关联的 label 改成的 span 分组标题，视觉与原 label 一致 */
-.modal .form-group .list-header label,
-.modal .form-group .list-header .list-title {
-  width: auto;
-  min-width: 0;
-  text-align: left;
-  padding-top: 0;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
+  .modal .form-group .list-header label,
+  .modal .form-group .list-header .list-title {
+    width: auto;
+    min-width: 0;
+    text-align: left;
+    padding-top: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+  }
 
-.list-add-btn {
-  white-space: nowrap;
-}
+  .list-add-btn {
+    white-space: nowrap;
+  }
 
-/* ==========================================
+  /* ==========================================
  * 动态列表列标题行（机柜机位列表 + 房间子网配置/工位列表共用）：
  * 与输入行相同的 flex 列结构（内容列 flex:1 + 末列操作位）
  * ========================================== */
 
-/* 列标题行：底部细线与输入行分隔，保证标题与下方输入框逐列对齐 */
-#cabinet-positions-container .cabinet-columns-header,
-.dyn-columns-header {
-  display: flex;
-  gap: var(--space-md);
-  align-items: center;
-  padding-bottom: var(--space-xs);
-  margin-bottom: var(--space-sm);
-  border-bottom: 1px solid var(--color-border-light);
-}
+  /* 列标题行：底部细线与输入行分隔，保证标题与下方输入框逐列对齐 */
+  #cabinet-positions-container .cabinet-columns-header,
+  .dyn-columns-header {
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+    padding-bottom: var(--space-xs);
+    margin-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-border-light);
+  }
 
-/* 列标题已由 label 改为 span：选择器同步扩展，样式不变 */
-#cabinet-positions-container .cabinet-columns-header > label,
-#cabinet-positions-container .cabinet-columns-header > span,
-.dyn-columns-header > span {
-  flex: 1;
-  min-width: 0;
-  width: auto;
-  padding-top: 0;
-  margin: 0;
-  text-align: left;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
+  /* 列标题已由 label 改为 span：选择器同步扩展，样式不变 */
+  #cabinet-positions-container .cabinet-columns-header > label,
+  #cabinet-positions-container .cabinet-columns-header > span,
+  .dyn-columns-header > span {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    padding-top: 0;
+    margin: 0;
+    text-align: left;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
 
-#cabinet-positions-container .cabinet-columns-header > .cabinet-item-actions,
-.dyn-columns-header > .dyn-columns-actions {
-  flex: none;
-  width: auto;
-}
+  #cabinet-positions-container .cabinet-columns-header > .cabinet-item-actions,
+  .dyn-columns-header > .dyn-columns-actions {
+    flex: none;
+    width: auto;
+  }
 
-/* 窄屏：动态配置行纵向堆叠（原 responsive.css 组件级规则迁回） */
-@media (width <= 768px) {
-  .network-config-item .form-row {
-    flex-direction: column;
+  /* 窄屏：动态配置行纵向堆叠（原 responsive.css 组件级规则迁回） */
+  @media (width <= 768px) {
+    .network-config-item .form-row {
+      flex-direction: column;
+    }
   }
 }

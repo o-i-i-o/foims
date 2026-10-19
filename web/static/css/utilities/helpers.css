@@ -1,86 +1,88 @@
-/* 通用工具类 */
+@layer utilities {
+  /* 通用工具类 */
 
-.mt-md {
-  margin-top: var(--space-md);
-}
+  .mt-md {
+    margin-top: var(--space-md);
+  }
 
-.flex-1 {
-  flex: 1;
-}
+  .flex-1 {
+    flex: 1;
+  }
 
-.hidden {
-  display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
-}
+  .hidden {
+    display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
+  }
 
-.text-muted {
-  color: var(--color-text-muted);
-}
+  .text-muted {
+    color: var(--color-text-muted);
+  }
 
-/* 危险色文字（与 .text-muted 对称的颜色工具类） */
-.text-danger {
-  color: var(--color-danger);
-}
+  /* 危险色文字（与 .text-muted 对称的颜色工具类） */
+  .text-danger {
+    color: var(--color-danger);
+  }
 
-.text-center {
-  text-align: center;
-}
+  .text-center {
+    text-align: center;
+  }
 
-.w-auto {
-  width: auto;
-}
+  .w-auto {
+    width: auto;
+  }
 
-/* 表单行内的横向组合（label + checkbox + 按钮等） */
-.form-group-inline {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding-top: 0.85rem;
-}
+  /* 表单行内的横向组合（label + checkbox + 按钮等） */
+  .form-group-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-top: 0.85rem;
+  }
 
-/* label 不占定宽：单独使用（如 main.html 手动封禁行）走首条规则；
+  /* label 不占定宽：单独使用（如 main.html 手动封禁行）走首条规则；
    与 .form-group 组合（模态内 .form-row 中）时需覆盖 forms.css 的
    .form-group label:not(.checkbox-label) 与 modals.css 的
    .modal .form-row .form-group label（0,3,1 特异性，本文件后加载胜出） */
-.form-group-inline label,
-.form-group.form-group-inline label:not(.checkbox-label) {
-  margin: 0;
-  min-width: auto;
-  padding-top: 0;
-}
+  .form-group-inline label,
+  .form-group.form-group-inline label:not(.checkbox-label) {
+    margin: 0;
+    min-width: auto;
+    padding-top: 0;
+  }
 
-/* 行内 checkbox：固定小尺寸，不被 form-group 的全宽布局拉伸 */
-.form-checkbox {
-  width: 1rem;
-  height: 1rem;
-  min-width: 1rem;
-  margin: 0;
-  flex-shrink: 0;
-}
+  /* 行内 checkbox：固定小尺寸，不被 form-group 的全宽布局拉伸 */
+  .form-checkbox {
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    margin: 0;
+    flex-shrink: 0;
+  }
 
-/* 紧随组合内容的小间距按钮 */
-.btn-gap-left {
-  margin-left: var(--space-xs);
-}
+  /* 紧随组合内容的小间距按钮 */
+  .btn-gap-left {
+    margin-left: var(--space-xs);
+  }
 
-/* ==========================================
+  /* ==========================================
    角色只读模式（roleCapabilities.js）
    ========================================== */
 
-/* 只读分区内隐藏的写控件（清扫函数追加该类） */
-.ro-hidden {
-  display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
-}
+  /* 只读分区内隐藏的写控件（清扫函数追加该类） */
+  .ro-hidden {
+    display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
+  }
 
-/* 只读分区标题右侧的只读徽标 */
-.content-section.readonly-section h2::after {
-  content: attr(data-ro-badge);
-  display: inline-block;
-  margin-left: var(--space-sm);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  vertical-align: middle;
-  background: var(--color-border-light);
-  color: var(--color-text-muted);
+  /* 只读分区标题右侧的只读徽标 */
+  .content-section.readonly-section h2::after {
+    content: attr(data-ro-badge);
+    display: inline-block;
+    margin-left: var(--space-sm);
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    vertical-align: middle;
+    background: var(--color-border-light);
+    color: var(--color-text-muted);
+  }
 }

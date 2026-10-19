@@ -1,240 +1,231 @@
-/* 日志管理 / 通知管理样式 */
+@layer pages {
+  /* 日志管理 / 通知管理样式 */
 
-/* 操作日志表：搜索框取代原操作列表头，收窄时间/操作人/结果列，
+  /* 操作日志表：搜索框取代原操作列表头，收窄时间/操作人/结果列，
    让出宽度给含按钮与搜索框的最后一列 */
-#operation-logs-table td.col-time {
-  width: 170px;
-  white-space: nowrap;
-}
+  #operation-logs-table td.col-time {
+    width: 170px;
+    white-space: nowrap;
+  }
 
-#operation-logs-table td.col-operator {
-  width: 120px;
-  white-space: nowrap;
-}
+  #operation-logs-table td.col-operator {
+    width: 120px;
+    white-space: nowrap;
+  }
 
-#operation-logs-table td.col-result {
-  width: 80px;
-  white-space: nowrap;
-}
+  #operation-logs-table td.col-result {
+    width: 80px;
+    white-space: nowrap;
+  }
 
-.notification-settings-section {
-  margin-top: 2rem;
-}
+  .notification-settings-section {
+    margin-top: 2rem;
+  }
 
-/* 通知方式矩阵：行=通知类型，列=通知方式 */
-.notification-matrix {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1.5rem;
-}
+  /* 通知方式矩阵：行=通知类型，列=通知方式 */
+  .notification-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
 
-.notification-matrix th,
-.notification-matrix td {
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid var(--color-border-light);
-  text-align: left;
-}
+  .notification-matrix th,
+  .notification-matrix td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-light);
+    text-align: left;
+  }
 
-.notification-matrix th {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
+  .notification-matrix th {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
 
-.notification-matrix input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  vertical-align: middle;
-}
+  .notification-matrix input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+  }
 
-/* 占位徽章收缩为内容宽度，避免撑满整列 */
-.notification-matrix .status-badge {
-  display: inline-flex;
-}
+  /* 占位徽章收缩为内容宽度，避免撑满整列 */
+  .notification-matrix .status-badge {
+    display: inline-flex;
+  }
 
-.users-checkbox-list {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: 0.5rem;
-  background: var(--color-bg);
-}
+  .users-checkbox-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 0.5rem;
+    background: var(--color-bg);
+  }
 
-.users-checkbox-list .user-checkbox-item {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: var(--radius-sm);
-  transition: background-color 0.2s;
-}
+  .users-checkbox-list .user-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.2s;
+  }
 
-.users-checkbox-list .user-checkbox-item:hover {
-  background-color: var(--color-bg-white);
-}
+  .users-checkbox-list .user-checkbox-item:hover {
+    background-color: var(--color-bg-white);
+  }
 
-.users-checkbox-list input[type="checkbox"] {
-  margin-right: 0.75rem;
-  width: 18px;
-  height: 18px;
-}
+  .users-checkbox-list input[type="checkbox"] {
+    margin-right: 0.75rem;
+    width: 18px;
+    height: 18px;
+  }
 
-.users-checkbox-list .user-info {
-  display: flex;
-  flex-direction: column;
-}
+  .users-checkbox-list .user-info {
+    display: flex;
+    flex-direction: column;
+  }
 
-.users-checkbox-list .user-name {
-  font-weight: 500;
-  color: var(--color-text);
-}
+  .users-checkbox-list .user-name {
+    font-weight: 500;
+    color: var(--color-text);
+  }
 
-.users-checkbox-list .user-email {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
-.logs-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  min-width: 0;
-}
-
-.log-stat-card {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  text-align: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.log-stat-title {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.5rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.log-stat-value {
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--color-primary);
-  word-break: break-all;
-}
-
-.log-stat-info {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-top: 0.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clear-logs-form {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  min-width: 0;
-}
-
-.clear-logs-form .form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  min-width: 0;
-}
-
-.clear-logs-form .form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.clear-logs-form label {
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.clear-logs-form select,
-.clear-logs-form input {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-@media (width <= 576px) {
-  .clear-logs-form .form-row {
-    grid-template-columns: 1fr;
+  .users-checkbox-list .user-email {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
   }
 
   .logs-stats-grid {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    min-width: 0;
+  }
+
+  .log-stat-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    text-align: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .log-stat-title {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .log-stat-value {
-    font-size: 1.5rem;
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    word-break: break-all;
   }
-}
 
-/* ===== 日志详情弹窗字段网格 ===== */
-.log-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px 16px;
-  margin-bottom: 16px;
-}
+  .log-stat-info {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-/* 键值对 dl 化：重置 dl/dd 浏览器默认边距，保持原布局 */
-dl.log-detail-item {
-  margin: 0;
-}
+  .clear-logs-form {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 1.5rem;
+    min-width: 0;
+  }
 
-.log-detail-item dt {
-  display: block;
-  margin-bottom: 2px;
-  font-weight: 500;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
+  .clear-logs-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    min-width: 0;
+  }
 
-.log-detail-item dd {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--color-text-light);
-  word-break: break-all;
-  line-height: 1.6;
-}
+  .clear-logs-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
 
-.log-detail-section {
-  margin-bottom: 12px;
-}
+  /* label 的字重与颜色由 forms.css 的 .form-group label:not(.checkbox-label) 提供；
+   此处仅保留其未覆盖的 white-space */
+  .clear-logs-form label {
+    white-space: nowrap;
+  }
 
-@media (width <= 576px) {
+  @media (width <= 576px) {
+    .clear-logs-form .form-row {
+      grid-template-columns: 1fr;
+    }
+
+    .logs-stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .log-stat-value {
+      font-size: 1.5rem;
+    }
+  }
+
+  /* ===== 日志详情弹窗字段网格 ===== */
   .log-detail-grid {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 16px;
+    margin-bottom: 16px;
   }
-}
 
-/* 通知表工具栏：过滤下拉 + 刷新/清除按钮 */
-.notifications-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  /* 键值对 dl 化：重置 dl/dd 浏览器默认边距，保持原布局 */
+  dl.log-detail-item {
+    margin: 0;
+  }
+
+  .log-detail-item dt {
+    display: block;
+    margin-bottom: 2px;
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .log-detail-item dd {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    word-break: break-all;
+    line-height: 1.6;
+  }
+
+  .log-detail-section {
+    margin-bottom: 12px;
+  }
+
+  @media (width <= 576px) {
+    .log-detail-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* 通知表工具栏：过滤下拉 + 刷新/清除按钮 */
+  .notifications-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 }

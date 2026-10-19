@@ -1,582 +1,590 @@
-/* 组织管理 - 树形结构样式 */
+@layer pages {
+  /* 组织管理 - 树形结构样式 */
 
-.org-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-md);
-  margin-bottom: 0;
-  flex-wrap: wrap;
-}
-
-.org-search-input {
-  flex: 1;
-  max-width: 320px;
-  min-width: 200px;
-  width: 100%;
-}
-
-.org-actions {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
-
-.org-tree-container {
-  background: var(--color-bg-white);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  min-height: 400px;
-  overflow-x: auto;
-}
-
-.org-empty-state {
-  text-align: center;
-  padding: var(--space-xl) var(--space-md);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-base);
-}
-
-/* 树节点 */
-.org-node-wrapper {
-  position: relative;
-
-  /* 入场动画（keyframes 在 utilities/animations.css） */
-  animation: org-fade-in var(--transition-slow) ease;
-}
-
-.org-node {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-fast);
-  cursor: default;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-
-.org-node:hover {
-  background-color: var(--color-bg-hover);
-  border-color: var(--color-border-light);
-}
-
-.org-node:hover .org-node-actions {
-  opacity: 1;
-}
-
-/* 展开/折叠按钮 */
-.org-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  transition: transform var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.org-toggle:hover {
-  color: var(--color-primary);
-}
-
-.org-toggle.expanded .org-toggle-icon {
-  transform: rotate(90deg);
-}
-
-.org-toggle-icon {
-  transition: transform var(--transition-fast);
-}
-
-.org-toggle-placeholder {
-  display: inline-block;
-  width: 20px;
-  flex-shrink: 0;
-}
-
-/* 节点图标和名称 */
-.org-node-icon {
-  font-size: 1.2rem;
-  color: var(--color-text);
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.org-node-icon svg {
-  width: 1.25em;
-  height: 1.25em;
-}
-
-/* 图标语义配色外壳（颜色由 renderOrgIcon 内联注入） */
-.org-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-/* 树节点图标底衬：以图标自身颜色生成浅色圆角背景，SVG 缩放至底衬内 */
-.org-node-icon .org-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-
-.org-node-icon .org-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* 历史 emoji 与 SVG 图标共用底衬，保持行内视觉尺寸一致 */
-.org-node-icon .org-icon-legacy {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, currentColor 10%, transparent);
-}
-
-.org-node-name {
-  font-weight: 500;
-  color: var(--color-text);
-  font-size: var(--font-size-base);
-}
-
-.org-node-type-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  flex-shrink: 0;
-}
-
-/* 节点类型徽章配色：底色统一取文字 token 的 10% 透明度（同文件 color-mix 模式） */
-.org-node-type-badge[data-type="headquarters"] {
-  background: color-mix(in srgb, var(--color-secondary-hover) 8%, transparent);
-
-  /* 比主色深一档的 lime 文字：主色向文字色深化 */
-  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-text));
-}
-
-.org-node-type-badge[data-type="building"] {
-  background: color-mix(in srgb, var(--color-blue) 10%, transparent);
-  color: var(--color-blue);
-}
-
-.org-node-type-badge[data-type="floor"] {
-  background: color-mix(in srgb, var(--color-info) 10%, transparent);
-  color: var(--color-info);
-}
-
-.org-node-type-badge[data-type="data_center"] {
-  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-  color: var(--color-danger);
-}
-
-.org-node-type-badge[data-type="telecom_closet"],
-.org-node-type-badge[data-type="cabinet"] {
-  background: color-mix(in srgb, var(--color-ipv6) 10%, transparent);
-  color: var(--color-ipv6);
-}
-
-.org-node-type-badge[data-type="office"] {
-  background: color-mix(in srgb, var(--color-success) 10%, transparent);
-  color: var(--color-success);
-}
-
-.org-node-type-badge[data-type="hall"] {
-  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  color: var(--color-warning-text);
-}
-
-.org-node-type-badge[data-type="workstation"] {
-  background: color-mix(in srgb, var(--color-secondary) 10%, transparent);
-  color: var(--color-secondary);
-}
-
-.org-node-type-badge[data-type="cabinet_position"] {
-  background: color-mix(in srgb, var(--color-orange) 10%, transparent);
-  color: var(--color-orange);
-}
-
-.org-node-desc {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 节点操作按钮 */
-.org-node-actions {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.org-node-actions .btn {
-  padding: 2px 8px;
-  font-size: var(--font-size-xs);
-}
-
-/* 文本按钮形态（组织模板编辑弹窗使用）：浅色底 + 边框 */
-.btn-add-child {
-  background: var(--color-success-bg);
-  color: var(--color-success-text);
-  border: 1px solid var(--color-success);
-}
-
-.btn-add-child:hover {
-  background: var(--color-success);
-  color: var(--color-bg-white);
-}
-
-/* 树节点图标按钮形态：无边框、透明底，与全局 icon-btn 风格统一 */
-.icon-btn.btn-add-child {
-  background: transparent;
-  border: none;
-}
-
-.icon-btn.btn-employees {
-  background: transparent;
-  border: none;
-  color: var(--color-primary);
-}
-
-/* btn-add-child 的悬浮着色由 buttons.css 的 .icon-btn.btn-add-child:hover 统一提供 */
-
-.icon-btn.btn-employees:hover {
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-}
-
-/* 人员管理模态框 */
-.employee-modal-org {
-  color: var(--color-text-secondary);
-  font-weight: 400;
-  font-size: 0.9em;
-  margin-left: 6px;
-}
-
-.employee-table-container {
-  max-height: 380px;
-  overflow: auto;
-}
-
-.employee-actions-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-}
-
-.modal-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-/* 子节点容器：缩进由嵌套容器的 padding-left 逐层累加（每层 24px），
-   替代原 JS 按深度写内联 paddingLeft 的方案 */
-.org-children {
-  position: relative;
-  padding-left: 24px;
-}
-
-.org-children::before {
-  content: "";
-  position: absolute;
-  left: 28px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--color-border-light);
-}
-
-/* 父级信息 */
-.org-parent-info {
-  background: var(--control-bg-muted);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-md);
-}
-
-.org-parent-info p {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-/* 响应式 */
-@media (width <= 768px) {
   .org-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: 0;
+    flex-wrap: wrap;
+  }
+
+  .org-search-input {
+    flex: 1;
+    max-width: 320px;
+    min-width: 200px;
+    width: 100%;
   }
 
   .org-actions {
-    justify-content: flex-start;
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .org-tree-container {
+    background: var(--color-bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    min-height: 400px;
+    overflow-x: auto;
+  }
+
+  .org-empty-state {
+    text-align: center;
+    padding: var(--space-xl) var(--space-md);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-base);
+  }
+
+  /* 树节点 */
+  .org-node-wrapper {
+    position: relative;
+
+    /* 入场动画（keyframes 在 utilities/animations.css） */
+    animation: org-fade-in var(--transition-slow) ease;
   }
 
   .org-node {
-    flex-wrap: wrap;
-    padding: var(--space-xs) var(--space-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast);
+    cursor: default;
+    border: 1px solid transparent;
+    white-space: nowrap;
   }
 
-  .org-node-actions {
+  .org-node:hover {
+    background-color: var(--color-bg-hover);
+    border-color: var(--color-border-light);
+  }
+
+  .org-node:hover .org-node-actions {
     opacity: 1;
-    flex-wrap: wrap;
+  }
+
+  /* 展开/折叠按钮 */
+  .org-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: transform var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .org-toggle:hover {
+    color: var(--color-primary);
+  }
+
+  .org-toggle.expanded .org-toggle-icon {
+    transform: rotate(90deg);
+  }
+
+  .org-toggle-icon {
+    transition: transform var(--transition-fast);
+  }
+
+  .org-toggle-placeholder {
+    display: inline-block;
+    width: 20px;
+    flex-shrink: 0;
+  }
+
+  /* 节点图标和名称 */
+  .org-node-icon {
+    font-size: 1.2rem;
+    color: var(--color-text);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .org-node-icon svg {
+    width: 1.25em;
+    height: 1.25em;
+  }
+
+  /* 图标语义配色外壳（颜色由 renderOrgIcon 内联注入） */
+  .org-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  /* 树节点图标底衬：以图标自身颜色生成浅色圆角背景，SVG 缩放至底衬内 */
+  .org-node-icon .org-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  .org-node-icon .org-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* 历史 emoji 与 SVG 图标共用底衬，保持行内视觉尺寸一致 */
+  .org-node-icon .org-icon-legacy {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  .org-node-name {
+    font-weight: 500;
+    color: var(--color-text);
+    font-size: var(--font-size-base);
+  }
+
+  .org-node-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  /* 节点类型徽章配色：底色统一取文字 token 的 10% 透明度（同文件 color-mix 模式） */
+  .org-node-type-badge[data-type="headquarters"] {
+    background: color-mix(
+      in srgb,
+      var(--color-secondary-hover) 8%,
+      transparent
+    );
+
+    /* 比主色深一档的 lime 文字：主色向文字色深化 */
+    color: color-mix(in srgb, var(--color-primary) 85%, var(--color-text));
+  }
+
+  .org-node-type-badge[data-type="building"] {
+    background: color-mix(in srgb, var(--color-blue) 10%, transparent);
+    color: var(--color-blue);
+  }
+
+  .org-node-type-badge[data-type="floor"] {
+    background: color-mix(in srgb, var(--color-info) 10%, transparent);
+    color: var(--color-info);
+  }
+
+  .org-node-type-badge[data-type="data_center"] {
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
+  }
+
+  .org-node-type-badge[data-type="telecom_closet"],
+  .org-node-type-badge[data-type="cabinet"] {
+    background: color-mix(in srgb, var(--color-ipv6) 10%, transparent);
+    color: var(--color-ipv6);
+  }
+
+  .org-node-type-badge[data-type="office"] {
+    background: color-mix(in srgb, var(--color-success) 10%, transparent);
+    color: var(--color-success);
+  }
+
+  .org-node-type-badge[data-type="hall"] {
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    color: var(--color-warning-text);
+  }
+
+  .org-node-type-badge[data-type="workstation"] {
+    background: color-mix(in srgb, var(--color-secondary) 10%, transparent);
+    color: var(--color-secondary);
+  }
+
+  .org-node-type-badge[data-type="cabinet_position"] {
+    background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+    color: var(--color-orange);
   }
 
   .org-node-desc {
-    display: none;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-}
 
+  /* 节点操作按钮 */
+  .org-node-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    flex-shrink: 0;
+  }
 
-/* ==========================================
+  .org-node-actions .btn {
+    padding: 2px 8px;
+    font-size: var(--font-size-xs);
+  }
+
+  /* 文本按钮形态（组织模板编辑弹窗使用）：浅色底 + 边框。
+   排除 .icon-btn 形态：图标按钮的着色/悬停由 buttons.css 的
+   .icon-btn.btn-add-child 系列提供，此处不得越层接管 */
+  .btn-add-child:not(.icon-btn) {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+    border: 1px solid var(--color-success);
+  }
+
+  .btn-add-child:not(.icon-btn):hover {
+    background: var(--color-success);
+    color: var(--color-bg-white);
+  }
+
+  /* 树节点图标按钮形态：无边框、透明底，与全局 icon-btn 风格统一 */
+  .icon-btn.btn-add-child {
+    background: transparent;
+    border: none;
+  }
+
+  .icon-btn.btn-employees {
+    background: transparent;
+    border: none;
+    color: var(--color-primary);
+  }
+
+  /* btn-add-child 的悬浮着色由 buttons.css 的 .icon-btn.btn-add-child:hover 统一提供 */
+
+  .icon-btn.btn-employees:hover {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+
+  /* 人员管理模态框 */
+  .employee-modal-org {
+    color: var(--color-text-secondary);
+    font-weight: 400;
+    font-size: 0.9em;
+    margin-left: 6px;
+  }
+
+  .employee-table-container {
+    max-height: 380px;
+    overflow: auto;
+  }
+
+  .employee-actions-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+  }
+
+  .modal-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  /* 子节点容器：缩进由嵌套容器的 padding-left 逐层累加（每层 24px），
+   替代原 JS 按深度写内联 paddingLeft 的方案 */
+  .org-children {
+    position: relative;
+    padding-left: 24px;
+  }
+
+  .org-children::before {
+    content: "";
+    position: absolute;
+    left: 28px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--color-border-light);
+  }
+
+  /* 父级信息 */
+  .org-parent-info {
+    background: var(--control-bg-muted);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+  }
+
+  .org-parent-info p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+
+  /* 响应式 */
+  @media (width <= 768px) {
+    .org-toolbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .org-actions {
+      justify-content: flex-start;
+    }
+
+    .org-node {
+      flex-wrap: wrap;
+      padding: var(--space-xs) var(--space-sm);
+    }
+
+    .org-node-actions {
+      opacity: 1;
+      flex-wrap: wrap;
+    }
+
+    .org-node-desc {
+      display: none;
+    }
+  }
+
+  /* ==========================================
  * 模板管理样式
  * ========================================== */
 
-.org-template-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-md);
-}
+  .org-template-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-md);
+  }
 
-.org-template-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  max-height: 60vh;
-  overflow-y: auto;
-}
+  .org-template-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
 
-.org-template-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-white);
-  transition: border-color var(--transition-fast);
-}
+  .org-template-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-white);
+    transition: border-color var(--transition-fast);
+  }
 
-.org-template-item:hover {
-  border-color: var(--color-primary);
-}
+  .org-template-item:hover {
+    border-color: var(--color-primary);
+  }
 
-.org-template-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
+  .org-template-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
 
-.org-template-info strong {
-  font-size: var(--font-size-base);
-  color: var(--color-text);
-}
+  .org-template-info strong {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
 
-.org-template-levels {
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  font-weight: 500;
-}
+  .org-template-levels {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+    font-weight: 500;
+  }
 
-.org-template-desc {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
+  .org-template-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
 
-.org-template-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
+  .org-template-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
 
-/* 模板编辑器 - 树形结构 */
-.org-template-tree-container {
-  flex-basis: 100%;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
-  background: var(--color-bg-white);
-  margin-bottom: var(--space-sm);
-  min-height: 80px;
-}
+  /* 模板编辑器 - 树形结构 */
+  .org-template-tree-container {
+    flex-basis: 100%;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    background: var(--color-bg-white);
+    margin-bottom: var(--space-sm);
+    min-height: 80px;
+  }
 
-.org-template-type-node {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
+  .org-template-type-node {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
 
-.org-template-type-root > .org-template-type-row {
-  background: var(--color-primary-light);
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
+  .org-template-type-root > .org-template-type-row {
+    background: var(--color-primary-light);
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
 
-.org-template-root-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  background: var(--color-primary);
-  color: var(--color-bg-white);
-  flex-shrink: 0;
-  letter-spacing: 1px;
-}
+  .org-template-root-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-primary);
+    color: var(--color-bg-white);
+    flex-shrink: 0;
+    letter-spacing: 1px;
+  }
 
-.org-template-type-row {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  padding: 3px 0;
-}
+  .org-template-type-row {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    padding: 3px 0;
+  }
 
-/* 图标选择按钮（内嵌 SVG 图标） */
-.org-template-icon-btn {
-  font-size: 1.05rem;
-  color: var(--color-text);
-  flex-shrink: 0;
-  width: 2em;
-  height: 2em;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-white);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast);
-  position: relative;
-}
+  /* 图标选择按钮（内嵌 SVG 图标） */
+  .org-template-icon-btn {
+    font-size: 1.05rem;
+    color: var(--color-text);
+    flex-shrink: 0;
+    width: 2em;
+    height: 2em;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+      border-color var(--transition-fast),
+      background-color var(--transition-fast);
+    position: relative;
+  }
 
-.org-template-icon-btn svg {
-  width: 1.35em;
-  height: 1.35em;
-}
+  .org-template-icon-btn svg {
+    width: 1.35em;
+    height: 1.35em;
+  }
 
-.org-template-icon-btn .org-icon-legacy {
-  font-size: 1em;
-  line-height: 1;
-}
+  .org-template-icon-btn .org-icon-legacy {
+    font-size: 1em;
+    line-height: 1;
+  }
 
-.org-template-icon-btn:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
-}
+  .org-template-icon-btn:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
 
-/* 图标选择面板：按 业务组织/物理地点/功能空间 分组 */
-.org-icon-picker {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: var(--z-popover);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px;
-  width: 264px;
-  max-height: 320px;
-  overflow: auto;
-  background: var(--color-bg-white);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  margin-top: 4px;
-}
+  /* 图标选择面板：按 业务组织/物理地点/功能空间 分组 */
+  .org-icon-picker {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: var(--z-popover);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    width: 264px;
+    max-height: 320px;
+    overflow: auto;
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    margin-top: 4px;
+  }
 
-.org-icon-picker-group-title {
-  font-size: 0.72rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 4px;
-}
+  .org-icon-picker-group-title {
+    font-size: 0.72rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+  }
 
-.org-icon-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-}
+  .org-icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
 
-.org-icon-picker-item {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  aspect-ratio: 1;
-  min-width: 0;
-  padding: 0;
-  font-size: 1.2rem;
-  color: var(--color-text);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
+  .org-icon-picker-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    min-width: 0;
+    padding: 0;
+    font-size: 1.2rem;
+    color: var(--color-text);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
 
-.org-icon-picker-item svg {
-  width: 1.35rem;
-  height: 1.35rem;
-}
+  .org-icon-picker-item svg {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
 
-.org-icon-picker-item:hover {
-  background: var(--color-bg-hover);
-}
+  .org-icon-picker-item:hover {
+    background: var(--color-bg-hover);
+  }
 
-.org-icon-picker-item.active {
-  background: var(--color-primary-light);
-  outline: 2px solid var(--color-primary);
-}
+  .org-icon-picker-item.active {
+    background: var(--color-primary-light);
+    outline: 2px solid var(--color-primary);
+  }
 
-.org-template-type-row .org-template-type-input {
-  flex: 1;
-  min-width: 0;
-}
+  .org-template-type-row .org-template-type-input {
+    flex: 1;
+    min-width: 0;
+  }
 
-/* 行内「添加子层级/删除」图标按钮：统一 icon-btn 尺寸，仅保留防挤压 */
-.org-template-type-row .icon-btn.btn-add-child,
-.org-template-type-row .icon-btn.btn-delete {
-  flex-shrink: 0;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-}
+  /* 行内「添加子层级/删除」图标按钮：统一 icon-btn 尺寸，仅保留防挤压 */
+  .org-template-type-row .icon-btn.btn-add-child,
+  .org-template-type-row .icon-btn.btn-delete {
+    flex-shrink: 0;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+  }
 
-.org-template-type-children {
-  margin-left: 20px;
-  padding-left: 16px;
-  border-left: 2px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
-  margin-top: 6px;
-  margin-bottom: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+  .org-template-type-children {
+    margin-left: 20px;
+    padding-left: 16px;
+    border-left: 2px solid
+      color-mix(in srgb, var(--color-primary) 25%, transparent);
+    margin-top: 6px;
+    margin-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
 
-/* 子节点悬停时高亮整条引导线 */
-.org-template-type-children:hover {
-  border-left-color: var(--color-primary);
+  /* 子节点悬停时高亮整条引导线 */
+  .org-template-type-children:hover {
+    border-left-color: var(--color-primary);
+  }
 }

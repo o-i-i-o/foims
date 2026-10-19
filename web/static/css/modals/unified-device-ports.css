@@ -1,198 +1,202 @@
-/* 统一设备端口管理样式 */
+@layer modals {
+  /* 统一设备端口管理样式 */
 
-/* ============ 端口分组容器 ============ */
-.port-groups-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  max-height: 60vh;
-  overflow-y: auto;
-}
+  /* ============ 端口分组容器 ============ */
+  .port-groups-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
 
-/* ============ 单个端口分组 ============ */
-.port-group {
-  flex: 1;
-  min-width: 15.625rem;
-  border: 1px solid var(--color-border-dark);
-  border-radius: var(--radius-lg);
-  padding: 0.9375rem;
-  background-color: var(--color-bg);
-}
+  /* ============ 单个端口分组 ============ */
+  .port-group {
+    flex: 1;
+    min-width: 15.625rem;
+    border: 1px solid var(--color-border-dark);
+    border-radius: var(--radius-lg);
+    padding: 0.9375rem;
+    background-color: var(--color-bg);
+  }
 
-.port-group h4 {
-  margin-top: 0;
-  margin-bottom: 0.9375rem;
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-}
+  .port-group h4 {
+    margin-top: 0;
+    margin-bottom: 0.9375rem;
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+  }
 
-/* 交换板卡分组标题（与端口分组同款，仅多一个类型标记颜色） */
-.port-group.is-switch-group h4 {
-  color: var(--color-orange);
-}
+  /* 交换板卡分组标题（与端口分组同款，仅多一个类型标记颜色） */
+  .port-group.is-switch-group h4 {
+    color: var(--color-orange);
+  }
 
-/* ============ 端口网格 ============ */
-.port-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
-  gap: var(--space-sm);
-}
+  /* ============ 端口网格 ============ */
+  .port-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
+    gap: var(--space-sm);
+  }
 
-/* ============ 单个端口项 ============ */
-.port-item {
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid var(--color-border-dark);
-  border-radius: var(--radius-sm);
-  background-color: var(--color-bg-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  position: relative;
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast),
-    transform var(--transition-fast);
-  color: var(--color-text);
-}
+  /* ============ 单个端口项 ============ */
+  .port-item {
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 1px solid var(--color-border-dark);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-bg-white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    position: relative;
+    transition:
+      border-color var(--transition-fast),
+      background-color var(--transition-fast),
+      transform var(--transition-fast);
+    color: var(--color-text);
+  }
 
-.port-item:hover {
-  border-color: var(--port-hover-border);
-  background-color: var(--port-hover-bg);
-  transform: translateY(-1px);
-}
+  .port-item:hover {
+    border-color: var(--port-hover-border);
+    background-color: var(--port-hover-bg);
+    transform: translateY(-1px);
+  }
 
-.port-item.status-up {
-  border-color: var(--port-up-border);
-  background-color: var(--port-up-bg);
-}
+  .port-item.status-up {
+    border-color: var(--port-up-border);
+    background-color: var(--port-up-bg);
+  }
 
-.port-item.status-down {
-  border-color: var(--port-down-border);
-  background-color: var(--port-down-bg);
-}
+  .port-item.status-down {
+    border-color: var(--port-down-border);
+    background-color: var(--port-down-bg);
+  }
 
-.port-item.status-admin-down {
-  border-color: var(--port-admin-down-border);
-  background-color: var(--port-admin-down-bg);
-}
+  .port-item.status-admin-down {
+    border-color: var(--port-admin-down-border);
+    background-color: var(--port-admin-down-bg);
+  }
 
-/* NIC 接口项用蓝色调区分（仍沿用 .port-item 的方块样式） */
-.port-item.nic-interface {
-  border-color: var(--color-blue);
-  background-color: var(--color-info-bg);
-}
+  /* NIC 接口项用蓝色调区分（仍沿用 .port-item 的方块样式） */
+  .port-item.nic-interface {
+    border-color: var(--color-blue);
+    background-color: var(--color-info-bg);
+  }
 
-.port-item.nic-interface:hover {
-  border-color: var(--color-blue);
-  background-color: var(--color-info-bg);
-}
+  .port-item.nic-interface:hover {
+    border-color: var(--color-blue);
+    background-color: var(--color-info-bg);
+  }
 
-/* ============ 端口悬停提示 ============ */
-.port-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--color-text);
-  color: var(--color-bg-white);
-  padding: 0.3125rem 0.625rem;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-  z-index: var(--z-tooltip);
-  margin-bottom: 0.3125rem;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity var(--transition-fast), visibility var(--transition-fast);
-}
+  /* ============ 端口悬停提示 ============ */
+  .port-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--color-text);
+    color: var(--color-bg-white);
+    padding: 0.3125rem 0.625rem;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+    z-index: var(--z-tooltip);
+    margin-bottom: 0.3125rem;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--transition-fast),
+      visibility var(--transition-fast);
+  }
 
-.port-item:hover .port-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
+  .port-item:hover .port-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
 
-.port-tooltip::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border-width: 0.3125rem;
-  border-style: solid;
-  border-color: var(--color-text) transparent transparent transparent;
-}
+  .port-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 0.3125rem;
+    border-style: solid;
+    border-color: var(--color-text) transparent transparent transparent;
+  }
 
-/* 层叠模态框的层级由 js/utils/modalLoader.js 按打开顺序写内联 z-index，此处不再定义 */
+  /* 层叠模态框的层级由 js/utils/modalLoader.js 按打开顺序写内联 z-index，此处不再定义 */
 
-/* ============ 空消息（限定在端口分组容器内，避免污染全局 .error-message） ============ */
-.port-groups-container .empty-message {
-  text-align: center;
-  padding: 1.25rem;
-  color: var(--color-text-muted);
-  width: 100%;
-}
+  /* ============ 空消息（限定在端口分组容器内，避免污染全局 .error-message） ============ */
+  .port-groups-container .empty-message {
+    text-align: center;
+    padding: 1.25rem;
+    color: var(--color-text-muted);
+    width: 100%;
+  }
 
-/* ============ SNMP 端口冲突确认对话框 ============ */
-.port-conflict-summary {
-  margin-bottom: var(--space-md);
-  padding: 0.75rem 0.875rem;
-  background: var(--color-warning-bg);
-  border: 1px solid var(--color-warning-border);
-  border-radius: var(--radius-lg);
-  font-size: 0.8125rem;
-  color: var(--color-warning-text);
-  line-height: 1.6;
-}
+  /* ============ SNMP 端口冲突确认对话框 ============ */
+  .port-conflict-summary {
+    margin-bottom: var(--space-md);
+    padding: 0.75rem 0.875rem;
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-lg);
+    font-size: 0.8125rem;
+    color: var(--color-warning-text);
+    line-height: 1.6;
+  }
 
-.port-conflict-list {
-  max-height: 15rem;
-  overflow-y: auto;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--space-md);
-}
+  .port-conflict-list {
+    max-height: 15rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+  }
 
-.port-conflict-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 0.75rem;
-  align-items: center;
-  padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid var(--color-border-light);
-  font-size: 0.8125rem;
-}
+  .port-conflict-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--color-border-light);
+    font-size: 0.8125rem;
+  }
 
-.port-conflict-row:last-child {
-  border-bottom: none;
-}
+  .port-conflict-row:last-child {
+    border-bottom: none;
+  }
 
-.port-conflict-row .conflict-port-number {
-  font-weight: 600;
-  color: var(--color-text);
-}
+  .port-conflict-row .conflict-port-number {
+    font-weight: 600;
+    color: var(--color-text);
+  }
 
-.port-conflict-row .conflict-port-detail {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
+  .port-conflict-row .conflict-port-detail {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+  }
 
-.port-conflict-row .conflict-select {
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  background: var(--color-bg-white);
-}
+  .port-conflict-row .conflict-select {
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    background: var(--color-bg-white);
+  }
 
-.port-conflict-actions {
-  display: flex;
-  gap: var(--space-sm);
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border-light);
+  .port-conflict-actions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--color-border-light);
+  }
 }

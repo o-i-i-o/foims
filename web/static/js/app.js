@@ -143,6 +143,8 @@ function waitForStylesheets() {
   const promises = Array.from(links).map((link) => {
     if (link.sheet) {
       try {
+        // 故意读取 cssRules 触发跨域安全错误，以此探测样式表是否加载完成
+        // oxlint-disable-next-line no-unused-expressions
         link.sheet.cssRules;
         return Promise.resolve();
       } catch {

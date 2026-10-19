@@ -5,8 +5,12 @@
 写样式前先读本文档，改样式时遵守既有模式。
 
 > 核心原则：**可维护、可复用、减少冲突、性能友好**
-> 配套工具：Stylelint（静态检查，配置 `web/.stylelintrc.json`）。
-> CSS **不归 Prettier 管**（`web/.prettierignore` 已排除），按第三节手工排版。
+> 配套工具：**Biome**（仓库根 `biome.json`，脱离 Node 的 CSS lint + 格式化，
+> 独立二进制 `~/.local/bin/biome`；JS 侧由 oxlint 负责，配置 `.oxlintrc.json`）。
+>
+> **优先级声明：本文档仅作意图与解释说明，与 `biome.json` 冲突时一律以
+> `biome.json` 为准**（lint 工具是执行标准，文档是背景补充）。
+> 原 `web/.stylelintrc.json`（stylelint/Node 时代）已废弃不再维护。
 
 1. 颜色、间距、圆角、阴影、断点一律走 CSS 变量（`variables.css`），禁零散硬编码；
 2. 主色 lime + 副色 gray（Open Color 色板），低饱和中性色，禁高饱和艳色与纯黑 #000；

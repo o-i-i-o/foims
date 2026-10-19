@@ -1,0 +1,40 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "root": true,
+  "files": {
+    "includes": ["web/static/**", "!web/static/icons/**"]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "a11y": "off",
+      "nursery": {
+        "useLayeredStyles": "error"
+      }
+    }
+  },
+  "css": {
+    "parser": {
+      "allowWrongLineComments": true
+    },
+    "formatter": {
+      "enabled": true,
+      "indentStyle": "space",
+      "indentWidth": 2
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "json": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "assist": {
+    "enabled": false
+  }
+}

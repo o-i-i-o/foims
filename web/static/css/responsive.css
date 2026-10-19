@@ -1,227 +1,232 @@
-/* 响应式补充：仅保留结构性变化（侧栏转顶部导航、纵向堆叠等）。
+@layer responsive {
+  /* 响应式补充：仅保留结构性变化（侧栏转顶部导航、纵向堆叠等）。
    尺寸自适应已由 auto-fit grid、min()、clamp() 在基础样式中原生完成，不再依赖断点覆盖。 */
 
-/* 中屏：侧边栏收窄（宽度统一由 --sidebar-width 变量驱动，侧栏与主内容区自动同步） */
-@media (width <= 992px) {
-  :root {
-    --sidebar-width: 200px;
-  }
-}
-
-@media (width <= 768px) {
-  /* ===== 侧边栏折叠为顶部横向导航（结构性变化） ===== */
-  .sidebar {
-    width: 100%;
-    height: auto;
-    position: relative;
-    top: 0;
-    margin-bottom: 0;
-    overflow-x: auto;
-    flex-direction: column;
+  /* 中屏：侧边栏收窄（宽度统一由 --sidebar-width 变量驱动，侧栏与主内容区自动同步） */
+  @media (width <= 992px) {
+    :root {
+      --sidebar-width: 200px;
+    }
   }
 
-  .sidebar-header {
-    padding: 0.75rem 1rem;
-  }
+  @media (width <= 768px) {
+    /* ===== 侧边栏折叠为顶部横向导航（结构性变化） ===== */
+    .sidebar {
+      width: 100%;
+      height: auto;
+      position: relative;
+      top: 0;
+      margin-bottom: 0;
+      overflow-x: auto;
+      flex-direction: column;
+    }
 
-  .sidebar-header h1 {
-    font-size: 1.1rem;
-  }
+    .sidebar-header {
+      padding: 0.75rem 1rem;
+    }
 
-  .sidebar-menu {
-    display: flex;
-    flex-wrap: nowrap;
-    padding: 0.5rem;
-    gap: 0.25rem;
-    overflow-x: auto;
-  }
+    .sidebar-header h1 {
+      font-size: 1.1rem;
+    }
 
-  .sidebar-menu li {
-    margin-bottom: 0;
-    flex-shrink: 0;
-  }
+    .sidebar-menu {
+      display: flex;
+      flex-wrap: nowrap;
+      padding: 0.5rem;
+      gap: 0.25rem;
+      overflow-x: auto;
+    }
 
-  .sidebar-menu li a {
-    padding: 0.5rem 1rem;
-    border-left: none;
-    border-bottom: 3px solid transparent;
-    border-radius: var(--radius-sm);
-    white-space: nowrap;
-    font-size: 0.875rem;
-  }
+    .sidebar-menu li {
+      margin-bottom: 0;
+      flex-shrink: 0;
+    }
 
-  .sidebar-menu li a:hover,
-  .sidebar-menu li a.active {
-    border-left-color: transparent;
-    border-bottom-color: var(--color-primary);
-  }
+    .sidebar-menu li a {
+      padding: 0.5rem 1rem;
+      border-left: none;
+      border-bottom: 3px solid transparent;
+      border-radius: var(--radius-sm);
+      white-space: nowrap;
+      font-size: 0.875rem;
+    }
 
-  /* 小屏下侧边栏为顶部横向导航：隐藏收起/展开按钮并强制展开布局 */
-  .sidebar-toggle {
-    display: none;
-  }
+    .sidebar-menu li a:hover,
+    .sidebar-menu li a.active {
+      border-left-color: transparent;
+      border-bottom-color: var(--color-primary);
+    }
 
-  body.sidebar-collapsed .sidebar {
-    width: 100%;
-    height: auto;
-  }
+    /* 小屏下侧边栏为顶部横向导航：隐藏收起/展开按钮并强制展开布局 */
+    .sidebar-toggle {
+      display: none;
+    }
 
-  body.sidebar-collapsed .sidebar-title {
-    opacity: 1;
-    visibility: visible;
-    transition: none;
-  }
+    body.sidebar-collapsed .sidebar {
+      width: 100%;
+      height: auto;
+    }
 
-  body.sidebar-collapsed .sidebar .nav-text {
-    max-width: none;
-    opacity: 1;
-    visibility: visible;
-    transition: none;
-  }
+    body.sidebar-collapsed .sidebar-title {
+      opacity: 1;
+      visibility: visible;
+      transition: none;
+    }
 
-  body.sidebar-collapsed #language-selector .lang-icon {
-    max-width: 24px;
-    opacity: 1;
-    visibility: visible;
-    transition: none;
-  }
+    body.sidebar-collapsed .sidebar .nav-text {
+      max-width: none;
+      opacity: 1;
+      visibility: visible;
+      transition: none;
+    }
 
-  body.sidebar-collapsed .sidebar-menu li a {
-    justify-content: flex-start;
-    padding: 0.5rem 1rem;
-  }
+    body.sidebar-collapsed #language-selector .lang-icon {
+      max-width: 24px;
+      opacity: 1;
+      visibility: visible;
+      transition: none;
+    }
 
-  body.sidebar-collapsed .sidebar-menu li a:hover {
-    padding-left: 1rem;
-  }
+    body.sidebar-collapsed .sidebar-menu li a {
+      justify-content: flex-start;
+      padding: 0.5rem 1rem;
+    }
 
-  body.sidebar-collapsed .footer-btn {
-    gap: var(--space-sm);
-  }
+    body.sidebar-collapsed .sidebar-menu li a:hover {
+      padding-left: 1rem;
+    }
 
-  body.sidebar-collapsed .main-content {
-    margin-left: 0;
-  }
+    body.sidebar-collapsed .footer-btn {
+      gap: var(--space-sm);
+    }
 
-  /* 侧边栏页脚响应式：用户/语言/注销横向排列 */
-  .sidebar-footer {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    gap: 0.5rem;
-  }
+    body.sidebar-collapsed .main-content {
+      margin-left: 0;
+    }
 
-  .sidebar-footer .user-info {
-    min-height: 0;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-    box-shadow: none;
-  }
+    /* 侧边栏页脚响应式：用户/语言/注销横向排列 */
+    .sidebar-footer {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      gap: 0.5rem;
+    }
 
-  .footer-btn {
-    width: auto;
-    min-height: 0;
-    padding: 0.4rem 0.8rem;
-    font-size: 0.875rem;
-    box-shadow: none;
-  }
+    .sidebar-footer .user-info {
+      min-height: 0;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+      box-shadow: none;
+    }
 
-  /* ===== 主内容区 ===== */
-  .main-content {
-    margin-left: 0;
-    padding: 1rem;
-  }
+    .footer-btn {
+      width: auto;
+      min-height: 0;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.875rem;
+      box-shadow: none;
+    }
 
-  /* 表格压缩 */
-  .table-container {
-    margin: 0 -1rem;
-    padding: 0 1rem;
-  }
+    /* ===== 主内容区 ===== */
+    .main-content {
+      margin-left: 0;
+      padding: 1rem;
+    }
 
-  .data-table {
-    font-size: 0.8rem;
-  }
+    /* 表格压缩 */
+    .table-container {
+      margin: 0 -1rem;
+      padding: 0 1rem;
+    }
 
-  .data-table th,
-  .data-table td {
-    padding: 0.5rem 0.35rem;
-  }
+    .data-table {
+      font-size: 0.8rem;
+    }
 
-  /* ===== 模态框：贴边全宽、底部按钮平分 ===== */
-  .modal.active {
-    padding: 1rem 0.5rem;
-    align-items: flex-start;
-  }
+    .data-table th,
+    .data-table td {
+      padding: 0.5rem 0.35rem;
+    }
 
-  .modal-content {
-    max-height: calc(100vh - 2rem);
-    border-radius: var(--radius-lg);
-  }
+    /* ===== 模态框：贴边全宽、底部按钮平分 ===== */
+    .modal.active {
+      padding: 1rem 0.5rem;
+      align-items: flex-start;
+    }
 
-  .modal-footer {
-    flex-wrap: wrap;
-  }
+    .modal-content {
+      max-height: calc(100vh - 2rem);
+      border-radius: var(--radius-lg);
+    }
 
-  .modal-footer .btn {
-    flex: 1;
-    min-width: 100px;
-  }
+    .modal-footer {
+      flex-wrap: wrap;
+    }
 
-  /* ===== 表单：label 与控件纵向堆叠（选择器特异性对齐 forms.css 同行表单变体） ===== */
-  .form-group,
-  .modal .form-group,
-  .config-card .form-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
+    .modal-footer .btn {
+      flex: 1;
+      min-width: 100px;
+    }
 
-  .form-group label:not(.checkbox-label),
-  .modal .form-group label,
-  .config-card .form-group label:not(.checkbox-label),
-  .config-card .form-group .group-label {
-    width: 100%;
-    min-width: 0;
-    text-align: left;
-    padding-top: 0;
-    margin-bottom: 0.25rem;
-  }
+    /* ===== 表单：label 与控件纵向堆叠（选择器特异性对齐 forms.css 同行表单变体） ===== */
+    .form-group,
+    .modal .form-group,
+    .config-card .form-group {
+      flex-direction: column;
+      align-items: stretch;
+    }
 
-  /* 模态内表单控件随纵向堆叠拉伸全宽：覆盖 forms.css 同行表单变体的
+    /* 模态内仅复选框标签参与纵向堆叠；非复选框标签维持 forms.css 弹窗变体
+     的窄版居中样式（:not(.modal *) 排除模态内命中，避免按层序反超该变体；
+     此前特异性时代 responsive 规则从未实际胜出，分层后需显式排除） */
+    .form-group label:not(.checkbox-label):not(.modal *),
+    .modal .form-group .checkbox-label,
+    .config-card .form-group label:not(.checkbox-label),
+    .config-card .form-group .group-label {
+      width: 100%;
+      min-width: 0;
+      text-align: left;
+      padding-top: 0;
+      margin-bottom: 0.25rem;
+    }
+
+    /* 模态内表单控件随纵向堆叠拉伸全宽：覆盖 forms.css 同行表单变体的
      align-items:center 与 textarea 的 align-self（responsive.css 最后加载，同特异性胜出） */
-  .modal .form-group {
-    align-items: stretch;
+    .modal .form-group {
+      align-items: stretch;
+    }
+
+    .modal .form-group textarea {
+      align-self: stretch;
+    }
+
+    /* ===== 标签页横向滚动 ===== */
+    .tabs {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      flex: 0 0 auto;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    /* 网络配置/导入导出/仪表盘等组件级响应式已迁回各自文件就近维护 */
   }
 
-  .modal .form-group textarea {
-    align-self: stretch;
-  }
+  /* 超小屏幕 */
+  @media (width <= 480px) {
+    .data-table th,
+    .data-table td {
+      padding: 0.35rem 0.25rem;
+      font-size: 0.75rem;
+    }
 
-  /* ===== 标签页横向滚动 ===== */
-  .tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-  }
-
-  .tab-btn {
-    flex: 0 0 auto;
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
-    white-space: nowrap;
-  }
-
-  /* 网络配置/导入导出/仪表盘等组件级响应式已迁回各自文件就近维护 */
-}
-
-/* 超小屏幕 */
-@media (width <= 480px) {
-  .data-table th,
-  .data-table td {
-    padding: 0.35rem 0.25rem;
-    font-size: 0.75rem;
-  }
-
-  .btn {
-    min-width: 100px;
+    .btn {
+      min-width: 100px;
+    }
   }
 }

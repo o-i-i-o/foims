@@ -1,76 +1,80 @@
-/* 白底卡片基样式：仪表盘卡片（pages/dashboard.css） */
-.dashboard-card {
-  background: var(--color-bg-white);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
+@layer components {
+  /* 白底卡片基样式：仪表盘卡片（pages/dashboard.css） */
+  .dashboard-card {
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
 
-.stat-card {
-  background: var(--color-primary);
-  color: var(--color-bg-white);
-  padding: var(--space-lg);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  position: relative;
-  overflow: hidden;
-}
+  .stat-card {
+    background: var(--color-primary);
+    color: var(--color-bg-white);
+    padding: var(--space-lg);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+    transition:
+      transform var(--transition-normal),
+      box-shadow var(--transition-normal);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    position: relative;
+    overflow: hidden;
+  }
 
-.stat-card.clickable {
-  cursor: pointer;
-}
+  .stat-card.clickable {
+    cursor: pointer;
+  }
 
-.stat-card.clickable:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
-}
+  .stat-card.clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
+  }
 
-.stat-card.stat-success {
-  background: var(--color-success);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-}
+  .stat-card.stat-success {
+    background: var(--color-success);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  }
 
-.stat-card.stat-success.clickable:hover {
-  box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
-}
+  .stat-card.stat-success.clickable:hover {
+    box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
+  }
 
-.stat-card.stat-info {
-  background: var(--color-info);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-}
+  .stat-card.stat-info {
+    background: var(--color-info);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  }
 
-.stat-card.stat-info.clickable:hover {
-  box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
-}
+  .stat-card.stat-info.clickable:hover {
+    box-shadow: 0 6px 16px rgb(0 0 0 / 18%);
+  }
 
-.stat-icon {
-  font-size: 2.5rem;
-  opacity: 0.9;
-  flex-shrink: 0;
-}
+  .stat-icon {
+    font-size: 2.5rem;
+    opacity: 0.9;
+    flex-shrink: 0;
+  }
 
-.stat-content {
-  flex: 1;
-  min-width: 0;
-}
+  .stat-content {
+    flex: 1;
+    min-width: 0;
+  }
 
-.stat-card h3 {
-  font-size: 0.85rem;
-  margin: 0 0 var(--space-xs) 0;
-  opacity: 0.9;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  .stat-card h3 {
+    font-size: 0.85rem;
+    margin: 0 0 var(--space-xs) 0;
+    opacity: 0.9;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-.stat-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.2;
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
 }
