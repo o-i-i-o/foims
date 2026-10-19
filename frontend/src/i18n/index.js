@@ -10,7 +10,7 @@ import { createI18n } from "vue-i18n";
 import zh from "./locales/zh.json";
 import en from "./locales/en.json";
 
-const SUPPORTED_LANGUAGES = ["zh", "en"];
+const SUPPORTED_LANGUAGES = new Set(["zh", "en"]);
 const STORAGE_KEY = "language";
 
 // 浏览器禁用存储（"阻止所有 Cookie"/存储策略）时 localStorage 访问抛
@@ -33,7 +33,7 @@ function persistLanguage(lang) {
 
 function detectInitialLanguage() {
   const saved = readSavedLanguage();
-  if (saved && SUPPORTED_LANGUAGES.includes(saved)) {
+  if (saved && SUPPORTED_LANGUAGES.has(saved)) {
     return saved;
   }
   const browserLang = (navigator.language || "en").startsWith("zh") ? "zh" : "en";
@@ -78,7 +78,7 @@ export const i18n = createI18n({
 
 /** 切换语言并持久化（与旧版行为一致：同步 <html lang>） */
 export function changeLanguage(lang) {
-  if (!SUPPORTED_LANGUAGES.includes(lang)) {
+  if (!SUPPORTED_LANGUAGES.has(lang)) {
     return;
   }
   i18n.global.locale.value = lang;

@@ -1,0 +1,390 @@
+@layer layouts {
+  .sidebar {
+    background: var(--color-bg-white);
+    box-shadow: 2px 0 4px rgb(0 0 0 / 10%);
+    width: var(--sidebar-width);
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: hidden auto;
+
+    /* 收起过渡期间裁剪尚未收缩完的文字，避免横向滚动条闪现 */
+    display: flex;
+    flex-direction: column;
+    transition: width var(--sidebar-anim-duration) var(--sidebar-anim-easing);
+  }
+
+  /* 收起状态：仅保留图标导航栏 */
+  body.sidebar-collapsed .sidebar {
+    width: var(--sidebar-width-collapsed);
+  }
+
+  body.sidebar-collapsed .main-content {
+    margin-left: var(--sidebar-width-collapsed);
+  }
+
+  .sidebar-header {
+    position: relative;
+    background: #343a40;
+    color: var(--color-bg-white);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid #212529;
+    text-align: center;
+  }
+
+  .sidebar-header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  /* 标题收起时淡出（宽度收缩由侧边栏 overflow 裁剪），展开时延迟淡入 */
+  .sidebar-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition:
+      opacity 0.18s ease 0.12s,
+      visibility 0.18s ease 0.12s;
+  }
+
+  body.sidebar-collapsed .sidebar-title {
+    opacity: 0;
+    visibility: hidden;
+    transition-delay: 0s;
+  }
+
+  /* 收起/展开按钮：展开与收起两种状态下位置恒定——
+   始终位于标题块左侧、贴屏幕左缘、垂直居中 */
+  .sidebar-toggle {
+    position: absolute;
+    left: var(--space-sm);
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-md);
+    background: rgb(255 255 255 / 20%);
+    color: var(--color-bg-white);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+
+  .sidebar-toggle:hover {
+    background: rgb(255 255 255 / 35%);
+  }
+
+  .sidebar-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(255 255 255 / 40%);
+  }
+
+  .sidebar-toggle svg {
+    width: 18px;
+    height: 18px;
+
+    /* 单箭头随状态旋转 180°，代替双图标切换 */
+    transition: transform var(--sidebar-anim-duration)
+      var(--sidebar-anim-easing);
+  }
+
+  /* svg 尺寸基础规则集中声明在状态/彩色化覆盖之前（biome noDescendingSpecificity 约定）：
+   导航图标撑满容器；语言菜单对勾 14px，未选中项隐藏但保留位置保证文字对齐 */
+  .nav-icon svg {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .lang-menu-item svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .lang-menu-item[aria-checked="false"] svg {
+    visibility: hidden;
+  }
+
+  body.sidebar-collapsed .sidebar-toggle svg {
+    transform: rotate(180deg);
+  }
+
+  .sidebar-menu {
+    list-style: none;
+    padding: var(--space-md) 0;
+    flex: 1;
+    overflow: hidden auto;
+    min-height: 0;
+  }
+
+  .sidebar-menu li {
+    margin-bottom: var(--space-sm);
+  }
+
+  .sidebar-menu li a {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0.75rem var(--space-lg);
+    color: var(--color-text);
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      padding-left var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+      background-color var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
+    border-left: 3px solid transparent;
+  }
+
+  .sidebar-menu li a:hover {
+    background-color: var(--color-bg);
+    border-left-color: var(--color-primary);
+    padding-left: calc(var(--space-lg) + 0.25rem);
+  }
+
+  .sidebar-menu li a.active {
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    border-left-color: var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  /* 收起状态：图标精确居中——图标中心 = 边框3px + 内边距 + 图标一半，
+   令其等于条目宽度的一半，即 padding = (100% - 26px) / 2 */
+  body.sidebar-collapsed .sidebar-menu li a {
+    padding-left: calc((100% - 26px) / 2);
+    padding-right: 0;
+  }
+
+  body.sidebar-collapsed .sidebar-menu li a:hover {
+    padding-left: calc((100% - 26px) / 2);
+  }
+
+  /* 导航图标：导航项与页脚控件共用 */
+  .nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  /* 一级导航图标彩色化：按导航项组合类固定描边色（不耦合 href 属性，
+   路由名调整只需改 HTML 类），不随 hover/选中态变色 */
+  .sidebar-menu .nav-link.nav-dashboard .nav-icon svg {
+    stroke: var(--color-warning);
+  }
+  .sidebar-menu .nav-link.nav-organization .nav-icon svg {
+    stroke: var(--color-success);
+  }
+  .sidebar-menu .nav-link.nav-resources .nav-icon svg {
+    stroke: var(--color-ipv6);
+  }
+  .sidebar-menu .nav-link.nav-ip .nav-icon svg {
+    stroke: var(--color-blue);
+  }
+  .sidebar-menu .nav-link.nav-visualization .nav-icon svg {
+    stroke: var(--color-pink);
+  }
+  .sidebar-menu .nav-link.nav-logs .nav-icon svg {
+    stroke: var(--color-info);
+  }
+  .sidebar-menu .nav-link.nav-system .nav-icon svg {
+    stroke: var(--color-text-muted);
+  }
+
+  /* 导航文字：收起时先淡出再随 max-width 归零，展开时宽度恢复后延迟淡入 */
+  .nav-text {
+    min-width: 0;
+    max-width: 165px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition:
+      max-width var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+      opacity 0.18s ease 0.12s,
+      visibility 0.18s ease 0.12s;
+  }
+
+  body.sidebar-collapsed .sidebar .nav-text {
+    max-width: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition-delay: 0s;
+  }
+
+  .sidebar-footer {
+    background: var(--color-bg);
+    padding: var(--space-md) var(--space-sm);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: var(--space-sm);
+    margin-top: auto;
+  }
+
+  /* 作用域限定在 .sidebar-footer 内，避免与 logs.css 的 .users-checkbox-list .user-info 冲突 */
+  .sidebar-footer .user-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    min-height: 40px;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-bg-white);
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+    color: var(--color-text-secondary);
+    overflow: hidden;
+
+    /* 收起时 gap 归零配合文字 max-width 归零，图标平滑滑动到正中 */
+    transition: gap var(--sidebar-anim-duration) var(--sidebar-anim-easing);
+  }
+
+  #current-user {
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  /* 收起时用户名归零后 gap 也要归零，否则残余间隙把图标挤离中心 */
+  body.sidebar-collapsed .sidebar-footer .user-info {
+    gap: 0;
+  }
+
+  /* 语言/注销图标按钮：展开时图标+文字，收起后仅图标（含义由悬浮提示展示） */
+  .footer-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    min-height: 40px;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-white);
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+    overflow: hidden;
+    transition:
+      gap var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background-color var(--transition-fast);
+  }
+
+  .footer-btn:hover {
+    color: var(--color-primary);
+    border-color: var(--control-border-hover);
+  }
+
+  .footer-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--control-shadow);
+  }
+
+  #logout-btn:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  body.sidebar-collapsed .footer-btn {
+    gap: 0;
+  }
+
+  /* 语言按钮文字（语言名称）：收起后仍显示，作为按钮主体 */
+  .lang-name {
+    white-space: nowrap;
+  }
+
+  /* 语言按钮图标：展开时显示，收起后隐藏（与 nav-text 同一套收起动画）。
+   必须覆盖 .nav-icon 的 min-width/flex-shrink，否则收起后仍占 20px 挤偏文字 */
+  #language-selector .lang-icon {
+    max-width: 24px;
+    min-width: 0;
+    flex-shrink: 1;
+    opacity: 1;
+    visibility: visible;
+    overflow: hidden;
+    white-space: nowrap;
+    transition:
+      max-width var(--sidebar-anim-duration) var(--sidebar-anim-easing),
+      opacity 0.18s ease 0.12s,
+      visibility 0.18s ease 0.12s;
+  }
+
+  body.sidebar-collapsed #language-selector .lang-icon {
+    max-width: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition-delay: 0s;
+  }
+
+  /* 语言下拉菜单：挂在 body 上固定定位，避免被侧边栏 overflow 裁剪 */
+  .lang-menu {
+    position: fixed;
+    z-index: var(--z-popover);
+    min-width: 120px;
+    padding: 4px;
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .lang-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .lang-menu-item:hover {
+    background: var(--color-bg);
+    color: var(--color-primary);
+  }
+
+  .lang-menu-item[aria-checked="true"] {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  /* 减少动态效果偏好：关闭侧边栏相关过渡 */
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .main-content,
+    .sidebar-title,
+    .sidebar-toggle svg,
+    .sidebar-menu li a,
+    .nav-text,
+    .sidebar-footer .user-info,
+    .footer-btn {
+      transition: none;
+    }
+  }
+}

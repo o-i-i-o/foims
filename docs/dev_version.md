@@ -156,3 +156,11 @@ v0.10.0
 3. i18n 迁移：vue-i18n（composition）复用旧版 zh/en JSON 原文件（迁移期单一来源），导入时归一化旧占位符语法（{{x}}→{x}）并转义 @|$ 消息格式特殊字符（现网语言包已核对花括号仅来自占位符、@ 仅 1 处、| 为 0 处）；会话工具（rememberMe 双存储互斥）与 toast 组合式函数随迁
 4. e2e 验证：Vite dev 下登录页渲染（角色/表单/i18n 文案）、错误路径（错密码显示错误条）、成功登录跳转 main.html 占位页、全程零 console 错误
 5. 联动：根 Cargo.toml 0.26.4→0.27.0（crate 版本不变）；旧 web/ 未动不 bump 静态版本，frontend_consistency 5 测试预期不受影响
+
+v0.10.1
+2026102005092601
+1. 主界面壳完成（Vue 重构第二批）：MainShell.vue 移植 main.html 壳层（侧边栏 + 主内容 RouterView + AppToast + 改密模态）——NavIcon 以形状描述数组经 `<component :is>` 渲染（避免 v-html 绕过审计）、侧边栏收起态 body class + localStorage 持久化、语言菜单 Teleport 复刻旧定位逻辑（收起态右侧飞出/默认向上 top<8 向下）、改密模态 SFC 化（不一致校验/成功后延迟跳登录）、退出登录与无会话守卫（无会话跳回 /index.html）
+2. 路由与状态：Vue Router 5 采 hash 模式（保留旧版 #section 深链兼容且零 nginx 改动），NAV_ITEMS 单一数据源同时驱动路由表与侧边栏渲染；Pinia auth store 包装 session.js（HttpOnly Cookie 为真实凭证，store 仅持用户快照，删除无调用方的 syncFromSession 死代码）；TanStack Query 5 全局接线（queries retry:false，失败已归一为 {success:false} 不抛异常）
+3. RBAC 声明式迁移：roleCapabilities.js 五角色隐藏/只读分区表（admin/sysadmin/secadmin/auditor/user），路由守卫兜底重定向 + 占位页只读角标；不移植旧版 DOM 扫描 + MutationObserver 写控件隐藏机制，改由 Vue 页面声明式实现；空闲超时 usePageTimeout（等保，activity 事件重置，超时先 refreshToken 成功续期、失败跳登录）与 useTooltip 委托单例随迁；SectionPlaceholder 占位页沿用 content-section active 类保留布局层贴底约定，i18n 新增 common.section_migrating
+4. 验证：浏览器 e2e 9 项全过（壳渲染/侧边栏导航/收起展开/语言切换/改密模态/退出登录+无会话守卫/RBAC 隐藏分区重定向/只读角标）；oxlint 95 文件 0 告警（i18n 支持语言列表数组改 Set 修 prefer-set-has）；biome 纳入 frontend/src/styles 后 154 文件零诊断（biome migrate：recommended→preset 迁移、目录忽略 !x 去尾 /** 修正、排除 foims-agent 断链 fixture）；frontend_consistency 5 测试通过，cargo fmt/clippy --release -D warnings 零告警（本轮 Rust 零改动）
+5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

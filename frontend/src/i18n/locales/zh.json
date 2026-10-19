@@ -20,6 +20,7 @@
     "load_page": "加载页面 {{page}}"
   },
   "common": {
+    "section_migrating": "该分区正在向新界面迁移，暂未开放。",
     "name": "名称",
     "save": "保存",
     "cancel": "取消",

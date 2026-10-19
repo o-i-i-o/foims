@@ -20,6 +20,7 @@
     "load_page": "Load page {{page}}"
   },
   "common": {
+    "section_migrating": "This section is being migrated to the new UI and is not yet available.",
     "name": "Name",
     "save": "Save",
     "cancel": "Cancel",
