@@ -476,7 +476,7 @@ export class TopologyRenderer {
 
   /// 在一段线路中点标注线缆标签
   _drawCableLabel(group, cable, from, to) {
-    if (!cable || !cable.cable_label) {
+    if (!cable?.cable_label) {
       return;
     }
     const label = document.createElementNS(SVG_NS, "text");
@@ -489,7 +489,7 @@ export class TopologyRenderer {
   }
 
   _getPairKey(id1, id2) {
-    const sorted = [id1, id2].sort();
+    const sorted = [id1, id2].toSorted();
     return `${sorted[0]}|${sorted[1]}`;
   }
 
@@ -628,7 +628,9 @@ export class TopologyRenderer {
     // 锚点占用与平行偏移会按原 DOM 顺序完整重建，不会与保留连线错位
     this._connectionPairCount.clear();
     this._anchorSlots.clear();
-    toRedraw.forEach((conn) => this.drawConnection(conn));
+    toRedraw.forEach((conn) => {
+      this.drawConnection(conn);
+    });
   }
 
   setConnectionsMap(map) {

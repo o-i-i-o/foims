@@ -246,18 +246,18 @@ export class NetworkCardManager {
     return { cidr, hasCidr: !!cidr };
   }
 
-  async init() {
+  init() {
     const container = this.getContainer();
     if (!container) {
       return false;
     }
     container.innerHTML = "";
     this.resetLegacyData();
-    await this.addCard();
+    this.addCard();
     return true;
   }
 
-  async addCard(cardData = null) {
+  addCard(cardData = null) {
     const container = this.getContainer();
     if (!container) {
       return;
@@ -265,7 +265,7 @@ export class NetworkCardManager {
     const data = cardData || {};
     const card = this.createCardElement(data);
     // 先在分离 DOM 上完成端口/IP 子树的构建与绑定，再一次性插入，避免逐级触发重排
-    await this.bindCardEvents(card, data);
+    this.bindCardEvents(card, data);
     container.appendChild(card);
   }
 
@@ -303,7 +303,7 @@ export class NetworkCardManager {
     return div;
   }
 
-  async bindCardEvents(card, cardData = {}) {
+  bindCardEvents(card, cardData = {}) {
     card.querySelector(".remove-card-btn")?.addEventListener("click", () => this.removeCard(card));
     card.querySelector(".add-card-btn")?.addEventListener("click", () => this.addCard());
 
@@ -311,12 +311,12 @@ export class NetworkCardManager {
     if (ports.length > 0) {
       for (const portData of ports) {
         const port = this.createPortElement(portData);
-        await this.bindPortEvents(port, portData);
+        this.bindPortEvents(port, portData);
         card.appendChild(port);
       }
     } else {
       const port = this.createPortElement();
-      await this.bindPortEvents(port);
+      this.bindPortEvents(port);
       card.appendChild(port);
     }
   }
@@ -403,15 +403,15 @@ export class NetworkCardManager {
     return div;
   }
 
-  async bindPortEvents(port, portData = {}) {
+  bindPortEvents(port, portData = {}) {
     port.querySelector(".remove-port-btn")?.addEventListener("click", () => this.removePort(port));
-    port.querySelector(".add-port-btn")?.addEventListener("click", async () => {
+    port.querySelector(".add-port-btn")?.addEventListener("click", () => {
       const card = port.closest(".network-card-item");
       if (!card) {
         return;
       }
       const newPort = this.createPortElement();
-      await this.bindPortEvents(newPort);
+      this.bindPortEvents(newPort);
       card.appendChild(newPort);
     });
 
@@ -419,13 +419,13 @@ export class NetworkCardManager {
     const ips = portData.ips || [];
     if (ips.length > 0) {
       for (const ipData of ips) {
-        const ipRow = await this.createIpRowElement();
-        await this.bindIpRowEvents(ipRow, ipData);
+        const ipRow = this.createIpRowElement();
+        this.bindIpRowEvents(ipRow, ipData);
         ipsContainer.appendChild(ipRow.element);
       }
     } else {
-      const ipRow = await this.createIpRowElement();
-      await this.bindIpRowEvents(ipRow);
+      const ipRow = this.createIpRowElement();
+      this.bindIpRowEvents(ipRow);
       ipsContainer.appendChild(ipRow.element);
     }
   }
@@ -487,20 +487,20 @@ export class NetworkCardManager {
     return { element: div };
   }
 
-  async bindIpRowEvents(ipRow, ipData = null) {
+  bindIpRowEvents(ipRow, ipData = null) {
     const { element } = ipRow;
     element
       .querySelector(".remove-ip-btn")
       ?.addEventListener("click", () => this.removeIp(element));
 
-    element.querySelector(".add-ip-btn")?.addEventListener("click", async () => {
+    element.querySelector(".add-ip-btn")?.addEventListener("click", () => {
       const port = element.closest(".nc-port-item");
       const ipsContainer = port?.querySelector(".port-ips-container");
       if (!ipsContainer) {
         return;
       }
       const newRow = this.createIpRowElement();
-      await this.bindIpRowEvents(newRow);
+      this.bindIpRowEvents(newRow);
       ipsContainer.appendChild(newRow.element);
     });
 
@@ -611,7 +611,7 @@ export class NetworkCardManager {
     ipElement.remove();
   }
 
-  async loadExisting(cards) {
+  loadExisting(cards) {
     const container = this.getContainer();
     if (!container) {
       return;
@@ -622,19 +622,21 @@ export class NetworkCardManager {
     // 仅加载设备模态框托管的网口（device_managed=0 的 SNMP/端口模态框
     // 网口不在设备表单展示）；空网卡（板卡）整体跳过
     const managedCards = (cards || [])
-      .map((card) => ({
-        ...card,
-        ports: (card.ports || []).filter((p) => p.device_managed !== false)
-      }))
-      .filter((card) => (card.ports || []).length > 0);
+      .map((card) => {
+        // 浅拷贝后覆写 ports：不在 map 中展开对象（no-map-spread）
+        const managed = Object.assign({}, card);
+        managed.ports = (card.ports || []).filter((p) => p.device_managed !== false);
+        return managed;
+      })
+      .filter((card) => card.ports.length > 0);
 
     if (managedCards.length === 0) {
-      await this.addCard();
+      this.addCard();
       return;
     }
 
     for (const cardData of managedCards) {
-      await this.addCard(cardData);
+      this.addCard(cardData);
     }
   }
 
@@ -681,7 +683,7 @@ export class NetworkCardManager {
           );
           return;
         }
-        if (portVlan !== null && (isNaN(portVlan) || portVlan < 1 || portVlan > 4094)) {
+        if (portVlan !== null && (Number.isNaN(portVlan) || portVlan < 1 || portVlan > 4094)) {
           errors.push(
             `${t(T_KEY_NETWORK_CARD)} ${cardNum} - ${t(T_KEY_NETWORK_PORT)} ${portNum}: ${t("device.vlan_invalid")}`
           );

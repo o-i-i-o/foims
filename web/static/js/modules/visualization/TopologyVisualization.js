@@ -73,7 +73,9 @@ export class TopologyVisualization {
     this.nodes = nodes;
     this.connections = connections;
     this.connectionsMap.clear();
-    connections.forEach((c) => this.connectionsMap.set(c.id, c));
+    connections.forEach((c) => {
+      this.connectionsMap.set(c.id, c);
+    });
     this.renderer.setConnectionsMap(this.connectionsMap);
 
     // 修正历史布局中房间包围盒相互覆盖的情况（整体平移分组，不动单个设备）
@@ -106,8 +108,12 @@ export class TopologyVisualization {
 
   _renderCurrentView() {
     this.renderer.clearAll();
-    this.visibleNodes().forEach((node) => this.renderer.drawDeviceNode(node));
-    this.visibleConnections().forEach((conn) => this.renderer.drawConnection(conn));
+    this.visibleNodes().forEach((node) => {
+      this.renderer.drawDeviceNode(node);
+    });
+    this.visibleConnections().forEach((conn) => {
+      this.renderer.drawConnection(conn);
+    });
     this._renderContainers();
 
     this._fitView();
@@ -127,7 +133,9 @@ export class TopologyVisualization {
         (c) => c.source_device_id !== deviceId && c.target_device_id !== deviceId
       );
       this.connectionsMap.clear();
-      this.connections.forEach((c) => this.connectionsMap.set(c.id, c));
+      this.connections.forEach((c) => {
+        this.connectionsMap.set(c.id, c);
+      });
       await this.loadTopology();
     }
   }
@@ -306,18 +314,28 @@ export class TopologyVisualization {
     const deleteBtn = modal.querySelector("#topo-conn-detail-delete");
     if (deleteBtn) {
       deleteBtn.classList.toggle("hidden", Boolean(conn.derived));
-      deleteBtn.onclick = async () => {
-        closeModal("topology-connection-detail-modal");
-        await this._deleteConnection(conn.id);
-      };
+      // 当前详情连线存实例字段（模态框保持打开期间重复查看时覆盖），
+      // 删除按钮一次性绑定（dataset.bound 防重），点击时读取最新连线 ID
+      this._detailConnectionId = conn.id;
+      if (!deleteBtn.dataset.bound) {
+        deleteBtn.dataset.bound = "true";
+        deleteBtn.addEventListener("click", async () => {
+          closeModal("topology-connection-detail-modal");
+          await this._deleteConnection(this._detailConnectionId);
+        });
+      }
     }
 
-    // onclick 赋值幂等：模态框保持打开期间重复查看连线详情不会叠加监听
+    // 关闭按钮一次性绑定（dataset.bound 防重）：模态框保持打开期间重复查看
+    // 连线详情不会叠加监听
     const closeButtons = modal.querySelectorAll(
       '[data-modal-id="topology-connection-detail-modal"]'
     );
     closeButtons.forEach((btn) => {
-      btn.onclick = () => this._deselectConnection();
+      if (!btn.dataset.bound) {
+        btn.dataset.bound = "true";
+        btn.addEventListener("click", () => this._deselectConnection());
+      }
     });
 
     openModal("topology-connection-detail-modal");
@@ -342,7 +360,9 @@ export class TopologyVisualization {
     }
     this.core.connectionsGroup
       .querySelectorAll(".selected")
-      .forEach((el) => el.classList.remove("selected"));
+      .forEach((el) => {
+        el.classList.remove("selected");
+      });
     this.selectedConnectionId = null;
   }
 
@@ -815,24 +835,35 @@ export class TopologyVisualization {
     yInput.value = Math.round(box.y);
 
     const saveBtn = modal.querySelector("#topology-container-save-btn");
-    saveBtn.onclick = async () => {
-      const x = Number(xInput.value);
-      const y = Number(yInput.value);
-      // Number("") === 0 会被下方校验放行：空串先显式拒绝
-      if (
-        xInput.value.trim() === "" ||
-        yInput.value.trim() === "" ||
-        !Number.isFinite(x) ||
-        !Number.isFinite(y) ||
-        x < 0 ||
-        y < 0
-      ) {
-        showToast(t("common.check_input"), "warning");
-        return;
-      }
-      closeModal("topology-container-modal");
-      await this.moveContainerOrigin(kind, key, Math.round(x), Math.round(y));
-    };
+    // 目标容器随每次打开变化，存实例字段；按钮一次性绑定（dataset.bound 防重），
+    // 点击时读取最新目标，保持原 onclick 覆盖语义
+    this._containerTarget = { kind, key };
+    if (!saveBtn.dataset.bound) {
+      saveBtn.dataset.bound = "true";
+      saveBtn.addEventListener("click", async () => {
+        const x = Number(xInput.value);
+        const y = Number(yInput.value);
+        // Number("") === 0 会被下方校验放行：空串先显式拒绝
+        if (
+          xInput.value.trim() === "" ||
+          yInput.value.trim() === "" ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          x < 0 ||
+          y < 0
+        ) {
+          showToast(t("common.check_input"), "warning");
+          return;
+        }
+        closeModal("topology-container-modal");
+        await this.moveContainerOrigin(
+          this._containerTarget.kind,
+          this._containerTarget.key,
+          Math.round(x),
+          Math.round(y)
+        );
+      });
+    }
 
     openModal("topology-container-modal");
   }

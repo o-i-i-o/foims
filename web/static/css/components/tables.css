@@ -6,10 +6,6 @@
     flex-direction: column;
   }
 
-  .table-container > .data-table {
-    flex: 1;
-  }
-
   .data-table {
     width: 100%;
 
@@ -22,12 +18,68 @@
     box-shadow: var(--shadow-sm);
   }
 
+  .table-container > .data-table {
+    flex: 1;
+  }
+
+  /* ===== 独立表格家族（不带 .data-table 类的模态内明细表）：
+   基础规则集中声明在前，列级变体覆盖在文件底部（biome noDescendingSpecificity 约定） ===== */
+
+  /* MAC 表组内明细表 */
+  .mac-group-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .mac-group-table th {
+    border: 1px solid var(--color-border-dark);
+    padding: 6px;
+    text-align: left;
+    background: var(--color-bg);
+  }
+
+  .mac-group-table td {
+    border: 1px solid var(--color-border-dark);
+    padding: 6px;
+  }
+
+  /* LLDP 邻居表 */
+  .lldp-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .lldp-table thead tr {
+    background-color: var(--color-bg-secondary);
+  }
+
+  .lldp-table th {
+    border: 1px solid var(--color-border-dark);
+    padding: 12px 10px;
+    font-weight: 600;
+  }
+
+  .lldp-table td {
+    border: 1px solid var(--color-border-dark);
+    padding: 10px;
+  }
+
+  /* ===== .data-table 家族 ===== */
+
   .data-table td {
     padding: 0.35rem;
     padding-top: 0.3rem;
     text-align: center;
     vertical-align: middle;
     border-bottom: 1px solid var(--color-border);
+  }
+
+  /* 空数据占位行：与 .data-table td 等特异度，按源序覆盖其紧凑内边距 */
+  .empty-row td {
+    padding: var(--space-lg);
+    color: var(--color-text-muted);
+    font-style: italic;
   }
 
   .data-table th {
@@ -62,12 +114,6 @@
 
   .data-table tr:last-child td {
     border-bottom: none;
-  }
-
-  .empty-row td {
-    padding: var(--space-lg);
-    color: var(--color-text-muted);
-    font-style: italic;
   }
 
   /* 表格加载失败占位单元格：默认可见的文本错误行
@@ -780,41 +826,6 @@
     display: none;
   }
 
-  /* MAC 表组内明细表 */
-  .mac-group-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .mac-group-table th {
-    border: 1px solid var(--color-border-dark);
-    padding: 6px;
-    text-align: left;
-    background: var(--color-bg);
-  }
-
-  .mac-group-table td {
-    border: 1px solid var(--color-border-dark);
-    padding: 6px;
-  }
-
-  /* LLDP 邻居表 */
-  .lldp-table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-top: 10px;
-  }
-
-  .lldp-table thead tr {
-    background-color: var(--color-bg-secondary);
-  }
-
-  .lldp-table th {
-    border: 1px solid var(--color-border-dark);
-    padding: 12px 10px;
-    font-weight: 600;
-  }
-
   .lldp-table th.lldp-col-index {
     width: 60px;
     text-align: center;
@@ -827,11 +838,6 @@
 
   .lldp-table tbody tr:nth-child(even) {
     background-color: var(--color-bg);
-  }
-
-  .lldp-table td {
-    border: 1px solid var(--color-border-dark);
-    padding: 10px;
   }
 
   .lldp-table td.lldp-index {

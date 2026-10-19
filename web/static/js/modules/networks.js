@@ -75,7 +75,7 @@ export async function loadNetworkRegionsData(
       columns: [
         {
           field: "id",
-          render: (v, row, index) => startIndex + index + 1,
+          render: (_v, _row, index) => startIndex + index + 1,
           className: "index-column"
         },
         { field: "name", render: (v) => escapeHtml(v) },
@@ -206,7 +206,7 @@ export async function loadNetworksData(
       columns: [
         {
           field: "id",
-          render: (v, row, index) => startIndex + index + 1,
+          render: (_v, _row, index) => startIndex + index + 1,
           className: "index-column"
         },
         { field: "name", render: (v) => escapeHtml(v) },
@@ -302,14 +302,14 @@ function calculateTotalIps(cidr) {
       return 0;
     }
 
-    const prefixLength = parseInt(parts[1]);
-    if (isNaN(prefixLength) || prefixLength < 0 || prefixLength > 32) {
+    const prefixLength = parseInt(parts[1], 10);
+    if (Number.isNaN(prefixLength) || prefixLength < 0 || prefixLength > 32) {
       return 0;
     }
 
     // 计算总IP数量：2^(32 - 子网掩码长度) - 2（减去网络地址和广播地址）；
     // /31、/32 扣除后为 0/负数，按 0 处理（无传统意义可用地址）
-    return Math.max(0, Math.pow(2, 32 - prefixLength) - 2);
+    return Math.max(0, 2 ** (32 - prefixLength) - 2);
   } catch (error) {
     console.error("计算总IP数量失败:", error);
     return 0;
@@ -402,7 +402,7 @@ function generateSubnet24List(cidr) {
 
   const ip = parts[0];
   const ipParts = ip.split(".").map(Number);
-  if (ipParts.length !== 4 || ipParts.some((p) => isNaN(p))) {
+  if (ipParts.length !== 4 || ipParts.some((p) => Number.isNaN(p))) {
     return [];
   }
 
@@ -489,7 +489,7 @@ export async function showNetworkUsage(id) {
 
     const ipData = ipResult.data?.data || ipResult.data?.items || ipResult.data || [];
     const allNetworkIps = Array.isArray(ipData) ? ipData : [];
-    const isIPv6 = (ip) => ip.ip_address && ip.ip_address.includes(":");
+    const isIPv6 = (ip) => ip.ip_address?.includes(":");
     const ipv4Ips = allNetworkIps.filter((ip) => !isIPv6(ip));
     const ipv6Ips = allNetworkIps.filter((ip) => isIPv6(ip));
 
@@ -817,7 +817,7 @@ function buildIPv6Content(network, networkIps, _subnetId) {
   `;
 }
 
-function bindIPv4Events(modalContainer, network, networkIps, subnetId) {
+function bindIPv4Events(modalContainer, _network, networkIps, subnetId) {
   const filterSelect = modalContainer.querySelector("#ip-status-filter");
   const ipGrid = modalContainer.querySelector("#ip-grid");
   const ipListBody = modalContainer.querySelector("#ipv4-list-body");
@@ -838,7 +838,9 @@ function bindIPv4Events(modalContainer, network, networkIps, subnetId) {
           return;
         }
         const subIps = generateIpAddresses(subCidr);
-        subnet24Buttons.forEach((b) => b.classList.remove("active"));
+        subnet24Buttons.forEach((b) => {
+          b.classList.remove("active");
+        });
         btn.classList.add("active");
         ipGrid.dataset.activeCidr = subCidr;
         ipGrid.innerHTML = renderIpBlocks(subIps, ipStatusMap);
@@ -951,7 +953,7 @@ function bindIPv4Events(modalContainer, network, networkIps, subnetId) {
   }
 }
 
-function bindIPv6Events(modalContainer, network, networkIps, subnetId) {
+function bindIPv6Events(modalContainer, _network, _networkIps, subnetId) {
   const refreshButton = modalContainer.querySelector("#refresh-ipv6-usage");
   const ipListBody = modalContainer.querySelector("#ipv6-list-body");
 
@@ -1221,7 +1223,7 @@ export async function submitNetworkForm() {
       showToast(t("network.gateway_invalid", { family }), "warning");
       return;
     }
-    if (!cidr || !cidr.trim()) {
+    if (!cidr?.trim()) {
       showToast(t("network.gateway_requires_cidr", { family }), "warning");
       return;
     }
@@ -1232,7 +1234,7 @@ export async function submitNetworkForm() {
   }
 
   const parseDnsList = (dnsStr) => {
-    if (!dnsStr || !dnsStr.trim()) {
+    if (!dnsStr?.trim()) {
       return null;
     }
     const dnsList = dnsStr
@@ -1300,13 +1302,17 @@ export async function openNetworkRegionModal(networkRegion = null) {
     const ipv6Cidrs = Array.isArray(networkRegion.ipv6_cidrs) ? networkRegion.ipv6_cidrs : [];
 
     if (ipv4Cidrs.length > 0) {
-      ipv4Cidrs.forEach((cidr) => addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4", cidr));
+      ipv4Cidrs.forEach((cidr) => {
+        addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4", cidr);
+      });
     } else {
       addCidrInputRow("network-region-ipv4-cidrs-list", "ipv4");
     }
 
     if (ipv6Cidrs.length > 0) {
-      ipv6Cidrs.forEach((cidr) => addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6", cidr));
+      ipv6Cidrs.forEach((cidr) => {
+        addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6", cidr);
+      });
     } else {
       addCidrInputRow("network-region-ipv6-cidrs-list", "ipv6");
     }

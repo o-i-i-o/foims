@@ -14,7 +14,7 @@ import { getIcon } from "../utils/icons.js";
  */
 export function initLanguageMenu() {
   const btn = document.getElementById("language-selector");
-  if (!btn || btn.tagName !== "BUTTON") {
+  if (btn?.tagName !== "BUTTON") {
     return;
   }
 

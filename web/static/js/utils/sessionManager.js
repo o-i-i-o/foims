@@ -28,32 +28,34 @@ function safeStorageRemove(storage, key) {
   }
 }
 
-export class SessionManager {
-  static #userKey = "user";
-  static #rememberMeKey = "rememberMe";
-  static #memoryUser = null;
+// 纯静态类改为对象字面量（noStaticOnlyClass / no-extraneous-class）：
+// 私有静态字段与方法上移为模块级状态与函数，对外导出与调用方式不变
+const USER_KEY = "user";
+const REMEMBER_ME_KEY = "rememberMe";
+let memoryUser = null;
 
-  static #getStorage() {
-    return this.isRememberMe() ? localStorage : sessionStorage;
-  }
+function getStorage() {
+  return SessionManager.isRememberMe() ? localStorage : sessionStorage;
+}
 
-  static isRememberMe() {
-    const { ok, value } = safeStorageGet(localStorage, this.#rememberMeKey);
+export const SessionManager = {
+  isRememberMe() {
+    const { ok, value } = safeStorageGet(localStorage, REMEMBER_ME_KEY);
     return ok && value === "true";
-  }
+  },
 
-  static hasSession() {
-    return this.getUser() !== null;
-  }
+  hasSession() {
+    return SessionManager.getUser() !== null;
+  },
 
-  static getUser() {
+  getUser() {
     // 严格按 rememberMe 标志读单一存储，不做 localStorage 回退：
     // 回退会让"非记住登录"的标签读到其他会话写入 localStorage 的
     // 用户副本，两个标签以不同 rememberMe 登录时读写漂移
-    const { ok, value: userJson } = safeStorageGet(this.#getStorage(), this.#userKey);
+    const { ok, value: userJson } = safeStorageGet(getStorage(), USER_KEY);
     if (!ok) {
       // 存储被禁用时退化为进程内副本（刷新后丢失，重新登录即可）
-      return this.#memoryUser;
+      return memoryUser;
     }
     if (userJson) {
       try {
@@ -64,31 +66,31 @@ export class SessionManager {
     }
 
     return null;
-  }
+  },
 
-  static setUser(user, rememberMe = false) {
-    this.clear();
+  setUser(user, rememberMe = false) {
+    SessionManager.clear();
 
-    this.#memoryUser = user;
-    safeStorageSet(localStorage, this.#rememberMeKey, rememberMe ? "true" : "false");
-    safeStorageSet(this.#getStorage(), this.#userKey, JSON.stringify(user));
-  }
+    memoryUser = user;
+    safeStorageSet(localStorage, REMEMBER_ME_KEY, rememberMe ? "true" : "false");
+    safeStorageSet(getStorage(), USER_KEY, JSON.stringify(user));
+  },
 
-  static clear() {
-    this.#memoryUser = null;
-    safeStorageRemove(localStorage, this.#userKey);
-    safeStorageRemove(localStorage, this.#rememberMeKey);
-    safeStorageRemove(sessionStorage, this.#userKey);
-  }
+  clear() {
+    memoryUser = null;
+    safeStorageRemove(localStorage, USER_KEY);
+    safeStorageRemove(localStorage, REMEMBER_ME_KEY);
+    safeStorageRemove(sessionStorage, USER_KEY);
+  },
 
-  static updateUser(updates) {
-    const user = this.getUser();
+  updateUser(updates) {
+    const user = SessionManager.getUser();
     if (user) {
       const updatedUser = { ...user, ...updates };
-      this.#memoryUser = updatedUser;
-      safeStorageSet(this.#getStorage(), this.#userKey, JSON.stringify(updatedUser));
+      memoryUser = updatedUser;
+      safeStorageSet(getStorage(), USER_KEY, JSON.stringify(updatedUser));
       return updatedUser;
     }
     return null;
   }
-}
+};

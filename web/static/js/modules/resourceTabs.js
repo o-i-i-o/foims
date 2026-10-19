@@ -84,10 +84,14 @@ function bindTabClickHandlers(container) {
  * @param {string} tabId - 标签 ID
  */
 function updateActiveTab(tabBtns, tabContents, activeBtn, tabId) {
-  tabBtns.forEach((btn) => btn.classList.remove("active"));
+  tabBtns.forEach((btn) => {
+    btn.classList.remove("active");
+  });
   activeBtn.classList.add("active");
 
-  tabContents.forEach((content) => content.classList.remove("active"));
+  tabContents.forEach((content) => {
+    content.classList.remove("active");
+  });
 
   const targetTab = document.getElementById(`${tabId}-tab`);
   targetTab?.classList.add("active");

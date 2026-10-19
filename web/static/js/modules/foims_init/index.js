@@ -66,7 +66,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.querySelectorAll(".step").forEach((step) => {
     step.addEventListener("click", () => {
-      const stepNum = parseInt(step.dataset.step);
+      const stepNum = parseInt(step.dataset.step, 10);
       if (stepNum < state.currentStep) {
         goToStep(stepNum);
       }

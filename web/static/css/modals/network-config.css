@@ -92,7 +92,7 @@
 
   .network-config-wrapper {
     width: 100%;
-    flex: 1 !important; /* stylelint-disable-line declaration-no-important -- 压制表单控件默认宽度 */
+    flex: 1; /* modals 层晚于 components 层，压制表单控件默认宽度无需 important */
     min-width: 0;
   }
 
@@ -140,9 +140,9 @@
   }
 
   /* 列标题已由 label 改为 span：选择器同步扩展，样式不变 */
+  .dyn-columns-header > span,
   #cabinet-positions-container .cabinet-columns-header > label,
-  #cabinet-positions-container .cabinet-columns-header > span,
-  .dyn-columns-header > span {
+  #cabinet-positions-container .cabinet-columns-header > span {
     flex: 1;
     min-width: 0;
     width: auto;

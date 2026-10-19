@@ -27,8 +27,14 @@ import { INTERFACE_ROLES, PHYSICAL_TYPES } from "../utils/networkCardManager.js"
 // 仅在弹出冲突对话框的轮次写入，每轮同步整体重建，不跨轮残留
 const conflictState = {
   existingMap: new Map(), // 已存在网口：key = name（小写）
-  decisions: {} // { name: 'overwrite' | 'skip' }
+  decisions: {}, // { name: 'overwrite' | 'skip' }
+  deviceId: null, // 本轮同步的设备 ID（冲突弹窗按钮点击时读取）
+  toAdd: [], // 本轮无冲突待新增端口
+  conflicts: [] // 本轮冲突列表快照（跳过数统计与决策遍历来源）
 };
+
+// 端口详情模态框当前编辑的端口数据（删除按钮一次性绑定后点击时读取）
+let currentPortDetail = null;
 
 /**
  * 统一的设备端口管理入口
@@ -190,11 +196,12 @@ function createPortItem(iface) {
  * 绑定模态框底部按钮 + 端口项点击事件
  */
 function bindModalButtons(deviceId) {
-  // 页脚按钮用 onclick 赋值保证幂等：refreshModalView 在模态框未销毁时
-  // 重复调用本函数，addEventListener 会叠加监听导致一次点击多次触发
+  // 页脚按钮一次性绑定（dataset.bound 防重）：refreshModalView 在模态框
+  // 未销毁时重复调用本函数，防叠加监听导致一次点击多次触发
   const addPortBtn = elementCache.get("add-port-btn");
-  if (addPortBtn) {
-    addPortBtn.onclick = () => {
+  if (addPortBtn && !addPortBtn.dataset.bound) {
+    addPortBtn.dataset.bound = "true";
+    addPortBtn.addEventListener("click", () => {
       // 端口模态框新建的端口默认不进设备模态框（设备管理复选框不勾选）
       openPortDetailModal({
         portId: "",
@@ -204,15 +211,16 @@ function bindModalButtons(deviceId) {
         portType: "access",
         status: "up"
       });
-    };
+    });
   }
 
   // 从SNMP获取端口
   const getSnmpBtn = elementCache.get("get-snmp-ports-btn");
-  if (getSnmpBtn) {
-    getSnmpBtn.onclick = async () => {
+  if (getSnmpBtn && !getSnmpBtn.dataset.bound) {
+    getSnmpBtn.dataset.bound = "true";
+    getSnmpBtn.addEventListener("click", async () => {
       await startSnmpSync(deviceId);
-    };
+    });
   }
 
   // 端口项点击（事件委托）：统一打开端口详情编辑。
@@ -296,13 +304,16 @@ async function openPortDetailModal(portData) {
   if (deleteBtn) {
     deleteBtn.style.display = isNewPort ? "none" : "inline-block";
   }
-  // onclick 赋值覆盖旧监听、保证幂等（同一 DOM 存活期内重复初始化时，
-  // addEventListener 会叠加监听导致一次点击多次提交）
-  if (saveBtn) {
-    saveBtn.onclick = () => submitPortForm();
+  // 详情模态框每次打开重建 DOM（closeModal 销毁重建），dataset.bound 防同一
+  // 存活期内重复初始化叠加监听（并发双击端口项场景）
+  currentPortDetail = portData;
+  if (saveBtn && !saveBtn.dataset.bound) {
+    saveBtn.dataset.bound = "true";
+    saveBtn.addEventListener("click", () => submitPortForm());
   }
-  if (deleteBtn) {
-    deleteBtn.onclick = () => deletePort(portData);
+  if (deleteBtn && !deleteBtn.dataset.bound) {
+    deleteBtn.dataset.bound = "true";
+    deleteBtn.addEventListener("click", () => deletePort(currentPortDetail));
   }
 }
 
@@ -341,13 +352,13 @@ async function submitPortForm() {
     showToast(t("device.port_name_required"), "warning");
     return;
   }
-  if (data.vlan_id !== null && (isNaN(data.vlan_id) || data.vlan_id < 1 || data.vlan_id > 4094)) {
+  if (data.vlan_id !== null && (Number.isNaN(data.vlan_id) || data.vlan_id < 1 || data.vlan_id > 4094)) {
     showToast(t("device.vlan_invalid"), "warning");
     return;
   }
   if (
     data.native_vlan_id !== null &&
-    (isNaN(data.native_vlan_id) || data.native_vlan_id < 1 || data.native_vlan_id > 4094)
+    (Number.isNaN(data.native_vlan_id) || data.native_vlan_id < 1 || data.native_vlan_id > 4094)
   ) {
     showToast(t("device.native_vlan_invalid"), "warning");
     return;
@@ -491,7 +502,9 @@ async function startSnmpSync(deviceId) {
     }
 
     const existingMap = new Map();
-    existingPorts.forEach((p) => existingMap.set(String(p.name).toLowerCase(), p));
+    existingPorts.forEach((p) => {
+      existingMap.set(String(p.name).toLowerCase(), p);
+    });
 
     // 3. 对比分类
     const toAdd = [];
@@ -534,6 +547,11 @@ async function startSnmpSync(deviceId) {
  */
 async function showConflictModal(deviceId, toAdd, conflicts) {
   await openModal("port-conflict-modal");
+
+  // 本轮数据存模块级状态：弹窗按钮一次性绑定（防叠加监听），点击时读取最新值
+  conflictState.deviceId = deviceId;
+  conflictState.toAdd = toAdd;
+  conflictState.conflicts = conflicts;
 
   const summaryEl = document.getElementById("port-conflict-summary");
   const listEl = document.getElementById("port-conflict-list");
@@ -580,38 +598,42 @@ async function showConflictModal(deviceId, toAdd, conflicts) {
     });
   }
 
-  // 全部跳过 / 全部覆盖：onclick 赋值幂等，重复初始化不会叠加监听
+  // 全部跳过 / 全部覆盖 / 确认：一次性绑定（dataset.bound 防重），每轮冲突数据
+  // 由 conflictState 提供，重复初始化不会叠加监听
   const skipAllBtn = document.getElementById("conflict-skip-all-btn");
   const overwriteAllBtn = document.getElementById("conflict-overwrite-all-btn");
-  if (skipAllBtn) {
-    skipAllBtn.onclick = () => {
-      conflicts.forEach((c) => {
+  if (skipAllBtn && !skipAllBtn.dataset.bound) {
+    skipAllBtn.dataset.bound = "true";
+    skipAllBtn.addEventListener("click", () => {
+      conflictState.conflicts.forEach((c) => {
         conflictState.decisions[String(c.snmpPort.name)] = "skip";
       });
       syncConflictSelections();
-    };
+    });
   }
-  if (overwriteAllBtn) {
-    overwriteAllBtn.onclick = () => {
-      conflicts.forEach((c) => {
+  if (overwriteAllBtn && !overwriteAllBtn.dataset.bound) {
+    overwriteAllBtn.dataset.bound = "true";
+    overwriteAllBtn.addEventListener("click", () => {
+      conflictState.conflicts.forEach((c) => {
         conflictState.decisions[String(c.snmpPort.name)] = "overwrite";
       });
       syncConflictSelections();
-    };
+    });
   }
 
   // 确认 → 应用决策
   const confirmBtn = document.getElementById("conflict-confirm-btn");
-  if (confirmBtn) {
-    confirmBtn.onclick = async () => {
-      const toOverwrite = conflicts
+  if (confirmBtn && !confirmBtn.dataset.bound) {
+    confirmBtn.dataset.bound = "true";
+    confirmBtn.addEventListener("click", async () => {
+      const toOverwrite = conflictState.conflicts
         .filter((c) => conflictState.decisions[String(c.snmpPort.name)] === "overwrite")
         .map((c) => c.snmpPort);
       // 跳过数取自本轮冲突列表快照，避免上一轮冲突状态残留导致统计错误
-      const skippedCount = conflicts.length - toOverwrite.length;
+      const skippedCount = conflictState.conflicts.length - toOverwrite.length;
       closeModal("port-conflict-modal");
-      await applySnmpResults(deviceId, toAdd, toOverwrite, skippedCount);
-    };
+      await applySnmpResults(conflictState.deviceId, conflictState.toAdd, toOverwrite, skippedCount);
+    });
   }
 }
 
@@ -679,33 +701,47 @@ async function applySnmpResults(deviceId, toAdd, toOverwrite, skippedCount) {
     }
   };
 
+  // 同步任务表：先全部新增，后覆盖/退化新增。端口逐个顺序提交，
+  // 避免并发请求触发服务端限流；以任务表+递归执行器替代 for+await
+  // （no-await-in-loop），任务数 = 待同步端口数，递归深度有界
+  const tasks = [];
   for (const p of toAdd) {
-    await createPort(p);
+    tasks.push(() => createPort(p));
   }
-
   for (const p of toOverwrite) {
-    const key = String(p.name).toLowerCase();
-    const existing = conflictState.existingMap.get(key);
-    if (!existing) {
-      // 本轮快照中找不到原网口时退化为新增
-      await createPort(p);
-      continue;
-    }
-    try {
-      const r = await apiPut(
-        `/api/resources/devices/interfaces/${existing.id}`,
-        buildOverwritePayload(p)
-      );
-      if (r.success) {
-        overwritten++;
-      } else {
+    tasks.push(async () => {
+      const key = String(p.name).toLowerCase();
+      const existing = conflictState.existingMap.get(key);
+      if (!existing) {
+        // 本轮快照中找不到原网口时退化为新增
+        await createPort(p);
+        return;
+      }
+      try {
+        const r = await apiPut(
+          `/api/resources/devices/interfaces/${existing.id}`,
+          buildOverwritePayload(p)
+        );
+        if (r.success) {
+          overwritten++;
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        console.error(`SNMP 同步覆盖端口 ${p.name} 失败:`, e);
         failed++;
       }
-    } catch (e) {
-      console.error(`SNMP 同步覆盖端口 ${p.name} 失败:`, e);
-      failed++;
-    }
+    });
   }
+
+  const runTasks = async (i = 0) => {
+    if (i >= tasks.length) {
+      return;
+    }
+    await tasks[i]();
+    await runTasks(i + 1);
+  };
+  await runTasks();
 
   const parts = [];
   if (added) {

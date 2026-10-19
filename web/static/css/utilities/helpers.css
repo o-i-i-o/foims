@@ -10,7 +10,7 @@
   }
 
   .hidden {
-    display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
+    display: none; /* utilities 层晚于组件/页面层，层序压制无需 important */
   }
 
   .text-muted {
@@ -69,7 +69,7 @@
 
   /* 只读分区内隐藏的写控件（清扫函数追加该类） */
   .ro-hidden {
-    display: none !important; /* stylelint-disable-line declaration-no-important -- 工具类需压制任意调用点 */
+    display: none; /* utilities 层晚于组件/页面层，层序压制无需 important */
   }
 
   /* 只读分区标题右侧的只读徽标 */

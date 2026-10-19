@@ -16,7 +16,9 @@ function activateTabPane(modal, btn) {
   });
   btn.classList.add("active");
   btn.setAttribute("aria-selected", "true");
-  modal.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+  modal.querySelectorAll(".tab-content").forEach((c) => {
+    c.classList.remove("active");
+  });
   const targetTab = modal.querySelector(`#${btn.dataset.tab}-tab`);
   if (targetTab) {
     targetTab.classList.add("active");
@@ -75,8 +77,8 @@ async function viewArpTable(deviceId) {
           return;
         }
 
-        const ipv4Entries = entries.filter((e) => e.ip_address && e.ip_address.includes("."));
-        const ipv6Entries = entries.filter((e) => e.ip_address && e.ip_address.includes(":"));
+        const ipv4Entries = entries.filter((e) => e.ip_address?.includes("."));
+        const ipv6Entries = entries.filter((e) => e.ip_address?.includes(":"));
 
         modal.querySelector('[data-tab="ipv4"]').textContent = `IPv4 (${ipv4Entries.length})`;
         modal.querySelector('[data-tab="ipv6"]').textContent = `IPv6 (${ipv6Entries.length})`;
@@ -253,9 +255,9 @@ function groupByNetwork(entries, type) {
 
   const sortedGroups = {};
   Object.keys(groups)
-    .sort()
+    .toSorted()
     .forEach((key) => {
-      sortedGroups[key] = groups[key].sort((a, b) => {
+      sortedGroups[key] = groups[key].toSorted((a, b) => {
         if (type === "ipv4") {
           const aParts = a.ip_address.split(".").map(Number);
           const bParts = b.ip_address.split(".").map(Number);

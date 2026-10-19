@@ -252,12 +252,12 @@ async function loadRateLimitConfig() {
 async function saveRateLimitConfig() {
   const rateLimitConfig = {
     enabled: elementCache.getValue("rate-limit-enabled") === "true",
-    ip_limit: parseInt(elementCache.getValue("rate-limit-ip")) || 100,
-    user_limit: parseInt(elementCache.getValue("rate-limit-user")) || 200,
-    login_limit: parseInt(elementCache.getValue("rate-limit-login")) || 5,
-    window_secs: parseInt(elementCache.getValue("rate-limit-window")) || 60,
-    email_limit: parseInt(elementCache.getValue("rate-limit-email")) || 5,
-    email_window_secs: parseInt(elementCache.getValue("rate-limit-email-window")) || 3600
+    ip_limit: parseInt(elementCache.getValue("rate-limit-ip"), 10) || 100,
+    user_limit: parseInt(elementCache.getValue("rate-limit-user"), 10) || 200,
+    login_limit: parseInt(elementCache.getValue("rate-limit-login"), 10) || 5,
+    window_secs: parseInt(elementCache.getValue("rate-limit-window"), 10) || 60,
+    email_limit: parseInt(elementCache.getValue("rate-limit-email"), 10) || 5,
+    email_window_secs: parseInt(elementCache.getValue("rate-limit-email-window"), 10) || 3600
   };
 
   try {

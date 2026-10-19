@@ -42,7 +42,7 @@ function getDeviceFormValues() {
     location: elementCache.getValue("device-location") || null,
     description: elementCache.getValue("device-description") || null,
     snmp_version: elementCache.getValue("device-snmp-version"),
-    snmp_port: parseInt(elementCache.getValue("device-snmp-port")) || 161,
+    snmp_port: parseInt(elementCache.getValue("device-snmp-port"), 10) || 161,
     snmp_community: maskToNull(elementCache.getValue("device-snmp-community")),
     snmp_username: elementCache.getValue("device-snmp-username") || null,
     snmp_auth_protocol: elementCache.getValue("device-snmp-auth-protocol") || null,

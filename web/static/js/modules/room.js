@@ -105,7 +105,9 @@ class NetworkConfigManager {
     this.bindExternalAddButton();
 
     // 仅移除旧条目，保留模板内的静态列头（与机位列表的列头保留机制一致）
-    this.container.querySelectorAll(".network-config-item").forEach((el) => el.remove());
+    this.container.querySelectorAll(".network-config-item").forEach((el) => {
+      el.remove();
+    });
     await this.addItem();
     return true;
   }
@@ -269,7 +271,9 @@ class NetworkConfigManager {
     }
 
     // 仅移除旧条目，保留模板内的静态列头（与机位列表的列头保留机制一致）
-    this.container.querySelectorAll(".network-config-item").forEach((el) => el.remove());
+    this.container.querySelectorAll(".network-config-item").forEach((el) => {
+      el.remove();
+    });
 
     const networkMap = new Map(allNetworks.map((n) => [n.id, n]));
     const selectedIds = networks.map((n) => n.id);
@@ -395,7 +399,7 @@ function renderManagerControl(data = {}) {
 /** 收集单个管理人控件的值：仅提交员工 id（管理人为必填，校验在 validateRoomChildren） */
 function collectManagerValue(item) {
   const control = item.querySelector(".child-manager");
-  if (!control || control.tagName !== "SELECT") {
+  if (control?.tagName !== "SELECT") {
     return { manager_employee_id: null };
   }
   return { manager_employee_id: control.value || null };
@@ -499,11 +503,11 @@ class RoomChildListManager extends DynamicRowManager {
       return Array.from(items).map((item) => {
         const idInput = item.querySelector(".child-id");
         const nameInput = item.querySelector(".child-name");
-        return {
+        const base = {
           id: idInput?.value || null,
-          name: (nameInput?.value || "").trim(),
-          ...collectManagerValue(item)
+          name: (nameInput?.value || "").trim()
         };
+        return Object.assign(base, collectManagerValue(item));
       });
     }
     return Array.from(items).map((item) => {
@@ -571,7 +575,9 @@ class RoomChildrenManager {
         // 仅移除条目与空状态占位，保留模板内的静态列头（与机位列表机制一致）
         list.container
           .querySelectorAll(".room-child-item, .room-child-empty")
-          .forEach((el) => el.remove());
+          .forEach((el) => {
+            el.remove();
+          });
         list.updateEmptyState();
       }
     }
@@ -624,10 +630,14 @@ class RoomChildrenManager {
     }
 
     if ((this.isOfficeRoom || this.isMixedRoom) && children?.workstations?.length) {
-      children.workstations.forEach((ws) => this.workstationList.addItem(ws));
+      children.workstations.forEach((ws) => {
+        this.workstationList.addItem(ws);
+      });
     }
     if ((this.isCabinetRoom || this.isMixedRoom) && children?.cabinets?.length) {
-      children.cabinets.forEach((cab) => this.cabinetList.addItem(cab));
+      children.cabinets.forEach((cab) => {
+        this.cabinetList.addItem(cab);
+      });
     }
 
     for (const list of [this.workstationList, this.cabinetList]) {
@@ -718,7 +728,9 @@ class RoomNetOutletsManager extends DynamicRowManager {
     this.container.innerHTML = "";
 
     const netOutlets = room?.net_outlets || [];
-    netOutlets.forEach((no) => this.addItem(no));
+    netOutlets.forEach((no) => {
+      this.addItem(no);
+    });
     this.updateEmptyState();
   }
 
@@ -788,7 +800,7 @@ export async function loadRoomsData(page = currentPage, sortBy = null, sortOrder
       columns: [
         {
           field: "id",
-          render: (v, row, index) => startIndex + index + 1,
+          render: (_v, _row, index) => startIndex + index + 1,
           className: "index-column"
         },
         { field: "name", render: (v) => escapeHtml(v) },

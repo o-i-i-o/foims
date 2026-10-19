@@ -1,5 +1,5 @@
 /**
- * API客户端类 - 处理所有API请求
+ * API客户端 - 处理所有API请求
  * 使用 HttpOnly Cookie 进行认证，彻底防止 XSS 窃取 token
  */
 import { SessionManager } from "./sessionManager.js";
@@ -26,40 +26,38 @@ export function translateServerMessage(data) {
   return data;
 }
 
-export class ApiClient {
-  static #pendingRequests = new Map();
+// 纯静态类改为对象字面量（noStaticOnlyClass / no-extraneous-class）：
+// 私有静态字段与方法上移为模块级状态与函数，对外导出与调用方式不变
+const pendingRequests = new Map();
+let isRedirecting = false;
+let refreshPromise = null;
+let lastRefreshTime = 0;
+let refreshThresholdMs = 5 * 60 * 1000;
 
-  static #hashBody(body) {
-    if (body instanceof FormData) {
-      const entries = [...body.entries()].sort(([a], [b]) => a.localeCompare(b));
-      return entries.map(([k, v]) => `${k}=${v}`).join("&");
-    }
-    if (typeof body === "string") {
-      return body.length > 200 ? body.substring(0, 200) : body;
-    }
-    return String(body);
+function hashBody(body) {
+  if (body instanceof FormData) {
+    const entries = [...body.entries()].toSorted(([a], [b]) => a.localeCompare(b));
+    return entries.map(([k, v]) => `${k}=${v}`).join("&");
   }
-
-  static #isRedirecting = false;
-
-  static #refreshPromise = null;
-
-  static #lastRefreshTime = 0;
-
-  static #refreshThresholdMs = 5 * 60 * 1000;
-
-  static setRefreshThreshold(thresholdMs) {
-    this.#refreshThresholdMs = thresholdMs;
+  if (typeof body === "string") {
+    return body.length > 200 ? body.substring(0, 200) : body;
   }
+  return String(body);
+}
 
-  static async request(url, options = {}, retryCount = 0) {
+export const ApiClient = {
+  setRefreshThreshold(thresholdMs) {
+    refreshThresholdMs = thresholdMs;
+  },
+
+  async request(url, options = {}, retryCount = 0) {
     const method = options.method || "GET";
-    const bodyHash = options.body ? `_${this.#hashBody(options.body)}` : "";
+    const bodyHash = options.body ? `_${hashBody(options.body)}` : "";
     const requestKey = `${url}_${method}${bodyHash}`;
 
     // 并发相同 GET 共享同一 Promise，避免重复请求
-    if (method === "GET" && retryCount === 0 && this.#pendingRequests.has(requestKey)) {
-      return this.#pendingRequests.get(requestKey);
+    if (method === "GET" && retryCount === 0 && pendingRequests.has(requestKey)) {
+      return pendingRequests.get(requestKey);
     }
 
     // 会话维护：距上次刷新超过阈值时先刷新一次（refreshPromise 单飞去重）。
@@ -70,14 +68,14 @@ export class ApiClient {
 
     const now = Date.now();
     if (
-      !this.isPublicAuthEndpoint(url) &&
+      !ApiClient.isPublicAuthEndpoint(url) &&
       !skipAuthCheck &&
       // 仅在存在已登录会话标志时才做主动刷新：登录页等无会话场景
       // refresh 注定失败，只会徒增请求；401 恢复路径不受影响
       SessionManager.hasSession() &&
-      now - this.#lastRefreshTime > this.#refreshThresholdMs
+      now - lastRefreshTime > refreshThresholdMs
     ) {
-      await this.refreshToken();
+      await ApiClient.refreshToken();
     }
 
     const defaultOptions = {
@@ -104,13 +102,13 @@ export class ApiClient {
       delete mergedOptions.headers["Content-Type"];
     }
 
-    return this.processRequest(url, mergedOptions, retryCount, requestKey, skipAuthCheck);
-  }
+    return ApiClient.processRequest(url, mergedOptions, retryCount, requestKey, skipAuthCheck);
+  },
 
-  static async processRequest(url, options, retryCount, requestKey, skipAuthCheck = false) {
-    const requestPromise = this.makeRequest(url, options, retryCount, requestKey, skipAuthCheck);
+  async processRequest(url, options, retryCount, requestKey, skipAuthCheck = false) {
+    const requestPromise = ApiClient.makeRequest(url, options, retryCount, requestKey, skipAuthCheck);
 
-    this.#pendingRequests.set(requestKey, requestPromise);
+    pendingRequests.set(requestKey, requestPromise);
 
     try {
       const result = await requestPromise;
@@ -121,24 +119,17 @@ export class ApiClient {
       }
       return result;
     } finally {
-      this.#pendingRequests.delete(requestKey);
+      pendingRequests.delete(requestKey);
     }
-  }
+  },
 
-  static async makeRequest(url, options, retryCount, requestKey, skipAuthCheck = false) {
+  async makeRequest(url, options, retryCount, requestKey, skipAuthCheck = false) {
     try {
       const response = await fetch(url, options);
 
       if (!response.ok) {
         if (response.status === 401) {
-          return this.#handleUnauthorized(
-            url,
-            response,
-            options,
-            retryCount,
-            requestKey,
-            skipAuthCheck
-          );
+          return handleUnauthorized(url, response, options, retryCount, requestKey, skipAuthCheck);
         }
         if (response.status === 429 && retryCount < 3) {
           // Retry-After 为秒数或 HTTP-date：parseInt 解析失败（含 HTTP-date
@@ -147,7 +138,7 @@ export class ApiClient {
           const delaySeconds = Number.isNaN(retryAfterSeconds) ? 2 : retryAfterSeconds;
 
           await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
-          return this.makeRequest(url, options, retryCount + 1, requestKey, skipAuthCheck);
+          return ApiClient.makeRequest(url, options, retryCount + 1, requestKey, skipAuthCheck);
         }
 
         // 先取文本再尝试 JSON 解析：部分 4xx/5xx 的响应体是纯文本，
@@ -177,7 +168,7 @@ export class ApiClient {
       const contentType = response.headers.get("Content-Type");
 
       // 优先处理 JSON 响应
-      if (contentType && contentType.includes("application/json")) {
+      if (contentType?.includes("application/json")) {
         return translateServerMessage(await response.json());
       }
 
@@ -197,7 +188,7 @@ export class ApiClient {
         if (disposition && disposition.indexOf("attachment") !== -1) {
           const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
           const matches = filenameRegex.exec(disposition);
-          if (matches !== null && matches[1]) {
+          if (matches?.[1]) {
             filename = matches[1].replace(/['"]/g, "");
           }
         }
@@ -250,57 +241,9 @@ export class ApiClient {
         errorDetails: { originalError: rawMessage }
       };
     }
-  }
+  },
 
-  /** 解析认证端点 401 响应体，归一为统一的错误结果对象（响应体非 JSON 时兜底） */
-  static async #parseAuthErrorResponse(response) {
-    try {
-      const errorData = await response.json();
-      translateServerMessage(errorData);
-      return {
-        success: false,
-        message: errorData.message || t("api.auth_failed"),
-        errorType: errorData.error_type || "unauthorized",
-        errorDetails: errorData.error_details || {},
-        suggestedAction: errorData.suggested_action || ""
-      };
-    } catch (jsonError) {
-      console.error("认证失败响应体非 JSON:", jsonError);
-      return {
-        success: false,
-        message: t("api.auth_failed"),
-        errorType: "unauthorized"
-      };
-    }
-  }
-
-  /**
-   * 401 处理：公共认证端点与 skipAuthCheck 请求（登录/发码/忘记密码等）
-   * 直接返回真实错误响应，不走注定失败的 refresh，也不弹"令牌已过期"或
-   * 强制跳转登录页（否则 LDAP 输错密码会丢输入且真实错误被吞）；
-   * 其余请求先尝试刷新令牌并重试，失败才提示并跳转登录页
-   */
-  static async #handleUnauthorized(url, response, options, retryCount, requestKey, skipAuthCheck) {
-    if (this.isPublicAuthEndpoint(url) || skipAuthCheck) {
-      return this.#parseAuthErrorResponse(response);
-    }
-
-    const refreshSuccess = await this.refreshToken();
-    if (refreshSuccess && retryCount < 3) {
-      return this.request(url, options, retryCount + 1);
-    }
-
-    if (!this.#isRedirecting) {
-      this.#isRedirecting = true;
-      this.showAuthError();
-      setTimeout(() => {
-        this.redirectToLogin();
-      }, 1500);
-    }
-    return { success: false, message: t("api.token_expired"), errorType: "token_expired" };
-  }
-
-  static isPublicAuthEndpoint(url) {
+  isPublicAuthEndpoint(url) {
     if (typeof url !== "string") {
       return false;
     }
@@ -323,30 +266,30 @@ export class ApiClient {
       normalizedUrl === "/api/certificate/ca/info" ||
       normalizedUrl.startsWith("/api/init/")
     );
-  }
+  },
 
-  static async get(url) {
-    return this.request(url);
-  }
+  async get(url) {
+    return ApiClient.request(url);
+  },
 
-  static async post(url, data, options = {}) {
+  async post(url, data, options = {}) {
     const body = data instanceof FormData ? data : JSON.stringify(data);
-    return this.request(url, { method: "POST", body, ...options });
-  }
+    return ApiClient.request(url, { method: "POST", body, ...options });
+  },
 
-  static async put(url, data, options = {}) {
-    return this.request(url, { method: "PUT", body: JSON.stringify(data), ...options });
-  }
+  async put(url, data, options = {}) {
+    return ApiClient.request(url, { method: "PUT", body: JSON.stringify(data), ...options });
+  },
 
-  static async delete(url, data = null, options = {}) {
+  async delete(url, data = null, options = {}) {
     const deleteOptions = { method: "DELETE", ...options };
     if (data) {
       deleteOptions.body = JSON.stringify(data);
     }
-    return this.request(url, deleteOptions);
-  }
+    return ApiClient.request(url, deleteOptions);
+  },
 
-  static redirectToLogin() {
+  redirectToLogin() {
     SessionManager.clear();
     // 持久化缓存随登出一并清除：TTL 内的缓存可能含前一账号的业务数据，
     // 共享浏览器换账号后不应残留可读
@@ -356,18 +299,18 @@ export class ApiClient {
       console.error("清理持久化缓存失败:", error);
     }
     window.location.href = "/index.html";
-  }
+  },
 
-  static showAuthError() {
+  showAuthError() {
     showToast(t("api.token_expired"), "error");
-  }
+  },
 
-  static async refreshToken() {
-    if (this.#refreshPromise) {
-      return this.#refreshPromise;
+  async refreshToken() {
+    if (refreshPromise) {
+      return refreshPromise;
     }
 
-    this.#refreshPromise = (async () => {
+    refreshPromise = (async () => {
       try {
         const response = await fetch("/api/auth/refresh", {
           method: "POST",
@@ -380,7 +323,7 @@ export class ApiClient {
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
-            this.#lastRefreshTime = Date.now();
+            lastRefreshTime = Date.now();
           }
           return result.success;
         }
@@ -389,11 +332,59 @@ export class ApiClient {
         console.error("令牌刷新失败:", error);
         return false;
       } finally {
-        this.#refreshPromise = null;
+        refreshPromise = null;
       }
     })();
 
-    return this.#refreshPromise;
+    return refreshPromise;
+  }
+};
+
+/**
+ * 401 处理：公共认证端点与 skipAuthCheck 请求（登录/发码/忘记密码等）
+ * 直接返回真实错误响应，不走注定失败的 refresh，也不弹"令牌已过期"或
+ * 强制跳转登录页（否则 LDAP 输错密码会丢输入且真实错误被吞）；
+ * 其余请求先尝试刷新令牌并重试，失败才提示并跳转登录页
+ */
+async function handleUnauthorized(url, response, options, retryCount, _requestKey, skipAuthCheck) {
+  if (ApiClient.isPublicAuthEndpoint(url) || skipAuthCheck) {
+    return parseAuthErrorResponse(response);
+  }
+
+  const refreshSuccess = await ApiClient.refreshToken();
+  if (refreshSuccess && retryCount < 3) {
+    return ApiClient.request(url, options, retryCount + 1);
+  }
+
+  if (!isRedirecting) {
+    isRedirecting = true;
+    ApiClient.showAuthError();
+    setTimeout(() => {
+      ApiClient.redirectToLogin();
+    }, 1500);
+  }
+  return { success: false, message: t("api.token_expired"), errorType: "token_expired" };
+}
+
+/** 解析认证端点 401 响应体，归一为统一的错误结果对象（响应体非 JSON 时兜底） */
+async function parseAuthErrorResponse(response) {
+  try {
+    const errorData = await response.json();
+    translateServerMessage(errorData);
+    return {
+      success: false,
+      message: errorData.message || t("api.auth_failed"),
+      errorType: errorData.error_type || "unauthorized",
+      errorDetails: errorData.error_details || {},
+      suggestedAction: errorData.suggested_action || ""
+    };
+  } catch (jsonError) {
+    console.error("认证失败响应体非 JSON:", jsonError);
+    return {
+      success: false,
+      message: t("api.auth_failed"),
+      errorType: "unauthorized"
+    };
   }
 }
 

@@ -25,19 +25,20 @@ async function loadStyle(href) {
   link.rel = "stylesheet";
   link.href = url;
 
-  link.onload = () => {
+  // link 元素一次性使用（load/error 后不再复用），直接注册监听
+  link.addEventListener("load", () => {
     loadedStyles.add(url);
     loadingStyles.delete(url);
     resolve(true);
-  };
+  });
 
-  link.onerror = () => {
+  link.addEventListener("error", () => {
     loadingStyles.delete(url);
     // 从 head 移除失败的 link，避免坏链接永久残留且每次重试再插入不断累积
     link.remove();
     console.error(`Failed to load style: ${url}`);
     reject(new Error(`Failed to load style: ${url}`));
-  };
+  });
 
   document.head.appendChild(link);
   loadingStyles.set(url, promise);

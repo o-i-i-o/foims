@@ -187,7 +187,7 @@ export class SVGDataManager {
           workstations.forEach((workstation, index) => {
             const savedItem = layoutById.get(workstation.id.toLowerCase());
             // 异常坐标（NaN/负值/零宽高）不进画布：告警后回退默认网格排布
-            if (savedItem && savedItem.position && !isValidLayoutPosition(savedItem.position)) {
+            if (savedItem?.position && !isValidLayoutPosition(savedItem.position)) {
               console.warn(
                 "工位已保存坐标异常，已回退默认排布:",
                 workstation.id,
@@ -472,7 +472,7 @@ export class SVGDataManager {
         (item) => item.id.toLowerCase() === cabinet.id.toLowerCase()
       );
       const savedX =
-        savedItem && savedItem.position && Number.isFinite(savedItem.position.x)
+        savedItem?.position && Number.isFinite(savedItem.position.x)
           ? savedItem.position.x
           : null;
       const x = savedX ?? padding + index * (CABINET_WIDTH + CABINET_GAP);
@@ -512,12 +512,22 @@ export class SVGDataManager {
    * @returns {Promise<boolean>} 是否完整完成（false 表示已被新渲染取代）
    */
   async renderCabinetBatches(cabinets, token) {
-    for (let i = 0; i < cabinets.length; i += CABINET_BATCH_SIZE) {
+    // 递归逐批渲染替代 for+await（no-await-in-loop）：批间保留 token 取消
+    // 检查与渐进上屏（先看到的批次可先行滚动查看），批次深度 = 柜数/16
+    const renderFrom = async (start) => {
       if (token !== this.cabinetRenderToken) {
         return false;
       }
-      const batch = cabinets.slice(i, i + CABINET_BATCH_SIZE);
-      batch.forEach((cabinet) => this.renderer.drawCabinet(cabinet));
+      if (start >= cabinets.length) {
+        // 全部批次完成:画布为完整成品,恢复可保存
+        this.cabinetRenderSettled = true;
+        return true;
+      }
+
+      const batch = cabinets.slice(start, start + CABINET_BATCH_SIZE);
+      batch.forEach((cabinet) => {
+        this.renderer.drawCabinet(cabinet);
+      });
 
       const positionIds = batch.flatMap((cabinet) =>
         (cabinet.positions || []).map((position) => position.id)
@@ -527,11 +537,13 @@ export class SVGDataManager {
         return false;
       }
 
-      batch.forEach((cabinet) => this.drawCabinetPositions(cabinet, ipMap));
-    }
-    // 全部批次完成:画布为完整成品,恢复可保存
-    this.cabinetRenderSettled = true;
-    return true;
+      batch.forEach((cabinet) => {
+        this.drawCabinetPositions(cabinet, ipMap);
+      });
+      return renderFrom(start + CABINET_BATCH_SIZE);
+    };
+
+    return renderFrom(0);
   }
 
   /**

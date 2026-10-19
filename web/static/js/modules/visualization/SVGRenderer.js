@@ -47,12 +47,12 @@ export class SVGRenderer {
     const ipDetail = workstation.ipDetail || null;
     const ipAddress = ipDetail ? ipDetail.ip_address : t("viz.no_ip");
     let portInfo = t("viz.no_port");
-    if (ipDetail && ipDetail.port_device_name && ipDetail.port_device_number) {
+    if (ipDetail?.port_device_name && ipDetail.port_device_number) {
       portInfo = `${ipDetail.port_device_name}: ${ipDetail.port_device_number}`;
     }
 
     const statusClass =
-      ipDetail && ipDetail.status ? `status-${ipDetail.status}` : "status-unknown";
+      ipDetail?.status ? `status-${ipDetail.status}` : "status-unknown";
     group.classList.add(statusClass);
 
     // 工位卡片四行标签文本（名称/IP/端口/负责人），统一走 labelText helper
@@ -157,7 +157,7 @@ export class SVGRenderer {
     return group;
   }
 
-  drawUMarks(cabinet, group, baseX, baseY, width, capacity, uHeight) {
+  drawUMarks(_cabinet, group, baseX, baseY, width, capacity, uHeight) {
     const startY = baseY + 40;
 
     for (let i = 1; i <= capacity; i++) {
@@ -228,8 +228,7 @@ export class SVGRenderer {
 
     let portsLabel = t("viz.no_port");
     if (
-      position.ipDetail &&
-      position.ipDetail.port_device_name &&
+      position.ipDetail?.port_device_name &&
       position.ipDetail.port_device_number
     ) {
       portsLabel = `${position.ipDetail.port_device_name}: ${position.ipDetail.port_device_number}`;

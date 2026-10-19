@@ -95,6 +95,24 @@
       var(--sidebar-anim-easing);
   }
 
+  /* svg 尺寸基础规则集中声明在状态/彩色化覆盖之前（biome noDescendingSpecificity 约定）：
+   导航图标撑满容器；语言菜单对勾 14px，未选中项隐藏但保留位置保证文字对齐 */
+  .nav-icon svg {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .lang-menu-item svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .lang-menu-item[aria-checked="false"] svg {
+    visibility: hidden;
+  }
+
   body.sidebar-collapsed .sidebar-toggle svg {
     transform: rotate(180deg);
   }
@@ -160,12 +178,6 @@
     min-width: 20px;
     height: 20px;
     flex-shrink: 0;
-  }
-
-  .nav-icon svg {
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
   }
 
   /* 一级导航图标彩色化：按导航项组合类固定描边色（不耦合 href 属性，
@@ -360,17 +372,6 @@
   .lang-menu-item[aria-checked="true"] {
     color: var(--color-primary);
     font-weight: 600;
-  }
-
-  /* 对勾图标占位：未选中项隐藏但保留位置，保证各项文字对齐 */
-  .lang-menu-item svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-  }
-
-  .lang-menu-item[aria-checked="false"] svg {
-    visibility: hidden;
   }
 
   /* 减少动态效果偏好：关闭侧边栏相关过渡 */

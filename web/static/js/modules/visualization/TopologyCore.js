@@ -248,7 +248,9 @@ export class TopologyCore extends SVGCanvasBase {
       this.isContainerDragging = false;
       this.containerDrag = null;
       if (this.hasMoved) {
-        drag.memberStart.forEach(({ el }) => this._snapElementToGrid(el));
+        drag.memberStart.forEach(({ el }) => {
+          this._snapElementToGrid(el);
+        });
         if (this.callbacks.onContainerDragEnd) {
           this.callbacks.onContainerDragEnd(drag.fixedKey, drag.fixedGroupKey);
         }
@@ -405,7 +407,9 @@ export class TopologyCore extends SVGCanvasBase {
     this.tempConnectionGroup.innerHTML = "";
     this.elementsGroup
       .querySelectorAll(".connection-source")
-      .forEach((a) => a.classList.remove("connection-source"));
+      .forEach((a) => {
+        a.classList.remove("connection-source");
+      });
   }
 
   _drawTempConnection(x1, y1, x2, y2) {

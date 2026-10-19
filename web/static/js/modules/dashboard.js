@@ -40,7 +40,7 @@ export async function loadDashboardData(forceRefresh = false) {
     showToast: false
   });
 
-  if (!result || !result.success || !result.data) {
+  if (!result?.success || !result.data) {
     const fallbackData = await loadFallbackData();
     if (fallbackData) {
       updateDashboardUI(fallbackData);

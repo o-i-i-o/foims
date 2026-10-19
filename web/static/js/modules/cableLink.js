@@ -102,7 +102,7 @@ export async function loadCableLinksData(page = currentPage, sortBy = null, sort
       columns: [
         {
           field: "id",
-          render: (v, row, index) => startIndex + index + 1,
+          render: (_v, _row, index) => startIndex + index + 1,
           className: "index-column"
         },
         {
@@ -239,31 +239,41 @@ export async function openCableLabelPrintModal() {
   };
 
   allCheck.checked = true;
-  allCheck.onchange = () => {
-    modal.querySelectorAll(".cable-label-print-check").forEach((check) => {
-      check.checked = allCheck.checked;
-    });
-    updateCount();
-  };
-  tbody.onclick = (e) => {
-    if (e.target.classList.contains("cable-label-print-check")) {
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!allCheck.dataset.bound) {
+    allCheck.dataset.bound = "true";
+    allCheck.addEventListener("change", () => {
+      modal.querySelectorAll(".cable-label-print-check").forEach((check) => {
+        check.checked = allCheck.checked;
+      });
       updateCount();
-    }
-  };
+    });
+  }
+  if (!tbody.dataset.bound) {
+    tbody.dataset.bound = "true";
+    tbody.addEventListener("click", (e) => {
+      if (e.target.classList.contains("cable-label-print-check")) {
+        updateCount();
+      }
+    });
+  }
   updateCount();
 
-  form.onsubmit = (e) => {
-    e.preventDefault();
-    const indexes = [...modal.querySelectorAll(".cable-label-print-check:checked")].map((check) =>
-      Number(check.dataset.index)
-    );
-    if (!indexes.length) {
-      showToast(t("cable_link.print_none_selected"), "warning");
-      return;
-    }
-    printCableLabels(indexes.map((i) => lastLoadedItems[i]));
-    closeModal("cable-label-print-modal");
-  };
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const indexes = [...modal.querySelectorAll(".cable-label-print-check:checked")].map((check) =>
+        Number(check.dataset.index)
+      );
+      if (!indexes.length) {
+        showToast(t("cable_link.print_none_selected"), "warning");
+        return;
+      }
+      printCableLabels(indexes.map((i) => lastLoadedItems[i]));
+      closeModal("cable-label-print-modal");
+    });
+  }
 
   openModal("cable-label-print-modal");
 }

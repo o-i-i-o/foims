@@ -88,7 +88,7 @@ document.addEventListener("click", (e) => {
 // 语言切换时帮助弹窗若处于打开状态，按新语言重绘标题与正文
 document.addEventListener("languagechange", () => {
   const modal = document.getElementById("help-modal");
-  if (!modal || !modal.classList.contains("active") || !modal.dataset.helpTarget) {
+  if (!modal?.classList.contains("active") || !modal.dataset.helpTarget) {
     return;
   }
   const titleKey = modal.dataset.helpTitleKey;

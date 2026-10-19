@@ -43,7 +43,7 @@ const translateErrorField = (errorKey) => {
 // 保证 ui.js / index.js 展示前消息已是译文。
 const parseJsonResponse = async (response) => {
   const text = await response.text();
-  if (!text || !text.trim()) {
+  if (!text?.trim()) {
     const msg = response.ok
       ? t("init.empty_response")
       : `${t("init.parse_empty", { status: response.status })}`;
@@ -335,7 +335,7 @@ export const handleInitModeSubmit = async (e) => {
 
         if (result.success) {
           let message = t("init.db_init_success");
-          if (result.data && result.data.backup_file) {
+          if (result.data?.backup_file) {
             message += `\n${t("init.backup_file")} ${result.data.backup_file}`;
           }
           showToast(message);
@@ -362,7 +362,7 @@ export const handleInitModeSubmit = async (e) => {
 
     if (result.success) {
       let message = t("init.db_init_success");
-      if (result.data && result.data.backup_file) {
+      if (result.data?.backup_file) {
         message += `\n${t("init.backup_file")} ${result.data.backup_file}`;
       }
       showToast(message);
@@ -429,11 +429,11 @@ export const handleAdminAccountSubmit = async (e) => {
         // 不执行重启（restart_mode = manual），前端切换为手动重启指引页
         let restartMode = "systemd";
         try {
-          const response = await fetch("/api/init/restart", {
+          const restartResponse = await fetch("/api/init/restart", {
             method: "POST",
             headers: JSON_HEADERS
           });
-          const restartResult = await parseJsonResponse(response);
+          const restartResult = await parseJsonResponse(restartResponse);
           if (restartResult?.data?.restart_mode === "manual") {
             restartMode = "manual";
           }
@@ -466,7 +466,9 @@ export const handleAdminAccountSubmit = async (e) => {
  */
 const waitForBackendRestart = async () => {
   const maxAttempts = 30;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+
+  // 递归轮询替代 for+await（no-await-in-loop）：探测间隔 1s，最多 30 次
+  const probe = async (attempt) => {
     try {
       const response = await fetch("/api/auth/init-status", {
         headers: JSON_HEADERS,
@@ -483,10 +485,16 @@ const waitForBackendRestart = async () => {
       // 服务重启窗口内连接失败属预期：debug 记录后继续下一轮
       console.debug("init restart probe failed:", error);
     }
+    if (attempt >= maxAttempts) {
+      showToast(t("init.restart_timeout"));
+      window.location.href = "/main.html";
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  showToast(t("init.restart_timeout"));
-  window.location.href = "/main.html";
+    return probe(attempt + 1);
+  };
+
+  return probe(1);
 };
 
 /** 获取并展示服务器控制台验证码。由 index.js 的 .get-captcha-btn 点击监听调用。 */

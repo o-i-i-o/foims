@@ -80,10 +80,14 @@ function initTabSwitching() {
       const tabId = this.getAttribute("data-tab");
       setActiveSubtab("visualization", tabId);
 
-      tabBtns.forEach((b) => b.classList.remove("active"));
+      tabBtns.forEach((b) => {
+        b.classList.remove("active");
+      });
       this.classList.add("active");
 
-      tabContents.forEach((content) => content.classList.remove("active"));
+      tabContents.forEach((content) => {
+        content.classList.remove("active");
+      });
       const targetTab = elementCache.get(tabId);
       if (targetTab) {
         targetTab.classList.add("active");
@@ -348,7 +352,9 @@ function updateTopologyConnectionFormVisibility() {
   const isLogical = type === "logical";
   document
     .querySelectorAll(".topo-conn-ports-group")
-    .forEach((el) => el.classList.toggle("hidden", !isLogical));
+    .forEach((el) => {
+      el.classList.toggle("hidden", !isLogical);
+    });
 }
 
 async function openTopologyConnectionModal() {
@@ -374,70 +380,83 @@ async function openTopologyConnectionModal() {
   }
   labelInput.value = "";
 
-  typeSelect.onchange = async () => {
-    updateTopologyConnectionFormVisibility();
-    if (typeSelect.value === "logical") {
-      await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
-      await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
-    }
-  };
-  sourceSelect.onchange = async () => {
-    if (typeSelect.value === "logical") {
-      await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
-    }
-  };
-  targetSelect.onchange = async () => {
-    if (typeSelect.value === "logical") {
-      await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
-    }
-  };
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!typeSelect.dataset.bound) {
+    typeSelect.dataset.bound = "true";
+    typeSelect.addEventListener("change", async () => {
+      updateTopologyConnectionFormVisibility();
+      if (typeSelect.value === "logical") {
+        await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
+        await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
+      }
+    });
+  }
+  if (!sourceSelect.dataset.bound) {
+    sourceSelect.dataset.bound = "true";
+    sourceSelect.addEventListener("change", async () => {
+      if (typeSelect.value === "logical") {
+        await loadTopologyConnectionPorts(sourcePorts, sourceSelect.value);
+      }
+    });
+  }
+  if (!targetSelect.dataset.bound) {
+    targetSelect.dataset.bound = "true";
+    targetSelect.addEventListener("change", async () => {
+      if (typeSelect.value === "logical") {
+        await loadTopologyConnectionPorts(targetPorts, targetSelect.value);
+      }
+    });
+  }
 
-  form.onsubmit = async (e) => {
-    e.preventDefault();
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
 
-    const sourceDeviceId = sourceSelect.value;
-    const targetDeviceId = targetSelect.value;
-    if (!sourceDeviceId || !targetDeviceId) {
-      showToast(t("viz.connection_device_required"), "warning");
-      return;
-    }
-    if (sourceDeviceId === targetDeviceId) {
-      showToast(t("viz.no_self_connection"), "warning");
-      return;
-    }
-
-    const body = {
-      connection_type: typeSelect.value,
-      source_device_id: sourceDeviceId,
-      target_device_id: targetDeviceId,
-      label: labelInput.value.trim() || null
-    };
-
-    if (typeSelect.value === "logical") {
-      body.source_port_ids = [...sourcePorts.selectedOptions].map((o) => o.value);
-      body.target_port_ids = [...targetPorts.selectedOptions].map((o) => o.value);
-      if (body.source_port_ids.length === 0 || body.target_port_ids.length === 0) {
-        showToast(t("viz.logical_members_required"), "warning");
+      const sourceDeviceId = sourceSelect.value;
+      const targetDeviceId = targetSelect.value;
+      if (!sourceDeviceId || !targetDeviceId) {
+        showToast(t("viz.connection_device_required"), "warning");
         return;
       }
-    }
+      if (sourceDeviceId === targetDeviceId) {
+        showToast(t("viz.no_self_connection"), "warning");
+        return;
+      }
 
-    // 重复连线预检：同设备对已有连线（任意类型，含方向翻转）时拒绝
-    const existing = topologyVisualization.connections.some(
-      (c) =>
-        (c.source_device_id === sourceDeviceId && c.target_device_id === targetDeviceId) ||
-        (c.source_device_id === targetDeviceId && c.target_device_id === sourceDeviceId)
-    );
-    if (existing) {
-      showToast(t("server.visualization.connection_duplicate"), "warning");
-      return;
-    }
-    const result = await topologyVisualization.dataManager.createConnection(body);
-    if (result) {
-      closeModal("topology-connection-modal");
-      await topologyVisualization.loadTopology();
-    }
-  };
+      const body = {
+        connection_type: typeSelect.value,
+        source_device_id: sourceDeviceId,
+        target_device_id: targetDeviceId,
+        label: labelInput.value.trim() || null
+      };
+
+      if (typeSelect.value === "logical") {
+        body.source_port_ids = [...sourcePorts.selectedOptions].map((o) => o.value);
+        body.target_port_ids = [...targetPorts.selectedOptions].map((o) => o.value);
+        if (body.source_port_ids.length === 0 || body.target_port_ids.length === 0) {
+          showToast(t("viz.logical_members_required"), "warning");
+          return;
+        }
+      }
+
+      // 重复连线预检：同设备对已有连线（任意类型，含方向翻转）时拒绝
+      const existing = topologyVisualization.connections.some(
+        (c) =>
+          (c.source_device_id === sourceDeviceId && c.target_device_id === targetDeviceId) ||
+          (c.source_device_id === targetDeviceId && c.target_device_id === sourceDeviceId)
+      );
+      if (existing) {
+        showToast(t("server.visualization.connection_duplicate"), "warning");
+        return;
+      }
+      const result = await topologyVisualization.dataManager.createConnection(body);
+      if (result) {
+        closeModal("topology-connection-modal");
+        await topologyVisualization.loadTopology();
+      }
+    });
+  }
 
   openModal("topology-connection-modal");
 }

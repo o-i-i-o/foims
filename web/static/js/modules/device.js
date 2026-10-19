@@ -115,7 +115,7 @@ export async function loadDevicesData(page = currentPage, sortBy = null, sortOrd
       columns: [
         {
           field: "id",
-          render: (v, row, index) => startIndex + index + 1,
+          render: (_v, _row, index) => startIndex + index + 1,
           className: "index-column"
         },
         { field: "name", render: (v) => escapeHtml(v) },
@@ -692,7 +692,7 @@ export async function submitDeviceForm() {
   }
 
   const snmpVersion = getElementValue("device-snmp-version") || "v2c";
-  const snmpPort = parseInt(getElementValue("device-snmp-port")) || 161;
+  const snmpPort = parseInt(getElementValue("device-snmp-port"), 10) || 161;
 
   // 功耗：空串=不记录（null）；按所选单位换算为瓦后校验，非法值直接拦截
   const powerWatts = readPowerWattsInput(powerWattsRaw, getElementValue("device-power-unit-modal"));
@@ -805,7 +805,7 @@ async function fillDeviceFormForEdit(device, cardManager, roomDetailPromise) {
       elementCache.setValue("device-cabinet-id", "");
       elementCache.setValue("device-position-id", "");
       await cardManager.setRoomContext(null);
-      await cardManager.loadExisting(device.cards || []);
+      cardManager.loadExisting(device.cards || []);
       return;
     }
   } else {
@@ -822,7 +822,7 @@ async function fillDeviceFormForEdit(device, cardManager, roomDetailPromise) {
     elementCache.setValue("device-position-id", device.position_id);
   }
 
-  await cardManager.loadExisting(device.cards || []);
+  cardManager.loadExisting(device.cards || []);
 }
 
 export async function openDeviceModal(device = null) {
@@ -870,7 +870,7 @@ export async function openDeviceModal(device = null) {
 
     if (cardManager) {
       await cardManager.setRoomContext(null);
-      await cardManager.init();
+      cardManager.init();
     }
   }
 

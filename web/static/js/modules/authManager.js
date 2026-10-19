@@ -36,7 +36,7 @@ export const loginUser = (data, rememberMe) => {
   // 切换到动态码输入步骤（复用本地登录 2FA 视图与文案）并暂存凭证，不建立会话。
   // login.js 的本地登录路径已自行处理该标记，此处兜底覆盖未检查的 LDAP
   // （及未来其他外部登录）路径
-  if (data && data.requires_two_factor) {
+  if (data?.requires_two_factor) {
     const usernameInput = document.getElementById("ldap-username");
     const passwordInput = document.getElementById("ldap-password");
     // 凭证快照连同验证码字段一并采集：后端在失败计数达阈值后强制校验
@@ -278,54 +278,58 @@ export const initChangePassword = () => {
 
     // 防重入：请求进行中忽略重复提交（快速双击会发起两次改密请求）
     let submitting = false;
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      if (submitting) {
-        return;
-      }
-      const oldPassword = elementCache.getValue("change-password-old");
-      const newPassword = elementCache.getValue("change-password-new");
-      const confirmPassword = elementCache.getValue("change-password-confirm");
-
-      if (!oldPassword || !newPassword) {
-        showToast(t("auth.password_required"), "warning");
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        showToast(t("auth.password_mismatch"), "warning");
-        return;
-      }
-
-      const submitButton = form.querySelector('[type="submit"]');
-      submitting = true;
-      if (submitButton) {
-        submitButton.disabled = true;
-      }
-
-      try {
-        const result = await apiPost("/api/auth/change-password", {
-          old_password: oldPassword,
-          new_password: newPassword
-        });
-        if (result.success) {
-          showToast(result.message, "success");
-          closeModal("change-password-modal");
-          form.reset();
-          // 改密后令牌全部失效，跳转登录页重新认证
-          setTimeout(() => redirectToLogin(), 1200);
-        } else {
-          showToast(result.message, "error");
+    // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+    if (!form.dataset.bound) {
+      form.dataset.bound = "true";
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (submitting) {
+          return;
         }
-      } catch (error) {
-        console.error("修改密码请求失败:", error);
-        showToast(t("auth.change_password_failed"), "error");
-      } finally {
-        submitting = false;
+        const oldPassword = elementCache.getValue("change-password-old");
+        const newPassword = elementCache.getValue("change-password-new");
+        const confirmPassword = elementCache.getValue("change-password-confirm");
+
+        if (!oldPassword || !newPassword) {
+          showToast(t("auth.password_required"), "warning");
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          showToast(t("auth.password_mismatch"), "warning");
+          return;
+        }
+
+        const submitButton = form.querySelector('[type="submit"]');
+        submitting = true;
         if (submitButton) {
-          submitButton.disabled = false;
+          submitButton.disabled = true;
         }
-      }
-    };
+
+        try {
+          const result = await apiPost("/api/auth/change-password", {
+            old_password: oldPassword,
+            new_password: newPassword
+          });
+          if (result.success) {
+            showToast(result.message, "success");
+            closeModal("change-password-modal");
+            form.reset();
+            // 改密后令牌全部失效，跳转登录页重新认证
+            setTimeout(() => redirectToLogin(), 1200);
+          } else {
+            showToast(result.message, "error");
+          }
+        } catch (error) {
+          console.error("修改密码请求失败:", error);
+          showToast(t("auth.change_password_failed"), "error");
+        } finally {
+          submitting = false;
+          if (submitButton) {
+            submitButton.disabled = false;
+          }
+        }
+      });
+    }
 
     openModal("change-password-modal");
   });

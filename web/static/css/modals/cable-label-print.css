@@ -13,26 +13,6 @@
     display: none;
   }
 
-  /* 打印时只保留标签打印区 */
-  @media print {
-    body > *:not(.cable-label-print-area) {
-      display: none !important; /* stylelint-disable-line declaration-no-important -- 打印时隐藏页面 UI */
-    }
-
-    body {
-      margin: 0; /* 清除浏览器默认 8px 外边距，避免标签偏离标签纸定位 */
-    }
-
-    .cable-label-print-area {
-      display: block;
-    }
-
-    @page {
-      size: 25mm 40mm; /* 步进 40mm = 标签 38mm + 间隔 2mm */
-      margin: 0;
-    }
-  }
-
   /* 单枚标签：垂直排列（上=本端编号，下=对端编号）；一枚标签独占一页 */
   .cable-label {
     width: var(--label-width);
@@ -76,5 +56,31 @@
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+}
+
+/* 顶层 responsive 层：打印遮蔽规则必须位于固定层序末位——
+ body 直接子代的 .sidebar/.main-content 在 layouts 层带 display 声明，
+ 若本规则留在 modals 层会被层序反超导致打印时应用 UI 泄漏。
+ 置于末层后无需 !important 即可压制全部应用样式 */
+@layer responsive {
+  /* 打印时只保留标签打印区 */
+  @media print {
+    body > *:not(.cable-label-print-area) {
+      display: none;
+    }
+
+    body {
+      margin: 0; /* 清除浏览器默认 8px 外边距，避免标签偏离标签纸定位 */
+    }
+
+    .cable-label-print-area {
+      display: block;
+    }
+
+    @page {
+      size: 25mm 40mm; /* 步进 40mm = 标签 38mm + 间隔 2mm */
+      margin: 0;
+    }
   }
 }

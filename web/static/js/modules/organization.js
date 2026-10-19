@@ -59,7 +59,9 @@ function findRootType(levels) {
   const allChildren = new Set();
   Object.values(levels).forEach((children) => {
     if (Array.isArray(children)) {
-      children.forEach((c) => allChildren.add(c));
+      children.forEach((c) => {
+        allChildren.add(c);
+      });
     }
   });
   const roots = Object.keys(levels).filter((k) => !allChildren.has(k));
@@ -83,7 +85,9 @@ function renderLevelsMapping(levels, separator = "<br>", plain = false) {
     if (children.length === 0) {
       paths.push([...currentPath, type]);
     } else {
-      children.forEach((child) => findPaths(child, [...currentPath, type]));
+      children.forEach((child) => {
+        findPaths(child, [...currentPath, type]);
+      });
     }
   }
   findPaths(rootType, []);
@@ -209,8 +213,10 @@ async function renderOrgTree(container, treeData) {
   container.innerHTML = "";
   const fragment = document.createDocumentFragment();
 
-  for (const node of treeData) {
-    fragment.appendChild(await renderTreeNode(node));
+  // 并行渲染顶层节点后按原顺序插入：图标获取相互独立（含缓存）
+  const renderedNodes = await Promise.all(treeData.map((node) => renderTreeNode(node)));
+  for (const el of renderedNodes) {
+    fragment.appendChild(el);
   }
 
   container.appendChild(fragment);
@@ -263,8 +269,10 @@ async function renderTreeNode(node) {
     if (!allExpanded) {
       childrenContainer.style.display = "none";
     }
-    for (const child of node.children) {
-      childrenContainer.appendChild(await renderTreeNode(child));
+    // 并行渲染子节点后按原顺序插入（与顶层渲染一致的策略）
+    const renderedChildren = await Promise.all(node.children.map((child) => renderTreeNode(child)));
+    for (const el of renderedChildren) {
+      childrenContainer.appendChild(el);
     }
     wrapper.appendChild(childrenContainer);
   }
@@ -462,7 +470,7 @@ export async function openOrgModal(org = null, parentId = null) {
 
     try {
       const allowed = await getAllowedChildTypes(parentId);
-      if (allowed && allowed.allowed_child_types && allowed.allowed_child_types.length > 0) {
+      if (allowed?.allowed_child_types && allowed.allowed_child_types.length > 0) {
         populateTypeSelectWithOptions(typeSelect, allowed.allowed_child_types);
       } else {
         typeSelect.innerHTML = `<option value="">${t("organization.no_child_allowed")}</option>`;
@@ -507,23 +515,27 @@ export async function openOrgModal(org = null, parentId = null) {
           });
 
           // 模板选择变化时，自动设置根节点类型（type_path="0"）
-          templateSelect.onchange = () => {
-            const selectedTpl = templates.find((tpl) => tpl.id === templateSelect.value);
-            if (selectedTpl && selectedTpl.levels) {
-              const rootType = findRootType(selectedTpl.levels);
-              if (rootType) {
-                // 根节点 type_path 固定为 "0"
-                typeSelect.innerHTML = "";
-                const option = document.createElement("option");
-                option.value = "0";
-                option.textContent = getOrgTypeLabel(rootType);
-                option.dataset.typeName = rootType;
-                option.selected = true;
-                typeSelect.appendChild(option);
-                typeSelect.disabled = true;
+          // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+          if (!templateSelect.dataset.bound) {
+            templateSelect.dataset.bound = "true";
+            templateSelect.addEventListener("change", () => {
+              const selectedTpl = templates.find((tpl) => tpl.id === templateSelect.value);
+              if (selectedTpl?.levels) {
+                const rootType = findRootType(selectedTpl.levels);
+                if (rootType) {
+                  // 根节点 type_path 固定为 "0"
+                  typeSelect.innerHTML = "";
+                  const option = document.createElement("option");
+                  option.value = "0";
+                  option.textContent = getOrgTypeLabel(rootType);
+                  option.dataset.typeName = rootType;
+                  option.selected = true;
+                  typeSelect.appendChild(option);
+                  typeSelect.disabled = true;
+                }
               }
-            }
-          };
+            });
+          }
         } catch (error) {
           handleError(error, t(T_KEY_OPERATION_FAILED));
         }
@@ -609,7 +621,12 @@ export async function openEmployeeModal(orgId, orgName) {
 
   const addBtn = document.getElementById("employee-add-btn");
   if (addBtn) {
-    addBtn.onclick = () => openEmployeeEditModal(orgId, null);
+    // 目标组织随每次打开变化，存 dataset 供一次性绑定的按钮读取（dataset.bound 防重）
+    addBtn.dataset.orgId = orgId || "";
+    if (!addBtn.dataset.bound) {
+      addBtn.dataset.bound = "true";
+      addBtn.addEventListener("click", () => openEmployeeEditModal(addBtn.dataset.orgId, null));
+    }
   }
 
   await loadEmployeeList(orgId);
@@ -682,52 +699,56 @@ async function openEmployeeEditModal(orgId, employee) {
   elementCache.setValue("employee-edit-hire-date", employee?.hire_date || "");
 
   const form = elementCache.get("employee-edit-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const id = elementCache.getValue("employee-edit-id");
-    const name = elementCache.getValue("employee-edit-name").trim();
-    if (!name) {
-      showToast(t("employee.name_required"), "warning");
-      return;
-    }
-
-    const body = {
-      name,
-      gender: elementCache.getValue("employee-edit-gender") || "unknown",
-      phone: elementCache.getValue("employee-edit-phone").trim(),
-      email: elementCache.getValue("employee-edit-email").trim(),
-      hire_date: elementCache.getValue("employee-edit-hire-date") || null
-    };
-
-    // 防重复提交：请求期间禁用保存按钮，结束后恢复（双击会重复提交产生重复员工）
-    const saveBtn = form.querySelector("button[type='submit']");
-    const originalText = saveBtn?.textContent;
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.textContent = t("common.saving");
-    }
-
-    try {
-      const result = id
-        ? await apiPut(`/api/resources/employees/${id}`, body)
-        : await apiPost("/api/resources/employees", { ...body, org_id: orgId });
-      if (result.success) {
-        showToast(result.message, "success");
-        closeModal("employee-edit-modal");
-        form.reset();
-        loadEmployeeList(orgId);
-      } else {
-        showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = elementCache.getValue("employee-edit-id");
+      const name = elementCache.getValue("employee-edit-name").trim();
+      if (!name) {
+        showToast(t("employee.name_required"), "warning");
+        return;
       }
-    } catch (error) {
-      handleError(error, t(T_KEY_OPERATION_FAILED));
-    } finally {
+
+      const body = {
+        name,
+        gender: elementCache.getValue("employee-edit-gender") || "unknown",
+        phone: elementCache.getValue("employee-edit-phone").trim(),
+        email: elementCache.getValue("employee-edit-email").trim(),
+        hire_date: elementCache.getValue("employee-edit-hire-date") || null
+      };
+
+      // 防重复提交：请求期间禁用保存按钮，结束后恢复（双击会重复提交产生重复员工）
+      const saveBtn = form.querySelector("button[type='submit']");
+      const originalText = saveBtn?.textContent;
       if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = originalText;
+        saveBtn.disabled = true;
+        saveBtn.textContent = t("common.saving");
       }
-    }
-  };
+
+      try {
+        const result = id
+          ? await apiPut(`/api/resources/employees/${id}`, body)
+          : await apiPost("/api/resources/employees", { ...body, org_id: orgId });
+        if (result.success) {
+          showToast(result.message, "success");
+          closeModal("employee-edit-modal");
+          form.reset();
+          loadEmployeeList(orgId);
+        } else {
+          showToast(`${t(T_KEY_OPERATION_FAILED)}: ${result.message}`, "error");
+        }
+      } catch (error) {
+        handleError(error, t(T_KEY_OPERATION_FAILED));
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = originalText;
+        }
+      }
+    });
+  }
 }
 
 /** 删除员工（工位管理人的员工引用会自动解绑） */
@@ -991,9 +1012,9 @@ async function openTemplateEditor(template = null) {
         }
         try {
           const templates = await getTemplates();
-          const template = templates.find((tpl) => tpl.name === quickFill.value);
-          if (template) {
-            loadMappingIntoTree(treeContainer, template.levels, template.icons || {});
+          const selectedTemplate = templates.find((tpl) => tpl.name === quickFill.value);
+          if (selectedTemplate) {
+            loadMappingIntoTree(treeContainer, selectedTemplate.levels, selectedTemplate.icons || {});
           }
         } catch (error) {
           handleError(error, t("common.load_failed"));
@@ -1105,7 +1126,9 @@ function showIconPicker(iconBtn) {
   if (dismissActiveIconPicker) {
     dismissActiveIconPicker();
   }
-  document.querySelectorAll(".org-icon-picker").forEach((p) => p.remove());
+  document.querySelectorAll(".org-icon-picker").forEach((p) => {
+    p.remove();
+  });
 
   const picker = document.createElement("div");
   picker.className = "org-icon-picker";
@@ -1192,7 +1215,9 @@ function loadMappingIntoTree(container, mapping, icons = {}) {
     parentContainer.appendChild(node);
     const cc = getChildrenContainer(node);
     const children = mapping[type] || [];
-    children.forEach((childType) => addTypeWithChildren(cc, childType, false));
+    children.forEach((childType) => {
+      addTypeWithChildren(cc, childType, false);
+    });
   }
 
   addTypeWithChildren(container, rootType, true);
@@ -1285,7 +1310,7 @@ function collectIcons(container) {
       return;
     }
     const iconBtn = node.querySelector(":scope > .org-template-type-row .org-template-icon-btn");
-    if (iconBtn && iconBtn.dataset.icon) {
+    if (iconBtn?.dataset.icon) {
       icons[type] = iconBtn.dataset.icon;
     }
     const cc = getChildrenContainer(node);

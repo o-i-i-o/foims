@@ -417,7 +417,7 @@ export class SVGCore extends SVGCanvasBase {
       this.container.style.position = "relative";
     }
 
-    if (!this.scrollSpacer || !this.scrollSpacer.isConnected) {
+    if (!this.scrollSpacer?.isConnected) {
       const spacer = document.createElement("div");
       spacer.style.cssText = "position:absolute;top:0;left:0;height:1px;pointer-events:none;";
       this.container.appendChild(spacer);

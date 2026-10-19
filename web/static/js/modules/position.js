@@ -27,8 +27,8 @@ export async function submitCabinetPositionForm() {
   const parsedId = id && id !== "" ? id : null;
   const name = elementCache.getValue("cabinet-position-name");
   const cabinetId = elementCache.getValue("cabinet-position-cabinet");
-  const startU = parseInt(elementCache.getValue("cabinet-position-start-u"));
-  const endU = parseInt(elementCache.getValue("cabinet-position-end-u"));
+  const startU = parseInt(elementCache.getValue("cabinet-position-start-u"), 10);
+  const endU = parseInt(elementCache.getValue("cabinet-position-end-u"), 10);
   const description = elementCache.getValue("cabinet-position-description");
 
   // 验证必填字段
@@ -43,12 +43,12 @@ export async function submitCabinetPositionForm() {
   }
 
   // 验证U位是否为有效数字
-  if (isNaN(startU) || startU <= 0) {
+  if (Number.isNaN(startU) || startU <= 0) {
     showToast(t("cabinet_position.start_u_invalid"), "warning");
     return;
   }
 
-  if (isNaN(endU) || endU <= 0) {
+  if (Number.isNaN(endU) || endU <= 0) {
     showToast(t("cabinet_position.end_u_invalid"), "warning");
     return;
   }
@@ -203,7 +203,7 @@ export async function openCabinetPositionModal(position = null) {
     // 通过 cabinet_id 从 cabinets 数据源只读获取房间信息
     if (position.cabinet_id) {
       const roomInfo = await loadRoomByCabinetId(position.cabinet_id);
-      if (roomInfo && roomInfo.roomId) {
+      if (roomInfo?.roomId) {
         elementCache.setValue("cabinet-position-room", roomInfo.roomId);
         await handleRoomChange();
         elementCache.setValue("cabinet-position-cabinet", position.cabinet_id);

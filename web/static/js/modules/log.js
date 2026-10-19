@@ -112,11 +112,15 @@ export function initLogTabs() {
         }
 
         // 更新按钮状态
-        tabBtns.forEach((b) => b.classList.remove("active"));
+        tabBtns.forEach((b) => {
+          b.classList.remove("active");
+        });
         this.classList.add("active");
 
         // 更新内容显示
-        tabContents.forEach((content) => content.classList.remove("active"));
+        tabContents.forEach((content) => {
+          content.classList.remove("active");
+        });
         document.getElementById(`${tabId}-tab`).classList.add("active");
 
         // 加载对应类型的数据
@@ -148,11 +152,15 @@ export function initLogTabs() {
     const targetTabBtn = document.querySelector(`#logs [data-tab="${CSS.escape(targetTabId)}"]`);
     if (targetTabBtn && !targetTabBtn.classList.contains("active")) {
       // 更新按钮状态
-      tabBtns.forEach((b) => b.classList.remove("active"));
+      tabBtns.forEach((b) => {
+        b.classList.remove("active");
+      });
       targetTabBtn.classList.add("active");
 
       // 更新内容显示（getElementById 按字面匹配、不解析选择器，无需转义）
-      tabContents.forEach((content) => content.classList.remove("active"));
+      tabContents.forEach((content) => {
+        content.classList.remove("active");
+      });
       document.getElementById(`${targetTabId}-tab`)?.classList.add("active");
     }
     return;
@@ -165,10 +173,14 @@ export function initLogTabs() {
     ? document.querySelector(`#logs [data-tab="${CSS.escape(savedTabId)}"]`)
     : null;
   if (savedTabBtn && !savedTabBtn.classList.contains("active")) {
-    tabBtns.forEach((b) => b.classList.remove("active"));
+    tabBtns.forEach((b) => {
+      b.classList.remove("active");
+    });
     savedTabBtn.classList.add("active");
 
-    tabContents.forEach((content) => content.classList.remove("active"));
+    tabContents.forEach((content) => {
+      content.classList.remove("active");
+    });
     document.getElementById(`${savedTabId}-tab`)?.classList.add("active");
   }
 }

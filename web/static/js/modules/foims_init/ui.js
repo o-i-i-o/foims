@@ -15,7 +15,7 @@ export const goToStep = (stepNum) => {
   });
   document.querySelector(`.step-panel[data-step="${stepNum}"]`)?.classList.add("active");
   document.querySelectorAll(".step").forEach((step) => {
-    const stepData = parseInt(step.dataset.step);
+    const stepData = parseInt(step.dataset.step, 10);
     if (stepData < stepNum) {
       step.classList.add("completed");
       step.classList.remove("active");

@@ -29,8 +29,8 @@
     flex-shrink: 0;
   }
 
-  .form-group label .required,
-  .required {
+  .required,
+  .form-group label .required {
     color: var(--color-danger);
     margin-left: 2px;
     font-weight: 700;
@@ -133,6 +133,14 @@
 
   .form-row .form-group {
     margin-bottom: 0;
+  }
+
+  /* 功率单位下拉：不随同行表单变体的控件撑满规则拉伸，保持自适应宽
+   （声明提前避免与 .modal/.config-card 高特异度 select 组成降序对） */
+  .power-input-row select {
+    width: auto;
+    flex: 0 0 auto;
+    min-width: 72px;
   }
 
   /* ===== 同行表单变体：label 定宽居中、控件与 label 同行撑满剩余空间 =====
@@ -357,11 +365,5 @@
     flex: 1;
     min-width: 0;
     width: auto;
-  }
-
-  .power-input-row select {
-    width: auto;
-    flex: 0 0 auto;
-    min-width: 72px;
   }
 }

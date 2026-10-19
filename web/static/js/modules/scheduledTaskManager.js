@@ -35,7 +35,7 @@ function setupEventListeners() {
   const taskTable = document.querySelector("#scheduled-tasks-table");
   if (taskTable && !taskTable.dataset.handlerAttached) {
     taskTable.dataset.handlerAttached = "true";
-    initSortEvents("scheduled-tasks-table", taskTableState, (page, sortBy, sortOrder) =>
+    initSortEvents("scheduled-tasks-table", taskTableState, (_page, sortBy, sortOrder) =>
       loadScheduledTasks(sortBy, sortOrder)
     );
     taskTable.addEventListener("click", (e) => {
@@ -290,9 +290,9 @@ async function editScheduledTask(id) {
 
     if (task.task_type === "mac_sync" && task.config) {
       // 勾选设备：config.device_ids 与现存复选项求交，已删除设备自然剔除
-      (task.config.device_ids || []).forEach((id) => {
+      (task.config.device_ids || []).forEach((deviceId) => {
         const checkbox = document.querySelector(
-          `#scheduled-task-device-list input[value="${CSS.escape(id)}"]`
+          `#scheduled-task-device-list input[value="${CSS.escape(deviceId)}"]`
         );
         if (checkbox) {
           checkbox.checked = true;
@@ -519,9 +519,9 @@ async function runScheduledTask(id) {
     const response = await apiPost(`/api/system/scheduled-tasks/${id}/run`);
     if (response.success) {
       const result = response.data?.result;
-      if (result && result.ok) {
+      if (result?.ok) {
         showToast(`${t("scheduled_tasks.run_success")}: ${result.ok}`, "success");
-      } else if (result && result.err) {
+      } else if (result?.err) {
         showToast(`${t("scheduled_tasks.run_failed")}: ${result.err}`, "error");
       } else {
         showToast(t("scheduled_tasks.run_success"), "success");

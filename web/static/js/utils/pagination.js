@@ -45,7 +45,7 @@ export function renderPagination(
 
   const showSizeSelector = typeof options.onPageSizeChange === "function";
   const pageSizeOptions =
-    options.pageSizeOptions && options.pageSizeOptions.length
+    options.pageSizeOptions?.length
       ? options.pageSizeOptions
       : DEFAULT_PAGE_SIZE_OPTIONS;
   const currentPageSize = options.pageSize || pageSizeOptions[0];
@@ -76,7 +76,7 @@ export function renderPagination(
 
   pagination.querySelectorAll(".pagination-btn, .pagination-page").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const page = parseInt(btn.dataset.page);
+      const page = parseInt(btn.dataset.page, 10);
       if (page >= 1 && page <= totalPages && onPageChange) {
         onPageChange(page);
       }
@@ -87,7 +87,7 @@ export function renderPagination(
     const sizeSelect = pagination.querySelector(".pagination-size-selector");
     if (sizeSelect) {
       sizeSelect.addEventListener("change", () => {
-        const size = parseInt(sizeSelect.value);
+        const size = parseInt(sizeSelect.value, 10);
         if (Number.isFinite(size) && options.onPageSizeChange) {
           options.onPageSizeChange(size);
         }
@@ -99,7 +99,7 @@ export function renderPagination(
     const jumpInput = pagination.querySelector(".pagination-jump-input");
     const jumpBtn = pagination.querySelector(".pagination-jump-btn");
     const doJump = () => {
-      const page = parseInt(jumpInput.value);
+      const page = parseInt(jumpInput.value, 10);
       if (Number.isFinite(page) && page >= 1 && page <= totalPages && onPageChange) {
         onPageChange(page);
       }

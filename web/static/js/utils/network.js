@@ -21,7 +21,7 @@ export function isValidIPv4(ip) {
       return false;
     }
     const num = parseInt(part, 10);
-    if (isNaN(num) || num < 0 || num > 255) {
+    if (Number.isNaN(num) || num < 0 || num > 255) {
       return false;
     }
     // 前导零一律拒绝（"01" 与 "00" 同口径）：
@@ -85,7 +85,7 @@ export function isValidIP(ip) {
 /** IPv4 点分十进制 → BigInt，非法输入返回 null。 */
 export function ipv4ToInt(ip) {
   const parts = ip.split(".").map((p) => parseInt(p, 10));
-  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
     return null;
   }
   return (
@@ -115,7 +115,7 @@ export function ipv6ToInt(ipv6) {
 export function ipv4CidrToRange(cidr) {
   const [ip, prefixLen] = cidr.split("/");
   const prefix = parseInt(prefixLen, 10);
-  if (!ip || isNaN(prefix) || prefix < 0 || prefix > 32) {
+  if (!ip || Number.isNaN(prefix) || prefix < 0 || prefix > 32) {
     return null;
   }
 
@@ -136,7 +136,7 @@ export function ipv4CidrToRange(cidr) {
 export function ipv6CidrToRange(cidr) {
   const [ip, prefixLen] = cidr.split("/");
   const prefix = parseInt(prefixLen, 10);
-  if (!ip || isNaN(prefix) || prefix < 0 || prefix > 128) {
+  if (!ip || Number.isNaN(prefix) || prefix < 0 || prefix > 128) {
     return null;
   }
 

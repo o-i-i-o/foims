@@ -63,10 +63,6 @@
     border-color: var(--color-border-light);
   }
 
-  .org-node:hover .org-node-actions {
-    opacity: 1;
-  }
-
   /* 展开/折叠按钮 */
   .org-toggle {
     display: inline-flex;
@@ -84,12 +80,12 @@
     color: var(--color-primary);
   }
 
-  .org-toggle.expanded .org-toggle-icon {
-    transform: rotate(90deg);
-  }
-
   .org-toggle-icon {
     transition: transform var(--transition-fast);
+  }
+
+  .org-toggle.expanded .org-toggle-icon {
+    transform: rotate(90deg);
   }
 
   .org-toggle-placeholder {
@@ -127,6 +123,17 @@
     height: 28px;
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  /* SVG 图标尺寸基础规则（低特异度）集中声明在 .org-node-icon 作用域覆盖之前 */
+  .org-template-icon-btn svg {
+    width: 1.35em;
+    height: 1.35em;
+  }
+
+  .org-icon-picker-item svg {
+    width: 1.35rem;
+    height: 1.35rem;
   }
 
   .org-node-icon .org-icon svg {
@@ -229,6 +236,11 @@
     opacity: 0;
     transition: opacity var(--transition-fast);
     flex-shrink: 0;
+  }
+
+  /* 悬停显形：默认 opacity:0，悬停节点时显示操作按钮 */
+  .org-node:hover .org-node-actions {
+    opacity: 1;
   }
 
   .org-node-actions .btn {
@@ -432,6 +444,13 @@
     position: relative;
   }
 
+  .org-template-type-row {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    padding: 3px 0;
+  }
+
   .org-template-type-root > .org-template-type-row {
     background: var(--color-primary-light);
     padding: 6px 10px;
@@ -449,13 +468,6 @@
     color: var(--color-bg-white);
     flex-shrink: 0;
     letter-spacing: 1px;
-  }
-
-  .org-template-type-row {
-    display: flex;
-    gap: var(--space-sm);
-    align-items: center;
-    padding: 3px 0;
   }
 
   /* 图标选择按钮（内嵌 SVG 图标） */
@@ -477,11 +489,6 @@
       border-color var(--transition-fast),
       background-color var(--transition-fast);
     position: relative;
-  }
-
-  .org-template-icon-btn svg {
-    width: 1.35em;
-    height: 1.35em;
   }
 
   .org-template-icon-btn .org-icon-legacy {
@@ -541,11 +548,6 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background-color var(--transition-fast);
-  }
-
-  .org-icon-picker-item svg {
-    width: 1.35rem;
-    height: 1.35rem;
   }
 
   .org-icon-picker-item:hover {

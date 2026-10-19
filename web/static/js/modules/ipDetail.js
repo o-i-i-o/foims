@@ -201,10 +201,14 @@ async function openPullMacModal() {
   }
 
   const form = document.getElementById("pull-mac-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    await pullIpMacData();
-  };
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (form && !form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await pullIpMacData();
+    });
+  }
 
   openModal("pull-mac-modal");
 }
@@ -317,12 +321,12 @@ export async function loadIpMacData(
         columns: [
           {
             field: "id",
-            render: (v, row, index) => startIndex + index + 1,
+            render: (_v, _row, index) => startIndex + index + 1,
             className: "index-column"
           },
           {
             field: "location",
-            render: (v, row) => {
+            render: (_v, row) => {
               return escapeHtml(
                 row.workstation_name ||
                   row.cabinet_name ||

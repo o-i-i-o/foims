@@ -29,10 +29,14 @@ export function initSystemTabs() {
         const tabId = this.getAttribute("data-tab");
         setActiveSubtab("system", tabId);
 
-        tabBtns.forEach((b) => b.classList.remove("active"));
+        tabBtns.forEach((b) => {
+          b.classList.remove("active");
+        });
         this.classList.add("active");
 
-        tabContents.forEach((content) => content.classList.remove("active"));
+        tabContents.forEach((content) => {
+          content.classList.remove("active");
+        });
         const tabContentElement = elementCache.get(`${tabId}-tab`);
         if (tabContentElement) {
           tabContentElement.classList.add("active");
@@ -301,7 +305,7 @@ async function saveSystemConfig() {
   try {
     const serverConfig = {
       ...currentServerConfig,
-      page_timeout: parseInt(elementCache.getValue("page-timeout")) || 30,
+      page_timeout: parseInt(elementCache.getValue("page-timeout"), 10) || 30,
       public_url: elementCache.getValue("public-url") || ""
     };
 
@@ -571,7 +575,7 @@ function waitForServiceRecovery(service) {
           result.success && Array.isArray(result.data)
             ? result.data.find((item) => item.name === service)
             : null;
-        if (target && target.active) {
+        if (target?.active) {
           clearInterval(timer);
           showToast(t("services.restart_recovered"), "success");
           if (service === "foims") {
@@ -647,7 +651,7 @@ async function saveSmtpConfig() {
     const secureType = elementCache.getValue("smtp-secure-type");
     const smtpConfig = {
       host: elementCache.getValue("smtp-host"),
-      port: parseInt(elementCache.getValue("smtp-port")),
+      port: parseInt(elementCache.getValue("smtp-port"), 10),
       username: elementCache.getValue("smtp-username"),
       password: elementCache.getValue("smtp-password"),
       from: elementCache.getValue("smtp-from"),
@@ -733,7 +737,9 @@ function renderSnmpTrapUsers(users) {
     return;
   }
   tbody.innerHTML = "";
-  users.forEach((user) => tbody.appendChild(buildSnmpTrapUserRow(user)));
+  users.forEach((user) => {
+    tbody.appendChild(buildSnmpTrapUserRow(user));
+  });
   showSnmpTrapUsersEmptyRow();
 }
 
@@ -1279,7 +1285,7 @@ export async function loadNotificationSettings() {
 
     // 通知方式开关：后端未配置或字段缺失时默认全开（与后端 serde 默认值一致）
     const methods =
-      settingsResult.success && settingsResult.data && settingsResult.data.methods
+      settingsResult.success && settingsResult.data?.methods
         ? settingsResult.data.methods
         : {};
     const macChangeToggle = elementCache.get("notify-method-mac-change");
@@ -1659,7 +1665,7 @@ export async function clearLogs() {
 
   // 空或非数字视为未填写：直接提示，不按 0（清空全部）处理，
   // 避免误触不可逆的全量清理，也避免确认文案与请求体出现 NaN/null
-  if (daysInput === "" || isNaN(parsedDays)) {
+  if (daysInput === "" || Number.isNaN(parsedDays)) {
     showToast(t("logs.days_required"), "warning");
     return;
   }
@@ -2051,41 +2057,45 @@ async function openCaGenerateModal() {
   }
 
   const form = elementCache.get("ca-generate-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    if (caGenerateSaving) {
-      return;
-    }
-    caGenerateSaving = true;
-    try {
-      const fd = new FormData(form);
-      const body = {
-        common_name: String(fd.get("common_name") || "").trim(),
-        organization: certOptionalField(fd.get("organization")),
-        organizational_unit: certOptionalField(fd.get("organizational_unit")),
-        country: certOptionalField(fd.get("country")),
-        state: certOptionalField(fd.get("state")),
-        locality: certOptionalField(fd.get("locality")),
-        validity_days: parseInt(fd.get("validity_days"), 10) || null
-      };
-      if (!body.common_name) {
-        showToast(t("cert.common_name_required"), "warning");
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (caGenerateSaving) {
         return;
       }
+      caGenerateSaving = true;
+      try {
+        const fd = new FormData(form);
+        const body = {
+          common_name: String(fd.get("common_name") || "").trim(),
+          organization: certOptionalField(fd.get("organization")),
+          organizational_unit: certOptionalField(fd.get("organizational_unit")),
+          country: certOptionalField(fd.get("country")),
+          state: certOptionalField(fd.get("state")),
+          locality: certOptionalField(fd.get("locality")),
+          validity_days: parseInt(fd.get("validity_days"), 10) || null
+        };
+        if (!body.common_name) {
+          showToast(t("cert.common_name_required"), "warning");
+          return;
+        }
 
-      const result = await apiPost("/api/system/certificate/ca/generate", body);
-      if (result.success) {
-        showToast(result.message, "success");
-        closeModal("ca-generate-modal");
-        form.reset();
-        loadCertificateInventory();
-      } else {
-        showToast(result.message, "error");
+        const result = await apiPost("/api/system/certificate/ca/generate", body);
+        if (result.success) {
+          showToast(result.message, "success");
+          closeModal("ca-generate-modal");
+          form.reset();
+          loadCertificateInventory();
+        } else {
+          showToast(result.message, "error");
+        }
+      } finally {
+        caGenerateSaving = false;
       }
-    } finally {
-      caGenerateSaving = false;
-    }
-  };
+    });
+  }
 
   openModal("ca-generate-modal");
 }
@@ -2099,43 +2109,47 @@ async function openCaImportModal() {
   }
 
   const form = elementCache.get("ca-import-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    if (caImportSaving) {
-      return;
-    }
-    caImportSaving = true;
-    try {
-      const caFile = elementCache.get("ca-file")?.files[0];
-      const caKeyFile = elementCache.get("ca-key-file")?.files[0];
-      if (!caFile || !caKeyFile) {
-        showToast(t("cert.file_required"), "warning");
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (caImportSaving) {
         return;
       }
+      caImportSaving = true;
+      try {
+        const caFile = elementCache.get("ca-file")?.files[0];
+        const caKeyFile = elementCache.get("ca-key-file")?.files[0];
+        if (!caFile || !caKeyFile) {
+          showToast(t("cert.file_required"), "warning");
+          return;
+        }
 
-      const fd = new FormData();
-      fd.append("cert", caFile);
-      fd.append("key", caKeyFile);
+        const fd = new FormData();
+        fd.append("cert", caFile);
+        fd.append("key", caKeyFile);
 
-      const result = await apiRequest("/api/system/certificate/ca/import", {
-        method: "POST",
-        body: fd
-      });
-      if (result.success) {
-        showToast(result.message, "success");
-        closeModal("ca-import-modal");
-        form.reset();
-        loadCertificateInventory();
-      } else {
-        showToast(result.message, "error");
+        const result = await apiRequest("/api/system/certificate/ca/import", {
+          method: "POST",
+          body: fd
+        });
+        if (result.success) {
+          showToast(result.message, "success");
+          closeModal("ca-import-modal");
+          form.reset();
+          loadCertificateInventory();
+        } else {
+          showToast(result.message, "error");
+        }
+      } catch (error) {
+        console.error("导入CA失败:", error);
+        showToast(t("cert.import_failed"), "error");
+      } finally {
+        caImportSaving = false;
       }
-    } catch (error) {
-      console.error("导入CA失败:", error);
-      showToast(t("cert.import_failed"), "error");
-    } finally {
-      caImportSaving = false;
-    }
-  };
+    });
+  }
 
   openModal("ca-import-modal");
 }
@@ -2180,54 +2194,58 @@ async function openCertGenerateModal() {
   }
 
   const form = elementCache.get("cert-generate-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    if (certGenerateSaving) {
-      return;
-    }
-    certGenerateSaving = true;
-    try {
-      const fd = new FormData(form);
-      const sans = String(fd.get("subject_alt_names") || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      const caId = String(fd.get("ca_id") || "").trim();
-      if (!caId) {
-        showToast(t("cert.ca_required"), "warning");
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (certGenerateSaving) {
         return;
       }
+      certGenerateSaving = true;
+      try {
+        const fd = new FormData(form);
+        const sans = String(fd.get("subject_alt_names") || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
 
-      const body = {
-        common_name: String(fd.get("common_name") || "").trim(),
-        organization: certOptionalField(fd.get("organization")),
-        organizational_unit: certOptionalField(fd.get("organizational_unit")),
-        country: certOptionalField(fd.get("country")),
-        state: certOptionalField(fd.get("state")),
-        locality: certOptionalField(fd.get("locality")),
-        validity_days: parseInt(fd.get("validity_days"), 10) || null,
-        subject_alt_names: sans.length > 0 ? sans : null,
-        ca_id: caId
-      };
-      if (!body.common_name) {
-        showToast(t("cert.common_name_required"), "warning");
-        return;
-      }
+        const caId = String(fd.get("ca_id") || "").trim();
+        if (!caId) {
+          showToast(t("cert.ca_required"), "warning");
+          return;
+        }
 
-      const result = await apiPost("/api/system/certificate/generate", body);
-      if (result.success) {
-        showToast(result.message, "success");
-        closeModal("cert-generate-modal");
-        form.reset();
-        loadCertificateInventory();
-      } else {
-        showToast(result.message, "error");
+        const body = {
+          common_name: String(fd.get("common_name") || "").trim(),
+          organization: certOptionalField(fd.get("organization")),
+          organizational_unit: certOptionalField(fd.get("organizational_unit")),
+          country: certOptionalField(fd.get("country")),
+          state: certOptionalField(fd.get("state")),
+          locality: certOptionalField(fd.get("locality")),
+          validity_days: parseInt(fd.get("validity_days"), 10) || null,
+          subject_alt_names: sans.length > 0 ? sans : null,
+          ca_id: caId
+        };
+        if (!body.common_name) {
+          showToast(t("cert.common_name_required"), "warning");
+          return;
+        }
+
+        const result = await apiPost("/api/system/certificate/generate", body);
+        if (result.success) {
+          showToast(result.message, "success");
+          closeModal("cert-generate-modal");
+          form.reset();
+          loadCertificateInventory();
+        } else {
+          showToast(result.message, "error");
+        }
+      } finally {
+        certGenerateSaving = false;
       }
-    } finally {
-      certGenerateSaving = false;
-    }
-  };
+    });
+  }
 
   openModal("cert-generate-modal");
 }
@@ -2241,48 +2259,52 @@ async function openCertImportModal() {
   }
 
   const form = elementCache.get("cert-import-form");
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    if (certImportSaving) {
-      return;
-    }
-    certImportSaving = true;
-    try {
-      const certFile = elementCache.get("cert-file")?.files[0];
-      const keyFile = elementCache.get("key-file")?.files[0];
-      if (!certFile || !keyFile) {
-        showToast(t("cert.file_required"), "warning");
+  // 模态框 DOM 每次打开重建（closeModal 销毁重建），dataset.bound 防同一存活期重复绑定
+  if (!form.dataset.bound) {
+    form.dataset.bound = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (certImportSaving) {
         return;
       }
+      certImportSaving = true;
+      try {
+        const certFile = elementCache.get("cert-file")?.files[0];
+        const keyFile = elementCache.get("key-file")?.files[0];
+        if (!certFile || !keyFile) {
+          showToast(t("cert.file_required"), "warning");
+          return;
+        }
 
-      const fd = new FormData();
-      fd.append("cert", certFile);
-      fd.append("key", keyFile);
-      // 附带的 CA（可选）仅供终端导出信任，不参与证书/私钥校验
-      const caFile = elementCache.get("cert-ca-file")?.files[0];
-      if (caFile) {
-        fd.append("ca", caFile);
-      }
+        const fd = new FormData();
+        fd.append("cert", certFile);
+        fd.append("key", keyFile);
+        // 附带的 CA（可选）仅供终端导出信任，不参与证书/私钥校验
+        const caFile = elementCache.get("cert-ca-file")?.files[0];
+        if (caFile) {
+          fd.append("ca", caFile);
+        }
 
-      const result = await apiRequest("/api/system/certificate/import", {
-        method: "POST",
-        body: fd
-      });
-      if (result.success) {
-        showToast(result.message, "success");
-        closeModal("cert-import-modal");
-        form.reset();
-        loadCertificateInventory();
-      } else {
-        showToast(result.message, "error");
+        const result = await apiRequest("/api/system/certificate/import", {
+          method: "POST",
+          body: fd
+        });
+        if (result.success) {
+          showToast(result.message, "success");
+          closeModal("cert-import-modal");
+          form.reset();
+          loadCertificateInventory();
+        } else {
+          showToast(result.message, "error");
+        }
+      } catch (error) {
+        console.error("导入证书失败:", error);
+        showToast(t("cert.import_failed"), "error");
+      } finally {
+        certImportSaving = false;
       }
-    } catch (error) {
-      console.error("导入证书失败:", error);
-      showToast(t("cert.import_failed"), "error");
-    } finally {
-      certImportSaving = false;
-    }
-  };
+    });
+  }
 
   openModal("cert-import-modal");
 }

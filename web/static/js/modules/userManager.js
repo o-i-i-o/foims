@@ -484,7 +484,7 @@ async function handleUser2faEnable() {
 
   const code = codeInput.value;
 
-  if (!code || code.length !== 6) {
+  if (code?.length !== 6) {
     errorDiv.textContent = t("two_factor.verify_code_placeholder");
     errorDiv.classList.add("show");
     return;
@@ -529,7 +529,7 @@ async function handleUser2faDisable() {
 
   const code = codeInput.value;
 
-  if (!code || code.length !== 6) {
+  if (code?.length !== 6) {
     errorDiv.textContent = t("two_factor.verify_code_placeholder");
     errorDiv.classList.add("show");
     return;

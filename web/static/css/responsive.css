@@ -96,8 +96,21 @@
       padding-left: 1rem;
     }
 
+    .footer-btn {
+      width: auto;
+      min-height: 0;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.875rem;
+      box-shadow: none;
+    }
+
     body.sidebar-collapsed .footer-btn {
       gap: var(--space-sm);
+    }
+
+    .main-content {
+      margin-left: 0;
+      padding: 1rem;
     }
 
     body.sidebar-collapsed .main-content {
@@ -118,20 +131,6 @@
       padding: 0.25rem 0.5rem;
       font-size: 0.875rem;
       box-shadow: none;
-    }
-
-    .footer-btn {
-      width: auto;
-      min-height: 0;
-      padding: 0.4rem 0.8rem;
-      font-size: 0.875rem;
-      box-shadow: none;
-    }
-
-    /* ===== 主内容区 ===== */
-    .main-content {
-      margin-left: 0;
-      padding: 1rem;
     }
 
     /* 表格压缩 */

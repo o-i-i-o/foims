@@ -34,7 +34,9 @@ function resetDynamicListContainer(manager) {
   const { itemSelector, emptyClassName } = manager.config;
   manager.container
     .querySelectorAll(`${itemSelector}, .${emptyClassName}`)
-    .forEach((el) => el.remove());
+    .forEach((el) => {
+      el.remove();
+    });
 }
 
 // 两个动态列表管理器（机位/配线架）共用的 init：确保容器、绑定底部
@@ -118,7 +120,9 @@ class CabinetPositionsManager extends DynamicRowManager {
     resetDynamicListContainer(this);
 
     if (positions?.length) {
-      positions.forEach((pos) => this.addItem(pos));
+      positions.forEach((pos) => {
+        this.addItem(pos);
+      });
     }
     this.updateEmptyState();
   }
@@ -200,7 +204,9 @@ class CabinetPatchPanelsManager extends DynamicRowManager {
     }
     resetDynamicListContainer(this);
     if (patchPanels?.length) {
-      patchPanels.forEach((pp) => this.addItem(pp));
+      patchPanels.forEach((pp) => {
+        this.addItem(pp);
+      });
     }
     this.updateEmptyState();
   }
@@ -274,7 +280,7 @@ export async function loadCabinetsData(page = currentPage, sortBy = null, sortOr
       columns: [
         {
           field: "id",
-          render: (v, row, index) => startIndex + index + 1,
+          render: (_v, _row, index) => startIndex + index + 1,
           className: "index-column"
         },
         { field: "room_name", render: (v) => escapeHtml(v) || "-" },
@@ -475,7 +481,7 @@ export async function submitCabinetForm() {
     return;
   }
 
-  if (isNaN(capacity) || capacity <= 0) {
+  if (Number.isNaN(capacity) || capacity <= 0) {
     showToast(t("cabinet.capacity_invalid"), "warning");
     return;
   }

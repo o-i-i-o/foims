@@ -110,7 +110,9 @@ export function initThSearchPopovers(tableSelector) {
       popover
         .closest("table")
         ?.querySelectorAll(".th-search-popover.open")
-        .forEach((p) => p.classList.remove("open"));
+        .forEach((p) => {
+          p.classList.remove("open");
+        });
 
       if (willOpen) {
         popover.classList.add("open");
@@ -445,7 +447,9 @@ export function appendPaginationToTable(container, data, onPageChange, options =
   if (tableContainer) {
     // 分页插在 .table-container 之后（同级）：容器是 overflow-x 滚动容器，
     // 内部元素 sticky 无法相对视口固定，移出后分页条才能吸附在页脚
-    tableContainer.querySelectorAll(".pagination-container").forEach((p) => p.remove());
+    tableContainer.querySelectorAll(".pagination-container").forEach((p) => {
+      p.remove();
+    });
     const nextSibling = tableContainer.nextElementSibling;
     if (nextSibling?.classList.contains("pagination-container")) {
       nextSibling.remove();
@@ -475,7 +479,7 @@ export function appendPaginationToTable(container, data, onPageChange, options =
   // 仅一页时仍可能需要展示每页条数选择器：完全无可交互内容时才短路返回
   const hasSizeSelector = typeof options.onPageSizeChange === "function";
   if (totalPages <= 1 && !hasSizeSelector) {
-    if (paginationContainer && paginationContainer.classList.contains("pagination-container")) {
+    if (paginationContainer?.classList.contains("pagination-container")) {
       paginationContainer.innerHTML = "";
     }
     return;

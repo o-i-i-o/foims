@@ -313,7 +313,9 @@ class LoginManager {
       btn.classList.remove("active");
       btn.setAttribute("aria-selected", "false");
     });
-    this.dom.loginSections.forEach((section) => section.classList.remove("active"));
+    this.dom.loginSections.forEach((section) => {
+      section.classList.remove("active");
+    });
 
     // 激活当前 Tab（区块 id 与模式名一一对应：{mode}-section）
     targetBtn.classList.add("active");
@@ -471,7 +473,7 @@ class LoginManager {
       const result = await apiPost("/api/auth/login", body, { skipAuthCheck: true });
 
       if (result.success) {
-        if (result.data && result.data.requires_two_factor) {
+        if (result.data?.requires_two_factor) {
           // 保存凭证用于 2FA
           this.tempAuthData = { username, password, rememberMe };
           this.switchToTwoFactorView();
@@ -503,7 +505,7 @@ class LoginManager {
       );
 
       if (result.success) {
-        if (result.data && result.data.requires_two_factor) {
+        if (result.data?.requires_two_factor) {
           // 邮箱登录通过，但仍需 2FA（如果开启了）
           // 后端 login_with_email_code 返回了 username。
           this.tempAuthData = {
@@ -792,9 +794,9 @@ class LoginManager {
 
   handleNetworkError(error) {
     let msg = t("login.network_error");
-    if (error.message && error.message.includes("Network")) {
+    if (error.message?.includes("Network")) {
       msg = t("login.network_failed");
-    } else if (error.message && error.message.includes("timeout")) {
+    } else if (error.message?.includes("timeout")) {
       msg = t("login.timeout");
     }
     this.showError(msg);
@@ -840,7 +842,7 @@ class LoginManager {
       }
     } catch (error) {
       let msg = t("login.send_failed");
-      if (error.message && error.message.includes("Network")) {
+      if (error.message?.includes("Network")) {
         msg = t("login.network_failed");
       }
       forgotPasswordError.textContent = msg;
@@ -859,7 +861,7 @@ class LoginManager {
   async checkInitMode() {
     try {
       const result = await apiGet("/api/auth/init-status");
-      if (result.success && result.data && result.data.init_enabled) {
+      if (result.success && result.data?.init_enabled) {
         window.location.href = "/init_index.html";
         return true;
       }
@@ -1274,7 +1276,9 @@ class LoginManager {
     const shakeEls = shakeIds.map((id) => document.getElementById(id)).filter(Boolean);
 
     // 重置 shake 动画（移除 class → 强制 reflow → 重新添加）
-    shakeEls.forEach((el) => el.classList.remove("shake-head"));
+    shakeEls.forEach((el) => {
+      el.classList.remove("shake-head");
+    });
     // eslint-disable-next-line sonarjs/void-use -- 读取 offsetHeight 强制 reflow，以重放 shake 动画
     void document.body.offsetHeight;
 
@@ -1290,7 +1294,9 @@ class LoginManager {
 
     // 身体过渡(0.7s)进行到一半（350ms）时再开始摇头
     setTimeout(() => {
-      shakeEls.forEach((el) => el.classList.add("shake-head"));
+      shakeEls.forEach((el) => {
+        el.classList.add("shake-head");
+      });
     }, 350);
 
     // 2.5 秒后自动恢复（仅恢复姿态；错误提示由 clearError 控制）
@@ -1300,7 +1306,9 @@ class LoginManager {
       if (orangeMouth) {
         orangeMouth.classList.remove("visible");
       }
-      shakeEls.forEach((el) => el.classList.remove("shake-head"));
+      shakeEls.forEach((el) => {
+        el.classList.remove("shake-head");
+      });
       this.updateCharacters();
     }, 2500);
   }

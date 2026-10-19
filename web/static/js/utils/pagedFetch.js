@@ -24,34 +24,38 @@ export function notifyLoadFailure(showToast, error, what) {
 export async function fetchAllPages({ apiGet, showToast, path, what }) {
   const MAX_PAGES = 5;
   const PAGE_SIZE = 1000;
-  const items = [];
   const sep = path.includes("?") ? "&" : "?";
 
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  // 递归逐页拉取：失败与到达末页需短路终止（保留顺序拉取语义），
+  // 以递归替代 for+await（no-await-in-loop）；页数上限 5，递归深度有界
+  const fetchFrom = async (page, items) => {
     let result;
     try {
       result = await apiGet(`${path}${sep}page=${page}&page_size=${PAGE_SIZE}`);
     } catch (error) {
       notifyLoadFailure(showToast, error, what);
-      break;
+      return items;
     }
     if (!result.success || !Array.isArray(result.data?.items)) {
       if (!result.success) {
         notifyLoadFailure(showToast, result.message, what);
       }
-      break;
+      return items;
     }
 
     items.push(...result.data.items);
 
     const totalPages = Number(result.data.total_pages) || 1;
     if (page >= totalPages) {
-      break;
+      return items;
     }
     if (page === MAX_PAGES) {
       // 还有后续页但已达拉取上限：提示数据可能不完整
       showToast(t("viz.data_page_limit_exceeded"), "warning");
+      return items;
     }
-  }
-  return items;
+    return fetchFrom(page + 1, items);
+  };
+
+  return fetchFrom(1, []);
 }

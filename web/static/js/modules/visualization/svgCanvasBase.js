@@ -302,7 +302,7 @@ export class SVGCanvasBase {
       return;
     }
     const target = e.target.closest("[data-tooltip]");
-    if (!target || !target.dataset.tooltip) {
+    if (!target?.dataset.tooltip) {
       this._hideTooltip();
       return;
     }
@@ -368,7 +368,9 @@ export class SVGCanvasBase {
   _clearSelection() {
     this.elementsGroup
       .querySelectorAll(".selected")
-      .forEach((el) => el.classList.remove("selected"));
+      .forEach((el) => {
+        el.classList.remove("selected");
+      });
     this.selectedElement = null;
   }
 
