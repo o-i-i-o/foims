@@ -22,60 +22,26 @@ jobs:
         with:
           node-version: 24
 
-      # 阻断级：ES 模块语法与 i18n JSON 解析校验（零配置，确定性结果）。
-      # id/注册表/i18n 键/版本号一致性由 cargo test 的
-      # tests/frontend_consistency.rs 覆盖（随下方 build job 运行）。
-      - name: JS 模块语法校验
-        working-directory: web
-        run: |
-          set -e
-          count=0
-          for f in $(find static/js -name '*.js'); do
-            node --input-type=module --check < "$f"
-            count=$((count+1))
-          done
-          echo "语法校验通过：$count 个 JS 文件"
-
-      - name: i18n JSON 校验
-        working-directory: web
-        run: |
-          set -e
-          for f in static/i18n/*.json; do
-            node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$f"
-          done
-
-      # 阻断级：lint 栈（本地已全绿；格式归 prettier、代码质量归 eslint，
-      # CSS 归 stylelint、HTML 归 htmlhint、纯工具函数归 jest —— 职责划分
-      # 见 web/eslint.config.mjs 与 docs/code-style.md 3.6）
-      - name: 安装 lint 依赖
-        working-directory: web
+      # 依赖安装：与 package-lock.json 严格一致（Vue 3 + Vite 工程；
+      # 旧版原生 JS 的 eslint/stylelint/jest 等工具链已随 web-archive/ 存档退役）
+      - name: 安装依赖
+        working-directory: frontend
         run: npm ci --no-audit --no-fund
 
-      - name: ESLint（代码质量 + import/sonarjs 插件）
-        working-directory: web
-        run: npx eslint static/js tests
+      # 阻断级：构建期集中暴露 SFC 编译错误、模板引用缺失与 import 断链
+      - name: 前端构建
+        working-directory: frontend
+        run: npm run build
 
-      - name: Stylelint（CSS）
-        working-directory: web
-        run: npx stylelint "static/css/**/*.css"
+      # 阻断级：lint 栈（Biome 管 CSS 与格式、Oxlint 管 JS 质量，均为独立
+      # 二进制脱离 Node 环境运行，配置见根 biome.json 与 .oxlintrc.json；
+      # 存档目录 web-archive/ 已排除）。版本与本地工具及 biome.json 的
+      # schema 版本保持同步，升级时三处联动
+      - name: Biome（CSS + 格式检查）
+        run: npx --yes @biomejs/biome@2.5.15 check frontend
 
-      - name: HTMLHint（入口页与模态片段）
-        working-directory: web
-        run: |
-          npx htmlhint "static/*.html" "static/modals/**/*.html"
-          npx htmlhint "static/*.html" --rules='{"doctype-first":true,"html-lang-require":true,"title-require":true}'
-
-      - name: Prettier 格式检查
-        working-directory: web
-        run: npx prettier --check static/js tests eslint.config.mjs jest.config.mjs babel.config.cjs
-
-      - name: Jest 单元测试（纯工具模块）
-        working-directory: web
-        run: npx jest
-
-      - name: Depcheck（依赖健康检查）
-        working-directory: web
-        run: npx depcheck
+      - name: Oxlint（JS 质量检查）
+        run: npx --yes oxlint@1.88.0
 
   # 主程序任务：检查（fmt/clippy/test）→ 编译 → deb / rpm / zip 产物。
   # 不再级联 agent（见 agent-build 任务），两任务并行互不等待。
@@ -116,6 +82,12 @@ jobs:
 
       - name: 构建项目
         run: cargo build --release --verbose
+
+      # 前端构建在打包脚本内现场执行（npm ci + vite build），需 Node 工具链
+      - name: 安装 Node（打包脚本前端构建）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       # 打包脚本 scripts/build-pkgs.sh 无需 root：deb（dpkg-deb）/rpm（rpmbuild
       # 用户态 _dbpath）/zip（裸二进制）三格式，产物输出至 target/

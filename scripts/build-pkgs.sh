@@ -15,7 +15,9 @@
 #     （%pre 运行环境强检 / %post 建用户与证书自签 / %preun 停启用 /
 #     %postun 对齐 purge 清理）
 #   - systemd 单元唯一来源为 deploy/services/foims.service，本脚本不再内嵌副本
-#   - web 目录仅打包 static/（package.json、tests、eslint 等开发工具链文件不进包）
+#   - 前端为 Vue 3 + Vite 工程（frontend/），打包前现场构建（npm ci +
+#     vite build），产物 dist/ 布局部署到 /opt/foims/web/static；
+#     旧版原生 JS 前端已存档于 web-archive/，不进包
 #   - 配置文件以 config.toml.example 副本为基础打包（去除 .example 后缀）：
 #     仓库/开发机的本地 config.toml 可能含真实数据库连接信息，不进包；
 #     数据库连接要素由安装后的初始化向导在页面填写并回写配置文件；
@@ -109,15 +111,27 @@ if command -v strip >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "5. 复制资源文件..."
-# 仅打包 web/static：后端与 nginx 均只消费该目录，
-# 其余（package.json/tests/lint 配置/.trae）为开发工具链文件
-if [ -d "web/static" ]; then
-    mkdir -p "$DEBPAK_DIR/opt/foims/web"
-    cp -r web/static "$DEBPAK_DIR/opt/foims/web/"
-    find "$DEBPAK_DIR/opt/foims/web" -type d -exec chmod 755 {} \;
-    find "$DEBPAK_DIR/opt/foims/web" -type f -exec chmod 644 {} \;
+echo "5. 构建并复制前端资源..."
+# 前端为 Vue 3 + Vite 工程：打包前现场构建，产物部署到 /opt/foims/web/static
+# （部署布局沿用旧版，nginx $web_dir 路由零改动）。Node 工具链缺失即中止，
+# 避免打出缺前端资源的安装包
+if ! command -v npm >/dev/null 2>&1; then
+    echo "错误：未找到 npm，前端构建需要 Node.js 工具链" >&2
+    exit 1
 fi
+(
+    cd frontend || exit 1
+    npm ci --no-audit --no-fund || exit 1
+    npm run build || exit 1
+) || exit 1
+if [ ! -d "frontend/dist" ]; then
+    echo "错误：frontend/dist 不存在，前端构建疑似失败" >&2
+    exit 1
+fi
+mkdir -p "$DEBPAK_DIR/opt/foims/web"
+cp -r frontend/dist "$DEBPAK_DIR/opt/foims/web/static"
+find "$DEBPAK_DIR/opt/foims/web" -type d -exec chmod 755 {} \;
+find "$DEBPAK_DIR/opt/foims/web" -type f -exec chmod 644 {} \;
 
 # 配置文件打包（conffile，升级时 dpkg 保留本地修改）：
 # 以 config.toml.example 副本去除示例后缀进包——本地 config.toml 可能

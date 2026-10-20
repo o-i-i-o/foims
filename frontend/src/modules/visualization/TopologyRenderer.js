@@ -44,7 +44,7 @@ const HOP_STYLES = {
   patch_panel: { kind: "rect" }
 };
 
-// 设备类型 → lucide 图标文件（本地图标库 /static/icons/lucide/，
+// 设备类型 → lucide 图标文件（本地图标库 /icons/lucide/，
 // lucide-static v1.55.0，ISC 许可证见目录内 LICENSE）
 const DEVICE_ICON_FILES = {
   switch: "network",
@@ -59,7 +59,9 @@ const DEVICE_ICON_FILES = {
   other: "package"
 };
 
-const LUCIDE_ICON_BASE = "/static/icons/lucide/";
+// Vue 化适配：图标由 Vite public/icons 服务（dev 与生产 URL 一致），
+// 生产 nginx 以 /icons/ location 映射 $web_dir/static/icons/
+const LUCIDE_ICON_BASE = "/icons/lucide/";
 
 // 图标内容缓存：同一图标跨重绘只取一次文件；失败不缓存负结果，
 // 下次重绘自动重试

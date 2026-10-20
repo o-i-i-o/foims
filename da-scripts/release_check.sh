@@ -3,15 +3,15 @@
 # FOIMS 发布前检查脚本
 #
 # 流程对齐 .github/workflows/ci.yml：
-#   frontend job —— JS 模块语法 / i18n JSON / ESLint / Stylelint / HTMLHint /
-#                   Prettier / Jest / Depcheck
+#   frontend job —— npm ci / vite build（SFC 编译与 import 解析阻断）/
+#                   Biome（CSS + 格式）/ Oxlint（JS 质量）
 #   build job    —— cargo fmt --check / clippy / test / build + build-pkgs.sh 打包
 #                   （deb/rpm/zip；agent 交叉编译在 CI 独立 agent-build job，
 #                   本地由下方 Agent 构建检查覆盖）
 #
 # 与 CI 的差异：
 #   - 本地执行前先 cargo fmt 自动修复（CI 仅 --check）
-#   - lint 依赖 node_modules 已存在时跳过 npm ci（CI 每次全新安装）
+#   - 依赖 node_modules 已存在时跳过 npm ci（CI 每次全新安装）
 #   - cargo test 已知环境性失败降级为警告不阻断：/etc/foims/encryption.key
 #     为 root 0600，非 root 用户下 crypto::tests 固定权限拒绝（CI 无此文件，
 #     与代码无关），判定标准见 is_known_env_failure
@@ -30,10 +30,10 @@ NC='\033[0m' # No Color
 
 # ---- 前端检查函数（对齐 CI frontend job，子 shell 隔离 cwd）----
 
-# 前端 lint 依赖：node_modules 已存在则跳过，否则按 CI 方式全新安装
+# 前端依赖：node_modules 已存在则跳过，否则按 CI 方式全新安装
 fe_lint_deps() {
     (
-        cd web || exit 1
+        cd frontend || exit 1
         if [ -d node_modules ]; then
             echo "node_modules 已存在，跳过 npm ci"
             exit 0
@@ -42,45 +42,19 @@ fe_lint_deps() {
     )
 }
 
-# JS 模块语法校验：ES 模块逐文件 node --check
-fe_js_syntax() {
+# 前端构建：Vue SFC 编译 + 模板/导入解析在构建期集中暴露
+fe_build() {
     (
-        cd web || exit 1
-        count=0
-        for f in $(find static/js -name '*.js'); do
-            node --input-type=module --check < "$f" || exit 1
-            count=$((count + 1))
-        done
-        echo "语法校验通过：$count 个 JS 文件"
+        cd frontend || exit 1
+        npm run build
     )
 }
 
-# i18n JSON 解析校验
-fe_i18n_json() {
-    (
-        cd web || exit 1
-        for f in static/i18n/*.json; do
-            [ -f "$f" ] || continue
-            node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$f" || exit 1
-        done
-    )
-}
+# Biome：CSS 审计 + 格式检查（配置见根 biome.json，存档目录已排除）
+fe_biome() { biome check frontend; }
 
-fe_eslint()     { ( cd web && npx eslint static/js tests ); }
-fe_stylelint()  { ( cd web && npx stylelint "static/css/**/*.css" ); }
-
-# HTMLHint：常规规则 + 入口页强规则（doctype/lang/title）两轮
-fe_htmlhint() {
-    (
-        cd web || exit 1
-        npx htmlhint "static/*.html" "static/modals/**/*.html" || exit 1
-        npx htmlhint "static/*.html" --rules='{"doctype-first":true,"html-lang-require":true,"title-require":true}'
-    )
-}
-
-fe_prettier()   { ( cd web && npx prettier --check static/js tests eslint.config.mjs jest.config.mjs babel.config.cjs --write); }
-fe_jest()       { ( cd web && npx jest ); }
-fe_depcheck()   { ( cd web && npx depcheck ); }
+# Oxlint：JS 代码质量（配置见根 .oxlintrc.json，存档目录已排除）
+fe_oxlint() { oxlint; }
 
 # ---- 检查执行框架 ----
 
@@ -178,8 +152,8 @@ main() {
         echo "  ${RED}❌ 错误${NC}: 未找到 Cargo.toml，当前目录: $(pwd)"
         exit 1
     fi
-    if [ ! -d "web" ]; then
-        echo "  ${RED}❌ 错误${NC}: 未找到 web/ 目录，当前目录: $(pwd)"
+    if [ ! -d "frontend" ]; then
+        echo "  ${RED}❌ 错误${NC}: 未找到 frontend/ 目录，当前目录: $(pwd)"
         exit 1
     fi
 
@@ -189,8 +163,8 @@ main() {
 
     # Node.js 前置：缺失时前端检查整体无法执行，明确报错并跳过该段
     SKIP_FRONTEND=0
-    if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
-        echo "  ${RED}❌ 错误${NC}: 未检测到 node/npx，前端检查无法执行（CI 前端 job 使用 Node 24）"
+    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+        echo "  ${RED}❌ 错误${NC}: 未检测到 node/npm，前端检查无法执行（CI 前端 job 使用 Node 24）"
         TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
         ERROR_COUNT=$((ERROR_COUNT + 1))
         SKIP_FRONTEND=1
@@ -211,15 +185,10 @@ main() {
     # 前端检查（对齐 CI frontend job）
     if [ "$SKIP_FRONTEND" -eq 0 ]; then
         echo "──────── 前端检查（CI frontend job）────────"
-        run_check "前端 lint 依赖" fe_lint_deps
-        run_check "JS 模块语法校验" fe_js_syntax
-        run_check "i18n JSON 校验" fe_i18n_json
-        run_check "ESLint（代码质量 + import/sonarjs）" fe_eslint
-        run_check "Stylelint（CSS）" fe_stylelint
-        run_check "HTMLHint（入口页与模态片段）" fe_htmlhint
-        run_check "Prettier 格式检查" fe_prettier
-        run_check "Jest 单元测试（纯工具模块）" fe_jest
-        run_check "Depcheck（依赖健康检查）" fe_depcheck
+        run_check "前端依赖安装" fe_lint_deps
+        run_check "前端构建（vite build）" fe_build
+        run_check "Biome（CSS + 格式）" fe_biome
+        run_check "Oxlint（JS 质量）" fe_oxlint
         echo ""
     fi
 

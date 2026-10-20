@@ -43,6 +43,9 @@ F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技
 ## 🧭 架构
 
 - 后端以 h2c 监听 UDS（默认 `/run/foims/api.sock`），不直接暴露 TCP 端口。
+- 前端为 Vue 3 + Vite 工程（仓库根 `frontend/`，MPA 三入口：登录/初始化向导/
+  主应用），`vite build` 产物部署到 nginx 静态目录（`/opt/foims/web/static`）；
+  旧版原生 JS 前端已存档于 `web-archive/`（只读参考）。
 - 两个例外为进程内 UDP 监听（不经 nginx，防火墙需放行）：Agent 指标上报（默认 UDP 9100，HTTP/3）与 SNMP Trap 接收（默认 UDP 162，可配）。
 - TLS 证书、安全响应头、静态资源缓存均在 nginx 层完成，样例见 [deploy/nginx/](deploy/nginx/)。
 
@@ -50,6 +53,7 @@ F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技
 
 ### 前置要求
 - **Rust**: 1.87 或更高（推荐通过 rustup 官方命令安装）
+- **Node.js**: 22 或更高（构建 Vue 3 前端 `frontend/`，打包与开发需要）
 - **PostgreSQL**: 版本 16 或更高
 - **OpenSSL**: 开发库 (libssl-dev，邮件组件 native-tls 依赖)
 - **nginx**: 版本 ≥ 1.28.1（h2c 上游代理；如需 HTTP/3 还需编译 QUIC 支持）
@@ -81,6 +85,9 @@ PostgreSQL 中手动执行建库 SQL。
 ```bash
 cargo build --release
 sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
+
+# 前端开发（可选）：Vite dev server 5173，/api 经本机 nginx 代理后端
+cd frontend && npm ci && npm run dev
 ```
 
 - 后端仅服务 API（UDS），静态资源与 TLS 由 nginx 托管：
@@ -95,9 +102,10 @@ sudo ./target/release/foims          # UDS 绑定与属组设置需要 root
 **为了避免网络安全风险，nginx配置示例文件中对初始化api接口进行了限制，仅允许127.0.0.1（localhost）访问，请手动增加配置终端的实际ip，并在初始化完成后去除**
 ### 5. 生产环境部署
 
-1. **编译发布版本**
+1. **构建发布产物**
    ```bash
    cargo build --release
+   (cd frontend && npm ci && npm run build)   # 前端产物 dist/ → nginx 静态目录
    ```
 
 2. **安装 nginx 生产配置**

@@ -262,3 +262,12 @@ v0.10.12
 3. 修复 MainShell 模板根节点复用 id="app" 的嵌套重复 id（main.html 挂载容器已占用该 id，模板根再占用使 querySelector("#app") 语义被污染、DOM id 唯一性被破坏）；样式与脚本均不依赖内层 #app，直接移除
 4. 验证：oxlint 112 文件 0 告警、biome 166 文件 0 诊断、vite build 通过、frontend_consistency 5 测试通过；e2e 以 getComputedStyle 实测可见性——rooms-tab display:flex 12 行、devices-tab flex 13 行、#operation-tab flex 50 行、非激活页签均 none，console 零错误。教训沉淀：JS 读 textContent/tr 数对 CSS visibility 全盲（隐藏元素照样可读），历次 e2e 仅凭 DOM 文本验证而漏检本缺陷，可见性验证必须显式读 computed style
 5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.11.0
+2026102102290901
+1. 前端整体切换 Vue 3 工程为本仓唯一前端（模块级x+1，切换收口）：旧原生 JS 前端 web/ 整体 git mv 为 web-archive/ 存档（只读参考，不再参与构建/部署/CI，AGENTS.md 声明禁止在其上继续开发）；初始化向导完整移植为 InitWizard.vue 替换占位页（5 步流程，check-pgsql/db-test/db-create/import-file/init/restart 全接口对齐旧版契约，失败统一归一 {success:false} 走错误态，与旧版语义一致）
+2. 图标布局与 URL 契约变更：lucide 图标库迁入 frontend/public/icons（随 Vite 构建产物部署），引用 URL 由 /static/icons/lucide/ 统一改为 /icons/lucide/（消除 public/static 与部署目录 static/ 的双层嵌套矛盾；唯一代码引用点 TopologyRenderer.js LUCIDE_ICON_BASE）；nginx（deploy/nginx/foims.conf 与本机 foims-dev.conf）静态 location 同步调整为 /assets/、/icons/、favicon.ico（alias $web_dir/static/ 下对应目录，长缓存与安全头逐项不变）
+3. 构建链与 CI：build-pkgs.sh/pak.sh/release_check.sh 改为 frontend/ 下 npm ci && npm run build 产出 dist/（部署布局 $web_dir/static/：入口页 index/main/init_index.html + assets/ + icons/ + favicon.ico）；ci.yml 新增 frontend job（Node 22 锁版本跑 biome/oxlint/vite build）并将产物接入 build job；删除 bump_static_version.sh 与 tests/frontend_consistency.rs（Vite 内容哈希指纹替代 ?v= 手工 bump，一致性测试随之失义），biome.json/.oxlintrc.json/.gitignore 同步收口到 frontend/
+4. 文档同步：AGENTS.md 前端章节改 Vue 3 + Vite 并移除 ?v=/MODULE_VERSION bump 规则；code-style.md §3 整章重写为「前端（Vue 3 + Vite）」（工程结构与构建/Vue 风格/apiClient 永不 reject 契约/i18n {{name}} 占位符归一化/校验命令/拓扑遗留模块维护策略）；CSS-style.md 重写（frontend/src/styles 实际布局、@layer 全局层序与 scoped 优先级、工程化配套改 Biome+Vite）；README/README_EN 补 Node.js 22+ 前置、npm ci && npm run build/dev 步骤与 web-archive 存档说明
+5. 验证：vite build 通过；cargo fmt / clippy --release -D warnings 通过；cargo test --workspace 710 通过 0 失败；biome（frontend CSS）与 oxlint（113 文件）全绿；部署冒烟 curl 7 路径全 200（入口页 no-store、assets/icons immutable 缓存分级正确、lucide SVG 内容抽查正确）；浏览器 e2e 初始化向导 5 步指示器渲染正常、console 零错误；已初始化环境（init.enabled=false）下后端不挂载 /api/init/*（main.rs 路由门控）返回 404 属预期行为
+6. 联动：根 Cargo.toml 0.27.0→0.28.0（仅 lib）；frontend/package.json 版本未动（Vite 内容哈希管理资源版本，无需手工 bump）

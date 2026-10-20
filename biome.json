@@ -3,9 +3,8 @@
 	"root": true,
 	"files": {
 		"includes": [
-			"web/static/**",
-			"!web/static/icons",
 			"frontend/src/styles/**",
+			"!web-archive",
 			"!foims-agent"
 		]
 	},

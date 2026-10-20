@@ -73,7 +73,7 @@ impl From<sqlx::Error> for AppError {
 
 - 日志统一 `tracing`（`error!`/`warn!`/`info!`/`debug!`），禁止 `println!`。
 - 面向用户的响应 message 一律为 i18n 键 + `message_params` 插值
-  （`foims_common::msg` 或键字面量，词条在 `web/static/i18n/` 双语维护）；
+  （`foims_common::msg` 或键字面量，词条在 `frontend/src/i18n/locales/` 双语维护）；
   可枚举的固定情形禁止直传中文文案（范本：`ldap.rs` 的
   `"server.ldap.config_retrieved"`、`error.rs` 的 `msg("server.error.*")`）。
 
@@ -146,184 +146,123 @@ Ok(ok_json(paged_response(items, total, &pagination), "common.fetch_success"))
 - 更新接口的可空字段用 `Option<Option<T>>`（`deserialize_some`）：
   缺省不改、`Some(None)` 置空；`QueryBuilder` 直接 `push_bind(Option)` 编码。
 
-## 3. 前端（HTML5 / 原生 ES2025 / CSS3）
+## 3. 前端（Vue 3 + Vite）
 
-### 3.1 模块与加载
+前端为仓库根 `frontend/` 的 Vue 3 + Vite 工程（MPA 三入口）。旧版原生 JS
+前端整体存档于 `web-archive/`（只读参考，禁止在其上继续开发）；本文档
+前端规范只针对 `frontend/`。
 
-- 纯 ES Modules，无全局变量；入口 `app.js`，业务模块经
-  `resourceLoader.loadModule()` 懒加载（带 Map 缓存与 `?v=` 防双实例）。
-- 新工具放 `static/js/utils/`；IP/CIDR 校验用 `utils/network.js`，
-  下拉填充用 `utils/resources.js` 的 `fillSelect`，不要各写一份。
+### 3.1 工程结构与构建
 
-### 3.2 JS 风格
+```
+frontend/
+├── index.html / init_index.html / main.html  MPA 三入口（登录/初始化向导/主应用）
+├── vite.config.js         构建配置（入口映射；dev 代理 /api → 本机 nginx:80）
+├── public/icons/          lucide 图标（URL /icons/lucide/，dev/生产均静态直服）
+└── src/
+    ├── entries/           入口装配（login/init/main：createApp + 样式 + 插件）
+    ├── pages/             页面级组件（MainShell + 各分区 Page）
+    ├── components/        通用组件 + 按域分组组件（<域>/<名称>Modal.vue 等）
+    ├── composables/       组合式函数（useToast/usePagedList/useModalStack…）
+    ├── api/client.js      API 客户端（契约见 3.3，全站唯一请求出口）
+    ├── i18n/              vue-i18n 实例 + 双语词条 locales/{zh,en}.json
+    ├── stores/            pinia store（auth）
+    ├── router/            vue-router（hash 模式，NAV_ITEMS 即侧边栏数据源）
+    ├── styles/            CSS（规范见 docs/CSS-style.md，@layer 层序体系）
+    ├── utils/             纯工具（network/pagedFetch/formatter/session…）
+    ├── config/            静态配置（deviceOptions/icons/orgConfig）
+    ├── modules/visualization/  拓扑画布遗留模块（原生 JS 逐字迁移，见 3.6）
+    └── templates/modals/  拓扑遗留模态 HTML 片段（legacyModalLoader 消费）
+```
 
-- 格式以 prettier（`.prettierrc`）为准：2 空格缩进、双引号、分号、
-  printWidth 100、无尾逗号、模板字符串（不用 `+` 拼接）、`const` 优先。
-- 异步一律 `async/await`（不用 `.then` 链）。事件绑定按节点生命周期分两类
-  （详见 3.7 模态框生命周期）：
-  - **常驻节点**（页面表格、document 委托）：`addEventListener` +
-    `dataset.bound` 标志防重复绑定；
-  - **模态框内部节点**（DOM 随 closeModal 销毁重建）：优先
-    `onclick/onsubmit` 属性幂等赋值；确需 addEventListener 时必须在
-    函数内成对 removeEventListener，禁止依赖"反正会重建"而裸绑。
-- DOM 访问优先 `elementCache`；表格渲染统一 `renderTable`（含 loading 等
-  多态的特殊页面除外，如 fail2ban/scheduledTask）。
-- 用户通知一律 `showToast`；`alert/confirm` 禁用，确认框用 `showConfirm`。
-- `catch` 不许静默：用户路径给 toast，后台路径 `console.error` 带上下文。
-- i18n 插值统一双花括号：`t("device.conflict_summary", { count: 3 })`，
-  词条写作 `"{{count}} 个端口…"`，禁止手动 `.replace()`。
-- 颜色不硬编码：HTML/JS 一律 `var(--color-*)/var(--chart-*)/var(--status-*)`
-  （见 `variables.css`）；SVG 属性用 `style.fill = "var(...)"` 形式。
-- en/zh 词条必须双向对齐（每次改完跑 parity 校验，见 3.5）。
+- dev：`cd frontend && npm run dev`（5173）；构建：`npm run build`，产物
+  `dist/` 部署到 `/opt/foims/web/static`。
+- 缓存与版本：Vite 内容指纹（`assets/` 哈希文件名）承担静态资源长缓存，
+  **无需手工 bump `?v=`/MODULE_VERSION**；nginx 对 `/assets/` 长缓存、
+  入口页 `no-cache`（见 `deploy/nginx/foims.conf`）。
 
-### 3.3 CSS
+### 3.2 Vue 风格
 
-css 代码规范位于 docs/CSS-style.md
+- 组件一律 `<script setup>` 组合式 API，组件头用块注释说明来源与职责
+  （范本：`components/ModalShell.vue`）；新组件按域放 `components/<域>/`，
+  跨分区复用放 `components/` 根。
+- 服务端状态用 TanStack Query（`@tanstack/vue-query`）管理缓存与失效；
+  客户端会话态用 pinia（`stores/auth.js`）。禁止手工维护平行的缓存副本。
+- 分页列表统一 `usePagedList`（排序/页大小/越界回退/跨页序号）+
+  `Pagination.vue`，不要各页面自写一套。
+- 用户通知一律 `showToast`（`composables/useToast.js`）；确认框用
+  `ConfirmModal.vue`；`alert/confirm` 禁用。
+- 弹窗统一 `ModalShell.vue` 外壳（遮罩/标题栏/插槽/Esc 关闭）；嵌套子弹窗
+  的 Esc 层级由 `useModalStack` 保证（只关最上层），禁止手写遮罩或操作
+  `document.body.style.overflow`。
+- 异步一律 `async/await`；`catch` 不许静默：用户路径给 toast，后台路径
+  `console.error` 带上下文。
+- 页面级定时器用 `usePageTimeout`（分区切换自动清理），禁止悬挂裸
+  `setTimeout`。
+- 颜色不硬编码：一律 `var(--color-*)/var(--chart-*)/var(--status-*)`。
 
-### 3.4 HTML
+### 3.3 API 客户端契约
 
-- 页面与 modal 片段 2 空格缩进；void 元素（input/br/img/link/meta/hr…）
-  不写 XHTML 自闭合斜线；SVG 内部元素保持 `/>`（foreign content 需要）。
-- 微布局不写行内 style，用工具类（`utilities/helpers.css`，如
-  `.form-group-inline`、`.form-checkbox`），缺类先补类再使用。
-- 表单 label 必带 `for`；图标按钮带 `aria-label`；文案带 `data-i18n` 且
-  以英文兜底文本。
-- HTML 禁止内联事件属性（`onclick`/`onsubmit`/`onchange` 等）：项目纯 ESM
-  无全局变量，内联属性引用不到模块函数；绑定一律在 JS 中以
-  `el.onclick = fn` 幂等赋值或容器委托完成（范式见 3.7）。
-- 模态框 HTML 抽离边界：**静态骨架**（固定表单/文案）放
-  `modals/<域>/<名称>-modal.html`，经 `modalLoader.js` 注册挂载，值用
-  DOM API 填充；**数据驱动正文**（`.map()` 行循环、条件分支、运行时
-  计算值，如 TopologyModal 的端口表）保留
-  在 JS 渲染函数中，仅注入骨架的空容器。modalLoader 不支持模板占位
-  符/循环/条件，强行抽离动态内容需另造模板引擎，不做。
-- 模态框表单元素统一命名（不再新增同类别名类）：
-  - Field 字段：`.form-group` + `<label for=…><span data-i18n=…>名称</span>…</label>`；
-  - Required field 必填项：`<span class="required">*</span>`（不用
-    `<abbr>` 或其他标记承载）；
-  - 描述提示文字：`.hint-text`（唯一类，`form-hint` 等别名已废弃）；
-  - 描述文本域：不写固定 `rows`（高度走 `field-sizing` 自适应），
-    统一带 `data-i18n-placeholder="common.description_placeholder"`。
+- 全站请求统一走 `api/client.js`（`apiGet/apiPost/…`），**永不 reject**：
+  失败归一为 `{ success: false, message, … }`，调用方按 `success` 分支，
+  **不写 try/catch 死代码**。唯一例外：探活类 raw fetch（连接失败属预期
+  的静默重试，如初始化向导等待后端重启），必须注释说明。
+- 服务端 `message` 为 i18n 键，客户端经 `translateServerMessage` 就地翻译，
+  原始键保留在 `message_key` 供调用方分支（如验证码联动）。
+- 认证用 HttpOnly Cookie（`credentials: include`）；401 自动刷新重试
+  （公共端点除外，`isPublicAuthEndpoint` 白名单），429 按 `Retry-After`
+  退避。
+- 文件下载归一为 `{ success, data: Blob, isBlob: true, filename }`，落盘用
+  `utils/download.js`。
 
-### 3.5 缓存与版本
+### 3.4 i18n
 
-- 静态资源缓存策略在 `deploy/nginx/*.conf`：`/static/js/` 必须
-  `no-cache`（ES 模块间相对导入不带版本号，长缓存会导致陈旧模块）；
-  CSS/图片入口带 `?v=` 可长缓存。
-- 改动 JS/CSS 后同步 bump：三个入口页（`main.html`/`index.html`/
-  `init_index.html`）的 `?v=` 与 `resourceLoader.js` 的 `MODULE_VERSION`
-  必须同号（由 `tests/frontend_consistency.rs` 强制校验，漏 bump 直接挂
-  `cargo test`）。
-- 版本号为 Unix 时间戳（秒）：递增、唯一，重复 bump 不冲突。用
-  `bash da-scripts/bump_static_version.sh` 一键 bump（同秒重复或时钟
-  回拨时自动取 当前+1 保证单调），`--check`/`--show` 可单独校验/查看；
-  也可传纯数字参数写入指定版本号。
+- 词条在 `frontend/src/i18n/locales/{zh,en}.json` 双语维护，en/zh 必须
+  双向对齐（校验命令见 3.5）。
+- 词条占位符维持旧版 `{{name}}` 写法，导入时自动归一化为 vue-i18n 的
+  `{name}` 语法（`@`/`|`/`$` 特殊字符由 `i18n/index.js` 统一转义，
+  词条文件无需关心）；组件内 `t("device.conflict_summary", { count: 3 })`。
+- 切换语言统一 `changeLanguage`（`i18n/index.js`：持久化 localStorage 并
+  同步 `<html lang>`），禁止组件自行改 `i18n.global.locale`。
 
-### 3.6 校验命令
+### 3.5 校验命令
 
 ```bash
-# JS 语法门禁（static/js 全部模块逐个校验，勿写死数量）
-find web/static/js -name "*.js" -exec sh -c 'node --input-type=module --check < "$1"' _ {} \;
+# 构建（含 SFC 编译校验，失败即挂）
+cd frontend && npm run build
 
-# import 死链扫描（相对导入 + MODULE_REGISTRY 全量核对）
-python3 - <<'EOF'
-import re, os, glob
-base = "web/static/js"
-for path in glob.glob(f"{base}/**/*.js", recursive=True):
-    for m in re.finditer(r'from\s+["\'](\.[^"\']+)["\']', open(path, encoding="utf-8").read()):
-        target = os.path.normpath(os.path.join(os.path.dirname(path), m.group(1)))
-        if not os.path.exists(target):
-            print("断链:", path, "->", m.group(1))
-for name, p in re.findall(r'(\w+):\s+"(/static/js/[^"]+)"', open(f"{base}/utils/resourceLoader.js", encoding="utf-8").read()):
-    if not os.path.exists("web" + p):
-        print("注册表悬空:", name, p)
-EOF
+# CSS 结构与格式 lint（根 biome.json；CSS 归 Biome，无 stylelint）
+npx @biomejs/biome@2.5.15 check frontend   # 本地装了二进制则直接 `biome check frontend`
+
+# JS 质量 lint（根 .oxlintrc.json；web-archive/ 与 frontend/dist/ 已忽略）
+npx oxlint@1.88.0
 
 # i18n 双向 parity
-node -e "const zh=require('./web/static/i18n/zh.json'),en=require('./web/static/i18n/en.json'); \
+node -e "const zh=require('./frontend/src/i18n/locales/zh.json'),en=require('./frontend/src/i18n/locales/en.json'); \
 const f=(o,p='')=>Object.entries(o).flatMap(([k,v])=>typeof v==='object'?f(v,p+k+'.'):[p+k]); \
 const z=new Set(f(zh)),e=new Set(f(en)); \
 console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k=>!z.has(k)));"
-
-# 前端 lint 全量（需 node/npm；格式归 prettier，代码质量归 eslint，
-# CSS 归 stylelint，HTML 归 htmlhint，纯工具函数归 jest）
-cd web && npm ci && npm run lint && npm run format:check && npm test
 ```
 
-lint 职责划分（2026-08 起，配置见 `web/eslint.config.mjs`（ESLint 9 平面配置）/
-`web/.stylelintrc.json` / `web/.htmlhintrc` / `web/.prettierrc`）：
-- **eslint**：代码质量与潜在缺陷（no-unused-vars、eqeqeq、no-else-return、prefer-const 等）
-  外加插件：`eslint-plugin-import`（导入规范与死链）、`eslint-plugin-sonarjs`
-  （复杂度/重复串/隐患模式，认知复杂度阈值 40、重复串阈值 6，校准理由见配置内注释）、
-  `eslint-config-prettier`（关闭与 prettier 冲突的格式规则，置于配置末尾）；
-  格式类规则已全部移交 prettier，避免两者对模板串/三元换行的判定冲突；
-- **prettier**：仅管 `static/js` 与 lint 配置文件（CSS 不归 prettier，
-  按 2 空格手工排版，见 `docs/CSS-style.md` 与 `web/.prettierignore`）；
-- **stylelint**：CSS 结构性检查（基线 `stylelint-config-standard` + 项目覆盖规则）；
-  `!important` 默认禁止，打印隐藏/工具类等压制场景
-  以 `/* stylelint-disable-line declaration-no-important -- 原因 */` 显式豁免；
-  SVG 几何属性 `rx/ry` 因标准属性值表未收录而在配置中豁免；
-- **htmlhint**：入口页与模态片段共用 `web/.htmlhintrc`（片段无 doctype/lang，
-  相应文档级规则关闭）；入口页另跑 `npm run lint:html:entries` 补查
-  doctype-first/html-lang-require/title-require；
-- **jest**：`tests/` 下纯工具模块单元测试（network IP/CIDR、helpers、
-  sessionManager），jsdom 环境、babel 按当前 Node 目标转译（无实验 flag），
-  `npm test` 运行；
-- **depcheck**：依赖健康检查（CLI 工具类依赖在 `web/.depcheckrc` 豁免），
-  `npm run depcheck` 运行；
-- **lighthouse-ci**（`web/lighthouserc.json`）：对登录页与初始化向导做
-  性能/可访问性/最佳实践/SEO 审计，`npm run lighthouse` 运行；
-  需本机可用 Chromium/Chrome（经 `CHROME_PATH` 指定，chrome-headless-shell
-  须连同 `icudtl.dat` 等伴随文件整目录使用）。2026-08 基线：两页
-  performance 100 / accessibility 100 / seo 100 / best-practices 96
-  （仅 errors-in-console：静态服务器把 /api/* 回 404 HTML 所致的环境产物，
-  生产 nginx 有后端代理，故该断言关闭）。类别断言 warn 级 minScore 0.9，
-  结果不外传。
-- **抑制约定**：个别经评估的误报以 `// eslint-disable-next-line <rule> -- 中文理由`
-  行内豁免（与 stylelint 同款约定），禁止无理由豁免与文件级豁免。
+- lint 职责划分：CSS 结构/格式归 **Biome**（`biome.json`，含
+  `useLayeredStyles` 强制 @layer 层序），JS 质量归 **Oxlint**
+  （`.oxlintrc.json`）。版本号与 `ci.yml` frontend job、biome.json schema
+  三处联动，升级须同步。
+- 抑制约定：经评估的误报以 `// biome-ignore lint/<rule>: 中文理由` 行内
+  豁免，禁止无理由豁免与文件级豁免。
 
-### 3.6.1 已知豁免清单
+### 3.6 拓扑可视化遗留模块
 
-- `sonarjs/no-duplicate-string` 白名单固定 6 项（`application/json` 与
-  `device-workstation-id` 等 5 个 `device-*-id` 元素 id，与
-  `web/eslint.config.mjs` 的 `ignoreStrings` 同步维护）；元素 id 必须保持
-  字面量（`tests/frontend_consistency.rs` 按字面量正则做悬空校验）；
-- `sonarjs/no-hardcoded-passwords`：`login.js` 的 `"password-login"` 为登录
-  方式枚举值（与 index.html 的 data-tab 联动），非密钥；
-- `sonarjs/pseudo-random` / `sonarjs/void-use`：登录页角色动画的
-  `Math.random` 抖动延迟与 `void offsetHeight` 强制 reflow，均非安全场景。
+`modules/visualization/`、`templates/modals/` 与桥接层
+（`utils/legacyBridge.js` / `legacyModalLoader.js` / `legacyResources.js`）
+是旧版拓扑画布生态的逐字迁移（命令式原生 JS），经桥接层适配 Vue 端设施
+（i18n/showToast/openModal）。约束：
 
-### 3.7 模态框生命周期（唯一权威范式）
-
-全站模态框统一走 `modalLoader.js`，生命周期为：
-**`closeModal` 即销毁 DOM（`modal.remove()`）→ 下次打开从 `htmlCache`
-重新注入全新节点**。所有绑定与填充策略都建立在这个事实上：
-
-- **打开范式**："数据预取并行、填充串行于 DOM 就绪后"。
-  `Promise.all` 只并行原始数据请求与 `openModal`；`fillSelect` 内部
-  会等待目标元素出现（`waitForElement`），因此与 `openModal` 并行调用
-  安全；其余手写填充必须在 `await openModal()` 之后执行。
-- **绑定范式**：模态内按钮用 `onclick = fn` 幂等赋值（重复打开/
-  刷新重绑不叠加监听）；容器级委托用 `dataset.bound` 标志。此处是 JS
-  对 DOM 属性的赋值；HTML 片段内禁止写内联 `on*` 属性（见 3.4）。
-  历史教训（device.js 网卡区域注释）：模态 DOM 每次销毁重建，模块级
-  "已绑定"标志位会导致第二次打开时新 DOM 零监听 —— 禁止使用。
-- **禁止跨模态复用 id**：两个模态框同屏时 `getElementById` 只返回文档序
-  第一个，监听会绑错元素。同类别按钮 id 必须加模态前缀区分。
-- **层叠模态**：`openModal/closeModal` 内部维护打开计数，只有归零才恢复
-  `body.overflow`；不要在业务代码里直接改 `document.body.style.overflow`。
-- **并行加载**：模态框 HTML（`openModal`）与首屏数据请求互不依赖时放同
-  一个 `Promise.all`；首次打开的 HTML 已由 `prefetchModalsOnIdle` 在空闲
-  时预热进内存缓存，无需担心串行 RTT。
-- **安全**：任何拼进 `innerHTML`/模板字符串的用户可控值（名称、描述、
-  枚举回退值）必须过 `escapeHtml`；`renderTable` 的 render 回调返回
-  字符串时同样适用。
-
-### 3.8 校验命令（cargo test 集成）
-
-id/注册表/i18n 键/版本号四类一致性校验已固化为 Rust 集成测试
-（`tests/frontend_consistency.rs`），随 `cargo test` 运行，无需 Node
-工具链。
+- **只维护不扩展**：新交互功能一律用 Vue 组件实现，禁止新增命令式模块
+  或往桥接层堆函数；待画布 Vue 化后整体退役。
+- 桥接层改动保持"函数体逐字迁移 + 依赖来源替换"的既有模式，不重构。
+- 遗留模块内拼进 `innerHTML`/模板字符串的用户可控值仍必须过
+  `escapeHtml`（Vue 模板插值自动转义，遗留命令式代码不享受该保障）。
 
 ## 4. 布局约定速查
 
@@ -334,7 +273,8 @@ id/注册表/i18n 键/版本号四类一致性校验已固化为 Rust 集成测�
 | crate 间共享类型 | 放 `foims-common`，原路径 `pub use` 兼容 |
 | 建表/视图/触发器 | foims-init `schema/tables/`，重复结构数据驱动（见 views.rs） |
 | 结构校验清单 | `foims-init/src/check.rs` 与 schema 同步增补 |
-| 前端下拉 | `fillSelect(selectId, url, { placeholderKey, filter, itemToLabel })` |
-| 前端表格 | `renderTable` + `appendPaginationToTable` + `createSortState` |
-| 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network.js"` |
+| 前端分页列表 | `usePagedList` + `Pagination.vue`（排序/页大小/越界回退） |
+| 前端通知 | `showToast`（`composables/useToast.js`）；确认框 `ConfirmModal.vue` |
+| 前端弹窗 | `ModalShell.vue` + `useModalStack`（Esc 只关最上层） |
+| 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network.js"`（frontend/src/utils/） |
 

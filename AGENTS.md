@@ -13,7 +13,10 @@
 - 不使用数据库迁移代码：修改结构时直接执行 SQL，然后同步完善 foims-init 的
   建表代码与 `check.rs` 校验清单。
   - 自版本cargo.toml版本0.24.0起，需要考虑版本升级问题，每次涉及数据库的修改仍然需要同步完善 `foims-init` 的建表代码与 `check.rs` 校验清单以确保全新部署的代码的干净，另外需要基于当前 中(0.23.0的23) 版本（举例 ”强调，从0.24.0版本开始" 0.23.x 后所有版本都基于0.23.0版本数据库生成数据库迁移代码sql，0.24.x “x>0" 版本基于0.24.0版本数据库生成数据库迁移代码sql，0.24.0版本基于0.23.0版本数据库生成数据库迁移代码sql，产物放在upgrade目录，每个中版本仅保留一份最新版本升级代码，如upgrade/0.23/保存一份最新的0.23.x的sql和脚本 upgrade/0.24/文件夹保留）生成对应的数据库迁移代码和脚本做为升级方法。
-- 前后端分离，nginx 托管静态资源、代理 API。
+- 前后端分离，nginx 托管静态资源、代理 API。前端为 Vue 3 + Vite 工程
+  （仓库根 `frontend/`，MPA 三入口 index/init_index/main），产物经
+  `vite build` 部署到 `/opt/foims/web/static`；旧版原生 JS 前端已存档于
+  `web-archive/`（只读参考，不再维护，禁止在其上继续开发）。
 
 ## 硬性规则
 
@@ -30,10 +33,11 @@
 ## 版本与测试
 
 - 每次代码更新后按照`docs/dev_version.md`规则更新版本记录；Cargo.toml
-  仅当该文件 y/x 段变化时才联动 bump（z 段普通修改不动 Cargo.toml）；
-  前端资源同步 bump 三个入口页（main/index/init_index）的 `?v=` 与
-  `resourceLoader.js` 的 `MODULE_VERSION`（时间戳格式，一键脚本
-  `bash da-scripts/bump_static_version.sh`；一致性由 `cargo test` 强制）。
-- 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`。
+  仅当该文件 y/x 段变化时才联动 bump（z 段普通修改不动 Cargo.toml）。
+  前端资源缓存由 Vite 内容指纹（assets/ 哈希文件名）承担，无需手工 bump
+  版本号；入口 HTML 引用变化随构建自动生效。
+- 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`；
+  前端改动后：`cd frontend && npm run build`，审计用独立二进制
+  `biome check frontend`（CSS+格式）与 `oxlint`（JS 质量）。
 - 开发直接测试：`./da-scripts/pak.sh`；
 - 测试用户 admin / admin123。

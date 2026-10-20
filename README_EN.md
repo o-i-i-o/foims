@@ -43,6 +43,7 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 ## 🧭 Architecture
 
 - The backend listens on a UDS over h2c (default `/run/foims/api.sock`) and does not directly expose a TCP port.
+- The frontend is a Vue 3 + Vite project (repo root `frontend/`, MPA with three entries: login / init wizard / main app); the `vite build` output is deployed to the nginx static directory (`/opt/foims/web/static`). The legacy vanilla-JS frontend is archived under `web-archive/` (read-only reference).
 - Two exceptions are in-process UDP listeners (not proxied by nginx; allow them through the firewall): Agent metric reporting (UDP 9100 by default, HTTP/3) and SNMP Trap reception (UDP 162 by default, configurable).
 - TLS certificates, security response headers, and static asset caching are all handled at the nginx layer; see samples in [deploy/nginx/](deploy/nginx/).
 
@@ -50,6 +51,7 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 
 ### Prerequisites
 - **Rust**: 1.87 or higher (recommended to install via the official rustup command)
+- **Node.js**: 22 or higher (to build the Vue 3 frontend under `frontend/`; required for packaging and development)
 - **PostgreSQL**: version 16 or higher
 - **OpenSSL**: development libraries (libssl-dev, required by the native-tls mail component)
 - **nginx**: version ≥ 1.28.1 (h2c upstream proxy; QUIC support must be compiled in for HTTP/3)
@@ -81,6 +83,9 @@ after completing the PostgreSQL checks, fill in the connection information on th
 ```bash
 cargo build --release
 sudo ./target/release/foims          # UDS binding and group ownership require root
+
+# Frontend development (optional): Vite dev server on 5173, /api proxied via local nginx to the backend
+cd frontend && npm ci && npm run dev
 ```
 
 - The backend only serves the API (over UDS); static assets and TLS are hosted by nginx:
@@ -96,9 +101,10 @@ sudo ./target/release/foims          # UDS binding and group ownership require r
 
 ### 5. Production Deployment
 
-1. **Build the release binary**
+1. **Build the release artifacts**
    ```bash
    cargo build --release
+   (cd frontend && npm ci && npm run build)   # frontend output dist/ → nginx static directory
    ```
 
 2. **Install the production nginx configuration**

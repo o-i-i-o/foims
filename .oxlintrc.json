@@ -12,5 +12,5 @@
   "env": {
     "browser": true
   },
-  "ignorePatterns": ["target/", "web/static/icons/"]
+  "ignorePatterns": ["target/", "web-archive/", "frontend/dist/"]
 }
