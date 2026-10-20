@@ -546,6 +546,7 @@ function deviceLocationText(item) {
       v-show="activeTab === 'network-regions'"
       id="network-regions-tab"
       class="tab-content"
+      :class="{ active: activeTab === 'network-regions' }"
       role="tabpanel"
     >
       <div class="table-container">
@@ -651,7 +652,7 @@ function deviceLocationText(item) {
     </div>
 
     <!-- ==================== 子网页签 ==================== -->
-    <div v-show="activeTab === 'networks'" id="networks-tab" class="tab-content" role="tabpanel">
+    <div v-show="activeTab === 'networks'" id="networks-tab" class="tab-content" :class="{ active: activeTab === 'networks' }" role="tabpanel">
       <div class="table-container">
         <table id="networks-table" class="data-table" aria-label="Subnets">
           <thead>
@@ -740,7 +741,7 @@ function deviceLocationText(item) {
     </div>
 
     <!-- ==================== 房间页签 ==================== -->
-    <div v-show="activeTab === 'rooms'" id="rooms-tab" class="tab-content" role="tabpanel">
+    <div v-show="activeTab === 'rooms'" id="rooms-tab" class="tab-content" :class="{ active: activeTab === 'rooms' }" role="tabpanel">
       <div class="table-container">
         <table id="rooms-table" class="data-table" aria-label="Rooms">
           <thead>
@@ -853,7 +854,7 @@ function deviceLocationText(item) {
     </div>
 
     <!-- ==================== 机柜页签 ==================== -->
-    <div v-show="activeTab === 'cabinets'" id="cabinets-tab" class="tab-content" role="tabpanel">
+    <div v-show="activeTab === 'cabinets'" id="cabinets-tab" class="tab-content" :class="{ active: activeTab === 'cabinets' }" role="tabpanel">
       <div class="table-container">
         <table id="cabinets-table" class="data-table" aria-label="Cabinets">
           <thead>
@@ -948,7 +949,7 @@ function deviceLocationText(item) {
     </div>
 
     <!-- ==================== 设备页签 ==================== -->
-    <div v-show="activeTab === 'devices'" id="devices-tab" class="tab-content" role="tabpanel">
+    <div v-show="activeTab === 'devices'" id="devices-tab" class="tab-content" :class="{ active: activeTab === 'devices' }" role="tabpanel">
       <div class="table-container">
         <table id="devices-table" class="data-table" aria-label="Devices">
           <thead>
@@ -1061,7 +1062,7 @@ function deviceLocationText(item) {
     </div>
 
     <!-- ==================== 线路页签 ==================== -->
-    <div v-show="activeTab === 'cable-links'" id="cable-links-tab" class="tab-content" role="tabpanel">
+    <div v-show="activeTab === 'cable-links'" id="cable-links-tab" class="tab-content" :class="{ active: activeTab === 'cable-links' }" role="tabpanel">
       <div class="table-container">
         <table id="cable-links-table" class="data-table" aria-label="Cable links">
           <thead>

@@ -268,7 +268,7 @@ const detailsLog = ref(null);
       </button>
     </div>
 
-    <div id="operation-tab" v-show="activeTab === 'operation'" class="tab-content" role="tabpanel">
+    <div id="operation-tab" v-show="activeTab === 'operation'" class="tab-content" :class="{ active: activeTab === 'operation' }" role="tabpanel">
       <div class="table-container">
         <table id="operation-logs-table" class="data-table" aria-label="Operation logs">
           <thead>
@@ -366,7 +366,7 @@ const detailsLog = ref(null);
       />
     </div>
 
-    <div id="login-tab" v-show="activeTab === 'login'" class="tab-content" role="tabpanel">
+    <div id="login-tab" v-show="activeTab === 'login'" class="tab-content" :class="{ active: activeTab === 'login' }" role="tabpanel">
       <div class="table-container">
         <table id="login-logs-table" class="data-table" aria-label="Login logs">
           <thead>
@@ -432,7 +432,7 @@ const detailsLog = ref(null);
       />
     </div>
 
-    <div id="notifications-tab" v-show="activeTab === 'notifications'" class="tab-content" role="tabpanel">
+    <div id="notifications-tab" v-show="activeTab === 'notifications'" class="tab-content" :class="{ active: activeTab === 'notifications' }" role="tabpanel">
       <div class="table-container">
         <table id="notifications-table" class="data-table" aria-label="Notifications list">
           <thead>

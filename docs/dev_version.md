@@ -254,3 +254,11 @@ v0.10.11
 6. 基础设施：utils/download.js 新增 downloadBlobResult（apiClient blob 归一结果触发浏览器保存，Content-Disposition 文件名优先）；icons.js 补 play/power/unlock、formatter.js 补 formatDate/formatUptime（本批次前置已就绪）；styles/pages/system.css 全量迁入（旧 system 相关 CSS 合并，修正 4 处 noDescendingSpecificity：数据管理卡按钮组与导出下拉、清理表单 label 抬升父级限定，匹配面等价）
 7. 验证：vite build 通过；oxlint 112 文件 0 告警（修复 CertificateCard mergedCerts map 内对象展开改 decorateCert 具名函数）、biome 166 文件 0 诊断、frontend_consistency 5 测试通过；浏览器 e2e 七页签逐一切换全过（系统信息卡片/用户表含 admin 行/系统配置表单与服务证书表/SMTP 与通知矩阵/数据管理 Agent·SNMP·导入导出·日志四卡片/定时任务空态表格/安全限流·密码策略·Fail2ban 三卡），console 零未捕获错误
 8. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.12
+2026102020503701
+1. 修复资源管理/日志页二级页签全部空白（根因）：旧版页签 CSS 契约要求显示必须依赖 `.tab-content.active`（main-content.css 自 v0.10.1 壳层落地即有 `.tab-content { display: none }`），而 ResourcesPage 六处（network-regions/networks/rooms/cabinets/devices/cable-links）与 LogsPage 三处（operation/login/notifications）页签容器只绑 `v-show` 未绑 `:class="{ active: ... }"`——数据实际已渲染进 DOM 但整层 display:none 视觉空白；逐处补齐 active 类绑定（v-show 与 active 类随同一状态联动，与 SystemPage 组件范式一致）
+2. 修复 IDE 预览面板在途请求被中止后查询永久错误（次生叠加问题）：预览 iframe 挂起恢复瞬间 fetch 被浏览器掐断（net::ERR_ABORTED → TypeError: Failed to fetch），此前全局 retry:false 使查询一次失败即进错误态不再自愈；TanStack Query 全局 queries.retry 由 false 改为 1，恢复后的立即重试时渲染帧已激活可成功，真实 API 失败多试一次幂等 GET 无副作用，写操作走 mutation（默认不重试）不受影响；服务端链路验证无恙（六资源接口 curl 压测 30/30 全通、vite 代理与模块转换均 200）
+3. 修复 MainShell 模板根节点复用 id="app" 的嵌套重复 id（main.html 挂载容器已占用该 id，模板根再占用使 querySelector("#app") 语义被污染、DOM id 唯一性被破坏）；样式与脚本均不依赖内层 #app，直接移除
+4. 验证：oxlint 112 文件 0 告警、biome 166 文件 0 诊断、vite build 通过、frontend_consistency 5 测试通过；e2e 以 getComputedStyle 实测可见性——rooms-tab display:flex 12 行、devices-tab flex 13 行、#operation-tab flex 50 行、非激活页签均 none，console 零错误。教训沉淀：JS 读 textContent/tr 数对 CSS visibility 全盲（隐藏元素照样可读），历次 e2e 仅凭 DOM 文本验证而漏检本缺陷，可见性验证必须显式读 computed style
+5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

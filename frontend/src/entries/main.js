@@ -46,10 +46,12 @@ app.use(VueQueryPlugin, {
   queryClientConfig: {
     defaultOptions: {
       queries: {
-        // 数据新鲜度与重试策略由各分区页按业务声明，这里只关闭
-        // 全局重试（API 客户端已内置 401 刷新与 429 退避，业务失败
-        // 统一以 { success: false } 归一，不抛异常）
-        retry: false
+        // 数据新鲜度策略由各分区页按业务声明；全局允许 1 次重试：
+        // IDE 预览面板（iframe）挂起恢复瞬间会在途请求被浏览器中止
+        // （net::ERR_ABORTED → Failed to fetch），恢复后的立即重试时
+        // 渲染帧已激活可成功；真实 API 失败多试一次幂等 GET 无副作用，
+        // 写操作走 mutation（默认不重试）不受影响
+        retry: 1
       }
     }
   }
