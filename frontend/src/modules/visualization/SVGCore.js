@@ -1,0 +1,441 @@
+import { apiGet, apiPost, apiDelete } from "../../api/client.js";
+import { showConfirm, showToast } from "../../utils/legacyBridge.js";
+import { SVGCanvasBase, SVG_NS } from "./svgCanvasBase.js";
+
+// SVG 命名空间（唯一定义处在 svgCanvasBase.js，此处再导出供渲染/数据模块引用）
+export { SVG_NS };
+
+/**
+ * 工位/机柜布局画布：网格背景、元素拖拽/吸附/对齐线与机柜虚拟横向滚动。
+ * 网格/标尺/viewBox/tooltip/坐标换算等共享实现在 SVGCanvasBase。
+ */
+export class SVGCore extends SVGCanvasBase {
+  constructor(containerId, type, callbacks = {}) {
+    super(containerId, { type, callbacks, defaultElementWidth: 160, rulerFontDivisor: 100 });
+    this.currentRoomId = null;
+    this.currentCabinetId = null;
+    this.snapToGrid = true;
+    this.showAlignmentLines = true;
+    this.alignmentThreshold = 10;
+    this.alignmentLinesGroup = null;
+    this.apiGet = apiGet;
+    this.apiPost = apiPost;
+    this.apiDelete = apiDelete;
+    this.showToast = showToast;
+    this.showConfirm = showConfirm;
+    // 机柜画布定型后容器 resize 的重排回调（由 SVGVisualization 接线到数据层）
+    this.onCabinetContainerResize = null;
+
+    this._init();
+  }
+
+  _initSVG() {
+    this.container.innerHTML = "";
+
+    this.svg = document.createElementNS(SVG_NS, "svg");
+    this.svg.className.baseVal = "visualization-svg";
+    this.svg.setAttribute("width", "100%");
+    this.svg.setAttribute("height", "100%");
+    this.svg.setAttribute("viewBox", "0 0 2000 2000");
+    if (this.type === "cabinet") {
+      // 机柜视图内容锚定画布底部，保证不同窗口/分辨率下柜底始终贴近屏幕底部；
+      // 初始 viewBox 直接取容器尺寸，避免先渲染 2000x2000 再纠正的闪变
+      this.svg.setAttribute("preserveAspectRatio", "xMidYMax meet");
+      const w = this.container.clientWidth || 800;
+      const h = this.container.clientHeight || 600;
+      this.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    } else {
+      // 工位视图内容锚定左上角：默认 xMidYMid 会在内容宽高比与容器不一致时
+      // 把内容整体居中，视觉上画布与左侧边栏之间偏离一段距离
+      // （网格留白已由基类覆盖矩形消除）。初始 viewBox 取容器尺寸（下限 1000x800）
+      this.svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
+      const w = this.container.clientWidth || 0;
+      const h = this.container.clientHeight || 0;
+      this.svg.setAttribute("viewBox", `0 0 ${Math.max(1000, w)} ${Math.max(800, h)}`);
+    }
+
+    this._createDefs();
+    this._createGridBackground();
+    this._createGridRulerGroup();
+
+    this.elementsGroup = document.createElementNS(SVG_NS, "g");
+    this.svg.appendChild(this.elementsGroup);
+
+    this.alignmentLinesGroup = document.createElementNS(SVG_NS, "g");
+    this.alignmentLinesGroup.className.baseVal = "alignment-lines";
+    this.svg.appendChild(this.alignmentLinesGroup);
+
+    this.container.appendChild(this.svg);
+
+    // 尺寸/边框/滚动均由 CSS（visualization.css 的 .visualization-canvas-scroll）控制，
+    // JS 不写内联 overflow/height：内联 maxHeight 会令高分辨率屏下机柜底部无法贴底
+  }
+
+  /**
+   * 工位画布尺寸跟踪：viewBox 至少覆盖容器尺寸，保证 ~1:1 显示比例；
+   * 已有内容时保留内容边界（取两者最大值），只增不减。
+   * （网格背景铺满由基类覆盖矩形统一保证，这里只负责视野大小。）
+   */
+  fitViewBoxToContainer() {
+    const w = this.container.clientWidth || 0;
+    const h = this.container.clientHeight || 0;
+    if (!w || !h) {
+      return;
+    }
+    const vb = this.svg.viewBox.baseVal;
+    if (vb.width >= w && vb.height >= h) {
+      return;
+    }
+    this.setViewBox(0, 0, Math.max(vb.width, w), Math.max(vb.height, h));
+  }
+
+  /**
+   * 容器尺寸变化（基类 ResizeObserver 钩子）：
+   * 先走基类同步网格覆盖矩形——画布可能在所属 section 隐藏时初始化
+   * （容器 0×0，覆盖矩形早退为 viewBox 副本），且工位路径的
+   * fitViewBoxToContainer 在 viewBox 已覆盖容器时会早退不调 setViewBox，
+   * 若不在此处显式同步，显示后网格背景将停留在初始化时的错误尺寸；
+   * 随后按类型调整视野：工位画布 viewBox 只增不减；机柜画布未定型时
+   * 兜底取容器尺寸，已定型（虚拟横向滚动）时交由数据层本地重排。
+   */
+  _onContainerResize() {
+    super._onContainerResize();
+    if (this.type === "cabinet") {
+      this._fitCabinetViewBoxOnResize();
+    } else {
+      this.fitViewBoxToContainer();
+    }
+  }
+
+  /**
+   * 主网格线 + 坐标标尺层：位于元素层之下。
+   * 主网格间距为 gridSize 的 5 倍（100px），每条主网格线在视口
+   * 顶边/左边标注画布坐标，配合坐标输入框精确定位。
+   */
+  _createGridRulerGroup() {
+    this.gridRulerGroup = document.createElementNS(SVG_NS, "g");
+    this.gridRulerGroup.className.baseVal = "grid-ruler";
+    this.svg.appendChild(this.gridRulerGroup);
+    this._renderGridRuler();
+  }
+
+  _initEventListeners() {
+    this.svg.addEventListener("mousedown", this._handleMouseDown.bind(this));
+    this.svg.addEventListener("mousemove", this._handleMouseMove.bind(this));
+    this.svg.addEventListener("mouseup", this._handleMouseUp.bind(this));
+    this.svg.addEventListener("mouseleave", () => {
+      this._handleMouseUp();
+      this._hideTooltip();
+      this._clearAlignmentLines();
+    });
+
+    this.svg.addEventListener("click", (e) => {
+      const isElement = e.target.closest("[data-id]");
+      if (!isElement) {
+        this._clearSelection();
+      }
+    });
+  }
+
+  _handleMouseDown(e) {
+    if (e.button !== 0) {
+      return;
+    }
+    const target = e.target.closest("[data-id]");
+    if (target) {
+      this.isDragging = true;
+      this.hasMoved = false;
+      this.selectedElement = target;
+      this._selectElement(target);
+
+      const rect = target.querySelector("rect");
+      if (rect) {
+        this.elementStartPos = {
+          x: parseFloat(rect.getAttribute("x")),
+          y: parseFloat(rect.getAttribute("y"))
+        };
+      }
+      this.mouseStartPos = this._getSvgCoordinates(e);
+    }
+  }
+
+  _handleMouseMove(e) {
+    if (this.isDragging && this.selectedElement) {
+      const currentPos = this._getSvgCoordinates(e);
+      const dx = currentPos.x - this.mouseStartPos.x;
+      const dy = currentPos.y - this.mouseStartPos.y;
+
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        this.hasMoved = true;
+
+        const newX = this.elementStartPos.x + dx;
+        const newY = this.elementStartPos.y + dy;
+
+        this._setElementPosition(this.selectedElement, newX, newY);
+
+        if (this.showAlignmentLines) {
+          this._updateAlignmentLines(this.selectedElement);
+        }
+
+        this._hideTooltip();
+      }
+      return;
+    }
+
+    this._updateTooltip(e);
+  }
+
+  _handleMouseUp(_e) {
+    if (this.isDragging && !this.hasMoved && this.selectedElement) {
+      this._handleElementClick(this.selectedElement);
+    }
+
+    if (this.isDragging && this.hasMoved && this.selectedElement && this.snapToGrid) {
+      this._snapElementToGrid(this.selectedElement);
+    }
+
+    // 拖拽落定后通知上层（可视化层据此自动保存坐标，实现页面直接编辑位置）
+    if (
+      this.isDragging &&
+      this.hasMoved &&
+      this.selectedElement &&
+      this.callbacks.onPositionChanged
+    ) {
+      this.callbacks.onPositionChanged(this.selectedElement.dataset.id);
+    }
+
+    this._clearAlignmentLines();
+    this.isDragging = false;
+  }
+
+  /** 机柜元素位移后，其内部机位子元素按相对坐标跟随（基类联动钩子）。 */
+  _onElementPositioned(element, x, y) {
+    if (element.classList.contains("cabinet-element")) {
+      this._updateChildPositions(element, x, y);
+    }
+  }
+
+  _updateChildPositions(element, parentX, parentY) {
+    const cabinetId = element.dataset.id;
+    const positions = this.elementsGroup.querySelectorAll(".cabinet-position-element");
+    positions.forEach((position) => {
+      if (position.dataset.cabinetId === cabinetId) {
+        const relX = parseFloat(position.dataset.relX || 0);
+        const relY = parseFloat(position.dataset.relY || 0);
+        const newX = parentX + relX;
+        const newY = parentY + relY;
+
+        const positionRect = position.querySelector("rect");
+        if (positionRect) {
+          positionRect.setAttribute("x", newX);
+          positionRect.setAttribute("y", newY);
+        }
+        const positionTexts = position.querySelectorAll("text");
+        positionTexts.forEach((text) => {
+          const textRelX = parseFloat(text.dataset.relX || 0);
+          const textRelY = parseFloat(text.dataset.relY || 0);
+          text.setAttribute("x", newX + textRelX);
+          text.setAttribute("y", newY + textRelY);
+        });
+      }
+    });
+  }
+
+  // 从元素 class 推断节点类型（工位/机柜/机位），未知返回空串
+  _elementTypeOf(element) {
+    const typeByClass = [
+      ["workstation-element", "workstation"],
+      ["cabinet-element", "cabinet"],
+      ["cabinet-position-element", "cabinet-position"]
+    ];
+    for (const [cls, type] of typeByClass) {
+      if (element.classList.contains(cls)) {
+        return type;
+      }
+    }
+    return "";
+  }
+
+  _handleElementClick(element) {
+    const id = element.dataset.id;
+    const elementType = this._elementTypeOf(element);
+
+    // 画布当前坐标随事件透传（工位模态框坐标输入框回填用）
+    const rect = element.querySelector("rect");
+    const position = rect
+      ? {
+          x: parseFloat(rect.getAttribute("x")) || 0,
+          y: parseFloat(rect.getAttribute("y")) || 0
+        }
+      : null;
+
+    if (elementType === "workstation" && this.callbacks.onEditWorkstation) {
+      this.callbacks.onEditWorkstation(id, position);
+    } else if (elementType === "cabinet" && this.callbacks.onEditCabinet) {
+      this.callbacks.onEditCabinet(id);
+    } else if (elementType === "cabinet-position" && this.callbacks.onEditCabinetPosition) {
+      this.callbacks.onEditCabinetPosition(id);
+    }
+  }
+
+  _updateAlignmentLines(element) {
+    this._clearAlignmentLines();
+
+    const rect = element.querySelector("rect");
+    if (!rect) {
+      return;
+    }
+
+    const x = parseFloat(rect.getAttribute("x"));
+    const y = parseFloat(rect.getAttribute("y"));
+    const width = parseFloat(rect.getAttribute("width"));
+    const height = parseFloat(rect.getAttribute("height"));
+
+    const elementCenterX = x + width / 2;
+    const elementCenterY = y + height / 2;
+
+    const allElements = this.elementsGroup.querySelectorAll("[data-id]");
+    const otherElements = Array.from(allElements).filter((el) => el !== element);
+
+    otherElements.forEach((other) => {
+      const otherRect = other.querySelector("rect");
+      if (!otherRect) {
+        return;
+      }
+
+      const ox = parseFloat(otherRect.getAttribute("x"));
+      const oy = parseFloat(otherRect.getAttribute("y"));
+      const ow = parseFloat(otherRect.getAttribute("width"));
+      const oh = parseFloat(otherRect.getAttribute("height"));
+      const otherCenterX = ox + ow / 2;
+      const otherCenterY = oy + oh / 2;
+
+      if (Math.abs(elementCenterX - otherCenterX) < this.alignmentThreshold) {
+        this._drawAlignmentLine(
+          otherCenterX,
+          Math.min(y, oy),
+          otherCenterX,
+          Math.max(y + height, oy + oh)
+        );
+      }
+
+      if (Math.abs(elementCenterY - otherCenterY) < this.alignmentThreshold) {
+        this._drawAlignmentLine(
+          Math.min(x, ox),
+          otherCenterY,
+          Math.max(x + width, ox + ow),
+          otherCenterY
+        );
+      }
+
+      if (Math.abs(x - ox) < this.alignmentThreshold) {
+        this._drawAlignmentLine(ox, Math.min(y, oy), ox, Math.max(y + height, oy + oh));
+      }
+
+      if (Math.abs(y - oy) < this.alignmentThreshold) {
+        this._drawAlignmentLine(Math.min(x, ox), oy, Math.max(x + width, ox + ow), oy);
+      }
+    });
+  }
+
+  _drawAlignmentLine(x1, y1, x2, y2) {
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", x1);
+    line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2);
+    line.setAttribute("y2", y2);
+    line.setAttribute("stroke", "#3b82f6");
+    line.setAttribute("stroke-width", "1");
+    line.setAttribute("stroke-dasharray", "4,4");
+    line.setAttribute("opacity", "0.7");
+    this.alignmentLinesGroup.appendChild(line);
+  }
+
+  _clearAlignmentLines() {
+    if (this.alignmentLinesGroup) {
+      this.alignmentLinesGroup.innerHTML = "";
+    }
+  }
+
+  /**
+   * 机柜空画布兜底铺满：viewBox 直接取容器尺寸（背景矩形随 setViewBox 同步），
+   * 并把滚动占位宽度收回容器宽度，清除上一房间残留的横向滚动。
+   * 容器隐藏（尺寸为 0）时回退 800×600，切页签可见后由 ResizeObserver 纠正。
+   */
+  fitCabinetCanvasToContainer() {
+    const w = this.container.clientWidth || 800;
+    const h = this.container.clientHeight || 600;
+    if (this.scrollSpacer?.isConnected) {
+      this.scrollSpacer.style.width = `${w}px`;
+    }
+    this.setViewBox(0, 0, w, h);
+  }
+
+  /**
+   * 机柜画布容器尺寸变化兜底（基类 ResizeObserver 钩子的机柜分支）：
+   * 未定型（尚未渲染机柜）时按容器尺寸铺满；已定型时优先交由数据层
+   * 本地重排（重算 U 高并重设 viewBox，柜底贴底、网格铺满一步到位），
+   * 数据层未接入时退化为视野宽跟随容器宽、高度取定型高与容器高的较大值。
+   */
+  _fitCabinetViewBoxOnResize() {
+    if (!this._cabinetScrollBound || !this.onCabinetContainerResize) {
+      this.fitCabinetCanvasToContainer();
+      return;
+    }
+    this.onCabinetContainerResize();
+  }
+
+  /**
+   * 机柜画布定型（虚拟横向滚动方案）。
+   *
+   * Chromium 无法光栅化超大宽度的 SVG 元素（如千柜 ~20 万像素），因此 SVG
+   * 元素始终保持视口尺寸，由占位元素撑出内容总宽度提供原生横向滚动条；
+   * 滚动时平移 viewBox 的 x 偏移，内容坐标仍按全局 1:1 布局，拖拽与对齐
+   * 逻辑经 getScreenCTM 自动适配。
+   * 必须在绘制机柜之前调用，保证首帧就是最终布局。
+   */
+  setCabinetCanvasSize(totalWidth, height) {
+    if (!this._cabinetScrollBound) {
+      this._cabinetScrollBound = true;
+      this._cabinetViewHeight = height;
+      // rAF 节流：滚动时仅更新 viewBox 与网格位置
+      this.container.addEventListener("scroll", () => {
+        if (this._cabinetScrollRaf) {
+          return;
+        }
+        this._cabinetScrollRaf = requestAnimationFrame(() => {
+          this._cabinetScrollRaf = 0;
+          this._applyCabinetScroll(this.container.scrollLeft);
+        });
+      });
+    }
+    this._cabinetViewHeight = height;
+
+    // 占位元素绝对定位需要一个定位上下文
+    if (!this.container.style.position) {
+      this.container.style.position = "relative";
+    }
+
+    if (!this.scrollSpacer?.isConnected) {
+      const spacer = document.createElement("div");
+      spacer.style.cssText = "position:absolute;top:0;left:0;height:1px;pointer-events:none;";
+      this.container.appendChild(spacer);
+      this.scrollSpacer = spacer;
+    }
+    this.scrollSpacer.style.width = `${totalWidth}px`;
+
+    // SVG 覆盖在占位元素之上并吸住视口左缘
+    this.svg.style.position = "sticky";
+    this.svg.style.left = "0";
+    this.svg.style.width = "100%";
+    this.svg.setAttribute("height", "100%");
+
+    this._applyCabinetScroll(this.container.scrollLeft);
+  }
+
+  /** 按横向滚动偏移更新机柜画布 viewBox（背景矩形随 setViewBox 一并铺满）。 */
+  _applyCabinetScroll(scrollLeft) {
+    const viewWidth = this.container.clientWidth || 800;
+    this.setViewBox(scrollLeft, 0, viewWidth, this._cabinetViewHeight || 600);
+  }
+}

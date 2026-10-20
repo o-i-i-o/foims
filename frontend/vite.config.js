@@ -10,8 +10,14 @@ export default defineConfig({
     port: 5173,
     // /api 经本机 nginx（80 端口）转发至后端 UDS，与旧前端 dev 链路一致：
     // 浏览器 → Vite(5173) → nginx(80) → axum UDS
+    // /static 同理走 nginx：拓扑画布运行时 fetch /static/icons/lucide/*.svg，
+    // 生产由 nginx 直接托管 web/static，dev 代理保持同一行为
     proxy: {
       "/api": {
+        target: "http://localhost",
+        changeOrigin: false
+      },
+      "/static": {
         target: "http://localhost",
         changeOrigin: false
       }

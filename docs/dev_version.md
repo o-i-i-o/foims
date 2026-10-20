@@ -223,3 +223,13 @@ v0.10.8
 3. 共享抽取 composables/usePagedList.js：usePagedList 工厂/seqIndex 跨页序号/sortClass 三态/onThSort 守卫自 ResourcesPage 移出（纯移动，函数体不变），ResourcesPage 与 IpPage 复用；useQuery 随移出更新 import
 4. 验证：vite build 通过；oxlint 64 文件 0 告警、biome 163 文件 0 诊断、frontend_consistency 5 测试通过；curl 契约验证 ip 列表 updated_at 排序、device_name 过滤（2 条）、network 按网段名过滤（2 条）、分页键与 pull-defaults 结构；浏览器 e2e 5 项全过（11 列表头与拉取按钮/数据行与 100 每页分页选择器/4 个搜索弹层开关/拉取 MAC 弹窗开与设备列表渲染/关闭），console 零错误
 5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.9
+2026102014021101
+1. 可视化页完成 Vue 化（Vue 重构第八批）：VisualizationPage.vue 提供 section DOM 壳（三页签 工位/机柜/设备可视化，全部旧版 id 保留）+ onMounted 调 initVisualization() 挂载画布生态；MainShell 的 RouterView 对该页启用 KeepAlive（include 组件名，旧版分区 DOM 常驻不销毁，画布模块级单例/elementCache/document 级监听依赖该语义）；路由登记 visualization 替换 SectionPlaceholder
+2. 画布生态原样迁入（用户确认「画布原生+弹窗 Vue 化」方案）：11 个 visualization JS（svgCanvasBase/SVGCore/SVGDataManager/SVGRenderer/SVGVisualization/TopologyCore/TopologyDataManager/TopologyModal/TopologyRenderer/TopologyVisualization/visualizationManager.js 共 5414 行）逐字复制到 frontend/src/modules/visualization/，仅改 import 指向——apiClient→api/client.js、i18n/ui/confirm/helpers→legacyBridge、modalLoader→legacyModalLoader、pagedFetch 同路径直迁、resources 三函数→legacyResources；visualizationManager 的 loadModule 动态加载改静态 import（try/catch 保留）
+3. 适配层三件：legacyBridge.js（t 经 vue-i18n global、showToast 转发 useToast、showConfirm/confirmDelete/elementCache/setActiveSubtab/getActiveSubtab/createSeqGuard/debounce/escapeHtml/nextFrame 逐字）；legacyModalLoader.js（旧 modalLoader 机制裁剪 5 条目：confirm-modal + topology 4 弹窗，HTML 经 templates/modals/ 下 vite ?raw 内联，z-index 递增栈/焦点陷阱/[data-modal-id] 关闭委托保留）；legacyResources.js（组织/可视化房间下拉与 getOrgSubtreeIds）
+4. 编辑弹窗 Vue 化：legacyBridge 以可变 holder vueModals + 委托包装导出 editWorkstation/editCabinet/editCabinetPosition（ES module 导出绑定只读不可直接覆写），VisualizationPage 挂载时注入三个 Vue 弹窗实现；WorkstationModal.vue（办公类房间级联管理人按房间组织取员工、X/Y 坐标仅随 foims:workstation-saved CustomEvent 交画布静默应用不进 API）；PositionModal.vue（房间/机柜级联，房间选项自机柜数据源去重派生，编辑经 cabinet_id 反查房间回显）；CabinetModal 复用批 B 组件（与 ResourcesPage 同模式 GET 详情后打开）
+5. 页面样式：visualization.css 851 行迁入 frontend/src/styles/pages/visualization.css（@layer pages/responsive 原样），main.js 全局引入——画布/拓扑/弹窗 DOM 由原生 JS 动态创建拿不到 scoped 属性，页面级样式必须走全局层；vite dev 补 /static 代理（拓扑运行时 fetch /static/icons/lucide/*.svg，dev 与生产 nginx 同链路，修复 WebView 首验的图标解析报错）
+6. 验证：vite build 通过；oxlint 82 文件 0 告警、biome 164 文件 0 诊断、frontend_consistency 5 测试通过；迁移 diff 核对仅 import 头与 loadModule 段变化、5 个弹窗 HTML 与旧版字节一致；浏览器 e2e 5 项全过（三页签 tab-btn/三画布容器/工位组织 119 选项+房间下拉+SVG 渲染/机柜画布 SVG/拓扑画布 SVG 零 JS 异常，lucide 报错经 /static 代理修复后 curl 契约确认 SVG 可达）
+7. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

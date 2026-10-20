@@ -25,6 +25,9 @@ import "../styles/components/cable-label-print.css";
 import "../styles/toasts.css";
 import "../styles/layouts/sidebar.css";
 import "../styles/layouts/main-content.css";
+// pages 层：可视化页（画布/拓扑/机位弹窗等由原生 JS 动态创建的 DOM 拿不到
+// scoped 属性，页面级样式必须走全局层）
+import "../styles/pages/visualization.css";
 
 import App from "../pages/MainShell.vue";
 import { i18n } from "../i18n/index.js";

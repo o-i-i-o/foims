@@ -162,7 +162,14 @@ onMounted(() => {
     </aside>
 
     <main class="main-content" role="main">
-      <RouterView />
+      <!-- 可视化页画布 DOM 常驻（旧版分区从不销毁，画布单例/elementCache/
+           document 级监听依赖该语义），经 KeepAlive 按组件名缓存；其余分区
+           维持离场即销毁 -->
+      <RouterView v-slot="{ Component }">
+        <KeepAlive include="VisualizationPage">
+          <component :is="Component" />
+        </KeepAlive>
+      </RouterView>
     </main>
 
     <AppToast />
