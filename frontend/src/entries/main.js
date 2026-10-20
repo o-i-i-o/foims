@@ -30,6 +30,8 @@ import "../styles/layouts/main-content.css";
 import "../styles/pages/visualization.css";
 // pages 层：主机监控页与详情/阈值弹窗
 import "../styles/pages/agents.css";
+// pages 层：系统管理页（配置卡片/证书/服务/导入导出/通知矩阵/日志统计）
+import "../styles/pages/system.css";
 
 import App from "../pages/MainShell.vue";
 import { i18n } from "../i18n/index.js";

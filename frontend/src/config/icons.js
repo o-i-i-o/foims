@@ -197,5 +197,17 @@ export const ICONS = {
   // MAC 表（列表 + 字母角标组合，24x32 视窗）
   listM: listBadgeIcon("M"),
   // LLDP（列表 + 字母角标组合，24x32 视窗）
-  listL: listBadgeIcon("L")
+  listL: listBadgeIcon("L"),
+  // 立即执行（定时任务行内操作）
+  play: icon({ tag: "polygon", points: "5 3 19 12 5 21 5 3" }),
+  // 启停切换（定时任务启用/禁用）
+  power: icon(
+    { tag: "path", d: "M18.36 6.64a9 9 0 1 1-12.73 0" },
+    { tag: "line", x1: "12", y1: "2", x2: "12", y2: "12" }
+  ),
+  // 解封（应用层 fail2ban 已封禁 IP 行内操作）
+  unlock: icon(
+    { tag: "rect", x: "3", y: "11", width: "18", height: "11", rx: "2", ry: "2" },
+    { tag: "path", d: "M7 11V7a5 5 0 0 1 9.9-1" }
+  )
 };

@@ -1,0 +1,753 @@
+@layer pages {
+  /* 系统管理分区页样式（移植自旧版 pages/system-config.css + data-management.css，
+   并入 logs.css 中系统页使用的通知矩阵/收件人清单/日志统计类） */
+
+  .system-config-section,
+  .notification-config-section {
+    margin: 0 auto;
+    padding: var(--space-lg);
+    background: var(--color-bg-white);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+  }
+
+  .system-config-section h3,
+  .notification-config-section h3 {
+    color: var(--color-text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-sm);
+
+    /* 标题分隔线用实色主色：--color-primary-light 是 10% tint，2px 线条几乎不可见 */
+    border-bottom: 2px solid var(--color-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .system-config-section h3::before,
+  .notification-config-section h3::before {
+    content: "";
+    width: 4px;
+    height: 20px;
+    background: var(--color-primary);
+    border-radius: 2px;
+  }
+
+  .config-card {
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--color-border-light);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
+  }
+
+  .config-card:hover {
+    /* hover 边框用实色主色，10% tint 边框视觉上消失 */
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 12px
+      color-mix(in srgb, var(--color-primary) 15%, transparent);
+  }
+
+  .config-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .config-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .config-card-title .icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary-light);
+    border-radius: 50%;
+    color: var(--color-primary);
+    font-size: 0.75rem;
+  }
+
+  /* 字段行已换用页面表单家族 form-row/form-group（label 定宽居中、控件同行撑满，
+   同行表单变体规则见 forms.css），此处仅保留只读 dl 字段与整行分组块的差异 */
+
+  /* 只读字段 dl：dt 与家族行 label 同款定宽居中，dd 值框 flex:1 撑满剩余空间 */
+  dl.config-field,
+  .config-field dd {
+    margin: 0;
+  }
+
+  dl.config-field {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .config-field dt {
+    min-width: 80px;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-align: center;
+  }
+
+  /* 只读字段值框：控件壳与表单控件同款（token 见 variables.css） */
+  .config-field .field-value {
+    flex: 1;
+    min-width: 0;
+    padding: var(--control-padding-y) var(--control-padding-x);
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    background: var(--control-bg);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text);
+    min-height: 1.2rem;
+    word-break: break-all;
+  }
+
+  /* SNMP Trap v3 USM 用户表：fixed 布局按列宽分配，行内输入控件按列宽自适应，
+   防止 6 列控件以默认尺寸（~170px/列）撑破卡片产生横向滚动 */
+  .snmp-trap-users-container .data-table {
+    table-layout: fixed;
+  }
+
+  .snmp-trap-users-container th:nth-child(1) {
+    width: 20%;
+  }
+
+  .snmp-trap-users-container th:nth-child(2),
+  .snmp-trap-users-container th:nth-child(4) {
+    width: 15%;
+  }
+
+  .snmp-trap-users-container th:nth-child(3),
+  .snmp-trap-users-container th:nth-child(5) {
+    width: 20%;
+  }
+
+  .snmp-trap-users-container th:nth-child(6) {
+    width: 10%;
+  }
+
+  .snmp-trap-users-container td input,
+  .snmp-trap-users-container td select {
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.85rem;
+  }
+
+  .snmp-trap-users-container td:last-child {
+    text-align: center;
+  }
+
+  /* 行内表单组的字段标签（如安全卡片"手动封禁"行 IP 输入框），
+   与表单字段标签视觉一致 */
+  .inline-field-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  /* 用户管理 2fa 二维码居中 */
+  .qr-code-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 整行分组块（收件人清单/SNMP v3 用户表）：标题左对齐取齐正文、
+   按钮不随 align-items:stretch 拉满整行；块规则本体见 forms.css 同行表单变体 */
+  .config-card .form-group.form-group-block > .group-label {
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+    padding-top: 0;
+    color: var(--color-text-secondary);
+  }
+
+  /* 证书/服务管理表格操作列：基础规则声明在高特异度 .btn 组之前 */
+  .cert-actions-cell,
+  .svc-actions-cell {
+    white-space: nowrap;
+  }
+
+  .cert-actions-cell .btn,
+  .svc-actions-cell .btn {
+    margin-right: 6px;
+  }
+
+  .config-card .form-group.form-group-block > .btn {
+    align-self: flex-start;
+  }
+
+  /* ==================== 证书管理卡片 ==================== */
+
+  /* 卡片头部操作按钮组（证书/SMTP 等卡片头部通用） */
+  .card-header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .cert-section {
+    margin-top: 16px;
+  }
+
+  .cert-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 8px;
+  }
+
+  .cert-table-container {
+    overflow: auto;
+  }
+
+  .cert-days-warning {
+    color: var(--color-status-warning-text);
+    font-weight: 600;
+  }
+
+  .cert-days-expired {
+    color: var(--color-status-danger-text);
+    font-weight: 700;
+  }
+
+  /* 状态徽章：证书类型 / CA 私钥 / 服务状态三处共用同一形状规格 */
+  .cert-type-badge,
+  .ca-key-badge,
+  .svc-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* 徽章配色：文字用状态色 token，底色取同 token 的 12% 透明度（保持同色相） */
+  .cert-type-generated {
+    color: var(--color-status-info-text);
+    background: color-mix(
+      in srgb,
+      var(--color-status-info-text) 12%,
+      transparent
+    );
+  }
+
+  .cert-type-imported,
+  .ca-key-ok,
+  .svc-active {
+    color: var(--color-status-success-text);
+    background: color-mix(
+      in srgb,
+      var(--color-status-success-text) 12%,
+      transparent
+    );
+  }
+
+  .ca-key-missing,
+  .svc-inactive {
+    color: var(--color-status-neutral-text);
+    background: color-mix(
+      in srgb,
+      var(--color-status-neutral-text) 12%,
+      transparent
+    );
+  }
+
+  .svc-failed {
+    color: var(--color-status-danger-text);
+    background: color-mix(
+      in srgb,
+      var(--color-status-danger-text) 12%,
+      transparent
+    );
+  }
+
+  .svc-unregistered {
+    color: var(--color-status-warning-text);
+    background: color-mix(
+      in srgb,
+      var(--color-status-warning-text) 12%,
+      transparent
+    );
+  }
+
+  /* ==================== 站点根 CA 区块 ==================== */
+
+  .cert-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  /* CA 私钥徽章配色与形状复用上方 .ca-key-badge 共用规则 */
+
+  /* ==================== 服务管理卡片（foims / nginx 共同管理） ==================== */
+
+  /* 状态 / 自启徽章与操作列样式复用上方共用规则 */
+
+  /* 未注册服务的操作列提示文案 */
+  .svc-unregistered-hint {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
+
+  /* ==================== 商业许可卡片 ==================== */
+
+  /* 注册/购买占位按钮组 */
+  .license-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+  }
+
+  /* ==================== 关于卡片：开源组件清单模态框 ==================== */
+
+  /* 关于卡片内的"开源组件"入口：原 <a> 模拟链接已按钮化，
+   先做按钮 reset（去边框/背景/内边距、继承字体、手型光标），
+   再保留主题色 + 下划线动效 + 外链角标，视觉与原链接一致 */
+  .about-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: var(--space-sm);
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    cursor: pointer;
+    color: var(--color-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .about-link::after {
+    content: "↗";
+    font-size: 0.85em;
+    line-height: 1;
+    transition: transform var(--transition-fast);
+  }
+
+  .about-link:hover,
+  .about-link:focus-visible {
+    color: var(--color-primary-hover);
+    border-bottom-color: currentColor;
+    outline: none;
+  }
+
+  .about-link:hover::after {
+    transform: translate(1px, -1px);
+  }
+
+  .open-source-intro {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .open-source-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .open-source-group .open-source-license {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0 0 var(--space-xs);
+    padding-bottom: var(--space-xs);
+
+    /* 分组分隔线用实色主色，10% tint 2px 线条几乎不可见 */
+    border-bottom: 2px solid var(--color-primary);
+  }
+
+  .open-source-items {
+    margin: 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+  }
+
+  .open-source-items li {
+    font-size: 0.875rem;
+    line-height: 1.8;
+  }
+
+  .open-source-items a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .open-source-items a:hover {
+    text-decoration: underline;
+  }
+
+  /* 认证配置卡片头部的启用开关（LDAP / SSO） */
+  .config-switch {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .config-switch input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+  }
+
+  /* ==================== 定时任务 Cron 五字段输入 ==================== */
+
+  /* 标准 Linux cron 五段（分 时 日 月 星期）：横排等分输入框，下挂字段名。
+   选择器带 .cron-field-group 前缀抬升特异性，覆盖 forms.css 同行表单变体的
+   .modal .form-group label/input 横排规则（label 定宽居中、input flex:1） */
+  .modal .form-group.cron-field-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modal .form-group.cron-field-group > label {
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+    padding-top: 0;
+  }
+
+  .cron-field-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--space-sm);
+    width: 100%;
+    margin-top: var(--space-xs);
+  }
+
+  .modal .form-group.cron-field-group .cron-field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .modal .form-group.cron-field-group .cron-field input {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    text-align: center;
+  }
+
+  .cron-field-label {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+  }
+
+  /* 提交校验失败的字段标红（输入即清除） */
+  .cron-field input.cron-field-invalid {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 2px var(--color-danger-bg);
+  }
+
+  .cron-preview-hint {
+    font-style: normal;
+    align-self: flex-start;
+  }
+
+  .cron-preview-hint code {
+    font-family: var(--font-mono);
+    color: var(--color-text-light);
+    background-color: var(--control-bg-muted);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ==================== 导入导出 / 数据管理 ==================== */
+
+  .data-management-container,
+  .database-management-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    min-width: 0;
+  }
+
+  .data-management-container .section,
+  .database-management-container .section {
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    border: 1px solid var(--color-border-light);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* 数据管理/日志管理卡片化后：子区块置于 config-card 灰底之上，改用白底保持层次 */
+  .config-card .data-management-container .section,
+  .config-card .database-management-container .section {
+    background: var(--color-bg-white);
+  }
+
+  .data-management-container .section h3,
+  .database-management-container .section h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .import-actions,
+  .export-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+
+  .data-management-container .export-actions select {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    font-size: 0.85rem;
+    min-width: 0;
+  }
+
+  .config-card .data-management-container .import-actions .btn,
+  .config-card .data-management-container .export-actions .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .import-result-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: var(--space-sm);
+  }
+
+  .import-result-item {
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-xs);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    border-left: 3px solid var(--color-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .import-result-item:nth-child(odd) {
+    background: var(--color-bg-white);
+  }
+
+  /* ==================== 通知设置（移植自旧版 logs.css 系统页类） ==================== */
+
+  .notification-settings-section {
+    margin-top: 2rem;
+  }
+
+  /* 通知方式矩阵：行=通知类型，列=通知方式 */
+  .notification-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
+
+  .notification-matrix th,
+  .notification-matrix td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-light);
+    text-align: left;
+  }
+
+  .notification-matrix th {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .notification-matrix input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+  }
+
+  /* 占位徽章收缩为内容宽度，避免撑满整列 */
+  .notification-matrix .status-badge {
+    display: inline-flex;
+  }
+
+  .users-checkbox-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 0.5rem;
+    background: var(--color-bg);
+  }
+
+  .users-checkbox-list .user-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.2s;
+  }
+
+  .users-checkbox-list .user-checkbox-item:hover {
+    background-color: var(--color-bg-white);
+  }
+
+  .users-checkbox-list input[type="checkbox"] {
+    margin-right: 0.75rem;
+    width: 18px;
+    height: 18px;
+  }
+
+  .users-checkbox-list .user-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .users-checkbox-list .user-name {
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  .users-checkbox-list .user-email {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  /* ==================== 日志统计 / 清理（移植自旧版 logs.css 系统页类） ==================== */
+
+  .logs-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    min-width: 0;
+  }
+
+  .log-stat-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    text-align: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .log-stat-title {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .log-stat-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    word-break: break-all;
+  }
+
+  .log-stat-info {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .clear-logs-form {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 1.5rem;
+    min-width: 0;
+  }
+
+  .clear-logs-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    min-width: 0;
+  }
+
+  .clear-logs-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  /* label 的字重与颜色由 forms.css 的 .form-group label:not(.checkbox-label) 提供；
+   此处仅保留其未覆盖的 white-space */
+  .config-card .clear-logs-form .form-group label {
+    white-space: nowrap;
+  }
+
+  @media (width <= 576px) {
+    .clear-logs-form .form-row {
+      grid-template-columns: 1fr;
+    }
+
+    .logs-stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .log-stat-value {
+      font-size: 1.5rem;
+    }
+  }
+
+  @media (width <= 768px) {
+    .data-management-container,
+    .database-management-container {
+      grid-template-columns: 1fr;
+    }
+
+    /* 窄屏：导入导出操作区纵向堆叠（原 responsive.css 组件级规则迁回） */
+    .import-actions,
+    .export-actions {
+      flex-direction: column;
+    }
+  }
+}

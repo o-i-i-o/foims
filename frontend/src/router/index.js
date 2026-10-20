@@ -1,13 +1,11 @@
 /**
  * 主应用路由：hash 模式（与旧版 #dashboard 深链保持一致，无需 nginx 改动）。
- * 分区清单即导航数据源（侧边栏按 NAV_ITEMS 顺序渲染），未迁移分区统一
- * 挂 SectionPlaceholder 占位页，迁移完成时在 SECTION_COMPONENTS 登记
- * 实现组件即可替换。
+ * 分区清单即导航数据源（侧边栏按 NAV_ITEMS 顺序渲染），八个分区均已登记
+ * Vue 实现组件。
  */
 import { createRouter, createWebHashHistory } from "vue-router";
 import { hasSession } from "../utils/session.js";
 import { getHiddenSections } from "../utils/roleCapabilities.js";
-import SectionPlaceholder from "../pages/SectionPlaceholder.vue";
 import LogsPage from "../pages/LogsPage.vue";
 import DashboardPage from "../pages/DashboardPage.vue";
 import OrganizationPage from "../pages/OrganizationPage.vue";
@@ -15,6 +13,7 @@ import ResourcesPage from "../pages/ResourcesPage.vue";
 import IpPage from "../pages/IpPage.vue";
 import VisualizationPage from "../pages/VisualizationPage.vue";
 import AgentsPage from "../pages/AgentsPage.vue";
+import SystemPage from "../pages/SystemPage.vue";
 
 /**
  * 一级分区（顺序与旧版侧边栏一致）：name 同时是路由名、
@@ -39,7 +38,7 @@ const SECTION_COMPONENTS = {
   visualization: VisualizationPage,
   agents: AgentsPage,
   logs: LogsPage,
-  system: SectionPlaceholder
+  system: SystemPage
 };
 
 const router = createRouter({

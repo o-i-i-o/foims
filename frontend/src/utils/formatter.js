@@ -16,6 +16,38 @@ export function formatDateTime(dateStr) {
   return new Date(dateStr).toLocaleString(locale());
 }
 
+/** 仅日期（跟随界面语言），供"最早记录时间"、证书有效期等日期级展示使用 */
+export function formatDate(dateStr) {
+  if (!dateStr) {
+    return "-";
+  }
+  return new Date(dateStr).toLocaleDateString(locale());
+}
+
+/** 系统运行时长（秒 → X天X小时X分钟X秒，各时间单位文案走 i18n 动态键） */
+export function formatUptime(totalSeconds) {
+  let seconds = totalSeconds;
+  const days = Math.floor(seconds / (24 * 60 * 60));
+  seconds %= 24 * 60 * 60;
+  const hours = Math.floor(seconds / (60 * 60));
+  seconds %= 60 * 60;
+  const minutes = Math.floor(seconds / 60);
+  seconds %= 60;
+
+  let result = "";
+  if (days > 0) {
+    result += i18n.global.t("system.uptime_days", { count: days });
+  }
+  if (hours > 0) {
+    result += i18n.global.t("system.uptime_hours", { count: hours });
+  }
+  if (minutes > 0) {
+    result += i18n.global.t("system.uptime_minutes", { count: minutes });
+  }
+  result += i18n.global.t("system.uptime_seconds", { count: seconds });
+  return result;
+}
+
 /** 下划线命名转空格首字母大写（翻译键缺失时的展示回退） */
 function titleCase(value) {
   return value
