@@ -116,6 +116,11 @@ export const ICONS = {
     { tag: "line", x1: "21", y1: "12", x2: "9", y2: "12" }
   ),
   check: icon({ tag: "polyline", points: "20 6 9 17 4 12" }),
+  // 禁用（锁，主机监控行内操作）
+  lock: icon(
+    { tag: "rect", x: "3", y: "11", width: "18", height: "11", rx: "2", ry: "2" },
+    { tag: "path", d: "M7 11V7a5 5 0 0 1 10 0v4" }
+  ),
   // 查看详情（眼睛）
   eye: icon(
     { tag: "path", d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" },

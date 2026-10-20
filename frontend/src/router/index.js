@@ -14,6 +14,7 @@ import OrganizationPage from "../pages/OrganizationPage.vue";
 import ResourcesPage from "../pages/ResourcesPage.vue";
 import IpPage from "../pages/IpPage.vue";
 import VisualizationPage from "../pages/VisualizationPage.vue";
+import AgentsPage from "../pages/AgentsPage.vue";
 
 /**
  * 一级分区（顺序与旧版侧边栏一致）：name 同时是路由名、
@@ -36,7 +37,7 @@ const SECTION_COMPONENTS = {
   resources: ResourcesPage,
   ip: IpPage,
   visualization: VisualizationPage,
-  agents: SectionPlaceholder,
+  agents: AgentsPage,
   logs: LogsPage,
   system: SectionPlaceholder
 };

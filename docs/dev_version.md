@@ -233,3 +233,13 @@ v0.10.9
 5. 页面样式：visualization.css 851 行迁入 frontend/src/styles/pages/visualization.css（@layer pages/responsive 原样），main.js 全局引入——画布/拓扑/弹窗 DOM 由原生 JS 动态创建拿不到 scoped 属性，页面级样式必须走全局层；vite dev 补 /static 代理（拓扑运行时 fetch /static/icons/lucide/*.svg，dev 与生产 nginx 同链路，修复 WebView 首验的图标解析报错）
 6. 验证：vite build 通过；oxlint 82 文件 0 告警、biome 164 文件 0 诊断、frontend_consistency 5 测试通过；迁移 diff 核对仅 import 头与 loadModule 段变化、5 个弹窗 HTML 与旧版字节一致；浏览器 e2e 5 项全过（三页签 tab-btn/三画布容器/工位组织 119 选项+房间下拉+SVG 渲染/机柜画布 SVG/拓扑画布 SVG 零 JS 异常，lucide 报错经 /static 代理修复后 curl 契约确认 SVG 可达）
 7. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.10
+2026102015084901
+1. 主机监控页完成 Vue 化（Vue 重构第九批）：AgentsPage.vue 移植旧版 main.html agents 分区 + modules/agents.js——工具栏（状态下拉直提交/关键字草稿态回车与查询按钮提交并回第 1 页/刷新与 30s 轮询沿用已提交筛选与当前页）、12 列表格（状态点/主机名+SNMP 来源徽标+备注标签/AgentUsageBar 迷你使用率条 >85% 红 >60% 橙/温度 ℃ 格式化/相对时间最近上报）、分页与末页越界回退；TanStack Query refetchInterval 30s 轮询（窗口失焦自动暂停，同旧版 document.hidden 语义），路由登记 agents 替换 SectionPlaceholder（仅 admin/secadmin 可达，RBAC 守卫不变）
+2. 行内管理操作：详情（眼睛）/禁用（锁，PATCH status=disabled，仅 Agent 行显示）/启用（check，PATCH status=active）/删除（ConfirmModal 确认后 DELETE 级联历史），成功后失效 ["agents"] 重拉；SNMP 采集行不经上报鉴权，禁用/启用隐藏（旧版语义）
+3. 阈值弹窗 AgentThresholdModal.vue：四项阈值（cpu/mem/disk 1-100、temp 1-200）留空不监控、整数范围前端校验，enabled 复选框随表单提交 PUT，成功失效 ["agent-thresholds"] 并关闭；ModalShell + footer 槽（复选框+保存按钮 form 属性关联），v-if 挂载每次打开重拉配置
+4. 详情弹窗 AgentDetailModal.vue：标题主机名接续显示、状态徽章三色/IP 概要，系统信息/CPU 大数字+负载/内存容量条/磁盘（容量条+读写 IOPS+利用率，宽卡）/网卡（↓↑ 人性化速率+错误数）/温度风扇（℃/RPM）六张分组卡片 + 近 24h 趋势五卡；AgentSparkline.vue 声明式 SVG 曲线（固定 viewBox 320x96、null 断点分段 polyline、孤立单点圆点、max/min 标注、网络卡 rx/tx 双线图例），无需旧版 nextFrame 延迟测量时序；detail/history 各一条 useQuery（agentId 变化即 refetch）
+5. 资源联动：agents.css 462 行原样迁入 frontend/src/styles/pages/agents.css（@layer pages，全局引入同 visualization.css 前例）；config/icons.js 补 lock 图标（与旧版 icons.js 逐字同形）；AgentUsageBar 列表与弹窗共用
+6. 验证：vite build 通过；oxlint 87 文件 0 告警（修复 AgentsPage watch 内 totalPages 遮蔽外层 computed 命名）、biome 165 文件 0 诊断、frontend_consistency 5 测试通过；浏览器 e2e WebView 不稳（登录成功后无法取快照），按流程回退 curl 契约验证——列表分页键 items/total/page/page_size/total_pages、阈值配置结构、详情 raw_metrics 八字段、历史 144 点（cpu/disk/mem/rx_bps/tx_bps/temp 键与曲线取数对齐）、未登录 401 拒绝全部通过，vite transform 六个新模块均 200
+7. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
