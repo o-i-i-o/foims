@@ -9,17 +9,19 @@ import { computed } from "vue";
 import { ICONS } from "../config/icons.js";
 
 const props = defineProps({
-  name: { type: String, required: true }
+  name: { type: String, required: true },
+  /** 纵向加高视窗（0 0 24 32），仅字母角标组合图标（listP/listM/listL）使用 */
+  tall: { type: Boolean, default: false }
 });
 
 const shapes = computed(() =>
-  (ICONS[props.name] ?? []).map(({ tag, ...attrs }) => ({ tag, attrs }))
+  (ICONS[props.name] ?? []).map(({ tag, children, ...attrs }) => ({ tag, attrs, children }))
 );
 </script>
 
 <template>
   <svg
-    viewBox="0 0 24 24"
+    :viewBox="tall ? '0 0 24 32' : '0 0 24 24'"
     fill="none"
     stroke="currentColor"
     stroke-width="2"
@@ -27,6 +29,6 @@ const shapes = computed(() =>
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <component :is="shape.tag" v-for="(shape, index) in shapes" :key="index" v-bind="shape.attrs" />
+    <component :is="shape.tag" v-for="(shape, index) in shapes" :key="index" v-bind="shape.attrs">{{ shape.children }}</component>
   </svg>
 </template>

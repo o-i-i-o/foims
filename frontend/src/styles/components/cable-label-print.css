@@ -1,0 +1,87 @@
+@layer modals {
+  /* 线缆标签批量打印，逐字移植自旧版
+   web/static/css/modals/cable-label-print.css
+   规格说明：25x38+40 —— 标签 25mm 宽 x 38mm 高，标签间步进 40mm。
+   纸张固定为标签步进尺寸（@page size: 25mm 40mm），一枚标签独占一页，
+   页底 2mm 空白即标签间隔；标签内容仍为一枚印两端（上=本端、下=对端）。
+   打印区域平时隐藏，window.print() 时仅渲染标签页（遮蔽应用其余内容）。 */
+
+  /* 标签规格变量：调整标签尺寸时只改这里（页高在 @page size 同步调整） */
+  .cable-label-print-area {
+    --label-width: 25mm;
+    --label-height: 38mm;
+
+    display: none;
+  }
+
+  /* 单枚标签：垂直排列（上=本端编号，下=对端编号）；一枚标签独占一页 */
+  .cable-label {
+    width: var(--label-width);
+    height: var(--label-height);
+    box-sizing: border-box;
+    border: 0.3mm solid #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    padding: 1mm 0.5mm;
+    break-inside: avoid;
+    break-after: page;
+  }
+
+  /* 末枚标签不强制分页，避免末尾多出空白页 */
+  .cable-label:last-child {
+    break-after: auto;
+  }
+
+  .cable-label-text {
+    font-size: 8pt;
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+    word-break: break-all;
+  }
+
+  .cable-label-divider {
+    width: 100%;
+    border-top: 0.2mm dashed #000;
+  }
+
+  /* 弹窗内的选择列表滚动区 */
+  .cable-label-print-table-container {
+    max-height: 320px;
+    overflow: auto;
+  }
+
+  .cable-label-select-all {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+}
+
+/* 顶层 responsive 层：打印遮蔽规则必须位于固定层序末位——
+ body 直接子代的 .sidebar/.main-content 在 layouts 层带 display 声明，
+ 若本规则留在 modals 层会被层序反超导致打印时应用 UI 泄漏。
+ 置于末层后无需 !important 即可压制全部应用样式 */
+@layer responsive {
+  /* 打印时只保留标签打印区 */
+  @media print {
+    body > *:not(.cable-label-print-area) {
+      display: none;
+    }
+
+    body {
+      margin: 0; /* 清除浏览器默认 8px 外边距，避免标签偏离标签纸定位 */
+    }
+
+    .cable-label-print-area {
+      display: block;
+    }
+
+    @page {
+      size: 25mm 40mm; /* 步进 40mm = 标签 38mm + 间隔 2mm */
+      margin: 0;
+    }
+  }
+}

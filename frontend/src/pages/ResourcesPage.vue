@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 资源管理页（移植自旧版 main.html resources 分区 + resourceTabs.js，
- * 按页签分批迁移：已迁移 = 网络区域/子网/房间/机柜四个页签）：
+ * 按页签分批迁移：已迁移 = 网络区域/子网/房间/机柜/设备/线路六个页签）：
  * 页签记忆（route.query.tab 优先 → localStorage → 默认网络区域，与
  * 旧版 setActiveSubtab 同键名 foims_subtab_resources）。
  * 数据层为 TanStack Query：各表分页 20/页、列排序、page_size 可选
@@ -15,6 +15,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiGet } from "../api/client.js";
 import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter.js";
+import { getDeviceTypeName } from "../config/deviceOptions.js";
 import { showToast } from "../composables/useToast.js";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
@@ -26,18 +27,27 @@ import NetworkModal from "../components/network/NetworkModal.vue";
 import NetworkRegionModal from "../components/network/NetworkRegionModal.vue";
 import RoomModal from "../components/room/RoomModal.vue";
 import SubnetUsageModal from "../components/network/SubnetUsageModal.vue";
+import DeviceModal from "../components/device/DeviceModal.vue";
+import UnifiedDevicePortsModal from "../components/device/UnifiedDevicePortsModal.vue";
+import ArpModal from "../components/device/ArpModal.vue";
+import LldpModal from "../components/device/LldpModal.vue";
+import CableLinkModal from "../components/cable/CableLinkModal.vue";
+import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
+import CablePrintArea from "../components/cable/CablePrintArea.vue";
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // ==================== 页签状态（记忆 + 深链，与 LogsPage 同模式） ====================
 
-// 本批已迁移页签：其余页签（devices/cable-links）随批次追加
+// 本批已迁移页签
 const TABS = [
   { id: "network-regions", titleKey: "resources.network_regions" },
   { id: "networks", titleKey: "resources.network_segments" },
   { id: "rooms", titleKey: "resources.rooms" },
-  { id: "cabinets", titleKey: "resources.cabinets" }
+  { id: "cabinets", titleKey: "resources.cabinets" },
+  { id: "devices", titleKey: "resources.devices" },
+  { id: "cable-links", titleKey: "resources.cable_links" }
 ];
 const SUBTAB_KEY = "foims_subtab_resources";
 
@@ -279,6 +289,40 @@ const cabinets = usePagedList({
     })}`
 });
 
+// ==================== 设备页签 ====================
+
+const devices = usePagedList({
+  tag: "devices",
+  defaultPageSize: 20,
+  enabled: computed(() => activeTab.value === "devices"),
+  // 旧版设备列表默认按名称升序
+  defaultSortBy: "name",
+  defaultSortOrder: "asc",
+  buildUrl: (page, pageSize, sortBy, sortOrder) =>
+    `/api/resources/devices?${new URLSearchParams({
+      page,
+      page_size: pageSize,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    })}`
+});
+
+// ==================== 线路页签 ====================
+
+const cableLinks = usePagedList({
+  tag: "cable-links",
+  defaultPageSize: 20,
+  enabled: computed(() => activeTab.value === "cable-links"),
+  // 旧版线路列表默认按更新时间倒序
+  buildUrl: (page, pageSize, sortBy, sortOrder) =>
+    `/api/resources/cable-links?${new URLSearchParams({
+      page,
+      page_size: pageSize,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    })}`
+});
+
 // ==================== 弹窗与删除 ====================
 
 const regionModal = reactive({ open: false, region: null });
@@ -286,12 +330,24 @@ const networkModal = reactive({ open: false, network: null });
 const usageModal = reactive({ open: false, subnetId: "" });
 const roomModal = reactive({ open: false, room: null });
 const cabinetModal = reactive({ open: false, cabinet: null });
+// 设备弹窗：device 为 null = 新增，对象 = 编辑回显（GET /devices/{id} 完整数据）
+const deviceModal = reactive({ open: false, device: null });
+// 统一端口/MAC/LLDP 弹窗（deviceId + deviceName 供标题与接口调用）
+const portsModal = reactive({ open: false, deviceId: "", deviceName: "" });
+const arpModal = reactive({ open: false, deviceId: "" });
+const lldpModal = reactive({ open: false, deviceId: "" });
+// 线路弹窗：linkId 为 "" = 新增，非空 = 编辑（弹窗内取详情回填）
+const cableLinkModal = reactive({ open: false, linkId: "" });
+// 标签打印弹窗：items 取当前页列表数据（行内单行打印直接经 CablePrintArea）
+const labelPrintModal = reactive({ open: false, items: [] });
 // 通用简单列表弹窗（房间子项/信息点、机柜机位共用）
 const simpleList = reactive({ open: false, title: "", columns: [], rows: [] });
 const deletingRegion = ref(null);
 const deletingNetwork = ref(null);
 const deletingRoom = ref(null);
 const deletingCabinet = ref(null);
+const deletingDevice = ref(null);
+const deletingCableLink = ref(null);
 
 function openRegionModal(region = null) {
   regionModal.region = region;
@@ -311,6 +367,42 @@ function openRoomModal(room = null) {
 function openCabinetModal(cabinet = null) {
   cabinetModal.cabinet = cabinet;
   cabinetModal.open = true;
+}
+
+// 编辑设备：先取完整详情（含 cards），成功后打开弹窗回显
+async function editDevice(id) {
+  const result = await apiGet(`/api/resources/devices/${id}`);
+  if (!result.success || !result.data) {
+    showToast(`${t("device.load_failed")}: ${result.message}`, "error");
+    return;
+  }
+  deviceModal.device = result.data;
+  deviceModal.open = true;
+}
+
+// 行内单行打印：直接以该行两端编号调起打印（不经弹窗，旧版语义）；
+// seq 变化强制重挂载打印区，保证重复点击同一行也能再次调起打印
+const directPrint = reactive({ seq: 0, items: null });
+
+function printRowLabels(item) {
+  directPrint.items = [item];
+  directPrint.seq++;
+}
+
+// 编辑线路：详情由 CableLinkModal 内部查询回填
+function editCableLink(id) {
+  cableLinkModal.linkId = id;
+  cableLinkModal.open = true;
+}
+
+// 批量打印：列出当前页线路供勾选（旧版 openCableLabelPrintModal）
+function openCableLabelPrintModal() {
+  if (cableLinks.items.length === 0) {
+    showToast(t("cable_link.print_empty"), "warning");
+    return;
+  }
+  labelPrintModal.items = cableLinks.items;
+  labelPrintModal.open = true;
 }
 
 // 编辑房间：先取轻量 brief（一次并行查询取齐基础字段与子项），成功后打开弹窗
@@ -452,10 +544,68 @@ const deleteCabinetMutation = useMutation({
   }
 });
 
+const deleteDeviceMutation = useMutation({
+  mutationFn: (id) => apiDelete(`/api/resources/devices/${id}`),
+  onSuccess: (result) => {
+    if (result.success) {
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+      showToast(t("device.delete_success"), "success");
+    } else {
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+    }
+    deletingDevice.value = null;
+  }
+});
+
+const deleteCableLinkMutation = useMutation({
+  mutationFn: (id) => apiDelete(`/api/resources/cable-links/${id}`),
+  onSuccess: (result) => {
+    if (result.success) {
+      queryClient.invalidateQueries({ queryKey: ["cable-links"] });
+      showToast(t("cable_link.delete_success"), "success");
+    } else {
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+    }
+    deletingCableLink.value = null;
+  }
+});
+
 /** 房型是否机房类（行内子项列表按钮文案随房型切换：机房显机柜、其余显工位） */
 function isCabinetRoomType(roomType) {
   const type = (roomType || "").toLowerCase();
   return type === "data_center" || type === "telecom_closet";
+}
+
+// 端点/链路类型标签：未知枚举原样回显（与旧版 getEndpointTypeLabel 一致）
+function endpointTypeLabel(type) {
+  const labels = {
+    net_outlet: t("cable_link.endpoint_net_outlet"),
+    device_interface: t("cable_link.endpoint_device_interface"),
+    patch_panel: t("cable_link.endpoint_patch_panel")
+  };
+  return labels[type] || type;
+}
+
+function linkTypeLabel(type) {
+  const labels = {
+    ethernet: t("cable_link.link_type_ethernet"),
+    fiber: t("cable_link.link_type_fiber"),
+    console: t("cable_link.link_type_console")
+  };
+  return labels[type] || type;
+}
+
+/** 设备位置列：工位优先，其次机柜+U 区间（两者皆有才显示区间） */
+function deviceLocationText(item) {
+  if (item.workstation_name) {
+    return `${t("device.workstation")}: ${item.workstation_name}`;
+  }
+  if (item.cabinet_name) {
+    const uRange =
+      item.start_u != null && item.end_u != null ? ` ${item.start_u}-${item.end_u}U` : "";
+    return `${t("device.position")}: ${item.cabinet_name}${uRange}`;
+  }
+  return "-";
 }
 
 /** 排序列头公共类绑定（sorted/asc/desc 三态，与 LogsPage 表头一致） */
@@ -904,6 +1054,217 @@ function onThSort(event, list, key) {
       />
     </div>
 
+    <!-- ==================== 设备页签 ==================== -->
+    <div v-show="activeTab === 'devices'" id="devices-tab" class="tab-content" role="tabpanel">
+      <div class="table-container">
+        <table id="devices-table" class="data-table" aria-label="Devices">
+          <thead>
+            <tr>
+              <th class="index-column">{{ t("common.index") }}</th>
+              <th class="sortable" :class="sortClass(devices, 'name')" @click="onThSort($event, devices, 'name')">
+                {{ t("common.name") }}
+              </th>
+              <th class="sortable col-center" :class="sortClass(devices, 'device_type')" @click="onThSort($event, devices, 'device_type')">
+                {{ t("common.type") }}
+              </th>
+              <th class="sortable" :class="sortClass(devices, 'brand')" @click="onThSort($event, devices, 'brand')">
+                {{ t("device.brand") }}
+              </th>
+              <th class="sortable" :class="sortClass(devices, 'model')" @click="onThSort($event, devices, 'model')">
+                {{ t("device.model") }}
+              </th>
+              <th class="col-center">{{ t("device.power_watts") }}</th>
+              <th>{{ t("device.location") }}</th>
+              <th class="sortable" :class="sortClass(devices, 'room_name')" @click="onThSort($event, devices, 'room_name')">
+                {{ t("device.room") }}
+              </th>
+              <th>{{ t("common.description") }}</th>
+              <th>
+                <button type="button" class="btn btn-primary btn-sm" @click="deviceModal.device = null; deviceModal.open = true">
+                  {{ t("device.add") }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="devices.isError">
+              <td colspan="10" class="text-center">{{ devices.errorMessage }}</td>
+            </tr>
+            <tr v-else-if="devices.items.length === 0">
+              <td colspan="10" class="text-center">{{ t("common.no_data") }}</td>
+            </tr>
+            <template v-else>
+              <tr v-for="(item, index) in devices.items" :key="item.id">
+                <td class="index-column">{{ seqIndex(devices, index) }}</td>
+                <td>{{ item.name }}</td>
+                <td class="col-center">{{ getDeviceTypeName(t, item.device_type) }}</td>
+                <td>{{ item.brand || "-" }}</td>
+                <td>{{ item.model || "-" }}</td>
+                <td class="col-center">{{ item.power_watts ?? "-" }}</td>
+                <td>{{ deviceLocationText(item) }}</td>
+                <td>{{ item.room_name || "-" }}</td>
+                <td>{{ item.description || "-" }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="icon-btn btn-edit"
+                    :data-tooltip="t('common.edit')"
+                    :aria-label="t('common.edit')"
+                    @click="editDevice(item.id)"
+                  >
+                    <NavIcon name="edit" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-primary"
+                    :data-tooltip="t('device.ports')"
+                    :aria-label="t('device.ports')"
+                    @click="portsModal.deviceId = item.id; portsModal.deviceName = item.name || ''; portsModal.open = true"
+                  >
+                    <NavIcon name="listP" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-success"
+                    :data-tooltip="t('device.mac_table')"
+                    :aria-label="t('device.mac_table')"
+                    @click="arpModal.deviceId = item.id; arpModal.open = true"
+                  >
+                    <NavIcon name="listM" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-warning"
+                    :data-tooltip="t('device.lldp')"
+                    :aria-label="t('device.lldp')"
+                    @click="lldpModal.deviceId = item.id; lldpModal.open = true"
+                  >
+                    <NavIcon name="listL" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-delete"
+                    :data-tooltip="t('common.delete')"
+                    :aria-label="t('common.delete')"
+                    @click="deletingDevice = item"
+                  >
+                    <NavIcon name="trash" />
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        :page="devices.page"
+        :total-pages="devices.totalPages"
+        :total="devices.total"
+        :page-size="devices.pageSize"
+        :page-size-options="devices.pageSizeOptions"
+        @page-change="(p) => (devices.page = p)"
+        @page-size-change="devices.changePageSize"
+      />
+    </div>
+
+    <!-- ==================== 线路页签 ==================== -->
+    <div v-show="activeTab === 'cable-links'" id="cable-links-tab" class="tab-content" role="tabpanel">
+      <div class="table-container">
+        <table id="cable-links-table" class="data-table" aria-label="Cable links">
+          <thead>
+            <tr>
+              <th class="index-column">{{ t("common.index") }}</th>
+              <th>{{ t("cable_link.a_endpoint_type") }}</th>
+              <th>{{ t("cable_link.a_endpoint_no") }}</th>
+              <th>{{ t("cable_link.b_endpoint_type") }}</th>
+              <th>{{ t("cable_link.b_endpoint_no") }}</th>
+              <th class="sortable col-center" :class="sortClass(cableLinks, 'link_type')" @click="onThSort($event, cableLinks, 'link_type')">
+                {{ t("common.type") }}
+              </th>
+              <th>
+                <span class="sortable" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')">
+                  {{ t("cable_link.cable_label") }}
+                </span>
+                <button type="button" class="btn btn-secondary btn-sm" @click="openCableLabelPrintModal">
+                  {{ t("cable_link.print") }}
+                </button>
+              </th>
+              <th class="sortable col-center" :class="sortClass(cableLinks, 'length_m')" @click="onThSort($event, cableLinks, 'length_m')">
+                {{ t("cable_link.length_m") }}
+              </th>
+              <th class="sortable col-center" :class="sortClass(cableLinks, 'tested')" @click="onThSort($event, cableLinks, 'tested')">
+                {{ t("cable_link.tested") }}
+              </th>
+              <th>
+                <button type="button" class="btn btn-primary btn-sm" @click="cableLinkModal.linkId = ''; cableLinkModal.open = true">
+                  {{ t("cable_link.add") }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="cableLinks.isError">
+              <td colspan="10" class="text-center">{{ cableLinks.errorMessage }}</td>
+            </tr>
+            <tr v-else-if="cableLinks.items.length === 0">
+              <td colspan="10" class="text-center">{{ t("common.no_data") }}</td>
+            </tr>
+            <template v-else>
+              <tr v-for="(item, index) in cableLinks.items" :key="item.id">
+                <td class="index-column">{{ seqIndex(cableLinks, index) }}</td>
+                <td class="col-center">{{ endpointTypeLabel(item.a_endpoint_type) }}</td>
+                <td>{{ item.a_endpoint_label || "-" }}</td>
+                <td class="col-center">{{ endpointTypeLabel(item.b_endpoint_type) }}</td>
+                <td>{{ item.b_endpoint_label || "-" }}</td>
+                <td class="col-center">{{ linkTypeLabel(item.link_type) }}</td>
+                <td>{{ item.cable_label || "-" }}</td>
+                <td class="col-center">{{ item.length_m != null ? `${item.length_m}m` : "-" }}</td>
+                <td class="col-center">{{ item.tested ? t("cable_link.tested_yes") : t("cable_link.tested_no") }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="icon-btn btn-edit"
+                    :data-tooltip="t('common.edit')"
+                    :aria-label="t('common.edit')"
+                    @click="editCableLink(item.id)"
+                  >
+                    <NavIcon name="edit" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-print-cable"
+                    :data-tooltip="t('cable_link.print')"
+                    :aria-label="t('cable_link.print')"
+                    @click="printRowLabels(item)"
+                  >
+                    <NavIcon name="printer" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-delete"
+                    :data-tooltip="t('common.delete')"
+                    :aria-label="t('common.delete')"
+                    @click="deletingCableLink = item"
+                  >
+                    <NavIcon name="trash" />
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        :page="cableLinks.page"
+        :total-pages="cableLinks.totalPages"
+        :total="cableLinks.total"
+        :page-size="cableLinks.pageSize"
+        :page-size-options="cableLinks.pageSizeOptions"
+        @page-change="(p) => (cableLinks.page = p)"
+        @page-size-change="cableLinks.changePageSize"
+      />
+    </div>
+
     <!-- ==================== 弹窗 ==================== -->
     <NetworkRegionModal
       v-if="regionModal.open"
@@ -964,6 +1325,68 @@ function onThSort(event, list, key) {
       danger
       @confirm="deleteCabinetMutation.mutate(deletingCabinet.id)"
       @cancel="deletingCabinet = null"
+    />
+
+    <!-- 设备编辑弹窗：保存成功后弹窗内先 emit("saved") 再 emit("close")，
+         失效放在 saved 上，仅取消关闭时不触发无谓重查 -->
+    <DeviceModal
+      v-if="deviceModal.open"
+      :device="deviceModal.device"
+      @close="deviceModal.open = false"
+      @saved="queryClient.invalidateQueries({ queryKey: ['devices'] })"
+    />
+    <UnifiedDevicePortsModal
+      v-if="portsModal.open"
+      :device-id="portsModal.deviceId"
+      :device-name="portsModal.deviceName"
+      @close="portsModal.open = false"
+    />
+    <ArpModal
+      v-if="arpModal.open"
+      :device-id="arpModal.deviceId"
+      @close="arpModal.open = false"
+    />
+    <LldpModal
+      v-if="lldpModal.open"
+      :device-id="lldpModal.deviceId"
+      @close="lldpModal.open = false"
+    />
+    <!-- 线路编辑弹窗：保存后仅 emit("saved")，需在此关闭并失效列表 -->
+    <CableLinkModal
+      v-if="cableLinkModal.open"
+      :link-id="cableLinkModal.linkId"
+      @close="cableLinkModal.open = false"
+      @saved="
+        cableLinkModal.open = false;
+        queryClient.invalidateQueries({ queryKey: ['cable-links'] });
+        queryClient.invalidateQueries({ queryKey: ['devices'] });
+      "
+    />
+    <CableLabelPrintModal
+      v-if="labelPrintModal.open"
+      :items="labelPrintModal.items"
+      @close="labelPrintModal.open = false"
+    />
+    <!-- 行内单行打印：seq 变化强制重挂载，打印结束清理 -->
+    <CablePrintArea
+      v-if="directPrint.items"
+      :key="directPrint.seq"
+      :items="directPrint.items"
+      @done="directPrint.items = null"
+    />
+    <ConfirmModal
+      v-if="deletingDevice"
+      :message="t('common.delete_confirm')"
+      danger
+      @confirm="deleteDeviceMutation.mutate(deletingDevice.id)"
+      @cancel="deletingDevice = null"
+    />
+    <ConfirmModal
+      v-if="deletingCableLink"
+      :message="t('common.delete_confirm')"
+      danger
+      @confirm="deleteCableLinkMutation.mutate(deletingCableLink.id)"
+      @cancel="deletingCableLink = null"
     />
   </section>
 </template>

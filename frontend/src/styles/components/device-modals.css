@@ -1,0 +1,143 @@
+@layer modals {
+  /* 设备弹窗辅助样式（模板管理列表 + 加载态/工具行），
+   逐字移植自旧版 web/static/css/components/modals.css 的
+   device-template 与宽幅滚动辅助两段 */
+
+  /* ==================== 设备模板管理 ==================== */
+  .device-template-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .device-template-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-white);
+    transition: border-color var(--transition-fast);
+  }
+
+  .device-template-item:hover {
+    border-color: var(--color-primary);
+  }
+
+  .device-template-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .device-template-name {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .device-template-meta {
+    display: flex;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .device-template-actions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+  }
+
+  .device-template-edit-form {
+    width: 100%;
+  }
+
+  .device-template-edit-form .form-row {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+  }
+
+  .device-template-edit-form .form-group {
+    flex: 1;
+    margin-bottom: 0;
+  }
+
+  .device-template-edit-form .form-group label {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-xs);
+  }
+
+  .device-template-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+  }
+
+  /* ==================== 宽幅与滚动辅助（MAC/LLDP 等数据表模态框） ==================== */
+
+  /* 旧版 .modal-body.modal-body-scroll：MAC/LLDP 长表滚动区（新外壳 body
+   不可挂类，由弹窗内滚动容器承接） */
+  .modal-body-scroll {
+    max-height: 31.25rem;
+    overflow-y: auto;
+  }
+
+  .modal-loading {
+    text-align: center;
+    padding: 2.5rem 1rem;
+  }
+
+  .modal-loading .loading-text {
+    margin-top: 0.625rem;
+    color: var(--color-text-muted);
+  }
+
+  .spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 0.25rem solid var(--color-border-light);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto;
+  }
+
+  /* 模态框内工具行：左侧 tab 切换 + 右侧操作按钮 */
+  .tab-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
+    flex-wrap: wrap;
+  }
+
+  .tab-toolbar .tab-buttons {
+    display: flex;
+    gap: 0.3125rem;
+  }
+
+  .tab-search {
+    width: 100%;
+    padding: 0.5rem;
+    border: 0.0625rem solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.625rem;
+  }
+
+  .tab-table-container {
+    max-height: 21.875rem;
+    overflow-y: auto;
+  }
+}

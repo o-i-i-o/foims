@@ -8,6 +8,42 @@
 
 const icon = (...shapes) => shapes;
 
+/**
+ * 「顶部字母 + 列表」的单体组合图标（24x32 纵向视窗，移植自旧版
+ * listBadgeIcon）：上部白底圆内 currentColor 字母，下部完整 list 线条。
+ * 字母经 shape.children 由 NavIcon 渲染为文本子节点。
+ */
+function listBadgeIcon(letter) {
+  return icon(
+    {
+      tag: "circle",
+      cx: "12",
+      cy: "6",
+      r: "6",
+      fill: "var(--color-bg-white)",
+      stroke: "none"
+    },
+    {
+      tag: "text",
+      x: "12",
+      y: "8.9",
+      "text-anchor": "middle",
+      "font-size": "9",
+      "font-weight": "700",
+      "font-family": "inherit",
+      fill: "currentColor",
+      stroke: "none",
+      children: letter
+    },
+    { tag: "line", x1: "8", y1: "18", x2: "21", y2: "18" },
+    { tag: "line", x1: "8", y1: "24", x2: "21", y2: "24" },
+    { tag: "line", x1: "8", y1: "30", x2: "21", y2: "30" },
+    { tag: "line", x1: "3", y1: "18", x2: "3.01", y2: "18" },
+    { tag: "line", x1: "3", y1: "24", x2: "3.01", y2: "24" },
+    { tag: "line", x1: "3", y1: "30", x2: "3.01", y2: "30" }
+  );
+}
+
 export const ICONS = {
   dashboard: icon(
     { tag: "path", d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
@@ -139,5 +175,22 @@ export const ICONS = {
     { tag: "line", x1: "3", y1: "6", x2: "3.01", y2: "6" },
     { tag: "line", x1: "3", y1: "12", x2: "3.01", y2: "12" },
     { tag: "line", x1: "3", y1: "18", x2: "3.01", y2: "18" }
-  )
+  ),
+  // 自动分配 IP（闪电）
+  zap: icon({ tag: "polygon", points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2" }),
+  // 打印（打印机，线缆标签打印）
+  printer: icon(
+    { tag: "polyline", points: "6 9 6 2 18 2 18 9" },
+    {
+      tag: "path",
+      d: "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+    },
+    { tag: "rect", x: "6", y: "14", width: "12", height: "8" }
+  ),
+  // 设备接口（列表 + 字母角标组合，24x32 视窗）
+  listP: listBadgeIcon("P"),
+  // MAC 表（列表 + 字母角标组合，24x32 视窗）
+  listM: listBadgeIcon("M"),
+  // LLDP（列表 + 字母角标组合，24x32 视窗）
+  listL: listBadgeIcon("L")
 };

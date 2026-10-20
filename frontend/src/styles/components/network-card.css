@@ -1,0 +1,182 @@
+@layer modals {
+  /* 网卡管理器样式（网卡 → 网口 → IP），逐字移植自旧版
+   web/static/css/modals/network-card-manager.css
+   结构：network-card-item > [card-level-bar, nc-fields, nc-port-item]
+        nc-port-item > [port-level-bar, nc-fields, port-ips-container > nc-ip-item]
+        nc-ip-item > [ip-level-bar, nc-fields, nc-fields]
+   注意：使用 nc- 前缀避免与 visualization.css 的 .port-item 冲突 */
+
+  /* ===== 层级容器 ===== */
+  .network-card-item {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-primary);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    box-sizing: border-box;
+  }
+
+  .nc-port-item {
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-info);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    margin-top: var(--space-sm);
+    box-sizing: border-box;
+  }
+
+  .nc-ip-item {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-success);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    margin-top: var(--space-sm);
+    box-sizing: border-box;
+  }
+
+  /* IP 容器：网口内部承装 IP 的区域 */
+  .port-ips-container {
+    margin-top: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 2px solid var(--color-border-light);
+  }
+
+  /* ===== 层级标签栏 ===== */
+  .card-level-bar,
+  .port-level-bar,
+  .ip-level-bar,
+  header.card-level-bar,
+  header.port-level-bar,
+  header.ip-level-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .level-badge,
+  .level-badge.level-card,
+  .level-badge.level-port,
+  .level-badge.level-ip {
+    display: inline-block;
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--color-bg-white);
+    line-height: 1.6;
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  /* 重置 h3 默认样式 */
+  .card-level-bar h3.level-badge,
+  .port-level-bar h3.level-badge,
+  .ip-level-bar h3.level-badge {
+    margin: 0;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+  }
+
+  .level-card {
+    background: var(--color-primary);
+  }
+
+  .level-port {
+    background: var(--color-info);
+  }
+
+  .level-ip {
+    background: var(--color-success);
+  }
+
+  .level-actions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+  }
+
+  /* ===== 字段网格容器 ===== */
+  .nc-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .nc-fields:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ===== 字段单项 ===== */
+  .nc-field {
+    display: block;
+    min-width: 0;
+  }
+
+  .nc-field label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .nc-field .required {
+    color: var(--color-danger);
+    margin-left: 2px;
+  }
+
+  /* 复选框字段：覆盖 .nc-field label 的块级样式，保持复选框与文字同行垂直居中 */
+  .nc-field .checkbox-label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0;
+  }
+
+  /* ===== 输入控件：.nc-input 基样式统一由 components/forms.css 提供 ===== */
+
+  /* ===== 响应式 ===== */
+  @media (width <= 768px) {
+    .nc-fields {
+      grid-template-columns: 1fr;
+    }
+
+    .port-ips-container {
+      padding-left: var(--space-xs);
+    }
+
+    .card-level-bar,
+    .port-level-bar,
+    .ip-level-bar,
+    header.card-level-bar,
+    header.port-level-bar,
+    header.ip-level-bar {
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+    }
+  }
+
+  /* IP 地址输入 + 自动分配按钮组合 */
+  .nc-address-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .nc-address-group .ip-address {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nc-address-group .auto-assign-ip-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}

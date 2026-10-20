@@ -2,14 +2,19 @@
  * IP 地址与 CIDR 工具函数（IPv4/IPv6，移植自旧版 web/static/js/utils/network.js）。
  *
  * IPv4 八位组拒绝前导零（如 "01"，避免八进制歧义）。
- * 本文件仅收录前端已接线页面的依赖链（网段弹窗校验）：
- * isIPv6 / isValidIPv4 / isValidIPv6 / isIpInCidr 及其内部实现，
+ * 本文件收录前端已接线页面的依赖链（网段弹窗校验、设备网卡 IP 校验）：
+ * isIPv6 / isValidIP / isValidIPv4 / isValidIPv6 / isIpInCidr 及其内部实现，
  * 其余旧版函数待所属页面迁移时再补。
  */
 
 /** 判断是否为 IPv6 地址（按是否含冒号粗判，配合 isValidIPv6 使用）。 */
 export function isIPv6(ip) {
   return ip.includes(":");
+}
+
+/** 校验 IP 地址（IPv4 或 IPv6 任一合法即通过，网卡 IP 行校验用）。 */
+export function isValidIP(ip) {
+  return isValidIPv4(ip) || isValidIPv6(ip);
 }
 
 /** 校验 IPv4 点分十进制格式（拒绝前导零）。 */

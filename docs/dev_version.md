@@ -206,3 +206,12 @@ v0.10.6
 3. 基础设施：ModalShell 根节点补 modal 类使 forms.css 的 .modal 表单变体规则生效（对齐旧版弹窗 label 同行视觉）；dynamic-lists.css 移植旧版 network-config.css 动态列表样式（dyn-list/dyn-list-item/list-header/dyn-columns-header/必填星号 ::after）；utils/power.js 迁移 readPowerWattsInput、formatter.js 补 formatPowerValue；icons.js 补 list 形状
 4. 验证：vite build 通过；oxlint 122 文件 0 告警、biome 0 诊断、frontend_consistency 5 测试通过；curl 验证 rooms/cabinets 列表、rooms/{id}/brief 轻量回显、options 下拉接口契约与组件期望字段逐一对齐；浏览器 e2e 因本轮 WebView infra 持续不可用（3 轮代理均阻塞于登录/导航超时）未能执行，待环境恢复后补验
 5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.7
+2026102013114601
+1. 资源管理页 Vue 化第三批（Vue 重构第六批·批 C）：ResourcesPage.vue 追加「设备/线路」两页签完成六页签全量迁移——设备表 10 列（类型映射/功率/位置工位优先否则机柜+U 区间两者皆有才显示/房间）与线路表 10 列（A/B 端类型与编号/线路类型/线缆标签/长度/已测），设备 name 升序、线路 created_at 倒序默认排序（usePagedList defaultSort 参数），行内操作（编辑/端口/MAC/LLDP/删除、编辑/单行打印/删除）与删除确认；工具栏新增设备按钮、新增线路与批量打印标签按钮
+2. 设备弹窗族：DeviceModal（SNMP 配置折叠/模板联动回填/工位与机位互斥/NetworkCardEditor 网卡-网口-IP 三级行模型、遗留网段标记、网关校验、保存链卡片→网口→IP）；DeviceTemplateModal 模板管理（行内编辑/删除确认）；UnifiedDevicePortsModal 统一端口管理（size=xl、端口排序/悬浮详情、SNMP 同步任务表顺序递归执行防限流、冲突决策 skip/overwrite 弹窗、汇总 toast）；ArpModal/LldpModal MAC 与邻居表（phase 状态机、IPv4 /24 与 IPv6 fe80/ULA/240e 网段分组折叠、300ms 防抖搜索、LLDP neighbor_port 按 port_id 非 MAC>port_desc>port_id 优先级展示）
+3. 线路弹窗族：CableLinkModal（A/B 端 createSide 工厂级联：类型→范围→机柜/设备→端点四级下拉、device_interface 端点值 device_interface: 前缀编码、编辑回显 populateEndpointCascade 逐级回填、seq 序号守卫丢弃过期级联响应、禁自环校验）；CableLabelPrintModal 批量标签打印（当前页勾选、每条线路 A+B/B+A 两枚标签）；CablePrintArea Teleport body 打印区（window.print + afterprint 清理，行内单行打印经 directPrint seq 强制重挂载支持重复触发）
+4. 共享常量抽取 config/deviceOptions.js：DEVICE_TYPE_OPTIONS/CARD_TYPES/PHYSICAL_TYPES/INTERFACE_ROLES 与 getDeviceTypeName（未注册枚举原样回显），DeviceModal/NetworkCardEditor/DeviceTemplateModal 三处复用；device-modals.css 补 .modal-body-scroll 弹窗内滚动规则
+5. 验证：vite build 通过；oxlint 61 文件 0 告警（修复 NetworkCardEditor 两处 no-map-spread：网段选项改数组浅拷贝、buildCardRow 增 portsData 参数避免 map 内对象展开）、biome 163 文件 0 诊断、frontend_consistency 5 测试通过；浏览器 e2e 登录与两页签导航可达（WebView 不稳），curl 契约验证 devices/cable-links 列表排序参数、分页键 items/total/page/page_size/total_pages 与 macs/lldp-neighbors/nics/options/rooms 弹窗依赖接口全部通过
+6. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

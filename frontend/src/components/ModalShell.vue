@@ -3,7 +3,7 @@
  * 通用弹窗外壳（移植自旧版 utils/modalLoader.js buildModalShell +
  * components/modals.css 外壳）：遮罩 + 标题栏（含关闭按钮）+ body/footer
  * 插槽。Esc 与点击遮罩视为关闭；size 为宽度档位（与旧版 modal-content
- * 档位一致：默认 640 / sm 480 / md 600 / lg 900，min() 保证窄视口不溢出）。
+ * 档位一致：默认 640 / sm 480 / md 600 / lg 900 / xl 90vw，min() 保证窄视口不溢出）。
  */
 import { onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
@@ -83,6 +83,11 @@ onBeforeUnmount(useModalStack(() => emit("close")));
 
 .modal-dialog.modal-lg {
   max-width: min(900px, calc(100vw - 2rem));
+}
+
+/* xl 档：统一端口管理等宽弹窗（旧版 modal-lg-custom 90vw） */
+.modal-dialog.modal-xl {
+  max-width: 90vw;
 }
 
 .modal-header {
