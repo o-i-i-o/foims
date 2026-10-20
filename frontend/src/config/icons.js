@@ -79,5 +79,10 @@ export const ICONS = {
     { tag: "polyline", points: "16 17 21 12 16 7" },
     { tag: "line", x1: "21", y1: "12", x2: "9", y2: "12" }
   ),
-  check: icon({ tag: "polyline", points: "20 6 9 17 4 12" })
+  check: icon({ tag: "polyline", points: "20 6 9 17 4 12" }),
+  // 查看详情（眼睛）
+  eye: icon(
+    { tag: "path", d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" },
+    { tag: "circle", cx: "12", cy: "12", r: "3" }
+  )
 };

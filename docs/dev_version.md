@@ -164,3 +164,11 @@ v0.10.1
 3. RBAC 声明式迁移：roleCapabilities.js 五角色隐藏/只读分区表（admin/sysadmin/secadmin/auditor/user），路由守卫兜底重定向 + 占位页只读角标；不移植旧版 DOM 扫描 + MutationObserver 写控件隐藏机制，改由 Vue 页面声明式实现；空闲超时 usePageTimeout（等保，activity 事件重置，超时先 refreshToken 成功续期、失败跳登录）与 useTooltip 委托单例随迁；SectionPlaceholder 占位页沿用 content-section active 类保留布局层贴底约定，i18n 新增 common.section_migrating
 4. 验证：浏览器 e2e 9 项全过（壳渲染/侧边栏导航/收起展开/语言切换/改密模态/退出登录+无会话守卫/RBAC 隐藏分区重定向/只读角标）；oxlint 95 文件 0 告警（i18n 支持语言列表数组改 Set 修 prefer-set-has）；biome 纳入 frontend/src/styles 后 154 文件零诊断（biome migrate：recommended→preset 迁移、目录忽略 !x 去尾 /** 修正、排除 foims-agent 断链 fixture）；frontend_consistency 5 测试通过，cargo fmt/clippy --release -D warnings 零告警（本轮 Rust 零改动）
 5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.2
+2026102008252401
+1. 日志页完成 Vue 化（Vue 重构第三批，TanStack Query 数据层首次实战）：LogsPage.vue 移植旧版 logs 三页签全量逻辑——操作日志（分页 50/页、时间/操作类型/资源类型列排序、操作类型精确搜索防抖）、登录日志（163 条分页 + 排序）、通知（分页 20/页、已读状态列排序、单条/全部标记已读）；页签状态 route.query.tab 优先 → localStorage 记忆 → 默认操作日志，hash 深链形如 #/logs?tab=login
+2. TanStack Query 接线模式固化：页内 usePagedList 工厂（queryKey 用 computed 包裹 page/sort/搜索等 reactive 依赖，enabled 按页签懒加载，queryFn 对 apiClient 归一化失败 {success:false} 显式 throw 使查询进入 error 态，watch data 实现空页越界回退最后一页）；写操作 useMutation + invalidateQueries 前缀匹配失效驱动重拉；分页/排序/搜索/已读操作全部由查询状态驱动，无手工 DOM 渲染
+3. 通用组件沉淀：Pagination.vue（保真旧版分页 DOM 层级与省略号算法， totalPages>7 才渲染跳页框）、ConfirmModal.vue（danger 变体、Esc/遮罩取消）、LogDetailsModal.vue（操作日志七字段网格 + details JSON 解析格式化展示）；icons.js 新增 eye 图标；formatter.js 迁移旧版时间格式化（跟随界面语言）与 server.*/枚举/通知 content 翻译工具；entries/main.js 引入 components 层四 CSS（buttons/forms/tables/badges，与旧版逐字一致），日志页特有列宽与工具栏样式入 SFC scoped
+4. 验证：浏览器 e2e 13 项全过（子标签记忆/切换+hash 深链/列翻译/分页翻页/排序切换/详情弹窗/搜索空态+命中/登录日志/通知翻译与插值/单条已读/全部已读确认弹窗取消+确认双路径）；vite build 通过；oxlint 100 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过
+5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

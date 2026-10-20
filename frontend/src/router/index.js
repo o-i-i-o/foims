@@ -8,6 +8,7 @@ import { createRouter, createWebHashHistory } from "vue-router";
 import { hasSession } from "../utils/session.js";
 import { getHiddenSections } from "../utils/roleCapabilities.js";
 import SectionPlaceholder from "../pages/SectionPlaceholder.vue";
+import LogsPage from "../pages/LogsPage.vue";
 
 /**
  * 一级分区（顺序与旧版侧边栏一致）：name 同时是路由名、
@@ -31,7 +32,7 @@ const SECTION_COMPONENTS = {
   ip: SectionPlaceholder,
   visualization: SectionPlaceholder,
   agents: SectionPlaceholder,
-  logs: SectionPlaceholder,
+  logs: LogsPage,
   system: SectionPlaceholder
 };
 

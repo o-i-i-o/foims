@@ -8,7 +8,12 @@ import { createPinia } from "pinia";
 
 import "../styles/variables.css";
 import "../styles/reset.css";
+// components 层：与旧版 web/static/css/components 同名文件逐字一致
 import "../styles/components/tooltip.css";
+import "../styles/components/buttons.css";
+import "../styles/components/forms.css";
+import "../styles/components/tables.css";
+import "../styles/components/badges.css";
 import "../styles/toasts.css";
 import "../styles/layouts/sidebar.css";
 import "../styles/layouts/main-content.css";

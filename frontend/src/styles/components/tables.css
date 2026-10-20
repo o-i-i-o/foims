@@ -1,0 +1,892 @@
+@layer components {
+  .table-container {
+    width: 100%;
+    overflow-x: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .data-table {
+    width: 100%;
+
+    /* 强制至少铺满容器：表格处于 flex 等上下文时不因内容收缩 */
+    min-width: 100%;
+    border-collapse: collapse;
+    background: var(--color-bg-white);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .table-container > .data-table {
+    flex: 1;
+  }
+
+  /* ===== 独立表格家族（不带 .data-table 类的模态内明细表）：
+   基础规则集中声明在前，列级变体覆盖在文件底部（biome noDescendingSpecificity 约定） ===== */
+
+  /* MAC 表组内明细表 */
+  .mac-group-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .mac-group-table th {
+    border: 1px solid var(--color-border-dark);
+    padding: 6px;
+    text-align: left;
+    background: var(--color-bg);
+  }
+
+  .mac-group-table td {
+    border: 1px solid var(--color-border-dark);
+    padding: 6px;
+  }
+
+  /* LLDP 邻居表 */
+  .lldp-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .lldp-table thead tr {
+    background-color: var(--color-bg-secondary);
+  }
+
+  .lldp-table th {
+    border: 1px solid var(--color-border-dark);
+    padding: 12px 10px;
+    font-weight: 600;
+  }
+
+  .lldp-table td {
+    border: 1px solid var(--color-border-dark);
+    padding: 10px;
+  }
+
+  /* ===== .data-table 家族 ===== */
+
+  .data-table td {
+    padding: 0.35rem;
+    padding-top: 0.3rem;
+    text-align: center;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  /* 空数据占位行：与 .data-table td 等特异度，按源序覆盖其紧凑内边距 */
+  .empty-row td {
+    padding: var(--space-lg);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .data-table th {
+    background: var(--color-bg);
+    font-weight: 600;
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  /* 收紧表头行高：表头单元格单独减薄纵向内边距，
+   并同步缩小表头内的按钮与筛选输入框 */
+  .data-table thead th {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    border-top: 2px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
+    text-align: center;
+  }
+
+  /* 表头按钮的紧凑尺寸声明移至文件末尾的 responsive 层，
+   避免被 responsive.css 的通用 .btn 移动端最小宽度规则按层序反超 */
+
+  /* 宽度可控列（序号/时间/数字/枚举/按钮）：居中由 .data-table td 基础规则提供，
+   .col-center 仅作为 HTML 侧的语义标记类保留，无独立样式 */
+
+  .data-table tr:hover {
+    background: var(--color-bg);
+  }
+
+  .data-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* 表格加载失败占位单元格：默认可见的文本错误行
+   （区别于表单内联错误框 .error-message——后者默认 display:none，依赖 .show） */
+  .table-error-cell {
+    color: var(--color-danger-text);
+    text-align: center;
+    padding: 0.75rem;
+    font-weight: 500;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    width: 100%;
+  }
+
+  .pagination-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .pagination-btn {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-primary);
+    color: var(--color-bg-white);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  .pagination-btn:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+  }
+
+  .pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .pagination-pages {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .pagination-page {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    background: transparent;
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .pagination-page:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-primary);
+  }
+
+  .pagination-page.active {
+    background: var(--color-primary);
+    color: var(--color-bg-white);
+    border-color: var(--color-primary);
+  }
+
+  .pagination-ellipsis {
+    padding: 0 8px;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+
+  /* 分页页脚：sticky 吸附在可视区底部（长表格滚动时始终可见），自然位置仍在表格之后；
+   不透明背景避免吸附时透出底下行内容 */
+  .pagination-container {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    width: 100%;
+    padding: var(--space-md) 0;
+    border-top: 1px solid var(--color-border);
+    margin-top: auto;
+    background: var(--color-bg);
+  }
+
+  .pagination-wrapper {
+    display: block;
+    width: 100%;
+    padding: 0;
+  }
+
+  .pagination-info {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  .pagination-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .pagination-size,
+  .pagination-jump {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+
+  .pagination-size-selector,
+  .pagination-jump-input {
+    padding: 3px 6px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+  }
+
+  .pagination-size-selector {
+    cursor: pointer;
+  }
+
+  .pagination-jump-input {
+    width: 56px;
+    cursor: text;
+    text-align: center;
+  }
+
+  .pagination-size-selector:focus,
+  .pagination-jump-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .pagination-jump .pagination-btn {
+    padding: 3px var(--space-sm);
+    font-size: 0.8125rem;
+  }
+
+  .data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    position: relative;
+  }
+
+  .data-table th.sortable:hover {
+    background-color: var(--color-bg-hover);
+  }
+
+  .data-table th.sortable::after {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    transition:
+      opacity 0.2s ease,
+      color 0.2s ease;
+    opacity: 0.5;
+    font-family: monospace;
+    letter-spacing: -2px;
+  }
+
+  .data-table th.sortable:hover::after {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+
+  .data-table th.sortable.sorted {
+    background-color: var(--color-primary-light);
+  }
+
+  .data-table th.sortable.sorted::after {
+    opacity: 1;
+    color: var(--color-primary);
+    font-weight: 700;
+  }
+
+  .data-table th.sortable.sorted.asc::after {
+    content: "↑";
+  }
+
+  .data-table th.sortable.sorted.desc::after {
+    content: "↓";
+  }
+
+  .data-table th.sortable:not(.sorted)::after {
+    content: "↕";
+  }
+
+  .data-table th.sortable.sorted::before {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--color-primary);
+  }
+
+  /* 表头文字与行内操作按钮同行（如 IP 表 MAC 地址列的“拉取”按钮）。
+   th 必须保持 table-cell：设为 flex 会脱离表格列宽算法，在 table-layout:fixed
+   下该列百分比宽度失效并挤乱相邻列，这里仅禁止换行并收窄排序箭头留白 */
+  .data-table th.th-inline-action {
+    white-space: nowrap;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* 排序箭头移到右上角，避让行内按钮 */
+  .data-table th.th-inline-action.sortable::after {
+    top: 6px;
+    transform: none;
+  }
+
+  .data-table th.th-inline-action > * {
+    vertical-align: middle;
+  }
+
+  .data-table th.th-inline-action .btn-sm {
+    min-width: 0;
+    height: 26px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  /* 表头搜索：放大镜图标 + 点击图标弹出的搜索输入框 */
+  .data-table th.th-searchable {
+    position: relative;
+    white-space: nowrap;
+  }
+
+  .data-table th .th-search-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.35rem;
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    vertical-align: middle;
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease;
+  }
+
+  .data-table th .th-search-toggle svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+
+  .data-table th .th-search-toggle:hover {
+    color: var(--color-primary);
+    background-color: var(--color-bg-hover);
+  }
+
+  /* 输入框内有内容时图标保持高亮 */
+  .data-table th .th-search-toggle.active {
+    color: var(--color-primary);
+  }
+
+  .data-table th .th-search-popover {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 30;
+    width: min(14rem, 80vw);
+    padding: 0.5rem;
+    background-color: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+  }
+
+  .data-table th .th-search-popover.open {
+    display: block;
+  }
+
+  .data-table th .th-search-popover .form-control {
+    width: 100%;
+    font-size: 0.75rem;
+    padding: 0.4rem 0.5rem;
+  }
+
+  /* 表格容器水平滚动包装（通用工具类，原位于 network-usage.css） */
+  .table-responsive {
+    overflow-x: auto;
+  }
+
+  /* 各表格按百分比指定列宽（限定主页面表格 id，避免影响模态框动态表格）：
+   配合 table-layout: fixed 使浏览器严格按比例分配列宽 */
+  #network-regions-table,
+  #networks-table,
+  #rooms-table,
+  #cabinets-table,
+  #devices-table,
+  #cable-links-table,
+  #ip-table,
+  #operation-logs-table,
+  #login-logs-table,
+  #notifications-table,
+  #users-table,
+  #scheduled-tasks-table {
+    table-layout: fixed;
+  }
+
+  /* 网络区域表：序号/名称/IPv4/IPv6/描述/创建时间/操作 */
+  #network-regions-table th:nth-child(1) {
+    width: 5%;
+  }
+  #network-regions-table th:nth-child(2) {
+    width: 15%;
+  }
+  #network-regions-table th:nth-child(3) {
+    width: 17%;
+  }
+  #network-regions-table th:nth-child(4) {
+    width: 17%;
+  }
+  #network-regions-table th:nth-child(5) {
+    width: 20%;
+  }
+  #network-regions-table th:nth-child(6) {
+    width: 14%;
+  }
+  #network-regions-table th:nth-child(7) {
+    width: 12%;
+  }
+
+  /* 网络表：序号/名称/区域/IPv4/IPv6/创建时间/操作（含筛选输入框，列适当加宽） */
+  #networks-table th:nth-child(1) {
+    width: 5%;
+  }
+  #networks-table th:nth-child(2) {
+    width: 14%;
+  }
+  #networks-table th:nth-child(3) {
+    width: 14%;
+  }
+  #networks-table th:nth-child(4) {
+    width: 17%;
+  }
+  #networks-table th:nth-child(5) {
+    width: 17%;
+  }
+  #networks-table th:nth-child(6) {
+    width: 17%;
+  }
+  #networks-table th:nth-child(7) {
+    width: 16%;
+  }
+
+  /* 房间表：序号/名称/类型/组织/工位数/当前功率/电源功率/网络/描述/创建时间/操作
+   （11 列，合计 100%；列数与 main.html 表头严格对应，缺列会把尾部操作列压成 0 宽） */
+  #rooms-table th:nth-child(1) {
+    width: 4%;
+  }
+  #rooms-table th:nth-child(2) {
+    width: 9%;
+  }
+  #rooms-table th:nth-child(3) {
+    width: 7%;
+  }
+  #rooms-table th:nth-child(4) {
+    width: 10%;
+  }
+  #rooms-table th:nth-child(5) {
+    width: 6%;
+  }
+  #rooms-table th:nth-child(6) {
+    width: 9%;
+  }
+  #rooms-table th:nth-child(7) {
+    width: 9%;
+  }
+  #rooms-table th:nth-child(8) {
+    width: 13%;
+  }
+  #rooms-table th:nth-child(9) {
+    width: 12%;
+  }
+  #rooms-table th:nth-child(10) {
+    width: 11%;
+  }
+  #rooms-table th:nth-child(11) {
+    width: 10%;
+  }
+
+  /* 机柜表：序号/房间/名称/容量/当前功率/电源功率/机位数/描述/创建时间/操作（10 列） */
+  #cabinets-table th:nth-child(1) {
+    width: 5%;
+  }
+  #cabinets-table th:nth-child(2) {
+    width: 11%;
+  }
+  #cabinets-table th:nth-child(3) {
+    width: 12%;
+  }
+  #cabinets-table th:nth-child(4) {
+    width: 7%;
+  }
+  #cabinets-table th:nth-child(5) {
+    width: 9%;
+  }
+  #cabinets-table th:nth-child(6) {
+    width: 9%;
+  }
+  #cabinets-table th:nth-child(7) {
+    width: 7%;
+  }
+  #cabinets-table th:nth-child(8) {
+    width: 14%;
+  }
+  #cabinets-table th:nth-child(9) {
+    width: 13%;
+  }
+  #cabinets-table th:nth-child(10) {
+    width: 13%;
+  }
+
+  /* 设备表：序号/名称/类型/品牌/型号/功率/位置/房间/描述/操作（10 列） */
+  #devices-table th:nth-child(1) {
+    width: 4%;
+  }
+  #devices-table th:nth-child(2) {
+    width: 10%;
+  }
+  #devices-table th:nth-child(3) {
+    width: 8%;
+  }
+  #devices-table th:nth-child(4) {
+    width: 10%;
+  }
+  #devices-table th:nth-child(5) {
+    width: 11%;
+  }
+  #devices-table th:nth-child(6) {
+    width: 8%;
+  }
+  #devices-table th:nth-child(7) {
+    width: 14%;
+  }
+  #devices-table th:nth-child(8) {
+    width: 9%;
+  }
+  #devices-table th:nth-child(9) {
+    width: 13%;
+  }
+  #devices-table th:nth-child(10) {
+    width: 13%;
+  }
+
+  /* 线缆连接表：序号/A端类型/A端编号/B端类型/B端编号/类型/标签/长度/已测/操作 */
+  #cable-links-table th:nth-child(1) {
+    width: 4%;
+  }
+  #cable-links-table th:nth-child(2) {
+    width: 10%;
+  }
+  #cable-links-table th:nth-child(3) {
+    width: 16%;
+  }
+  #cable-links-table th:nth-child(4) {
+    width: 10%;
+  }
+  #cable-links-table th:nth-child(5) {
+    width: 16%;
+  }
+  #cable-links-table th:nth-child(6) {
+    width: 9%;
+  }
+  #cable-links-table th:nth-child(7) {
+    width: 11%;
+  }
+  #cable-links-table th:nth-child(8) {
+    width: 7%;
+  }
+  #cable-links-table th:nth-child(9) {
+    width: 7%;
+  }
+  #cable-links-table th:nth-child(10) {
+    width: 10%;
+  }
+
+  /* IP 表：序号/位置/名称/类型/网络/IP地址/MAC/设备端口/状态/最后在线/创建时间（合计 100%）。
+   配比按各列表头（含搜索图标/排序留白）单行所需宽度调校，避免中文表头竖排或 3+1 换行 */
+  #ip-table th:nth-child(1) {
+    width: 4%;
+  }
+  #ip-table th:nth-child(2) {
+    width: 7.5%;
+  }
+  #ip-table th:nth-child(3) {
+    width: 9.5%;
+  }
+  #ip-table th:nth-child(4) {
+    width: 10%;
+  }
+  #ip-table th:nth-child(5) {
+    width: 9.5%;
+  }
+  #ip-table th:nth-child(6) {
+    width: 10.5%;
+  }
+  #ip-table th:nth-child(7) {
+    width: 12.5%;
+  }
+  #ip-table th:nth-child(8) {
+    width: 10%;
+  }
+  #ip-table th:nth-child(9) {
+    width: 6.5%;
+  }
+  #ip-table th:nth-child(10) {
+    width: 10%;
+  }
+  #ip-table th:nth-child(11) {
+    width: 10%;
+  }
+
+  /* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/搜索框 */
+  #operation-logs-table th:nth-child(1) {
+    width: 4%;
+  }
+  #operation-logs-table th:nth-child(2) {
+    width: 16%;
+  }
+  #operation-logs-table th:nth-child(3) {
+    width: 10%;
+  }
+  #operation-logs-table th:nth-child(4) {
+    width: 12%;
+  }
+  #operation-logs-table th:nth-child(5) {
+    width: 12%;
+  }
+  #operation-logs-table th:nth-child(6) {
+    width: 10%;
+  }
+  #operation-logs-table th:nth-child(7) {
+    width: 12%;
+  }
+  #operation-logs-table th:nth-child(8) {
+    width: 24%;
+  }
+
+  /* 登录日志表：序号/时间/用户名/IP/UA/结果/错误信息 */
+  #login-logs-table th:nth-child(1) {
+    width: 4%;
+  }
+  #login-logs-table th:nth-child(2) {
+    width: 15%;
+  }
+  #login-logs-table th:nth-child(3) {
+    width: 10%;
+  }
+  #login-logs-table th:nth-child(4) {
+    width: 12%;
+  }
+  #login-logs-table th:nth-child(5) {
+    width: 22%;
+  }
+  #login-logs-table th:nth-child(6) {
+    width: 10%;
+  }
+  #login-logs-table th:nth-child(7) {
+    width: 27%;
+  }
+
+  /* 通知表：序号/时间/标题/内容/状态/操作 */
+  #notifications-table th:nth-child(1) {
+    width: 4%;
+  }
+  #notifications-table th:nth-child(2) {
+    width: 14%;
+  }
+  #notifications-table th:nth-child(3) {
+    width: 20%;
+  }
+  #notifications-table th:nth-child(4) {
+    width: 38%;
+  }
+  #notifications-table th:nth-child(5) {
+    width: 12%;
+  }
+  #notifications-table th:nth-child(6) {
+    width: 12%;
+  }
+
+  /* 用户表：序号/用户名/邮箱/角色/状态/2FA/创建时间/操作 */
+  #users-table th:nth-child(1) {
+    width: 4%;
+  }
+  #users-table th:nth-child(2) {
+    width: 12%;
+  }
+  #users-table th:nth-child(3) {
+    width: 22%;
+  }
+  #users-table th:nth-child(4) {
+    width: 10%;
+  }
+  #users-table th:nth-child(5) {
+    width: 10%;
+  }
+  #users-table th:nth-child(6) {
+    width: 6%;
+  }
+  #users-table th:nth-child(7) {
+    width: 20%;
+  }
+  #users-table th:nth-child(8) {
+    width: 16%;
+  }
+
+  /* 计划任务表：序号/名称/类型/Cron/状态/上次运行/上次结果/操作 */
+  #scheduled-tasks-table th:nth-child(1) {
+    width: 4%;
+  }
+  #scheduled-tasks-table th:nth-child(2) {
+    width: 14%;
+  }
+  #scheduled-tasks-table th:nth-child(3) {
+    width: 10%;
+  }
+  #scheduled-tasks-table th:nth-child(4) {
+    width: 16%;
+  }
+  #scheduled-tasks-table th:nth-child(5) {
+    width: 10%;
+  }
+  #scheduled-tasks-table th:nth-child(6) {
+    width: 16%;
+  }
+  #scheduled-tasks-table th:nth-child(7) {
+    width: 16%;
+  }
+  #scheduled-tasks-table th:nth-child(8) {
+    width: 14%;
+  }
+
+  /* ==========================================
+   设备 MAC 表 / LLDP 邻居表（deviceMacLldp.js 模态框专用，
+   由 JS 模板渲染，类名以 mac-/lldp- 前缀隔离）
+   ========================================== */
+
+  /* MAC 表空数据提示 */
+  .mac-table-empty {
+    text-align: center;
+    color: var(--color-text-secondary);
+    padding: 20px;
+  }
+
+  /* MAC 表按网段分组的外层容器 */
+  .mac-network-group {
+    margin-bottom: 10px;
+  }
+
+  /* MAC 表可点击的网段分组标题行（点击折叠/展开组内明细） */
+  .network-group-header {
+    background: var(--color-bg-hover);
+    padding: 8px 12px;
+    font-weight: 700;
+    border-left: 3px solid var(--color-success);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+
+  /* MAC 表分组标题右侧折叠箭头：默认折叠态横置，展开时 JS 切换 .expanded 回正 */
+  .mac-collapse-icon {
+    transform: rotate(-90deg);
+    transition: transform var(--transition-normal);
+  }
+
+  .mac-collapse-icon.expanded {
+    transform: rotate(0deg);
+  }
+
+  /* MAC 表组内明细：折叠态由 JS 切换 .collapsed 收起 */
+  .network-group-content.collapsed {
+    display: none;
+  }
+
+  .lldp-table th.lldp-col-index {
+    width: 60px;
+    text-align: center;
+  }
+
+  /* 隔行底色：与原内联实现一致（首行主背景，偶数行次背景） */
+  .lldp-table tbody tr:nth-child(odd) {
+    background-color: var(--color-bg-white);
+  }
+
+  .lldp-table tbody tr:nth-child(even) {
+    background-color: var(--color-bg);
+  }
+
+  .lldp-table td.lldp-index {
+    text-align: center;
+    color: var(--color-text-muted);
+    padding: 10px 8px;
+  }
+
+  .lldp-table td.lldp-port {
+    font-weight: 500;
+  }
+
+  .lldp-table td.lldp-chassis {
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+
+  .lldp-table td.lldp-desc {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9em;
+    color: var(--color-text-secondary, var(--color-text-secondary));
+  }
+
+  /* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
+  .mac-lldp-text-error {
+    color: #f00;
+  }
+
+  .mac-lldp-text-muted {
+    color: var(--color-text-secondary);
+    margin-bottom: 10px;
+  }
+
+  .mac-lldp-text-syncing {
+    margin-top: 10px;
+    color: var(--color-text-secondary);
+  }
+}
+
+/* 顶层 responsive 层：组件级移动端覆盖，需与 responsive.css 同层并靠更高特异性胜出 */
+@layer responsive {
+  .data-table th .btn {
+    height: 30px;
+    min-width: 60px;
+
+    /* 固定高度下禁止换行，避免文字溢出按钮 */
+    white-space: nowrap;
+  }
+}
