@@ -215,3 +215,11 @@ v0.10.7
 4. 共享常量抽取 config/deviceOptions.js：DEVICE_TYPE_OPTIONS/CARD_TYPES/PHYSICAL_TYPES/INTERFACE_ROLES 与 getDeviceTypeName（未注册枚举原样回显），DeviceModal/NetworkCardEditor/DeviceTemplateModal 三处复用；device-modals.css 补 .modal-body-scroll 弹窗内滚动规则
 5. 验证：vite build 通过；oxlint 61 文件 0 告警（修复 NetworkCardEditor 两处 no-map-spread：网段选项改数组浅拷贝、buildCardRow 增 portsData 参数避免 map 内对象展开）、biome 163 文件 0 诊断、frontend_consistency 5 测试通过；浏览器 e2e 登录与两页签导航可达（WebView 不稳），curl 契约验证 devices/cable-links 列表排序参数、分页键 items/total/page/page_size/total_pages 与 macs/lldp-neighbors/nics/options/rooms 弹窗依赖接口全部通过
 6. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.8
+2026102013275701
+1. IP 详情页完成 Vue 化（Vue 重构第七批）：IpPage.vue 移植旧版 main.html ip 分区 + ipDetail.js——只读 11 列表格（位置按 工位>机柜>端口设备>设备 优先级/子网列「网段名 (区域名)」未知回显/类型映射/状态徽章/最后在线与创建时间格式化），4 列表头搜索弹层（防抖 300ms 服务端过滤，输入态与查询参数双份状态），默认 updated_at 倒序、每页 100 条（旧版 IP_PAGE_SIZE），页大小可选 10/20/50/100；MAC 列头内嵌「拉取」按钮（th-inline-action，排序守卫排除 button）
+2. PullMacModal 弹窗：左列 SNMP 设备复选列表（page_size=1000 全量拉取、snmp_configured 标记过滤、占位文案四态：网络异常/暂无设备/暂无 SNMP 设备）+ 右列目标子网下拉（空值=全部子网，label 名称 (CIDR)）；三查询并行（设备/网段/pull-defaults），服务端保存的上次拉取配置就绪后预选一次（设备与现存选项求交、已删除设备剔除、默认子网已被删除时赋值自然回落空值）；提交 POST /api/resources/ip/pull（子网可缺省），按钮 pending 态「拉取中...」，成功 toast result.message 并经父组件失效 ["ip"] 重拉列表
+3. 共享抽取 composables/usePagedList.js：usePagedList 工厂/seqIndex 跨页序号/sortClass 三态/onThSort 守卫自 ResourcesPage 移出（纯移动，函数体不变），ResourcesPage 与 IpPage 复用；useQuery 随移出更新 import
+4. 验证：vite build 通过；oxlint 64 文件 0 告警、biome 163 文件 0 诊断、frontend_consistency 5 测试通过；curl 契约验证 ip 列表 updated_at 排序、device_name 过滤（2 条）、network 按网段名过滤（2 条）、分页键与 pull-defaults 结构；浏览器 e2e 5 项全过（11 列表头与拉取按钮/数据行与 100 每页分页选择器/4 个搜索弹层开关/拉取 MAC 弹窗开与设备列表渲染/关闭），console 零错误
+5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
