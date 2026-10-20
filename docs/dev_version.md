@@ -180,3 +180,12 @@ v0.10.3
 3. formatter.js 补齐 4 个工具函数（getStatusText/getRoomTypeName/getActionIcon/formatTime，与旧版逐字一致）；entries/main.js 引入 components 层 cards.css（与旧版逐字一致），dashboard.css 除 .main-body（Vue 壳由 main-content.css 提供底色）外全量入 SFC scoped，骨架条与 agent-usage 迷你条以 scoped 片段内联
 4. 验证：浏览器 e2e 12 项全过（统计卡真实值/五张榜单渲染/骨架屏加载态/主机负载空态+页签/自动轮播/手动切换停轮播/悬停暂停/移出恢复/子网卡深链/view-all 不跳转/IP 卡深链/英文切换全量）+ RBAC 两项（注入 auditor 角色后主机负载卡不渲染 dashCards=5、恢复 admin 后恢复渲染 dashCards=6）；vite build 通过；oxlint 101 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过
 5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.4
+2026102010143401
+1. 组织管理页完成 Vue 化（Vue 重构第五批）：OrganizationPage.vue 移植旧版 organization.js（1444 行）全量逻辑——工具栏（搜索/全部展开/全部收起/新增根组织/组织模板）+ 组织树渲染与节点行内操作（新增下级/编辑/人员管理/删除），删除走 ConfirmModal 确认；搜索为客户端过滤（命中节点+祖先链可见、纯祖先命中强制展开，清空搜索经 renderEpoch 整树重挂载还原展开态，对应旧版全量重渲染语义）
+2. 递归组件与图标结构化：OrgTreeNode/TemplateTypeNode 自引用递归渲染（provide/inject 传递操作上下文）；orgConfig.js 移植 org-icons.js/org-config.js（21 图标形状对象 + 语义配色/分组/关键词映射，resolveOrgIcon 同步纯函数按 模板 icons→API icons→关键词→默认 优先级解析），OrgIcon.vue 以 `<component :is>` 渲染形状对象避免 v-html，历史 emoji 值纯文本渲染
+3. 弹窗体系：ModalShell.vue 通用外壳（Esc/遮罩关闭、dialog 85vh 滚动）+ useModalStack 弹窗层级栈（模块级栈，Esc 仅关最上层，修复嵌套弹窗连带关闭——ModalShell/ConfirmModal 均接入）；OrgNodeModal 三模式（edit 仅名称/描述、add-child 类型来自 allowed-child-types 查询、add-root 选模板后锁定 type_path="0" 根类型）；EmployeeModal 员工列表+嵌套编辑+删除确认；TemplateModal 模板列表+嵌套编辑器（响应式树数据 collectLevels/collectIcons/findDuplicateTypeName 替代旧版 DOM 收集，图标面板 @click.stop 防误关）
+4. 数据层 TanStack Query：树/允许子类型/模板/员工全查询化（queryFn 归一化失败显式 throw，enabled 按弹窗开合懒加载，org-available-types staleTime Infinity），写操作 useMutation + invalidateQueries（organizations-tree/org-templates/org-available-types 前缀失效）；页面层非 scoped 全局 `<style>` 承载旧版 organization.css 592 行（org-* 类名隔离，递归组件/弹窗 DOM 需跨组件生效）
+5. 验证：浏览器 e2e 8 项全过（渲染/树交互/搜索过滤与恢复/节点操作/员工弹窗/模板列表+层级编辑/add-root 模板联动锁定根类型/网络与控制台零错误；首轮误报 2 项经复查均为代理视口 762px 命中移动端媒体查询与预期偏差，非缺陷）；vite build 通过；oxlint 111 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过
+6. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

@@ -4,8 +4,9 @@
  * v-if 控制挂载，确认/取消经事件通知调用方；Esc 与点击遮罩视为取消。
  * 样式为 SFC 自包含（shell 未迁移 modals.css，避免引入整包组件样式）。
  */
-import { onBeforeUnmount, onMounted } from "vue";
+import { onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { useModalStack } from "../composables/useModalStack.js";
 
 const props = defineProps({
   message: { type: String, required: true },
@@ -17,19 +18,8 @@ const emit = defineEmits(["confirm", "cancel"]);
 
 const { t } = useI18n();
 
-function onKeydown(event) {
-  if (event.key === "Escape") {
-    emit("cancel");
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("keydown", onKeydown);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("keydown", onKeydown);
-});
+// Esc 仅取消最上层弹窗（嵌套在业务弹窗内时不应连带关闭父弹窗）
+onBeforeUnmount(useModalStack(() => emit("cancel")));
 </script>
 
 <template>
