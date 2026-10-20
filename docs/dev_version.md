@@ -198,3 +198,11 @@ v0.10.5
 4. 表头排序点击守卫 onThSort（closest 排除 input/button/.th-search-popover 等，对应旧版 initSortEvents 语义）
 5. 验证：浏览器 e2e 7 项全过（区域/子网表渲染与分页/表头搜索过滤命中/排序三态箭头/使用情况与编辑弹窗开关/页签记忆恢复）；vite build 通过；oxlint 117 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过；另经 curl 验证排序/过滤/删除/明细接口契约（误测 80 端口旧版应用一轮已纠正为 5173）
 6. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.6
+2026102012183301
+1. 资源管理页 Vue 化第二批（Vue 重构第六批·批 B）：ResourcesPage.vue 追加「房间/机柜」两页签——房间表 11 列（含房型映射/工位数/当前功率/电源功率/子网绑定列表）与机柜表 10 列（含容量/机位数），均分页 20/页、name 升序默认排序（usePagedList 扩展 defaultSortBy/defaultSortOrder 参数，批 A 两页签维持 created_at 倒序）、行内操作（编辑/子项列表/信息点列表、编辑/机位列表/删除）与删除确认
+2. 弹窗组件：RoomModal.vue 全量移植（组织树缩进下拉/房型六选项/电源功率 W|kW 换算/网段配置行区域级联+行间去重+至少保留一行/工位与机柜动态行按房型分区显示切换清空/信息点行本地非空查重），提交链 rooms→children→net-outlets 三段式保存期间禁用提交按钮；NetworkConfigRow.vue 网段行组件（defineModel 双绑定，region_id 变更经 TanStack queryKey 缓存级联拉取）；CabinetModal.vue 全量移植（机房类房间下拉/容量/机位行 U 位 1-48 校验/配线架行），提交链 cabinets→positions→patch-panels；SimpleListModal.vue 通用只读列表弹窗（子项/信息点/机位三处共用）
+3. 基础设施：ModalShell 根节点补 modal 类使 forms.css 的 .modal 表单变体规则生效（对齐旧版弹窗 label 同行视觉）；dynamic-lists.css 移植旧版 network-config.css 动态列表样式（dyn-list/dyn-list-item/list-header/dyn-columns-header/必填星号 ::after）；utils/power.js 迁移 readPowerWattsInput、formatter.js 补 formatPowerValue；icons.js 补 list 形状
+4. 验证：vite build 通过；oxlint 122 文件 0 告警、biome 0 诊断、frontend_consistency 5 测试通过；curl 验证 rooms/cabinets 列表、rooms/{id}/brief 轻量回显、options 下拉接口契约与组件期望字段逐一对齐；浏览器 e2e 因本轮 WebView infra 持续不可用（3 轮代理均阻塞于登录/导航超时）未能执行，待环境恢复后补验
+5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

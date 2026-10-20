@@ -26,7 +26,7 @@ onBeforeUnmount(useModalStack(() => emit("close")));
 <template>
   <div class="modal-overlay" @click.self="emit('close')">
     <div
-      class="modal-dialog"
+      class="modal modal-dialog"
       :class="size ? `modal-${size}` : ''"
       role="dialog"
       aria-modal="true"

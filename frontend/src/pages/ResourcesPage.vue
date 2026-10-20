@@ -1,26 +1,30 @@
 <script setup>
 /**
  * 资源管理页（移植自旧版 main.html resources 分区 + resourceTabs.js，
- * 按页签分批迁移：本批 = 网络区域 + 子网两个页签）：
+ * 按页签分批迁移：已迁移 = 网络区域/子网/房间/机柜四个页签）：
  * 页签记忆（route.query.tab 优先 → localStorage → 默认网络区域，与
  * 旧版 setActiveSubtab 同键名 foims_subtab_resources）。
- * 数据层为 TanStack Query：两张表均分页 20/页、列排序、page_size 可选
+ * 数据层为 TanStack Query：各表分页 20/页、列排序、page_size 可选
  * （10/20/50/100，切换重置页码）；子网页签 4 列表头搜索弹层防抖 300ms
- * 服务端过滤；行内操作（使用情况/编辑/删除）与两张弹窗、删除确认。
+ * 服务端过滤；行内操作（使用情况/子项列表/信息点/机位/编辑/删除）
+ * 与各弹窗、删除确认。
  */
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiGet } from "../api/client.js";
-import { formatDateTime } from "../utils/formatter.js";
+import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter.js";
 import { showToast } from "../composables/useToast.js";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
 import ThSearch from "../components/ThSearch.vue";
+import SimpleListModal from "../components/SimpleListModal.vue";
+import CabinetModal from "../components/cabinet/CabinetModal.vue";
 import NetworkModal from "../components/network/NetworkModal.vue";
 import NetworkRegionModal from "../components/network/NetworkRegionModal.vue";
+import RoomModal from "../components/room/RoomModal.vue";
 import SubnetUsageModal from "../components/network/SubnetUsageModal.vue";
 
 const { t } = useI18n();
@@ -28,10 +32,12 @@ const queryClient = useQueryClient();
 
 // ==================== 页签状态（记忆 + 深链，与 LogsPage 同模式） ====================
 
-// 本批已迁移页签：其余页签（rooms/cabinets/devices/cable-links）随批次追加
+// 本批已迁移页签：其余页签（devices/cable-links）随批次追加
 const TABS = [
   { id: "network-regions", titleKey: "resources.network_regions" },
-  { id: "networks", titleKey: "resources.network_segments" }
+  { id: "networks", titleKey: "resources.network_segments" },
+  { id: "rooms", titleKey: "resources.rooms" },
+  { id: "cabinets", titleKey: "resources.cabinets" }
 ];
 const SUBTAB_KEY = "foims_subtab_resources";
 
@@ -87,13 +93,22 @@ watch(
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 /**
- * 分页列表封装：created_at 倒序为默认排序，排序/页大小切换重置页码；
- * 空页且页码越界（末页数据删除后）自动回退最后一页。
+ * 分页列表封装：默认 created_at 倒序（房间/机柜旧版默认 name 升序，经
+ * defaultSort 指定），排序/页大小切换重置页码；空页且页码越界（末页数据
+ * 删除后）自动回退最后一页。
  */
-function usePagedList({ tag, defaultPageSize, enabled, buildUrl, extraKey }) {
+function usePagedList({
+  tag,
+  defaultPageSize,
+  enabled,
+  buildUrl,
+  extraKey,
+  defaultSortBy = "created_at",
+  defaultSortOrder = "desc"
+}) {
   const page = ref(1);
   const pageSize = ref(defaultPageSize);
-  const sort = reactive({ by: "created_at", order: "desc" });
+  const sort = reactive({ by: defaultSortBy, order: defaultSortOrder });
 
   const query = useQuery({
     queryKey: computed(() => [
@@ -228,13 +243,55 @@ watch(networkFilters, () => {
   }, 300);
 });
 
+// ==================== 房间页签 ====================
+
+const rooms = usePagedList({
+  tag: "rooms",
+  defaultPageSize: 20,
+  enabled: computed(() => activeTab.value === "rooms"),
+  // 旧版房间列表默认按名称升序
+  defaultSortBy: "name",
+  defaultSortOrder: "asc",
+  buildUrl: (page, pageSize, sortBy, sortOrder) =>
+    `/api/resources/rooms?${new URLSearchParams({
+      page,
+      page_size: pageSize,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    })}`
+});
+
+// ==================== 机柜页签 ====================
+
+const cabinets = usePagedList({
+  tag: "cabinets",
+  defaultPageSize: 20,
+  enabled: computed(() => activeTab.value === "cabinets"),
+  // 旧版机柜列表默认按名称升序
+  defaultSortBy: "name",
+  defaultSortOrder: "asc",
+  buildUrl: (page, pageSize, sortBy, sortOrder) =>
+    `/api/resources/cabinets?${new URLSearchParams({
+      page,
+      page_size: pageSize,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    })}`
+});
+
 // ==================== 弹窗与删除 ====================
 
 const regionModal = reactive({ open: false, region: null });
 const networkModal = reactive({ open: false, network: null });
 const usageModal = reactive({ open: false, subnetId: "" });
+const roomModal = reactive({ open: false, room: null });
+const cabinetModal = reactive({ open: false, cabinet: null });
+// 通用简单列表弹窗（房间子项/信息点、机柜机位共用）
+const simpleList = reactive({ open: false, title: "", columns: [], rows: [] });
 const deletingRegion = ref(null);
 const deletingNetwork = ref(null);
+const deletingRoom = ref(null);
+const deletingCabinet = ref(null);
 
 function openRegionModal(region = null) {
   regionModal.region = region;
@@ -244,6 +301,103 @@ function openRegionModal(region = null) {
 function openNetworkModal(network = null) {
   networkModal.network = network;
   networkModal.open = true;
+}
+
+function openRoomModal(room = null) {
+  roomModal.room = room;
+  roomModal.open = true;
+}
+
+function openCabinetModal(cabinet = null) {
+  cabinetModal.cabinet = cabinet;
+  cabinetModal.open = true;
+}
+
+// 编辑房间：先取轻量 brief（一次并行查询取齐基础字段与子项），成功后打开弹窗
+async function editRoom(id) {
+  const result = await apiGet(`/api/resources/rooms/${id}/brief`);
+  if (!result.success || !result.data) {
+    showToast(`${t("room.fetch_failed")}: ${result.message}`, "error");
+    return;
+  }
+  openRoomModal(result.data);
+}
+
+// 编辑机柜：完整详情含机位/配线架子项，成功后打开弹窗
+async function editCabinet(id) {
+  const result = await apiGet(`/api/resources/cabinets/${id}`);
+  if (!result.success || !result.data) {
+    showToast(`${t("cabinet.load_failed")}: ${result.message}`, "error");
+    return;
+  }
+  openCabinetModal(result.data);
+}
+
+/**
+ * 房间子项列表弹窗："其他"房间工位与机柜均可能存在，优先展示有数据的
+ * 一类（旧版 openRoomChildrenListModal 语义）。
+ */
+async function openRoomChildrenListModal(roomId) {
+  const result = await apiGet(`/api/resources/rooms/${roomId}`);
+  if (!result.success || !result.data) {
+    showToast(result.message || t("room.load_failed"), "error");
+    return;
+  }
+  const room = result.data;
+  const roomType = (room.room_type || "").toLowerCase();
+  const isCabinetList =
+    roomType === "data_center" ||
+    roomType === "telecom_closet" ||
+    (roomType === "other" && !(room.workstations || []).length);
+
+  if (!isCabinetList) {
+    simpleList.title = `${room.name} - ${t("room.workstations")}`;
+    simpleList.columns = [t("common.name"), t("workstation.manager")];
+    simpleList.rows = (room.workstations || []).map((ws) => [ws.name || "-", ws.manager_name || "-"]);
+  } else {
+    simpleList.title = `${room.name} - ${t("room.cabinets")}`;
+    simpleList.columns = [t("common.name"), t("cabinet.capacity")];
+    simpleList.rows = (room.cabinets || []).map((cab) => [cab.name || "-", cab.capacity ?? "-"]);
+  }
+  simpleList.open = true;
+}
+
+/** 房间信息点列表弹窗 */
+async function openRoomNetOutletsListModal(roomId) {
+  const result = await apiGet(`/api/resources/rooms/${roomId}`);
+  if (!result.success || !result.data) {
+    showToast(result.message || t("room.load_failed"), "error");
+    return;
+  }
+  const room = result.data;
+  simpleList.title = `${room.name} - ${t("room.net_outlets")}`;
+  simpleList.columns = [t("common.name")];
+  simpleList.rows = (room.net_outlets || []).map((outlet) => [outlet.name || "-"]);
+  simpleList.open = true;
+}
+
+/** 机柜机位列表弹窗 */
+async function openCabinetPositionsListModal(cabinetId) {
+  const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
+  if (!result.success || !result.data) {
+    showToast(result.message || t("cabinet.load_failed"), "error");
+    return;
+  }
+  const cabinet = result.data;
+  simpleList.title = `${cabinet.name} - ${t("cabinet.positions_list")}`;
+  simpleList.columns = [
+    t("common.name"),
+    t("cabinet_position.start_u"),
+    t("cabinet_position.end_u"),
+    t("common.description")
+  ];
+  simpleList.rows = (cabinet.positions || []).map((pos) => [
+    pos.name || "-",
+    pos.start_u ?? "-",
+    pos.end_u ?? "-",
+    pos.description || "-"
+  ]);
+  simpleList.open = true;
 }
 
 const deleteRegionMutation = useMutation({
@@ -271,6 +425,38 @@ const deleteNetworkMutation = useMutation({
     deletingNetwork.value = null;
   }
 });
+
+const deleteRoomMutation = useMutation({
+  mutationFn: (id) => apiDelete(`/api/resources/rooms/${id}`),
+  onSuccess: (result) => {
+    if (result.success) {
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      showToast(t("room.delete_success"), "success");
+    } else {
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+    }
+    deletingRoom.value = null;
+  }
+});
+
+const deleteCabinetMutation = useMutation({
+  mutationFn: (id) => apiDelete(`/api/resources/cabinets/${id}`),
+  onSuccess: (result) => {
+    if (result.success) {
+      queryClient.invalidateQueries({ queryKey: ["cabinets"] });
+      showToast(t("cabinet.delete_success"), "success");
+    } else {
+      showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
+    }
+    deletingCabinet.value = null;
+  }
+});
+
+/** 房型是否机房类（行内子项列表按钮文案随房型切换：机房显机柜、其余显工位） */
+function isCabinetRoomType(roomType) {
+  const type = (roomType || "").toLowerCase();
+  return type === "data_center" || type === "telecom_closet";
+}
 
 /** 排序列头公共类绑定（sorted/asc/desc 三态，与 LogsPage 表头一致） */
 function sortClass(list, key) {
@@ -510,6 +696,214 @@ function onThSort(event, list, key) {
       />
     </div>
 
+    <!-- ==================== 房间页签 ==================== -->
+    <div v-show="activeTab === 'rooms'" id="rooms-tab" class="tab-content" role="tabpanel">
+      <div class="table-container">
+        <table id="rooms-table" class="data-table" aria-label="Rooms">
+          <thead>
+            <tr>
+              <th class="index-column">{{ t("common.index") }}</th>
+              <th class="sortable" :class="sortClass(rooms, 'name')" @click="onThSort($event, rooms, 'name')">
+                {{ t("common.name") }}
+              </th>
+              <th class="sortable col-center" :class="sortClass(rooms, 'room_type')" @click="onThSort($event, rooms, 'room_type')">
+                {{ t("common.type") }}
+              </th>
+              <th class="sortable" :class="sortClass(rooms, 'org_name')" @click="onThSort($event, rooms, 'org_name')">
+                {{ t("organization.parent_org") }}
+              </th>
+              <th class="col-center">{{ t("room.workstation_count") }}</th>
+              <th class="col-center">{{ t("room.power") }}</th>
+              <th class="col-center">{{ t("room.power_supply") }}</th>
+              <th>{{ t("room.networks") }}</th>
+              <th>{{ t("common.description") }}</th>
+              <th class="sortable col-center" :class="sortClass(rooms, 'created_at')" @click="onThSort($event, rooms, 'created_at')">
+                {{ t("common.created_at") }}
+              </th>
+              <th>
+                <button type="button" class="btn btn-primary btn-sm" @click="openRoomModal()">
+                  {{ t("room.add_room") }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="rooms.isError">
+              <td colspan="11" class="text-center">{{ rooms.errorMessage }}</td>
+            </tr>
+            <tr v-else-if="rooms.items.length === 0">
+              <td colspan="11" class="text-center">{{ t("common.no_data") }}</td>
+            </tr>
+            <template v-else>
+              <tr v-for="(item, index) in rooms.items" :key="item.id">
+                <td class="index-column">{{ seqIndex(rooms, index) }}</td>
+                <td>{{ item.name }}</td>
+                <td class="col-center">{{ getRoomTypeName(item.room_type) }}</td>
+                <td>{{ item.org_name || "-" }}</td>
+                <td class="col-center">{{ item.workstation_count ?? "0" }}</td>
+                <!-- 当前功率：该房间全部设备功耗之和（固定以瓦显示） -->
+                <td class="col-center">{{ formatPowerValue(item.allocated_power_watts ?? 0, "W") }}</td>
+                <!-- 电源功率：供电上限（未设置显示 "-"） -->
+                <td class="col-center">{{ formatPowerValue(item.total_power_watts, "W") }}</td>
+                <td>
+                  <template v-if="item.networks && item.networks.length > 0">
+                    <div v-for="network in item.networks" :key="network.id">
+                      {{ network.name }} ({{ network.network_region }})
+                    </div>
+                  </template>
+                  <template v-else>-</template>
+                </td>
+                <td>{{ item.description || "-" }}</td>
+                <td class="col-center">{{ formatDateTime(item.created_at) }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="icon-btn btn-edit"
+                    :data-tooltip="t('common.edit')"
+                    :aria-label="t('common.edit')"
+                    @click="editRoom(item.id)"
+                  >
+                    <NavIcon name="edit" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-primary btn-room-children-list"
+                    :data-tooltip="isCabinetRoomType(item.room_type) ? t('room.cabinets') : t('room.workstations')"
+                    :aria-label="isCabinetRoomType(item.room_type) ? t('room.cabinets') : t('room.workstations')"
+                    @click="openRoomChildrenListModal(item.id)"
+                  >
+                    <NavIcon name="list" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-success"
+                    :data-tooltip="t('room.net_outlets')"
+                    :aria-label="t('room.net_outlets')"
+                    @click="openRoomNetOutletsListModal(item.id)"
+                  >
+                    <NavIcon name="list" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-delete"
+                    :data-tooltip="t('common.delete')"
+                    :aria-label="t('common.delete')"
+                    @click="deletingRoom = item"
+                  >
+                    <NavIcon name="trash" />
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        :page="rooms.page"
+        :total-pages="rooms.totalPages"
+        :total="rooms.total"
+        :page-size="rooms.pageSize"
+        :page-size-options="rooms.pageSizeOptions"
+        @page-change="(p) => (rooms.page = p)"
+        @page-size-change="rooms.changePageSize"
+      />
+    </div>
+
+    <!-- ==================== 机柜页签 ==================== -->
+    <div v-show="activeTab === 'cabinets'" id="cabinets-tab" class="tab-content" role="tabpanel">
+      <div class="table-container">
+        <table id="cabinets-table" class="data-table" aria-label="Cabinets">
+          <thead>
+            <tr>
+              <th class="index-column">{{ t("common.index") }}</th>
+              <th class="sortable" :class="sortClass(cabinets, 'room_name')" @click="onThSort($event, cabinets, 'room_name')">
+                {{ t("cabinet.room") }}
+              </th>
+              <th class="sortable" :class="sortClass(cabinets, 'name')" @click="onThSort($event, cabinets, 'name')">
+                {{ t("common.name") }}
+              </th>
+              <th class="sortable col-center" :class="sortClass(cabinets, 'capacity')" @click="onThSort($event, cabinets, 'capacity')">
+                {{ t("cabinet.capacity") }}
+              </th>
+              <th class="col-center">{{ t("cabinet.power") }}</th>
+              <th class="col-center">{{ t("cabinet.power_supply") }}</th>
+              <th class="col-center">{{ t("cabinet.position_count") }}</th>
+              <th>{{ t("common.description") }}</th>
+              <th class="sortable col-center" :class="sortClass(cabinets, 'created_at')" @click="onThSort($event, cabinets, 'created_at')">
+                {{ t("common.created_at") }}
+              </th>
+              <th>
+                <button type="button" class="btn btn-primary btn-sm" @click="openCabinetModal()">
+                  {{ t("cabinet.add_cabinet") }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="cabinets.isError">
+              <td colspan="10" class="text-center">{{ cabinets.errorMessage }}</td>
+            </tr>
+            <tr v-else-if="cabinets.items.length === 0">
+              <td colspan="10" class="text-center">{{ t("common.no_data") }}</td>
+            </tr>
+            <template v-else>
+              <tr v-for="(item, index) in cabinets.items" :key="item.id">
+                <td class="index-column">{{ seqIndex(cabinets, index) }}</td>
+                <td>{{ item.room_name || "-" }}</td>
+                <td>{{ item.name }}</td>
+                <td class="col-center">{{ item.capacity ?? "-" }}</td>
+                <!-- 当前功率：柜内机位关联设备功耗之和（固定以瓦显示） -->
+                <td class="col-center">{{ formatPowerValue(item.allocated_power_watts ?? 0, "W") }}</td>
+                <!-- 电源功率：供电上限（未设置显示 "-"） -->
+                <td class="col-center">{{ formatPowerValue(item.total_power_watts, "W") }}</td>
+                <td class="col-center">{{ item.position_count ?? 0 }}</td>
+                <td>{{ item.description || "-" }}</td>
+                <td class="col-center">{{ formatDateTime(item.created_at) }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="icon-btn btn-edit"
+                    :data-tooltip="t('common.edit')"
+                    :aria-label="t('common.edit')"
+                    @click="editCabinet(item.id)"
+                  >
+                    <NavIcon name="edit" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-primary"
+                    :data-tooltip="t('cabinet.positions_list')"
+                    :aria-label="t('cabinet.positions_list')"
+                    @click="openCabinetPositionsListModal(item.id)"
+                  >
+                    <NavIcon name="list" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-delete"
+                    :data-tooltip="t('common.delete')"
+                    :aria-label="t('common.delete')"
+                    @click="deletingCabinet = item"
+                  >
+                    <NavIcon name="trash" />
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        :page="cabinets.page"
+        :total-pages="cabinets.totalPages"
+        :total="cabinets.total"
+        :page-size="cabinets.pageSize"
+        :page-size-options="cabinets.pageSizeOptions"
+        @page-change="(p) => (cabinets.page = p)"
+        @page-size-change="cabinets.changePageSize"
+      />
+    </div>
+
     <!-- ==================== 弹窗 ==================== -->
     <NetworkRegionModal
       v-if="regionModal.open"
@@ -526,6 +920,23 @@ function onThSort(event, list, key) {
       :subnet-id="usageModal.subnetId"
       @close="usageModal.open = false"
     />
+    <RoomModal
+      v-if="roomModal.open"
+      :room="roomModal.room"
+      @close="roomModal.open = false"
+    />
+    <CabinetModal
+      v-if="cabinetModal.open"
+      :cabinet="cabinetModal.cabinet"
+      @close="cabinetModal.open = false"
+    />
+    <SimpleListModal
+      v-if="simpleList.open"
+      :title="simpleList.title"
+      :columns="simpleList.columns"
+      :rows="simpleList.rows"
+      @close="simpleList.open = false"
+    />
     <ConfirmModal
       v-if="deletingRegion"
       :message="t('common.delete_confirm')"
@@ -539,6 +950,20 @@ function onThSort(event, list, key) {
       danger
       @confirm="deleteNetworkMutation.mutate(deletingNetwork.id)"
       @cancel="deletingNetwork = null"
+    />
+    <ConfirmModal
+      v-if="deletingRoom"
+      :message="t('common.delete_confirm')"
+      danger
+      @confirm="deleteRoomMutation.mutate(deletingRoom.id)"
+      @cancel="deletingRoom = null"
+    />
+    <ConfirmModal
+      v-if="deletingCabinet"
+      :message="t('common.delete_confirm')"
+      danger
+      @confirm="deleteCabinetMutation.mutate(deletingCabinet.id)"
+      @cancel="deletingCabinet = null"
     />
   </section>
 </template>

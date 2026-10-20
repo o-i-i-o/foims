@@ -95,6 +95,17 @@ export function getRoomTypeName(type) {
   return typeNames[type] || type || "-";
 }
 
+/** 功率展示：指定单位输出（kW 保留至多 3 位小数）；空值显示 "-"（房间/机柜列表用） */
+export function formatPowerValue(watts, unit) {
+  if (watts == null) {
+    return "-";
+  }
+  if (unit === "kW") {
+    return `${parseFloat((watts / 1000).toFixed(3))} kW`;
+  }
+  return `${watts} W`;
+}
+
 /** 操作类型图标：按 action 关键词匹配 emoji（与旧版逐字一致） */
 export function getActionIcon(action) {
   if (!action) {

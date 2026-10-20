@@ -15,6 +15,8 @@ import "../styles/components/forms.css";
 import "../styles/components/tables.css";
 import "../styles/components/badges.css";
 import "../styles/components/cards.css";
+// modals 层：模态框动态列表（房间网段/工位/机柜/信息点、机柜机位/配线架）
+import "../styles/components/dynamic-lists.css";
 import "../styles/toasts.css";
 import "../styles/layouts/sidebar.css";
 import "../styles/layouts/main-content.css";
