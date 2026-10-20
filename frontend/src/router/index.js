@@ -9,6 +9,7 @@ import { hasSession } from "../utils/session.js";
 import { getHiddenSections } from "../utils/roleCapabilities.js";
 import SectionPlaceholder from "../pages/SectionPlaceholder.vue";
 import LogsPage from "../pages/LogsPage.vue";
+import DashboardPage from "../pages/DashboardPage.vue";
 
 /**
  * 一级分区（顺序与旧版侧边栏一致）：name 同时是路由名、
@@ -26,7 +27,7 @@ export const NAV_ITEMS = [
 ];
 
 const SECTION_COMPONENTS = {
-  dashboard: SectionPlaceholder,
+  dashboard: DashboardPage,
   organization: SectionPlaceholder,
   resources: SectionPlaceholder,
   ip: SectionPlaceholder,

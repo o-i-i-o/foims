@@ -71,3 +71,70 @@ export function translateNotificationContent(content) {
   }
   return content;
 }
+
+/** IP 状态文本：语言包映射，未知值原样回显 */
+export function getStatusText(status) {
+  const statusMap = {
+    active: i18n.global.t("status.active"),
+    inactive: i18n.global.t("status.inactive"),
+    reserved: i18n.global.t("status.reserved")
+  };
+  return statusMap[status] || status || i18n.global.t("status.unknown");
+}
+
+/** 机房类型文本：语言包映射，未知值原样回显 */
+export function getRoomTypeName(type) {
+  const typeNames = {
+    OFFICE: i18n.global.t("room.type_office"),
+    LOBBY: i18n.global.t("room.type_lobby"),
+    RECEPTION: i18n.global.t("room.type_reception"),
+    DATA_CENTER: i18n.global.t("room.type_datacenter"),
+    TELECOM_CLOSET: i18n.global.t("room.type_telecom_closet"),
+    OTHER: i18n.global.t("room.type_other")
+  };
+  return typeNames[type] || type || "-";
+}
+
+/** 操作类型图标：按 action 关键词匹配 emoji（与旧版逐字一致） */
+export function getActionIcon(action) {
+  if (!action) {
+    return "📋";
+  }
+  const actionLower = action.toLowerCase();
+  if (actionLower.includes("create") || actionLower.includes("add")) {
+    return "➕";
+  }
+  if (actionLower.includes("update") || actionLower.includes("edit")) {
+    return "✏️";
+  }
+  if (actionLower.includes("delete") || actionLower.includes("remove")) {
+    return "🗑️";
+  }
+  if (actionLower.includes("login")) {
+    return "🔐";
+  }
+  if (actionLower.includes("logout")) {
+    return "🚪";
+  }
+  return "📋";
+}
+
+/** 相对时间：一分钟内刚刚，一小时内 N 分钟前，一天内 N 小时前，其余按日期展示 */
+export function formatTime(timestamp) {
+  if (!timestamp) {
+    return "-";
+  }
+  const date = new Date(timestamp);
+  const diff = new Date() - date;
+
+  if (diff < 60000) {
+    return i18n.global.t("time.just_now");
+  }
+  if (diff < 3600000) {
+    return i18n.global.t("time.minutes_ago", { count: Math.floor(diff / 60000) });
+  }
+  if (diff < 86400000) {
+    return i18n.global.t("time.hours_ago", { count: Math.floor(diff / 3600000) });
+  }
+  return date.toLocaleDateString(locale());
+}

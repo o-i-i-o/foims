@@ -172,3 +172,11 @@ v0.10.2
 3. 通用组件沉淀：Pagination.vue（保真旧版分页 DOM 层级与省略号算法， totalPages>7 才渲染跳页框）、ConfirmModal.vue（danger 变体、Esc/遮罩取消）、LogDetailsModal.vue（操作日志七字段网格 + details JSON 解析格式化展示）；icons.js 新增 eye 图标；formatter.js 迁移旧版时间格式化（跟随界面语言）与 server.*/枚举/通知 content 翻译工具；entries/main.js 引入 components 层四 CSS（buttons/forms/tables/badges，与旧版逐字一致），日志页特有列宽与工具栏样式入 SFC scoped
 4. 验证：浏览器 e2e 13 项全过（子标签记忆/切换+hash 深链/列翻译/分页翻页/排序切换/详情弹窗/搜索空态+命中/登录日志/通知翻译与插值/单条已读/全部已读确认弹窗取消+确认双路径）；vite build 通过；oxlint 100 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过
 5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.3
+2026102009391201
+1. 仪表盘完成 Vue 化（Vue 重构第四批）：DashboardPage.vue 移植旧版 dashboard.js 全部逻辑——5 张统计卡（dashboard-stats 单端点，加载中展示 0、失败如实展示 "-"）+ 5 张榜单卡（子网/IP/最近动态/房间/机柜，各分页接口 page_size=5）+ 主机负载卡（CPU/内存/温度三页签 10s 自动轮播、悬停暂停、手动切换后永久停止轮播、onUnmounted 清理定时器）；卡片点击跳转移植 data-nav/data-tab 委托语义（命中链接/按钮不跳转，view-all 维持旧版无动作；带 tab 的卡片 router.push 生成 #/resources?tab=networks 深链）
+2. 榜单查询工厂 useTopList（queryKey=[tag]、queryFn 归一化失败显式 throw、staleTime 60s 对应旧版客户端缓存 TTL）；主机负载查询 enabled 按角色懒加载（hiddenSections 含 agents 不请求，该端点仅 admin/secadmin 可访问，无权限角色整卡不渲染避免噪音 403）；旧版 loadFallbackData 三接口计数兜底按回退逻辑规范评估后删除（兜底与主端点同源依赖数据库，失败场景同样不可用，仅以 0 掩盖错误）
+3. formatter.js 补齐 4 个工具函数（getStatusText/getRoomTypeName/getActionIcon/formatTime，与旧版逐字一致）；entries/main.js 引入 components 层 cards.css（与旧版逐字一致），dashboard.css 除 .main-body（Vue 壳由 main-content.css 提供底色）外全量入 SFC scoped，骨架条与 agent-usage 迷你条以 scoped 片段内联
+4. 验证：浏览器 e2e 12 项全过（统计卡真实值/五张榜单渲染/骨架屏加载态/主机负载空态+页签/自动轮播/手动切换停轮播/悬停暂停/移出恢复/子网卡深链/view-all 不跳转/IP 卡深链/英文切换全量）+ RBAC 两项（注入 auditor 角色后主机负载卡不渲染 dashCards=5、恢复 admin 后恢复渲染 dashCards=6）；vite build 通过；oxlint 101 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过
+5. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本

@@ -14,6 +14,7 @@ import "../styles/components/buttons.css";
 import "../styles/components/forms.css";
 import "../styles/components/tables.css";
 import "../styles/components/badges.css";
+import "../styles/components/cards.css";
 import "../styles/toasts.css";
 import "../styles/layouts/sidebar.css";
 import "../styles/layouts/main-content.css";
