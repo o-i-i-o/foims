@@ -4,7 +4,8 @@
  * 上一页/下一页 + 页码省略序列 + 总数信息，总页数 > 7 时出现跳页框。
  * 根元素为 .pagination-container，调用方置于 .table-container 之后
  * （布局层 sticky 页脚规则依赖该相邻结构）。
- * 未实现每页条数选择器：日志等现有页面页大小固定，待出现可变页大小页面时补充。
+ * 传入 pageSize（>0）时在总数信息后渲染每页条数选择器
+ * （旧版 appendPaginationToTable 的 onPageSizeChange 语义：切换后由调用方重置页码重拉）。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -12,10 +13,13 @@ import { useI18n } from "vue-i18n";
 const props = defineProps({
   page: { type: Number, required: true },
   totalPages: { type: Number, required: true },
-  total: { type: Number, default: 0 }
+  total: { type: Number, default: 0 },
+  // 每页条数：>0 时渲染选择器并回显当前值（旧版默认选项 10/20/50/100）
+  pageSize: { type: Number, default: 0 },
+  pageSizeOptions: { type: Array, default: () => [10, 20, 50, 100] }
 });
 
-const emit = defineEmits(["page-change"]);
+const emit = defineEmits(["page-change", "page-size-change"]);
 
 const { t } = useI18n();
 
@@ -128,6 +132,16 @@ const infoText = computed(() =>
         </div>
         <div class="pagination-right">
           <span class="pagination-info">{{ infoText }}</span>
+          <span v-if="pageSize > 0" class="pagination-size">
+            <select
+              class="pagination-size-selector"
+              :value="pageSize"
+              :title="t('common.page_size')"
+              @change="emit('page-size-change', Number($event.target.value))"
+            >
+              <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} / {{ t("common.page") }}</option>
+            </select>
+          </span>
         </div>
       </div>
     </div>

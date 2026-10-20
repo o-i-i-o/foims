@@ -189,3 +189,12 @@ v0.10.4
 4. 数据层 TanStack Query：树/允许子类型/模板/员工全查询化（queryFn 归一化失败显式 throw，enabled 按弹窗开合懒加载，org-available-types staleTime Infinity），写操作 useMutation + invalidateQueries（organizations-tree/org-templates/org-available-types 前缀失效）；页面层非 scoped 全局 `<style>` 承载旧版 organization.css 592 行（org-* 类名隔离，递归组件/弹窗 DOM 需跨组件生效）
 5. 验证：浏览器 e2e 8 项全过（渲染/树交互/搜索过滤与恢复/节点操作/员工弹窗/模板列表+层级编辑/add-root 模板联动锁定根类型/网络与控制台零错误；首轮误报 2 项经复查均为代理视口 762px 命中移动端媒体查询与预期偏差，非缺陷）；vite build 通过；oxlint 111 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过
 6. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
+
+v0.10.5
+2026102011472101
+1. 资源管理页 Vue 化第一批（Vue 重构第六批·批 A）：ResourcesPage.vue 移植旧版 resourceTabs.js + networks.js 分区骨架与「网络区域/子网」两页签——页签切换 localStorage 记忆（键名 foims_subtab_resources 与旧版一致）+ route.query.tab 深链 + 前进/后退同步；两表均分页 20/页（page_size 可选 10/20/50/100，切换重置页码）、created_at 倒序默认排序、列排序、空页越界回退末页；子网页签 4 列表头搜索弹层（防抖 300ms 服务端过滤，输入态与查询参数双份状态避免防抖窗口内 queryKey 与 URL 不一致）
+2. 组件配套：ThSearch.vue 表头搜索弹层（多根双 ref 外点判断、模块级 openCloser 全页互斥展开）；Pagination.vue 扩展 pageSize/pageSizeOptions props 与 page-size-change 事件（旧版 appendPaginationToTable 的每页条数语义）；icons.js 补 chart/refresh 形状；utils/network.js 迁移 isValidIPv4/isValidIPv6/isIpInCidr 及依赖链（isValidIP 无调用方不迁）
+3. 三弹窗：NetworkRegionModal（IPv4/IPv6 CIDR 动态行，全空返 null）；NetworkModal（区域下拉懒加载、网关三连校验 isValid→requires_cidr→isIpInCidr、DNS 按 /[,\s]+/ 分隔上限 5）；SubnetUsageModal（子网详情+IP 列表双查询，/24 拆分网格 256 条展示上限、利用率计算 /31·/32 计 0，旧版 token 防并发由 queryKey 含 subnetId 天然替代）；删除确认沿用旧版无名字插值文案
+4. 表头排序点击守卫 onThSort（closest 排除 input/button/.th-search-popover 等，对应旧版 initSortEvents 语义）
+5. 验证：浏览器 e2e 7 项全过（区域/子网表渲染与分页/表头搜索过滤命中/排序三态箭头/使用情况与编辑弹窗开关/页签记忆恢复）；vite build 通过；oxlint 117 文件 0 告警、biome 158 文件 0 诊断、frontend_consistency 5 测试通过；另经 curl 验证排序/过滤/删除/明细接口契约（误测 80 端口旧版应用一轮已纠正为 5173）
+6. 联动：仅 z+1，Cargo.toml 与 frontend/package.json 均不动；旧 web/ 未动不 bump 静态版本
