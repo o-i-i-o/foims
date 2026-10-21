@@ -8,7 +8,8 @@ use validator::Validate;
 
 // ==================== 用户模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -24,7 +25,8 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UserCreate {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     #[validate(custom(
@@ -57,7 +59,8 @@ pub struct UserCreate {
     pub password_expiry_days: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UserUpdate {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
@@ -77,7 +80,8 @@ pub struct UserUpdate {
     pub password_expiry_days: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UserLogin {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
@@ -93,14 +97,16 @@ pub struct UserLogin {
     pub captcha_text: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct ForgotPasswordRequest {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct ResetPasswordRequest {
     #[validate(length(min = 1))]
     pub token: String,
@@ -114,7 +120,8 @@ pub struct ResetPasswordRequest {
 
 // ==================== 2FA 模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct TwoFactorLoginRequest {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
@@ -129,7 +136,8 @@ pub struct TwoFactorLoginRequest {
     pub remember_me: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct SendTwoFactorCodeRequest {
     #[validate(length(min = 3, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,
@@ -140,14 +148,16 @@ pub struct SendTwoFactorCodeRequest {
     pub password: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct SendLoginCodeRequest {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct EmailLoginRequest {
     #[validate(email(message = "server.common.validation.email_format"))]
     /// 与其余登录邮箱字段同口径：上限 100 字符
@@ -158,7 +168,8 @@ pub struct EmailLoginRequest {
     pub remember_me: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct LdapLoginRequest {
     #[validate(length(min = 1, max = 50, message = "server.user.validation.username_length"))]
     pub username: String,

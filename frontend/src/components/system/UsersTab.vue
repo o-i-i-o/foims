@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 用户管理页签（移植自旧版 main.html users 分区 + modules/userManager.js）：
  * 分页列表（8 列 + 表头排序）+ 新增/编辑（两步弹窗含 2FA 管理）+ 删除确认。
@@ -7,26 +7,25 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiDelete } from "../../api/client.js";
-import { formatDateTime } from "../../utils/formatter.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
-import { onThSort, seqIndex, sortClass, usePagedList } from "../../composables/usePagedList.js";
+import { apiDelete } from "../../api/client";
+import { formatDateTime } from "../../utils/formatter";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
+import { onThSort, seqIndex, sortClass, usePagedList } from "../../composables/usePagedList";
 import ConfirmModal from "../ConfirmModal.vue";
 import NavIcon from "../NavIcon.vue";
 import Pagination from "../Pagination.vue";
 import UserModal from "./UserModal.vue";
+import type { User } from "../../types/api/generated/User";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
-const list = usePagedList({
+const list = usePagedList<User>({
   tag: "users",
   defaultPageSize: 20,
   enabled: computed(() => props.active),
@@ -35,8 +34,8 @@ const list = usePagedList({
 });
 
 // 角色显示（三权分立 + 超管）
-function roleLabel(role) {
-  const keys = {
+function roleLabel(role: string): string {
+  const keys: Record<string, string> = {
     admin: "user.role_admin",
     sysadmin: "user.role_sysadmin",
     secadmin: "user.role_secadmin",
@@ -47,37 +46,37 @@ function roleLabel(role) {
 
 // ==================== 新增/编辑弹窗 ====================
 
-const modalUser = ref(null);
+const modalUser = ref<User | null>(null);
 const showUserModal = ref(false);
 
-function openCreate() {
+function openCreate(): void {
   modalUser.value = null;
   showUserModal.value = true;
 }
 
-function openEdit(user) {
+function openEdit(user: User): void {
   modalUser.value = user;
   showUserModal.value = true;
 }
 
-function handleModalSaved() {
+function handleModalSaved(): void {
   queryClient.invalidateQueries({ queryKey: ["users"] });
 }
 
 // ==================== 删除（二次确认） ====================
 
-const deleteTarget = ref(null);
+const deleteTarget = ref<User | null>(null);
 const deleting = ref(false);
 
-function handleDeleteConfirmed() {
+function handleDeleteConfirmed(): void {
   const id = deleteTarget.value?.id;
   deleteTarget.value = null;
   if (id != null) {
-    doDelete(id);
+    void doDelete(id);
   }
 }
 
-async function doDelete(id) {
+async function doDelete(id: string): Promise<void> {
   if (deleting.value) {
     return;
   }

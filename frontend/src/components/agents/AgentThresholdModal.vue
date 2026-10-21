@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 主机告警阈值配置弹窗（移植自旧版 modals/agents/agent-alert-threshold-modal.html
  * + agents.js openAlertThresholdModal/saveAlertThresholds）：
@@ -8,14 +8,27 @@
 import { reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import type { AlertThresholds } from "../../types/api/generated/AlertThresholds";
+import { apiGet, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
+
+/** 四项阈值字段的键 */
+type ThresholdKey = "cpu_pct" | "mem_pct" | "disk_pct" | "temp_c";
+
+/** 保存载荷结构（与后端 AlertThresholds 对齐，未监控项为 null） */
+interface ThresholdPayload {
+  enabled: boolean;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  disk_pct: number | null;
+  temp_c: number | null;
+}
 
 /** 阈值字段定义：key 与取值范围（百分比 1-100 / 温度 1-200） */
 const THRESHOLD_FIELDS = [
@@ -23,22 +36,28 @@ const THRESHOLD_FIELDS = [
   { key: "mem_pct", min: 1, max: 100 },
   { key: "disk_pct", min: 1, max: 100 },
   { key: "temp_c", min: 1, max: 200 }
-];
+] as const;
 
 // 弹窗经 v-if 挂载，每次打开都重新拉取当前配置
 const configQuery = useQuery({
   queryKey: ["agent-thresholds"],
-  queryFn: async () => {
-    const result = await apiGet("/api/agents/alert-thresholds");
+  queryFn: async (): Promise<AlertThresholds | null> => {
+    const result = await apiGet<AlertThresholds>("/api/agents/alert-thresholds");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    return result.data || {};
+    return result.data;
   }
 });
 
 // 表单态：阈值为字符串（空串 = 不监控），回显与校验都按原始输入处理
-const form = reactive({ enabled: false, cpu_pct: "", mem_pct: "", disk_pct: "", temp_c: "" });
+const form = reactive<{ enabled: boolean } & Record<ThresholdKey, string | number>>({
+  enabled: false,
+  cpu_pct: "",
+  mem_pct: "",
+  disk_pct: "",
+  temp_c: ""
+});
 
 watch(
   () => configQuery.data.value,
@@ -46,7 +65,7 @@ watch(
     if (!config) {
       return;
     }
-    form.enabled = !!config.enabled;
+    form.enabled = config.enabled;
     for (const field of THRESHOLD_FIELDS) {
       form[field.key] = config[field.key] ?? "";
     }
@@ -54,7 +73,8 @@ watch(
 );
 
 const saveMutation = useMutation({
-  mutationFn: (payload) => apiPut("/api/agents/alert-thresholds", payload),
+  mutationFn: (payload: ThresholdPayload) =>
+    apiPut<unknown, ThresholdPayload>("/api/agents/alert-thresholds", payload),
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("agents.alert_save_success"), "success");
@@ -68,7 +88,13 @@ const saveMutation = useMutation({
 
 /** 保存告警阈值：前端范围校验后 PUT */
 function handleSubmit() {
-  const payload = { enabled: form.enabled, cpu_pct: null, mem_pct: null, disk_pct: null, temp_c: null };
+  const payload: ThresholdPayload = {
+    enabled: form.enabled,
+    cpu_pct: null,
+    mem_pct: null,
+    disk_pct: null,
+    temp_c: null
+  };
   for (const field of THRESHOLD_FIELDS) {
     const raw = String(form[field.key]).trim();
     if (raw === "") {

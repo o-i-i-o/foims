@@ -143,7 +143,8 @@ pub async fn reset_password<P: AuthProvider>(
 }
 
 /// 自助修改密码（已登录用户；修改成功后吊销全部令牌强制重新登录）。
-#[derive(Debug, serde::Deserialize, validator::Validate)]
+#[derive(Debug, serde::Deserialize, validator::Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct ChangePasswordRequest {
     #[validate(length(min = 1, message = "server.auth.validation.password_required"))]
     pub old_password: String,

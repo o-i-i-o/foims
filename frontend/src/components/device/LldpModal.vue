@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * LLDP 邻居弹窗（移植自旧版 modals/device/lldp-modal.html +
  * deviceMacLldp.js viewLldpNeighbors/renderLldpTable/syncLldpData）：
@@ -11,30 +11,31 @@
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPost } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost } from "../../api/client";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
+import type { DeviceLldp } from "../../types/api/generated/DeviceLldp";
+import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
 
-const props = defineProps({
-  deviceId: { type: String, required: true }
-});
+const props = defineProps<{ deviceId: string }>();
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
 // ==================== 加载状态机（与 ArpModal 同构） ====================
+// loading 初始加载 / syncing 同步中 / ready 就绪 / empty 无数据 / error 失败
+type LoadPhase = "loading" | "syncing" | "ready" | "empty" | "error";
 
-const phase = ref("loading");
+const phase = ref<LoadPhase>("loading");
 const errorMsg = ref("");
 const deviceName = ref("");
-const neighbors = ref([]);
+const neighbors = ref<DeviceLldp[]>([]);
 
-async function loadData() {
+async function loadData(): Promise<void> {
   phase.value = "loading";
   try {
-    const deviceResult = await apiGet(`/api/resources/devices/${props.deviceId}`);
+    const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
     if (!deviceResult.success) {
       phase.value = "error";
       errorMsg.value = t("device.load_failed");
@@ -42,7 +43,7 @@ async function loadData() {
     }
     deviceName.value = deviceResult.data?.name || "";
 
-    const result = await apiGet(`/api/resources/devices/${props.deviceId}/lldp-neighbors`);
+    const result = await apiGet<DeviceLldp[]>(`/api/resources/devices/${props.deviceId}/lldp-neighbors`);
     if (!result.success) {
       phase.value = "error";
       errorMsg.value = `${t("device.load_lldp_failed")}: ${result.message || ""}`;
@@ -51,15 +52,17 @@ async function loadData() {
     neighbors.value = result.data || [];
     phase.value = neighbors.value.length === 0 ? "empty" : "ready";
   } catch (error) {
+    // apiGet/apiPost 不 reject，此分支为防御性保留；非 Error 抛出值按空串回退
+    const message = error instanceof Error ? error.message : "";
     phase.value = "error";
-    errorMsg.value = `${t("common.load_failed")}: ${error.message}`;
+    errorMsg.value = `${t("common.load_failed")}: ${message}`;
   }
 }
 
-async function syncLldpData() {
+async function syncLldpData(): Promise<void> {
   phase.value = "syncing";
   try {
-    const result = await apiPost(`/api/resources/devices/${props.deviceId}/lldp/sync`, {});
+    const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/lldp/sync`, {});
     if (!result.success) {
       phase.value = "error";
       errorMsg.value = `${t("device.sync_failed")}: ${result.message || ""}`;
@@ -67,18 +70,19 @@ async function syncLldpData() {
     }
     await loadData();
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
     phase.value = "error";
-    errorMsg.value = `${t("device.sync_failed")}: ${error.message}`;
+    errorMsg.value = `${t("device.sync_failed")}: ${message}`;
   }
 }
 
 // ==================== 邻居端口展示逻辑（与旧版一致） ====================
 
-function isMac(str) {
+function isMac(str: string): boolean {
   return /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(str);
 }
 
-function neighborPortOf(n) {
+function neighborPortOf(n: DeviceLldp): string {
   if (n.neighbor_port_id && !isMac(n.neighbor_port_id)) {
     return n.neighbor_port_id;
   }

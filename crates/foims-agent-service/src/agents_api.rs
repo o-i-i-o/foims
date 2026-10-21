@@ -41,7 +41,8 @@ pub struct ListAgentsQuery {
 }
 
 /// PATCH /api/agents/{id} 请求体。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PatchAgentBody {
     /// 备注（trim 后 ≤100 字符）
     label: Option<String>,

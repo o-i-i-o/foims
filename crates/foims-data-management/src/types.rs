@@ -106,7 +106,8 @@ pub trait DataProvider: Clone + Send + Sync + 'static {
     async fn encrypt_password(&self, plain: &str) -> DataResult<String>;
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct ClearLogsRequest {
     #[validate(length(min = 1, max = 20, message = "server.logs.validation.log_type_length"))]
     pub log_type: String,

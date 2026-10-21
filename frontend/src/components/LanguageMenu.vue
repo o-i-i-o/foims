@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 侧边栏语言选择器（移植自旧版 languageMenu.js）：按钮 + body 级弹出菜单。
  * 语言列表固定为已迁移的 zh/en（native_name 直接维护于此，新增语言需
@@ -7,20 +7,21 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { changeLanguage } from "../i18n/index.js";
+import { changeLanguage } from "../i18n/index";
 import NavIcon from "./NavIcon.vue";
 
 const { t, locale } = useI18n();
 
+// as const 使其为元组类型：LANGUAGES[0] 索引访问不会因 noUncheckedIndexedAccess 变宽
 const LANGUAGES = [
   { code: "zh", nativeName: "中文" },
   { code: "en", nativeName: "English" }
-];
+] as const;
 
-const btnRef = ref(null);
-const menuRef = ref(null);
+const btnRef = ref<HTMLElement | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
 const open = ref(false);
-const menuStyle = ref({});
+const menuStyle = ref<Record<string, string>>({});
 
 const currentName = computed(
   () => LANGUAGES.find((item) => item.code === locale.value)?.nativeName ?? LANGUAGES[0].nativeName
@@ -64,20 +65,21 @@ function closeMenu() {
   open.value = false;
 }
 
-function selectLanguage(code) {
+function selectLanguage(code: string) {
   if (code !== locale.value) {
     changeLanguage(code);
   }
   closeMenu();
 }
 
-function onDocumentClick(e) {
-  if (open.value && !menuRef.value?.contains(e.target) && !btnRef.value?.contains(e.target)) {
+function onDocumentClick(e: Event) {
+  const target = e.target;
+  if (open.value && target instanceof Node && !menuRef.value?.contains(target) && !btnRef.value?.contains(target)) {
     closeMenu();
   }
 }
 
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     closeMenu();
   }

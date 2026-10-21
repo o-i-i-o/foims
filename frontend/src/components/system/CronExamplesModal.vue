@@ -1,16 +1,16 @@
-<script setup>
+<script setup lang="ts">
 /**
  * cron 表达式示例弹窗（静态示例表，在任务编辑弹窗之上叠加打开）。
  */
 import { useI18n } from "vue-i18n";
 import ModalShell from "../ModalShell.vue";
 
-defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
 // 与后端解析器（croner）支持的语法一致：逗号列表 / 区间 / 步进 / L（当月最后一天）
-const EXAMPLES = [
+const EXAMPLES: Array<{ expression: string; key: string }> = [
   { expression: "* * * * *", key: "every_1_minute" },
   { expression: "*/10 * * * *", key: "every_10_minutes" },
   { expression: "0 */1 * * *", key: "every_1_hour" },

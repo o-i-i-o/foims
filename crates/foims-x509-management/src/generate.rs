@@ -15,7 +15,8 @@ use crate::error::CertManagerError;
 const DEFAULT_VALIDITY_DAYS: i64 = 3650;
 const MAX_VALIDITY_DAYS: i64 = 36500;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GenerateCertRequest {
     pub common_name: String,
     pub organization: Option<String>,

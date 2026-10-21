@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 证书签发弹窗（移植自旧版 cert-generate-modal.html）：签发 CA 下拉
  * （无私钥的 CA 仅供信任导出不可签发，默认选站点根 CA）+ CN/主体/
@@ -7,30 +7,44 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiPost } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiPost } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import type { CaInfo } from "../../types/api/generated/CaInfo";
+import type { GenerateCertRequest } from "../../types/api/generated/GenerateCertRequest";
 import CertSubjectFields from "./CertSubjectFields.vue";
 import ModalShell from "../ModalShell.vue";
 
-const props = defineProps({
-  /** 可用 CA 列表（来自 ["certificates"] 查询的 cas 段） */
-  caList: { type: Array, default: () => [] }
-});
+/** 证书主体五字段（与 CertSubjectFields 的模型结构一致） */
+interface CertSubjectModel {
+  organization: string;
+  organizational_unit: string;
+  country: string;
+  state: string;
+  locality: string;
+}
 
-const emit = defineEmits(["close", "saved"]);
+const props = withDefaults(
+  defineProps<{
+    /** 可用 CA 列表（来自 ["certificates"] 查询的 cas 段） */
+    caList?: CaInfo[];
+  }>(),
+  { caList: () => [] }
+);
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // CA 下拉选项文案：根 CA（自生成）在前由列表序保证；无私钥的 CA 标注不可签发
-function caOptionLabel(ca) {
+function caOptionLabel(ca: CaInfo): string {
   const source = ca.source === "root" ? t("cert.ca_source_root") : t("cert.ca_source_imported");
   const name = ca.name || ca.id;
   return ca.has_key ? `${name}（${source}）` : `${name}（${source}，${t("cert.ca_no_key")}）`;
 }
 
 // 默认选中：根 CA 且有私钥 → 否则第一个有私钥的 CA → 无可用 CA 留空
-const defaultCaId = computed(() => {
+const defaultCaId = computed<string>(() => {
   const usable = props.caList.filter((ca) => ca.has_key);
   return usable.find((ca) => ca.source === "root")?.id || usable[0]?.id || "";
 });
@@ -39,17 +53,17 @@ const caId = ref(defaultCaId.value);
 const commonName = ref("");
 const validityDays = ref("3650");
 const subjectAltNames = ref("");
-const subject = ref({ organization: "", organizational_unit: "", country: "", state: "", locality: "" });
+const subject = ref<CertSubjectModel>({ organization: "", organizational_unit: "", country: "", state: "", locality: "" });
 
-const formRef = ref(null);
+const formRef = ref<HTMLFormElement | null>(null);
 const saving = ref(false);
 
-function optionalField(value) {
+function optionalField(value: string): string | null {
   const s = (value || "").trim();
   return s ? s : null;
 }
 
-async function handleSubmit() {
+async function handleSubmit(): Promise<void> {
   const form = formRef.value;
   if (form && !form.checkValidity()) {
     form.reportValidity();
@@ -73,7 +87,7 @@ async function handleSubmit() {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const body = {
+  const body: GenerateCertRequest = {
     common_name: cn,
     organization: optionalField(subject.value.organization),
     organizational_unit: optionalField(subject.value.organizational_unit),

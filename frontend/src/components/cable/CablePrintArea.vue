@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 线缆标签打印区（移植自旧版 cableLink.js printCableLabels）：
  * 25x38+40 规格——标签 25mm x 38mm、步进 40mm，一枚标签独占一页；
@@ -7,13 +7,14 @@
  * 打印遮蔽规则见 styles/components/cable-label-print.css。
  */
 import { onBeforeUnmount, onMounted } from "vue";
+import type { CableLinkWithDetails } from "../../types/api/generated/CableLinkWithDetails";
 
-const props = defineProps({
+const props = defineProps<{
   /** 待打印线路（a_endpoint_label/b_endpoint_label） */
-  items: { type: Array, required: true }
-});
+  items: CableLinkWithDetails[];
+}>();
 
-const emit = defineEmits(["done"]);
+const emit = defineEmits<{ done: [] }>();
 
 function onAfterPrint() {
   emit("done");

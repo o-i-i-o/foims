@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 仪表盘（移植自旧版 modules/dashboard.js + main.html 127-257 行）：
  * 5 张统计卡（dashboard-stats 单端点）+ 6 张榜单卡（5 个分页接口 +
@@ -11,8 +11,8 @@ import { computed, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../api/client.js";
-import { useAuthStore } from "../stores/auth.js";
+import { apiGet } from "../api/client";
+import { useAuthStore } from "../stores/auth";
 import {
   getActionIcon,
   getOperationTypeText,
@@ -20,7 +20,14 @@ import {
   getResourceTypeText,
   getStatusText,
   formatTime
-} from "../utils/formatter.js";
+} from "../utils/formatter";
+import type { Paged } from "../types/api";
+import type { CabinetWithNetworks } from "../types/api/generated/CabinetWithNetworks";
+import type { DashboardStats } from "../types/api/generated/DashboardStats";
+import type { IpDetailWithNames } from "../types/api/generated/IpDetailWithNames";
+import type { Network } from "../types/api/generated/Network";
+import type { OperationLog } from "../types/api/generated/OperationLog";
+import type { RoomWithNetworks } from "../types/api/generated/RoomWithNetworks";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -28,12 +35,12 @@ const auth = useAuthStore();
 
 const CACHE_TTL = 60 * 1000;
 
-/** 榜单查询工厂：分页接口归一为 items 数组 */
-function useTopList(tag, url) {
-  return useQuery({
+/** 榜单查询工厂：分页接口归一为 items 数组（data 归一为非空数组以保持模板旧语义） */
+function useTopList<T>(tag: string, url: string) {
+  const query = useQuery({
     queryKey: [tag],
-    queryFn: async () => {
-      const result = await apiGet(url);
+    queryFn: async (): Promise<T[]> => {
+      const result = await apiGet<Paged<T>>(url);
       if (!result.success) {
         throw new Error(result.message || t("common.load_failed"));
       }
@@ -41,14 +48,16 @@ function useTopList(tag, url) {
     },
     staleTime: CACHE_TTL
   });
+  // query 的 data 在加载/失败期为 undefined，收窄为空数组，模板取值逻辑不变
+  return { ...query, data: computed(() => query.data.value ?? []) };
 }
 
 // ==================== 统计卡 ====================
 
 const statsQuery = useQuery({
   queryKey: ["dashboard-stats"],
-  queryFn: async () => {
-    const result = await apiGet("/api/system/dashboard-stats");
+  queryFn: async (): Promise<DashboardStats | null> => {
+    const result = await apiGet<DashboardStats>("/api/system/dashboard-stats");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -74,31 +83,46 @@ const statValues = computed(() => {
 
 // ==================== 榜单卡 ====================
 
-const networksQuery = useTopList("dashboard-top-networks", "/api/resources/networks?page_size=5");
-const ipsQuery = useTopList("dashboard-top-ips", "/api/resources/ip?page_size=5");
-const roomsQuery = useTopList("dashboard-top-rooms", "/api/resources/rooms?page_size=5");
-const cabinetsQuery = useTopList("dashboard-top-cabinets", "/api/resources/cabinets?page_size=5");
-const logsQuery = useTopList("dashboard-top-logs", "/api/logs/operation?page_size=5");
+// 网络榜单行：联查附加的区域名称键未入 generated Network
+type NetworkTopItem = Network & { network_region_name?: string | null };
+
+const networksQuery = useTopList<NetworkTopItem>("dashboard-top-networks", "/api/resources/networks?page_size=5");
+const ipsQuery = useTopList<IpDetailWithNames>("dashboard-top-ips", "/api/resources/ip?page_size=5");
+const roomsQuery = useTopList<RoomWithNetworks>("dashboard-top-rooms", "/api/resources/rooms?page_size=5");
+const cabinetsQuery = useTopList<CabinetWithNetworks>("dashboard-top-cabinets", "/api/resources/cabinets?page_size=5");
+const logsQuery = useTopList<OperationLog>("dashboard-top-logs", "/api/logs/operation?page_size=5");
 
 /** IP 榜单条目的归属行：区域 / 子网 */
-function ipRegionText(ip) {
+function ipRegionText(ip: IpDetailWithNames): string {
   return [ip.network_region, ip.network_name].filter(Boolean).join(" / ") || "-";
 }
 
 /** 最近动态条目的操作人行 */
-function logMetaText(log) {
+function logMetaText(log: OperationLog): string {
   return `${log.username || "-"} · ${formatTime(log.created_at)}`;
 }
 
 // ==================== 主机负载卡片 ====================
 
-const HOST_METRIC_KEYS = ["cpu", "memory", "temperature"];
+/** 主机负载条目（/api/agents/top-metrics 行：主机名/IP/标签/指标值） */
+interface HostMetricItem {
+  hostname: string | null;
+  ip: string | null;
+  label: string | null;
+  value: number | string | null;
+}
+
+/** 指标键 → 榜单数组（端点按需返回，未启用键可能缺失） */
+type HostMetrics = Partial<Record<"cpu" | "memory" | "temperature", HostMetricItem[]>>;
+
+const HOST_METRIC_KEYS = ["cpu", "memory", "temperature"] as const;
+type HostMetricKey = (typeof HOST_METRIC_KEYS)[number];
 const HOST_METRIC_ROTATE_MS = 10 * 1000;
 
 const hostMetricsQuery = useQuery({
   queryKey: ["dashboard-host-metrics"],
-  queryFn: async () => {
-    const result = await apiGet("/api/agents/top-metrics?limit=5");
+  queryFn: async (): Promise<HostMetrics | null> => {
+    const result = await apiGet<HostMetrics>("/api/agents/top-metrics?limit=5");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -109,12 +133,12 @@ const hostMetricsQuery = useQuery({
   staleTime: CACHE_TTL
 });
 
-const hostMetricActive = ref("cpu");
+const hostMetricActive = ref<HostMetricKey>("cpu");
 // 手动切换页签后置 true：用户意图优先，自动轮播永久停止
 let hostMetricManual = false;
-let rotateTimer = null;
+let rotateTimer: number | undefined;
 
-const hostMetricItems = computed(() => {
+const hostMetricItems = computed<HostMetricItem[]>(() => {
   const data = hostMetricsQuery.data.value;
   return data?.[hostMetricActive.value] ?? [];
 });
@@ -124,19 +148,20 @@ function startRotation() {
     return;
   }
   rotateTimer = setInterval(() => {
-    const next = HOST_METRIC_KEYS[(HOST_METRIC_KEYS.indexOf(hostMetricActive.value) + 1) % HOST_METRIC_KEYS.length];
-    hostMetricActive.value = next;
+    const index = HOST_METRIC_KEYS.indexOf(hostMetricActive.value);
+    // 模运算索引恒在键数组界内，收窄 noUncheckedIndexedAccess 的 undefined 分支
+    hostMetricActive.value = HOST_METRIC_KEYS[(index + 1) % HOST_METRIC_KEYS.length] as HostMetricKey;
   }, HOST_METRIC_ROTATE_MS);
 }
 
 function stopRotation() {
   if (rotateTimer) {
     clearInterval(rotateTimer);
-    rotateTimer = null;
+    rotateTimer = undefined;
   }
 }
 
-function selectHostMetric(metric) {
+function selectHostMetric(metric: HostMetricKey) {
   hostMetricManual = true;
   stopRotation();
   hostMetricActive.value = metric;
@@ -156,16 +181,16 @@ startRotation();
 onUnmounted(stopRotation);
 
 /** 主机显示名与副行 */
-function hostName(item) {
+function hostName(item: HostMetricItem): string {
   return item.hostname || item.ip || "-";
 }
 
-function hostMeta(item) {
+function hostMeta(item: HostMetricItem): string {
   return [item.label, item.ip].filter(Boolean).join(" · ") || "-";
 }
 
 /** 使用率迷你条分档（复用 agent-usage 约定：>85 红 >60 橙） */
-function usageLevel(value) {
+function usageLevel(value: number | string | null): string {
   const num = Number(value);
   if (!Number.isFinite(num)) {
     return "none";
@@ -179,7 +204,7 @@ function usageLevel(value) {
   return "ok";
 }
 
-function usageWidth(value) {
+function usageWidth(value: number | string | null): string {
   const num = Number(value);
   if (!Number.isFinite(num)) {
     return "0%";
@@ -187,13 +212,13 @@ function usageWidth(value) {
   return `${Math.min(100, Math.max(0, num)).toFixed(1)}%`;
 }
 
-function usageNum(value) {
+function usageNum(value: number | string | null): string {
   const num = Number(value);
   return Number.isFinite(num) ? Math.min(100, Math.max(0, num)).toFixed(1) : "-";
 }
 
 /** 温度榜值：保留一位小数（℃） */
-function tempText(value) {
+function tempText(value: number | string | null): string {
   const num = Number(value);
   return Number.isFinite(num) ? `${num.toFixed(1)}℃` : "-";
 }
@@ -205,8 +230,10 @@ function tempText(value) {
  * 命中卡片内链接或按钮时不跳转（view-all 按钮维持旧版无动作）；
  * 携带 tab 的卡片以 query 形式深链，目标分区迁移后按 query 定位页签。
  */
-function openSection(event, name, tab) {
-  if (event.target.closest("a") || event.target.closest("button")) {
+function openSection(event: MouseEvent, name: string, tab?: string): void {
+  // 事件目标由卡片内 DOM 触发，按 Element 收窄以复用旧版 closest 守卫
+  const target = event.target as Element;
+  if (target.closest("a") || target.closest("button")) {
     return;
   }
   router.push(tab ? { name, query: { tab } } : { name });

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 站点根 CA 生成弹窗（移植自旧版 ca-generate-modal.html + systemManager.js）：
  * CN 必填 + 主体五字段 + 有效期（默认 7300 天）；可选字段空串转 null。
@@ -6,30 +6,40 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiPost } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiPost } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import type { GenerateCaRequest } from "../../types/api/generated/GenerateCaRequest";
 import CertSubjectFields from "./CertSubjectFields.vue";
 import ModalShell from "../ModalShell.vue";
 
-const emit = defineEmits(["close", "saved"]);
+/** 证书主体五字段（与 CertSubjectFields 的模型结构一致） */
+interface CertSubjectModel {
+  organization: string;
+  organizational_unit: string;
+  country: string;
+  state: string;
+  locality: string;
+}
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-const formRef = ref(null);
+const formRef = ref<HTMLFormElement | null>(null);
 const commonName = ref("");
 const validityDays = ref("7300");
-const subject = ref({ organization: "", organizational_unit: "", country: "", state: "", locality: "" });
+const subject = ref<CertSubjectModel>({ organization: "", organizational_unit: "", country: "", state: "", locality: "" });
 
 const saving = ref(false);
 
 /** 可选字段：空串转 null（后端区分"未提供"与空值） */
-function optionalField(value) {
+function optionalField(value: string): string | null {
   const s = (value || "").trim();
   return s ? s : null;
 }
 
-async function handleSubmit() {
+async function handleSubmit(): Promise<void> {
   const form = formRef.value;
   if (form && !form.checkValidity()) {
     form.reportValidity();
@@ -38,7 +48,7 @@ async function handleSubmit() {
   if (saving.value) {
     return;
   }
-  const body = {
+  const body: GenerateCaRequest = {
     common_name: commonName.value.trim(),
     organization: optionalField(subject.value.organization),
     organizational_unit: optionalField(subject.value.organizational_unit),

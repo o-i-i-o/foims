@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 组织管理页（移植自旧版 main.html organization 分区 + modules/organization.js
  * + pages/organization.css）：组织树（展开/折叠/搜索过滤）+ 节点 CRUD +
@@ -9,9 +9,12 @@
 import { computed, provide, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet } from "../api/client.js";
-import { showToast } from "../composables/useToast.js";
-import { resolveOrgIcon } from "../config/orgConfig.js";
+import { apiDelete, apiGet } from "../api/client";
+import { showToast } from "../composables/useToast";
+import { resolveOrgIcon } from "../config/orgConfig";
+import type { Paged } from "../types/api";
+import type { OrganizationTreeNode } from "../types/api/generated/OrganizationTreeNode";
+import type { OrgTemplate } from "../types/api/generated/OrgTemplate";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import EmployeeModal from "../components/org/EmployeeModal.vue";
 import OrgNodeModal from "../components/org/OrgNodeModal.vue";
@@ -25,8 +28,8 @@ const queryClient = useQueryClient();
 
 const treeQuery = useQuery({
   queryKey: ["organizations-tree"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/organizations/tree");
+  queryFn: async (): Promise<OrganizationTreeNode[]> => {
+    const result = await apiGet<OrganizationTreeNode[]>("/api/resources/organizations/tree");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -34,12 +37,16 @@ const treeQuery = useQuery({
   }
 });
 
-const treeData = computed(() => (treeQuery.isError.value ? [] : (treeQuery.data.value ?? [])));
+const treeData = computed<OrganizationTreeNode[]>(() =>
+  treeQuery.isError.value ? [] : (treeQuery.data.value ?? [])
+);
 
 const availableTypesQuery = useQuery({
   queryKey: ["org-available-types"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/org-templates/available-types");
+  queryFn: async (): Promise<{ types: string[]; icons: Record<string, string> }> => {
+    const result = await apiGet<{ types?: string[]; icons?: Record<string, string> }>(
+      "/api/resources/org-templates/available-types"
+    );
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -52,8 +59,8 @@ const availableTypesQuery = useQuery({
 // 模板列表查询：树节点图标/徽标随树一起加载（与弹窗共用同键缓存，自动去重）
 const templatesQuery = useQuery({
   queryKey: ["org-templates"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/org-templates");
+  queryFn: async (): Promise<OrgTemplate[]> => {
+    const result = await apiGet<Paged<OrgTemplate>>("/api/resources/org-templates");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -62,26 +69,27 @@ const templatesQuery = useQuery({
 });
 
 /** 模板图标映射 { templateId: { type_name: icon } }（同名类型互不覆盖） */
-const templateIconsById = computed(() => {
-  const map = {};
+const templateIconsById = computed<Record<string, Record<string, string>>>(() => {
+  const map: Record<string, Record<string, string>> = {};
   for (const tpl of templatesQuery.data.value ?? []) {
-    if (tpl.icons && typeof tpl.icons === "object") {
-      map[tpl.id] = tpl.icons;
+    // icons 为 JsonValue，模板编辑器保存的对象形态（type → 图标名）按对象收窄
+    if (tpl.icons && typeof tpl.icons === "object" && !Array.isArray(tpl.icons)) {
+      map[tpl.id] = tpl.icons as Record<string, string>;
     }
   }
   return map;
 });
 
 /** 节点图标解析：所属模板 icons → API icons → 关键词匹配 → 默认 */
-function resolveIcon(orgType, templateId) {
-  return resolveOrgIcon(orgType, templateIconsById.value[templateId] ?? {}, availableTypesQuery.data.value?.icons ?? {});
+function resolveIcon(orgType: unknown, templateId: string | null): string {
+  return resolveOrgIcon(orgType, templateIconsById.value[templateId ?? ""] ?? {}, availableTypesQuery.data.value?.icons ?? {});
 }
 
 // ==================== 搜索（客户端过滤，防抖 300ms） ====================
 
 const searchInput = ref("");
 const searchKeyword = ref("");
-let searchTimer = null;
+let searchTimer: number | undefined;
 
 watch(searchInput, (value) => {
   clearTimeout(searchTimer);
@@ -104,9 +112,9 @@ const searchState = computed(() => {
   if (!keyword) {
     return null;
   }
-  const visible = new Set();
-  const expand = new Set();
-  function walk(nodes) {
+  const visible = new Set<string>();
+  const expand = new Set<string>();
+  function walk(nodes: OrganizationTreeNode[]): boolean {
     let hit = false;
     for (const node of nodes) {
       const selfHit = node.name.toLowerCase().includes(keyword);
@@ -146,10 +154,15 @@ function collapseAll() {
 
 // ==================== 树节点操作（注入给递归节点） ====================
 
-const orgModal = reactive({ open: false, mode: "add-root", node: null, parentId: "" });
+const orgModal = reactive<{ open: boolean; mode: string; node: OrganizationTreeNode | null; parentId: string }>({
+  open: false,
+  mode: "add-root",
+  node: null,
+  parentId: ""
+});
 const employeeModal = reactive({ open: false, orgId: "", orgName: "" });
 const templateModalOpen = ref(false);
-const deletingOrg = ref(null);
+const deletingOrg = ref<OrganizationTreeNode | null>(null);
 
 provide("orgTreeCtx", {
   keyword: searchKeyword,
@@ -159,7 +172,7 @@ provide("orgTreeCtx", {
   onAction
 });
 
-function onAction(node, action) {
+function onAction(node: OrganizationTreeNode, action: string): void {
   if (action === "add-child") {
     orgModal.mode = "add-child";
     orgModal.node = null;
@@ -182,7 +195,7 @@ function onAction(node, action) {
 // ==================== 组织节点删除 ====================
 
 const deleteOrgMutation = useMutation({
-  mutationFn: (node) => apiDelete(`/api/resources/organizations/${node.id}`),
+  mutationFn: (node: OrganizationTreeNode) => apiDelete(`/api/resources/organizations/${node.id}`),
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("organization.delete_success"), "success");

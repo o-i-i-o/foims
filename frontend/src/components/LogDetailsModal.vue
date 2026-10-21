@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 操作日志详情弹窗（移植自旧版 showLogDetails + modals/log/log-details-modal.html）。
  * log 对象由调用方直接传入（不再经 JSON 序列化挂 data 属性）。
@@ -6,17 +6,18 @@
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { formatDateTime, getOperationTypeText, getResourceTypeText } from "../utils/formatter.js";
+import { formatDateTime, getOperationTypeText, getResourceTypeText } from "../utils/formatter";
+import type { OperationLog } from "../types/api/generated/OperationLog";
 
-const props = defineProps({
-  log: { type: Object, required: true }
-});
+const props = defineProps<{
+  log: OperationLog;
+}>();
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-const detailsText = computed(() => {
+const detailsText = computed<string | null>(() => {
   if (!props.log.details) {
     return null;
   }

@@ -8,7 +8,8 @@ use validator::Validate;
 
 // ==================== 物理链路模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct CableLink {
     pub id: Uuid,
     pub a_endpoint_type: String,
@@ -23,7 +24,8 @@ pub struct CableLink {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct CableLinkWithDetails {
     pub id: Uuid,
     pub a_endpoint_type: String,
@@ -48,7 +50,8 @@ pub struct CableLinkWithDetails {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CableLinkCreate {
     pub a_endpoint_type: String,
     pub a_endpoint_id: Uuid,
@@ -67,7 +70,8 @@ pub struct CableLinkCreate {
     pub tested: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CableLinkUpdate {
     pub link_type: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
@@ -90,7 +94,8 @@ pub struct CableLinkUpdate {
     pub b_endpoint_id: Option<Uuid>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CablePathNode {
     pub hop_idx: i32,
     pub node_type: String,

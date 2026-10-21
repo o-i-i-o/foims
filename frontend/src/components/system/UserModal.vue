@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 用户新增/编辑弹窗（移植自旧版 modals/system/user-modal.html 两步结构 +
  * userManager.js）：第一步账户信息（原生表单校验），第二步双因素认证
@@ -8,17 +8,31 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
+import type { User } from "../../types/api/generated/User";
 
-const props = defineProps({
-  /** 编辑目标（列表行数据，仅取 id）；null = 新增 */
-  user: { type: Object, default: null }
-});
+/** 表单提交载荷（新增/编辑共用；编辑端点后端 UserUpdate 仅取 email/role/enabled/password_expiry_days，username/password 为前端提交超集） */
+interface UserFormPayload {
+  username: string;
+  email: string;
+  role: string;
+  enabled: boolean;
+  password_expiry_days: number;
+  password?: string;
+}
 
-const emit = defineEmits(["close", "saved"]);
+/** 2FA 初始化响应载荷（后端 json! 动态构造，未生成 ts-rs 类型） */
+interface TwoFactorInitData {
+  qr_code_base64?: string;
+  secret?: string;
+}
+
+const props = withDefaults(defineProps<{ user?: User | null }>(), { user: null });
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -28,7 +42,7 @@ const userId = computed(() => props.user?.id ?? null);
 
 // ==================== 第一步：账户信息 ====================
 
-const formRef = ref(null);
+const formRef = ref<HTMLFormElement | null>(null);
 const username = ref("");
 const email = ref("");
 const password = ref("");
@@ -43,7 +57,7 @@ let twoFactorTargetEnabled = false;
 const detailQuery = useQuery({
   queryKey: computed(() => ["users-detail", userId.value]),
   queryFn: async () => {
-    const result = await apiGet(`/api/users/${userId.value}`);
+    const result = await apiGet<User>(`/api/users/${userId.value}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -71,9 +85,9 @@ watch(
 
 // ==================== 第二步：双因素认证 ====================
 
-const step = ref("account");
+const step = ref<"account" | "2fa">("account");
 // 三态：unsaved 新用户待保存 / setup 扫码启用 / manage 已启用可禁用
-const twoFactorView = ref("unsaved");
+const twoFactorView = ref<"unsaved" | "setup" | "manage">("unsaved");
 const qrCode = ref("");
 const secret = ref("");
 const enableCode = ref("");
@@ -81,9 +95,9 @@ const disableCode = ref("");
 const enableError = ref("");
 const disableError = ref("");
 
-async function initTwoFactor(targetId) {
+async function initTwoFactor(targetId: string): Promise<void> {
   enableError.value = "";
-  const result = await apiPost("/api/two-factor/init", { user_id: targetId });
+  const result = await apiPost<TwoFactorInitData>("/api/two-factor/init", { user_id: targetId });
   if (result.success) {
     qrCode.value = result.data?.qr_code_base64
       ? `data:image/png;base64,${result.data.qr_code_base64}`
@@ -95,7 +109,7 @@ async function initTwoFactor(targetId) {
 }
 
 // 第一步"下一步"：仅切换到第二页（不触发保存）；无效时浏览器标红停留
-function goTo2faStep() {
+function goTo2faStep(): void {
   const form = formRef.value;
   if (form && !form.checkValidity()) {
     form.reportValidity();
@@ -118,14 +132,14 @@ function goTo2faStep() {
 }
 
 // 第二步返回第一步：回改账户信息
-function backToAccount() {
+function backToAccount(): void {
   step.value = "account";
 }
 
 // 启用 2FA：成功后动态切到管理视图（主按钮变"禁用2FA"），不关框
 const enabling = ref(false);
 
-async function handleEnable() {
+async function handleEnable(): Promise<void> {
   if (enabling.value || !userId.value) {
     return;
   }
@@ -158,7 +172,7 @@ async function handleEnable() {
 const disabling = ref(false);
 const showDisableConfirm = ref(false);
 
-async function handleDisable() {
+async function handleDisable(): Promise<void> {
   if (disabling.value || !userId.value) {
     return;
   }
@@ -169,7 +183,7 @@ async function handleDisable() {
   showDisableConfirm.value = true;
 }
 
-async function confirmDisable() {
+async function confirmDisable(): Promise<void> {
   showDisableConfirm.value = false;
   if (disabling.value || !userId.value) {
     return;
@@ -200,7 +214,7 @@ async function confirmDisable() {
 
 const saving = ref(false);
 
-async function handleSave() {
+async function handleSave(): Promise<void> {
   if (saving.value) {
     return;
   }
@@ -217,7 +231,7 @@ async function handleSave() {
     return;
   }
 
-  const userData = {
+  const userData: UserFormPayload = {
     username: username.value,
     email: email.value,
     role: role.value,

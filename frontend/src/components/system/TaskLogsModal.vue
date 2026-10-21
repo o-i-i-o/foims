@@ -1,26 +1,28 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 任务执行日志弹窗（固定取最近 50 条，五键分页响应取 items）。
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client.js";
-import { formatDateTime } from "../../utils/formatter.js";
+import { apiGet } from "../../api/client";
+import { formatDateTime } from "../../utils/formatter";
+import type { Paged } from "../../types/api";
+import type { TaskLog } from "../../types/api/generated/TaskLog";
 import ModalShell from "../ModalShell.vue";
 
-const props = defineProps({
-  taskName: { type: String, required: true }
-});
+const props = defineProps<{
+  taskName: string;
+}>();
 
-defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
 const logsQuery = useQuery({
   queryKey: ["task-logs", props.taskName],
   queryFn: async () => {
-    const result = await apiGet(
+    const result = await apiGet<Paged<TaskLog>>(
       `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(props.taskName)}&page=1&page_size=50`
     );
     if (!result.success) {
@@ -30,11 +32,21 @@ const logsQuery = useQuery({
   }
 });
 
-const logs = computed(() => logsQuery.data.value?.items || []);
+const logs = computed<TaskLog[]>(() => logsQuery.data.value?.items ?? []);
 
 // 状态徽章：成功为 active，其余原样展示
-function statusClass(status) {
+function statusClass(status: string): string {
   return status === "success" ? "status-active" : "status-inactive";
+}
+
+// TaskLog.details 为 JsonValue：仅 plain object 时读取 message/error 文案
+function detailText(log: TaskLog): string {
+  const details = log.details;
+  if (details !== null && typeof details === "object" && !Array.isArray(details)) {
+    const value = details.message || details.error;
+    return typeof value === "string" ? value : "";
+  }
+  return "";
 }
 </script>
 
@@ -59,7 +71,7 @@ function statusClass(status) {
           <td><span class="status-badge" :class="statusClass(log.status)">{{ log.status }}</span></td>
           <td>{{ formatDateTime(log.start_time) }}</td>
           <td>{{ String(log.duration ?? 0) }}</td>
-          <td>{{ log.details?.message || log.details?.error || "-" }}</td>
+          <td>{{ detailText(log) || "-" }}</td>
         </tr>
       </tbody>
     </table>

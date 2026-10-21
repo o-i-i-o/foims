@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 资源管理页（移植自旧版 main.html resources 分区 + resourceTabs.js，
  * 按页签分批迁移：已迁移 = 网络区域/子网/房间/机柜/设备/线路六个页签）：
@@ -13,11 +13,22 @@ import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet } from "../api/client.js";
-import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList.js";
-import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter.js";
-import { getDeviceTypeName } from "../config/deviceOptions.js";
-import { showToast } from "../composables/useToast.js";
+import { apiDelete, apiGet } from "../api/client";
+import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList";
+import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter";
+import { getDeviceTypeName } from "../config/deviceOptions";
+import { showToast } from "../composables/useToast";
+import type { CabinetBrief } from "../types/api/generated/CabinetBrief";
+import type { CabinetWithNetworks } from "../types/api/generated/CabinetWithNetworks";
+import type { CableLinkWithDetails } from "../types/api/generated/CableLinkWithDetails";
+import type { DeviceWithDetails } from "../types/api/generated/DeviceWithDetails";
+import type { NetOutletBrief } from "../types/api/generated/NetOutletBrief";
+import type { Network } from "../types/api/generated/Network";
+import type { NetworkInfo } from "../types/api/generated/NetworkInfo";
+import type { NetworkRegion } from "../types/api/generated/NetworkRegion";
+import type { Room } from "../types/api/generated/Room";
+import type { RoomWithNetworks } from "../types/api/generated/RoomWithNetworks";
+import type { WorkstationBrief } from "../types/api/generated/WorkstationBrief";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
@@ -35,6 +46,17 @@ import LldpModal from "../components/device/LldpModal.vue";
 import CableLinkModal from "../components/cable/CableLinkModal.vue";
 import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
 import CablePrintArea from "../components/cable/CablePrintArea.vue";
+
+/**
+ * GET /rooms/{id}/brief 轻量数据（room.rs get_room_brief 组装：Room 字段 + 各子项
+ * brief），与 RoomModal 内部未导出的同名类型保持结构一致。
+ */
+type RoomBrief = Room & {
+  networks: NetworkInfo[];
+  workstations: WorkstationBrief[];
+  cabinets: CabinetBrief[];
+  net_outlets: NetOutletBrief[];
+};
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -55,7 +77,7 @@ const SUBTAB_KEY = "foims_subtab_resources";
 const route = useRoute();
 const router = useRouter();
 
-function readInitialTab() {
+function readInitialTab(): string {
   // 深链 #/resources?tab=networks 优先，其次恢复上次记忆的页签，默认网络区域
   const fromQuery = String(route.query.tab ?? "");
   if (TABS.some((tab) => tab.id === fromQuery)) {
@@ -63,7 +85,7 @@ function readInitialTab() {
   }
   try {
     const saved = localStorage.getItem(SUBTAB_KEY);
-    if (TABS.some((tab) => tab.id === saved)) {
+    if (saved !== null && TABS.some((tab) => tab.id === saved)) {
       return saved;
     }
   } catch {
@@ -74,7 +96,7 @@ function readInitialTab() {
 
 const activeTab = ref(readInitialTab());
 
-function switchTab(tabId) {
+function switchTab(tabId: string): void {
   if (tabId === activeTab.value) {
     return;
   }
@@ -103,14 +125,14 @@ watch(
 
 // ==================== 网络区域页签 ====================
 
-const regions = usePagedList({
+const regions = usePagedList<NetworkRegion>({
   tag: "network-regions",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "network-regions"),
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
     `/api/resources/network-regions?${new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
@@ -123,15 +145,15 @@ const regions = usePagedList({
 const networkFilters = reactive({ name: "", region: "", ipv4: "", ipv6: "" });
 const networkFilterParams = reactive({ name: "", region: "", ipv4: "", ipv6: "" });
 
-const networks = usePagedList({
+const networks = usePagedList<Network>({
   tag: "networks",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "networks"),
   extraKey: computed(() => ({ ...networkFilterParams })),
   buildUrl: (page, pageSize, sortBy, sortOrder) => {
     const params = new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     });
@@ -154,7 +176,7 @@ const networks = usePagedList({
 });
 
 // 表头搜索输入防抖 300ms：同步到查询参数并重置页码
-let filterTimer = null;
+let filterTimer: number | undefined;
 watch(networkFilters, () => {
   clearTimeout(filterTimer);
   filterTimer = setTimeout(() => {
@@ -165,7 +187,7 @@ watch(networkFilters, () => {
 
 // ==================== 房间页签 ====================
 
-const rooms = usePagedList({
+const rooms = usePagedList<RoomWithNetworks>({
   tag: "rooms",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "rooms"),
@@ -174,8 +196,8 @@ const rooms = usePagedList({
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
     `/api/resources/rooms?${new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
@@ -183,7 +205,7 @@ const rooms = usePagedList({
 
 // ==================== 机柜页签 ====================
 
-const cabinets = usePagedList({
+const cabinets = usePagedList<CabinetWithNetworks>({
   tag: "cabinets",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cabinets"),
@@ -192,8 +214,8 @@ const cabinets = usePagedList({
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
     `/api/resources/cabinets?${new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
@@ -201,7 +223,7 @@ const cabinets = usePagedList({
 
 // ==================== 设备页签 ====================
 
-const devices = usePagedList({
+const devices = usePagedList<DeviceWithDetails>({
   tag: "devices",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "devices"),
@@ -210,8 +232,8 @@ const devices = usePagedList({
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
     `/api/resources/devices?${new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
@@ -219,15 +241,15 @@ const devices = usePagedList({
 
 // ==================== 线路页签 ====================
 
-const cableLinks = usePagedList({
+const cableLinks = usePagedList<CableLinkWithDetails>({
   tag: "cable-links",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cable-links"),
   // 旧版线路列表默认按更新时间倒序
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
     `/api/resources/cable-links?${new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
@@ -235,13 +257,13 @@ const cableLinks = usePagedList({
 
 // ==================== 弹窗与删除 ====================
 
-const regionModal = reactive({ open: false, region: null });
-const networkModal = reactive({ open: false, network: null });
+const regionModal = reactive<{ open: boolean; region: NetworkRegion | null }>({ open: false, region: null });
+const networkModal = reactive<{ open: boolean; network: Network | null }>({ open: false, network: null });
 const usageModal = reactive({ open: false, subnetId: "" });
-const roomModal = reactive({ open: false, room: null });
-const cabinetModal = reactive({ open: false, cabinet: null });
+const roomModal = reactive<{ open: boolean; room: RoomBrief | null }>({ open: false, room: null });
+const cabinetModal = reactive<{ open: boolean; cabinet: CabinetWithNetworks | null }>({ open: false, cabinet: null });
 // 设备弹窗：device 为 null = 新增，对象 = 编辑回显（GET /devices/{id} 完整数据）
-const deviceModal = reactive({ open: false, device: null });
+const deviceModal = reactive<{ open: boolean; device: DeviceWithDetails | null }>({ open: false, device: null });
 // 统一端口/MAC/LLDP 弹窗（deviceId + deviceName 供标题与接口调用）
 const portsModal = reactive({ open: false, deviceId: "", deviceName: "" });
 const arpModal = reactive({ open: false, deviceId: "" });
@@ -249,39 +271,44 @@ const lldpModal = reactive({ open: false, deviceId: "" });
 // 线路弹窗：linkId 为 "" = 新增，非空 = 编辑（弹窗内取详情回填）
 const cableLinkModal = reactive({ open: false, linkId: "" });
 // 标签打印弹窗：items 取当前页列表数据（行内单行打印直接经 CablePrintArea）
-const labelPrintModal = reactive({ open: false, items: [] });
+const labelPrintModal = reactive<{ open: boolean; items: CableLinkWithDetails[] }>({ open: false, items: [] });
 // 通用简单列表弹窗（房间子项/信息点、机柜机位共用）
-const simpleList = reactive({ open: false, title: "", columns: [], rows: [] });
-const deletingRegion = ref(null);
-const deletingNetwork = ref(null);
-const deletingRoom = ref(null);
-const deletingCabinet = ref(null);
-const deletingDevice = ref(null);
-const deletingCableLink = ref(null);
+const simpleList = reactive<{ open: boolean; title: string; columns: string[]; rows: string[][] }>({
+  open: false,
+  title: "",
+  columns: [],
+  rows: []
+});
+const deletingRegion = ref<NetworkRegion | null>(null);
+const deletingNetwork = ref<Network | null>(null);
+const deletingRoom = ref<RoomWithNetworks | null>(null);
+const deletingCabinet = ref<CabinetWithNetworks | null>(null);
+const deletingDevice = ref<DeviceWithDetails | null>(null);
+const deletingCableLink = ref<CableLinkWithDetails | null>(null);
 
-function openRegionModal(region = null) {
+function openRegionModal(region: NetworkRegion | null = null): void {
   regionModal.region = region;
   regionModal.open = true;
 }
 
-function openNetworkModal(network = null) {
+function openNetworkModal(network: Network | null = null): void {
   networkModal.network = network;
   networkModal.open = true;
 }
 
-function openRoomModal(room = null) {
+function openRoomModal(room: RoomBrief | null = null): void {
   roomModal.room = room;
   roomModal.open = true;
 }
 
-function openCabinetModal(cabinet = null) {
+function openCabinetModal(cabinet: CabinetWithNetworks | null = null): void {
   cabinetModal.cabinet = cabinet;
   cabinetModal.open = true;
 }
 
 // 编辑设备：先取完整详情（含 cards），成功后打开弹窗回显
-async function editDevice(id) {
-  const result = await apiGet(`/api/resources/devices/${id}`);
+async function editDevice(id: string): Promise<void> {
+  const result = await apiGet<DeviceWithDetails>(`/api/resources/devices/${id}`);
   if (!result.success || !result.data) {
     showToast(`${t("device.load_failed")}: ${result.message}`, "error");
     return;
@@ -292,21 +319,21 @@ async function editDevice(id) {
 
 // 行内单行打印：直接以该行两端编号调起打印（不经弹窗，旧版语义）；
 // seq 变化强制重挂载打印区，保证重复点击同一行也能再次调起打印
-const directPrint = reactive({ seq: 0, items: null });
+const directPrint = reactive<{ seq: number; items: CableLinkWithDetails[] | null }>({ seq: 0, items: null });
 
-function printRowLabels(item) {
+function printRowLabels(item: CableLinkWithDetails): void {
   directPrint.items = [item];
   directPrint.seq++;
 }
 
 // 编辑线路：详情由 CableLinkModal 内部查询回填
-function editCableLink(id) {
+function editCableLink(id: string): void {
   cableLinkModal.linkId = id;
   cableLinkModal.open = true;
 }
 
 // 批量打印：列出当前页线路供勾选（旧版 openCableLabelPrintModal）
-function openCableLabelPrintModal() {
+function openCableLabelPrintModal(): void {
   if (cableLinks.items.length === 0) {
     showToast(t("cable_link.print_empty"), "warning");
     return;
@@ -316,8 +343,8 @@ function openCableLabelPrintModal() {
 }
 
 // 编辑房间：先取轻量 brief（一次并行查询取齐基础字段与子项），成功后打开弹窗
-async function editRoom(id) {
-  const result = await apiGet(`/api/resources/rooms/${id}/brief`);
+async function editRoom(id: string): Promise<void> {
+  const result = await apiGet<RoomBrief>(`/api/resources/rooms/${id}/brief`);
   if (!result.success || !result.data) {
     showToast(`${t("room.fetch_failed")}: ${result.message}`, "error");
     return;
@@ -326,8 +353,8 @@ async function editRoom(id) {
 }
 
 // 编辑机柜：完整详情含机位/配线架子项，成功后打开弹窗
-async function editCabinet(id) {
-  const result = await apiGet(`/api/resources/cabinets/${id}`);
+async function editCabinet(id: string): Promise<void> {
+  const result = await apiGet<CabinetWithNetworks>(`/api/resources/cabinets/${id}`);
   if (!result.success || !result.data) {
     showToast(`${t("cabinet.load_failed")}: ${result.message}`, "error");
     return;
@@ -339,8 +366,8 @@ async function editCabinet(id) {
  * 房间子项列表弹窗："其他"房间工位与机柜均可能存在，优先展示有数据的
  * 一类（旧版 openRoomChildrenListModal 语义）。
  */
-async function openRoomChildrenListModal(roomId) {
-  const result = await apiGet(`/api/resources/rooms/${roomId}`);
+async function openRoomChildrenListModal(roomId: string): Promise<void> {
+  const result = await apiGet<RoomWithNetworks>(`/api/resources/rooms/${roomId}`);
   if (!result.success || !result.data) {
     showToast(result.message || t("room.load_failed"), "error");
     return;
@@ -359,14 +386,14 @@ async function openRoomChildrenListModal(roomId) {
   } else {
     simpleList.title = `${room.name} - ${t("room.cabinets")}`;
     simpleList.columns = [t("common.name"), t("cabinet.capacity")];
-    simpleList.rows = (room.cabinets || []).map((cab) => [cab.name || "-", cab.capacity ?? "-"]);
+    simpleList.rows = (room.cabinets || []).map((cab) => [cab.name || "-", String(cab.capacity ?? "-")]);
   }
   simpleList.open = true;
 }
 
 /** 房间信息点列表弹窗 */
-async function openRoomNetOutletsListModal(roomId) {
-  const result = await apiGet(`/api/resources/rooms/${roomId}`);
+async function openRoomNetOutletsListModal(roomId: string): Promise<void> {
+  const result = await apiGet<RoomWithNetworks>(`/api/resources/rooms/${roomId}`);
   if (!result.success || !result.data) {
     showToast(result.message || t("room.load_failed"), "error");
     return;
@@ -379,8 +406,8 @@ async function openRoomNetOutletsListModal(roomId) {
 }
 
 /** 机柜机位列表弹窗 */
-async function openCabinetPositionsListModal(cabinetId) {
-  const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
+async function openCabinetPositionsListModal(cabinetId: string): Promise<void> {
+  const result = await apiGet<CabinetWithNetworks>(`/api/resources/cabinets/${cabinetId}`);
   if (!result.success || !result.data) {
     showToast(result.message || t("cabinet.load_failed"), "error");
     return;
@@ -395,15 +422,15 @@ async function openCabinetPositionsListModal(cabinetId) {
   ];
   simpleList.rows = (cabinet.positions || []).map((pos) => [
     pos.name || "-",
-    pos.start_u ?? "-",
-    pos.end_u ?? "-",
+    String(pos.start_u ?? "-"),
+    String(pos.end_u ?? "-"),
     pos.description || "-"
   ]);
   simpleList.open = true;
 }
 
 const deleteRegionMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/resources/network-regions/${id}`),
+  mutationFn: (id: string) => apiDelete(`/api/resources/network-regions/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["network-regions"] });
@@ -416,7 +443,7 @@ const deleteRegionMutation = useMutation({
 });
 
 const deleteNetworkMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/resources/networks/${id}`),
+  mutationFn: (id: string) => apiDelete(`/api/resources/networks/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["networks"] });
@@ -429,7 +456,7 @@ const deleteNetworkMutation = useMutation({
 });
 
 const deleteRoomMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/resources/rooms/${id}`),
+  mutationFn: (id: string) => apiDelete(`/api/resources/rooms/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
@@ -442,7 +469,7 @@ const deleteRoomMutation = useMutation({
 });
 
 const deleteCabinetMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/resources/cabinets/${id}`),
+  mutationFn: (id: string) => apiDelete(`/api/resources/cabinets/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["cabinets"] });
@@ -455,7 +482,7 @@ const deleteCabinetMutation = useMutation({
 });
 
 const deleteDeviceMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/resources/devices/${id}`),
+  mutationFn: (id: string) => apiDelete(`/api/resources/devices/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
@@ -468,7 +495,7 @@ const deleteDeviceMutation = useMutation({
 });
 
 const deleteCableLinkMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/resources/cable-links/${id}`),
+  mutationFn: (id: string) => apiDelete(`/api/resources/cable-links/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["cable-links"] });
@@ -481,14 +508,14 @@ const deleteCableLinkMutation = useMutation({
 });
 
 /** 房型是否机房类（行内子项列表按钮文案随房型切换：机房显机柜、其余显工位） */
-function isCabinetRoomType(roomType) {
+function isCabinetRoomType(roomType: string): boolean {
   const type = (roomType || "").toLowerCase();
   return type === "data_center" || type === "telecom_closet";
 }
 
 // 端点/链路类型标签：未知枚举原样回显（与旧版 getEndpointTypeLabel 一致）
-function endpointTypeLabel(type) {
-  const labels = {
+function endpointTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
     net_outlet: t("cable_link.endpoint_net_outlet"),
     device_interface: t("cable_link.endpoint_device_interface"),
     patch_panel: t("cable_link.endpoint_patch_panel")
@@ -496,8 +523,8 @@ function endpointTypeLabel(type) {
   return labels[type] || type;
 }
 
-function linkTypeLabel(type) {
-  const labels = {
+function linkTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
     ethernet: t("cable_link.link_type_ethernet"),
     fiber: t("cable_link.link_type_fiber"),
     console: t("cable_link.link_type_console")
@@ -506,7 +533,7 @@ function linkTypeLabel(type) {
 }
 
 /** 设备位置列：工位优先，其次机柜+U 区间（两者皆有才显示区间） */
-function deviceLocationText(item) {
+function deviceLocationText(item: DeviceWithDetails): string {
   if (item.workstation_name) {
     return `${t("device.workstation")}: ${item.workstation_name}`;
   }

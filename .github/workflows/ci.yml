@@ -80,6 +80,14 @@ jobs:
       - name: 运行测试
         run: cargo test --release
 
+      # ts-rs 类型生成物漂移校验：export_bindings 测试重跑后，
+      # frontend/src/types/api/generated/ 不得产生与入库版本（git add -N
+      # 使新增未跟踪文件也纳入 diff）不一致的差异
+      - name: TS 类型生成物漂移校验
+        run: |
+          git add -N frontend/src/types/api/generated
+          git diff --exit-code -- frontend/src/types/api/generated
+
       - name: 构建项目
         run: cargo build --release --verbose
 

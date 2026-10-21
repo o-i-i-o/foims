@@ -1,6 +1,6 @@
 [package]
 name = "foims-visualization"
-version = "0.2.5"
+version = "0.2.6"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Visualization Module - Layout management and visualization"
@@ -28,6 +28,9 @@ validator = { workspace = true }
 # Utilities
 uuid = { workspace = true }
 thiserror = { workspace = true }
+
+# TS 类型导出
+ts-rs = { workspace = true }
 
 [lints]
 workspace = true

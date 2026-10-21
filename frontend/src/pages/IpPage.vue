@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * IP 详情页（移植自旧版 main.html ip 分区 + ipDetail.js）：只读列表展示
  * 各设备网口的 IP 观测数据，11 列（位置/设备/类型/子网/IP/MAC/端口主机名/
@@ -9,23 +9,28 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { formatDateTime } from "../utils/formatter.js";
-import { getDeviceTypeName } from "../config/deviceOptions.js";
-import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList.js";
+import { formatDateTime } from "../utils/formatter";
+import { getDeviceTypeName } from "../config/deviceOptions";
+import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList";
+import type { IpDetailWithNames } from "../types/api/generated/IpDetailWithNames";
 import Pagination from "../components/Pagination.vue";
 import ThSearch from "../components/ThSearch.vue";
 import PullMacModal from "../components/ip/PullMacModal.vue";
+
+// 列表行类型：generated IpDetailWithNames + 联查附加的端口主机名
+//（接口层未入 generated，与 SubnetUsageModal 的 IpRow 同款扩展）
+type IpRow = IpDetailWithNames & { port_device_name?: string | null };
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // 位置列：工位 > 机柜 > 端口所属设备 > 观测设备（旧版优先级语义）
-function locationText(row) {
+function locationText(row: IpRow): string {
   return row.workstation_name || row.cabinet_name || row.port_device_name || row.device_name || "-";
 }
 
 // 子网列：网段名（区域名），未知时统一回显「未知」
-function networkText(row) {
+function networkText(row: IpRow): string {
   return `${row.network_name || t("common.unknown")} (${row.network_region || t("common.unknown")})`;
 }
 
@@ -34,7 +39,7 @@ function networkText(row) {
 const ipFilters = reactive({ device_name: "", device_type: "", network: "", ip_address: "" });
 const ipFilterParams = reactive({ device_name: "", device_type: "", network: "", ip_address: "" });
 
-const ipList = usePagedList({
+const ipList = usePagedList<IpRow>({
   tag: "ip",
   defaultPageSize: 100,
   // 旧版 ipTableState 默认 updated_at 倒序
@@ -43,8 +48,8 @@ const ipList = usePagedList({
   extraKey: computed(() => ({ ...ipFilterParams })),
   buildUrl: (page, pageSize, sortBy, sortOrder) => {
     const params = new URLSearchParams({
-      page,
-      page_size: pageSize,
+      page: String(page),
+      page_size: String(pageSize),
       sort_by: sortBy,
       sort_order: sortOrder
     });
@@ -66,7 +71,7 @@ const ipList = usePagedList({
 });
 
 // 表头搜索输入防抖 300ms：同步到查询参数并重置页码（排序保持不变）
-let filterTimer = null;
+let filterTimer: number | undefined;
 watch(ipFilters, () => {
   clearTimeout(filterTimer);
   filterTimer = setTimeout(() => {
@@ -140,7 +145,7 @@ function onPullSaved() {
               <td class="index-column">{{ seqIndex(ipList, index) }}</td>
               <td>{{ locationText(row) }}</td>
               <td>{{ row.device_name || "-" }}</td>
-              <td class="col-center">{{ getDeviceTypeName(t, row.device_type) }}</td>
+              <td class="col-center">{{ getDeviceTypeName(t, row.device_type ?? "") }}</td>
               <td>{{ networkText(row) }}</td>
               <td>{{ row.ip_address }}</td>
               <td>{{ row.mac_address || "-" }}</td>

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 主机详情弹窗（移植自旧版 modals/agents/agent-detail-modal.html
  * + agents.js fillAgentDetail/loadAgentHistory/renderAllCharts）：
@@ -9,22 +9,93 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client.js";
-import { formatDateTime } from "../../utils/formatter.js";
+import { apiGet } from "../../api/client";
+import { formatDateTime } from "../../utils/formatter";
 import ModalShell from "../ModalShell.vue";
 import AgentSparkline from "./AgentSparkline.vue";
 import AgentUsageBar from "./AgentUsageBar.vue";
 
-const props = defineProps({
-  agentId: { type: [Number, String], required: true }
-});
+/** 主机详情载荷（GET /api/agents/{id}，仅声明本弹窗消费的字段） */
+interface AgentDetail {
+  status: string;
+  hostname: string | null;
+  ip: string | null;
+  os: string | null;
+  arch: string | null;
+  agent_version: string | null;
+  uptime_secs: number | null;
+  mem_usage_pct: number | null;
+  raw_metrics: RawMetrics | null;
+}
 
-const emit = defineEmits(["close"]);
+/** raw_metrics 上报 JSON 的消费字段（全部可选：旧版 agent 上报可能缺键） */
+interface RawMetrics {
+  machine_id?: string | null;
+  collected_at?: string | null;
+  system?: {
+    os?: string | null;
+    kernel?: string | null;
+    arch?: string | null;
+    uptime_secs?: number | null;
+  } | null;
+  cpu?: {
+    usage_pct?: number | null;
+    load1?: number | null;
+    load5?: number | null;
+    load15?: number | null;
+    cores?: number | null;
+  } | null;
+  memory?: {
+    total?: number | null;
+    used?: number | null;
+    swap_total?: number | null;
+    swap_used?: number | null;
+  } | null;
+  disks?: Array<{
+    device?: string | null;
+    mount?: string | null;
+    total?: number | null;
+    used?: number | null;
+    read_iops?: number | null;
+    write_iops?: number | null;
+    util_pct?: number | null;
+  }> | null;
+  nets?: Array<{
+    iface?: string | null;
+    rx_bps?: number | null;
+    tx_bps?: number | null;
+    errors?: number | null;
+  }> | null;
+  sensors?: Array<{
+    label?: string | null;
+    kind?: string | null;
+    value?: number | string | null;
+  }> | null;
+}
+
+/** 24h 曲线点（后端补齐六键，缺值为 null） */
+interface AgentHistoryPoint {
+  cpu: number | null;
+  mem: number | null;
+  disk: number | null;
+  temp: number | null;
+  rx_bps: number | null;
+  tx_bps: number | null;
+}
+
+/** 曲线序列键 */
+type HistoryKey = "cpu" | "mem" | "disk" | "temp" | "rx_bps" | "tx_bps";
+
+const props = defineProps<{
+  agentId: number | string;
+}>();
+
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
 // 状态元数据：徽章配色类 + 名称 i18n 键（active/offline 由上报自动翻转）
-const STATUS_META = {
+const STATUS_META: Record<string, { badge: string; labelKey: string }> = {
   active: { badge: "agent-badge-active", labelKey: "agents.status_active" },
   offline: { badge: "agent-badge-offline", labelKey: "agents.status_offline" },
   disabled: { badge: "agent-badge-disabled", labelKey: "agents.status_disabled" }
@@ -32,8 +103,8 @@ const STATUS_META = {
 
 const detailQuery = useQuery({
   queryKey: computed(() => ["agent-detail", props.agentId]),
-  queryFn: async () => {
-    const result = await apiGet(`/api/agents/${props.agentId}`);
+  queryFn: async (): Promise<AgentDetail | null> => {
+    const result = await apiGet<AgentDetail>(`/api/agents/${props.agentId}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -43,12 +114,15 @@ const detailQuery = useQuery({
 
 const historyQuery = useQuery({
   queryKey: computed(() => ["agent-history", props.agentId]),
-  queryFn: async () => {
-    const result = await apiGet(`/api/agents/${props.agentId}/history?hours=24`);
+  queryFn: async (): Promise<AgentHistoryPoint[]> => {
+    const result = await apiGet<{ items?: AgentHistoryPoint[] }>(
+      `/api/agents/${props.agentId}/history?hours=24`
+    );
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    return Array.isArray(result.data?.items) ? result.data.items : [];
+    const items = result.data?.items;
+    return Array.isArray(items) ? items : [];
   }
 });
 
@@ -58,12 +132,17 @@ const raw = computed(() => agent.value?.raw_metrics || {});
 
 const detailError = computed(() => detailQuery.error.value?.message || t("common.load_failed"));
 
-const statusMeta = computed(() => STATUS_META[agent.value?.status]);
-const statusText = computed(() => (statusMeta.value ? t(statusMeta.value.labelKey) : String(agent.value?.status ?? "-")));
+const statusMeta = computed(() => {
+  const status = agent.value?.status;
+  return status ? STATUS_META[status] : undefined;
+});
+const statusText = computed(() =>
+  statusMeta.value ? t(statusMeta.value.labelKey) : String(agent.value?.status ?? "-")
+);
 
 /** CPU 负载：1/5/15 分钟负载拼接展示 */
-function formatLoads(cpu) {
-  const loads = [cpu.load1, cpu.load5, cpu.load15];
+function formatLoads(cpu: RawMetrics["cpu"]): string {
+  const loads = [cpu?.load1, cpu?.load5, cpu?.load15];
   if (loads.every((v) => v == null)) {
     return "-";
   }
@@ -71,7 +150,7 @@ function formatLoads(cpu) {
 }
 
 /** 字节容量：自动选 B/KB/MB/GB/TB 单位 */
-function formatBytes(bytes) {
+function formatBytes(bytes: unknown): string {
   const value = Number(bytes);
   if (!Number.isFinite(value) || value <= 0) {
     return "-";
@@ -87,7 +166,7 @@ function formatBytes(bytes) {
 }
 
 /** 网络速率：bps → bps/Kbps/Mbps/Gbps */
-function formatBps(bps) {
+function formatBps(bps: unknown): string {
   const value = Number(bps);
   if (!Number.isFinite(value)) {
     return "-";
@@ -105,7 +184,7 @@ function formatBps(bps) {
 }
 
 /** 运行时长：>1 天 "x天y小时"、>1 小时 "x小时y分"、其余 "x分钟" */
-function formatUptime(secs) {
+function formatUptime(secs: unknown): string {
   const total = Number(secs);
   if (!Number.isFinite(total) || total <= 0) {
     return "-";
@@ -123,7 +202,7 @@ function formatUptime(secs) {
 }
 
 /** 交换分区：已用 / 总量（均未上报时 "-"） */
-function formatSwap(memory) {
+function formatSwap(memory: NonNullable<RawMetrics["memory"]>): string {
   if (memory.swap_total == null && memory.swap_used == null) {
     return "-";
   }
@@ -131,7 +210,7 @@ function formatSwap(memory) {
 }
 
 /** 读写 IOPS 数值：未上报返回 "-" */
-function formatIops(disk) {
+function formatIops(disk: NonNullable<RawMetrics["disks"]>[number]): string {
   if (disk.read_iops == null && disk.write_iops == null) {
     return "-";
   }
@@ -141,7 +220,7 @@ function formatIops(disk) {
 }
 
 /** 使用率分档色（容量条配色，与列表迷你条同口径） */
-function usageLevel(value) {
+function usageLevel(value: number): string {
   if (value > 85) {
     return "danger";
   }
@@ -152,14 +231,17 @@ function usageLevel(value) {
 }
 
 /** 磁盘容量百分比：总量为 0 时按 0 处理 */
-function diskPct(disk) {
+function diskPct(disk: NonNullable<RawMetrics["disks"]>[number]): number {
   const total = Number(disk.total) || 0;
   const used = Number(disk.used) || 0;
   return total > 0 ? Math.min(100, (used / total) * 100) : 0;
 }
 
 /** 温度/风扇行文案：类型（i18n 名）+ 值（℃ 或 RPM） */
-function sensorText(sensor) {
+function sensorText(sensor: NonNullable<RawMetrics["sensors"]>[number]): {
+  kindLabel: string;
+  value: string;
+} {
   const kind = String(sensor.kind || "").toLowerCase();
   let kindLabel = kind || t("common.unknown");
   if (kind === "temp") {
@@ -167,7 +249,7 @@ function sensorText(sensor) {
   } else if (kind === "fan") {
     kindLabel = t("agents.sensor_fan");
   }
-  let value;
+  let value: string;
   if (sensor.value == null) {
     value = "-";
   } else if (kind === "temp") {
@@ -181,14 +263,14 @@ function sensorText(sensor) {
 }
 
 /** 曲线 min/max 标注数值：整数去小数，其余保留一位 */
-function formatChartNum(value) {
+function formatChartNum(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 /** 按指标拆分 24h 历史序列（cpu/mem/disk/temp/rx/tx 均可能为 null） */
 const sparkSeries = computed(() => {
   const items = historyQuery.data.value ?? [];
-  const column = (key) => items.map((item) => item?.[key] ?? null);
+  const column = (key: HistoryKey) => items.map((item) => item?.[key] ?? null);
   return {
     cpu: [{ values: column("cpu"), lineClass: "agent-chart-line-cpu" }],
     memory: [{ values: column("mem"), lineClass: "agent-chart-line-memory" }],
@@ -202,7 +284,7 @@ const sparkSeries = computed(() => {
 });
 
 /** 百分比/温度卡的数值标注（单位后缀） */
-function formatUnit(unit) {
+function formatUnit(unit: string): (value: number) => string {
   return (value) => formatChartNum(value) + unit;
 }
 </script>

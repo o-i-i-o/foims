@@ -1,6 +1,6 @@
 [package]
 name = "foims-init"
-version = "0.1.7"
+version = "0.1.8"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Init Module - Database initialization and management"
@@ -19,6 +19,7 @@ sqlx = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+ts-rs = { workspace = true }
 
 # Validation
 validator = { workspace = true }

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 服务管理卡片（移植自旧版 systemManager.js 服务段）：foims / nginx 双行
  * 状态表（systemd 注册态/运行态/自启/运行时长），操作按钮按当前状态禁用
@@ -8,15 +8,30 @@
 import { computed, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost } from "../../api/client.js";
-import { formatUptime } from "../../utils/formatter.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost } from "../../api/client";
+import { formatUptime } from "../../utils/formatter";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
+
+/** 单个 systemd 服务状态（后端 /api/system/services 行，后端未生成 ts-rs 类型） */
+interface ServiceStatusItem {
+  name: string;
+  unit: string;
+  registered: boolean;
+  active: boolean;
+  active_state: string | null;
+  sub_state: string | null;
+  enabled: boolean;
+  status_text?: string | null;
+  reload_supported: boolean;
+  uptime_seconds?: number | null;
+}
+
+/** 服务操作类型（与后端路由段一致） */
+type ServiceOp = "start" | "stop" | "restart" | "reload" | "enable" | "disable";
 
 const { t } = useI18n();
 
@@ -25,7 +40,7 @@ const readonly = isSectionReadonly("system");
 const servicesQuery = useQuery({
   queryKey: ["system-services"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/services");
+    const result = await apiGet<ServiceStatusItem[]>("/api/system/services");
     if (!result.success) {
       throw new Error(result.message || t("services.load_failed"));
     }
@@ -37,7 +52,7 @@ const servicesQuery = useQuery({
 const services = computed(() => (Array.isArray(servicesQuery.data.value) ? servicesQuery.data.value : []));
 
 // 状态徽章分级：未注册 / 运行中 / 失败 / 已停止，title 展示原始 state 与补充说明
-function badgeMeta(item) {
+function badgeMeta(item: ServiceStatusItem): { cls: string; text: string; title: string } {
   const baseTitle = `${item.active_state || "-"} / ${item.sub_state || "-"}`;
   const title = item.status_text ? `${baseTitle}\n${item.status_text}` : baseTitle;
   if (!item.registered) {
@@ -53,17 +68,17 @@ function badgeMeta(item) {
 }
 
 /** systemd 单元名（受管服务固定 foims / nginx 两个） */
-function unitName(service) {
+function unitName(service: string): string {
   return service === "foims" ? "foims.service" : "nginx.service";
 }
 
 // ==================== 操作（stop/restart 需二次确认） ====================
 
 const opInFlight = ref(false);
-const confirmOp = ref(null); // { service, op }
-let recoveryTimer = null;
+const confirmOp = ref<null | { service: string; op: ServiceOp }>(null);
+let recoveryTimer: ReturnType<typeof setInterval> | null = null;
 
-function requestOp(service, op) {
+function requestOp(service: string, op: ServiceOp): void {
   if (opInFlight.value) {
     return;
   }
@@ -71,29 +86,32 @@ function requestOp(service, op) {
     confirmOp.value = { service, op };
     return;
   }
-  runOp(service, op);
+  void runOp(service, op);
 }
 
-function confirmMessage() {
-  const { service, op } = confirmOp.value || {};
-  const name = t(`services.name_${service}`);
-  const unit = unitName(service);
-  if (op === "stop") {
-    const extraKey = service === "foims" ? "services.confirm_stop_foims_extra" : "services.confirm_stop_nginx_extra";
+function confirmMessage(): string {
+  const target = confirmOp.value;
+  if (!target) {
+    return "";
+  }
+  const name = t(`services.name_${target.service}`);
+  const unit = unitName(target.service);
+  if (target.op === "stop") {
+    const extraKey = target.service === "foims" ? "services.confirm_stop_foims_extra" : "services.confirm_stop_nginx_extra";
     return t("services.confirm_stop", { name, unit, extra: t(extraKey) });
   }
   return t("services.confirm_restart", { name, unit });
 }
 
-function onOpConfirmed() {
-  const { service, op } = confirmOp.value || {};
+function onOpConfirmed(): void {
+  const target = confirmOp.value;
   confirmOp.value = null;
-  if (service && op) {
-    runOp(service, op);
+  if (target) {
+    void runOp(target.service, target.op);
   }
 }
 
-async function runOp(service, op) {
+async function runOp(service: string, op: ServiceOp): Promise<void> {
   if (opInFlight.value) {
     return;
   }
@@ -123,23 +141,27 @@ async function runOp(service, op) {
 }
 
 // 重启恢复轮询：重启窗口期连接失败属预期继续轮询；超时提示手动刷新
-function waitForServiceRecovery(service) {
+function waitForServiceRecovery(service: string): void {
   const deadline = Date.now() + 40000;
   recoveryTimer = setInterval(() => {
     if (Date.now() > deadline) {
-      clearInterval(recoveryTimer);
+      if (recoveryTimer !== null) {
+        clearInterval(recoveryTimer);
+      }
       recoveryTimer = null;
       showToast(t("services.restart_timeout"), "warning");
       return;
     }
-    apiGet("/api/system/services")
+    apiGet<ServiceStatusItem[]>("/api/system/services")
       .then((result) => {
         const target =
           result.success && Array.isArray(result.data)
             ? result.data.find((item) => item.name === service)
             : null;
         if (target?.active) {
-          clearInterval(recoveryTimer);
+          if (recoveryTimer !== null) {
+            clearInterval(recoveryTimer);
+          }
           recoveryTimer = null;
           showToast(t("services.restart_recovered"), "success");
           if (service === "foims") {

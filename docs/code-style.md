@@ -228,7 +228,13 @@ frontend/
 ### 3.5 校验命令
 
 ```bash
-# 构建（含 SFC 编译校验，失败即挂）
+# 类型检查（vue-tsc 全量；npm run build 已前置含此步，开发循环可单跑）
+cd frontend && npm run typecheck
+
+# 后端载荷 TS 类型再生成（ts-rs export_bindings；生成物提交入库，CI 漂移校验）
+bash da-scripts/gen-ts-types.sh
+
+# 构建（含 vue-tsc 类型检查 + SFC 编译校验，失败即挂）
 cd frontend && npm run build
 
 # CSS 结构与格式 lint（根 biome.json；CSS 归 Biome，无 stylelint）
@@ -264,6 +270,33 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 - 遗留模块内拼进 `innerHTML`/模板字符串的用户可控值仍必须过
   `escapeHtml`（Vue 模板插值自动转义，遗留命令式代码不享受该保障）。
 
+### 3.7 TypeScript 规范
+
+前端为全量 TS 工程（strict 全开 + `noUncheckedIndexedAccess` +
+`verbatimModuleSyntax`，tsconfig 为唯一权威配置）：
+
+- **禁 any**：未知结构用 `unknown` + 类型收窄（typeof/instanceof/in）；
+  边界处的 `as` 断言必须附中文注释说明依据，禁止无理由断言与 `!` 滥用。
+- **生成物只读**：`types/api/generated/`（ts-rs 生成，后端载荷类型）禁止
+  手改；后端类型变更后跑 `bash da-scripts/gen-ts-types.sh` 再生成并提交，
+  CI 对生成物做漂移校验（`git diff --exit-code`）。
+- **手写契约**：`types/api/index.ts` 的 `ApiResult<T>`（client 层归一化
+  信封，`data: T | null`）与 `Paged<T>`（`paged_response` 五键）手写维护，
+  与 Rust 信封结构有意不同，不从后端导出。
+- **API 调用泛型化**：`apiGet<T>` / `apiPost<T, B>` / `apiPut<T, B>` /
+  `apiDelete<T, B>` 必须显式给出载荷类型，优先消费 generated 类型；T 缺省
+  为 `unknown`，禁止用 `as` 绕过泛型标注。
+- **SFC 类型化**：`<script setup lang="ts">`；props 用 `defineProps<{...}>()`
+  （默认值 `withDefaults`），emits 用元组签名 `defineEmits<{ save: [v: X] }>()`；
+  ref/reactive 依赖推导，复杂表单状态建 interface。
+- **import 后缀规则**：一律无后缀（`from "../api/client"`）；仅指向保留
+  `.js` 的遗留文件（§3.6 三件桥接/加载器与 `modules/visualization/`）的
+  import 保留 `.js` 后缀。
+- **类型导入**：`verbatimModuleSyntax` 开启，类型导入必须 `import type`。
+- **i18n 消息类型**：消息键为运行时数据（i18n JSON 维护），i18n 实例按
+  宽化 schema 消费（`t(key: string): string`），禁止为消息键生成字面量
+  联合类型（大型 JSON 深度实例化会触发 TS2589）。
+
 ## 4. 布局约定速查
 
 | 场景 | 标准做法 |
@@ -274,7 +307,8 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 | 建表/视图/触发器 | foims-init `schema/tables/`，重复结构数据驱动（见 views.rs） |
 | 结构校验清单 | `foims-init/src/check.rs` 与 schema 同步增补 |
 | 前端分页列表 | `usePagedList` + `Pagination.vue`（排序/页大小/越界回退） |
-| 前端通知 | `showToast`（`composables/useToast.js`）；确认框 `ConfirmModal.vue` |
+| 前端通知 | `showToast`（`composables/useToast.ts`）；确认框 `ConfirmModal.vue` |
 | 前端弹窗 | `ModalShell.vue` + `useModalStack`（Esc 只关最上层） |
-| 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network.js"`（frontend/src/utils/） |
+| 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network"`（frontend/src/utils/） |
+| 前端 API 载荷类型 | `types/api/generated/`（ts-rs 生成只读）+ 手写信封 `types/api/index.ts`；后端类型变更后跑 `da-scripts/gen-ts-types.sh` |
 

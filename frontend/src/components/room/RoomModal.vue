@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 房间新增/编辑弹窗（移植自旧版 modals/room/room-modal.html
  * + room.js openRoomModal/submitRoomForm）：
@@ -14,26 +14,59 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { readPowerWattsInput } from "../../utils/power.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { readPowerWattsInput } from "../../utils/power";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import NetworkConfigRow from "./NetworkConfigRow.vue";
+import type { CabinetBrief } from "../../types/api/generated/CabinetBrief";
+import type { CabinetSyncItem } from "../../types/api/generated/CabinetSyncItem";
+import type { Employee } from "../../types/api/generated/Employee";
+import type { NetOutletBrief } from "../../types/api/generated/NetOutletBrief";
+import type { NetworkInfo } from "../../types/api/generated/NetworkInfo";
+import type { OrganizationTreeNode } from "../../types/api/generated/OrganizationTreeNode";
+import type { Room } from "../../types/api/generated/Room";
+import type { RoomCreate } from "../../types/api/generated/RoomCreate";
+import type { RoomChildrenSync } from "../../types/api/generated/RoomChildrenSync";
+import type { RoomNetOutletsSync } from "../../types/api/generated/RoomNetOutletsSync";
+import type { WorkstationBrief } from "../../types/api/generated/WorkstationBrief";
+import type { WorkstationSyncItem } from "../../types/api/generated/WorkstationSyncItem";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显（GET /rooms/{id}/brief 轻量数据）
-  room: { type: Object, default: null }
-});
+/** GET /rooms/{id}/brief 轻量数据（room.rs get_room_brief 组装：Room 字段 + 各子项 brief） */
+type RoomBrief = Room & {
+  networks: NetworkInfo[];
+  workstations: WorkstationBrief[];
+  cabinets: CabinetBrief[];
+  net_outlets: NetOutletBrief[];
+};
 
-const emit = defineEmits(["close", "saved"]);
+const props = withDefaults(
+  defineProps<{
+    /** null = 新增；对象 = 编辑回显（GET /rooms/{id}/brief 轻量数据） */
+    room?: RoomBrief | null;
+  }>(),
+  { room: null }
+);
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // ==================== 基础表单 ====================
 
-const form = reactive({
+/** 房间表单状态（roomType 保持 string：select v-model 会回写 string 值） */
+interface RoomFormState {
+  name: string;
+  roomType: string;
+  orgId: string;
+  totalPower: number | "";
+  powerUnit: string;
+  description: string;
+}
+
+const form = reactive<RoomFormState>({
   name: props.room?.name ?? "",
   // 后端按大写存储房型，表单统一用小写
   roomType: (props.room?.room_type || "OFFICE").toLowerCase(),
@@ -43,10 +76,19 @@ const form = reactive({
   description: props.room?.description ?? ""
 });
 
-const ROOM_TYPE_OPTIONS = ["office", "lobby", "reception", "data_center", "telecom_closet", "other"];
+const ROOM_TYPE_OPTIONS = [
+  "office",
+  "lobby",
+  "reception",
+  "data_center",
+  "telecom_closet",
+  "other"
+] as const;
+
+type RoomType = (typeof ROOM_TYPE_OPTIONS)[number];
 
 // 房型 i18n 键后缀映射（data_center/telecom_closet 的键名与枚举值不同）
-const ROOM_TYPE_KEY_SUFFIX = {
+const ROOM_TYPE_KEY_SUFFIX: Record<RoomType, string> = {
   office: "office",
   lobby: "lobby",
   reception: "reception",
@@ -59,7 +101,14 @@ const ROOM_TYPE_KEY_SUFFIX = {
 
 let nextRowKey = 1;
 
-const networkConfigs = reactive(
+/** 网段配置行状态 */
+interface NetworkConfigRowState {
+  key: number;
+  regionId: string;
+  networkId: string;
+}
+
+const networkConfigs = reactive<NetworkConfigRowState[]>(
   (props.room?.networks ?? []).map((network) => ({
     key: nextRowKey++,
     regionId: network.network_region_id || "",
@@ -72,17 +121,26 @@ if (networkConfigs.length === 0) {
 }
 
 /** 其他行已选网段 id：当前行选项过滤用（本行自身选择不参与过滤） */
-function excludedNetworkIds(currentKey) {
+function excludedNetworkIds(currentKey: number): string[] {
   return networkConfigs
     .filter((row) => row.key !== currentKey && row.networkId)
     .map((row) => row.networkId);
 }
 
-function addNetworkConfig() {
+/** 网段配置行值回写：v-for 已保证序号有效，行 key 恒保留（等价原 v-model 整行替换） */
+function updateNetworkConfig(index: number, value: { regionId: string; networkId: string }): void {
+  const row = networkConfigs[index];
+  if (row) {
+    row.regionId = value.regionId;
+    row.networkId = value.networkId;
+  }
+}
+
+function addNetworkConfig(): void {
   networkConfigs.push({ key: nextRowKey++, regionId: "", networkId: "" });
 }
 
-function removeNetworkConfig(index) {
+function removeNetworkConfig(index: number): void {
   // 至少保留一行网段配置（旧版 keep_one_network 语义）
   if (networkConfigs.length <= 1) {
     showToast(t("room.keep_one_network"), "warning");
@@ -100,7 +158,23 @@ const isMixedRoom = computed(() => form.roomType === "other");
 const showWorkstations = computed(() => isOfficeRoom.value || isMixedRoom.value);
 const showCabinets = computed(() => isCabinetRoom.value || isMixedRoom.value);
 
-const workstations = reactive(
+/** 工位动态行状态 */
+interface WorkstationRowState {
+  key: number;
+  id: string | null;
+  name: string;
+  managerEmployeeId: string;
+}
+
+/** 机柜动态行状态 */
+interface CabinetRowState {
+  key: number;
+  id: string | null;
+  name: string;
+  capacity: number;
+}
+
+const workstations = reactive<WorkstationRowState[]>(
   (props.room?.workstations ?? []).map((ws) => ({
     key: nextRowKey++,
     id: ws.id,
@@ -109,7 +183,7 @@ const workstations = reactive(
   }))
 );
 
-const childCabinets = reactive(
+const childCabinets = reactive<CabinetRowState[]>(
   (props.room?.cabinets ?? []).map((cab) => ({
     key: nextRowKey++,
     id: cab.id,
@@ -119,22 +193,29 @@ const childCabinets = reactive(
 );
 
 // 切换房型：清空工位与机柜列表（"其他"切换到任一类型/反向均不保留）
-function onRoomTypeChange() {
+function onRoomTypeChange(): void {
   workstations.splice(0);
   childCabinets.splice(0);
 }
 
-function addWorkstation() {
+function addWorkstation(): void {
   workstations.push({ key: nextRowKey++, id: null, name: "", managerEmployeeId: "" });
 }
 
-function addChildCabinet() {
+function addChildCabinet(): void {
   childCabinets.push({ key: nextRowKey++, id: null, name: "", capacity: 42 });
 }
 
 // ==================== 信息点动态行 ====================
 
-const netOutlets = reactive(
+/** 信息点动态行状态 */
+interface NetOutletRowState {
+  key: number;
+  id: string | null;
+  name: string;
+}
+
+const netOutlets = reactive<NetOutletRowState[]>(
   (props.room?.net_outlets ?? []).map((outlet) => ({
     key: nextRowKey++,
     id: outlet.id,
@@ -142,17 +223,24 @@ const netOutlets = reactive(
   }))
 );
 
-function addNetOutlet() {
+function addNetOutlet(): void {
   netOutlets.push({ key: nextRowKey++, id: null, name: "" });
 }
 
 // ==================== 下拉选项（组织树 / 组织员工） ====================
 
-// 组织选项：树形按深度缩进展示（旧版 loadOrgsForSelect 语义）
+/** 组织下拉行（树形按深度缩进展示，旧版 loadOrgsForSelect 语义） */
+interface OrgOptionRow {
+  id: string;
+  name: string;
+  orgType: string;
+  depth: number;
+}
+
 const orgsQuery = useQuery({
   queryKey: ["organizations", "tree"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/organizations/tree");
+  queryFn: async (): Promise<OrganizationTreeNode[] | null> => {
+    const result = await apiGet<OrganizationTreeNode[]>("/api/resources/organizations/tree");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -160,9 +248,9 @@ const orgsQuery = useQuery({
   }
 });
 
-const orgOptions = computed(() => {
-  const flat = [];
-  const walk = (nodes, depth) => {
+const orgOptions = computed<OrgOptionRow[]>(() => {
+  const flat: OrgOptionRow[] = [];
+  const walk = (nodes: OrganizationTreeNode[], depth: number): void => {
     for (const node of nodes) {
       flat.push({ id: node.id, name: node.name, orgType: node.org_type, depth });
       if (Array.isArray(node.children) && node.children.length > 0) {
@@ -178,8 +266,8 @@ const orgOptions = computed(() => {
 const employeesQuery = useQuery({
   queryKey: computed(() => ["room-employees", form.orgId]),
   enabled: computed(() => Boolean(form.orgId)),
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/employees?org_id=${form.orgId}`);
+  queryFn: async (): Promise<Employee[] | null> => {
+    const result = await apiGet<Employee[]>(`/api/resources/employees?org_id=${form.orgId}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -196,8 +284,8 @@ const employeeOptions = computed(() =>
 const saving = ref(false);
 
 /** 信息点本地校验：名称非空且弹窗内不重复（全局唯一由后端兜底） */
-function validateNetOutletsLocal() {
-  const seen = new Set();
+function validateNetOutletsLocal(): string | null {
+  const seen = new Set<string>();
   for (const outlet of netOutlets) {
     if (!outlet.name.trim()) {
       return t("net_outlet.name_required");
@@ -211,7 +299,7 @@ function validateNetOutletsLocal() {
 }
 
 /** 子项校验：按房型检查工位（名称+管理人）与机柜（名称+容量 1-48） */
-function validateChildren() {
+function validateChildren(): string | null {
   if (showWorkstations.value) {
     for (const ws of workstations) {
       if (!ws.name.trim()) {
@@ -236,7 +324,7 @@ function validateChildren() {
 }
 
 const saveMutation = useMutation({
-  mutationFn: async () => {
+  mutationFn: async (): Promise<string> => {
     // 前置校验链（与旧版 submitRoomForm 顺序一致）
     if (!form.name.trim()) {
       throw new Error(t("room.name_required"));
@@ -264,7 +352,7 @@ const saveMutation = useMutation({
       throw new Error(outletsError);
     }
 
-    const roomData = {
+    const roomData: RoomCreate = {
       name: form.name.trim(),
       // 后端统一按大写存储房型
       room_type: form.roomType.toUpperCase(),
@@ -276,12 +364,12 @@ const saveMutation = useMutation({
 
     let roomId = props.room?.id;
     if (roomId) {
-      const result = await apiPut(`/api/resources/rooms/${roomId}`, roomData);
+      const result = await apiPut<unknown, RoomCreate>(`/api/resources/rooms/${roomId}`, roomData);
       if (!result.success) {
         throw new Error(result.message || t("room.save_failed"));
       }
     } else {
-      const result = await apiPost("/api/resources/rooms", roomData);
+      const result = await apiPost<Room, RoomCreate>("/api/resources/rooms", roomData);
       if (!result.success) {
         throw new Error(result.message || t("room.save_failed"));
       }
@@ -291,43 +379,46 @@ const saveMutation = useMutation({
       }
     }
 
-    // 同步子项（工位/机柜，按房型构造）
-    const childrenData = showCabinets.value
+    // 同步子项（工位/机柜，按房型构造；缺省键与显式 null 在 serde Option 下等价）
+    const workstationItems: WorkstationSyncItem[] = workstations.map((ws) => ({
+      id: ws.id,
+      name: ws.name.trim(),
+      manager_employee_id: ws.managerEmployeeId
+    }));
+    const cabinetItems: CabinetSyncItem[] = childCabinets.map((cab) => ({
+      id: cab.id,
+      name: cab.name.trim(),
+      capacity: cab.capacity
+    }));
+    // 机房类仅机柜、办公类仅工位、"其他"两类齐全（与旧版按房型构造键集一致）
+    const childrenData: RoomChildrenSync = showCabinets.value
       ? {
-          cabinets: childCabinets.map((cab) => ({
-            id: cab.id,
-            name: cab.name.trim(),
-            capacity: cab.capacity
-          })),
-          ...(isMixedRoom.value
-            ? {
-                workstations: workstations.map((ws) => ({
-                  id: ws.id,
-                  name: ws.name.trim(),
-                  manager_employee_id: ws.managerEmployeeId
-                }))
-              }
-            : {})
+          cabinets: cabinetItems,
+          workstations: isMixedRoom.value ? workstationItems : null
         }
       : {
-          workstations: workstations.map((ws) => ({
-            id: ws.id,
-            name: ws.name.trim(),
-            manager_employee_id: ws.managerEmployeeId
-          }))
+          cabinets: null,
+          workstations: workstationItems
         };
-    const syncResult = await apiPut(`/api/resources/rooms/${roomId}/children`, childrenData);
+    const syncResult = await apiPut<unknown, RoomChildrenSync>(
+      `/api/resources/rooms/${roomId}/children`,
+      childrenData
+    );
     if (!syncResult.success) {
       throw new Error(syncResult.message || t("room.children_save_failed"));
     }
 
     // 同步信息点（所有房型通用）
-    const noSyncResult = await apiPut(`/api/resources/rooms/${roomId}/net-outlets`, {
+    const outletsPayload: RoomNetOutletsSync = {
       net_outlets: netOutlets.map((outlet) => ({
         id: outlet.id,
         name: outlet.name.trim()
       }))
-    });
+    };
+    const noSyncResult = await apiPut<unknown, RoomNetOutletsSync>(
+      `/api/resources/rooms/${roomId}/net-outlets`,
+      outletsPayload
+    );
     if (!noSyncResult.success) {
       throw new Error(noSyncResult.message || t("room.net_outlets_save_failed"));
     }
@@ -348,7 +439,7 @@ const saveMutation = useMutation({
   }
 });
 
-function submit() {
+function submit(): void {
   if (saving.value) {
     return;
   }
@@ -430,8 +521,9 @@ function submit() {
           <NetworkConfigRow
             v-for="(row, index) in networkConfigs"
             :key="row.key"
-            v-model="networkConfigs[index]"
+            :model-value="row"
             :excluded-ids="excludedNetworkIds(row.key)"
+            @update:model-value="updateNetworkConfig(index, $event)"
             @remove="removeNetworkConfig(index)"
           />
         </div>

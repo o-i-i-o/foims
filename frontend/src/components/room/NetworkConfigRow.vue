@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 房间网段配置行（移植自旧版 room.js NetworkConfigManager 行模板）：
  * 区域下拉联动网段下拉（options 端点按 region_id 过滤，TanStack 缓存），
@@ -8,26 +8,33 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client.js";
+import { apiGet } from "../../api/client";
 import NavIcon from "../NavIcon.vue";
+import type { ResourceOption } from "../../types/api/generated/ResourceOption";
 
-const props = defineProps({
+/** 行内双向绑定值：区域 + 网段 */
+interface NetworkConfigValue {
+  regionId: string;
+  networkId: string;
+}
+
+const props = defineProps<{
   /** 其他行已选中的网段 id 集合（当前行选项中被过滤） */
-  excludedIds: { type: Array, required: true }
-});
+  excludedIds: string[];
+}>();
 
 // 行内值双向绑定：{ regionId, networkId }
-const model = defineModel({ type: Object, required: true });
+const model = defineModel<NetworkConfigValue>({ required: true });
 
-const emit = defineEmits(["remove"]);
+const emit = defineEmits<{ remove: [] }>();
 
 const { t } = useI18n();
 
 // 区域选项：与同弹窗其他行共享同一 query 缓存
 const regionsQuery = useQuery({
   queryKey: ["options", "network-regions"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/options/network-regions");
+  queryFn: async (): Promise<ResourceOption[] | null> => {
+    const result = await apiGet<ResourceOption[]>("/api/resources/options/network-regions");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -39,9 +46,9 @@ const regionsQuery = useQuery({
 const networksQuery = useQuery({
   queryKey: computed(() => ["options", "networks", model.value.regionId]),
   enabled: computed(() => Boolean(model.value.regionId)),
-  queryFn: async () => {
+  queryFn: async (): Promise<ResourceOption[] | null> => {
     const url = `/api/resources/options/networks?region_id=${model.value.regionId}`;
-    const result = await apiGet(url);
+    const result = await apiGet<ResourceOption[]>(url);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -59,7 +66,7 @@ const networkOptions = computed(() => {
   return items.filter((item) => !props.excludedIds.includes(item.id));
 });
 
-function onRegionChange() {
+function onRegionChange(): void {
   // 切换区域后原网段不再属于新区域，清空待重选
   model.value = { ...model.value, networkId: "" };
 }

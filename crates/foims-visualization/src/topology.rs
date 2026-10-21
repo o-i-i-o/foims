@@ -22,7 +22,8 @@ use crate::layout::{VisualizationError, ok_json};
 
 // ==================== 请求/响应模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyNodeItem {
     pub device_id: Uuid,
     /// 坐标 0..=100000，尺寸 1..=10000（极值/负值直写库前拦截）
@@ -52,8 +53,9 @@ pub struct TopologyNodeItem {
     pub height: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[validate(schema(function = "validate_topology_nodes_coords"))]
+#[ts(export)]
 pub struct TopologyNodesRequest {
     pub nodes: Vec<TopologyNodeItem>,
 }
@@ -67,7 +69,8 @@ fn validate_topology_nodes_coords(req: &TopologyNodesRequest) -> Result<(), Vali
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyConnectionRequest {
     /// 连线类型：physical（默认，手动示意）/ logical（链路聚合）
     pub connection_type: Option<String>,
@@ -84,7 +87,8 @@ pub struct TopologyConnectionRequest {
 }
 
 /// 派生物理连线的中间节点（信息点/配线架）。
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyHop {
     pub node_type: String,
     pub node_id: Uuid,
@@ -92,20 +96,23 @@ pub struct TopologyHop {
 }
 
 /// 派生物理连线的一段线路。
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyCableSegment {
     pub cable_id: Uuid,
     pub cable_label: Option<String>,
 }
 
 /// 逻辑连线的成员端口。
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyMemberPort {
     pub port_id: Uuid,
     pub port_number: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyConnectionView {
     /// 派生物理连线为合成 id（cable:{md5}），存储连线为 UUID
     pub id: String,
@@ -132,7 +139,8 @@ pub struct TopologyConnectionView {
     pub target_members: Vec<TopologyMemberPort>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct TopologyNodeWithDevice {
     pub id: Uuid,
     pub device_id: Uuid,
@@ -814,7 +822,8 @@ pub async fn delete_topology_connection(
 
 // ==================== 自动发现（基于线路数据确保节点） ====================
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AutoDiscoverResult {
     pub added_nodes: usize,
     pub discovered_connections: usize,

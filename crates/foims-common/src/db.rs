@@ -161,7 +161,9 @@ impl std::ops::Drop for RequestMetricGuard<'_> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+/// 连接池指标快照（GET /api/system/info 的 pool_metrics 载荷）
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PoolMetricsSnapshot {
     pub active_connections: u32,
     pub idle_connections: u32,

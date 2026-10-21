@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 端口详情弹窗（移植自旧版 modals/device/device-port-detail-modal.html +
  * unifiedDevicePorts.js openPortDetailModal/collectPortFormData/submitPortForm/
@@ -14,22 +14,41 @@
 import { reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation } from "@tanstack/vue-query";
-import { apiDelete, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { INTERFACE_ROLES, PHYSICAL_TYPES } from "../../config/deviceOptions.js";
+import { apiDelete, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { INTERFACE_ROLES, PHYSICAL_TYPES } from "../../config/deviceOptions";
 import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
+import type { DeviceInterfaceUpdate } from "../../types/api/generated/DeviceInterfaceUpdate";
 
-const props = defineProps({
+/** 打开端口的行数据（由统一端口管理弹窗构造；portId 为空 = 新增） */
+interface PortFormSource {
+  portId: string;
+  deviceId: string;
+  name: string;
+  physicalType: string;
+  interfaceRole: string;
+  portType: string;
+  status: string;
+  /** 数字输入回显：空为空串 */
+  nativeVlanId: number | "";
+  vlanId: number | "";
+  speed: string;
+  macAddress: string;
+  deviceManaged: boolean;
+  description: string;
+}
+
+const props = defineProps<{
   /** 打开端口的完整数据；portId 为空 = 新增（默认 access/up、不托管） */
-  port: { type: Object, required: true }
-});
+  port: PortFormSource;
+}>();
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
-const PORT_TYPE_OPTIONS = [
+const PORT_TYPE_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "access", labelKey: "device.port_type_access" },
   { value: "trunk", labelKey: "device.port_type_trunk" },
   { value: "hybrid", labelKey: "device.port_type_hybrid" },
@@ -38,7 +57,7 @@ const PORT_TYPE_OPTIONS = [
   { value: "console", labelKey: "device.port_type_console" }
 ];
 
-const PORT_STATUS_OPTIONS = [
+const PORT_STATUS_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "up", labelKey: "device.port_status_up" },
   { value: "down", labelKey: "device.port_status_down" },
   { value: "admin-down", labelKey: "device.port_status_admin_down" }
@@ -63,14 +82,14 @@ const form = reactive({
 });
 
 // VLAN 输入归一：有值时 parseInt，非法范围提交前校验拦截
-function parseVlanInput(raw) {
+function parseVlanInput(raw: number | "" | null | undefined): number | null {
   if (raw === "" || raw === null || raw === undefined) {
     return null;
   }
-  return Number.parseInt(raw, 10);
+  return Number.parseInt(String(raw), 10);
 }
 
-function isInvalidVlan(value) {
+function isInvalidVlan(value: number | null): boolean {
   return value !== null && (Number.isNaN(value) || value < 1 || value > 4094);
 }
 
@@ -93,7 +112,9 @@ const saveMutation = useMutation({
       showToast(t("device.native_vlan_invalid"), "warning");
       return null;
     }
-    const payload = {
+    // 创建/更新共用载荷：按 DeviceInterfaceUpdate 键集（与原发送键集一致，
+    // 不补 nic_id——后端缺省时按端口名前缀自动归属网卡）
+    const payload: DeviceInterfaceUpdate = {
       name,
       physical_type: form.physicalType || "other",
       interface_role: form.interfaceRole || "business",

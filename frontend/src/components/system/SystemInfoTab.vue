@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 系统信息页签（移植自旧版 system-info-tab + systemManager.loadSystemInfo）：
  * 系统信息只读字段（名称/数据库状态/系统时间/运行时长）+ 商业许可占位卡
@@ -8,18 +8,25 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client.js";
-import { formatDateTime, formatUptime } from "../../utils/formatter.js";
+import { apiGet } from "../../api/client";
+import { formatDateTime, formatUptime } from "../../utils/formatter";
+import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 import OpenSourceModal from "./OpenSourceModal.vue";
 
-const props = defineProps({ active: { type: Boolean, default: false } });
+const props = withDefaults(
+  defineProps<{
+    /** 页签是否激活（激活时才发起查询） */
+    active?: boolean;
+  }>(),
+  { active: false }
+);
 
 const { t } = useI18n();
 
 const infoQuery = useQuery({
   queryKey: ["system-info"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/info");
+    const result = await apiGet<SystemInfo>("/api/system/info");
     if (!result.success) {
       // apiClient 已将失败归一为 { success:false } 不抛异常，
       // 此处显式抛出让查询进入 error 态
@@ -30,9 +37,11 @@ const infoQuery = useQuery({
   enabled: computed(() => props.active)
 });
 
-const info = computed(() => infoQuery.data.value || {});
+// 局部字段缺省时模板回退展示占位符
+const info = computed<Partial<SystemInfo>>(() => infoQuery.data.value ?? {});
 
-const databaseStatusText = computed(() => {
+// 数据库状态文案：connected 绿色，disconnected* 红色（区分无权限/异常），其余原样
+const databaseStatusText = computed<string>(() => {
   const status = info.value.database_status || "-";
   if (status === "connected") {
     return t("system.connected");

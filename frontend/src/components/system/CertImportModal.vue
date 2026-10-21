@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 证书导入弹窗（移植自旧版 cert-import-modal.html）：证书与私钥必选、
  * 附带 CA 可选（仅供终端导出信任，不参与校验）。
@@ -6,21 +6,21 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiPost } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiPost } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-const certInput = ref(null);
-const keyInput = ref(null);
-const caInput = ref(null);
+const certInput = ref<HTMLInputElement | null>(null);
+const keyInput = ref<HTMLInputElement | null>(null);
+const caInput = ref<HTMLInputElement | null>(null);
 const saving = ref(false);
 
-async function handleSubmit() {
+async function handleSubmit(): Promise<void> {
   if (saving.value) {
     return;
   }

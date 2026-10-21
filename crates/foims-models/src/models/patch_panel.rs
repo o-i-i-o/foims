@@ -8,7 +8,8 @@ use uuid::Uuid;
 // ==================== 配线架模型 ====================
 // 配线架与信息点是不同概念，隶属机柜，由机柜弹窗内联同步管理
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct PatchPanel {
     pub id: Uuid,
     pub name: String,
@@ -17,7 +18,8 @@ pub struct PatchPanel {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct PatchPanelWithDetails {
     pub id: Uuid,
     pub name: String,

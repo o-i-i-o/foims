@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 定时任务创建/编辑弹窗（移植自旧版 scheduledTaskManager.js）：
  * 任务类型五选一 + cron 五字段逐段校验（含预览与示例表）+
@@ -7,22 +7,77 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 import CronExamplesModal from "./CronExamplesModal.vue";
+import type { Paged } from "../../types/api";
+import type { JsonValue } from "../../types/api/generated/serde_json/JsonValue";
+import type { ScheduledTask } from "../../types/api/generated/ScheduledTask";
+import type { ScheduledTaskCreate } from "../../types/api/generated/ScheduledTaskCreate";
+import type { Device } from "../../types/api/generated/Device";
+import type { Network } from "../../types/api/generated/Network";
 
-const props = defineProps({
-  /** 编辑任务对象；null 表示创建 */
-  task: { type: Object, default: null }
-});
+/** 设备列表行：generated Device + 列表端点附加的计算字段（未入 generated 模型，边界扩展） */
+type DeviceRow = Device & { snmp_configured: boolean; ip_address: string | null };
 
-const emit = defineEmits(["close", "saved"]);
+/** cron 单段边界定义 */
+interface CronFieldDef {
+  min: number;
+  max: number;
+  allowLastDay?: boolean;
+}
+
+const props = withDefaults(
+  defineProps<{
+    /** 编辑任务对象；null 表示创建 */
+    task?: ScheduledTask | null;
+  }>(),
+  { task: null }
+);
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 const isEdit = computed(() => Boolean(props.task));
+
+// ==================== 任务 config（JsonValue）收窄辅助 ====================
+// 后端 config 为自由 JsonValue，字段历史数据可能缺省或类型漂移，统一收窄取值
+
+/** 读取 config 中指定键的字符串数组（非数组或元素非字符串一律丢弃） */
+function configStringArray(config: JsonValue | null, key: string): string[] {
+  if (config !== null && typeof config === "object" && !Array.isArray(config)) {
+    const value = config[key];
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string");
+    }
+  }
+  return [];
+}
+
+/** 读取 config 中指定键的字符串 */
+function configString(config: JsonValue | null, key: string): string {
+  if (config !== null && typeof config === "object" && !Array.isArray(config)) {
+    const value = config[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return "";
+}
+
+/** 读取 config 中指定键的数值（缺省返回 null） */
+function configNumber(config: JsonValue | null, key: string): number | null {
+  if (config !== null && typeof config === "object" && !Array.isArray(config)) {
+    const value = config[key];
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+  return null;
+}
 
 // ==================== 基础字段 ====================
 
@@ -32,7 +87,7 @@ const enabled = ref(props.task ? Boolean(props.task.enabled) : true);
 
 // cron 五字段：标准 Linux cron 顺序（分 时 日 月 星期）。
 // 兼容历史 6 段（含秒）表达式：新表单不含秒位，去掉秒段后回填
-const CRON_FIELD_DEFS = [
+const CRON_FIELD_DEFS: CronFieldDef[] = [
   { min: 0, max: 59 },
   { min: 0, max: 23 },
   { min: 1, max: 31, allowLastDay: true },
@@ -47,7 +102,7 @@ const CRON_FIELD_LABEL_KEYS = [
   "scheduled_tasks.cron_fields.weekday"
 ];
 
-function parseCronFields(expression) {
+function parseCronFields(expression: string | null | undefined): string[] {
   const fields = (expression || "").trim().split(/\s+/);
   if (fields.length === 6) {
     fields.shift();
@@ -55,9 +110,9 @@ function parseCronFields(expression) {
   return CRON_FIELD_DEFS.map((_, i) => fields[i] ?? "*");
 }
 
-const cronFields = ref(parseCronFields(props.task?.cron_expression));
+const cronFields = ref<string[]>(parseCronFields(props.task?.cron_expression));
 // 逐字段非法标记（cron-field-invalid 标红）
-const cronInvalid = ref(CRON_FIELD_DEFS.map(() => false));
+const cronInvalid = ref<boolean[]>(CRON_FIELD_DEFS.map(() => false));
 const showCronExamples = ref(false);
 
 const cronPreview = computed(() => cronFields.value.join(" "));
@@ -66,19 +121,19 @@ const cronPreview = computed(() => cronFields.value.join(" "));
 const CRON_SEGMENT_PATTERN = /^(\*|\d+|\d+-\d+)(\/\d+)?$/;
 
 // 单字段合法性：逐段校验语法，数值端点须落在该字段边界内，区间还须起点≤终点
-function isValidCronFieldValue(value, field) {
+function isValidCronFieldValue(value: string, field: CronFieldDef): boolean {
   if (!value) {
     return false;
   }
   return value.split(",").every((part) => {
     // 日字段额外支持 L（当月最后一天，后端解析器与触发库 croner 均支持）
-    if (field.allowLastDay && part === "L") {
+    if (field.allowLastDay === true && part === "L") {
       return true;
     }
     if (!CRON_SEGMENT_PATTERN.test(part)) {
       return false;
     }
-    const [base, step] = part.split("/");
+    const [base = "", step] = part.split("/");
     // 步长必须为正整数：0 步长会被后端拒绝（除零防护）
     if (step !== undefined && Number(step) < 1) {
       return false;
@@ -90,16 +145,19 @@ function isValidCronFieldValue(value, field) {
     if (bounds.some((n) => n < field.min || n > field.max)) {
       return false;
     }
-    return bounds.length < 2 || bounds[0] <= bounds[1];
+    const start = bounds[0];
+    const end = bounds[1];
+    return bounds.length < 2 || (start !== undefined && end !== undefined && start <= end);
   });
 }
 
 // 逐字段校验并标红非法输入：全部合法时返回拼接后的表达式，否则返回 null
-function validateCronFields() {
+function validateCronFields(): string | null {
   let allValid = true;
-  const parts = [];
+  const parts: string[] = [];
   cronFields.value.forEach((value, index) => {
-    const valid = isValidCronFieldValue(value, CRON_FIELD_DEFS[index]);
+    const field = CRON_FIELD_DEFS[index];
+    const valid = field !== undefined && isValidCronFieldValue(value, field);
     cronInvalid.value[index] = !valid;
     if (!valid) {
       allValid = false;
@@ -109,7 +167,7 @@ function validateCronFields() {
   return allValid ? parts.join(" ") : null;
 }
 
-function clearCronInvalid(index) {
+function clearCronInvalid(index: number): void {
   cronInvalid.value[index] = false;
 }
 
@@ -118,7 +176,7 @@ function clearCronInvalid(index) {
 const devicesQuery = useQuery({
   queryKey: ["st-devices"],
   queryFn: async () => {
-    const result = await apiGet("/api/resources/devices?page_size=1000");
+    const result = await apiGet<Paged<DeviceRow>>("/api/resources/devices?page_size=1000");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -129,15 +187,15 @@ const devicesQuery = useQuery({
 });
 
 // 与 IP 页拉取模态框同口径：仅列出配置了 SNMP 的设备
-const snmpDevices = computed(() => {
-  const items = devicesQuery.data.value?.items || [];
+const snmpDevices = computed<DeviceRow[]>(() => {
+  const items = devicesQuery.data.value?.items ?? [];
   return items.filter((dev) => dev.snmp_configured);
 });
 
 const networksQuery = useQuery({
   queryKey: ["st-networks"],
   queryFn: async () => {
-    const result = await apiGet("/api/resources/networks");
+    const result = await apiGet<Paged<Network> | Network[]>("/api/resources/networks");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -146,16 +204,16 @@ const networksQuery = useQuery({
   enabled: computed(() => taskType.value === "mac_sync")
 });
 
-const networks = computed(() => {
+const networks = computed<Network[]>(() => {
   const data = networksQuery.data.value;
   return Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
 });
 
 // 勾选设备集合：多设备依次同步、后设备观测覆盖先设备写入
-const selectedDeviceIds = ref(new Set(props.task?.config?.device_ids || []));
-const subnetId = ref(props.task?.config?.subnet_id || "");
+const selectedDeviceIds = ref<Set<string>>(new Set(configStringArray(props.task?.config ?? null, "device_ids")));
+const subnetId = ref(configString(props.task?.config ?? null, "subnet_id"));
 
-function toggleDevice(id) {
+function toggleDevice(id: string): void {
   const next = new Set(selectedDeviceIds.value);
   if (next.has(id)) {
     next.delete(id);
@@ -167,14 +225,14 @@ function toggleDevice(id) {
 
 // ==================== 天数配置（log_cleanup / ip_status_sync） ====================
 
-const keepDays = ref(String(props.task?.config?.days ?? 30));
-const staleDays = ref(String(props.task?.config?.days ?? 30));
+const keepDays = ref(String(configNumber(props.task?.config ?? null, "days") ?? 30));
+const staleDays = ref(String(configNumber(props.task?.config ?? null, "days") ?? 30));
 
 // ==================== 提交 ====================
 
 const submitInFlight = ref(false);
 
-async function handleSubmit() {
+async function handleSubmit(): Promise<void> {
   if (submitInFlight.value) {
     return;
   }
@@ -189,7 +247,7 @@ async function handleSubmit() {
     return;
   }
 
-  let config = {};
+  let config: Record<string, JsonValue> = {};
   if (taskType.value === "mac_sync") {
     // 子网可缺省：空值表示全部子网，设备至少勾选一台
     const deviceIds = [...selectedDeviceIds.value];
@@ -210,7 +268,7 @@ async function handleSubmit() {
     config = { days };
   }
 
-  const data = {
+  const data: ScheduledTaskCreate = {
     name: name.value.trim(),
     task_type: taskType.value,
     cron_expression: cronExpression,
@@ -221,8 +279,8 @@ async function handleSubmit() {
   submitInFlight.value = true;
   try {
     const result = isEdit.value
-      ? await apiPut(`/api/system/scheduled-tasks/${props.task.id}`, data)
-      : await apiPost("/api/system/scheduled-tasks", data);
+      ? await apiPut<ScheduledTask, ScheduledTaskCreate>(`/api/system/scheduled-tasks/${props.task?.id}`, data)
+      : await apiPost<ScheduledTask, ScheduledTaskCreate>("/api/system/scheduled-tasks", data);
     if (result.success) {
       showToast(isEdit.value ? t("scheduled_tasks.update_success") : t("scheduled_tasks.create_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });

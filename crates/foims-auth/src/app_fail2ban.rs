@@ -343,7 +343,8 @@ pub fn record_login_success(ip: &str, username: &str) {
 
 // ==================== API 数据结构 ====================
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AppFail2banStatus {
     pub enabled: bool,
     pub findtime: u64,
@@ -357,31 +358,36 @@ pub struct AppFail2banStatus {
     pub tracked_usernames: Vec<TrackedNameInfo>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct BannedIpInfo {
     pub ip: String,
     pub remaining_seconds: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TrackedIpInfo {
     pub ip: String,
     pub failure_count: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct BannedNameInfo {
     pub username: String,
     pub remaining_seconds: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TrackedNameInfo {
     pub username: String,
     pub failure_count: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateFail2banConfigRequest {
     pub enabled: Option<bool>,
     #[validate(range(
@@ -404,12 +410,14 @@ pub struct UpdateFail2banConfigRequest {
     pub bantime: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct BanIpRequest {
     pub ip: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UnbanIpRequest {
     pub ip: String,
 }

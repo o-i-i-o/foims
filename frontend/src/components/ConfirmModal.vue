@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 通用确认弹窗（移植自旧版 utils/confirm.js + modals/common/confirm-modal.html）。
  * v-if 控制挂载，确认/取消经事件通知调用方；Esc 与点击遮罩视为取消。
@@ -6,15 +6,18 @@
  */
 import { onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { useModalStack } from "../composables/useModalStack.js";
+import { useModalStack } from "../composables/useModalStack";
 
-const props = defineProps({
-  message: { type: String, required: true },
-  title: { type: String, default: "" },
-  danger: { type: Boolean, default: false }
-});
+withDefaults(
+  defineProps<{
+    message: string;
+    title?: string;
+    danger?: boolean;
+  }>(),
+  { title: "", danger: false }
+);
 
-const emit = defineEmits(["confirm", "cancel"]);
+const emit = defineEmits<{ confirm: []; cancel: [] }>();
 
 const { t } = useI18n();
 

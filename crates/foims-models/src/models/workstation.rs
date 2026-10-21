@@ -9,7 +9,8 @@ use validator::{Validate, ValidationError};
 
 // ==================== 工位模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Workstation {
     pub id: Uuid,
     pub name: String,
@@ -22,7 +23,8 @@ pub struct Workstation {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct WorkstationWithDetails {
     pub id: Uuid,
     pub name: String,
@@ -39,7 +41,8 @@ pub struct WorkstationWithDetails {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct WorkstationCreate {
     #[validate(length(
         min = 1,
@@ -54,7 +57,8 @@ pub struct WorkstationCreate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct WorkstationUpdate {
     #[validate(length(
         min = 1,
@@ -76,7 +80,8 @@ pub struct WorkstationUpdate {
 
 // ==================== 批量同步模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct WorkstationSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(
@@ -89,7 +94,8 @@ pub struct WorkstationSyncItem {
     pub manager_employee_id: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(min = 1, max = 50, message = "server.cabinet.validation.name_length"))]
@@ -102,7 +108,8 @@ pub struct CabinetSyncItem {
     pub capacity: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct NetOutletSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(
@@ -113,7 +120,8 @@ pub struct NetOutletSyncItem {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct RoomNetOutletsSync {
     /// nested 显式开启：同步 handler 仅调用容器 validate()，
     /// 缺失时 NetOutletSyncItem 的字段校验不会执行（同 CabinetPositionsSync）
@@ -121,19 +129,22 @@ pub struct RoomNetOutletsSync {
     pub net_outlets: Vec<NetOutletSyncItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct NetOutletBrief {
     pub id: Uuid,
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct PatchPanelBrief {
     pub id: Uuid,
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 #[validate(schema(function = "validate_position_sync_u_order"))]
 pub struct PositionSyncItem {
     pub id: Option<Uuid>,
@@ -162,7 +173,8 @@ fn validate_position_sync_u_order(req: &PositionSyncItem) -> Result<(), Validati
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct RoomChildrenSync {
     /// nested 显式开启：validator derive 不自动展开 Option<Vec> 元素，
     /// 缺失时同步子项的字段校验在同步路径不会执行（同 CabinetPositionsSync）
@@ -172,7 +184,8 @@ pub struct RoomChildrenSync {
     pub cabinets: Option<Vec<CabinetSyncItem>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetPositionsSync {
     /// nested 显式开启：同步 handler 仅调用容器 validate()，
     /// 缺失时 PositionSyncItem 的字段与跨字段校验不会执行
@@ -180,7 +193,8 @@ pub struct CabinetPositionsSync {
     pub positions: Vec<PositionSyncItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct PatchPanelSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(
@@ -191,7 +205,8 @@ pub struct PatchPanelSyncItem {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetPatchPanelsSync {
     /// nested 显式开启：同步 handler 仅调用容器 validate()，
     /// 缺失时 PatchPanelSyncItem 的字段校验不会执行（同 CabinetPositionsSync）

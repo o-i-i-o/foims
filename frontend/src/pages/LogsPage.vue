@@ -1,23 +1,27 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 日志管理页（移植自旧版 web/static/main.html logs 分区 + modules/log.js）：
  * 操作日志 / 登录日志 / 通知三个页签，排序 + 分页 + 操作日志搜索。
  * 数据层为 TanStack Query 首次实战接线：queryFn 内对归一化失败（success:false）
  * 抛出以进入 error 态；通知已读操作经 useMutation + 失效缓存刷新。
  */
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../api/client.js";
+import { apiGet, apiPut } from "../api/client";
 import {
   formatDateTime,
   getOperationTypeText,
   getResourceTypeText,
   translateNotificationContent,
   translateServerKey
-} from "../utils/formatter.js";
-import { showToast } from "../composables/useToast.js";
+} from "../utils/formatter";
+import { showToast } from "../composables/useToast";
+import type { Paged } from "../types/api";
+import type { LoginLog } from "../types/api/generated/LoginLog";
+import type { Notification } from "../types/api/generated/Notification";
+import type { OperationLog } from "../types/api/generated/OperationLog";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import LogDetailsModal from "../components/LogDetailsModal.vue";
 import NavIcon from "../components/NavIcon.vue";
@@ -38,7 +42,7 @@ const SUBTAB_KEY = "foims_subtab_logs";
 const route = useRoute();
 const router = useRouter();
 
-function readInitialTab() {
+function readInitialTab(): string {
   // 深链 #/logs?tab=login 优先，其次恢复上次记忆的页签，默认操作日志
   const fromQuery = String(route.query.tab ?? "");
   if (TABS.some((tab) => tab.id === fromQuery)) {
@@ -46,7 +50,7 @@ function readInitialTab() {
   }
   try {
     const saved = localStorage.getItem(SUBTAB_KEY);
-    if (TABS.some((tab) => tab.id === saved)) {
+    if (saved !== null && TABS.some((tab) => tab.id === saved)) {
       return saved;
     }
   } catch {
@@ -57,7 +61,7 @@ function readInitialTab() {
 
 const activeTab = ref(readInitialTab());
 
-function switchTab(tabId) {
+function switchTab(tabId: string) {
   if (tabId === activeTab.value) {
     return;
   }
@@ -88,11 +92,37 @@ const OPERATION_PAGE_SIZE = 50;
 const LOGIN_PAGE_SIZE = 50;
 const NOTIFICATION_PAGE_SIZE = 20;
 
+/** 本地分页列表选项（页内克隆版固定页大小，buildUrl 为三参签名） */
+interface LocalPagedListOptions {
+  tag: string;
+  pageSize: number;
+  /** 查询启用条件（页签切换懒加载） */
+  enabled?: Ref<boolean> | boolean;
+  /** 附加查询键（搜索词变化触发重新查询） */
+  extraKey?: Ref<Record<string, unknown>>;
+  /** 组装分页请求 URL（页码/排序字段/排序方向） */
+  buildUrl: (page: number, sortBy: string, sortOrder: string) => string;
+}
+
+/** 本地分页列表返回状态（与共享 usePagedList 的 PagedList 同形状，无页大小切换） */
+interface LocalPagedList<T> {
+  page: number;
+  pageSize: number;
+  sort: { by: string; order: "asc" | "desc" };
+  toggleSort: (key: string) => void;
+  items: T[];
+  total: number;
+  totalPages: number;
+  isError: boolean;
+  errorMessage: string;
+}
+
 /**
  * 分页列表封装：created_at 倒序为默认排序，排序切换重置页码；
  * 空页且页码越界（末页数据删除后）自动回退最后一页。
  */
-function usePagedList({ tag, pageSize, enabled, buildUrl, extraKey }) {
+function usePagedList<T>(options: LocalPagedListOptions): LocalPagedList<T> {
+  const { tag, pageSize, enabled, buildUrl, extraKey } = options;
   const page = ref(1);
   const sort = reactive({ by: "created_at", order: "desc" });
 
@@ -101,8 +131,8 @@ function usePagedList({ tag, pageSize, enabled, buildUrl, extraKey }) {
       tag,
       { page: page.value, sortBy: sort.by, sortOrder: sort.order, ...extraKey?.value }
     ]),
-    queryFn: async () => {
-      const result = await apiGet(buildUrl(page.value, sort.by, sort.order));
+    queryFn: async (): Promise<Paged<T> | null> => {
+      const result = await apiGet<Paged<T>>(buildUrl(page.value, sort.by, sort.order));
       if (!result.success) {
         // apiClient 已将失败归一为 { success:false } 不抛异常，
         // 此处显式抛出让查询进入 error 态（isError/error.message 可渲染）
@@ -126,7 +156,7 @@ function usePagedList({ tag, pageSize, enabled, buildUrl, extraKey }) {
     }
   );
 
-  function toggleSort(key) {
+  function toggleSort(key: string): void {
     if (sort.by === key) {
       sort.order = sort.order === "asc" ? "desc" : "asc";
     } else {
@@ -146,22 +176,22 @@ function usePagedList({ tag, pageSize, enabled, buildUrl, extraKey }) {
     totalPages: computed(() => query.data.value?.total_pages ?? 1),
     isError: computed(() => query.isError.value),
     errorMessage: computed(() => query.error.value?.message || t("common.load_failed"))
-  });
+  }) as LocalPagedList<T>;
 }
 
 // ==================== 操作日志（含搜索） ====================
 
 const operationSearch = ref("");
 
-const operation = usePagedList({
+const operation = usePagedList<OperationLog>({
   tag: "logs-operation",
   pageSize: OPERATION_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "operation"),
   extraKey: computed(() => ({ search: operationSearch.value })),
   buildUrl: (page, sortBy, sortOrder) => {
     const params = new URLSearchParams({
-      page,
-      page_size: OPERATION_PAGE_SIZE,
+      page: String(page),
+      page_size: String(OPERATION_PAGE_SIZE),
       sort_by: sortBy,
       sort_order: sortOrder
     });
@@ -174,7 +204,7 @@ const operation = usePagedList({
 
 // 搜索框位于操作日志表头：防抖 500ms，搜索词变化重置页码
 const searchInput = ref("");
-let searchTimer = null;
+let searchTimer: number | undefined;
 
 watch(searchInput, (value) => {
   clearTimeout(searchTimer);
@@ -186,27 +216,27 @@ watch(searchInput, (value) => {
 
 // ==================== 登录日志 / 通知 ====================
 
-const login = usePagedList({
+const login = usePagedList<LoginLog>({
   tag: "logs-login",
   pageSize: LOGIN_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "login"),
   buildUrl: (page, sortBy, sortOrder) =>
     `/api/logs/login?${new URLSearchParams({
-      page,
-      page_size: LOGIN_PAGE_SIZE,
+      page: String(page),
+      page_size: String(LOGIN_PAGE_SIZE),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
 });
 
-const notifications = usePagedList({
+const notifications = usePagedList<Notification>({
   tag: "notifications",
   pageSize: NOTIFICATION_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "notifications"),
   buildUrl: (page, sortBy, sortOrder) =>
     `/api/notifications?${new URLSearchParams({
-      page,
-      page_size: NOTIFICATION_PAGE_SIZE,
+      page: String(page),
+      page_size: String(NOTIFICATION_PAGE_SIZE),
       sort_by: sortBy,
       sort_order: sortOrder
     })}`
@@ -215,7 +245,7 @@ const notifications = usePagedList({
 // ==================== 通知已读操作 ====================
 
 const markReadMutation = useMutation({
-  mutationFn: (id) => apiPut(`/api/notifications/${id}/read`, {}),
+  mutationFn: (id: string) => apiPut(`/api/notifications/${id}/read`, {}),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -246,7 +276,7 @@ function handleMarkAllConfirmed() {
 
 // ==================== 操作日志详情 ====================
 
-const detailsLog = ref(null);
+const detailsLog = ref<OperationLog | null>(null);
 </script>
 
 <template>

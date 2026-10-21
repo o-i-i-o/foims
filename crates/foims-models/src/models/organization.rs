@@ -8,7 +8,8 @@ use validator::{Validate, ValidationError};
 
 // ==================== 组织管理模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct OrgTemplate {
     pub id: Uuid,
     pub name: String,
@@ -19,7 +20,8 @@ pub struct OrgTemplate {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct OrgTemplateSummary {
     pub id: Uuid,
     pub name: String,
@@ -28,7 +30,8 @@ pub struct OrgTemplateSummary {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct OrgTemplateCreate {
     #[validate(length(
         min = 1,
@@ -42,7 +45,8 @@ pub struct OrgTemplateCreate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct OrgTemplateUpdate {
     #[validate(length(
         min = 1,
@@ -56,7 +60,8 @@ pub struct OrgTemplateUpdate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Organization {
     pub id: Uuid,
     pub name: String,
@@ -69,7 +74,8 @@ pub struct Organization {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct OrganizationTreeNode {
     pub id: Uuid,
     pub name: String,
@@ -111,7 +117,8 @@ pub fn validate_type_path_option(type_path: &&String) -> Result<(), ValidationEr
     validate_type_path(type_path)
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct OrganizationCreate {
     #[validate(length(
         min = 1,
@@ -130,7 +137,8 @@ pub struct OrganizationCreate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct OrganizationUpdate {
     #[validate(length(
         min = 1,

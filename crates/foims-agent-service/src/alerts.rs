@@ -42,7 +42,8 @@ const BODY_KEY_DISK: &str = "server.notification.agent_alert.body_disk";
 const BODY_KEY_TEMP: &str = "server.notification.agent_alert.body_temp";
 
 /// 全局告警阈值配置（None/留空 = 不监控该指标；温度单位 ℃，其余为百分比）。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AlertThresholds {
     /// 总开关：关闭时不评估任何指标（既有告警状态保留，重开后不重复通知）
     pub enabled: bool,

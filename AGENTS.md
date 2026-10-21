@@ -37,7 +37,13 @@
   前端资源缓存由 Vite 内容指纹（assets/ 哈希文件名）承担，无需手工 bump
   版本号；入口 HTML 引用变化随构建自动生效。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`；
-  前端改动后：`cd frontend && npm run build`，审计用独立二进制
-  `biome check frontend`（CSS+格式）与 `oxlint`（JS 质量）。
+  前端改动后：`cd frontend && npm run typecheck`（vue-tsc，开发循环可单跑）
+  与 `npm run build`；后端载荷类型变更后运行
+  `bash da-scripts/gen-ts-types.sh` 再生成 TS 类型（生成物提交入库，
+  CI 漂移校验，禁止手改 `frontend/src/types/api/generated/`）。
+  审计用独立二进制 `biome check frontend`（CSS+格式）与 `oxlint`（JS 质量）。
+- 前端 SFC 一律 `<script setup lang="ts">`；新增前端代码一律 TypeScript，
+  禁止 any（用 unknown + 收窄）；API 载荷类型优先取
+  `frontend/src/types/api/generated/` 生成物，手写类型只放前端自有契约。
 - 开发直接测试：`./da-scripts/pak.sh`；
 - 测试用户 admin / admin123。

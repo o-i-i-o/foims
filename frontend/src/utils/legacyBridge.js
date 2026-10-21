@@ -19,10 +19,20 @@ import { openModal, closeModal } from "./legacyModalLoader.js";
 /**
  * 旧版 t(key, options) 的对应物：第二参为对象插值（占位符替换），
  * vue-i18n 的 t(key, named) 兼容该形态；未传参时显式给 undefined。
+ *
+ * @param {string} key - i18n 消息键
+ * @param {Record<string, unknown>} [params] - 命名插值参数（对应 {name} 占位符）
+ * @returns {string} 已翻译文案（键缺失时回退为键本身）
  */
 export const t = (key, params) => i18n.global.t(key, params ?? undefined);
 
-/** 可传入 root 元素限定扫描范围（如新打开的模态框），省去全文档遍历 */
+/**
+ * 扫描 data-i18n-* 属性并就地填充翻译文本。
+ * 可传入 root 元素限定扫描范围（如新打开的模态框），省去全文档遍历
+ *
+ * @param {Document|Element} [root=document] - 扫描根节点
+ * @returns {void}
+ */
 export function updatePageTranslations(root = document) {
   const apply = (attribute, property) => {
     root.querySelectorAll(`[${attribute}]`).forEach((el) => {
@@ -51,13 +61,29 @@ export function updatePageTranslations(root = document) {
 // 全局通知（旧版 toast.js → Vue useToast）
 // ==========================================
 
-// 签名一致（message, type = "info", duration = 3000），直接复用 Vue 端实现
+/**
+ * 全局通知：签名与旧版 toast.js 一致（message, type = "info", duration = 3000），
+ * 直接复用 Vue 端 useToast 实现。
+ *
+ * @param {string} message - 通知文案（已翻译）
+ * @param {"info"|"success"|"error"|"warning"} [type="info"] - 通知类型
+ * @param {number} [duration=3000] - 展示时长（毫秒）
+ * @returns {number} 通知句柄 id（可用于提前移除）
+ */
 export const showToast = vueShowToast;
 
 // ==========================================
 // 错误处理（旧版 ui.js）
 // ==========================================
 
+/**
+ * 统一错误处理：打日志并以 error 通知展示错误信息。
+ *
+ * @param {unknown} error - 抛出值（Error / string / 其它均兼容）
+ * @param {string} [defaultMessage] - error 无可用 message 时的兜底文案
+ * @param {(() => void)|null} [fallback] - 可选回调（部分调用方用于列表失败后重渲染空表提示）
+ * @returns {void}
+ */
 export function handleError(error, defaultMessage = t("common.operation_failed"), fallback = null) {
   console.error("Error:", error);
 
@@ -132,6 +158,17 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+/**
+ * 打开公共确认框并等待用户选择；并发调用时上一个未决确认框按取消结束。
+ *
+ * @param {string} message - 确认文案
+ * @param {object} [options] - 展示选项
+ * @param {string} [options.title] - 弹窗标题（缺省保持模板默认）
+ * @param {string} [options.confirmText] - 确认按钮文案（缺省走 i18n common.confirm）
+ * @param {string} [options.cancelText] - 取消按钮文案（缺省走 i18n common.cancel）
+ * @param {boolean} [options.danger] - true 时确认按钮使用危险样式
+ * @returns {Promise<boolean>} 确认返回 true；取消/关闭/模板加载失败返回 false
+ */
 export function showConfirm(message, options = {}) {
   return new Promise((resolve) => {
     // 并发调用时先结束上一个（视为取消），避免其调用方永久悬挂
@@ -179,7 +216,14 @@ export function showConfirm(message, options = {}) {
   });
 }
 
-/** 与旧版 confirm.js 一致的删除确认封装（默认危险按钮文案） */
+/**
+ * 与旧版 confirm.js 一致的删除确认封装（默认危险按钮文案）。
+ *
+ * @param {string} entityName - 实体名（拼入默认确认文案的 {name} 插值）
+ * @param {object} [options] - showConfirm 选项；另支持 message 覆盖默认文案
+ * @param {string} [options.message] - 自定义确认文案
+ * @returns {Promise<boolean>} 同 showConfirm
+ */
 export async function confirmDelete(entityName, options = {}) {
   const message = options.message || t("common.confirm_delete", { name: entityName });
   return showConfirm(message, {
@@ -194,17 +238,33 @@ export async function confirmDelete(entityName, options = {}) {
 // DOM / 调度工具（旧版 helpers.js 逐字迁移）
 // ==========================================
 
+/**
+ * 等待两帧后执行回调（确保浏览器完成布局与绘制后再做 DOM 调整）。
+ *
+ * @param {FrameRequestCallback} callback - 帧回调
+ * @returns {number} requestAnimationFrame 句柄
+ */
 export function nextFrame(callback) {
   return requestAnimationFrame(() => {
     requestAnimationFrame(callback);
   });
 }
 
+/**
+ * 元素引用缓存：按 id 缓存 getElementById 结果，
+ * 命中元素已脱离文档时自动失效重查（不持有死引用）。
+ */
 class ElementCache {
   constructor() {
+    /** @type {Map<string, HTMLElement>} id → 元素引用 */
     this.cache = new Map();
   }
 
+  /**
+   * 取元素：缓存命中且仍在文档中直接返回，否则重查并刷新缓存
+   * @param {string} id - 元素 id
+   * @returns {HTMLElement|null} 元素引用，不存在时为 null
+   */
   get(id) {
     const cached = this.cache.get(id);
     if (cached && document.contains(cached)) {
@@ -218,11 +278,22 @@ class ElementCache {
     return el;
   }
 
+  /**
+   * 读输入类元素的 value
+   * @param {string} id - 元素 id
+   * @returns {string} 元素 value，元素不存在时为空串
+   */
   getValue(id) {
     const el = this.get(id);
     return el ? el.value : "";
   }
 
+  /**
+   * 写输入类元素的 value
+   * @param {string} id - 元素 id
+   * @param {string} value - 目标值
+   * @returns {void}
+   */
   setValue(id, value) {
     const el = this.get(id);
     if (el) {
@@ -230,11 +301,22 @@ class ElementCache {
     }
   }
 
+  /**
+   * 读 checkbox 类元素的 checked
+   * @param {string} id - 元素 id
+   * @returns {boolean} 元素 checked，元素不存在时为 false
+   */
   getChecked(id) {
     const el = this.get(id);
     return el ? el.checked : false;
   }
 
+  /**
+   * 写 checkbox 类元素的 checked
+   * @param {string} id - 元素 id
+   * @param {boolean} checked - 目标勾选状态
+   * @returns {void}
+   */
   setChecked(id, checked) {
     const el = this.get(id);
     if (el) {
@@ -242,6 +324,11 @@ class ElementCache {
     }
   }
 
+  /**
+   * 失效缓存：传 id 清除单条，缺省清空全部
+   * @param {string} [id] - 元素 id
+   * @returns {void}
+   */
   clear(id) {
     if (id) {
       this.cache.delete(id);
@@ -260,6 +347,12 @@ const HTML_ESCAPE_MAP = {
   "'": "&#39;"
 };
 
+/**
+ * HTML 转义：& < > " ' 五类字符替换为对应实体。
+ *
+ * @param {unknown} text - 待转义输入（falsy 直接返回空串）
+ * @returns {string} 转义后的文本
+ */
 export function escapeHtml(text) {
   if (!text) {
     return "";
@@ -267,6 +360,7 @@ export function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
 }
 
+/** 全局元素缓存单例：visualization 画布生态各模块共享同一份缓存 */
 export const elementCache = new ElementCache();
 
 // ==========================================
@@ -310,9 +404,18 @@ export function getActiveSubtab(pageId) {
 }
 
 /**
+ * 请求序号守卫句柄
+ * @typedef {object} SeqGuard
+ * @property {() => number} next - 开始一次新请求，返回本次序号
+ * @property {(seq: number) => boolean} isCurrent - 序号是否仍是最新（false 表示响应已过期）
+ */
+
+/**
  * 请求竞态守卫：列表请求前取号，响应返回后校验是否仍是最新请求，
  * 过期响应直接放弃渲染（翻页/排序/筛选并发后防止表格与状态错乱）。
  * 替代各列表模块各自维护的 `let xRequestSeq = 0` 三行样板。
+ *
+ * @returns {SeqGuard} 独立守卫实例（各列表互不干扰）
  */
 export function createSeqGuard() {
   let current = 0;
@@ -333,6 +436,14 @@ export function createSeqGuard() {
 // 防抖（旧版 ui.js）
 // ==========================================
 
+/**
+ * 防抖：wait 毫秒内的连续调用只执行最后一次。
+ *
+ * @template {unknown[]} A - 目标函数参数元组
+ * @param {(...args: A) => void} func - 需要防抖的目标函数
+ * @param {number} wait - 防抖等待时长（毫秒）
+ * @returns {(...args: A) => void} 包装后的防抖函数
+ */
 export function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -353,6 +464,17 @@ export function debounce(func, wait) {
 // 编辑弹窗入口。ES module 导出绑定只读、无法直接覆写，因此以可变 holder
 // 承载实现，VisualizationPage.vue 在挂载时对 holder 赋值注入 Vue 弹窗；
 // 未注入前为空实现，画布编辑回调调用时不产生副作用。
+/**
+ * Vue 弹窗注入点：可变实现 holder，键为画布编辑回调名。
+ * position 为画布坐标（{x,y} 或 null），桥接层不感知其形状，按 unknown 透传。
+ *
+ * @typedef {Object} VueModalImplementations
+ * @property {(id: string, position?: unknown) => void | Promise<unknown>} editWorkstation 打开工位编辑弹窗
+ * @property {(id: string) => void | Promise<unknown>} editCabinet 打开机柜编辑弹窗
+ * @property {(id: string) => void | Promise<unknown>} editCabinetPosition 打开机位编辑弹窗
+ */
+
+/** @type {VueModalImplementations} */
 export const vueModals = {
   editWorkstation: () => {},
   editCabinet: () => {},
@@ -361,6 +483,9 @@ export const vueModals = {
 
 // 委托包装：调用时才解析 holder 内的当前实现（visualizationManager
 // 按旧版形态导入同名具名导出，迁移代码无需改动）
+/** @type {VueModalImplementations["editWorkstation"]} 画布回调：打开工位编辑弹窗（委托 vueModals 当前实现） */
 export const editWorkstation = (...args) => vueModals.editWorkstation(...args);
+/** @type {VueModalImplementations["editCabinet"]} 画布回调：打开机柜编辑弹窗（委托 vueModals 当前实现） */
 export const editCabinet = (...args) => vueModals.editCabinet(...args);
+/** @type {VueModalImplementations["editCabinetPosition"]} 画布回调：打开机位编辑弹窗（委托 vueModals 当前实现） */
 export const editCabinetPosition = (...args) => vueModals.editCabinetPosition(...args);

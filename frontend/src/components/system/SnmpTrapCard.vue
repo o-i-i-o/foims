@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * SNMP Trap 接收配置卡片（移植自旧版 systemManager.js 的 trap 段）：
  * 启用开关 / 监听地址拆分（host:port）/ 冷却窗口 / 团体名白名单 /
@@ -8,13 +8,63 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPut } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** GET 配置中的 trap 段 USM 用户行（历史数据字段可能缺省） */
+interface TrapUserConfig {
+  username?: string | null;
+  auth_protocol?: string | null;
+  auth_password?: string | null;
+  priv_protocol?: string | null;
+  priv_password?: string | null;
+}
+
+/** trap 段配置（GET /api/system/config 的 snmp.trap 段，后端未生成 ts-rs 类型） */
+interface TrapSection {
+  enabled?: boolean;
+  bind_addr?: string | null;
+  communities?: string[] | null;
+  users?: TrapUserConfig[] | null;
+  cooldown_secs?: number | null;
+}
+
+/** snmp 段配置（本卡片仅消费基础参数 + trap 段） */
+interface SnmpConfigSection {
+  timeout_secs?: number;
+  retries?: number;
+  lldp_timeout_secs?: number;
+  mac_scan_timeout_secs?: number;
+  trap?: TrapSection | null;
+}
+
+/** 系统配置载荷（本卡片仅消费 snmp 段） */
+interface SystemConfigPayload {
+  snmp?: SnmpConfigSection | null;
+}
+
+/** PUT 提交的 trap USM 用户行 */
+interface TrapUserPayload {
+  username: string;
+  auth_protocol: string;
+  auth_password: string;
+  priv_protocol: string;
+  priv_password: string;
+}
+
+/** USM 用户表单行：hasValue 标记后端已配置密码（回传 ***），输入框保持留空 */
+interface TrapUserRow {
+  username: string;
+  auth_protocol: string;
+  auth_password: string;
+  authHasValue: boolean;
+  priv_protocol: string;
+  priv_password: string;
+  privHasValue: boolean;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -30,7 +80,7 @@ const PRIV_PROTOCOLS = ["des", "3des", "aes128", "aes192", "aes256"];
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/config");
+    const result = await apiGet<SystemConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -40,23 +90,22 @@ const configQuery = useQuery({
 });
 
 // 最近一次加载的 SNMP 基础参数（超时/重试等与 trap 无关的字段），保存时原样带回
-let snmpBase = null;
+let snmpBase: Pick<SnmpConfigSection, "timeout_secs" | "retries" | "lldp_timeout_secs" | "mac_scan_timeout_secs"> = {};
 
 const trapEnabled = ref(false);
 const bindHost = ref("0.0.0.0");
 const bindPort = ref("162");
 const cooldown = ref("30");
 const communities = ref("");
-// USM 用户行：hasValue 标记后端已配置密码（回传 ***），输入框保持留空
-const trapUsers = ref([]);
+const trapUsers = ref<TrapUserRow[]>([]);
 
 // 存量协议值大小写归一（后端解析大小写不敏感）；无法识别的取值回落为不启用
-function normalizeProtocol(value, protocols) {
+function normalizeProtocol(value: string | null | undefined, protocols: string[]): string {
   const v = (value || "").toLowerCase();
   return protocols.includes(v) ? v : "";
 }
 
-function buildRow(user) {
+function buildRow(user: TrapUserConfig | null): TrapUserRow {
   return {
     username: user?.username || "",
     auth_protocol: normalizeProtocol(user?.auth_protocol, AUTH_PROTOCOLS),
@@ -87,25 +136,30 @@ watch(
     const bindMatch = (trap.bind_addr || "0.0.0.0:162").match(
       /^(\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/
     );
-    bindHost.value = bindMatch ? bindMatch[1] : "0.0.0.0";
-    bindPort.value = bindMatch ? bindMatch[2] : "162";
+    bindHost.value = bindMatch?.[1] ?? "0.0.0.0";
+    bindPort.value = bindMatch?.[2] ?? "162";
     cooldown.value = String(trap.cooldown_secs ?? 30);
     communities.value = (trap.communities || []).join(", ");
     trapUsers.value = (trap.users || []).map((user) => buildRow(user));
   }
 );
 
-function addUser() {
+function addUser(): void {
   trapUsers.value.push(buildRow(null));
 }
 
-function removeRow(index) {
+function removeRow(index: number): void {
   trapUsers.value.splice(index, 1);
 }
 
 // 读取单个密码框的提交值：留空且有已配置标记时回传掩码由后端沿用磁盘值；
 // 配置了协议时密码必填，且新输入须满足 RFC 3414 的 8 字符下限。校验失败返回 null
-function readPassword(row, field, hasField, protocol) {
+function readPassword(
+  row: TrapUserRow,
+  field: "auth_password" | "priv_password",
+  hasField: "authHasValue" | "privHasValue",
+  protocol: string
+): string | null {
   const value = row[field];
   if (value !== "") {
     if (protocol && value.length < 8) {
@@ -125,9 +179,9 @@ function readPassword(row, field, hasField, protocol) {
 }
 
 // 收集并校验用户表；校验失败提示后返回 null
-function collectUsers() {
-  const users = [];
-  const seenUsernames = new Set();
+function collectUsers(): TrapUserPayload[] | null {
+  const users: TrapUserPayload[] = [];
+  const seenUsernames = new Set<string>();
   for (const row of trapUsers.value) {
     const username = row.username.trim();
     // USM 无 noAuth + priv 组合：加密必须与认证配套（与后端校验一致）
@@ -165,7 +219,7 @@ function collectUsers() {
 
 const saving = ref(false);
 
-async function saveSnmpTrapConfig() {
+async function saveSnmpTrapConfig(): Promise<void> {
   if (saving.value) {
     return;
   }
@@ -191,7 +245,7 @@ async function saveSnmpTrapConfig() {
 
   saving.value = true;
   try {
-    const result = await apiPut("/api/system/config", {
+    const payload: { snmp: SnmpConfigSection } = {
       snmp: {
         ...snmpBase,
         trap: {
@@ -202,7 +256,8 @@ async function saveSnmpTrapConfig() {
           cooldown_secs: cooldownSecs
         }
       }
-    });
+    };
+    const result = await apiPut("/api/system/config", payload);
     if (result.success) {
       showToast(t("snmp_trap.save_success"), "success");
       showToast(t("system.config_saved_restart_needed"), "warning");

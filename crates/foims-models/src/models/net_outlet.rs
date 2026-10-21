@@ -9,7 +9,8 @@ use validator::Validate;
 // ==================== 信息点模型 ====================
 // 信息点特指网络插座，仅隶属房间；配线架为独立模型（见 patch_panel.rs）
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct NetOutlet {
     pub id: Uuid,
     pub name: String,
@@ -18,7 +19,8 @@ pub struct NetOutlet {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct NetOutletWithDetails {
     pub id: Uuid,
     pub name: String,
@@ -28,7 +30,8 @@ pub struct NetOutletWithDetails {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct NetOutletCreate {
     #[validate(length(
         min = 1,
@@ -39,7 +42,8 @@ pub struct NetOutletCreate {
     pub room_id: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct NetOutletUpdate {
     #[validate(length(
         min = 1,

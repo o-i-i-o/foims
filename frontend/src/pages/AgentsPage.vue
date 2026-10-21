@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 主机监控页（移植自旧版 main.html agents 分区 + modules/agents.js）：
  * 状态/关键字筛选 + 分页列表 + 30s 自动刷新（窗口失焦自动暂停，TanStack
@@ -11,9 +11,10 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, request } from "../api/client.js";
-import { formatTime } from "../utils/formatter.js";
-import { showToast } from "../composables/useToast.js";
+import { apiDelete, apiGet, request } from "../api/client";
+import { formatTime } from "../utils/formatter";
+import { showToast } from "../composables/useToast";
+import type { Paged } from "../types/api";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
@@ -30,6 +31,26 @@ const queryClient = useQueryClient();
 
 // ==================== 列表查询（筛选 + 分页 + 轮询） ====================
 
+// 列表行类型：/api/agents 聚合 Agent 上报与 SNMP 采集源，字段超集未入
+// generated（id 兼容数值与字符串、source/label 为联查可选键、用量与
+// 温度可能缺报）
+interface AgentListItem {
+  id: number | string;
+  status: string;
+  hostname: string | null;
+  source?: string | null;
+  label?: string | null;
+  ip: string | null;
+  os: string | null;
+  arch: string | null;
+  cpu_usage: number | string | null;
+  mem_usage_pct: number | string | null;
+  disk_usage_pct: number | string | null;
+  max_temp: number | string | null;
+  agent_version: string | null;
+  last_seen: string | null;
+}
+
 // 状态筛选直接提交（下拉单选无中间态）；关键字为草稿态
 const status = ref("");
 const keywordDraft = ref("");
@@ -38,7 +59,7 @@ const page = ref(1);
 
 const listQuery = useQuery({
   queryKey: computed(() => ["agents", { page: page.value, status: status.value, keyword: keyword.value }]),
-  queryFn: async () => {
+  queryFn: async (): Promise<Paged<AgentListItem> | null> => {
     const params = new URLSearchParams({ page: String(page.value), page_size: String(PAGE_SIZE) });
     if (status.value) {
       params.set("status", status.value);
@@ -46,7 +67,7 @@ const listQuery = useQuery({
     if (keyword.value) {
       params.set("keyword", keyword.value);
     }
-    const result = await apiGet(`/api/agents?${params.toString()}`);
+    const result = await apiGet<Paged<AgentListItem>>(`/api/agents?${params.toString()}`);
     if (!result.success) {
       // apiClient 已将失败归一为 { success:false } 不抛异常，
       // 此处显式抛出让查询进入 error 态（isError/error.message 可渲染）
@@ -86,23 +107,23 @@ function applyFilters() {
 // ==================== 列表单元格渲染辅助 ====================
 
 // 状态元数据：状态点样式类 + 名称 i18n 键（active/offline 由上报自动翻转）
-const STATUS_META = {
+const STATUS_META: Record<string, { dot: string; labelKey: string }> = {
   active: { dot: "agent-dot-active", labelKey: "agents.status_active" },
   offline: { dot: "agent-dot-offline", labelKey: "agents.status_offline" },
   disabled: { dot: "agent-dot-disabled", labelKey: "agents.status_disabled" }
 };
 
-function statusMeta(agent) {
+function statusMeta(agent: AgentListItem): { dot: string; labelKey: string } | undefined {
   return STATUS_META[agent.status];
 }
 
-function statusText(agent) {
+function statusText(agent: AgentListItem): string {
   const meta = STATUS_META[agent.status];
   return meta ? t(meta.labelKey) : String(agent.status ?? "-");
 }
 
 /** 最高温度单元格：未上报显示 "-" */
-function formatTemp(temp) {
+function formatTemp(temp: number | string | null): string {
   if (temp == null || !Number.isFinite(Number(temp))) {
     return "-";
   }
@@ -113,12 +134,13 @@ function formatTemp(temp) {
 
 // 行内操作语义：detail 打开详情弹窗，disable/enable 经 PATCH 切换状态
 //（禁用后该机上报被 403 拒收，再启用即恢复），delete 需确认后 DELETE
-const detailId = ref(null);
+const detailId = ref<number | string | null>(null);
 const showThreshold = ref(false);
-const deleteTarget = ref(null);
+const deleteTarget = ref<AgentListItem | null>(null);
 
 const statusMutation = useMutation({
-  mutationFn: ({ id, next }) => request(`/api/agents/${id}`, { method: "PATCH", body: JSON.stringify({ status: next }) }),
+  mutationFn: ({ id, next }: { id: number | string; next: string }) =>
+    request(`/api/agents/${id}`, { method: "PATCH", body: JSON.stringify({ status: next }) }),
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("agents.status_updated"), "success");
@@ -130,7 +152,7 @@ const statusMutation = useMutation({
 });
 
 const deleteMutation = useMutation({
-  mutationFn: (id) => apiDelete(`/api/agents/${id}`),
+  mutationFn: (id: number | string) => apiDelete(`/api/agents/${id}`),
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("common.delete_success"), "success");

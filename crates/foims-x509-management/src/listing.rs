@@ -34,7 +34,8 @@ impl CertKind {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CertFileInfo {
     /// 文件基础名（如 create_1761234567890_cert，毫秒时间戳）
     pub file_stem: String,
@@ -47,7 +48,8 @@ pub struct CertFileInfo {
     pub days_remaining: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CertificateInventory {
     pub generated: Vec<CertFileInfo>,
     pub imported: Vec<CertFileInfo>,

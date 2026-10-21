@@ -1,6 +1,6 @@
 [package]
 name = "foims-data-management"
-version = "0.2.4"
+version = "0.2.5"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Data Management - module-based CSV import/export and database backup functionality"
@@ -19,6 +19,7 @@ sqlx = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+ts-rs = { workspace = true }
 
 # Validation
 validator = { workspace = true }

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 机柜新增/编辑弹窗（移植自旧版 modals/cabinet/cabinet-modal.html
  * + cabinet.js openCabinetModal/submitCabinetForm）：
@@ -11,25 +11,43 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { readPowerWattsInput } from "../../utils/power.js";
+import type { Cabinet } from "../../types/api/generated/Cabinet";
+import type { CabinetCreate } from "../../types/api/generated/CabinetCreate";
+import type { CabinetPatchPanelsSync } from "../../types/api/generated/CabinetPatchPanelsSync";
+import type { CabinetPositionsSync } from "../../types/api/generated/CabinetPositionsSync";
+import type { CabinetWithNetworks } from "../../types/api/generated/CabinetWithNetworks";
+import type { Room } from "../../types/api/generated/Room";
+import type { Paged } from "../../types/api";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { readPowerWattsInput } from "../../utils/power";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显（GET /cabinets/{id} 完整数据）
-  cabinet: { type: Object, default: null }
-});
+const props = withDefaults(
+  defineProps<{
+    /** null = 新增；对象 = 编辑回显（GET /cabinets/{id} 完整数据） */
+    cabinet?: CabinetWithNetworks | null;
+  }>(),
+  { cabinet: null }
+);
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // ==================== 基础表单 ====================
 
-const form = reactive({
+// totalPower 为输入框原始值（未换算），保留 string | number 联合
+const form = reactive<{
+  roomId: string;
+  name: string;
+  capacity: number;
+  totalPower: string | number;
+  powerUnit: string;
+  description: string;
+}>({
   roomId: props.cabinet?.room_id ?? "",
   name: props.cabinet?.name ?? "",
   capacity: props.cabinet?.capacity || 42,
@@ -40,9 +58,26 @@ const form = reactive({
 
 // ==================== 机位/配线架动态行 ====================
 
+/** 机位动态行（key 为前端行键，id 为已有机位主键） */
+interface PositionRow {
+  key: number;
+  id: string | null;
+  name: string;
+  startU: number;
+  endU: number;
+  description: string;
+}
+
+/** 配线架动态行（key 为前端行键，id 为已有配线架主键） */
+interface PatchPanelRow {
+  key: number;
+  id: string | null;
+  name: string;
+}
+
 let nextRowKey = 1;
 
-const positions = reactive(
+const positions = reactive<PositionRow[]>(
   (props.cabinet?.positions ?? []).map((pos) => ({
     key: nextRowKey++,
     id: pos.id,
@@ -53,7 +88,7 @@ const positions = reactive(
   }))
 );
 
-const patchPanels = reactive(
+const patchPanels = reactive<PatchPanelRow[]>(
   (props.cabinet?.patch_panels ?? []).map((panel) => ({
     key: nextRowKey++,
     id: panel.id,
@@ -74,9 +109,9 @@ function addPatchPanel() {
 // 机柜的网络配置由所属房间自动继承，房间下拉仅列机房类（机房/弱电井/其他）
 const roomsQuery = useQuery({
   queryKey: ["options", "datacenter-rooms"],
-  queryFn: async () => {
+  queryFn: async (): Promise<Paged<Room> | null> => {
     const params = new URLSearchParams({ page_size: "1000", room_type: "data_center,telecom_closet,other" });
-    const result = await apiGet(`/api/resources/rooms?${params}`);
+    const result = await apiGet<Paged<Room>>(`/api/resources/rooms?${params}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -84,16 +119,17 @@ const roomsQuery = useQuery({
   }
 });
 
-const roomOptions = computed(() =>
-  Array.isArray(roomsQuery.data.value?.items) ? roomsQuery.data.value.items : []
-);
+const roomOptions = computed<Room[]>(() => {
+  const items = roomsQuery.data.value?.items;
+  return Array.isArray(items) ? items : [];
+});
 
 // ==================== 提交 ====================
 
 const saving = ref(false);
 
 /** 机位校验：名称非空，U 位 1-48 整数且结束不小于起始 */
-function validatePositions() {
+function validatePositions(): string | null {
   for (const pos of positions) {
     if (!pos.name.trim()) {
       return t("cabinet.position_name_required");
@@ -114,7 +150,7 @@ function validatePositions() {
 }
 
 const saveMutation = useMutation({
-  mutationFn: async () => {
+  mutationFn: async (): Promise<string> => {
     if (!form.name.trim()) {
       throw new Error(t("cabinet.name_required"));
     }
@@ -125,7 +161,8 @@ const saveMutation = useMutation({
       throw new Error(t("cabinet.capacity_invalid"));
     }
     const totalPowerWatts = readPowerWattsInput(form.totalPower, form.powerUnit);
-    if (Number.isNaN(totalPowerWatts)) {
+    // readPowerWattsInput 空输入返回 null（= 不限制功率），仅 NaN 为非法值
+    if (totalPowerWatts !== null && Number.isNaN(totalPowerWatts)) {
       throw new Error(t("cabinet.total_power_invalid"));
     }
     const positionsError = validatePositions();
@@ -133,7 +170,7 @@ const saveMutation = useMutation({
       throw new Error(positionsError);
     }
 
-    const cabinetData = {
+    const cabinetData: CabinetCreate = {
       name: form.name.trim(),
       room_id: form.roomId,
       capacity: form.capacity,
@@ -143,12 +180,12 @@ const saveMutation = useMutation({
 
     let cabinetId = props.cabinet?.id;
     if (cabinetId) {
-      const result = await apiPut(`/api/resources/cabinets/${cabinetId}`, cabinetData);
+      const result = await apiPut<Cabinet, CabinetCreate>(`/api/resources/cabinets/${cabinetId}`, cabinetData);
       if (!result.success) {
         throw new Error(result.message || t("cabinet.save_failed"));
       }
     } else {
-      const result = await apiPost("/api/resources/cabinets", cabinetData);
+      const result = await apiPost<Cabinet, CabinetCreate>("/api/resources/cabinets", cabinetData);
       if (!result.success) {
         throw new Error(result.message || t("cabinet.save_failed"));
       }
@@ -159,7 +196,7 @@ const saveMutation = useMutation({
     }
 
     // 同步机位
-    const syncResult = await apiPut(`/api/resources/cabinets/${cabinetId}/positions`, {
+    const syncResult = await apiPut<unknown, CabinetPositionsSync>(`/api/resources/cabinets/${cabinetId}/positions`, {
       positions: positions.map((pos) => ({
         id: pos.id,
         name: pos.name.trim(),
@@ -173,7 +210,7 @@ const saveMutation = useMutation({
     }
 
     // 同步配线架
-    const ppResult = await apiPut(`/api/resources/cabinets/${cabinetId}/patch-panels`, {
+    const ppResult = await apiPut<unknown, CabinetPatchPanelsSync>(`/api/resources/cabinets/${cabinetId}/patch-panels`, {
       patch_panels: patchPanels.map((panel) => ({
         id: panel.id,
         name: panel.name.trim()

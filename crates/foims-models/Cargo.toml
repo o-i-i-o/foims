@@ -1,6 +1,6 @@
 [package]
 name = "foims-models"
-version = "0.2.10"
+version = "0.2.11"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Domain Models - shared request/response and database row models"
@@ -27,6 +27,9 @@ uuid = { workspace = true }
 
 # JSON
 serde_json = { workspace = true }
+
+# TS 类型导出
+ts-rs = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "foims-agent-service"
-version = "0.1.12"
+version = "0.1.13"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS 数据采集服务：agent 分发打包与 QUIC mTLS 接收、SNMP 轮询/Trap 接收、证书签发续期"
@@ -30,6 +30,7 @@ sha2 = { workspace = true }
 sqlx = { workspace = true }
 tar = { workspace = true }
 time = { workspace = true }
+ts-rs = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }

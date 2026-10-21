@@ -9,7 +9,8 @@ use validator::Validate;
 
 // ==================== 设备网卡模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct NetworkCard {
     pub id: Uuid,
     pub device_id: Uuid,
@@ -58,7 +59,8 @@ pub struct NetworkCardUpdate {
 // device_managed 标记网口是否在设备编辑模态框中展示与维护：
 // 设备模态框新建的网口为 true，端口模态框/SNMP 同步生成的为 false。
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceInterface {
     pub id: Uuid,
     pub device_id: Uuid,
@@ -84,7 +86,8 @@ pub struct DeviceInterface {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceInterfaceWithDevice {
     pub id: Uuid,
     pub device_id: Uuid,
@@ -106,7 +109,8 @@ pub struct DeviceInterfaceWithDevice {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceInterfaceCreate {
     #[validate(length(
         min = 1,
@@ -146,7 +150,8 @@ pub struct DeviceInterfaceCreate {
     pub device_managed: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceInterfaceUpdate {
     #[validate(length(
         min = 1,
@@ -198,7 +203,8 @@ pub struct DeviceInterfaceUpdate {
 // ==================== SNMP 相关模型 ====================
 
 /// SNMP 实时拉取的端口（未落库的原始数据，字段与统一网口模型对齐）
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct SnmpPort {
     /// 端口标识（如 xg1/0/0/1、GigabitEthernet1/0/1）
     pub name: String,
@@ -209,7 +215,8 @@ pub struct SnmpPort {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SnmpTestRequest {
     pub device_id: Option<Uuid>,
     pub ip_address: Option<String>,
@@ -242,7 +249,8 @@ pub struct LldpNeighbor {
 }
 
 /// SNMP 观测表 snmp_arp_entries 行模型：设备 ARP/FDB 学到的 IP ↔ MAC 条目
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct SnmpMac {
     pub id: Uuid,
     pub device_id: Uuid,
@@ -254,7 +262,8 @@ pub struct SnmpMac {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceLldp {
     pub id: Uuid,
     pub device_id: Uuid,
@@ -280,7 +289,8 @@ pub struct DeviceLldpCreate {
 
 // ==================== 设备模板模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceTemplate {
     pub id: Uuid,
     pub name: String,
@@ -292,7 +302,8 @@ pub struct DeviceTemplate {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceTemplateSummary {
     pub id: Uuid,
     pub name: String,
@@ -301,7 +312,8 @@ pub struct DeviceTemplateSummary {
     pub model: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateDeviceTemplateRequest {
     #[validate(length(
         min = 1,
@@ -322,7 +334,8 @@ pub struct UpdateDeviceTemplateRequest {
 
 // ==================== 设备模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Device {
     pub id: Uuid,
     pub name: String,
@@ -354,7 +367,8 @@ pub struct Device {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceWithDetails {
     pub id: Uuid,
     pub name: String,
@@ -390,7 +404,8 @@ pub struct DeviceWithDetails {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceCreate {
     #[validate(length(min = 1, max = 100, message = "server.device.validation.name_length"))]
     pub name: String,
@@ -467,7 +482,8 @@ pub struct DeviceCreate {
     pub template_name: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceUpdate {
     #[validate(length(min = 1, max = 100, message = "server.device.validation.name_length"))]
     pub name: Option<String>,

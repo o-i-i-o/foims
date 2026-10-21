@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * Agent 配置卡片（移植自旧版 data-management 分区 agent-service 段 +
  * systemManager.js Agent 分发段）：上报接收服务参数（监听地址/上报与
@@ -8,15 +8,34 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut, request } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut, request } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
-import { downloadBlobResult } from "../../utils/download.js";
+import { downloadBlobResult } from "../../utils/download";
+import type { EnrollmentTokenResponse } from "../../types/api/generated/EnrollmentTokenResponse";
+import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** agent 段配置（GET /api/system/config 的 agent 段，后端未生成 ts-rs 类型） */
+interface AgentConfigSection {
+  enabled: boolean;
+  bind_addr: string;
+  report_interval_secs: number;
+  collect_interval_secs: number;
+  use_public_url: boolean;
+  report_url_override: string | null;
+  /** 以下三项保存时原样带回（仅在配置加载后才有值） */
+  max_report_bytes?: number;
+  history_retention_days?: number;
+  offline_factor?: number;
+}
+
+/** 系统配置载荷（本卡片仅消费 agent 段） */
+interface SystemConfigPayload {
+  agent?: AgentConfigSection | null;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -26,8 +45,8 @@ const readonly = isSectionReadonly("system");
 // ==================== 上报接收服务参数（agent 段） ====================
 
 // 最近一次加载的 agent 段基础参数（与监听无关的字段）：PUT 整体替换，
-// 保存时原样带回避免丢配置
-let agentBase = null;
+// 保存时原样带回避免丢配置（未加载时为空对象，展开结果与 null 等价）
+let agentBase: Pick<AgentConfigSection, "max_report_bytes" | "history_retention_days" | "offline_factor"> = {};
 
 const agentEnabled = ref(false);
 const agentBindHost = ref("[::]");
@@ -40,7 +59,7 @@ const agentReportOverride = ref("");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/config");
+    const result = await apiGet<SystemConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -64,8 +83,8 @@ watch(
     agentEnabled.value = Boolean(agent.enabled);
     // 磁盘上 bind_addr 为 host:port，加载时拆分到地址/端口两个输入框
     const bindMatch = (agent.bind_addr || "[::]:9100").match(/^(\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/);
-    agentBindHost.value = bindMatch ? bindMatch[1] : "[::]";
-    agentBindPort.value = bindMatch ? bindMatch[2] : "9100";
+    agentBindHost.value = bindMatch?.[1] ?? "[::]";
+    agentBindPort.value = bindMatch?.[2] ?? "9100";
     agentInterval.value = String(agent.report_interval_secs ?? 60);
     agentCollectInterval.value = String(agent.collect_interval_secs ?? 5);
     agentUsePublicUrl.value = Boolean(agent.use_public_url);
@@ -75,7 +94,7 @@ watch(
 
 const savingAgent = ref(false);
 
-async function saveAgentConfig() {
+async function saveAgentConfig(): Promise<void> {
   if (savingAgent.value) {
     return;
   }
@@ -105,7 +124,7 @@ async function saveAgentConfig() {
 
   savingAgent.value = true;
   try {
-    const agent = {
+    const agent: AgentConfigSection = {
       ...agentBase,
       enabled: agentEnabled.value,
       bind_addr: `${bindHost}:${bindPort}`,
@@ -114,7 +133,7 @@ async function saveAgentConfig() {
       use_public_url: agentUsePublicUrl.value,
       report_url_override: reportOverride
     };
-    const result = await apiPut("/api/system/config", { agent });
+    const result = await apiPut<SystemConfigPayload, { agent: AgentConfigSection }>("/api/system/config", { agent });
     if (result.success) {
       showToast(t("agent_service.save_success"), "success");
       // 接收器随服务启动，监听地址/开关保存后需重启生效
@@ -131,7 +150,7 @@ async function saveAgentConfig() {
 // ==================== Agent 分发（版本 / 注册令牌 / 配置包） ====================
 
 // 操作系统 → 可用包格式（deb/rpm 为 Linux 系统包格式，zip 为 Windows 通用包）
-const AGENT_OS_FORMATS = {
+const AGENT_OS_FORMATS: Record<string, string[]> = {
   linux: ["deb", "rpm"],
   windows: ["zip"]
 };
@@ -139,17 +158,17 @@ const AGENT_OS_FORMATS = {
 const distOs = ref("linux");
 const distFormat = ref("deb");
 
-const formats = computed(() => AGENT_OS_FORMATS[distOs.value] || []);
+const formats = computed<string[]>(() => AGENT_OS_FORMATS[distOs.value] ?? []);
 
-function onOsChange() {
+function onOsChange(): void {
   // 操作系统切换后重置格式下拉（Windows 仅 zip，单项时禁用切换）
-  distFormat.value = formats.value[0] || "";
+  distFormat.value = formats.value[0] ?? "";
 }
 
 const tokenQuery = useQuery({
   queryKey: ["enrollment-token"],
   queryFn: async () => {
-    const result = await request("/api/agents/enrollment-token");
+    const result = await request<EnrollmentTokenResponse>("/api/agents/enrollment-token");
     if (!result.success) {
       throw new Error(result.message || t("system.agent_token_load_failed"));
     }
@@ -164,7 +183,7 @@ const enrollmentToken = computed(() => tokenQuery.data.value?.enrollment_token |
 const infoQuery = useQuery({
   queryKey: ["system-info"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/info");
+    const result = await apiGet<SystemInfo>("/api/system/info");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -175,7 +194,7 @@ const infoQuery = useQuery({
 
 const distDownloading = ref(false);
 
-async function downloadConfigPackage() {
+async function downloadConfigPackage(): Promise<void> {
   if (distDownloading.value || !distFormat.value) {
     return;
   }
@@ -198,14 +217,14 @@ async function downloadConfigPackage() {
 const showRegenerateConfirm = ref(false);
 const regenerating = ref(false);
 
-async function regenerateToken() {
+async function regenerateToken(): Promise<void> {
   showRegenerateConfirm.value = false;
   if (regenerating.value) {
     return;
   }
   regenerating.value = true;
   try {
-    const result = await apiPost("/api/agents/enrollment-token", {});
+    const result = await apiPost<EnrollmentTokenResponse>("/api/agents/enrollment-token", {});
     if (result.success && result.data?.enrollment_token) {
       showToast(t("system.agent_token_regenerated"), "success");
       queryClient.invalidateQueries({ queryKey: ["enrollment-token"] });

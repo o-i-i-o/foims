@@ -20,7 +20,8 @@ fn validate_u_order(start_u: i32, end_u: i32) -> Result<(), ValidationError> {
 
 // ==================== 机位模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetPosition {
     pub id: Uuid,
     pub name: String,
@@ -32,7 +33,8 @@ pub struct CabinetPosition {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetPositionWithDetails {
     pub id: Uuid,
     pub name: String,
@@ -50,7 +52,8 @@ pub struct CabinetPositionWithDetails {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 #[validate(schema(function = "validate_position_create_u_order"))]
 pub struct CabinetPositionCreate {
     #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]
@@ -73,7 +76,8 @@ fn validate_position_create_u_order(req: &CabinetPositionCreate) -> Result<(), V
     validate_u_order(req.start_u, req.end_u)
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 #[validate(schema(function = "validate_position_update_u_order"))]
 pub struct CabinetPositionUpdate {
     #[validate(length(min = 1, max = 50, message = "server.position.validation.name_length"))]

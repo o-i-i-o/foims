@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 表头搜索弹层（移植自旧版 ui.js initThSearchPopovers 通用交互）：
  * 多根组件，须直接置于 th.th-searchable 内（与列名 span 并列，样式与
@@ -10,23 +10,26 @@
 import { onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
-const props = defineProps({
-  modelValue: { type: String, default: "" },
-  // 输入框无障碍标签（旧版按列语义传入，如 "Search name"）
-  ariaLabel: { type: String, default: "" }
-});
+const props = withDefaults(
+  defineProps<{
+    modelValue?: string;
+    /** 输入框无障碍标签（旧版按列语义传入，如 "Search name"） */
+    ariaLabel?: string;
+  }>(),
+  { modelValue: "", ariaLabel: "" }
+);
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const { t } = useI18n();
 
-const toggleEl = ref(null);
-const popoverEl = ref(null);
-const inputEl = ref(null);
+const toggleEl = ref<HTMLElement | null>(null);
+const popoverEl = ref<HTMLElement | null>(null);
+const inputEl = ref<HTMLInputElement | null>(null);
 const open = ref(false);
 
 // 全页同一时刻只展开一个弹层：登记当前展开实例的关闭函数
-let openCloser = null;
+let openCloser: (() => void) | null = null;
 
 function close() {
   if (!open.value) {
@@ -50,11 +53,21 @@ function toggle() {
   inputEl.value?.focus();
 }
 
-function onDocumentClick(event) {
+/** 输入事件：从事件目标读取输入值并经 v-model 上抛 */
+function onInput(event: Event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement) {
+    emit("update:modelValue", target.value);
+  }
+}
+
+function onDocumentClick(event: Event) {
+  const target = event.target;
   if (
     open.value &&
-    !toggleEl.value?.contains(event.target) &&
-    !popoverEl.value?.contains(event.target)
+    target instanceof Node &&
+    !toggleEl.value?.contains(target) &&
+    !popoverEl.value?.contains(target)
   ) {
     close();
   }
@@ -89,7 +102,7 @@ onBeforeUnmount(() => {
       class="form-control form-control-sm"
       :placeholder="t('common.search_placeholder')"
       :aria-label="props.ariaLabel || t('common.search_placeholder')"
-      @input="emit('update:modelValue', $event.target.value)"
+      @input="onInput"
       @keydown.esc.stop="close"
     >
   </div>

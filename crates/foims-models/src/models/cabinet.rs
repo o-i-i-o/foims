@@ -10,7 +10,8 @@ use validator::Validate;
 
 // ==================== 机柜模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Cabinet {
     pub id: Uuid,
     pub name: String,
@@ -23,7 +24,8 @@ pub struct Cabinet {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetWithNetworks {
     pub id: Uuid,
     pub name: String,
@@ -44,7 +46,8 @@ pub struct CabinetWithNetworks {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetCreate {
     #[validate(length(min = 1, max = 50, message = "server.cabinet.validation.name_length"))]
     pub name: String,
@@ -65,7 +68,8 @@ pub struct CabinetCreate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetUpdate {
     #[validate(length(min = 1, max = 50, message = "server.cabinet.validation.name_length"))]
     pub name: Option<String>,

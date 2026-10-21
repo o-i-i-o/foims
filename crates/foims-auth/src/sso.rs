@@ -387,7 +387,8 @@ pub struct SsoCallbackParams {
 
 /// POST 回调请求体：TOTP 动态码经请求体传输，不落入
 /// URL query（反代日志/浏览器历史/Referer）
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SsoCallbackPostBody {
     /// 启用 2FA 的外部账户回调重试时携带的 TOTP 动态码
     pub totp_code: Option<String>,
@@ -649,7 +650,8 @@ async fn get_ldap_config_enabled(pool: &PgPool, config_type: &str) -> bool {
 
 // ==================== 配置管理接口 ====================
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SsoConfigResponse {
     pub enabled: bool,
     pub issuer_url: String,
@@ -685,7 +687,8 @@ pub async fn get_sso_config<P: AuthProvider>(
     Ok(foims_common::ok_json(resp, "server.sso.config_retrieved"))
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateSsoConfigRequest {
     pub enabled: bool,
     #[validate(url(message = "server.sso.validation.issuer_format"))]

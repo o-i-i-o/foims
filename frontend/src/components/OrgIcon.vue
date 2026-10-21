@@ -1,22 +1,29 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 组织节点图标渲染（移植自旧版 config/org-icons.js renderOrgIcon）：
  * 已知 key 渲染带语义配色的 SVG（结构化形状，避免 v-html）；
  * 历史 emoji 值原样文本输出（文本插值自动转义）；空值用默认图标。
  */
 import { computed } from "vue";
-import { DEFAULT_ORG_ICON, ORG_ICONS, ORG_ICON_COLORS } from "../config/orgConfig.js";
+import { DEFAULT_ORG_ICON, ORG_ICONS, ORG_ICON_COLORS } from "../config/orgConfig";
+import type { OrgIconShape } from "../config/orgConfig";
 
-const props = defineProps({
-  icon: { type: String, default: "" }
-});
+const props = withDefaults(
+  defineProps<{
+    icon?: string;
+  }>(),
+  { icon: "" }
+);
 
 // 已知 key → 对应形状；空值回退默认图标；未知值（历史 emoji）走文本分支
-const shapes = computed(() => {
-  if (props.icon && ORG_ICONS[props.icon]) {
-    return ORG_ICONS[props.icon];
+const shapes = computed<OrgIconShape[] | null>(() => {
+  // 局部变量承接索引访问，命中已知 key 时返回对应形状
+  const known = props.icon ? ORG_ICONS[props.icon] : undefined;
+  if (known) {
+    return known;
   }
-  return props.icon ? null : ORG_ICONS[DEFAULT_ORG_ICON];
+  // 默认图标键在配置中恒有定义（?? null 仅用于收窄索引访问类型）
+  return props.icon ? null : (ORG_ICONS[DEFAULT_ORG_ICON] ?? null);
 });
 
 const color = computed(

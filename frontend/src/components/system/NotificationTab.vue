@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * SMTP 配置页签（移植自旧版 system-notification 分区 + systemManager.js）：
  * SMTP 服务器卡片（未配置属正常业务态）+ 通知设置卡片（方式矩阵 +
@@ -7,13 +7,27 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
+import type { Paged } from "../../types/api";
+import type { UpdateSmtpConfigRequest } from "../../types/api/generated/UpdateSmtpConfigRequest";
+import type { NotificationSettings } from "../../types/api/generated/NotificationSettings";
+import type { NotificationMethods } from "../../types/api/generated/NotificationMethods";
+import type { User } from "../../types/api/generated/User";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** SMTP 配置响应（后端未生成 ts-rs 类型，未配置属正常业务态） */
+interface SmtpConfigResponse {
+  configured?: boolean;
+  host?: string | null;
+  port?: number | null;
+  username?: string | null;
+  from?: string | null;
+  secure?: boolean;
+  has_password?: boolean;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -34,7 +48,7 @@ const smtpHasPassword = ref(false);
 const smtpQuery = useQuery({
   queryKey: ["smtp-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/smtp/config");
+    const result = await apiGet<SmtpConfigResponse>("/api/system/smtp/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -71,20 +85,21 @@ watch(
 
 const savingSmtp = ref(false);
 
-async function saveSmtpConfig() {
+async function saveSmtpConfig(): Promise<void> {
   if (savingSmtp.value) {
     return;
   }
   savingSmtp.value = true;
   try {
-    const result = await apiPut("/api/system/smtp/config", {
+    const payload: UpdateSmtpConfigRequest = {
       host: smtpHost.value,
       port: Number.parseInt(smtpPort.value, 10),
       username: smtpUsername.value,
       password: smtpPassword.value,
       from: smtpFrom.value,
       secure: secureType.value !== "none"
-    });
+    };
+    const result = await apiPut("/api/system/smtp/config", payload);
     if (result.success) {
       showToast(t("smtp.save_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["smtp-config"] });
@@ -98,7 +113,7 @@ async function saveSmtpConfig() {
 
 const testingSmtp = ref(false);
 
-async function testSmtpConnection() {
+async function testSmtpConnection(): Promise<void> {
   if (testingSmtp.value) {
     return;
   }
@@ -119,13 +134,13 @@ async function testSmtpConnection() {
 
 const macChange = ref(true);
 const agentAlert = ref(true);
-const selectedIds = ref(new Set());
+const selectedIds = ref<Set<string>>(new Set());
 
 const usersQuery = useQuery({
   queryKey: ["notification-users"],
   queryFn: async () => {
     // page_size=1000（后端上限）：默认 20/页会漏掉第 21 个及之后的可选收件人
-    const result = await apiGet("/api/users?page_size=1000");
+    const result = await apiGet<Paged<User>>("/api/users?page_size=1000");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -134,7 +149,7 @@ const usersQuery = useQuery({
   enabled: computed(() => props.active)
 });
 
-const notifyUsers = computed(() => {
+const notifyUsers = computed<User[]>(() => {
   const data = usersQuery.data.value;
   if (Array.isArray(data)) {
     return data;
@@ -145,7 +160,7 @@ const notifyUsers = computed(() => {
 const settingsQuery = useQuery({
   queryKey: ["notification-settings"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/notification/settings");
+    const result = await apiGet<NotificationSettings>("/api/system/notification/settings");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -161,14 +176,15 @@ watch(
       return;
     }
     // 通知方式开关：后端未配置或字段缺失时默认全开（与后端 serde 默认值一致）
-    const methods = settings.methods || {};
+    // （边界断言：存量数据 methods 段可能缺省，按部分字段消费）
+    const methods = (settings.methods ?? {}) as Partial<NotificationMethods>;
     macChange.value = methods.mac_change !== false;
     agentAlert.value = methods.agent_alert !== false;
     selectedIds.value = new Set(settings.email_recipients || []);
   }
 );
 
-function toggleRecipient(id) {
+function toggleRecipient(id: string): void {
   const next = new Set(selectedIds.value);
   if (next.has(id)) {
     next.delete(id);
@@ -180,20 +196,21 @@ function toggleRecipient(id) {
 
 const savingNotification = ref(false);
 
-async function saveNotificationSettings() {
+async function saveNotificationSettings(): Promise<void> {
   if (savingNotification.value) {
     return;
   }
   savingNotification.value = true;
   try {
     // 通知方式矩阵：仅邮件方式可配置，webhook 为前端占位不提交后端字段
-    const result = await apiPut("/api/system/notification/settings", {
+    const payload: NotificationSettings = {
       email_recipients: [...selectedIds.value],
       methods: {
         mac_change: macChange.value,
         agent_alert: agentAlert.value
       }
-    });
+    };
+    const result = await apiPut("/api/system/notification/settings", payload);
     if (result.success) {
       showToast(t("notification.save_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["notification-settings"] });

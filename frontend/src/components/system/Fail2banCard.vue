@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 应用层 Fail2ban 卡片（移植自旧版 fail2banManager.js）：状态徽章 +
  * 配置（findtime/max_retry/bantime）+ 已封禁/追踪 IP 表 + 手动封禁/解禁。
@@ -7,15 +7,24 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 import NavIcon from "../NavIcon.vue";
+import type { AppFail2banStatus } from "../../types/api/generated/AppFail2banStatus";
+import type { BannedIpInfo } from "../../types/api/generated/BannedIpInfo";
+import type { TrackedIpInfo } from "../../types/api/generated/TrackedIpInfo";
+import type { BanIpRequest } from "../../types/api/generated/BanIpRequest";
+import type { UnbanIpRequest } from "../../types/api/generated/UnbanIpRequest";
+import type { UpdateFail2banConfigRequest } from "../../types/api/generated/UpdateFail2banConfigRequest";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** 封禁/解封响应载荷（后端 json! 动态构造，仅取提示文案） */
+interface BanActionResponse {
+  message?: string;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -25,7 +34,7 @@ const readonly = isSectionReadonly("system");
 const statusQuery = useQuery({
   queryKey: ["fail2ban-app"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/fail2ban/app/status");
+    const result = await apiGet<AppFail2banStatus>("/api/system/fail2ban/app/status");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -34,9 +43,9 @@ const statusQuery = useQuery({
   enabled: computed(() => props.active)
 });
 
-const status = computed(() => statusQuery.data.value || {});
-const bannedIps = computed(() => (Array.isArray(status.value.banned_ips) ? status.value.banned_ips : []));
-const trackedIps = computed(() => (Array.isArray(status.value.tracked_ips) ? status.value.tracked_ips : []));
+const status = computed<Partial<AppFail2banStatus>>(() => statusQuery.data.value ?? {});
+const bannedIps = computed<BannedIpInfo[]>(() => (Array.isArray(status.value.banned_ips) ? status.value.banned_ips : []));
+const trackedIps = computed<TrackedIpInfo[]>(() => (Array.isArray(status.value.tracked_ips) ? status.value.tracked_ips : []));
 
 // ==================== 配置表单 ====================
 
@@ -52,26 +61,27 @@ watch(
       return;
     }
     enabled.value = String(Boolean(data.enabled));
-    findtime.value = data.findtime ?? "";
-    maxRetry.value = data.max_retry ?? "";
-    bantime.value = data.bantime ?? "";
+    findtime.value = String(data.findtime ?? "");
+    maxRetry.value = String(data.max_retry ?? "");
+    bantime.value = String(data.bantime ?? "");
   }
 );
 
 const saving = ref(false);
 
-async function saveConfig() {
+async function saveConfig(): Promise<void> {
   if (saving.value) {
     return;
   }
   saving.value = true;
   try {
-    const result = await apiPut("/api/system/fail2ban/app/config", {
+    const payload: UpdateFail2banConfigRequest = {
       enabled: enabled.value === "true",
       findtime: Number.parseInt(findtime.value, 10),
       max_retry: Number.parseInt(maxRetry.value, 10),
       bantime: Number.parseInt(bantime.value, 10)
-    });
+    };
+    const result = await apiPut("/api/system/fail2ban/app/config", payload);
     if (result.success) {
       showToast(t("security.config_saved"), "success");
       queryClient.invalidateQueries({ queryKey: ["fail2ban-app"] });
@@ -90,8 +100,8 @@ const manualIp = ref("");
 // 解封确认目标（表格行内与手动解封共用）
 const unbanTarget = ref("");
 
-async function doUnban(ip) {
-  const result = await apiPost("/api/system/fail2ban/app/unban", { ip });
+async function doUnban(ip: string): Promise<boolean> {
+  const result = await apiPost<BanActionResponse, UnbanIpRequest>("/api/system/fail2ban/app/unban", { ip });
   if (result.success) {
     showToast(result.data?.message || t("security.unban_success"), "success");
     queryClient.invalidateQueries({ queryKey: ["fail2ban-app"] });
@@ -101,7 +111,7 @@ async function doUnban(ip) {
   return false;
 }
 
-async function handleUnbanConfirmed() {
+async function handleUnbanConfirmed(): Promise<void> {
   const ip = unbanTarget.value;
   unbanTarget.value = "";
   await doUnban(ip);
@@ -111,13 +121,13 @@ async function handleUnbanConfirmed() {
   }
 }
 
-async function banIp() {
+async function banIp(): Promise<void> {
   const ip = manualIp.value.trim();
   if (!ip) {
     showToast(t("security.input_ip"), "warning");
     return;
   }
-  const result = await apiPost("/api/system/fail2ban/app/ban", { ip });
+  const result = await apiPost<BanActionResponse, BanIpRequest>("/api/system/fail2ban/app/ban", { ip });
   if (result.success) {
     showToast(result.data?.message || t("security.ban_success"), "success");
     manualIp.value = "";
@@ -127,7 +137,7 @@ async function banIp() {
   }
 }
 
-function unbanIp() {
+function unbanIp(): void {
   const ip = manualIp.value.trim();
   if (!ip) {
     showToast(t("security.input_ip"), "warning");

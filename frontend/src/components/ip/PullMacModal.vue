@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 拉取 MAC 弹窗（移植自旧版 modals/ip/pull-mac-modal.html + ipDetail.js）：
  * 左列 SNMP 设备复选列表（勾选一个或多个作为本次拉取设备），右列目标子网
@@ -9,19 +9,31 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
+import type { Paged } from "../../types/api";
+import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
+import type { MacPullDefaults } from "../../types/api/generated/MacPullDefaults";
+import type { Network } from "../../types/api/generated/Network";
+import type { PullIpDetailsRequest } from "../../types/api/generated/PullIpDetailsRequest";
 
-const emit = defineEmits(["close", "saved"]);
+/** 设备列表行：后端在 DeviceWithDetails 基础上注入 snmp_configured 标记；
+ * ip_address 列表响应并不返回（模板展示恒回退 "-"），保留键以兼容原模板 */
+type PullDeviceItem = DeviceWithDetails & {
+  snmp_configured: boolean;
+  ip_address?: string | null;
+};
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
 // 设备列表：page_size=1000 全量拉取（旧版 fetchOptionItems 语义）
 const devicesQuery = useQuery({
   queryKey: ["ip-pull-devices"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/devices?page_size=1000");
+  queryFn: async (): Promise<Paged<PullDeviceItem> | null> => {
+    const result = await apiGet<Paged<PullDeviceItem>>("/api/resources/devices?page_size=1000");
     if (!result.success) {
       throw new Error(result.message || t("ip.load_failed_short"));
     }
@@ -32,8 +44,8 @@ const devicesQuery = useQuery({
 // 网段列表：page_size=1000 全量拉取
 const networksQuery = useQuery({
   queryKey: ["ip-pull-networks"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/networks?page_size=1000");
+  queryFn: async (): Promise<Paged<Network> | null> => {
+    const result = await apiGet<Paged<Network>>("/api/resources/networks?page_size=1000");
     if (!result.success) {
       throw new Error(result.message || t("ip.load_failed_short"));
     }
@@ -45,8 +57,8 @@ const networksQuery = useQuery({
 // 仅不预选（旧版 console.debug + 空 defaults 语义）
 const defaultsQuery = useQuery({
   queryKey: ["ip-pull-defaults"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/ip/pull-defaults");
+  queryFn: async (): Promise<MacPullDefaults> => {
+    const result = await apiGet<MacPullDefaults | null>("/api/resources/ip/pull-defaults");
     return result.success && result.data
       ? {
           device_ids: result.data.device_ids || [],
@@ -81,7 +93,7 @@ const devicePlaceholder = computed(() => {
 const subnetId = ref("");
 
 // 勾选集合（设备数据与默认配置就绪后预选一次，与旧版渲染时预选等价）
-const checkedIds = ref(new Set());
+const checkedIds = ref(new Set<string>());
 let defaultsApplied = false;
 
 watch(
@@ -100,7 +112,7 @@ watch(
   { immediate: true }
 );
 
-function toggleDevice(id, checked) {
+function toggleDevice(id: string, checked: boolean): void {
   const next = new Set(checkedIds.value);
   if (checked) {
     next.add(id);
@@ -108,6 +120,11 @@ function toggleDevice(id, checked) {
     next.delete(id);
   }
   checkedIds.value = next;
+}
+
+/** input change 事件目标断言为复选框元素（模板 @change 内联调用） */
+function isChecked(event: Event): boolean {
+  return event.target instanceof HTMLInputElement && event.target.checked;
 }
 
 // 子网下拉数据：正常时占位选项（全部子网）+ 全量网段；
@@ -127,7 +144,7 @@ const networkOptions = computed(() => {
 });
 
 const pullMutation = useMutation({
-  mutationFn: (payload) => apiPost("/api/resources/ip/pull", payload),
+  mutationFn: (payload: PullIpDetailsRequest) => apiPost("/api/resources/ip/pull", payload),
   onSuccess: (result) => {
     if (result.success) {
       showToast(result.message || t("ip.pull_mac_success"), "success");
@@ -137,26 +154,27 @@ const pullMutation = useMutation({
       showToast(`${t("ip.pull_mac_failed")}: ${result.message}`, "error");
     }
   },
-  onError: (error) => {
+  onError: (error: Error) => {
     showToast(error.message || t("ip.pull_mac_failed"), "error");
   }
 });
 
-function submitPull() {
+function submitPull(): void {
   if (checkedIds.value.size === 0) {
     showToast(t("ip.select_device_first"), "warning");
     return;
   }
-  // 子网可缺省：空值表示全部子网，后端不做 ips.subnet_id 过滤
-  const payload = { device_ids: [...checkedIds.value] };
-  if (subnetId.value) {
-    payload.subnet_id = subnetId.value;
-  }
+  // 子网可缺省：空值表示全部子网，后端不做 ips.subnet_id 过滤；
+  // 显式 null 与原条件缺省键在后端 serde Option 下等价
+  const payload: PullIpDetailsRequest = {
+    device_ids: [...checkedIds.value],
+    subnet_id: subnetId.value || null
+  };
   pullMutation.mutate(payload);
 }
 
 // 设备显示名：名称优先，其次主机名，最后回退 id（旧版语义）
-const deviceLabel = (dev) => dev.name || dev.hostname || dev.id;
+const deviceLabel = (dev: PullDeviceItem): string => dev.name || dev.hostname || dev.id;
 </script>
 
 <template>
@@ -176,7 +194,7 @@ const deviceLabel = (dev) => dev.name || dev.hostname || dev.id;
                 :id="`pull-mac-device-${dev.id}`"
                 :value="dev.id"
                 :checked="checkedIds.has(dev.id)"
-                @change="toggleDevice(dev.id, $event.target.checked)"
+                @change="toggleDevice(dev.id, isChecked($event))"
               >
               <label :for="`pull-mac-device-${dev.id}`" class="user-info">
                 <span class="user-name">{{ deviceLabel(dev) }}</span>

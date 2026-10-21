@@ -8,7 +8,8 @@ use validator::Validate;
 
 // ==================== 日志模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct OperationLog {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
@@ -26,7 +27,8 @@ pub struct OperationLog {
 // ==================== 定时任务模型 ====================
 
 /// scheduled_tasks 表行模型（真身定义，foims-scheduler 经 re-export 复用）
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct ScheduledTask {
     pub id: Uuid,
     pub name: String,
@@ -42,7 +44,8 @@ pub struct ScheduledTask {
 }
 
 /// task_logs 表行模型（真身定义，foims-scheduler 经 re-export 复用）
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct TaskLog {
     pub id: Uuid,
     pub task_name: String,
@@ -53,7 +56,8 @@ pub struct TaskLog {
     pub duration: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct ScheduledTaskCreate {
     #[validate(length(min = 1, max = 100, message = "server.task.validation.name_length"))]
     pub name: String,
@@ -65,7 +69,8 @@ pub struct ScheduledTaskCreate {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct ScheduledTaskUpdate {
     #[validate(length(min = 1, max = 100, message = "server.task.validation.name_length"))]
     pub name: Option<String>,
@@ -77,7 +82,8 @@ pub struct ScheduledTaskUpdate {
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct LoginLog {
     pub id: Uuid,
     pub username: String,
@@ -90,7 +96,8 @@ pub struct LoginLog {
 
 // ==================== 通知模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Notification {
     pub id: Uuid,
     pub user_id: Option<Uuid>,

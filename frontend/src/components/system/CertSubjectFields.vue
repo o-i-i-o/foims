@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 证书主体五字段（CA 生成 / 证书签发弹窗共用）：defineModel 双绑
  * { organization, organizational_unit, country, state, locality }；
@@ -6,14 +6,23 @@
  */
 import { useI18n } from "vue-i18n";
 
+/** 证书主体五字段模型（CA 生成 / 证书签发弹窗共用） */
+interface CertSubjectModel {
+  organization: string;
+  organizational_unit: string;
+  country: string;
+  state: string;
+  locality: string;
+}
+
 const { t } = useI18n();
 
-const model = defineModel({ type: Object, required: true });
+const model = defineModel<CertSubjectModel>({ required: true });
 
-defineProps({
+defineProps<{
   /** 输入框 id 前缀（ca / cert），避免两个弹窗同页 id 冲突 */
-  prefix: { type: String, required: true }
-});
+  prefix: string;
+}>();
 </script>
 
 <template>

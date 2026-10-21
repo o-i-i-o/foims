@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 通用弹窗外壳（移植自旧版 utils/modalLoader.js buildModalShell +
  * components/modals.css 外壳）：遮罩 + 标题栏（含关闭按钮）+ body/footer
@@ -7,15 +7,18 @@
  */
 import { onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { useModalStack } from "../composables/useModalStack.js";
+import { useModalStack } from "../composables/useModalStack";
 
-const props = defineProps({
-  /** 标题文案；提供 #title 插槽时忽略（用于标题含富内容的弹窗） */
-  title: { type: String, default: "" },
-  size: { type: String, default: "" }
-});
+withDefaults(
+  defineProps<{
+    /** 标题文案；提供 #title 插槽时忽略（用于标题含富内容的弹窗） */
+    title?: string;
+    size?: string;
+  }>(),
+  { title: "", size: "" }
+);
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 

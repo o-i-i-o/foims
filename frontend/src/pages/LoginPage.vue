@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 登录页（移植自 web/static/js/login.js + loginView.js + authManager.js 登录相关逻辑）
  *
@@ -9,11 +9,18 @@
  */
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPost, refreshToken } from "../api/client.js";
-import { hasSession, setUser, clearSession } from "../utils/session.js";
+import { apiGet, apiPost, refreshToken } from "../api/client";
+import { hasSession, setUser, clearSession } from "../utils/session";
 import ForgotPasswordModal from "../components/ForgotPasswordModal.vue";
 import AppToast from "../components/AppToast.vue";
-import { i18n, changeLanguage } from "../i18n/index.js";
+import { i18n, changeLanguage } from "../i18n/index";
+import type { ApiResult } from "../types/api";
+import type { EmailLoginRequest } from "../types/api/generated/EmailLoginRequest";
+import type { InitStatus } from "../types/api/generated/InitStatus";
+import type { LdapLoginRequest } from "../types/api/generated/LdapLoginRequest";
+import type { TwoFactorLoginRequest } from "../types/api/generated/TwoFactorLoginRequest";
+import type { User } from "../types/api/generated/User";
+import type { UserLogin } from "../types/api/generated/UserLogin";
 
 const { t } = useI18n();
 
@@ -61,21 +68,53 @@ const currentLanguage = ref(i18n.global.locale.value);
 
 // ==================== 图形验证码（连续失败触发） ====================
 
-const captchaState = reactive({
+type CaptchaForm = "password" | "ldap";
+
+const captchaState = reactive<Record<CaptchaForm, { id: string | null; failures: number; visible: boolean; svg: string }>>({
   password: { id: null, failures: 0, visible: false, svg: "" },
   ldap: { id: null, failures: 0, visible: false, svg: "" }
 });
-const captchaInput = reactive({ password: "", ldap: "" });
+const captchaInput = reactive<Record<CaptchaForm, string>>({ password: "", ldap: "" });
 
 // ==================== 2FA 上下文 ====================
 // kind: local（密码/邮箱，POST /api/auth/login/two-factor，字段 two_factor_code）
 //       ldap（外部登录，重试原端点，字段 code + 可选验证码快照）
-let tempAuthData = null;
+type TempAuthData =
+  | { kind: "local"; username: string; password: string; remember: boolean }
+  | {
+      kind: "ldap";
+      username: string;
+      password: string;
+      remember: boolean;
+      captcha: { captchaId: string | null; captchaText: string } | null;
+    };
+
+let tempAuthData: TempAuthData | null = null;
+
+// 验证码字段仅在触发后携带（与旧版请求字节形态一致，其余场景不发 null 键）
+type LoginBody = Omit<UserLogin, "captcha_id" | "captcha_text"> & {
+  captcha_id?: string | null;
+  captcha_text?: string | null;
+};
+
+// LDAP 2FA 重试载荷：原登录字段 + 动态码 code
+type LdapTwoFactorBody = Omit<LdapLoginRequest, "captcha_id" | "captcha_text"> & {
+  captcha_id?: string | null;
+  captcha_text?: string | null;
+  code: string;
+};
+
+// 登录端点载荷：2FA 分支返回 requires_two_factor（邮箱分支附带 username），否则为用户信息
+interface LoginPayload {
+  requires_two_factor?: boolean;
+  user: User;
+  username?: string;
+}
 
 // 发送验证码倒计时
 const sendingCode = ref(false);
 const sendCodeCountdown = ref(0);
-let countdownTimer = null;
+let countdownTimer: number | undefined;
 
 // 按钮文案
 const loginSubmitLabel = computed(() =>
@@ -98,18 +137,18 @@ const sendCodeLabel = computed(() => {
 
 // ==================== 错误条与 2FA 视图切换 ====================
 
-function showError(message) {
+function showError(message: string): void {
   errorMessage.value = message;
   errorVisible.value = true;
   triggerLoginError();
 }
 
-function clearError() {
+function clearError(): void {
   errorVisible.value = false;
   // 姿态不立即复位，交由 triggerLoginError 的恢复定时器自然还原
 }
 
-const twoFactorCodeInput = ref(null);
+const twoFactorCodeInput = ref<HTMLInputElement | null>(null);
 
 function switchToTwoFactorView() {
   activeView.value = "twoFactor";
@@ -151,7 +190,7 @@ async function checkLoginStatus() {
 /** 初始化模式（config.toml [init].enabled）时跳转初始化向导 */
 async function checkInitMode() {
   try {
-    const result = await apiGet("/api/auth/init-status");
+    const result = await apiGet<InitStatus>("/api/auth/init-status");
     if (result.success && result.data?.init_enabled) {
       window.location.href = "/init_index.html";
       return true;
@@ -164,7 +203,7 @@ async function checkInitMode() {
 
 async function setupAuthMethods() {
   try {
-    const result = await apiGet("/api/auth/methods");
+    const result = await apiGet<{ email?: boolean; ldap?: boolean; sso?: boolean }>("/api/auth/methods");
     if (!result.success || !result.data) {
       return;
     }
@@ -178,7 +217,8 @@ async function setupAuthMethods() {
 
 async function setupCaDownload() {
   try {
-    const result = await apiGet("/api/certificate/ca/info");
+    // generated CaInfo 为 CA 列表项，本端点实际返回 { available } 开关，按字段收窄
+    const result = await apiGet<{ available?: boolean }>("/api/certificate/ca/info");
     if (result.success && result.data?.available) {
       caAvailable.value = true;
     }
@@ -196,7 +236,7 @@ function cleanUrlParams() {
 
 // ==================== 登录提交 ====================
 
-function handleTabClick(targetMode) {
+function handleTabClick(targetMode: string): void {
   if (submitting.value) {
     return;
   }
@@ -204,7 +244,7 @@ function handleTabClick(targetMode) {
   clearError();
 }
 
-function requireCaptchaIfNeeded(form) {
+function requireCaptchaIfNeeded(form: CaptchaForm): boolean {
   if (captchaState[form].visible && !captchaInput[form].trim()) {
     showError(t("login.captcha_required"));
     return false;
@@ -253,22 +293,23 @@ async function handleSubmit() {
   }
 }
 
-async function submitPasswordLogin(usernameValue, passwordValue, remember) {
+async function submitPasswordLogin(usernameValue: string, passwordValue: string, remember: boolean) {
   submitting.value = true;
   try {
-    const body = { username: usernameValue, password: passwordValue, remember_me: remember };
+    const body: LoginBody = { username: usernameValue, password: passwordValue, remember_me: remember };
     if (captchaState.password.visible) {
       body.captcha_id = captchaState.password.id;
       body.captcha_text = captchaInput.password.trim();
     }
-    const result = await apiPost("/api/auth/login", body, { skipAuthCheck: true });
+    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login", body, { skipAuthCheck: true });
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
         tempAuthData = { kind: "local", username: usernameValue, password: passwordValue, remember };
         switchToTwoFactorView();
       } else {
-        finishLogin(result.data, remember);
+        // 后端契约：success 必含 user 载荷，data 不会为 null
+        finishLogin(result.data as LoginPayload, remember);
       }
     } else {
       showError(formatErrorMessage(result.message));
@@ -281,10 +322,10 @@ async function submitPasswordLogin(usernameValue, passwordValue, remember) {
   }
 }
 
-async function submitEmailLogin(mail, code, remember) {
+async function submitEmailLogin(mail: string, code: string, remember: boolean) {
   submitting.value = true;
   try {
-    const result = await apiPost(
+    const result = await apiPost<LoginPayload, EmailLoginRequest>(
       "/api/auth/login/email",
       { email: mail, code, remember_me: remember },
       { skipAuthCheck: true }
@@ -292,11 +333,18 @@ async function submitEmailLogin(mail, code, remember) {
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
-        // 后端 login_with_email_code 返回了 username
-        tempAuthData = { kind: "local", username: result.data.username, password: "", remember };
+        // 后端 login_with_email_code 返回了 username（success 必含 user 载荷，
+        // 且 2FA 分支的响应载荷必带 username 字符串）
+        tempAuthData = {
+          kind: "local",
+          username: (result.data as LoginPayload & { username: string }).username,
+          password: "",
+          remember
+        };
         switchToTwoFactorView();
       } else {
-        finishLogin(result.data, remember);
+        // 后端契约：success 必含 user 载荷，data 不会为 null
+        finishLogin(result.data as LoginPayload, remember);
       }
     } else {
       showError(formatErrorMessage(result.message));
@@ -308,15 +356,15 @@ async function submitEmailLogin(mail, code, remember) {
   }
 }
 
-async function submitLdapLogin(usernameValue, passwordValue, remember) {
+async function submitLdapLogin(usernameValue: string, passwordValue: string, remember: boolean) {
   submitting.value = true;
   try {
-    const body = { username: usernameValue, password: passwordValue, remember_me: remember };
+    const body: LoginBody = { username: usernameValue, password: passwordValue, remember_me: remember };
     if (captchaState.ldap.visible) {
       body.captcha_id = captchaState.ldap.id;
       body.captcha_text = captchaInput.ldap.trim();
     }
-    const result = await apiPost("/api/auth/login/ldap", body, { skipAuthCheck: true });
+    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login/ldap", body, { skipAuthCheck: true });
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
@@ -334,7 +382,8 @@ async function submitLdapLogin(usernameValue, passwordValue, remember) {
         };
         switchToTwoFactorView();
       } else {
-        finishLogin(result.data, remember);
+        // 后端契约：success 必含 user 载荷，data 不会为 null
+        finishLogin(result.data as LoginPayload, remember);
       }
     } else {
       showError(formatErrorMessage(result.message));
@@ -364,9 +413,9 @@ async function handleTwoFactorSubmit() {
   // 失败时保留 tempAuthData 供直接重试；仅登录成功或用户主动返回登录
   // 视图时才清空，避免输错一次动态码就弹回重输全部凭证
   try {
-    let result;
+    let result: ApiResult<LoginPayload>;
     if (tempAuthData.kind === "ldap") {
-      const body = {
+      const body: LdapTwoFactorBody = {
         username: tempAuthData.username,
         password: tempAuthData.password,
         remember_me: tempAuthData.remember,
@@ -376,9 +425,9 @@ async function handleTwoFactorSubmit() {
         body.captcha_id = tempAuthData.captcha.captchaId;
         body.captcha_text = tempAuthData.captcha.captchaText;
       }
-      result = await apiPost("/api/auth/login/ldap", body, { skipAuthCheck: true });
+      result = await apiPost<LoginPayload, LdapTwoFactorBody>("/api/auth/login/ldap", body, { skipAuthCheck: true });
     } else {
-      result = await apiPost(
+      result = await apiPost<LoginPayload, TwoFactorLoginRequest>(
         "/api/auth/login/two-factor",
         {
           username: tempAuthData.username,
@@ -393,7 +442,8 @@ async function handleTwoFactorSubmit() {
     if (result.success) {
       const remember = tempAuthData.remember;
       tempAuthData = null;
-      finishLogin(result.data, remember);
+      // 后端契约：success 必含 user 载荷，data 不会为 null
+      finishLogin(result.data as LoginPayload, remember);
     } else {
       showError(result.message || t("login.two_factor_failed"));
       if (tempAuthData.kind === "ldap") {
@@ -410,29 +460,31 @@ async function handleTwoFactorSubmit() {
 }
 
 /** 建立会话并跳转主应用 */
-function finishLogin(data, remember) {
+function finishLogin(data: LoginPayload, remember: boolean): void {
   setUser(data.user, remember);
   window.location.href = "/main.html";
 }
 
-function resetToInitState() {
+function resetToInitState(): void {
   tempAuthData = null;
   activeView.value = "login";
   twoFactorCode.value = "";
   clearError();
 }
 
-function handleNetworkError(error) {
+function handleNetworkError(error: unknown): void {
   let message = t("login.network_error");
-  if (error?.message?.includes("Network")) {
+  // 抛出值不一定是 Error 实例（与 client 层同款防御），非 Error 时按默认文案
+  const raw = error instanceof Error ? error.message : "";
+  if (raw.includes("Network")) {
     message = t("login.network_failed");
-  } else if (error?.message?.includes("timeout")) {
+  } else if (raw.includes("timeout")) {
     message = t("login.timeout");
   }
   showError(message);
 }
 
-function formatErrorMessage(message) {
+function formatErrorMessage(message: string): string {
   if (!message) {
     return t("api.failed");
   }
@@ -464,9 +516,9 @@ function formatErrorMessage(message) {
 // ==================== 图形验证码 ====================
 
 /** 拉取新验证码图片（点击图片可刷新） */
-async function refreshCaptcha(form) {
+async function refreshCaptcha(form: CaptchaForm) {
   try {
-    const result = await apiGet("/api/auth/captcha");
+    const result = await apiGet<{ captcha_id: string; svg: string }>("/api/auth/captcha");
     if (result.success && result.data) {
       // 先经 DOMParser 校验确为 svg 再注入，非 SVG 内容不进入 DOM
       const doc = new DOMParser().parseFromString(result.data.svg || "", "image/svg+xml");
@@ -483,13 +535,13 @@ async function refreshCaptcha(form) {
 }
 
 /** 显示验证码并加载新图 */
-function showCaptcha(form) {
+function showCaptcha(form: CaptchaForm): void {
   captchaState[form].visible = true;
   refreshCaptcha(form);
 }
 
 /** 登录失败后的验证码联动：累计失败次数并按需显示验证码 */
-function handleCaptchaOnFailure(form, messageKey) {
+function handleCaptchaOnFailure(form: CaptchaForm, messageKey: string | undefined): void {
   const state = captchaState[form];
   state.failures += 1;
   captchaInput[form] = "";
@@ -528,7 +580,7 @@ async function handleSendLoginCode() {
   }
 }
 
-function startCountdown(seconds) {
+function startCountdown(seconds: number): void {
   // 新倒计时开始前先清掉旧 interval，避免连续触发时多个计时器叠加
   if (countdownTimer) {
     clearInterval(countdownTimer);
@@ -538,7 +590,7 @@ function startCountdown(seconds) {
     sendCodeCountdown.value -= 1;
     if (sendCodeCountdown.value <= 0) {
       clearInterval(countdownTimer);
-      countdownTimer = null;
+      countdownTimer = undefined;
       sendCodeCountdown.value = 0;
     }
   }, 1000);
@@ -551,10 +603,9 @@ function startCountdown(seconds) {
 // 角色状态类全集（挂在 .character 根上，静态几何由 login.css 状态类供给）
 const CHAR_STATES = ["error", "look-away", "show-pwd", "face-each-other", "typing"];
 
-const sceneRoot = ref(null);
-const twoFactorView = ref(null);
+const sceneRoot = ref<HTMLElement | null>(null);
 // 元素缓存：onMounted 时一次性建立，避免逐帧 getElementById
-const els = {};
+const els: Record<string, HTMLElement | null> = {};
 
 // 动画状态（模板不直接读取，无需响应式）
 let mouseX = 0;
@@ -566,12 +617,12 @@ let isLoginError = false;
 let isPurpleBlinking = false;
 let isBlackBlinking = false;
 let isPurplePeeking = false;
-let typingTimer = null;
-let errorRecoverTimer = null;
+let typingTimer: number | undefined;
+let errorRecoverTimer: number | undefined;
 let mousemoveBound = false;
 
 // 角色眨眼/偷看动画的随机调度延迟（纯动画抖动，非安全场景）
-const randomDelay = (spread, base) => Math.random() * spread + base;
+const randomDelay = (spread: number, base: number): number => Math.random() * spread + base;
 
 const CHARACTER_IDS = [
   "char-purple",
@@ -602,7 +653,7 @@ function cacheElements() {
     return;
   }
   for (const id of CHARACTER_IDS) {
-    els[id] = root.querySelector(`#${id}`);
+    els[id] = root.querySelector<HTMLElement>(`#${id}`);
   }
 }
 
@@ -610,7 +661,7 @@ function cacheElements() {
  * 角色状态判定（优先级与原实现一致）：
  * error > look-away > show-pwd > face-each-other > typing > 自由态("")
  */
-function resolveCharState(isShowingPwd, isLookingAway) {
+function resolveCharState(isShowingPwd: boolean, isLookingAway: boolean): string {
   if (isLoginError) {
     return "error";
   }
@@ -631,16 +682,17 @@ function resolveCharState(isShowingPwd, isLookingAway) {
 
 // 清除元素上的行内样式属性：进入 CSS 状态类管辖的静态分支前调用，
 // 防止此前鼠标跟随帧写下的内联值压过类规则
-function clearInlineStyles(el, ...props) {
+function clearInlineStyles(el: HTMLElement | null | undefined, ...props: string[]): void {
   if (!el) {
     return;
   }
   for (const prop of props) {
-    el.style[prop] = "";
+    // CSSStyleDeclaration 无字符串索引签名，按行内样式键名断言写入
+    (el.style as unknown as Record<string, string>)[prop] = "";
   }
 }
 
-function applyStateClasses(el, state, extra = {}) {
+function applyStateClasses(el: HTMLElement | null | undefined, state: string, extra: Record<string, boolean> = {}): void {
   if (!el) {
     return;
   }
@@ -652,7 +704,14 @@ function applyStateClasses(el, state, extra = {}) {
   }
 }
 
-function calcPosition(el) {
+/** 姿态计算结果：视线偏移与身体倾斜 */
+interface CharPos {
+  faceX: number;
+  faceY: number;
+  bodySkew: number;
+}
+
+function calcPosition(el: HTMLElement): CharPos {
   const rect = el.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 3;
@@ -664,7 +723,7 @@ function calcPosition(el) {
   return { faceX, faceY, bodySkew };
 }
 
-function calcPupilOffset(el, maxDist) {
+function calcPupilOffset(el: HTMLElement, maxDist: number): { x: number; y: number } {
   const rect = el.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
@@ -675,7 +734,14 @@ function calcPupilOffset(el, maxDist) {
   return { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist };
 }
 
-function setFollowEyes(prefix, pos, eyeOffsetX, eyeOffsetY, pupilMaxDist, pupilRefEl) {
+function setFollowEyes(
+  prefix: string,
+  pos: CharPos,
+  eyeOffsetX: number,
+  eyeOffsetY: number,
+  pupilMaxDist: number,
+  pupilRefEl?: HTMLElement | null
+): void {
   const eyes = els[`${prefix}-eyes`];
   const pupilL = els[`${prefix}-pupil-l`];
   const pupilR = els[`${prefix}-pupil-r`];
@@ -689,15 +755,18 @@ function setFollowEyes(prefix, pos, eyeOffsetX, eyeOffsetY, pupilMaxDist, pupilR
   pupilR.style.transform = `translate(${po.x}px, ${po.y}px)`;
 }
 
-function clearFollowEyes(prefix) {
+function clearFollowEyes(prefix: string): void {
   clearInlineStyles(els[`${prefix}-eyes`], "left", "top");
   clearInlineStyles(els[`${prefix}-pupil-l`], "transform");
   clearInlineStyles(els[`${prefix}-pupil-r`], "transform");
 }
 
 // 紫色角色：身体倾斜 + 眼睛/瞳孔（含眨眼与密码可见时的偷看）
-function updatePurpleCharacter(isShowingPwd, isLookingAway, pos) {
+function updatePurpleCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const purple = els["char-purple"];
+  if (!purple) {
+    return;
+  }
   const state = resolveCharState(isShowingPwd, isLookingAway);
   applyStateClasses(purple, state, {
     peek: isShowingPwd && isPurplePeeking,
@@ -722,8 +791,11 @@ function updatePurpleCharacter(isShowingPwd, isLookingAway, pos) {
 }
 
 // 黑色角色：身体倾斜 + 眼睛/瞳孔（含眨眼）
-function updateBlackCharacter(isShowingPwd, isLookingAway, pos) {
+function updateBlackCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const black = els["char-black"];
+  if (!black) {
+    return;
+  }
   const state = resolveCharState(isShowingPwd, isLookingAway);
   applyStateClasses(black, state, { blink: isBlackBlinking });
 
@@ -745,8 +817,11 @@ function updateBlackCharacter(isShowingPwd, isLookingAway, pos) {
 }
 
 // 橙色角色：身体倾斜 + 眼睛/瞳孔 + 失败时的难过嘴
-function updateOrangeCharacter(isShowingPwd, isLookingAway, pos) {
+function updateOrangeCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const orange = els["char-orange"];
+  if (!orange) {
+    return;
+  }
   const state = resolveCharState(isShowingPwd, isLookingAway);
   applyStateClasses(orange, state);
 
@@ -773,8 +848,11 @@ function updateOrangeCharacter(isShowingPwd, isLookingAway, pos) {
 }
 
 // 黄色角色：身体倾斜 + 眼睛/瞳孔/嘴
-function updateYellowCharacter(isShowingPwd, isLookingAway, pos) {
+function updateYellowCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const yellow = els["char-yellow"];
+  if (!yellow) {
+    return;
+  }
   const state = resolveCharState(isShowingPwd, isLookingAway);
   applyStateClasses(yellow, state);
 
@@ -798,8 +876,12 @@ function updateYellowCharacter(isShowingPwd, isLookingAway, pos) {
 }
 
 // 更新所有角色姿态
-function updateCharacters() {
-  if (!els["char-purple"] || !els["char-black"] || !els["char-orange"] || !els["char-yellow"]) {
+function updateCharacters(): void {
+  const purple = els["char-purple"];
+  const black = els["char-black"];
+  const orange = els["char-orange"];
+  const yellow = els["char-yellow"];
+  if (!purple || !black || !orange || !yellow) {
     return;
   }
 
@@ -808,10 +890,10 @@ function updateCharacters() {
   // 密码框聚焦且密码不可见时，角色看向别处
   const isLookingAway = isPasswordFocused && !showPassword.value;
 
-  const purplePos = calcPosition(els["char-purple"]);
-  const blackPos = calcPosition(els["char-black"]);
-  const orangePos = calcPosition(els["char-orange"]);
-  const yellowPos = calcPosition(els["char-yellow"]);
+  const purplePos = calcPosition(purple);
+  const blackPos = calcPosition(black);
+  const orangePos = calcPosition(orange);
+  const yellowPos = calcPosition(yellow);
 
   updatePurpleCharacter(isShowingPwd, isLookingAway, purplePos);
   updateBlackCharacter(isShowingPwd, isLookingAway, blackPos);
@@ -819,7 +901,7 @@ function updateCharacters() {
   updateYellowCharacter(isShowingPwd, isLookingAway, yellowPos);
 }
 
-function setTyping(typing) {
+function setTyping(typing: boolean): void {
   isTyping = typing;
   if (typing) {
     isLookingAtEachOther = true;
@@ -834,7 +916,7 @@ function setTyping(typing) {
   updateCharacters();
 }
 
-function scheduleBlink(which) {
+function scheduleBlink(which: "purple" | "black"): void {
   setTimeout(() => {
     if (which === "purple") {
       isPurpleBlinking = true;
@@ -855,7 +937,7 @@ function scheduleBlink(which) {
 }
 
 // 密码可见时，紫色角色偶尔偷看
-function schedulePeek() {
+function schedulePeek(): void {
   if (password.value.length > 0 && showPassword.value) {
     setTimeout(() => {
       if (password.value.length > 0 && showPassword.value) {
@@ -871,7 +953,7 @@ function schedulePeek() {
   }
 }
 
-function togglePasswordVisible() {
+function togglePasswordVisible(): void {
   showPassword.value = !showPassword.value;
   updateCharacters();
   // 密码可见时，可能触发紫色角色偷看
@@ -881,10 +963,10 @@ function togglePasswordVisible() {
 }
 
 // 触发登录失败动画：角色摇头 + 难过嘴
-function triggerLoginError() {
+function triggerLoginError(): void {
   if (errorRecoverTimer) {
     clearTimeout(errorRecoverTimer);
-    errorRecoverTimer = null;
+    errorRecoverTimer = undefined;
   }
 
   const shakeIds = [
@@ -895,7 +977,7 @@ function triggerLoginError() {
     "yellow-mouth",
     "orange-mouth"
   ];
-  const shakeEls = shakeIds.map((id) => els[id]).filter(Boolean);
+  const shakeEls = shakeIds.map((id) => els[id]).filter((el): el is HTMLElement => el !== null);
 
   // 重置 shake 动画（移除 class → 强制 reflow → 重新添加）
   shakeEls.forEach((el) => {
@@ -921,7 +1003,7 @@ function triggerLoginError() {
   // 2.5 秒后自动恢复（仅恢复姿态；错误提示由 clearError 控制）
   errorRecoverTimer = setTimeout(() => {
     isLoginError = false;
-    errorRecoverTimer = null;
+    errorRecoverTimer = undefined;
     els["orange-mouth"]?.classList.remove("visible");
     shakeEls.forEach((el) => {
       el.classList.remove("shake-head");
@@ -932,7 +1014,7 @@ function triggerLoginError() {
 
 // ==================== 生命周期 ====================
 
-function onMouseMove(e) {
+function onMouseMove(e: MouseEvent): void {
   mouseX = e.clientX;
   mouseY = e.clientY;
   if (!isTyping && !isLoginError) {

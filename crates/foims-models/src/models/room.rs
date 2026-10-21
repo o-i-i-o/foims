@@ -10,7 +10,8 @@ use validator::Validate;
 
 // ==================== 房间模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Room {
     pub id: Uuid,
     pub name: String,
@@ -23,7 +24,8 @@ pub struct Room {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct RoomWithNetworks {
     pub id: Uuid,
     pub name: String,
@@ -47,7 +49,8 @@ pub struct RoomWithNetworks {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct WorkstationBrief {
     pub id: Uuid,
     pub name: String,
@@ -56,14 +59,16 @@ pub struct WorkstationBrief {
     pub manager_employee_id: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct CabinetBrief {
     pub id: Uuid,
     pub name: String,
     pub capacity: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct PositionBrief {
     pub id: Uuid,
     pub name: String,
@@ -72,7 +77,8 @@ pub struct PositionBrief {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct RoomCreate {
     #[validate(length(min = 1, max = 50, message = "server.room.validation.name_length"))]
     pub name: String,
@@ -93,7 +99,8 @@ pub struct RoomCreate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct RoomUpdate {
     #[validate(length(min = 1, max = 50, message = "server.room.validation.name_length"))]
     pub name: Option<String>,

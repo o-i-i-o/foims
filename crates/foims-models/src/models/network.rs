@@ -8,7 +8,8 @@ use validator::{Validate, ValidationError};
 
 // ==================== 网络区域模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct NetworkRegion {
     pub id: Uuid,
     pub name: String,
@@ -21,7 +22,8 @@ pub struct NetworkRegion {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct NetworkRegionCreate {
     #[validate(length(
         min = 1,
@@ -35,7 +37,8 @@ pub struct NetworkRegionCreate {
     pub ipv6_cidrs: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct NetworkRegionUpdate {
     #[validate(length(
         min = 1,
@@ -51,7 +54,8 @@ pub struct NetworkRegionUpdate {
 
 // ==================== 子网模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Network {
     pub id: Uuid,
     pub name: String,
@@ -70,7 +74,8 @@ pub struct Network {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct NetworkInfo {
     pub id: Uuid,
     pub name: String,
@@ -80,7 +85,8 @@ pub struct NetworkInfo {
     pub ipv6_cidr: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 #[validate(schema(function = "validate_network_create"))]
 pub struct NetworkCreate {
     #[validate(length(min = 1, max = 50, message = "server.network.validation.name_length"))]
@@ -112,7 +118,8 @@ pub struct NetworkCreate {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 #[validate(schema(function = "validate_network_update"))]
 pub struct NetworkUpdate {
     #[validate(length(min = 1, max = 50, message = "server.network.validation.name_length"))]

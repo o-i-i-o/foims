@@ -72,7 +72,8 @@ pub(crate) fn cleanup_email_send_records() {
 
 /// 邮箱验证码登录请求：在 foims-models 基础模型上扩展图形验证码字段
 ///（连续失败达到阈值后必填；基础模型跨 crate 共享，字段经 flatten 组合）
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct EmailCodeLoginRequest {
     #[serde(flatten)]
     pub base: EmailLoginRequest,

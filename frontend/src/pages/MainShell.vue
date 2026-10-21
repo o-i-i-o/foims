@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 主界面壳（移植自旧版 web/static/main.html 骨架 + navigation.js +
  * authManager.js 壳层逻辑）：侧边栏（收起/展开、RBAC 菜单隐藏、用户信息、
@@ -10,11 +10,11 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink, RouterView } from "vue-router";
-import { apiGet, redirectToLogin } from "../api/client.js";
-import { useAuthStore } from "../stores/auth.js";
-import { NAV_ITEMS } from "../router/index.js";
-import { initTooltip } from "../composables/useTooltip.js";
-import { usePageTimeout } from "../composables/usePageTimeout.js";
+import { apiGet, redirectToLogin } from "../api/client";
+import { useAuthStore } from "../stores/auth";
+import { NAV_ITEMS } from "../router/index";
+import { initTooltip } from "../composables/useTooltip";
+import { usePageTimeout } from "../composables/usePageTimeout";
 import AppToast from "../components/AppToast.vue";
 import ChangePasswordModal from "../components/ChangePasswordModal.vue";
 import LanguageMenu from "../components/LanguageMenu.vue";
@@ -27,7 +27,7 @@ const auth = useAuthStore();
 
 const SIDEBAR_COLLAPSE_KEY = "sidebar-collapsed";
 
-function readCollapsedState() {
+function readCollapsedState(): boolean {
   try {
     return localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1";
   } catch {
@@ -37,7 +37,7 @@ function readCollapsedState() {
 
 const collapsed = ref(readCollapsedState());
 
-function applyCollapsedState(value) {
+function applyCollapsedState(value: boolean) {
   collapsed.value = value;
   // 收起样式由 body.sidebar-collapsed 驱动（布局层 CSS 按旧版结构编写）
   document.body.classList.toggle("sidebar-collapsed", value);

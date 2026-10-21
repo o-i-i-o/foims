@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 初始化向导（移植自旧版 web/static/js/modules/foims_init/ + init_index.html）：
  * 五步流程 PostgreSQL 检查 → 数据库配置 → 数据库初始化 → 管理员账户 → 完成。
@@ -12,9 +12,14 @@
  */
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPost } from "../api/client.js";
-import { changeLanguage, i18n } from "../i18n/index.js";
-import { showToast } from "../composables/useToast.js";
+import { apiGet, apiPost } from "../api/client";
+import { changeLanguage, i18n } from "../i18n/index";
+import { showToast } from "../composables/useToast";
+import type { ApiResult } from "../types/api";
+import type { CreateDatabaseRequest } from "../types/api/generated/CreateDatabaseRequest";
+import type { CreateDatabaseResponse } from "../types/api/generated/CreateDatabaseResponse";
+import type { DatabaseSetupRequest } from "../types/api/generated/DatabaseSetupRequest";
+import type { InitRequest } from "../types/api/generated/InitRequest";
 import AppToast from "../components/AppToast.vue";
 
 const { t } = useI18n();
@@ -23,7 +28,7 @@ const { t } = useI18n();
 const currentStep = ref(1);
 const initMode = ref("create");
 
-function goToStep(stepNum) {
+function goToStep(stepNum: number): void {
   currentStep.value = stepNum;
 }
 
@@ -40,8 +45,8 @@ const hideLoading = () => {
 // 页内错误条：5 秒自动隐藏，新提示重置计时（与旧版 showError 语义一致）
 const errorMessage = ref("");
 const errorVisible = ref(false);
-let errorHideTimer = null;
-function showError(message) {
+let errorHideTimer: number | undefined;
+function showError(message: string): void {
   errorMessage.value = message;
   errorVisible.value = true;
   if (errorHideTimer) {
@@ -49,20 +54,19 @@ function showError(message) {
   }
   errorHideTimer = setTimeout(() => {
     errorVisible.value = false;
-    errorHideTimer = null;
+    errorHideTimer = undefined;
   }, 5000);
 }
 
 // 各检查步骤共用的兜底错误文案键（与旧版 T_KEY_* 一致）
 const unknownError = computed(() => t("init.unknown_error"));
-const networkError = computed(() => t("init.network_error"));
 
 /**
  * 翻译服务端返回的 error 字段（后端约定为 i18n key）。
  * 键在字典中缺失时 t() 原样返回 key，此时回退到通用未知错误文案，
  * 避免向用户展示裸键名。
  */
-function translateErrorField(errorKey) {
+function translateErrorField(errorKey: string | undefined): string {
   if (!errorKey) {
     return unknownError.value;
   }
@@ -89,19 +93,29 @@ const pgError = ref("");
 const pgInstalled = ref(false);
 const pgRunning = ref(false);
 
+// /api/init/check-pgsql 顶层响应结构（非统一 ApiResult 信封，按旧契约收窄）
+interface PgCheckResponse {
+  installed?: boolean;
+  running?: boolean;
+  message?: string;
+  error?: string;
+}
+
 async function checkPostgreSQL() {
   showLoading();
   pgCheck.value = "loading";
-  const result = await apiGet("/api/init/check-pgsql");
+  const result = await apiGet<unknown>("/api/init/check-pgsql");
   hideLoading();
-  if (result.installed && result.running) {
+  // 该端点返回顶层结构而非统一信封（与旧版契约一致），按字段形状收窄
+  const envelope = result as PgCheckResponse;
+  if (envelope.installed && envelope.running) {
     pgCheck.value = "success";
-    pgMessage.value = result.message || t("init.pg_connected");
+    pgMessage.value = envelope.message || t("init.pg_connected");
   } else {
     pgCheck.value = "error";
-    pgInstalled.value = Boolean(result.installed);
-    pgRunning.value = Boolean(result.running);
-    pgError.value = translateErrorField(result.error);
+    pgInstalled.value = Boolean(envelope.installed);
+    pgRunning.value = Boolean(envelope.running);
+    pgError.value = translateErrorField(envelope.error);
   }
 }
 
@@ -115,7 +129,7 @@ const dbConfig = reactive({
   password: ""
 });
 // 连接测试状态反馈块：null 隐藏 | { detail }
-const dbConfigStatus = ref(null);
+const dbConfigStatus = ref<{ detail: string } | null>(null);
 const dbConfigSubmitting = ref(false);
 
 /**
@@ -127,7 +141,7 @@ async function submitDbConfig() {
   if (dbConfigSubmitting.value) {
     return;
   }
-  const payload = {
+  const payload: DatabaseSetupRequest = {
     type: "pgsql",
     host: dbConfig.host.trim(),
     port: dbConfig.port.trim(),
@@ -141,7 +155,7 @@ async function submitDbConfig() {
   }
   dbConfigSubmitting.value = true;
   showLoading();
-  const result = await apiPost("/api/init/db/test-connection", payload);
+  const result = await apiPost<unknown, DatabaseSetupRequest>("/api/init/db/test-connection", payload);
   hideLoading();
   dbConfigSubmitting.value = false;
   if (result.success) {
@@ -156,15 +170,23 @@ async function submitDbConfig() {
 }
 
 // ==================== 第 3 步：数据库初始化 ====================
-const dbStatus = ref(null); // { connected, has_data, required_tables_exist, error }
-const sqlFile = ref(null);
+// /api/init/db-status 载荷：连接与建表状态（error 为后端 i18n key）
+interface InitDbStatus {
+  connected: boolean;
+  has_data: boolean;
+  required_tables_exist: boolean;
+  error?: string | null;
+}
+
+const dbStatus = ref<InitDbStatus | null>(null);
+const sqlFile = ref<File | null>(null);
 const verificationStep2 = ref("");
 const initSubmitting = ref(false);
 
 /** 检查数据库连接与表结构状态，按四分支渲染状态块（下一步在全部分支均可用） */
 async function checkDatabaseStatus() {
   showLoading();
-  const result = await apiGet("/api/init/db-status");
+  const result = await apiGet<InitDbStatus>("/api/init/db-status");
   hideLoading();
   // success 但 data 为 null 视同失败：不读取空对象
   if (result.success && result.data) {
@@ -189,8 +211,9 @@ const dbStatusKind = computed(() => {
   return "success";
 });
 
-function onSqlFileChange(e) {
-  sqlFile.value = e.target.files[0] || null;
+function onSqlFileChange(e: Event): void {
+  const input = e.target as HTMLInputElement;
+  sqlFile.value = input.files?.[0] ?? null;
 }
 
 /** 第三步表单提交：根据初始化方式新建或导入数据库（导入含 .sql 备份文件分支） */
@@ -204,15 +227,17 @@ async function submitInitMode() {
   }
   initSubmitting.value = true;
   showLoading();
-  let result;
+  let result: ApiResult<CreateDatabaseResponse>;
   if (initMode.value === "import" && sqlFile.value) {
     const formData = new FormData();
     formData.append("verification", verificationStep2.value);
     formData.append("sql_file", sqlFile.value);
-    result = await apiPost("/api/init/db/import-file", formData);
+    result = await apiPost<CreateDatabaseResponse, FormData>("/api/init/db/import-file", formData);
   } else {
     const endpoint = initMode.value === "create" ? "/api/init/db/create" : "/api/init/db/import";
-    result = await apiPost(endpoint, { verification: verificationStep2.value });
+    result = await apiPost<CreateDatabaseResponse, CreateDatabaseRequest>(endpoint, {
+      verification: verificationStep2.value
+    });
   }
   hideLoading();
   initSubmitting.value = false;
@@ -249,7 +274,7 @@ async function submitAdmin() {
   }
   adminSubmitting.value = true;
   showLoading();
-  const result = await apiPost("/api/init", {
+  const result = await apiPost<unknown, InitRequest>("/api/init", {
     username: admin.username,
     password: admin.password,
     email: admin.email,
@@ -272,7 +297,7 @@ async function submitAdmin() {
 const manualRestart = ref(false);
 
 async function handleRestart() {
-  const restartResult = await apiPost("/api/init/restart");
+  const restartResult = await apiPost<{ restart_mode?: string }>("/api/init/restart");
   if (restartResult?.data?.restart_mode === "manual") {
     manualRestart.value = true;
     return;
@@ -288,15 +313,15 @@ async function handleRestart() {
 async function waitForBackendRestart() {
   const maxAttempts = 30;
   // 递归轮询替代 for+await（no-await-in-loop）：探测间隔 1s，最多 30 次
-  const probe = async (attempt) => {
+  const probe = async (attempt: number): Promise<void> => {
     try {
       const response = await fetch("/api/auth/init-status", {
         headers: { "Content-Type": "application/json" },
         cache: "no-store"
       });
       if (response.ok) {
-        const result = await response.json();
-        if (result?.success) {
+        const result: unknown = await response.json();
+        if ((result as { success?: unknown } | null)?.success) {
           window.location.href = "/main.html";
           return;
         }
@@ -309,7 +334,7 @@ async function waitForBackendRestart() {
       window.location.href = "/main.html";
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
     return probe(attempt + 1);
   };
   return probe(1);

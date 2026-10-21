@@ -821,7 +821,8 @@ const MAC_PULL_CONFIG_TYPE: &str = "mac_pull";
 const MAC_PULL_DEFAULTS_KEY: &str = "default_pull";
 
 /// 默认拉取配置：设备集合（1..=100）与子网选择（None 表示全部子网）
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, ts_rs::TS)]
+#[ts(export)]
 pub struct MacPullDefaults {
     #[serde(default)]
     pub device_ids: Vec<Uuid>,

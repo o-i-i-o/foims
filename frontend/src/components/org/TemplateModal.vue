@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 层级模板管理弹窗（移植自旧版 openTemplateManagement + org-template-modal
  * + openTemplateEditor + org-template-editor-modal）：模板列表（名称/层级
@@ -9,19 +9,20 @@
 import { computed, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { getLevelPaths } from "../../config/orgConfig.js";
+import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { getLevelPaths } from "../../config/orgConfig";
 import NavIcon from "../NavIcon.vue";
 import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
 import TemplateTypeNode from "./TemplateTypeNode.vue";
+import type { ApiResult } from "../../types/api";
+import type { OrgTemplateCreate } from "../../types/api/generated/OrgTemplateCreate";
+import type { OrgTemplateSummary } from "../../types/api/generated/OrgTemplateSummary";
 
-const props = defineProps({
-  open: { type: Boolean, default: false }
-});
+const props = withDefaults(defineProps<{ open?: boolean }>(), { open: false });
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -30,12 +31,13 @@ const queryClient = useQueryClient();
 
 const templatesQuery = useQuery({
   queryKey: ["org-templates"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/org-templates");
+  queryFn: async (): Promise<OrgTemplateSummary[]> => {
+    const result = await apiGet<{ items?: OrgTemplateSummary[] }>("/api/resources/org-templates");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    return Array.isArray(result.data?.items) ? result.data.items : [];
+    // 原实现以 Array.isArray 防御非数组响应；类型保证下与 ?? [] 等价
+    return result.data?.items ?? [];
   },
   enabled: computed(() => props.open)
 });
@@ -45,34 +47,53 @@ const templatesQuery = useQuery({
 // 节点唯一标识（图标面板开合按 uid 定位）
 let uidSeq = 0;
 
-function createTypeNode(type = "", icon = "") {
+/** 编辑器层级树节点（与 TemplateTypeNode 的节点形状同构） */
+interface TplTypeNode {
+  uid: number;
+  type: string;
+  icon: string;
+  children: TplTypeNode[];
+}
+
+function createTypeNode(type = "", icon = ""): TplTypeNode {
   uidSeq += 1;
   return { uid: uidSeq, type, icon, children: [] };
 }
 
-/** 将 levels 映射重建为树形数据（icons 可选） */
-function buildTreeFromMapping(levels, icons = {}) {
-  const rootType = levels && typeof levels === "object" && !Array.isArray(levels)
-    ? Object.keys(levels).find((key) => {
-        const allChildren = new Set(Object.values(levels).flat());
-        return !allChildren.has(key);
-      })
-    : null;
+/** 将 levels 映射重建为树形数据（icons 为类型名 → 图标 key 映射，可缺省） */
+function buildTreeFromMapping(levels: unknown, icons: unknown = {}): TplTypeNode[] {
+  // 已校验为非数组对象，按映射形状消费（与 orgConfig.findRootType 同口径）
+  const levelMap =
+    levels && typeof levels === "object" && !Array.isArray(levels)
+      ? (levels as Record<string, unknown>)
+      : null;
+  // 全体子级引用集合：未被引用的 key 即根类型（原实现在 find 回调内重算，幂等故上提）
+  const allChildren = new Set<unknown>(levelMap ? Object.values(levelMap).flat() : []);
+  const rootType = levelMap ? Object.keys(levelMap).find((key) => !allChildren.has(key)) : null;
   if (!rootType) {
     return [createTypeNode()];
   }
-  function build(type, isRoot) {
-    const node = createTypeNode(type, icons[type] || "");
-    (levels[type] || []).forEach((childType) => {
-      node.children.push(build(childType, false));
+  // icons 同样按映射形状消费（调用侧已将空值兜为空对象）
+  const iconMap =
+    icons && typeof icons === "object" && !Array.isArray(icons)
+      ? (icons as Record<string, string>)
+      : {};
+  function build(type: string): TplTypeNode {
+    const node = createTypeNode(type, iconMap[type] || "");
+    const children = levelMap?.[type];
+    (Array.isArray(children) ? children : []).forEach((childType) => {
+      node.children.push(build(childType));
     });
     return node;
   }
-  return [build(rootType, true)];
+  return [build(rootType)];
 }
 
 /** 收集 levels 映射（空类型名节点跳过，子级取已填写的子类型名） */
-function collectLevels(nodes, map = {}) {
+function collectLevels(
+  nodes: TplTypeNode[],
+  map: Record<string, string[]> = {}
+): Record<string, string[]> {
   for (const node of nodes) {
     if (!node.type) {
       continue;
@@ -84,7 +105,10 @@ function collectLevels(nodes, map = {}) {
 }
 
 /** 收集图标映射（含默认图标，与旧版 collectIcons 一致） */
-function collectIcons(nodes, icons = {}) {
+function collectIcons(
+  nodes: TplTypeNode[],
+  icons: Record<string, string> = {}
+): Record<string, string> {
   for (const node of nodes) {
     if (node.type) {
       icons[node.type] = node.icon;
@@ -95,10 +119,10 @@ function collectIcons(nodes, icons = {}) {
 }
 
 /** 校验类型名全局唯一（collectMapping 以类型名作 key：同名静默覆盖会丢失子级） */
-function findDuplicateTypeName(nodes) {
-  const seen = new Set();
-  let duplicate = null;
-  function walk(list) {
+function findDuplicateTypeName(nodes: TplTypeNode[]): string | null {
+  const seen = new Set<string>();
+  let duplicate: string | null = null;
+  function walk(list: TplTypeNode[]): void {
     for (const node of list) {
       if (duplicate) {
         return;
@@ -120,7 +144,25 @@ function findDuplicateTypeName(nodes) {
 // ==================== 编辑器状态 ====================
 
 const editorOpen = ref(false);
-const editor = reactive({ id: "", name: "", description: "", quickFill: "", nodes: [], activePicker: null });
+
+/** 编辑器状态：nodes 为层级树，activePicker 为图标面板打开的节点 uid */
+interface EditorState {
+  id: string;
+  name: string;
+  description: string;
+  quickFill: string;
+  nodes: TplTypeNode[];
+  activePicker: number | null;
+}
+
+const editor = reactive<EditorState>({
+  id: "",
+  name: "",
+  description: "",
+  quickFill: "",
+  nodes: [],
+  activePicker: null
+});
 
 provide("orgTplEditorCtx", {
   activePicker: computed({
@@ -129,12 +171,12 @@ provide("orgTplEditorCtx", {
       editor.activePicker = value;
     }
   }),
-  addChild(parent) {
+  addChild(parent: TplTypeNode): void {
     parent.children.push(createTypeNode());
   },
-  removeNode(target) {
+  removeNode(target: TplTypeNode): void {
     // 从全树定位包含目标节点的子级数组并移除
-    function walk(list) {
+    function walk(list: TplTypeNode[]): boolean {
       const index = list.indexOf(target);
       if (index !== -1) {
         list.splice(index, 1);
@@ -147,7 +189,7 @@ provide("orgTplEditorCtx", {
 });
 
 // 点击编辑器任意位置外区域关闭图标面板
-function onDocumentClick() {
+function onDocumentClick(): void {
   editor.activePicker = null;
 }
 
@@ -159,7 +201,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", onDocumentClick);
 });
 
-function openEditor(template = null) {
+function openEditor(template: OrgTemplateSummary | null = null): void {
   editor.id = template?.id ?? "";
   editor.name = template?.name ?? "";
   editor.description = template?.description ?? "";
@@ -190,7 +232,7 @@ const saveMutation = useMutation({
   mutationFn: () => {
     const levels = collectLevels(editor.nodes);
     const icons = collectIcons(editor.nodes);
-    const data = {
+    const data: OrgTemplateCreate = {
       name: editor.name.trim(),
       levels,
       icons: Object.keys(icons).length > 0 ? icons : null,
@@ -214,7 +256,7 @@ const saveMutation = useMutation({
   }
 });
 
-function handleSubmit() {
+function handleSubmit(): void {
   if (!editor.name.trim()) {
     showToast(t("org_template.name_required"), "warning");
     return;
@@ -232,10 +274,13 @@ function handleSubmit() {
   saveMutation.mutate();
 }
 
-const deletingTemplate = ref(null);
+const deletingTemplate = ref<OrgTemplateSummary | null>(null);
 
 const deleteMutation = useMutation({
-  mutationFn: (template) => apiDelete(`/api/resources/org-templates/${template.id}`),
+  // TVariables 仅取 { id }：OrgTemplateSummary 携带递归 JsonValue（levels/icons），
+  // 参与 vue-query 泛型自动展开会触发 TS2589 实例化过深
+  mutationFn: (template: { id: string }): Promise<ApiResult<unknown>> =>
+    apiDelete(`/api/resources/org-templates/${template.id}`),
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("org_template.delete_success"), "success");
@@ -247,11 +292,11 @@ const deleteMutation = useMutation({
   }
 });
 
-function handleDeleteConfirmed() {
+function handleDeleteConfirmed(): void {
   const template = deletingTemplate.value;
   deletingTemplate.value = null;
   if (template) {
-    deleteMutation.mutate(template);
+    deleteMutation.mutate({ id: template.id });
   }
 }
 

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 统一设备端口管理弹窗（移植自旧版 modals/device/unified-device-ports-modal.html +
  * unifiedDevicePorts.js manageUnifiedDevicePorts/renderAllPortGroups/startSnmpSync/
@@ -15,19 +15,32 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
-import NavIcon from "../NavIcon.vue";
 import PortConflictModal from "./PortConflictModal.vue";
 import PortDetailModal from "./PortDetailModal.vue";
+import type { DeviceInterface } from "../../types/api/generated/DeviceInterface";
+import type { DeviceInterfaceCreate } from "../../types/api/generated/DeviceInterfaceCreate";
+import type { DeviceInterfaceUpdate } from "../../types/api/generated/DeviceInterfaceUpdate";
+import type { IpDetail } from "../../types/api/generated/IpDetail";
+import type { NetworkCard } from "../../types/api/generated/NetworkCard";
+import type { SnmpPort } from "../../types/api/generated/SnmpPort";
 
-const props = defineProps({
-  deviceId: { type: String, required: true },
-  deviceName: { type: String, default: "" }
-});
+/** GET /devices/{id}/nics 的网口行（含 IP 明细） */
+type NicPort = DeviceInterface & { ips?: IpDetail[] };
+/** GET /devices/{id}/nics 的网卡行 */
+type NicCard = NetworkCard & { ports?: NicPort[] };
 
-const emit = defineEmits(["close"]);
+const props = withDefaults(
+  defineProps<{
+    deviceId: string;
+    deviceName?: string;
+  }>(),
+  { deviceName: "" }
+);
+
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -36,8 +49,10 @@ const queryClient = useQueryClient();
 
 const nicsQuery = useQuery({
   queryKey: computed(() => ["device-nics", props.deviceId]),
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/devices/${props.deviceId}/nics`);
+  queryFn: async (): Promise<NicCard[]> => {
+    const result = await apiGet<{ cards?: NicCard[] }>(
+      `/api/resources/devices/${props.deviceId}/nics`
+    );
     if (!result.success) {
       throw new Error(result.message || t("device.load_failed"));
     }
@@ -48,19 +63,20 @@ const nicsQuery = useQuery({
 const cards = computed(() => nicsQuery.data.value ?? []);
 
 /** 展示端口名中的末尾数字段；不含数字显示全名，空名显示 ? */
-function extractPortLastNumber(portName) {
+function extractPortLastNumber(portName: string): string {
   if (typeof portName !== "string" || !portName) {
     return portName || "";
   }
   const match = portName.match(/\d+/g);
   if (match) {
-    return match.at(-1);
+    // /\d+/g 的匹配组非空，at(-1) 必有值；?? 仅用于类型收窄
+    return match.at(-1) ?? portName;
   }
   return portName;
 }
 
 /** 组内端口排序：sort_order 优先，其次名称（与旧版一致） */
-function sortedPorts(card) {
+function sortedPorts(card: NicCard): NicPort[] {
   const ports = Array.isArray(card.ports) ? [...card.ports] : [];
   ports.sort(
     (a, b) =>
@@ -70,7 +86,7 @@ function sortedPorts(card) {
 }
 
 /** 端口方块 tooltip：名称 | MAC | IP(网段/区域) | VLAN | 类型 | 状态 | 速率 */
-function portTooltip(iface) {
+function portTooltip(iface: NicPort): string {
   const ipList = Array.isArray(iface.ips)
     ? iface.ips
         .map((i) => {
@@ -105,9 +121,27 @@ function portTooltip(iface) {
 
 // ==================== 端口详情弹窗（新增/编辑） ====================
 
-const portDetail = ref(null);
+/** 端口详情弹窗的行数据（portId 为空 = 新增） */
+interface PortFormSource {
+  portId: string;
+  deviceId: string;
+  name: string;
+  physicalType: string;
+  interfaceRole: string;
+  portType: string;
+  status: string;
+  /** 数字输入回显：空为空串 */
+  nativeVlanId: number | "";
+  vlanId: number | "";
+  speed: string;
+  macAddress: string;
+  deviceManaged: boolean;
+  description: string;
+}
 
-function openPortDetail(iface) {
+const portDetail = ref<PortFormSource | null>(null);
+
+function openPortDetail(iface: NicPort | null): void {
   portDetail.value = {
     portId: iface?.id || "",
     deviceId: props.deviceId,
@@ -126,7 +160,7 @@ function openPortDetail(iface) {
 }
 
 /** 详情弹窗保存/删除成功：关闭详情并刷新分组视图 */
-function onPortSaved() {
+function onPortSaved(): void {
   portDetail.value = null;
   queryClient.invalidateQueries({ queryKey: ["device-nics", props.deviceId] });
 }
@@ -134,17 +168,27 @@ function onPortSaved() {
 // ==================== SNMP 同步 ====================
 
 const syncing = ref(false);
-// 冲突轮次状态：{ conflicts, addCount, toAdd, existingMap }，确认后整体清空
-const conflictRound = ref(null);
 
-async function startSnmpSync() {
+/** 冲突轮次状态：确认后整体清空 */
+interface ConflictRound {
+  conflicts: { snmpPort: SnmpPort; existingPort: NicPort }[];
+  addCount: number;
+  toAdd: SnmpPort[];
+  existingMap: Map<string, NicPort>;
+}
+
+const conflictRound = ref<ConflictRound | null>(null);
+
+async function startSnmpSync(): Promise<void> {
   if (syncing.value) {
     return;
   }
   syncing.value = true;
   try {
     // 1. 拉取 SNMP 实时端口（不落库）
-    const snmpResult = await apiGet(`/api/resources/devices/${props.deviceId}/snmp-ports`);
+    const snmpResult = await apiGet<SnmpPort[]>(
+      `/api/resources/devices/${props.deviceId}/snmp-ports`
+    );
     if (!snmpResult.success || !Array.isArray(snmpResult.data) || snmpResult.data.length === 0) {
       showToast(t("device.snmp_no_ports"), "warning");
       return;
@@ -152,8 +196,10 @@ async function startSnmpSync() {
     const newPorts = snmpResult.data;
 
     // 2. 现有网口（/nics cards 展平），按名称小写建索引
-    const existingResult = await apiGet(`/api/resources/devices/${props.deviceId}/nics`);
-    const existingMap = new Map();
+    const existingResult = await apiGet<{ cards?: NicCard[] }>(
+      `/api/resources/devices/${props.deviceId}/nics`
+    );
+    const existingMap = new Map<string, NicPort>();
     if (existingResult.success && existingResult.data) {
       for (const card of existingResult.data.cards || []) {
         for (const p of card.ports || []) {
@@ -163,12 +209,13 @@ async function startSnmpSync() {
     }
 
     // 3. 按名称（忽略大小写）分类：无冲突直接新增，有冲突弹决策弹窗
-    const toAdd = [];
-    const conflicts = [];
+    const toAdd: SnmpPort[] = [];
+    const conflicts: { snmpPort: SnmpPort; existingPort: NicPort }[] = [];
     for (const p of newPorts) {
       const key = String(p.name).toLowerCase();
-      if (existingMap.has(key)) {
-        conflicts.push({ snmpPort: p, existingPort: existingMap.get(key) });
+      const existing = existingMap.get(key);
+      if (existing) {
+        conflicts.push({ snmpPort: p, existingPort: existing });
       } else {
         toAdd.push(p);
       }
@@ -180,14 +227,16 @@ async function startSnmpSync() {
     }
     conflictRound.value = { conflicts, addCount: toAdd.length, toAdd, existingMap };
   } catch (error) {
-    showToast(error.message || t("device.port_sync_failed"), "error");
+    // 与原实现一致：非 Error 抛出值与空 message 均回退到通用失败文案
+    const message = error instanceof Error ? error.message : "";
+    showToast(message || t("device.port_sync_failed"), "error");
   } finally {
     syncing.value = false;
   }
 }
 
 /** 应用冲突决策：覆盖列表 + 跳过数由父级计算后进入同步任务表 */
-function onConflictConfirm(decisions) {
+function onConflictConfirm(decisions: Record<string, "skip" | "overwrite">): void {
   const round = conflictRound.value;
   if (!round) {
     return;
@@ -200,18 +249,34 @@ function onConflictConfirm(decisions) {
   applySnmpResults(round.toAdd, toOverwrite, skippedCount, round.existingMap);
 }
 
+/** 覆盖同步载荷：仅运行属性与描述。DeviceInterfaceUpdate 的双层 Option 语义为
+ * 缺失=不修改，故不补 device_managed/mac_address 等键（保持原请求键集） */
+type OverwritePayload = Pick<
+  DeviceInterfaceUpdate,
+  "description" | "port_type" | "vlan_id" | "status" | "speed"
+>;
+
 /**
  * 执行同步任务表：先全部新增，后覆盖/退化新增；端口逐个顺序提交避免
  * 服务端限流。完成后按 新增/覆盖/跳过/失败 汇总提示并刷新分组视图。
  */
-async function applySnmpResults(toAdd, toOverwrite, skippedCount, existingMap) {
+async function applySnmpResults(
+  toAdd: SnmpPort[],
+  toOverwrite: SnmpPort[],
+  skippedCount: number,
+  existingMap: Map<string, NicPort> | null
+): Promise<void> {
   let added = 0;
   let overwritten = 0;
   let failed = 0;
 
   // 新增：网卡按端口名前缀由后端自动生成，不进设备模态框
-  const buildCreatePayload = (p) => ({
+  const buildCreatePayload = (p: SnmpPort): DeviceInterfaceCreate => ({
     name: p.name,
+    // nic_id/mac_address/native_vlan_id 为原代码缺省键：显式 null 与缺省在后端 serde Option 下等价
+    nic_id: null,
+    mac_address: null,
+    native_vlan_id: null,
     physical_type: "other",
     interface_role: "business",
     description: p.description || null,
@@ -223,7 +288,7 @@ async function applySnmpResults(toAdd, toOverwrite, skippedCount, existingMap) {
   });
 
   // 覆盖：仅更新运行属性与描述，不传 device_managed（保留原托管状态）
-  const buildOverwritePayload = (p) => ({
+  const buildOverwritePayload = (p: SnmpPort): OverwritePayload => ({
     description: p.description || null,
     port_type: p.port_type || null,
     vlan_id: p.vlan_id ?? null,
@@ -232,7 +297,7 @@ async function applySnmpResults(toAdd, toOverwrite, skippedCount, existingMap) {
   });
 
   // 任务表 + 递归执行器逐个提交（与旧版一致），失败仅计数由汇总提示体现
-  const tasks = [];
+  const tasks: Array<() => Promise<void>> = [];
   for (const p of toAdd) {
     tasks.push(async () => {
       const r = await apiPost(
@@ -274,12 +339,15 @@ async function applySnmpResults(toAdd, toOverwrite, skippedCount, existingMap) {
     });
   }
 
-  const runTasks = async (i = 0) => {
+  const runTasks = async (i = 0): Promise<void> => {
     if (i >= tasks.length) {
       return;
     }
+    const task = tasks[i];
     try {
-      await tasks[i]();
+      if (task) {
+        await task();
+      }
     } catch {
       failed++;
     }
@@ -287,7 +355,7 @@ async function applySnmpResults(toAdd, toOverwrite, skippedCount, existingMap) {
   };
   await runTasks();
 
-  const parts = [];
+  const parts: string[] = [];
   if (added > 0) {
     parts.push(`${t("device.sync_added")} ${added}`);
   }

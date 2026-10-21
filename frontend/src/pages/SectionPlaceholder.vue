@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 未迁移分区占位页：一级分区从原生 JS 向 Vue 迁移的过渡展示。
  * 根元素沿用 content-section active 类，保持与布局层 CSS（分页贴底、
@@ -7,7 +7,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
-import { useAuthStore } from "../stores/auth.js";
+import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
 const { t } = useI18n();

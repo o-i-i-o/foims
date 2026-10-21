@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 迷你趋势曲线（移植自旧版 agents.js renderSparklineSeries）：
  * 固定 viewBox（0 0 320 96）自绘 polyline，每序列独立配色（lineClass）。
@@ -8,13 +8,22 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
-const props = defineProps({
-  /** 序列数组：每项 { values: (number|null)[], lineClass: string } */
-  series: { type: Array, required: true },
-  /** 数值标注格式化（max/min 标注） */
-  formatValue: { type: Function, required: true },
-  ariaLabel: { type: String, default: "" }
-});
+/** 单条曲线序列：values 为数值点（null 视为断点），lineClass 为配色类 */
+interface SparkSeriesItem {
+  values: Array<number | null>;
+  lineClass: string;
+}
+
+const props = withDefaults(
+  defineProps<{
+    /** 序列数组：每项 { values: (number|null)[], lineClass: string } */
+    series: SparkSeriesItem[];
+    /** 数值标注格式化（max/min 标注） */
+    formatValue: (value: number) => string;
+    ariaLabel?: string;
+  }>(),
+  { ariaLabel: "" }
+);
 
 const { t } = useI18n();
 
@@ -41,7 +50,7 @@ const scale = computed(() => {
   const span = max - min || 1;
   const len = Math.max(...props.series.map((item) => item.values.length));
   const step = (WIDTH - PAD * 2) / Math.max(len - 1, 1);
-  const toY = (v) => HEIGHT - PAD - ((v - min) / span) * (HEIGHT - PAD * 2);
+  const toY = (v: number) => HEIGHT - PAD - ((v - min) / span) * (HEIGHT - PAD * 2);
   return { max, min, step, toY };
 });
 
@@ -53,14 +62,18 @@ const groups = computed(() => {
   }
   const { step, toY } = scale.value;
   return props.series.map((item) => {
-    const segments = [];
-    const singles = [];
-    let current = [];
+    const segments: string[] = [];
+    const singles: Array<{ cx: number; cy: number }> = [];
+    let current: Array<[number, number]> = [];
     const flush = () => {
       if (current.length > 1) {
         segments.push(current.map((p) => p.join(",")).join(" "));
       } else if (current.length === 1) {
-        singles.push({ cx: current[0][0], cy: current[0][1] });
+        // 长度为 1 时首元素必然存在（收窄 noUncheckedIndexedAccess）
+        const point = current[0];
+        if (point) {
+          singles.push({ cx: point[0], cy: point[1] });
+        }
       }
       current = [];
     };
@@ -89,8 +102,9 @@ const groups = computed(() => {
       </g>
     </svg>
     <div class="agent-spark-range">
-      <span>{{ formatValue(scale.max) }}</span>
-      <span>{{ formatValue(scale.min) }}</span>
+      <!-- v-else 分支仅在非空态渲染，此时 scale 恒有值（?. ?? 0 仅为收窄类型） -->
+      <span>{{ formatValue(scale?.max ?? 0) }}</span>
+      <span>{{ formatValue(scale?.min ?? 0) }}</span>
     </div>
   </template>
 </template>

@@ -15,7 +15,8 @@ use uuid::Uuid;
 use foims_common::{AppError, msg};
 
 /// 密码策略配置
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PasswordPolicy {
     pub min_length: i32,
     pub require_upper: bool,

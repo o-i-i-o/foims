@@ -12,7 +12,8 @@ use foims_common::DbProvider;
 use foims_common::{AppError, msg};
 
 /// 单个选项（id + 名称）
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct ResourceOption {
     pub id: Uuid,
     pub name: String,

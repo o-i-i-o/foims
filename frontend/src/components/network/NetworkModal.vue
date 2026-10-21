@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 网段新增/编辑弹窗（移植自旧版 modals/network/network-modal.html
  * + networks.js openNetworkModal/submitNetworkForm）：
@@ -7,43 +7,61 @@
  */
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { isIpInCidr, isValidIPv4, isValidIPv6 } from "../../utils/network.js";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { isIpInCidr, isValidIPv4, isValidIPv6 } from "../../utils/network";
 import ModalShell from "../ModalShell.vue";
+import type { Paged } from "../../types/api";
+import type { Network } from "../../types/api/generated/Network";
+import type { NetworkCreate } from "../../types/api/generated/NetworkCreate";
+import type { NetworkRegion } from "../../types/api/generated/NetworkRegion";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显
-  network: { type: Object, default: null }
-});
+// null = 新增；对象 = 编辑回显
+const props = withDefaults(defineProps<{ network?: Network | null }>(), { network: null });
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-const form = reactive({
+/** 表单状态：DNS 以逗号/空白分隔文本编辑，提交时解析为数组 */
+interface NetworkFormState {
+  name: string;
+  regionId: string;
+  ipv4Cidr: string;
+  ipv6Cidr: string;
+  ipv4Gateway: string;
+  ipv6Gateway: string;
+  ipv4Dns: string;
+  ipv6Dns: string;
+  description: string;
+}
+
+/** DNS 数组回显为文本：未配置（null/非数组）返回空串（旧版回显语义） */
+function joinDns(dns: string[] | null | undefined): string {
+  return Array.isArray(dns) ? dns.join(", ") : "";
+}
+
+const form = reactive<NetworkFormState>({
   name: props.network?.name ?? "",
   regionId: props.network?.network_region_id ?? "",
   ipv4Cidr: props.network?.ipv4_cidr ?? "",
   ipv6Cidr: props.network?.ipv6_cidr ?? "",
   ipv4Gateway: props.network?.ipv4_gateway ?? "",
   ipv6Gateway: props.network?.ipv6_gateway ?? "",
-  ipv4Dns: Array.isArray(props.network?.ipv4_dns)
-    ? props.network.ipv4_dns.join(", ")
-    : props.network?.ipv4_dns ?? "",
-  ipv6Dns: Array.isArray(props.network?.ipv6_dns)
-    ? props.network.ipv6_dns.join(", ")
-    : props.network?.ipv6_dns ?? "",
+  ipv4Dns: joinDns(props.network?.ipv4_dns),
+  ipv6Dns: joinDns(props.network?.ipv6_dns),
   description: props.network?.description ?? ""
 });
 
 // 区域下拉选项：与区域列表共享失效前缀，弹窗打开时才加载
 const regionsQuery = useQuery({
   queryKey: ["network-regions", "options"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/network-regions?page_size=1000");
+  queryFn: async (): Promise<Paged<NetworkRegion> | null> => {
+    const result = await apiGet<Paged<NetworkRegion>>(
+      "/api/resources/network-regions?page_size=1000"
+    );
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -51,14 +69,12 @@ const regionsQuery = useQuery({
   }
 });
 
-const regionOptions = computed(() =>
-  Array.isArray(regionsQuery.data.value?.items) ? regionsQuery.data.value.items : []
-);
+const regionOptions = computed<NetworkRegion[]>(() => regionsQuery.data.value?.items ?? []);
 
 const saving = ref(false);
 
 /** DNS 文本解析：逗号/空白分隔，超 5 条提示并返回 null（旧版 parseDnsList 语义） */
-function parseDnsList(dnsStr) {
+function parseDnsList(dnsStr: string): string[] | null {
   if (!dnsStr?.trim()) {
     return null;
   }
@@ -89,7 +105,12 @@ async function submit() {
   }
 
   // 网关校验：格式合法、与地址族一致，且必须落在对应 CIDR 网段内
-  const gatewayChecks = [
+  const gatewayChecks: {
+    family: string;
+    gateway: string;
+    cidr: string;
+    isValid: (ip: string) => boolean;
+  }[] = [
     { family: "4", gateway: form.ipv4Gateway, cidr: form.ipv4Cidr, isValid: isValidIPv4 },
     { family: "6", gateway: form.ipv6Gateway, cidr: form.ipv6Cidr, isValid: isValidIPv6 }
   ];
@@ -123,7 +144,8 @@ async function submit() {
   }
 
   saving.value = true;
-  const body = {
+  // 覆盖型保存：未填项显式 null（与原实现键集一致）
+  const body: NetworkCreate = {
     name,
     network_region_id: form.regionId,
     ipv4_cidr: form.ipv4Cidr.trim() || null,

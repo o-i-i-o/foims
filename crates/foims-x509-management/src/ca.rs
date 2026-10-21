@@ -36,7 +36,8 @@ const MAX_CA_VALIDITY_DAYS: i64 = 36500;
 /// 导入 CA 目录名冲突重试上限（毫秒时间戳下冲突概率极低，仅作有界保护）
 const MAX_DIR_NAME_RETRIES: u64 = 100;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GenerateCaRequest {
     pub common_name: String,
     pub organization: Option<String>,
@@ -48,7 +49,8 @@ pub struct GenerateCaRequest {
     pub validity_days: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CaStatus {
     pub available: bool,
     /// 私钥是否在本机（决定能否签发证书）
@@ -61,7 +63,8 @@ pub struct CaStatus {
 }
 
 /// CA 列表项（证书生成弹窗的 CA 下拉框数据源）
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CaInfo {
     /// CA 标识：根 CA 固定为 "root"，导入 CA 为其目录名
     pub id: String,

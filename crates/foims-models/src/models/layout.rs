@@ -68,7 +68,8 @@ fn validate_position_coords(position: &Position) -> Result<(), validator::Valida
 
 // ==================== 布局模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
@@ -107,7 +108,8 @@ impl Position {
 ///
 /// 约定：两种画布类型均必需 `room_id`，且布局项非空；`element_type`
 /// 长度上限对齐 `element_layouts.element_type VARCHAR(20)`。
-#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct LayoutSaveRequest {
     #[validate(custom(function = validate_layout_type))]
     pub r#type: String,
@@ -119,7 +121,8 @@ pub struct LayoutSaveRequest {
     pub layout: Vec<LayoutItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate, ts_rs::TS)]
+#[ts(export)]
 #[validate(schema(function = validate_layout_item))]
 pub struct LayoutItem {
     pub id: Uuid,

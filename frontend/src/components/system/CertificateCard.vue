@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 证书管理卡片（移植自旧版 systemManager.js 证书段）：站点根 CA 池 +
  * 自生成/导入证书合并清单；应用 = 将证书/私钥整体替换进 nginx 配置，
@@ -7,19 +7,23 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPost } from "../../api/client.js";
-import { formatDate } from "../../utils/formatter.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiDelete, apiGet, apiPost } from "../../api/client";
+import { formatDate } from "../../utils/formatter";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 import CaGenerateModal from "./CaGenerateModal.vue";
 import CaImportModal from "./CaImportModal.vue";
 import CertGenerateModal from "./CertGenerateModal.vue";
 import CertImportModal from "./CertImportModal.vue";
+import type { CaInfo } from "../../types/api/generated/CaInfo";
+import type { CertFileInfo } from "../../types/api/generated/CertFileInfo";
+import type { CertificateInventory } from "../../types/api/generated/CertificateInventory";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** 证书清单行：文件信息 + 证书类型（自生成 / 导入） */
+type CertRow = CertFileInfo & { kind: "generated" | "imported" };
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -29,7 +33,7 @@ const readonly = isSectionReadonly("system");
 const certsQuery = useQuery({
   queryKey: ["certificates"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/certificate/list");
+    const result = await apiGet<CertificateInventory>("/api/system/certificate/list");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -38,19 +42,19 @@ const certsQuery = useQuery({
   enabled: computed(() => props.active)
 });
 
-const caList = computed(() => (Array.isArray(certsQuery.data.value?.cas) ? certsQuery.data.value.cas : []));
+const caList = computed<CaInfo[]>(() => certsQuery.data.value?.cas ?? []);
 // 单行证书记录补齐证书类型（自生成 = 站点 CA 签发，导入 = 外部证书）
-function decorateCert(info, kind) {
+function decorateCert(info: CertFileInfo, kind: "generated" | "imported"): CertRow {
   return { ...info, kind };
 }
 
 // 自生成与导入证书合并展示，以"证书类型"列区分
-const mergedCerts = computed(() => [
-  ...(certsQuery.data.value?.generated || []).map((info) => decorateCert(info, "generated")),
-  ...(certsQuery.data.value?.imported || []).map((info) => decorateCert(info, "imported"))
+const mergedCerts = computed<CertRow[]>(() => [
+  ...(certsQuery.data.value?.generated ?? []).map((info) => decorateCert(info, "generated")),
+  ...(certsQuery.data.value?.imported ?? []).map((info) => decorateCert(info, "imported"))
 ]);
 
-function formatCertValidity(info) {
+function formatCertValidity(info: CertFileInfo | CaInfo): string {
   if (!info.not_before || !info.not_after) {
     return "-";
   }
@@ -58,7 +62,7 @@ function formatCertValidity(info) {
 }
 
 // 剩余天数样式：过期红 / 30 天内警示；缺省（null/undefined）不加样式
-function certDaysClass(days) {
+function certDaysClass(days: number | null | undefined): string {
   if (days == null) {
     return "";
   }
@@ -68,7 +72,7 @@ function certDaysClass(days) {
   return days < 30 ? "cert-days-warning" : "";
 }
 
-function certDaysText(days) {
+function certDaysText(days: number | null | undefined): string {
   return days == null ? "-" : String(days);
 }
 
@@ -80,27 +84,30 @@ const showCertGenerate = ref(false);
 const showCertImport = ref(false);
 
 // 行内操作确认：{ type: "apply" | "delete", item }
-const confirmAction = ref(null);
+const confirmAction = ref<null | { type: "apply" | "delete"; item: CertRow }>(null);
 
-function confirmMessage() {
-  const { type, item } = confirmAction.value || {};
-  if (type === "apply") {
-    return t("cert.apply_confirm", { file: item.file_stem });
+function confirmMessage(): string {
+  const action = confirmAction.value;
+  if (!action) {
+    return "";
   }
-  return t("cert.delete_confirm", { file: item.file_stem });
+  if (action.type === "apply") {
+    return t("cert.apply_confirm", { file: action.item.file_stem });
+  }
+  return t("cert.delete_confirm", { file: action.item.file_stem });
 }
 
-async function onActionConfirmed() {
-  const { type, item } = confirmAction.value || {};
+async function onActionConfirmed(): Promise<void> {
+  const action = confirmAction.value;
   confirmAction.value = null;
-  if (!item) {
+  if (!action) {
     return;
   }
-  const path = `/api/system/certificate/${item.kind}/${encodeURIComponent(item.file_stem)}`;
-  const result = type === "apply" ? await apiPost(`${path}/apply`) : await apiDelete(path);
+  const path = `/api/system/certificate/${action.item.kind}/${encodeURIComponent(action.item.file_stem)}`;
+  const result = action.type === "apply" ? await apiPost(`${path}/apply`) : await apiDelete(path);
   if (result.success) {
     showToast(result.message, "success");
-    if (type === "delete") {
+    if (action.type === "delete") {
       queryClient.invalidateQueries({ queryKey: ["certificates"] });
     }
   } else {
@@ -111,17 +118,17 @@ async function onActionConfirmed() {
 // CA 生成前确认：覆盖既有站点根 CA 会影响全部终端信任
 const showCaGenerateConfirm = ref(false);
 
-function requestCaGenerate() {
+function requestCaGenerate(): void {
   showCaGenerateConfirm.value = true;
 }
 
-function onCaGenerateConfirmed() {
+function onCaGenerateConfirmed(): void {
   showCaGenerateConfirm.value = false;
   showCaGenerate.value = true;
 }
 
 // CA 下载：CA 证书为公开数据，直接浏览器新窗口下载 PEM
-function downloadCa() {
+function downloadCa(): void {
   window.open("/api/certificate/ca/download", "_blank");
 }
 </script>

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 可视化页（移植自旧版 main.html visualization 分区 + visualizationManager.js）：
  * 画布生态（11 个 visualization JS）逐字迁移到 modules/visualization/，本页只提供
@@ -11,12 +11,15 @@
  */
 import { onMounted, reactive } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet } from "../api/client.js";
+import { apiGet } from "../api/client";
 import { handleError, showToast, vueModals } from "../utils/legacyBridge.js";
 import { initVisualization } from "../modules/visualization/visualizationManager.js";
 import WorkstationModal from "../components/workstation/WorkstationModal.vue";
 import CabinetModal from "../components/cabinet/CabinetModal.vue";
 import PositionModal from "../components/cabinet/PositionModal.vue";
+import type { Workstation } from "../types/api/generated/Workstation";
+import type { CabinetWithNetworks } from "../types/api/generated/CabinetWithNetworks";
+import type { CabinetPosition } from "../types/api/generated/CabinetPosition";
 
 defineOptions({ name: "VisualizationPage" });
 
@@ -24,17 +27,24 @@ const { t } = useI18n();
 
 // ==================== Vue 编辑弹窗（画布回调注入点） ====================
 
+/** 画布当前坐标（visualizationManager 回调传入，回填坐标输入框） */
+type CanvasPosition = { x: number; y: number } | null;
+
 // 工位弹窗：workstation 为 GET 详情回显对象，position 为画布当前坐标
-const workstationModal = reactive({ open: false, workstation: null, position: null });
+const workstationModal = reactive({
+  open: false,
+  workstation: null as Workstation | null,
+  position: null as CanvasPosition
+});
 // 机柜弹窗：与 ResourcesPage.editCabinet 同模式（详情含机位/配线架子项）
-const cabinetModal = reactive({ open: false, cabinet: null });
+const cabinetModal = reactive({ open: false, cabinet: null as CabinetWithNetworks | null });
 // 机位弹窗：position 为 GET 详情回显对象
-const positionModal = reactive({ open: false, position: null });
+const positionModal = reactive({ open: false, position: null as CabinetPosition | null });
 
 /** 画布工位编辑回调 → GET 详情后打开 Vue 工位弹窗（旧版 editWorkstation 语义） */
-async function openWorkstationEditor(id, position = null) {
+async function openWorkstationEditor(id: string, position: CanvasPosition = null): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/workstations/${id}`);
+    const result = await apiGet<Workstation>(`/api/resources/workstations/${id}`);
     if (result.success) {
       workstationModal.workstation = result.data;
       workstationModal.position = position;
@@ -48,9 +58,9 @@ async function openWorkstationEditor(id, position = null) {
 }
 
 /** 画布机柜编辑回调 → GET 详情后打开 Vue 机柜弹窗（旧版 editCabinet 语义） */
-async function openCabinetEditor(id) {
+async function openCabinetEditor(id: string): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/cabinets/${id}`);
+    const result = await apiGet<CabinetWithNetworks>(`/api/resources/cabinets/${id}`);
     if (result.success && result.data) {
       cabinetModal.cabinet = result.data;
       cabinetModal.open = true;
@@ -63,9 +73,9 @@ async function openCabinetEditor(id) {
 }
 
 /** 画布机位编辑回调 → GET 详情后打开 Vue 机位弹窗（旧版 editCabinetPosition 语义） */
-async function openPositionEditor(id) {
+async function openPositionEditor(id: string): Promise<void> {
   try {
-    const result = await apiGet(`/api/resources/positions/${id}`);
+    const result = await apiGet<CabinetPosition>(`/api/resources/positions/${id}`);
     if (result.success) {
       positionModal.position = result.data;
       positionModal.open = true;
@@ -78,10 +88,17 @@ async function openPositionEditor(id) {
 }
 
 onMounted(() => {
-  // 注入 Vue 弹窗实现（赋值幂等，KeepAlive 下 onMounted 仅执行一次）
-  vueModals.editWorkstation = openWorkstationEditor;
-  vueModals.editCabinet = openCabinetEditor;
-  vueModals.editCabinetPosition = openPositionEditor;
+  // 注入 Vue 弹窗实现（赋值幂等，KeepAlive 下 onMounted 仅执行一次）。
+  // legacyBridge.js 为遗留 JS 模块（checkJs 关闭）无类型，holder 属性按
+  // 画布回调契约断言后注入
+  const modalBridge = vueModals as {
+    editWorkstation: (id: string, position: CanvasPosition) => void;
+    editCabinet: (id: string) => void;
+    editCabinetPosition: (id: string) => void;
+  };
+  modalBridge.editWorkstation = openWorkstationEditor;
+  modalBridge.editCabinet = openCabinetEditor;
+  modalBridge.editCabinetPosition = openPositionEditor;
 
   initVisualization();
 });

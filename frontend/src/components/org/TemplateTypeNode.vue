@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 层级模板类型节点（递归组件，移植自旧版 createTypeNode + 树形编辑器）：
  * 图标选择（按分组的 SVG 图标面板，同屏仅一个面板打开）、类型输入
@@ -6,27 +6,43 @@
  * orgTplEditorCtx 操作；根节点展示根徽标且不可删除。
  */
 import { computed, inject } from "vue";
+import type { Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { DEFAULT_ORG_ICON, getOrgTypeLabel, ORG_ICON_GROUPS } from "../../config/orgConfig.js";
+import { DEFAULT_ORG_ICON, getOrgTypeLabel, ORG_ICON_GROUPS } from "../../config/orgConfig";
 import NavIcon from "../NavIcon.vue";
 import OrgIcon from "../OrgIcon.vue";
 
-const props = defineProps({
-  node: { type: Object, required: true },
-  isRoot: { type: Boolean, default: false }
+/** 层级树节点（与 TemplateModal 编辑器树同构，经 props 传入） */
+interface TplTypeNode {
+  uid: number;
+  type: string;
+  icon: string;
+  children: TplTypeNode[];
+}
+
+/** 注入的编辑器上下文（由 TemplateModal provide，键 orgTplEditorCtx） */
+interface TplEditorCtx {
+  activePicker: Ref<number | null>;
+  addChild: (parent: TplTypeNode) => void;
+  removeNode: (target: TplTypeNode) => void;
+}
+
+const props = withDefaults(defineProps<{ node: TplTypeNode; isRoot?: boolean }>(), {
+  isRoot: false
 });
 
 const { t } = useI18n();
 
-const ctx = inject("orgTplEditorCtx");
+// provide 侧由 TemplateModal 固定传入，断言仅还原注入键的真实形状
+const ctx = inject("orgTplEditorCtx") as TplEditorCtx;
 
 const pickerOpen = computed(() => ctx.activePicker.value === props.node.uid);
 
-function togglePicker() {
+function togglePicker(): void {
   ctx.activePicker.value = pickerOpen.value ? null : props.node.uid;
 }
 
-function selectIcon(key) {
+function selectIcon(key: string): void {
   props.node.icon = key;
   ctx.activePicker.value = null;
 }

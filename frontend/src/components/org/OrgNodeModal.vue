@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 组织节点编辑弹窗（移植自旧版 openOrgModal + organization-modal.html +
  * submitOrgForm）：编辑模式仅改名称/描述（类型由模板决定不可改）；新增
@@ -8,39 +8,70 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { findRootType, getLevelPaths, getOrgTypeLabel } from "../../config/orgConfig.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { findRootType, getLevelPaths, getOrgTypeLabel } from "../../config/orgConfig";
 import ModalShell from "../ModalShell.vue";
+import type { OrgTemplateSummary } from "../../types/api/generated/OrgTemplateSummary";
+import type { OrganizationCreate } from "../../types/api/generated/OrganizationCreate";
+import type { OrganizationTreeNode } from "../../types/api/generated/OrganizationTreeNode";
+
+/** GET /organizations/{id}/allowed-child-types 响应（后端 organization.rs 手工 json! 组装） */
+interface AllowedChildTypesResponse {
+  parent_name: string;
+  parent_type: string;
+  allowed_child_types: AllowedChildTypeOption[];
+}
+
+/** 可选下级类型行 */
+interface AllowedChildTypeOption {
+  type: string;
+  type_path: string;
+  label: string;
+  level_index: number;
+}
 
 /** 模板下拉选项副行：levels 映射展开为可读路径（" / " 连接单行展示） */
-function templateLevelText(tpl) {
+function templateLevelText(tpl: OrgTemplateSummary): string {
   return getLevelPaths(tpl.levels).join(" / ");
 }
 
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  /** edit | add-child | add-root */
-  mode: { type: String, default: "add-root" },
-  /** 编辑模式传入树节点（含 name/description/org_type） */
-  node: { type: Object, default: null },
-  /** 新增下级时传入父节点 ID */
-  parentId: { type: String, default: "" }
-});
+const props = withDefaults(
+  defineProps<{
+    open?: boolean;
+    /** edit | add-child | add-root */
+    mode?: string;
+    /** 编辑模式传入树节点（含 name/description/org_type） */
+    node?: OrganizationTreeNode | null;
+    /** 新增下级时传入父节点 ID */
+    parentId?: string;
+  }>(),
+  { open: false, mode: "add-root", node: null, parentId: "" }
+);
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
-const form = reactive({ name: "", description: "", typeId: "", templateId: "" });
+/** 表单状态 */
+interface OrgFormState {
+  name: string;
+  description: string;
+  typeId: string;
+  templateId: string;
+}
+
+const form = reactive<OrgFormState>({ name: "", description: "", typeId: "", templateId: "" });
 const rootLabel = ref("");
 
 // ==================== 查询：可选下级类型 / 模板列表 ====================
 
 const allowedQuery = useQuery({
   queryKey: computed(() => ["org-allowed-child-types", props.parentId]),
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/organizations/${props.parentId}/allowed-child-types`);
+  queryFn: async (): Promise<AllowedChildTypesResponse | null> => {
+    const result = await apiGet<AllowedChildTypesResponse>(
+      `/api/resources/organizations/${props.parentId}/allowed-child-types`
+    );
     if (!result.success) {
       throw new Error(result.message || t("common.operation_failed"));
     }
@@ -51,23 +82,22 @@ const allowedQuery = useQuery({
 
 const templatesQuery = useQuery({
   queryKey: ["org-templates"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/org-templates");
+  queryFn: async (): Promise<OrgTemplateSummary[]> => {
+    const result = await apiGet<{ items?: OrgTemplateSummary[] }>("/api/resources/org-templates");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    return Array.isArray(result.data?.items) ? result.data.items : [];
+    return result.data?.items ?? [];
   },
   enabled: computed(() => props.open && props.mode === "add-root")
 });
 
-const typeOptions = computed(() => {
+const typeOptions = computed<AllowedChildTypeOption[]>(() => {
   if (props.mode !== "add-child") {
     return [];
   }
-  return Array.isArray(allowedQuery.data.value?.allowed_child_types)
-    ? allowedQuery.data.value.allowed_child_types
-    : [];
+  const allowed = allowedQuery.data.value?.allowed_child_types;
+  return Array.isArray(allowed) ? allowed : [];
 });
 
 /** 编辑模式类型展示（单选项，不可修改） */
@@ -92,7 +122,7 @@ watch(
 );
 
 /** 模板选择变化：根类型自动锁定为模板根（type_path 固定 "0"） */
-function onTemplateChange() {
+function onTemplateChange(): void {
   const selected = templatesQuery.data.value?.find((tpl) => tpl.id === form.templateId);
   const rootType = selected ? findRootType(selected.levels) : null;
   if (rootType) {
@@ -109,22 +139,26 @@ function onTemplateChange() {
 const saveMutation = useMutation({
   mutationFn: async () => {
     if (props.mode === "edit") {
-      // 编辑模式：仅更新名称/描述，类型由模板决定不可修改
-      return apiPut(`/api/resources/organizations/${props.node.id}`, {
-        name: form.name.trim(),
-        description: form.description || null
-      });
+      // 编辑模式：仅更新名称/描述，类型由模板决定不可修改；
+      // type_path 键缺省即不修改，故不展开为 OrganizationUpdate 全键载荷
+      // node 由打开方保证非空（OrganizationPage 仅编辑已有节点时置 mode="edit"）
+      return apiPut<unknown, { name: string; description: string | null }>(
+        `/api/resources/organizations/${props.node!.id}`,
+        {
+          name: form.name.trim(),
+          description: form.description || null
+        }
+      );
     }
-    const body = {
+    const body: OrganizationCreate = {
       name: form.name.trim(),
       type_path: form.typeId,
       parent_id: props.mode === "add-child" ? props.parentId : null,
+      // 仅 add-root 携带模板；add-child 显式 null 与原缺省键在 serde Option 下等价
+      template_id: props.mode === "add-root" ? form.templateId : null,
       description: form.description || null
     };
-    if (props.mode === "add-root") {
-      body.template_id = form.templateId;
-    }
-    return apiPost("/api/resources/organizations", body);
+    return apiPost<unknown, OrganizationCreate>("/api/resources/organizations", body);
   },
   onSuccess: (result) => {
     if (result.success) {
@@ -137,7 +171,7 @@ const saveMutation = useMutation({
   }
 });
 
-function handleSubmit() {
+function handleSubmit(): void {
   if (!form.name.trim()) {
     showToast(t("organization.name_required"), "warning");
     return;

@@ -84,6 +84,9 @@ const optionFetchCache = new Map();
 /**
  * 拉取下拉选项原始响应（带 10s TTL 共享缓存）。
  * 导出供调用方需要"先取数据再做分支渲染"的场景复用同一份缓存。
+ *
+ * @param {string} url - API 地址（返回数组或 {items} 分页结构）
+ * @returns {Promise<import("../types/api").ApiResult<unknown>>} API 响应信封
  */
 export function fetchOptionItems(url) {
   const hit = optionFetchCache.get(url);
@@ -120,19 +123,27 @@ function bumpFillSelectSeq(selectTarget) {
 }
 
 /**
+ * 下拉候选项（API 载荷与预取项的公共形状；其余字段按需透传）
+ * @typedef {object} SelectItem
+ * @property {string|number} id - 选项 value
+ * @property {string} [name] - 默认展示文本（未传 itemToLabel 时使用）
+ */
+
+/**
  * 通用下拉填充。
  *
  * @param {string|Element} selectTarget 目标 select 元素 id 或元素引用
  *   （元素引用用于动态行内没有 id 的 select，如房间网段配置行）
  * @param {string|null} url API 地址（返回数组或 {items} 结构）；传入 null
  *   且提供 opts.items 时不发请求（用于已预取或纯占位场景）
- * @param {Object} [opts]
- * @param {Array} [opts.items] 预取的候选项（优先于 url 请求）
+ * @param {object} [opts]
+ * @param {SelectItem[]} [opts.items] 预取的候选项（优先于 url 请求）
  * @param {string} [opts.placeholderKey] 空值占位项的 i18n 键
  * @param {string} [opts.emptyKey] 过滤后无数据时的提示项 i18n 键
- * @param {Function} [opts.filter] 项过滤谓词（item => boolean）
- * @param {Function} [opts.itemToLabel] 自定义展示文本（item => string，默认 item.name）
+ * @param {(item: SelectItem) => boolean} [opts.filter] 项过滤谓词（item => boolean）
+ * @param {(item: SelectItem) => string} [opts.itemToLabel] 自定义展示文本（item => string，默认 item.name）
  * @param {string} [opts.errorLabelKey] 失败日志中资源名的 i18n 键
+ * @returns {Promise<void>} 填充完成（目标不存在或响应已过期时静默跳过）
  */
 export async function fillSelect(selectTarget, url, opts = {}) {
   const {
@@ -220,6 +231,11 @@ function buildRoomsUrl(orgId, roomTypes) {
  *
  * roomTypes 为 "office"（工位可视化全类别）、"datacenter"（机柜可视化全类别）
  * 或具体类型（如 "other"，按字面过滤），可叠加组织过滤。
+ *
+ * @param {string} selectId - 目标 select 元素 id
+ * @param {string} roomTypes - 房间类别（"office" / "datacenter" / 具体房间类型）
+ * @param {string|null} [orgId=null] - 组织 id 过滤（null 为不过滤）
+ * @returns {Promise<void>} 填充完成
  */
 export function loadVisualizationRoomsForSelect(selectId, roomTypes, orgId = null) {
   let resolved = roomTypes;
@@ -247,7 +263,12 @@ function flattenOrgTree(nodes, depth = 0) {
   return result;
 }
 
-/** 加载组织选项（树形按深度缩进展示）。 */
+/**
+ * 加载组织选项（树形按深度缩进展示）。
+ *
+ * @param {string} [selectId="room-org-id"] - 目标 select 元素 id
+ * @returns {Promise<void>} 填充完成（加载失败时仅留占位项）
+ */
 export function loadOrgsForSelect(selectId = "room-org-id") {
   return (async () => {
     let flatOrgs = [];
@@ -269,7 +290,12 @@ export function loadOrgsForSelect(selectId = "room-org-id") {
   })();
 }
 
-/** 获取组织及其全部后代的 id 集合（拓扑按组织筛选用；树中未命中时退化为自身）。 */
+/**
+ * 获取组织及其全部后代的 id 集合（拓扑按组织筛选用；树中未命中时退化为自身）。
+ *
+ * @param {string} orgId - 组织 id
+ * @returns {Promise<Set<string>>} 组织及全部后代的 id 集合（请求失败时至少含 orgId）
+ */
 export async function getOrgSubtreeIds(orgId) {
   const ids = new Set();
   try {

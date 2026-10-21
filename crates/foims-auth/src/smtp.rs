@@ -314,7 +314,8 @@ pub async fn send_email_to_users(
 ///
 /// 按通知类型记录各方式（目前仅邮件）是否启用；前端「通知配置」卡片矩阵
 /// 逐格对应。未配置（历史存量）时全部视为启用，保持既有发送行为不变。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct NotificationMethods {
     /// MAC 地址变更通知的邮件方式开关
     #[serde(default = "default_true")]

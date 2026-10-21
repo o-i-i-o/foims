@@ -43,7 +43,8 @@ fn totp_replay_store() -> &'static TotpReplayStore {
 }
 
 /// 密码 + TOTP 两步登录请求：在 foims-models 基础模型上扩展图形验证码字段
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TwoFactorCodeLoginRequest {
     #[serde(flatten)]
     pub base: TwoFactorLoginRequest,
@@ -799,19 +800,22 @@ pub async fn disable_two_factor<P: AuthProvider>(
     Ok(foims_common::ok_json((), "server.auth.2fa_disabled"))
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct TwoFactorInitRequest {
     pub user_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct TwoFactorEnableRequest {
     #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,
     pub user_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct TwoFactorDisableRequest {
     #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
     pub code: String,

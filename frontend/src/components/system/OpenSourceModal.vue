@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 开源组件清单弹窗（移植自旧版 open-source-modal + systemManager 的
  * OPEN_SOURCE_COMPONENTS 常量）：与 NOTICE 同步维护，数据以 cargo-cyclonedx
@@ -7,9 +7,17 @@
 import { useI18n } from "vue-i18n";
 import ModalShell from "../ModalShell.vue";
 
+const emit = defineEmits<{ close: [] }>();
+
 const { t } = useI18n();
 
-const OPEN_SOURCE_COMPONENTS = [
+/** 开源组件分组（按许可证聚合） */
+interface OpenSourceGroup {
+  license: string;
+  components: Array<{ name: string; url: string }>;
+}
+
+const OPEN_SOURCE_COMPONENTS: OpenSourceGroup[] = [
   {
     license: "MIT",
     components: [
@@ -59,7 +67,7 @@ const OPEN_SOURCE_COMPONENTS = [
 </script>
 
 <template>
-  <ModalShell :title="t('system.open_source_components')" @close="$emit('close')">
+  <ModalShell :title="t('system.open_source_components')" @close="emit('close')">
     <p class="open-source-intro">{{ t("system.open_source_intro") }}</p>
     <div class="open-source-list">
       <div v-for="group in OPEN_SOURCE_COMPONENTS" :key="group.license" class="open-source-group">

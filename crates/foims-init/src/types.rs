@@ -48,7 +48,8 @@ impl VerificationCode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, validator::Validate)]
+#[derive(Debug, Serialize, Deserialize, validator::Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct InitRequest {
     #[validate(length(min = 3, max = 50, message = "server.init.validation.username_length"))]
     #[validate(custom(
@@ -82,7 +83,8 @@ pub struct InitRequest {
 ///
 /// 用户在页面填写连接要素，由「连接测试」验证通过后写入配置文件；
 /// 数据库与账号的创建由部署脚本 scripts/init-pgsql.sh 完成。
-#[derive(Debug, Serialize, Deserialize, validator::Validate)]
+#[derive(Debug, Serialize, Deserialize, validator::Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct DatabaseSetupRequest {
     /// 数据库类型（下拉框，为未来扩展预留；当前仅支持 pgsql）
     #[serde(rename = "type")]
@@ -185,12 +187,14 @@ impl DatabaseSetupRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateDatabaseRequest {
     pub verification: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateDatabaseResponse {
     pub backup_file: Option<String>,
     /// 消息 key（由前端翻译），与外层 ApiResponse.message 一致

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 网络区域新增/编辑弹窗（移植自旧版 modals/network/network-region-modal.html
  * + networks.js openNetworkRegionModal/submitNetworkRegionForm）：
@@ -8,35 +8,41 @@
 import { reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
+import type { NetworkRegion } from "../../types/api/generated/NetworkRegion";
+import type { NetworkRegionCreate } from "../../types/api/generated/NetworkRegionCreate";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显
-  region: { type: Object, default: null }
-});
+// null = 新增；对象 = 编辑回显
+const props = withDefaults(defineProps<{ region?: NetworkRegion | null }>(), { region: null });
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-const form = reactive({
+/** 表单基础字段：CIDR 动态行单独维护 */
+interface RegionFormState {
+  name: string;
+  description: string;
+}
+
+const form = reactive<RegionFormState>({
   name: props.region?.name ?? "",
   description: props.region?.description ?? ""
 });
 
 // CIDR 动态行：初始为已存值（无则一个空行）
-const ipv4Cidrs = ref(
+const ipv4Cidrs = ref<string[]>(
   props.region?.ipv4_cidrs?.length ? [...props.region.ipv4_cidrs] : [""]
 );
-const ipv6Cidrs = ref(
+const ipv6Cidrs = ref<string[]>(
   props.region?.ipv6_cidrs?.length ? [...props.region.ipv6_cidrs] : [""]
 );
 
 /** 添加一行 */
-function addRow(list) {
+function addRow(list: string[]): void {
   list.push("");
 }
 
@@ -44,7 +50,7 @@ function addRow(list) {
  * 删除一行：多行时移除；仅剩末行时清空输入（旧版 addCidrInputRow 语义），
  * 行数不减保证始终有输入位
  */
-function removeRow(list, index) {
+function removeRow(list: string[], index: number): void {
   if (list.length > 1) {
     list.splice(index, 1);
   } else {
@@ -53,14 +59,15 @@ function removeRow(list, index) {
 }
 
 /** 收集 CIDR 值：去空格、滤空串，全空返回 null（旧版 getCidrValues 语义） */
-function collectCidrs(list) {
+function collectCidrs(list: string[]): string[] | null {
   const values = list.map((v) => v.trim()).filter((v) => v.length > 0);
   return values.length > 0 ? values : null;
 }
 
 const saveMutation = useMutation({
   mutationFn: () => {
-    const body = {
+    // 新增/编辑共用键集：编辑端 NetworkRegionUpdate 键均可空，形状兼容 Create
+    const body: NetworkRegionCreate = {
       name: form.name.trim(),
       description: form.description || null,
       ipv4_cidrs: collectCidrs(ipv4Cidrs.value),
@@ -83,7 +90,7 @@ const saveMutation = useMutation({
   }
 });
 
-function submit() {
+function submit(): void {
   if (!form.name.trim()) {
     showToast(t("network.region_name_required"), "warning");
     return;

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 定时任务页签（移植自旧版 scheduledTaskManager.js）：无分页列表
  * （8 列 + 表头排序）+ 立即执行/启停/编辑/日志/删除五行操作。
@@ -7,19 +7,24 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPost } from "../../api/client.js";
-import { formatDateTime } from "../../utils/formatter.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
-import { onThSort, sortClass } from "../../composables/usePagedList.js";
+import { apiDelete, apiGet, apiPost } from "../../api/client";
+import { formatDateTime } from "../../utils/formatter";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
+import { onThSort, sortClass } from "../../composables/usePagedList";
 import ConfirmModal from "../ConfirmModal.vue";
 import NavIcon from "../NavIcon.vue";
 import ScheduledTaskModal from "./ScheduledTaskModal.vue";
 import TaskLogsModal from "./TaskLogsModal.vue";
+import type { PagedList } from "../../composables/usePagedList";
+import type { ScheduledTask } from "../../types/api/generated/ScheduledTask";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** 任务立即执行响应载荷（后端 json! 动态构造，未生成 ts-rs 类型） */
+interface TaskRunResponse {
+  result?: { ok?: string; err?: string } | null;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -28,11 +33,12 @@ const readonly = isSectionReadonly("system");
 
 // ==================== 列表（无分页，仅排序） ====================
 
-const sort = reactive({ by: "created_at", order: "desc" });
+const sort = reactive<{ by: string; order: "asc" | "desc" }>({ by: "created_at", order: "desc" });
 // 兼容 sortClass/onThSort 的 list 形态：无分页列表复用排序工具类
+// （工具函数仅消费 sort/toggleSort 两字段，边界断言补齐 PagedList 其余字段形状）
 const sortList = reactive({
   sort,
-  toggleSort(key) {
+  toggleSort(key: string): void {
     if (sort.by === key) {
       sort.order = sort.order === "asc" ? "desc" : "asc";
     } else {
@@ -40,12 +46,12 @@ const sortList = reactive({
       sort.order = "asc";
     }
   }
-});
+}) as unknown as PagedList<ScheduledTask>;
 
 const tasksQuery = useQuery({
   queryKey: computed(() => ["scheduled-tasks", { sortBy: sort.by, sortOrder: sort.order }]),
   queryFn: async () => {
-    const result = await apiGet(`/api/system/scheduled-tasks?sort_by=${sort.by}&sort_order=${sort.order}`);
+    const result = await apiGet<ScheduledTask[]>(`/api/system/scheduled-tasks?sort_by=${sort.by}&sort_order=${sort.order}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -54,21 +60,21 @@ const tasksQuery = useQuery({
   enabled: computed(() => props.active)
 });
 
-const tasks = computed(() => (Array.isArray(tasksQuery.data.value) ? tasksQuery.data.value : []));
+const tasks = computed<ScheduledTask[]>(() => (Array.isArray(tasksQuery.data.value) ? tasksQuery.data.value : []));
 
 // task_type 为动态翻译键：键缺失时 t() 原样返回键名，此时回退原始枚举值
-function typeLabel(taskType) {
+function typeLabel(taskType: string): string {
   const typeKey = `scheduled_tasks.task_types.${taskType}`;
   return t(typeKey) === typeKey ? taskType || "" : t(typeKey);
 }
 
-function refetch() {
+function refetch(): void {
   queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
 }
 
 // ==================== 立即执行 / 启停 / 删除 ====================
 
-const confirmAction = ref(null); // { type: "run" | "delete", task }
+const confirmAction = ref<null | { type: "run" | "delete"; task: ScheduledTask }>(null); // { type, task }
 const confirmMessage = computed(() => {
   if (!confirmAction.value) {
     return "";
@@ -78,30 +84,30 @@ const confirmMessage = computed(() => {
     : t("scheduled_tasks.confirm_delete");
 });
 
-const runningId = ref(null);
-const togglingId = ref(null);
-const deletingId = ref(null);
+const runningId = ref<string | null>(null);
+const togglingId = ref<string | null>(null);
+const deletingId = ref<string | null>(null);
 
-function handleConfirm() {
+function handleConfirm(): void {
   const action = confirmAction.value;
   confirmAction.value = null;
   if (!action) {
     return;
   }
   if (action.type === "run") {
-    doRun(action.task);
+    void doRun(action.task);
   } else {
-    doDelete(action.task);
+    void doDelete(action.task);
   }
 }
 
-async function doRun(task) {
+async function doRun(task: ScheduledTask): Promise<void> {
   if (runningId.value) {
     return;
   }
   runningId.value = task.id;
   try {
-    const result = await apiPost(`/api/system/scheduled-tasks/${task.id}/run`);
+    const result = await apiPost<TaskRunResponse>(`/api/system/scheduled-tasks/${task.id}/run`);
     if (result.success) {
       const runResult = result.data?.result;
       if (runResult?.ok) {
@@ -121,7 +127,7 @@ async function doRun(task) {
 }
 
 // 启停切换：处理期间防抖，连点会在请求返回前再次切换，最终状态被切回原样
-async function doToggle(task) {
+async function doToggle(task: ScheduledTask): Promise<void> {
   if (togglingId.value) {
     return;
   }
@@ -139,7 +145,7 @@ async function doToggle(task) {
   }
 }
 
-async function doDelete(task) {
+async function doDelete(task: ScheduledTask): Promise<void> {
   if (deletingId.value) {
     return;
   }
@@ -159,14 +165,14 @@ async function doDelete(task) {
 
 // ==================== 编辑 / 日志弹窗 ====================
 
-const editingTask = ref(null);
+const editingTask = ref<ScheduledTask | null>(null);
 const showTaskModal = ref(false);
 const logsTaskName = ref("");
 const showLogsModal = ref(false);
 
-async function openEdit(task) {
+async function openEdit(task: ScheduledTask): Promise<void> {
   // 列表行数据不含完整 config 明细，编辑前拉取详情回填
-  const result = await apiGet(`/api/system/scheduled-tasks/${task.id}`);
+  const result = await apiGet<ScheduledTask>(`/api/system/scheduled-tasks/${task.id}`);
   if (!result.success) {
     showToast(`${t("common.load_failed")}: ${result.message || ""}`, "error");
     return;
@@ -175,7 +181,7 @@ async function openEdit(task) {
   showTaskModal.value = true;
 }
 
-function openCreate() {
+function openCreate(): void {
   editingTask.value = null;
   showTaskModal.value = true;
 }

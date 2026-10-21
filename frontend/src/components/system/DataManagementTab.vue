@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 数据管理页签（移植自旧版 data-management 分区 + systemManager.js）：
  * Agent 上报服务 / SNMP Trap 接收 / 导入导出（CSV 校验含 magic bytes
@@ -6,18 +6,28 @@
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPost } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
-import { downloadBlobResult } from "../../utils/download.js";
+import { apiGet, apiPost } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
+import { downloadBlobResult } from "../../utils/download";
 import ModalShell from "../ModalShell.vue";
 import AgentServiceCard from "./AgentServiceCard.vue";
 import SnmpTrapCard from "./SnmpTrapCard.vue";
 import LogsManagementCard from "./LogsManagementCard.vue";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** 单表导入结果（后端 json! 动态构造，未生成 ts-rs 类型） */
+interface ImportResultRow {
+  table?: string;
+  inserted?: number;
+  updated?: number;
+}
+
+/** CSV 导入响应载荷 */
+interface ImportCsvResponse {
+  results?: ImportResultRow[] | null;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 
@@ -28,18 +38,18 @@ const readonly = isSectionReadonly("system");
 // 导入文件大小上限（与后端一致）
 const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
 
-const importFileInput = ref(null);
+const importFileInput = ref<HTMLInputElement | null>(null);
 const importing = ref(false);
 // 导入结果明细弹窗（后端逐表返回插入/更新行数）
 const importResultVisible = ref(false);
-const importResults = ref([]);
+const importResults = ref<ImportResultRow[]>([]);
 
 const exportType = ref("all");
 const exporting = ref(false);
 
 // 前端校验上传文件的真实类型：扩展名 + magic bytes（zip 为 PK 头，
 // csv 须为不含 NUL 的 UTF-8 文本），与后端校验形成双重防线
-async function validateImportFile(file) {
+async function validateImportFile(file: File): Promise<boolean> {
   const name = file.name.toLowerCase();
   const isZipName = name.endsWith(".zip");
   const isCsvName = name.endsWith(".csv");
@@ -67,14 +77,20 @@ async function validateImportFile(file) {
   return true;
 }
 
-function triggerImportCsv() {
+function triggerImportCsv(): void {
+  const input = importFileInput.value;
+  if (!input) {
+    return;
+  }
   // 清空上次选择，保证重复选择同一文件也触发 change
-  importFileInput.value.value = "";
-  importFileInput.value.click();
+  input.value = "";
+  input.click();
 }
 
-async function handleImportFile(event) {
-  const file = event.target.files[0];
+async function handleImportFile(event: Event): Promise<void> {
+  // 模板 change 事件目标恒为文件输入框（边界断言）
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
   if (!file || importing.value) {
     return;
   }
@@ -87,9 +103,9 @@ async function handleImportFile(event) {
     formData.append("file", file);
     showToast(t("import_export.importing"), "info");
     // 导入 CSV 模块数据（ZIP 内多个 表名.csv，或按表头识别的单个 CSV）
-    const result = await apiPost("/api/system/import-export/import/csv", formData);
+    const result = await apiPost<ImportCsvResponse>("/api/system/import-export/import/csv", formData);
     if (result.success) {
-      importResults.value = result.data?.results || [];
+      importResults.value = result.data?.results ?? [];
       if (importResults.value.length > 0) {
         importResultVisible.value = true;
       }
@@ -102,7 +118,7 @@ async function handleImportFile(event) {
   }
 }
 
-async function downloadTemplate() {
+async function downloadTemplate(): Promise<void> {
   const result = await apiGet("/api/system/import-export/template?type=all");
   if (!result.success) {
     showToast(`${t("import_export.download_template_failed")}: ${result.message}`, "error");
@@ -111,7 +127,7 @@ async function downloadTemplate() {
   downloadBlobResult(result, "template.zip");
 }
 
-async function exportCsvData() {
+async function exportCsvData(): Promise<void> {
   if (exporting.value) {
     return;
   }
@@ -134,7 +150,7 @@ async function exportCsvData() {
   }
 }
 
-async function exportDatabase() {
+async function exportDatabase(): Promise<void> {
   const result = await apiGet("/api/system/import-export/export/database");
   if (!result.success) {
     showToast(`${t("import_export.export_db_failed")}: ${result.message}`, "error");

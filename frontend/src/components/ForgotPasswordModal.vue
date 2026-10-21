@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 忘记密码模态框（移植自 web/static/modals/auth/forgot-password-modal.html
  * + login.js handleForgotPassword）。模板片段改为 SFC 内联，不再走
@@ -6,9 +6,9 @@
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiPost } from "../api/client.js";
+import { apiPost } from "../api/client";
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
@@ -23,7 +23,7 @@ async function handleSubmit() {
 
   sending.value = true;
   try {
-    const result = await apiPost(
+    const result = await apiPost<unknown, { email: string }>(
       "/api/auth/forgot-password",
       { email: email.value },
       { skipAuthCheck: true }
@@ -40,8 +40,9 @@ async function handleSubmit() {
       errorMessage.value = result.message || t("login.send_failed");
     }
   } catch (error) {
+    // apiPost 永不 reject（失败归一为 ApiResult），此分支为防御性兜底
     let message = t("login.send_failed");
-    if (error?.message?.includes("Network")) {
+    if (error instanceof Error && error.message.includes("Network")) {
       message = t("login.network_failed");
     }
     errorMessage.value = message;

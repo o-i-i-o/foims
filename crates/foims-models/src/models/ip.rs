@@ -8,7 +8,8 @@ use validator::Validate;
 
 // ==================== IP 详情模型 ====================
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct IpDetail {
     pub id: Uuid,
     pub device_interface_id: Uuid,
@@ -32,7 +33,8 @@ pub struct IpDetail {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct IpDetailWithNames {
     pub id: Uuid,
     pub device_interface_id: Uuid,
@@ -63,7 +65,8 @@ pub struct IpDetailWithNames {
     pub position_id: Option<Uuid>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct IpDetailCreate {
     pub device_interface_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
@@ -79,7 +82,8 @@ pub struct IpDetailCreate {
 
 // ==================== 设备网卡配置同步模型（网卡 → 网口 → IP） ====================
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct IpSyncItem {
     pub id: Option<Uuid>,
     pub subnet_id: Option<Uuid>,
@@ -92,7 +96,8 @@ pub struct IpSyncItem {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct PortSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(
@@ -120,7 +125,8 @@ pub struct PortSyncItem {
     pub ips: Vec<IpSyncItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct NetworkCardSyncItem {
     pub id: Option<Uuid>,
     #[validate(length(
@@ -138,7 +144,8 @@ pub struct NetworkCardSyncItem {
     pub ports: Vec<PortSyncItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct DeviceNetworkConfigSync {
     /// nested 显式开启：网卡→网口→IP 嵌套链的模型声明与校验点保持一致
     #[validate(nested)]
@@ -146,7 +153,8 @@ pub struct DeviceNetworkConfigSync {
     pub cards: Vec<NetworkCardSyncItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct AutoAssignIpRequest {
     pub subnet_id: Uuid,
     pub device_interface_id: Option<Uuid>,
@@ -155,7 +163,8 @@ pub struct AutoAssignIpRequest {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct PullIpDetailsRequest {
     /// 拉取设备列表（1..=100）：多设备按提交顺序依次同步，
     /// 后同步设备的观测结果直接覆盖先同步设备的写入
@@ -165,7 +174,8 @@ pub struct PullIpDetailsRequest {
     pub subnet_id: Option<Uuid>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct IpDetailUpdate {
     // 挂 deserialize_some 后 JSON null → Some(None)：可通过 null 解绑接口
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]

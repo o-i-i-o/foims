@@ -9,6 +9,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -222,6 +223,19 @@ async fn save_config_to_file(config: &Config) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
+/// 系统信息响应载荷（GET /api/system/info）
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SystemInfo {
+    pub name: String,
+    pub version: String,
+    pub database_status: String,
+    pub uptime_seconds: u64,
+    /// RFC3339 UTC 服务时间戳
+    pub timestamp: String,
+    pub pool_metrics: foims_common::db::PoolMetricsSnapshot,
+}
+
 pub async fn get_system_info(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
@@ -245,21 +259,14 @@ pub async fn get_system_info(
         .as_secs()
         .saturating_sub(START_TIME.load(Ordering::SeqCst));
 
-    let pool_metrics = state.pool()?.get_metrics();
-    let system_time = chrono::Utc::now();
-
-    let system_info = serde_json::json!({
-        "name": "FOIMS",
-        "version": env!("CARGO_PKG_VERSION"),
-        "database_status": database_status,
-        "uptime_seconds": uptime,
-        "timestamp": system_time.to_rfc3339(),
-        "pool_metrics": {
-            "active_connections": pool_metrics.active_connections,
-            "idle_connections": pool_metrics.idle_connections,
-            "waiting_requests": pool_metrics.waiting_requests,
-        }
-    });
+    let system_info = SystemInfo {
+        name: "FOIMS".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        database_status,
+        uptime_seconds: uptime,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        pool_metrics: state.pool()?.get_metrics(),
+    };
 
     Ok(foims_common::ok_json(
         system_info,
@@ -543,6 +550,13 @@ pub async fn restore_config(
     Ok(foims_common::ok_json((), "server.system.config_restored"))
 }
 
+/// 共享注册令牌响应载荷（GET /api/agents/enrollment-token 与 regenerate 共用）
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct EnrollmentTokenResponse {
+    pub enrollment_token: String,
+}
+
 /// GET /api/agents/enrollment-token：查看共享注册令牌（明文仅本端点返回，
 /// 系统配置端点中该字段与数据库密码/JWT 密钥同口径掩码展示）。
 pub async fn get_enrollment_token(
@@ -557,7 +571,9 @@ pub async fn get_enrollment_token(
         )));
     }
     Ok(foims_common::ok_json(
-        serde_json::json!({ "enrollment_token": token }),
+        EnrollmentTokenResponse {
+            enrollment_token: token,
+        },
         "server.agent.enrollment_token_retrieved",
     ))
 }
@@ -597,25 +613,37 @@ pub async fn regenerate_enrollment_token(
     log_info!("log.system.enrollment_token_regenerated");
 
     Ok(foims_common::ok_json(
-        serde_json::json!({ "enrollment_token": new_config.agent.enrollment_token }),
+        EnrollmentTokenResponse {
+            enrollment_token: new_config.agent.enrollment_token,
+        },
         "server.agent.enrollment_token_regenerated",
     ))
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateLanguageRequest {
     #[validate(length(min = 2, max = 5, message = "server.system.validation.language_length"))]
     pub language: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateSessionTimeoutRequest {
     pub session_timeout: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdatePageTimeoutRequest {
     pub page_timeout: Option<u64>,
+}
+
+/// 会话超时配置响应载荷（GET /api/system/session-timeout）
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SessionTimeoutConfig {
+    pub session_timeout: Option<u64>,
 }
 
 pub async fn get_session_timeout_config(
@@ -624,9 +652,9 @@ pub async fn get_session_timeout_config(
     // 读共享槽最新快照（写盘端点成功后已刷新）
     let config = state.config_snapshot();
     Ok(foims_common::ok_json(
-        serde_json::json!({
-            "session_timeout": config.server.session_timeout
-        }),
+        SessionTimeoutConfig {
+            session_timeout: config.server.session_timeout,
+        },
         "server.system.session_timeout_retrieved",
     ))
 }
@@ -670,18 +698,27 @@ pub async fn update_session_timeout_config(
     ))
 }
 
+/// 受支持语言条目（GET /api/system/languages）
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SupportedLanguage {
+    pub code: String,
+    pub name: String,
+    pub native_name: String,
+}
+
 pub async fn get_supported_languages() -> Result<Response, AppError> {
     let supported_languages = vec![
-        serde_json::json!({
-            "code": "en",
-            "name": "English",
-            "native_name": "English"
-        }),
-        serde_json::json!({
-            "code": "zh",
-            "name": "Chinese",
-            "native_name": "中文"
-        }),
+        SupportedLanguage {
+            code: "en".to_string(),
+            name: "English".to_string(),
+            native_name: "English".to_string(),
+        },
+        SupportedLanguage {
+            code: "zh".to_string(),
+            name: "Chinese".to_string(),
+            native_name: "中文".to_string(),
+        },
     ];
 
     Ok(foims_common::ok_json(
@@ -744,15 +781,22 @@ pub async fn update_language_setting(
     Ok(foims_common::ok_json((), "server.system.language_updated"))
 }
 
+/// 页面超时配置响应载荷（GET /api/system/page-timeout）
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct PageTimeoutConfig {
+    pub page_timeout: Option<u64>,
+}
+
 pub async fn get_page_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
     // 读共享槽最新快照（写盘端点成功后已刷新）
     let config = state.config_snapshot();
     Ok(foims_common::ok_json(
-        serde_json::json!({
-            "page_timeout": config.server.page_timeout
-        }),
+        PageTimeoutConfig {
+            page_timeout: config.server.page_timeout,
+        },
         "server.system.page_timeout_retrieved",
     ))
 }
@@ -796,7 +840,8 @@ pub async fn update_page_timeout_config(
     ))
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct NotificationSettings {
     pub email_recipients: Vec<Uuid>,
     /// 通知方式矩阵开关（类型 × 邮件，webhook 为前端占位待实现）
@@ -906,7 +951,8 @@ pub async fn get_smtp_config(
     Ok(foims_common::ok_json(resp, "server.smtp.config_retrieved"))
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateSmtpConfigRequest {
     #[validate(length(min = 1, max = 255, message = "server.smtp.validation.host_length"))]
     pub host: String,
@@ -973,7 +1019,8 @@ pub async fn test_smtp_connection(
     Ok(foims_common::ok_json((), "server.smtp.test_success"))
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct SendSystemEmailRequest {
     #[validate(length(min = 1, message = "server.smtp.validation.recipients_required"))]
     pub user_ids: Vec<Uuid>,
@@ -1029,6 +1076,72 @@ pub async fn update_password_policy(
 // foims / nginx 的状态查询与管理操作见 system/services.rs
 // （GET /api/system/services、POST /api/system/services/{service}/{op}）
 
+/// 仪表盘统计响应载荷（GET /api/system/dashboard-stats），按业务域分组计数
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardStats {
+    pub networks: DashboardNetworksStats,
+    pub ips: DashboardIpsStats,
+    pub devices: DashboardDevicesStats,
+    pub resources: DashboardResourcesStats,
+    pub users: DashboardUsersStats,
+    pub activity: DashboardActivityStats,
+}
+
+/// 网段与区域计数
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardNetworksStats {
+    pub networks: i64,
+    pub regions: i64,
+}
+
+/// IP 地址总量、活跃与状态分布
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardIpsStats {
+    pub total: i64,
+    pub active: i64,
+    pub inactive: i64,
+    /// 状态 → 数量分布（status 为自由字符串）
+    pub by_status: HashMap<String, i64>,
+}
+
+/// 设备总量与类型分布
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardDevicesStats {
+    pub total: i64,
+    /// 设备类型 → 数量分布
+    pub by_type: HashMap<String, i64>,
+}
+
+/// 机房资源计数
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardResourcesStats {
+    pub rooms: i64,
+    pub cabinets: i64,
+    pub workstations: i64,
+    pub positions: i64,
+}
+
+/// 用户总量与活跃数
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardUsersStats {
+    pub total: i64,
+    pub active: i64,
+}
+
+/// 24 小时操作与登录计数
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DashboardActivityStats {
+    pub operations_24h: i64,
+    pub logins_24h: i64,
+}
+
 pub async fn get_dashboard_stats(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
@@ -1057,12 +1170,12 @@ pub async fn get_dashboard_stats(
         sqlx::query("SELECT status, COUNT(*) AS cnt FROM interface_ips GROUP BY status")
             .fetch_all(&conn)
             .await?;
-    let ip_by_status: serde_json::Map<String, serde_json::Value> = ip_status_rows
+    let ip_by_status: HashMap<String, i64> = ip_status_rows
         .iter()
         .map(|r| {
             let status: String = r.get("status");
             let cnt: i64 = r.get("cnt");
-            (status, serde_json::Value::from(cnt))
+            (status, cnt)
         })
         .collect();
 
@@ -1078,12 +1191,12 @@ pub async fn get_dashboard_stats(
             cnt
         })
         .sum();
-    let devices_by_type: serde_json::Map<String, serde_json::Value> = device_type_rows
+    let devices_by_type: HashMap<String, i64> = device_type_rows
         .iter()
         .map(|r| {
             let dtype: String = r.get("device_type");
             let cnt: i64 = r.get("cnt");
-            (dtype, serde_json::Value::from(cnt))
+            (dtype, cnt)
         })
         .collect();
 
@@ -1123,36 +1236,36 @@ pub async fn get_dashboard_stats(
     .fetch_one(&conn)
     .await?;
 
-    let stats = serde_json::json!({
-        "networks": {
-            "networks": networks_count,
-            "regions": regions_count
+    let stats = DashboardStats {
+        networks: DashboardNetworksStats {
+            networks: networks_count,
+            regions: regions_count,
         },
-        "ips": {
-            "total": ips_total,
-            "active": ips_active,
-            "inactive": ips_total - ips_active,
-            "by_status": ip_by_status
+        ips: DashboardIpsStats {
+            total: ips_total,
+            active: ips_active,
+            inactive: ips_total - ips_active,
+            by_status: ip_by_status,
         },
-        "devices": {
-            "total": devices_count,
-            "by_type": devices_by_type
+        devices: DashboardDevicesStats {
+            total: devices_count,
+            by_type: devices_by_type,
         },
-        "resources": {
-            "rooms": rooms_count,
-            "cabinets": cabinets_count,
-            "workstations": workstations_count,
-            "positions": positions_count
+        resources: DashboardResourcesStats {
+            rooms: rooms_count,
+            cabinets: cabinets_count,
+            workstations: workstations_count,
+            positions: positions_count,
         },
-        "users": {
-            "total": users_total,
-            "active": users_active
+        users: DashboardUsersStats {
+            total: users_total,
+            active: users_active,
         },
-        "activity": {
-            "operations_24h": operations_24h,
-            "logins_24h": logins_24h
-        }
-    });
+        activity: DashboardActivityStats {
+            operations_24h,
+            logins_24h,
+        },
+    };
 
     Ok(foims_common::ok_json(
         stats,

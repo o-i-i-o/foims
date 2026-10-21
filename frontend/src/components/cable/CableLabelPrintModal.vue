@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 线缆标签批量打印弹窗（移植自旧版 cableLink.js openCableLabelPrintModal）：
  * 列出当前页线路（A/B 端编号），默认全选，勾选计数实时显示
@@ -7,21 +7,22 @@
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { showToast } from "../../composables/useToast.js";
+import type { CableLinkWithDetails } from "../../types/api/generated/CableLinkWithDetails";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 import CablePrintArea from "./CablePrintArea.vue";
 
-const props = defineProps({
+const props = defineProps<{
   /** 当前页线路列表（直接取列表数据，避免二次请求） */
-  items: { type: Array, required: true }
-});
+  items: CableLinkWithDetails[];
+}>();
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
 // 默认全选（与旧版一致）
-const checked = ref(props.items.map(() => true));
+const checked = ref<boolean[]>(props.items.map(() => true));
 const selectAll = ref(true);
 const printing = ref(false);
 
@@ -31,8 +32,12 @@ function onSelectAll() {
   checked.value = checked.value.map(() => selectAll.value);
 }
 
-function onChecked(index, event) {
-  checked.value[index] = event.target.checked;
+/** 勾选单行：从事件目标读取选中状态 */
+function onChecked(index: number, event: Event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement) {
+    checked.value[index] = target.checked;
+  }
 }
 
 /** 打印所选：无勾选提示，否则调起打印并在结束后关闭弹窗 */
@@ -44,8 +49,9 @@ function printSelected() {
   printing.value = true;
 }
 
-function selectedItems() {
-  return props.items.filter((_, index) => checked.value[index]);
+/** 勾选中的线路（按列表顺序过滤） */
+function selectedItems(): CableLinkWithDetails[] {
+  return props.items.filter((_, index) => checked.value[index] === true);
 }
 </script>
 

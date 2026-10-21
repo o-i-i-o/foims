@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 系统管理页（移植自旧版 main.html system 分区七页签壳）：
  * 系统信息 / 用户管理 / 系统配置 / SMTP 配置 / 导入导出 / 定时任务 / 安全。
@@ -20,7 +20,13 @@ const { t } = useI18n();
 
 // ==================== 页签状态（记忆 + 深链） ====================
 
-const TABS = [
+/** 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键 */
+interface TabMeta {
+  id: string;
+  titleKey: string;
+}
+
+const TABS: TabMeta[] = [
   { id: "system-info", titleKey: "system.info" },
   { id: "users", titleKey: "system.users" },
   { id: "system-config", titleKey: "system.config" },
@@ -34,7 +40,7 @@ const SUBTAB_KEY = "foims_subtab_system";
 const route = useRoute();
 const router = useRouter();
 
-function readInitialTab() {
+function readInitialTab(): string {
   // 深链 #/system?tab=users 优先，其次恢复上次记忆的页签，默认系统信息
   const fromQuery = String(route.query.tab ?? "");
   if (TABS.some((tab) => tab.id === fromQuery)) {
@@ -42,7 +48,7 @@ function readInitialTab() {
   }
   try {
     const saved = localStorage.getItem(SUBTAB_KEY);
-    if (TABS.some((tab) => tab.id === saved)) {
+    if (saved !== null && TABS.some((tab) => tab.id === saved)) {
       return saved;
     }
   } catch {
@@ -53,7 +59,7 @@ function readInitialTab() {
 
 const activeTab = ref(readInitialTab());
 
-function switchTab(tabId) {
+function switchTab(tabId: string) {
   if (tabId === activeTab.value) {
     return;
   }

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 通用分页控件（移植自旧版 utils/pagination.js renderPagination）：
  * 上一页/下一页 + 页码省略序列 + 总数信息，总页数 > 7 时出现跳页框。
@@ -10,27 +10,33 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
-const props = defineProps({
-  page: { type: Number, required: true },
-  totalPages: { type: Number, required: true },
-  total: { type: Number, default: 0 },
-  // 每页条数：>0 时渲染选择器并回显当前值（旧版默认选项 10/20/50/100）
-  pageSize: { type: Number, default: 0 },
-  pageSizeOptions: { type: Array, default: () => [10, 20, 50, 100] }
-});
+const props = withDefaults(
+  defineProps<{
+    page: number;
+    totalPages: number;
+    total?: number;
+    /** 每页条数：>0 时渲染选择器并回显当前值（旧版默认选项 10/20/50/100） */
+    pageSize?: number;
+    pageSizeOptions?: number[];
+  }>(),
+  { total: 0, pageSize: 0, pageSizeOptions: () => [10, 20, 50, 100] }
+);
 
-const emit = defineEmits(["page-change", "page-size-change"]);
+const emit = defineEmits<{
+  "page-change": [target: number];
+  "page-size-change": [size: number];
+}>();
 
 const { t } = useI18n();
 
 // 页码序列：null 表示省略号（与旧版 generatePageNumbers 一致）
-const pages = computed(() => {
+const pages = computed<(number | null)[]>(() => {
   const { page, totalPages } = props;
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
   const delta = 2;
-  const list = [1];
+  const list: Array<number | null> = [1];
   if (page > delta + 1) {
     list.push(null);
   }
@@ -47,7 +53,8 @@ const pages = computed(() => {
 });
 
 const showJump = computed(() => props.totalPages > 7);
-const jumpPage = ref(props.page);
+// 输入框运行时值可能为字符串（number 输入框解析失败回退原文），故为宽类型
+const jumpPage = ref<number | string>(props.page);
 
 // 翻页后同步跳页框回显值
 watch(
@@ -57,16 +64,24 @@ watch(
   }
 );
 
-function go(target) {
+function go(target: number) {
   if (target >= 1 && target <= props.totalPages && target !== props.page) {
     emit("page-change", target);
   }
 }
 
 function doJump() {
-  const target = Number.parseInt(jumpPage.value, 10);
+  const target = Number.parseInt(String(jumpPage.value), 10);
   if (Number.isFinite(target)) {
     go(target);
+  }
+}
+
+/** 每页条数下拉 change：从事件目标读取选中值上抛 */
+function onPageSizeChange(event: Event) {
+  const target = event.target;
+  if (target instanceof HTMLSelectElement) {
+    emit("page-size-change", Number(target.value));
   }
 }
 
@@ -137,7 +152,7 @@ const infoText = computed(() =>
               class="pagination-size-selector"
               :value="pageSize"
               :title="t('common.page_size')"
-              @change="emit('page-size-change', Number($event.target.value))"
+              @change="onPageSizeChange"
             >
               <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} / {{ t("common.page") }}</option>
             </select>

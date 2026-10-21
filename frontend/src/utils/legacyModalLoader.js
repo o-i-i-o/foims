@@ -184,6 +184,14 @@ ${innerHtml}
 </div>`;
 }
 
+/**
+ * 获取指定模态框的完整 HTML（构建期内联模板 + 模块级缓存）。
+ * 标准片段（注册表带 title/titleHtml）由 buildModalShell 补全外壳，
+ * 自包含片段原样返回。
+ *
+ * @param {string} modalId - 模态框 id（MODAL_REGISTRY 键）
+ * @returns {Promise<string|null>} 完整 HTML，未注册时为 null
+ */
 export async function fetchModalHtml(modalId) {
   // 模板构建期内联：无网络请求与版本化 URL，缓存键直接用 modalId
   if (htmlCache.has(modalId)) {
@@ -210,6 +218,13 @@ export async function fetchModalHtml(modalId) {
   return result;
 }
 
+/**
+ * 装载模态框：解析 HTML 注入 body，填充 data-icon 图标并扫描翻译。
+ * 幂等：已装载且仍在文档中时直接返回既有元素，不重复注入。
+ *
+ * @param {string} id - 模态框 id
+ * @returns {Promise<HTMLElement|null>} 模态框根元素，模板加载失败或片段为空时为 null
+ */
 export async function loadModal(id) {
   if (loadedModals.has(id)) {
     const existing = document.getElementById(id);
@@ -254,6 +269,14 @@ export async function loadModal(id) {
   return modal;
 }
 
+/**
+ * 打开模态框：必要时装载，激活并管理层级/焦点/滚动锁。
+ * 层叠打开时按顺序设置内联 z-index（后打开的一定在上）。
+ *
+ * @param {string} id - 模态框 id
+ * @param {string} [title=""] - 覆盖标题文案（空串保持模板/翻译默认）
+ * @returns {Promise<HTMLElement|undefined>} 模态框根元素，装载失败时为 undefined
+ */
 export async function openModal(id, title = "") {
   // await 之前捕获触发元素：模板加载期间焦点仍在调用按钮上，关闭时据此归还
   const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -305,6 +328,13 @@ export async function openModal(id, title = "") {
   return modal;
 }
 
+/**
+ * 关闭并销毁模态框：重置内部表单、清空 IP 容器、归还焦点、恢复滚动，
+ * 并从装载集合移除（下次打开重新装载注入）。
+ *
+ * @param {string} id - 模态框 id
+ * @returns {void}
+ */
 export function closeModal(id) {
   const modal = document.getElementById(id);
 

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 工位新增/编辑弹窗（移植自旧版 modals/workstation/workstation-modal.html
  * + modules/workstation.js openWorkstationModal/submitWorkstationForm）：
@@ -11,24 +11,43 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
+import type { Employee } from "../../types/api/generated/Employee";
+import type { Paged } from "../../types/api";
+import type { Room } from "../../types/api/generated/Room";
+import type { Workstation } from "../../types/api/generated/Workstation";
+import type { WorkstationCreate } from "../../types/api/generated/WorkstationCreate";
+import type { WorkstationUpdate } from "../../types/api/generated/WorkstationUpdate";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显（GET /workstations/{id} 完整数据）
-  workstation: { type: Object, default: null },
-  // 画布当前坐标（可视化回调传入，用于回填坐标输入框；房间管理入口无画布上下文为 null）
-  position: { type: Object, default: null }
-});
+const props = withDefaults(
+  defineProps<{
+    /** null = 新增；对象 = 编辑回显（GET /workstations/{id} 完整数据） */
+    workstation?: Workstation | null;
+    /** 画布当前坐标（可视化回调传入，用于回填坐标输入框；房间管理入口无画布上下文为 null） */
+    position?: { x: number; y: number } | null;
+  }>(),
+  { workstation: null, position: null }
+);
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
 // ==================== 表单 ====================
 
-const form = reactive({
+/** 工位表单状态（x/y 为坐标输入框字符串，提交前再解析） */
+interface WorkstationFormState {
+  roomId: string;
+  name: string;
+  managerId: string;
+  x: string;
+  y: string;
+  description: string;
+}
+
+const form = reactive<WorkstationFormState>({
   roomId: props.workstation?.room_id ?? "",
   name: props.workstation?.name ?? "",
   managerId: props.workstation?.manager_employee_id ?? "",
@@ -41,9 +60,9 @@ const form = reactive({
 
 const roomsQuery = useQuery({
   queryKey: ["options", "office-rooms"],
-  queryFn: async () => {
+  queryFn: async (): Promise<Paged<Room> | null> => {
     const params = new URLSearchParams({ page_size: "1000", room_type: "office,lobby,reception,other" });
-    const result = await apiGet(`/api/resources/rooms?${params}`);
+    const result = await apiGet<Paged<Room>>(`/api/resources/rooms?${params}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -51,9 +70,7 @@ const roomsQuery = useQuery({
   }
 });
 
-const roomOptions = computed(() =>
-  Array.isArray(roomsQuery.data.value?.items) ? roomsQuery.data.value.items : []
-);
+const roomOptions = computed(() => roomsQuery.data.value?.items ?? []);
 
 // 房间 → 所属组织映射：管理人下拉的唯一数据来源
 const roomOrgMap = computed(() => new Map(roomOptions.value.map((room) => [room.id, room.org_id || ""])));
@@ -66,8 +83,10 @@ const managerOrgId = computed(() => roomOrgMap.value.get(form.roomId) || "");
 
 const employeesQuery = useQuery({
   queryKey: ["options", "org-employees", managerOrgId],
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(managerOrgId.value)}`);
+  queryFn: async (): Promise<Employee[]> => {
+    const result = await apiGet<Employee[]>(
+      `/api/resources/employees?org_id=${encodeURIComponent(managerOrgId.value)}`
+    );
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -79,7 +98,7 @@ const employeesQuery = useQuery({
 const employeeOptions = computed(() => (Array.isArray(employeesQuery.data.value) ? employeesQuery.data.value : []));
 
 // 房间切换 → 管理人跟随新房间的所属组织刷新，旧选中作废（与旧版一致）
-function onRoomChange() {
+function onRoomChange(): void {
   form.managerId = "";
 }
 
@@ -87,7 +106,7 @@ function onRoomChange() {
 
 const saving = ref(false);
 
-function submit() {
+function submit(): void {
   if (saving.value) {
     return;
   }
@@ -111,8 +130,8 @@ function submit() {
   void submitSave();
 }
 
-async function submitSave() {
-  const workstationData = {
+async function submitSave(): Promise<void> {
+  const workstationData: WorkstationCreate = {
     name: form.name.trim(),
     room_id: form.roomId,
     manager_employee_id: form.managerId,
@@ -122,8 +141,11 @@ async function submitSave() {
   try {
     const parsedId = props.workstation?.id ?? null;
     const result = parsedId
-      ? await apiPut(`/api/resources/workstations/${parsedId}`, workstationData)
-      : await apiPost("/api/resources/workstations", workstationData);
+      ? await apiPut<Workstation, WorkstationUpdate>(
+          `/api/resources/workstations/${parsedId}`,
+          workstationData
+        )
+      : await apiPost<Workstation, WorkstationCreate>("/api/resources/workstations", workstationData);
 
     if (!result.success) {
       const errorMsg = result.message || t("common.check_input");

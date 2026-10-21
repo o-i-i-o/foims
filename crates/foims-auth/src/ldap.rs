@@ -461,7 +461,8 @@ pub(crate) async fn complete_external_login<P: AuthProvider>(
 
 // ==================== 配置管理接口 ====================
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct LdapConfigResponse {
     pub enabled: bool,
     pub url: String,
@@ -500,7 +501,8 @@ pub async fn get_ldap_config<P: AuthProvider>(
     Ok(foims_common::ok_json(resp, "server.ldap.config_retrieved"))
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateLdapConfigRequest {
     pub enabled: bool,
     #[validate(url(message = "server.ldap.validation.url_format"))]

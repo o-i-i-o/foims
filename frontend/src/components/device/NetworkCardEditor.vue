@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 网卡配置编辑器（移植自旧版 utils/networkCardManager.js 的 DOM 动态构建：
  * 网卡 → 网口 → IP 三级嵌套动态行）。
@@ -12,18 +12,41 @@
  */
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { CARD_TYPES, INTERFACE_ROLES, PHYSICAL_TYPES } from "../../config/deviceOptions.js";
-import { isIPv6, isIpInCidr, isValidIP } from "../../utils/network.js";
+import { apiGet } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { CARD_TYPES, INTERFACE_ROLES, PHYSICAL_TYPES } from "../../config/deviceOptions";
+import { isIPv6, isIpInCidr, isValidIP } from "../../utils/network";
 import NavIcon from "../NavIcon.vue";
+import type { DeviceInterface } from "../../types/api/generated/DeviceInterface";
+import type { IpDetail } from "../../types/api/generated/IpDetail";
+import type { IpSyncItem } from "../../types/api/generated/IpSyncItem";
+import type { NetworkCard } from "../../types/api/generated/NetworkCard";
+import type { NetworkCardSyncItem } from "../../types/api/generated/NetworkCardSyncItem";
+import type { NetworkInfo } from "../../types/api/generated/NetworkInfo";
+import type { PortSyncItem } from "../../types/api/generated/PortSyncItem";
 
-const props = defineProps({
-  /** 设备表单房间下拉当前值：网卡 IP 的区域/网段选项按房间配置网段过滤 */
-  roomId: { type: String, default: "" },
-  /** 编辑回显的原始 cards 数据（含 device_managed=false 的网口，加载时过滤） */
-  initialCards: { type: Array, default: () => [] }
-});
+/** GET /devices/{id} 的网卡树（fetch_device_network_config 组装：网卡 → 网口 → IP 明细） */
+type DeviceCardPort = DeviceInterface & { ips: IpDetail[] };
+type DeviceCard = NetworkCard & { ports: DeviceCardPort[] };
+
+/** IP 提交载荷：附加 network_region_id（后端 IpSyncItem 未声明该键，serde 忽略；保持原请求体） */
+type IpSyncPayload = IpSyncItem & { network_region_id?: string };
+
+/** 网口提交载荷：附加 device_managed（设备表单网口一律托管；后端 PortSyncItem 未声明该键） */
+type PortSyncPayload = PortSyncItem & { device_managed: boolean };
+
+/** 网卡提交载荷（网口行携带 device_managed 附加键） */
+type CardSyncPayload = Omit<NetworkCardSyncItem, "ports"> & { ports: PortSyncPayload[] };
+
+const props = withDefaults(
+  defineProps<{
+    /** 设备表单房间下拉当前值：网卡 IP 的区域/网段选项按房间配置网段过滤 */
+    roomId?: string;
+    /** 编辑回显的原始 cards 数据（含 device_managed=false 的网口，加载时过滤） */
+    initialCards?: DeviceCard[] | null;
+  }>(),
+  { roomId: "", initialCards: () => [] }
+);
 
 const { t } = useI18n();
 
@@ -31,23 +54,25 @@ const DEFAULT_PORT_NAME = "eth0";
 
 // ==================== 房间上下文（区域/网段选项来源） ====================
 
-const roomNetworks = ref([]);
+const roomNetworks = ref<NetworkInfo[]>([]);
 // 遗留数据：不属于当前房间的区域/网段，保留显示并标记
-const legacyRegionList = ref([]);
-const legacyNetworkList = ref([]);
+const legacyRegionList = ref<{ id: string; name: string }[]>([]);
+const legacyNetworkList = ref<{ id: string; name: string; network_region_id: string | null }[]>(
+  []
+);
 
 // 请求序号：快速切换房间时旧响应晚到不得覆盖新上下文
 let roomSeq = 0;
 // setRoomContext 在途 Promise：loadExisting 需等待房间网段就绪后再登记遗留项
-let roomContextReady = Promise.resolve();
+let roomContextReady: Promise<void> = Promise.resolve();
 
-async function applyRoomContext(roomId) {
+async function applyRoomContext(roomId: string): Promise<void> {
   const seq = ++roomSeq;
   roomNetworks.value = [];
   if (!roomId) {
     return;
   }
-  const result = await apiGet(`/api/resources/rooms/${roomId}/networks`);
+  const result = await apiGet<NetworkInfo[]>(`/api/resources/rooms/${roomId}/networks`);
   if (seq !== roomSeq) {
     return; // 响应期间已发起新的房间请求，丢弃过期结果
   }
@@ -65,8 +90,8 @@ watch(
 );
 
 // 房间配置的区域（去重后 {id, name}，追加遗留区域去重保留）
-const regionOptions = computed(() => {
-  const map = new Map();
+const regionOptions = computed<{ id: string; name: string }[]>(() => {
+  const map = new Map<string, { id: string; name: string }>();
   for (const n of roomNetworks.value) {
     const rid = n.network_region_id;
     if (rid && !map.has(rid)) {
@@ -87,32 +112,58 @@ const roomSubnetIds = computed(() => new Set(roomNetworks.value.map((n) => n.id)
 
 // 房间区域 id 集合（遗留区域登记判定用）
 const roomRegionIds = computed(
-  () => new Set(roomNetworks.value.map((n) => n.network_region_id).filter(Boolean))
+  () =>
+    new Set(
+      roomNetworks.value.map((n) => n.network_region_id).filter((id): id is string => Boolean(id))
+    )
 );
 
-const networksByRegion = computed(() => {
-  const map = new Map();
-  for (const n of roomNetworks.value) {
-    const rid = n.network_region_id;
-    if (!map.has(rid)) {
-      map.set(rid, []);
-    }
-    map.get(rid).push(n);
-  }
-  return map;
-});
+/** 网段下拉行：房间配置网段（NetworkInfo）或遗留网段（无 CIDR，仅展示与标记） */
+interface NetworkOptionRow {
+  id: string;
+  name: string;
+  network_region_id: string | null;
+  ipv4_cidr?: string | null;
+  ipv6_cidr?: string | null;
+  /** 遗留网段标记（不属于房间配置） */
+  legacy?: boolean;
+}
 
 // CIDR 校验用网段全集（房间网段 + 遗留网段）
-const allNetworks = computed(() => [...roomNetworks.value, ...legacyNetworkList.value]);
+const allNetworks = computed<NetworkOptionRow[]>(() => [
+  ...roomNetworks.value,
+  ...legacyNetworkList.value
+]);
+
+/** IP 行的网段下拉选项：房间配置网段 + 遗留网段，按 IP 行所选区域过滤 */
+function networkOptionsFor(ipRow: IpRowState): NetworkOptionRow[] {
+  const roomRows: NetworkOptionRow[] = roomNetworks.value.map((n) => ({
+    id: n.id,
+    name: n.name,
+    network_region_id: n.network_region_id,
+    ipv4_cidr: n.ipv4_cidr,
+    ipv6_cidr: n.ipv6_cidr
+  }));
+  const legacyRows: NetworkOptionRow[] = legacyNetworkList.value.map((n) => ({
+    ...n,
+    legacy: true
+  }));
+  const rows = [...roomRows, ...legacyRows];
+  // 未选区域时展示全部选项（含遗留），选择后仅保留该区域的网段
+  if (!ipRow.regionId) {
+    return rows;
+  }
+  return rows.filter((n) => n.network_region_id === ipRow.regionId);
+}
 
 /** 区域下拉占位文案：未选房间时引导先选房间 */
-function regionPlaceholder() {
+function regionPlaceholder(): string {
   return props.roomId ? t("network.select_region") : t("device.select_room_first");
 }
 
 /** 网段选项展示文本：名称 (CIDR)，遗留网段追加不属于房间的标记 */
-function networkOptionLabel(n, legacy = false) {
-  const cidrs = [];
+function networkOptionLabel(n: NetworkOptionRow, legacy = false): string {
+  const cidrs: string[] = [];
   if (n.ipv4_cidr) {
     cidrs.push(n.ipv4_cidr);
   }
@@ -124,33 +175,58 @@ function networkOptionLabel(n, legacy = false) {
   return `${n.name}${cidrStr}${mark}`;
 }
 
-/** 单个 IP 行可用网段：所选区域的房间网段 + 该区域的遗留网段（带 legacy 标记） */
-function networkOptionsFor(ipRow) {
-  const regionId = ipRow.regionId;
-  // 浅拷贝后追加遗留网段，避免改动 networksByRegion 缓存数组；
-  // 房间网段项不写 legacy 字段（读取处 undefined 与 false 同为无标记）
-  const list = [...(regionId ? networksByRegion.value.get(regionId) || [] : [])];
-  for (const ln of legacyNetworkList.value) {
-    if (ln.network_region_id === regionId && !list.some((n) => n.id === ln.id)) {
-      list.push({ ...ln, legacy: true });
-    }
-  }
-  return list;
+// ==================== 行模型（key 供 v-for 稳定渲染） ====================
+
+interface IpRowState {
+  key: number;
+  regionId: string;
+  subnetId: string;
+  ipAddress: string;
+  description: string;
+  /** 自动分配请求进行中（防连点覆盖） */
+  assigning: boolean;
 }
 
-// ==================== 行模型（key 供 v-for 稳定渲染） ====================
+interface PortRowState {
+  key: number;
+  id: string | null;
+  name: string;
+  physicalType: string;
+  interfaceRole: string;
+  macAddress: string;
+  /** 数字输入 v-model：清空时为空串 */
+  vlanId: number | "";
+  description: string;
+  ips: IpRowState[];
+}
+
+interface CardRowState {
+  key: number;
+  id: string | null;
+  name: string;
+  cardType: string;
+  description: string;
+  ports: PortRowState[];
+}
 
 let nextKey = 1;
 
-const cards = reactive([]);
+const cards = reactive<CardRowState[]>([]);
 
-function emptyIpRow() {
-  return { key: nextKey++, regionId: "", subnetId: "", ipAddress: "", description: "" };
+function emptyIpRow(): IpRowState {
+  return {
+    key: nextKey++,
+    regionId: "",
+    subnetId: "",
+    ipAddress: "",
+    description: "",
+    assigning: false
+  };
 }
 
 /** 新网口默认名：扫描表单全部网口名，取未占用的 ethN（重名会被后端 409 拒绝） */
-function nextDefaultPortName() {
-  const used = new Set();
+function nextDefaultPortName(): string {
+  const used = new Set<string>();
   for (const card of cards) {
     for (const port of card.ports) {
       const value = port.name.trim();
@@ -166,7 +242,7 @@ function nextDefaultPortName() {
   return `${DEFAULT_PORT_NAME}${index}`;
 }
 
-function emptyPortRow() {
+function emptyPortRow(): PortRowState {
   return {
     key: nextKey++,
     id: null,
@@ -180,7 +256,7 @@ function emptyPortRow() {
   };
 }
 
-function emptyCardRow() {
+function emptyCardRow(): CardRowState {
   return {
     key: nextKey++,
     id: null,
@@ -193,11 +269,11 @@ function emptyCardRow() {
 
 // ==================== 行增删（每级至少保留一行） ====================
 
-function addCard() {
+function addCard(): void {
   cards.push(emptyCardRow());
 }
 
-function removeCard(index) {
+function removeCard(index: number): void {
   if (cards.length <= 1) {
     showToast(t("device.at_least_one_card"), "warning");
     return;
@@ -205,11 +281,11 @@ function removeCard(index) {
   cards.splice(index, 1);
 }
 
-function addPort(card) {
+function addPort(card: CardRowState): void {
   card.ports.push(emptyPortRow());
 }
 
-function removePort(card, index) {
+function removePort(card: CardRowState, index: number): void {
   if (card.ports.length <= 1) {
     showToast(t("device.at_least_one_port"), "warning");
     return;
@@ -217,11 +293,11 @@ function removePort(card, index) {
   card.ports.splice(index, 1);
 }
 
-function addIp(port) {
+function addIp(port: PortRowState): void {
   port.ips.push(emptyIpRow());
 }
 
-function removeIp(port, index) {
+function removeIp(port: PortRowState, index: number): void {
   if (port.ips.length <= 1) {
     showToast(t("device.at_least_one_ip"), "warning");
     return;
@@ -231,7 +307,7 @@ function removeIp(port, index) {
 
 // ==================== 遗留数据登记（编辑回显） ====================
 
-function registerLegacy(ipData) {
+function registerLegacy(ipData: IpDetail): void {
   if (
     ipData.network_region_id &&
     !roomRegionIds.value.has(ipData.network_region_id) &&
@@ -255,8 +331,8 @@ function registerLegacy(ipData) {
   }
 }
 
-function buildCardRow(cardData, portsData) {
-  const card = {
+function buildCardRow(cardData: DeviceCard, portsData: DeviceCardPort[]): CardRowState {
+  const card: CardRowState = {
     key: nextKey++,
     id: cardData.id || null,
     name: cardData.name || t("device.default_card_name"),
@@ -265,7 +341,7 @@ function buildCardRow(cardData, portsData) {
     ports: []
   };
   for (const portData of portsData || []) {
-    const port = {
+    const port: PortRowState = {
       key: nextKey++,
       id: portData.id || null,
       name: portData.name || nextDefaultPortName(),
@@ -283,7 +359,8 @@ function buildCardRow(cardData, portsData) {
         regionId: ipData.network_region_id || "",
         subnetId: ipData.subnet_id || "",
         ipAddress: ipData.ip_address || "",
-        description: ipData.description || ""
+        description: ipData.description || "",
+        assigning: false
       });
     }
     if (port.ips.length === 0) {
@@ -297,7 +374,7 @@ function buildCardRow(cardData, portsData) {
 // ==================== 对外接口（父组件调用） ====================
 
 /** 新增路径：清空遗留记录并放置一张空网卡 */
-function resetForAdd() {
+function resetForAdd(): void {
   legacyRegionList.value = [];
   legacyNetworkList.value = [];
   cards.splice(0, cards.length, emptyCardRow());
@@ -308,7 +385,7 @@ function resetForAdd() {
  * 仅加载托管网口（device_managed=false 的 SNMP 同步网口不在设备表单展示）；
  * 空网卡（板卡）整体跳过；全部被过滤时回退为一张空网卡。
  */
-async function loadExisting(cardsData) {
+async function loadExisting(cardsData: DeviceCard[] | null): Promise<void> {
   await roomContextReady;
   legacyRegionList.value = [];
   legacyNetworkList.value = [];
@@ -336,12 +413,12 @@ async function loadExisting(cardsData) {
  * 收集校验后的提交数据：返回 { cards, errors }。
  * 完全空置的 IP 行（网段/地址/描述全空）静默跳过；其余逐项校验。
  */
-function collectData() {
+function collectData(): { cards: CardSyncPayload[]; errors: string[] } {
   if (!props.roomId) {
     return { cards: [], errors: [t("device.select_room_first")] };
   }
-  const out = [];
-  const errors = [];
+  const out: CardSyncPayload[] = [];
+  const errors: string[] = [];
   cards.forEach((card, cardIdx) => {
     const cardNum = cardIdx + 1;
     const cardName = card.name.trim();
@@ -350,11 +427,11 @@ function collectData() {
       return;
     }
 
-    const ports = [];
+    const ports: PortSyncPayload[] = [];
     card.ports.forEach((port, portIdx) => {
       const portNum = portIdx + 1;
       const portName = port.name.trim();
-      const portVlan = port.vlanId === "" ? null : parseInt(port.vlanId, 10);
+      const portVlan = port.vlanId === "" ? null : Number.parseInt(String(port.vlanId), 10);
 
       if (!portName) {
         errors.push(
@@ -369,7 +446,7 @@ function collectData() {
         return;
       }
 
-      const ips = [];
+      const ips: IpSyncPayload[] = [];
       port.ips.forEach((ipRow, ipIdx) => {
         const ipNum = ipIdx + 1;
         const subnetId = ipRow.subnetId || null;
@@ -420,7 +497,9 @@ function collectData() {
           return;
         }
 
-        const ipData = {
+        const ipData: IpSyncPayload = {
+          // 同步语义整体替换，原请求即无 id 键；显式 null 与缺键在 serde Option 下等价
+          id: null,
           subnet_id: subnetId,
           ip_address: ipAddress,
           description: ipDescription
@@ -469,7 +548,7 @@ function collectData() {
 
 // ==================== 自动分配 IP ====================
 
-async function autoAssignIp(ipRow) {
+async function autoAssignIp(ipRow: IpRowState): Promise<void> {
   if (!ipRow.subnetId) {
     showToast(t("device.auto_assign_select_network"), "warning");
     return;
@@ -479,7 +558,9 @@ async function autoAssignIp(ipRow) {
   }
   ipRow.assigning = true;
   try {
-    const result = await apiGet(`/api/resources/ip/available/${encodeURIComponent(ipRow.subnetId)}`);
+    const result = await apiGet<{ available_ips?: string[] }>(
+      `/api/resources/ip/available/${encodeURIComponent(ipRow.subnetId)}`
+    );
     const first = result.success ? (result.data?.available_ips || [])[0] : null;
     if (first) {
       ipRow.ipAddress = first;

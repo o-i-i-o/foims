@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 修改密码模态框（移植自旧版 authManager.initChangePassword +
  * modals/system/change-password-modal.html）。
@@ -7,10 +7,11 @@
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiPost, redirectToLogin } from "../api/client.js";
-import { showToast } from "../composables/useToast.js";
+import { apiPost, redirectToLogin } from "../api/client";
+import { showToast } from "../composables/useToast";
+import type { ChangePasswordRequest } from "../types/api/generated/ChangePasswordRequest";
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
@@ -34,7 +35,7 @@ async function handleSubmit() {
 
   submitting.value = true;
   try {
-    const result = await apiPost("/api/auth/change-password", {
+    const result = await apiPost<unknown, ChangePasswordRequest>("/api/auth/change-password", {
       old_password: oldPassword.value,
       new_password: newPassword.value
     });
@@ -49,6 +50,7 @@ async function handleSubmit() {
       showToast(result.message, "error");
     }
   } catch (error) {
+    // apiPost 永不 reject（失败归一为 ApiResult），此分支为防御性兜底
     console.error("修改密码请求失败:", error);
     showToast(t("auth.change_password_failed"), "error");
   } finally {

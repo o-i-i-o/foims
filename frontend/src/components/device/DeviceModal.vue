@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 设备新增/编辑弹窗（移植自旧版 modals/device/device-modal.html +
  * device.js openDeviceModal/submitDeviceForm/fillDeviceFormForEdit +
@@ -14,28 +14,57 @@
 import { onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { DEVICE_TYPE_OPTIONS } from "../../config/deviceOptions.js";
-import { readPowerWattsInput } from "../../utils/power.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { DEVICE_TYPE_OPTIONS } from "../../config/deviceOptions";
+import { readPowerWattsInput } from "../../utils/power";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import NetworkCardEditor from "./NetworkCardEditor.vue";
 import DeviceTemplateModal from "./DeviceTemplateModal.vue";
+import type { ApiResult, Paged } from "../../types/api";
+import type { CabinetPosition } from "../../types/api/generated/CabinetPosition";
+import type { DeviceInterface } from "../../types/api/generated/DeviceInterface";
+import type { DeviceTemplate } from "../../types/api/generated/DeviceTemplate";
+import type { DeviceTemplateSummary } from "../../types/api/generated/DeviceTemplateSummary";
+import type { DeviceUpdate } from "../../types/api/generated/DeviceUpdate";
+import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
+import type { IpDetail } from "../../types/api/generated/IpDetail";
+import type { CabinetWithNetworks } from "../../types/api/generated/CabinetWithNetworks";
+import type { NetworkCard } from "../../types/api/generated/NetworkCard";
+import type { NetworkCardSyncItem } from "../../types/api/generated/NetworkCardSyncItem";
+import type { OrganizationTreeNode } from "../../types/api/generated/OrganizationTreeNode";
+import type { PortSyncItem } from "../../types/api/generated/PortSyncItem";
+import type { RoomWithNetworks } from "../../types/api/generated/RoomWithNetworks";
+import type { SnmpTestRequest } from "../../types/api/generated/SnmpTestRequest";
+import type { WorkstationWithDetails } from "../../types/api/generated/WorkstationWithDetails";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显（GET /devices/{id} 完整数据，含 cards）
-  device: { type: Object, default: null }
-});
+/** GET /devices/{id} 的网卡树（fetch_device_network_config 组装：网卡 → 网口 → IP 明细） */
+type DeviceCardPort = DeviceInterface & { ips: IpDetail[] };
+type DeviceCard = NetworkCard & { ports: DeviceCardPort[] };
 
-const emit = defineEmits(["close", "saved"]);
+/** 网口提交载荷：附加 device_managed（设备表单网口一律托管；后端 PortSyncItem 未声明该键） */
+type PortSyncPayload = PortSyncItem & { device_managed: boolean };
+
+/** 网卡提交载荷（网口行携带 device_managed 附加键） */
+type CardSyncPayload = Omit<NetworkCardSyncItem, "ports"> & { ports: PortSyncPayload[] };
+
+const props = withDefaults(
+  defineProps<{
+    /** null = 新增；对象 = 编辑回显（GET /devices/{id} 完整数据，含 cards） */
+    device?: (DeviceWithDetails & { cards?: DeviceCard[] }) | null;
+  }>(),
+  { device: null }
+);
+
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // ==================== 常量选项 ====================
 
-const ROOM_TYPE_FILTER_OPTIONS = [
+const ROOM_TYPE_FILTER_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "office", labelKey: "room.type_office" },
   { value: "lobby", labelKey: "room.type_lobby" },
   { value: "reception", labelKey: "room.type_reception" },
@@ -47,7 +76,7 @@ const ROOM_TYPE_FILTER_OPTIONS = [
 /** SNMP 密码字段回显掩码：非空即显示圆点，提交时 maskToNull 还原 */
 const PASSWORD_MASK = "••••••••";
 
-function maskToNull(value) {
+function maskToNull(value: string): string | null {
   if (!value || value === PASSWORD_MASK || value.trim() === "") {
     return null;
   }
@@ -56,7 +85,39 @@ function maskToNull(value) {
 
 // ==================== 表单状态 ====================
 
-const form = reactive({
+/** 表单状态；snmpPort/powerWatts 为数字输入 v-model，清空时为空串 */
+interface DeviceFormState {
+  name: string;
+  hostname: string;
+  deviceType: string;
+  templateId: string;
+  saveAsTemplate: boolean;
+  templateName: string;
+  serialNumber: string;
+  brand: string;
+  model: string;
+  seller: string;
+  location: string;
+  powerWatts: number | "";
+  powerUnit: string;
+  orgId: string;
+  roomType: string;
+  roomId: string;
+  workstationId: string;
+  cabinetId: string;
+  positionId: string;
+  description: string;
+  snmpVersion: string;
+  snmpPort: number | "";
+  snmpCommunity: string;
+  snmpUsername: string;
+  snmpAuthProtocol: string;
+  snmpAuthPassword: string;
+  snmpPrivProtocol: string;
+  snmpPrivPassword: string;
+}
+
+const form = reactive<DeviceFormState>({
   name: "",
   hostname: "",
   deviceType: "desktop",
@@ -87,27 +148,41 @@ const form = reactive({
   snmpPrivPassword: ""
 });
 
-const cardEditor = ref(null);
+const cardEditor = ref<InstanceType<typeof NetworkCardEditor> | null>(null);
 const templateModalOpen = ref(false);
+
+/** 模板引用断言：NetworkCardEditor 为同步子组件，挂载后引用必然就绪 */
+function editor(): InstanceType<typeof NetworkCardEditor> {
+  return cardEditor.value as InstanceType<typeof NetworkCardEditor>;
+}
 
 // ==================== 下拉选项与级联加载 ====================
 
 // 设备模板选项（编辑回显与模板自动填充共用）
-const templateOptions = ref([]);
+const templateOptions = ref<DeviceTemplateSummary[]>([]);
 
-async function loadTemplateOptions() {
-  const result = await apiGet("/api/resources/device-templates");
+async function loadTemplateOptions(): Promise<void> {
+  const result = await apiGet<{ items?: DeviceTemplateSummary[] } | DeviceTemplateSummary[]>(
+    "/api/resources/device-templates"
+  );
   const data = result.success ? result.data : null;
   templateOptions.value = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
 }
 
 // 组织树展平为带缩进深度的列表（下拉展示用）
-const orgOptions = ref([]);
+interface OrgOptionRow {
+  id: string;
+  name: string;
+  orgType: string;
+  depth: number;
+}
 
-async function loadOrgOptions() {
-  const result = await apiGet("/api/resources/organizations/tree");
-  const flat = [];
-  const walk = (nodes, depth) => {
+const orgOptions = ref<OrgOptionRow[]>([]);
+
+async function loadOrgOptions(): Promise<void> {
+  const result = await apiGet<OrganizationTreeNode[]>("/api/resources/organizations/tree");
+  const flat: OrgOptionRow[] = [];
+  const walk = (nodes: OrganizationTreeNode[] | null, depth: number): void => {
     for (const node of nodes || []) {
       flat.push({ id: node.id, name: node.name, orgType: node.org_type, depth });
       if (node.children && node.children.length > 0) {
@@ -121,10 +196,10 @@ async function loadOrgOptions() {
   orgOptions.value = flat;
 }
 
-const roomOptions = ref([]);
-const workstationOptions = ref([]);
-const cabinetOptions = ref([]);
-const positionOptions = ref([]);
+const roomOptions = ref<RoomWithNetworks[]>([]);
+const workstationOptions = ref<WorkstationWithDetails[]>([]);
+const cabinetOptions = ref<CabinetWithNetworks[]>([]);
+const positionOptions = ref<CabinetPosition[]>([]);
 
 // 级联加载序号：快速切换过滤条件时旧响应晚到不得覆盖新选项
 let roomsSeq = 0;
@@ -132,7 +207,8 @@ let workstationsSeq = 0;
 let cabinetsSeq = 0;
 let positionsSeq = 0;
 
-function extractItems(result) {
+/** 兼容数组与分页两种载荷的条目提取 */
+function extractItems<T>(result: ApiResult<T[] | Paged<T>>): T[] {
   const data = result.success ? result.data : null;
   if (Array.isArray(data)) {
     return data;
@@ -141,7 +217,7 @@ function extractItems(result) {
 }
 
 /** 按组织/房型过滤加载房间选项；原选中值失效时重置（旧版 fillSelect 语义） */
-async function reloadRooms() {
+async function reloadRooms(): Promise<void> {
   const seq = ++roomsSeq;
   const params = new URLSearchParams({ page_size: "1000" });
   if (form.orgId) {
@@ -150,7 +226,7 @@ async function reloadRooms() {
   if (form.roomType) {
     params.set("room_type", form.roomType);
   }
-  const result = await apiGet(`/api/resources/rooms?${params}`);
+  const result = await apiGet<Paged<RoomWithNetworks>>(`/api/resources/rooms?${params}`);
   if (seq !== roomsSeq) {
     return;
   }
@@ -161,13 +237,15 @@ async function reloadRooms() {
 }
 
 /** 工位必属于房间：未选定房间时不发请求，仅展示"请先选择房间"占位 */
-async function reloadWorkstations(roomId = form.roomId) {
+async function reloadWorkstations(roomId: string = form.roomId): Promise<void> {
   const seq = ++workstationsSeq;
   if (!roomId) {
     workstationOptions.value = [];
     return;
   }
-  const result = await apiGet(`/api/resources/workstations?room_id=${roomId}&page_size=1000`);
+  const result = await apiGet<Paged<WorkstationWithDetails>>(
+    `/api/resources/workstations?room_id=${roomId}&page_size=1000`
+  );
   if (seq !== workstationsSeq) {
     return;
   }
@@ -178,13 +256,15 @@ async function reloadWorkstations(roomId = form.roomId) {
 }
 
 /** 机柜必属于房间：未选定房间时不发请求 */
-async function reloadCabinets(roomId = form.roomId) {
+async function reloadCabinets(roomId: string = form.roomId): Promise<void> {
   const seq = ++cabinetsSeq;
   if (!roomId) {
     cabinetOptions.value = [];
     return;
   }
-  const result = await apiGet(`/api/resources/cabinets?room_id=${roomId}&page_size=1000`);
+  const result = await apiGet<Paged<CabinetWithNetworks>>(
+    `/api/resources/cabinets?room_id=${roomId}&page_size=1000`
+  );
   if (seq !== cabinetsSeq) {
     return;
   }
@@ -195,7 +275,9 @@ async function reloadCabinets(roomId = form.roomId) {
 }
 
 /** 机位必须先选定机柜；roomId 仅用于回显无机柜的历史机位；都无时仅占位 */
-async function reloadPositions({ cabinetId = null, roomId = null } = {}) {
+async function reloadPositions(
+  { cabinetId = null, roomId = null }: { cabinetId?: string | null; roomId?: string | null } = {}
+): Promise<void> {
   const seq = ++positionsSeq;
   if (!cabinetId && !roomId) {
     positionOptions.value = [];
@@ -204,10 +286,11 @@ async function reloadPositions({ cabinetId = null, roomId = null } = {}) {
   const params = new URLSearchParams({ page_size: "1000" });
   if (cabinetId) {
     params.set("cabinet_id", cabinetId);
-  } else {
+  } else if (roomId) {
+    // 前置守卫保证 cabinetId 为空时 roomId 必有值
     params.set("room_id", roomId);
   }
-  const result = await apiGet(`/api/resources/positions?${params}`);
+  const result = await apiGet<Paged<CabinetPosition>>(`/api/resources/positions?${params}`);
   if (seq !== positionsSeq) {
     return;
   }
@@ -218,7 +301,7 @@ async function reloadPositions({ cabinetId = null, roomId = null } = {}) {
 }
 
 /** 组织/房型筛选变化：按条件重载房间选项并重载下游级联 */
-async function reloadDeviceRooms() {
+async function reloadDeviceRooms(): Promise<void> {
   await reloadRooms();
   await reloadWorkstations();
   await reloadCabinets();
@@ -229,7 +312,7 @@ async function reloadDeviceRooms() {
   }
 }
 
-function onRoomChange() {
+function onRoomChange(): void {
   // 房间变更：工位/机柜按新房间重载，机位依赖机柜选择一并重置
   reloadWorkstations();
   reloadCabinets();
@@ -237,31 +320,31 @@ function onRoomChange() {
   positionOptions.value = [];
 }
 
-function onCabinetChange() {
+function onCabinetChange(): void {
   // 机柜变更：重置机位并按机柜重载
   form.positionId = "";
   reloadPositions(form.cabinetId ? { cabinetId: form.cabinetId } : {});
 }
 
 // 工位与机位互斥：选中一方时清空另一方
-function onWorkstationChange() {
+function onWorkstationChange(): void {
   if (form.workstationId) {
     form.positionId = "";
   }
 }
 
-function onPositionChange() {
+function onPositionChange(): void {
   if (form.positionId) {
     form.workstationId = "";
   }
 }
 
 /** 模板选择变化：拉取模板详情自动填充类型/品牌/型号 */
-async function onTemplateChange() {
+async function onTemplateChange(): Promise<void> {
   if (!form.templateId) {
     return;
   }
-  const result = await apiGet(`/api/resources/device-templates/${form.templateId}`);
+  const result = await apiGet<DeviceTemplate>(`/api/resources/device-templates/${form.templateId}`);
   if (result.success && result.data) {
     const tmpl = result.data;
     if (tmpl.device_type) {
@@ -278,7 +361,7 @@ async function onTemplateChange() {
 
 // ==================== 编辑回显 ====================
 
-function setSnmpFieldValues(device) {
+function setSnmpFieldValues(device: DeviceWithDetails): void {
   form.snmpVersion = device.snmp_version || "v2c";
   form.snmpPort = device.snmp_port || 161;
   form.snmpCommunity = device.snmp_community ? PASSWORD_MASK : "";
@@ -290,7 +373,9 @@ function setSnmpFieldValues(device) {
 }
 
 /** 编辑路径回显：基础字段 → 房间上下文（下拉五路并行）→ 网卡数据 */
-async function fillDeviceFormForEdit(device) {
+async function fillDeviceFormForEdit(
+  device: DeviceWithDetails & { cards?: DeviceCard[] }
+): Promise<void> {
   form.name = device.name || "";
   form.hostname = device.hostname || "";
   form.deviceType = device.device_type || "other";
@@ -306,12 +391,12 @@ async function fillDeviceFormForEdit(device) {
   setSnmpFieldValues(device);
 
   if (!device.room_id) {
-    await cardEditor.value.loadExisting(device.cards || []);
+    await editor().loadExisting(device.cards || []);
     return;
   }
 
   // 编辑回显：按房间所属组织/类型对齐筛选条件后重载房间列表，确保目标房间在列
-  const roomResult = await apiGet(`/api/resources/rooms/${device.room_id}`);
+  const roomResult = await apiGet<RoomWithNetworks>(`/api/resources/rooms/${device.room_id}`);
   const room = roomResult.success && roomResult.data ? roomResult.data : null;
   if (!room) {
     // 房间详情加载失败：提示错误并联动清空房间/工位/机柜/机位选择，
@@ -321,7 +406,7 @@ async function fillDeviceFormForEdit(device) {
     form.workstationId = "";
     form.cabinetId = "";
     form.positionId = "";
-    await cardEditor.value.loadExisting(device.cards || []);
+    await editor().loadExisting(device.cards || []);
     return;
   }
 
@@ -357,14 +442,14 @@ async function fillDeviceFormForEdit(device) {
     form.positionId = device.position_id;
   }
 
-  await cardEditor.value.loadExisting(device.cards || []);
+  await editor().loadExisting(device.cards || []);
 }
 
 // ==================== SNMP 测试 / 信息拉取 ====================
 
 /** 从网卡编辑器收集首个已填 IP（SNMP 请求只使用首个 IP） */
-function firstCardIpAddress() {
-  const { cards } = cardEditor.value.collectData();
+function firstCardIpAddress(): string | null {
+  const { cards } = editor().collectData();
   for (const card of cards) {
     for (const port of card.ports) {
       for (const ip of port.ips) {
@@ -379,7 +464,7 @@ function firstCardIpAddress() {
 
 const testingSnmp = ref(false);
 
-async function testSnmpConnection() {
+async function testSnmpConnection(): Promise<void> {
   const ip = firstCardIpAddress();
   if (!ip) {
     showToast(t("device.ip_required"), "warning");
@@ -387,10 +472,18 @@ async function testSnmpConnection() {
   }
   testingSnmp.value = true;
   try {
-    const data = {
+    // SnmpTestRequest 全键必填（均可空）：显式 null 与键缺省在后端 serde Option 下等价
+    const data: SnmpTestRequest = {
+      device_id: props.device?.id ?? null,
       ip_address: ip,
-      snmp_port: parseInt(form.snmpPort, 10) || 161,
-      snmp_version: form.snmpVersion
+      snmp_version: form.snmpVersion,
+      snmp_community: null,
+      snmp_username: null,
+      snmp_auth_protocol: null,
+      snmp_auth_password: null,
+      snmp_priv_protocol: null,
+      snmp_priv_password: null,
+      snmp_port: Number.parseInt(String(form.snmpPort), 10) || 161
     };
     if (form.snmpVersion === "v3") {
       data.snmp_username = form.snmpUsername || null;
@@ -410,9 +503,6 @@ async function testSnmpConnection() {
         data.snmp_community = community;
       }
     }
-    if (props.device?.id) {
-      data.device_id = props.device.id;
-    }
     const result = await apiPost("/api/resources/devices/test-snmp", data);
     if (result.success) {
       showToast(t("device.snmp_test_success"), "success");
@@ -426,7 +516,14 @@ async function testSnmpConnection() {
 
 const fetchingSnmp = ref(false);
 
-async function getDeviceInfoFromSnmp() {
+/** GET /devices/{id}/snmp-info 载荷 */
+interface SnmpInfo {
+  brand: string | null;
+  model: string | null;
+  hostname: string | null;
+}
+
+async function getDeviceInfoFromSnmp(): Promise<void> {
   if (!props.device?.id) {
     // 未保存设备：有 IP 时提示先保存，无 IP 时提示先填 IP
     if (!firstCardIpAddress()) {
@@ -438,7 +535,7 @@ async function getDeviceInfoFromSnmp() {
   }
   fetchingSnmp.value = true;
   try {
-    const result = await apiGet(`/api/resources/devices/${props.device.id}/snmp-info`);
+    const result = await apiGet<SnmpInfo>(`/api/resources/devices/${props.device.id}/snmp-info`);
     if (result.success && result.data) {
       const info = result.data;
       if (info.brand) {
@@ -465,8 +562,17 @@ async function getDeviceInfoFromSnmp() {
 const saving = ref(false);
 
 const saveMutation = useMutation({
-  mutationFn: async ({ cards, powerWatts }) => {
-    const deviceData = {
+  // PUT 走 DeviceUpdate（双层 Option 语义与原发送键集一致，null=清空），
+  // POST 复用同一键集。template_id 为原代码即发送的附加键
+  // （后端 DeviceUpdate 未声明该字段，serde 静默忽略），保留以维持请求体逐键一致。
+  mutationFn: async ({
+    cards,
+    powerWatts
+  }: {
+    cards: CardSyncPayload[];
+    powerWatts: number | null;
+  }) => {
+    const deviceData: DeviceUpdate & { template_id: string | null } = {
       name: form.name.trim(),
       hostname: form.hostname || null,
       device_type: form.deviceType || "other",
@@ -483,7 +589,7 @@ const saveMutation = useMutation({
       save_as_template: form.saveAsTemplate,
       template_name: form.saveAsTemplate ? form.templateName.trim() || form.name.trim() : null,
       snmp_version: form.snmpVersion || "v2c",
-      snmp_port: parseInt(form.snmpPort, 10) || 161,
+      snmp_port: Number.parseInt(String(form.snmpPort), 10) || 161,
       power_watts: powerWatts,
       snmp_community: maskToNull(form.snmpCommunity),
       snmp_username: form.snmpUsername || null,
@@ -516,7 +622,7 @@ const saveMutation = useMutation({
 });
 
 /** 提交前校验（名称/工位机位互斥/网卡/IP 功耗），全部通过后进入 mutation */
-function submit() {
+function submit(): void {
   if (saving.value) {
     return;
   }
@@ -528,7 +634,7 @@ function submit() {
     showToast(t("device.position_mutual_exclusive"), "warning");
     return;
   }
-  const { cards, errors: cardErrors } = cardEditor.value.collectData();
+  const { cards, errors: cardErrors } = editor().collectData();
   if (cardErrors.length > 0) {
     showToast(cardErrors.join("\n"), "warning");
     return;
@@ -547,7 +653,7 @@ function submit() {
 
 onMounted(async () => {
   // 模板下拉、组织下拉、房间选项（新增路径）互不依赖，并行加载
-  const tasks = [loadTemplateOptions(), loadOrgOptions()];
+  const tasks: Promise<void>[] = [loadTemplateOptions(), loadOrgOptions()];
   if (!props.device?.room_id) {
     tasks.push(reloadRooms());
   }
@@ -555,7 +661,7 @@ onMounted(async () => {
   if (props.device) {
     await fillDeviceFormForEdit(props.device);
   } else {
-    cardEditor.value.resetForAdd();
+    editor().resetForAdd();
   }
 });
 </script>

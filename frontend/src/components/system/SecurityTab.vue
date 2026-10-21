@@ -1,22 +1,36 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 安全页签（移植自旧版 security 分区 + fail2banManager.js/systemManager.js）：
  * 限流设置（共享 ["system-config"] 查询键）/ 等保密码策略 / 应用层 Fail2ban。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { useQuery } from "@tanstack/vue-query";
+import { apiGet, apiPut } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 import Fail2banCard from "./Fail2banCard.vue";
+import type { PasswordPolicy } from "../../types/api/generated/PasswordPolicy";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** rate_limit 段配置（GET /api/system/config 的 rate_limit 段，后端未生成 ts-rs 类型） */
+interface RateLimitSection {
+  enabled?: boolean;
+  ip_limit?: number;
+  user_limit?: number;
+  login_limit?: number;
+  window_secs?: number;
+  email_limit?: number;
+  email_window_secs?: number;
+}
+
+/** 系统配置载荷（本页签仅消费 rate_limit 段） */
+interface SystemConfigPayload {
+  rate_limit?: RateLimitSection | null;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
-const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
@@ -25,7 +39,7 @@ const readonly = isSectionReadonly("system");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/config");
+    const result = await apiGet<SystemConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -62,13 +76,13 @@ watch(
 
 const savingRateLimit = ref(false);
 
-async function saveRateLimitConfig() {
+async function saveRateLimitConfig(): Promise<void> {
   if (savingRateLimit.value) {
     return;
   }
   savingRateLimit.value = true;
   try {
-    const result = await apiPut("/api/system/config", {
+    const payload: { rate_limit: RateLimitSection } = {
       rate_limit: {
         enabled: rateEnabled.value === "true",
         ip_limit: Number.parseInt(rateIpLimit.value, 10) || 100,
@@ -78,7 +92,8 @@ async function saveRateLimitConfig() {
         email_limit: Number.parseInt(rateEmailLimit.value, 10) || 5,
         email_window_secs: Number.parseInt(rateEmailWindow.value, 10) || 3600
       }
-    });
+    };
+    const result = await apiPut("/api/system/config", payload);
     if (result.success) {
       showToast(t("config.rate_limit_saved"), "success");
     } else {
@@ -94,7 +109,7 @@ async function saveRateLimitConfig() {
 const policyQuery = useQuery({
   queryKey: ["password-policy"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/password-policy");
+    const result = await apiGet<PasswordPolicy>("/api/system/password-policy");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -127,20 +142,21 @@ watch(
 
 const savingPolicy = ref(false);
 
-async function savePasswordPolicy() {
+async function savePasswordPolicy(): Promise<void> {
   if (savingPolicy.value) {
     return;
   }
   savingPolicy.value = true;
   try {
-    const result = await apiPut("/api/system/password-policy", {
+    const payload: PasswordPolicy = {
       min_length: Number.parseInt(policyMinLength.value, 10) || 8,
       history_count: Number.parseInt(policyHistory.value, 10) || 0,
       require_upper: requireUpper.value,
       require_lower: requireLower.value,
       require_digit: requireDigit.value,
       require_special: requireSpecial.value
-    });
+    };
+    const result = await apiPut("/api/system/password-policy", payload);
     // 成功失败均使用后端返回的 message 提示
     showToast(result.message, result.success ? "success" : "error");
   } finally {

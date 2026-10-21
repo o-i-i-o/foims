@@ -7,7 +7,8 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
+#[ts(export)]
 pub struct Employee {
     pub id: Uuid,
     pub org_id: Uuid,
@@ -21,7 +22,8 @@ pub struct Employee {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct EmployeeCreate {
     pub org_id: Uuid,
     #[validate(length(min = 1, max = 50, message = "server.employee.validation.name_length"))]
@@ -39,7 +41,8 @@ pub struct EmployeeCreate {
     pub hire_date: Option<NaiveDate>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
 pub struct EmployeeUpdate {
     #[validate(length(min = 1, max = 50, message = "server.employee.validation.name_length"))]
     pub name: Option<String>,

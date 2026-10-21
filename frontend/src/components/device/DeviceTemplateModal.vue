@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 设备模板管理弹窗（移植自旧版 modals/device/device-template-modal.html +
  * device.js openDeviceTemplateModal/loadDeviceTemplateList/editDeviceTemplate/
@@ -12,24 +12,29 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
-import { DEVICE_TYPE_OPTIONS, getDeviceTypeName } from "../../config/deviceOptions.js";
+import { apiDelete, apiGet, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { DEVICE_TYPE_OPTIONS, getDeviceTypeName } from "../../config/deviceOptions";
 import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
+import type { DeviceTemplateSummary } from "../../types/api/generated/DeviceTemplateSummary";
+import type { UpdateDeviceTemplateRequest } from "../../types/api/generated/UpdateDeviceTemplateRequest";
 
-const emit = defineEmits(["close", "changed"]);
+const emit = defineEmits<{ close: []; changed: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
 // ==================== 模板列表 ====================
 
+/** 列表行：后端 DeviceTemplateSummary 不返回 description，行内编辑的描述框恒为空（原行为保留） */
+type TemplateRow = DeviceTemplateSummary & { description?: string | null };
+
 const templatesQuery = useQuery({
   queryKey: ["device-templates"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/device-templates");
+  queryFn: async (): Promise<TemplateRow[]> => {
+    const result = await apiGet<{ items?: TemplateRow[] }>("/api/resources/device-templates");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -44,7 +49,7 @@ const templates = computed(() => templatesQuery.data.value ?? []);
 const editingId = ref("");
 const editForm = reactive({ name: "", deviceType: "other", brand: "", model: "", description: "" });
 
-function openEditor(tmpl) {
+function openEditor(tmpl: TemplateRow): void {
   editingId.value = tmpl.id;
   editForm.name = tmpl.name || "";
   editForm.deviceType = tmpl.device_type || "other";
@@ -53,18 +58,18 @@ function openEditor(tmpl) {
   editForm.description = tmpl.description || "";
 }
 
-function cancelEdit() {
+function cancelEdit(): void {
   editingId.value = "";
 }
 
 const updateMutation = useMutation({
-  mutationFn: async ({ id }) => {
+  mutationFn: async ({ id }: { id: string }) => {
     const name = editForm.name.trim();
     if (!name) {
       showToast(t("device_template.name_required"), "warning");
       return null;
     }
-    const data = {
+    const data: UpdateDeviceTemplateRequest = {
       name,
       device_type: editForm.deviceType || "other",
       brand: editForm.brand.trim() || null,
@@ -93,10 +98,10 @@ const updateMutation = useMutation({
 
 // ==================== 删除 ====================
 
-const deleting = ref(null);
+const deleting = ref<TemplateRow | null>(null);
 
 const deleteMutation = useMutation({
-  mutationFn: async (id) => {
+  mutationFn: async (id: string) => {
     const result = await apiDelete(`/api/resources/device-templates/${id}`);
     if (!result.success) {
       throw new Error(result.message || t("common.failed"));

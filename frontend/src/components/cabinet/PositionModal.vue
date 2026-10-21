@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 机位新增/编辑弹窗（移植自旧版 modals/cabinet/cabinet-position-modal.html
  * + modules/position.js openCabinetPositionModal/submitCabinetPositionForm）：
@@ -9,22 +9,36 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import type { CabinetPosition } from "../../types/api/generated/CabinetPosition";
+import type { CabinetPositionCreate } from "../../types/api/generated/CabinetPositionCreate";
+import type { CabinetWithNetworks } from "../../types/api/generated/CabinetWithNetworks";
+import type { Paged } from "../../types/api";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 
-const props = defineProps({
-  // null = 新增；对象 = 编辑回显（GET /positions/{id} 完整数据）
-  position: { type: Object, default: null }
-});
+const props = withDefaults(
+  defineProps<{
+    /** null = 新增；对象 = 编辑回显（GET /positions/{id} 完整数据） */
+    position?: CabinetPosition | null;
+  }>(),
+  { position: null }
+);
 
-const emit = defineEmits(["close", "saved"]);
+const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
 // ==================== 表单 ====================
 
-const form = reactive({
+const form = reactive<{
+  name: string;
+  roomId: string;
+  cabinetId: string;
+  startU: number;
+  endU: number;
+  description: string;
+}>({
   name: props.position?.name ?? "",
   roomId: "",
   cabinetId: props.position?.cabinet_id ?? "",
@@ -39,17 +53,18 @@ const form = reactive({
 // 默认 20/页会把第 21 个及之后的机柜静默截断）
 const cabinetsSourceQuery = useQuery({
   queryKey: ["options", "cabinet-room-source"],
-  queryFn: async () => {
-    const result = await apiGet("/api/resources/cabinets?page_size=1000");
+  queryFn: async (): Promise<CabinetWithNetworks[]> => {
+    const result = await apiGet<Paged<CabinetWithNetworks>>("/api/resources/cabinets?page_size=1000");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    return Array.isArray(result.data?.items) ? result.data.items : [];
+    const items = result.data?.items;
+    return Array.isArray(items) ? items : [];
   }
 });
 
-const roomOptions = computed(() => {
-  const roomMap = new Map();
+const roomOptions = computed<Array<{ id: string; name: string }>>(() => {
+  const roomMap = new Map<string, string>();
   for (const cabinet of cabinetsSourceQuery.data.value ?? []) {
     if (cabinet.room_id && cabinet.room_name && !roomMap.has(cabinet.room_id)) {
       roomMap.set(cabinet.room_id, cabinet.room_name);
@@ -60,17 +75,21 @@ const roomOptions = computed(() => {
 
 const roomCabinetsQuery = useQuery({
   queryKey: ["options", "room-cabinets", () => form.roomId],
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/cabinets?room_id=${encodeURIComponent(form.roomId)}&page_size=1000`);
+  queryFn: async (): Promise<CabinetWithNetworks[]> => {
+    const result = await apiGet<Paged<CabinetWithNetworks>>(`/api/resources/cabinets?room_id=${encodeURIComponent(form.roomId)}&page_size=1000`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    return Array.isArray(result.data?.items) ? result.data.items : [];
+    const items = result.data?.items;
+    return Array.isArray(items) ? items : [];
   },
   enabled: computed(() => Boolean(form.roomId))
 });
 
-const cabinetOptions = computed(() => (Array.isArray(roomCabinetsQuery.data.value) ? roomCabinetsQuery.data.value : []));
+const cabinetOptions = computed<CabinetWithNetworks[]>(() => {
+  const data = roomCabinetsQuery.data.value;
+  return Array.isArray(data) ? data : [];
+});
 
 // 房间切换 → 机柜选项刷新，旧选中作废（与旧版 innerHTML 重建一致）
 function onRoomChange() {
@@ -113,7 +132,7 @@ function submit() {
 }
 
 async function submitSave() {
-  const positionData = {
+  const positionData: CabinetPositionCreate = {
     name: form.name.trim(),
     cabinet_id: form.cabinetId,
     start_u: form.startU,
@@ -124,8 +143,8 @@ async function submitSave() {
   try {
     const parsedId = props.position?.id ?? null;
     const result = parsedId
-      ? await apiPut(`/api/resources/positions/${parsedId}`, positionData)
-      : await apiPost("/api/resources/positions", positionData);
+      ? await apiPut<CabinetPosition, CabinetPositionCreate>(`/api/resources/positions/${parsedId}`, positionData)
+      : await apiPost<CabinetPosition, CabinetPositionCreate>("/api/resources/positions", positionData);
 
     if (!result.success) {
       const errorMsg = result.message || t("common.check_input");
@@ -153,7 +172,7 @@ onMounted(() => {
   }
   void (async () => {
     try {
-      const result = await apiGet(`/api/resources/cabinets/${cabinetId}`);
+      const result = await apiGet<CabinetWithNetworks>(`/api/resources/cabinets/${cabinetId}`);
       if (result.success && result.data?.room_id) {
         form.roomId = result.data.room_id;
       }

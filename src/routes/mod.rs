@@ -95,8 +95,20 @@ async fn data_get_logs_stats(
         .map_err(AppError::from)
 }
 
+/// 健康检查响应载荷（GET /api/health）
+#[derive(Debug, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct HealthStatus {
+    pub status: String,
+}
+
 async fn health_check() -> Response {
-    foims_common::ok_json(serde_json::json!({"status": "ok"}), "server.common.success")
+    foims_common::ok_json(
+        HealthStatus {
+            status: "ok".to_string(),
+        },
+        "server.common.success",
+    )
 }
 
 /// 资源写操作与敏感查询的角色守卫（security-review A-2/S-2）。
@@ -162,6 +174,13 @@ async fn admin_guard_middleware(req: axum::extract::Request, next: Next) -> Resp
     }
 }
 
+/// 初始化状态响应载荷（GET /api/auth/init-status，公开端点）
+#[derive(Debug, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InitStatus {
+    pub init_enabled: bool,
+}
+
 /// 公开的初始化状态查询（不需要认证）
 /// 供前端登录页判断：当 init_enabled=true 时跳转到初始化页 /init_index.html
 /// 仅返回 init_enabled 一个布尔字段，避免泄露系统是否已初始化等额外信息。
@@ -169,9 +188,9 @@ pub async fn get_init_status(State(state): State<Arc<AppState>>) -> Response {
     // 读共享槽最新快照（disable_init_mode 写盘成功后已刷新）
     let config = state.config_snapshot();
     foims_common::ok_json(
-        serde_json::json!({
-            "init_enabled": config.init.enabled,
-        }),
+        InitStatus {
+            init_enabled: config.init.enabled,
+        },
         "server.common.success",
     )
 }

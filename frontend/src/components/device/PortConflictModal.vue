@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * SNMP 端口名称冲突确认弹窗（移植自旧版 modals/device/port-conflict-modal.html +
  * unifiedDevicePorts.js showConflictModal/syncConflictSelections）：
@@ -12,32 +12,43 @@ import { reactive } from "vue";
 import { useI18n } from "vue-i18n";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
+import type { DeviceInterface } from "../../types/api/generated/DeviceInterface";
+import type { SnmpPort } from "../../types/api/generated/SnmpPort";
 
-const props = defineProps({
+/** 冲突对：SNMP 实时端口与现有网口 */
+interface ConflictPair {
+  snmpPort: SnmpPort;
+  existingPort: DeviceInterface;
+}
+
+/** 逐项决策：skip=跳过 / overwrite=覆盖 */
+type PortDecision = "skip" | "overwrite";
+
+const props = defineProps<{
   /** 本轮冲突列表：{ snmpPort, existingPort } */
-  conflicts: { type: Array, required: true },
+  conflicts: ConflictPair[];
   /** 本轮无冲突待新增端口数（汇总展示） */
-  addCount: { type: Number, required: true }
-});
+  addCount: number;
+}>();
 
-const emit = defineEmits(["close", "confirm"]);
+const emit = defineEmits<{ close: []; confirm: [decisions: Record<string, PortDecision>] }>();
 
 const { t } = useI18n();
 
 // 逐项决策：{ 端口名: "skip" | "overwrite" }，默认跳过（与旧版一致）
-const decisions = reactive({});
+const decisions = reactive<Record<string, PortDecision>>({});
 for (const c of props.conflicts) {
   decisions[c.snmpPort.name] = "skip";
 }
 
-function setAll(value) {
+function setAll(value: PortDecision): void {
   for (const c of props.conflicts) {
     decisions[c.snmpPort.name] = value;
   }
 }
 
 /** 确认：把决策原样交给父组件计算覆盖/跳过并执行同步 */
-function confirmDecisions() {
+function confirmDecisions(): void {
   emit("confirm", { ...decisions });
 }
 </script>

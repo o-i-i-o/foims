@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 网段使用情况弹窗（移植自旧版 modals/network/subnet-usage-modal.html
  * + networks.js showNetworkUsage/buildIPv4Content/buildIPv6Content 及
@@ -11,18 +11,25 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
+import type { IpDetailWithNames } from "../../types/api/generated/IpDetailWithNames";
+import type { Network } from "../../types/api/generated/Network";
 
-const props = defineProps({
-  subnetId: { type: String, default: "" }
-});
+const props = withDefaults(defineProps<{ subnetId?: string }>(), { subnetId: "" });
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
+
+/** GET /ip 行：模板引用的 port_device_name 不在后端列表响应中
+ * （恒回退 "-"），保留可选键以兼容原模板展示 */
+type IpRow = IpDetailWithNames & { port_device_name?: string | null };
+
+/** GET /ip 响应形态兼容：旧版裸 data 键与现行分页 items（旧版 ipData 归一链） */
+type IpsResponse = { data?: IpRow[]; items?: IpRow[] };
 
 // IP 可视化网格最多渲染 256 个地址块（旧版 maxDisplayIps 语义）
 const MAX_DISPLAY_IPS = 256;
@@ -32,8 +39,8 @@ const MAX_DISPLAY_IPS = 256;
 const networkQuery = useQuery({
   queryKey: computed(() => ["network-detail", props.subnetId]),
   enabled: computed(() => !!props.subnetId),
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/networks/${props.subnetId}`);
+  queryFn: async (): Promise<Network | null> => {
+    const result = await apiGet<Network>(`/api/resources/networks/${props.subnetId}`);
     if (!result.success) {
       throw new Error(result.message || t("network.load_failed"));
     }
@@ -44,9 +51,11 @@ const networkQuery = useQuery({
 const ipsQuery = useQuery({
   queryKey: computed(() => ["subnet-ips", props.subnetId]),
   enabled: computed(() => !!props.subnetId),
-  queryFn: async () => {
+  queryFn: async (): Promise<IpRow[]> => {
     // 按 subnet_id 过滤拉取：全库拉取在 IP 超过 page_size 上限时还会静默缺数据
-    const result = await apiGet(`/api/resources/ip?subnet_id=${props.subnetId}&page_size=1000`);
+    const result = await apiGet<IpsResponse | IpRow[]>(
+      `/api/resources/ip?subnet_id=${props.subnetId}&page_size=1000`
+    );
     if (!result.success) {
       throw new Error(result.message || t("ip.load_failed"));
     }
@@ -60,7 +69,7 @@ const network = computed(() => networkQuery.data.value ?? null);
 const allNetworkIps = computed(() =>
   Array.isArray(ipsQuery.data.value) ? ipsQuery.data.value : []
 );
-const isV6 = (ip) => ip.ip_address?.includes(":");
+const isV6 = (ip: IpRow) => ip.ip_address?.includes(":");
 const ipv4Ips = computed(() => allNetworkIps.value.filter((ip) => !isV6(ip)));
 const ipv6Ips = computed(() => allNetworkIps.value.filter((ip) => isV6(ip)));
 
@@ -77,7 +86,7 @@ const showTabButtons = computed(() => hasIPv4.value && hasIPv6.value);
 // ==================== IPv4 统计与可视化 ====================
 
 /** 计算网段总 IP 数：2^(32-前缀) - 2；/31、/32 按 0 处理（旧版 calculateTotalIps） */
-function calculateTotalIps(cidr) {
+function calculateTotalIps(cidr: string | null | undefined): number {
   if (!cidr) {
     return 0;
   }
@@ -85,7 +94,8 @@ function calculateTotalIps(cidr) {
   if (parts.length !== 2) {
     return 0;
   }
-  const prefixLength = parseInt(parts[1], 10);
+  // length === 2 已保证后段存在，?? "" 仅用于 noUncheckedIndexedAccess 收窄
+  const prefixLength = Number.parseInt(parts[1] ?? "", 10);
   if (Number.isNaN(prefixLength) || prefixLength < 0 || prefixLength > 32) {
     return 0;
   }
@@ -97,7 +107,7 @@ function calculateTotalIps(cidr) {
  * （基址可能不是网络地址，如 10.0.0.77/24），从网络地址+1 起递增
  * （跳过网络地址），最多 MAX_DISPLAY_IPS 个（旧版 generateIpAddresses）
  */
-function generateIpAddresses(cidr) {
+function generateIpAddresses(cidr: string | null | undefined): string[] {
   if (!cidr) {
     return [];
   }
@@ -105,20 +115,23 @@ function generateIpAddresses(cidr) {
   if (parts.length !== 2) {
     return [];
   }
-  const ip = parts[0];
+  // length === 2 已保证前后段存在，?? 仅用于 noUncheckedIndexedAccess 收窄
+  const ip = parts[0] ?? "";
   if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
     return [];
   }
 
   const ipParts = ip.split(".").map(Number);
-  const prefix = parseInt(parts[1], 10);
+  // 正则已保证 4 段非空数字，默认值 0 仅用于 noUncheckedIndexedAccess 收窄
+  const [ip0 = 0, ip1 = 0, ip2 = 0, ip3 = 0] = ipParts;
+  const prefix = Number.parseInt(parts[1] ?? "", 10);
   let mask = (0xffffffff << (32 - prefix)) >>> 0;
   if (prefix <= 0) {
     mask = 0;
   } else if (prefix >= 32) {
     mask = 0xffffffff;
   }
-  const ipInt = (((ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3]) >>> 0) >>> 0;
+  const ipInt = (((ip0 << 24) | (ip1 << 16) | (ip2 << 8) | ip3) >>> 0) >>> 0;
   const networkInt = (ipInt & mask) >>> 0;
   const networkParts = [
     (networkInt >>> 24) & 255,
@@ -130,13 +143,14 @@ function generateIpAddresses(cidr) {
   const totalIps = calculateTotalIps(cidr);
   const maxDisplayIps = Math.min(totalIps, MAX_DISPLAY_IPS);
 
-  const ipAddresses = [];
+  const ipAddresses: string[] = [];
   for (let i = 1; i <= maxDisplayIps; i++) {
     // 从网络地址起递增（进位传播到高位字节）
     const newIpParts = [...networkParts];
     let carry = i;
     for (let j = 3; j >= 0 && carry > 0; j--) {
-      const sum = newIpParts[j] + carry;
+      // j 恒在 0..3 索引内，?? 0 仅用于 noUncheckedIndexedAccess 收窄
+      const sum = (newIpParts[j] ?? 0) + carry;
       newIpParts[j] = sum % 256;
       carry = Math.floor(sum / 256);
     }
@@ -146,7 +160,7 @@ function generateIpAddresses(cidr) {
 }
 
 /** 生成 /22、/23 网段划分为 /24 的子网列表（旧版 generateSubnet24List） */
-function generateSubnet24List(cidr) {
+function generateSubnet24List(cidr: string | null | undefined): string[] {
   if (!cidr) {
     return [];
   }
@@ -154,36 +168,41 @@ function generateSubnet24List(cidr) {
   if (parts.length !== 2) {
     return [];
   }
-  const prefixLength = parseInt(parts[1], 10);
+  // length === 2 已保证后段存在，?? "" 仅用于 noUncheckedIndexedAccess 收窄
+  const prefixLength = Number.parseInt(parts[1] ?? "", 10);
   if (prefixLength !== 22 && prefixLength !== 23) {
     return [];
   }
 
-  const ipParts = parts[0].split(".").map(Number);
+  // length === 2 已保证前段存在，?? "" 仅用于类型收窄
+  const ipParts = (parts[0] ?? "").split(".").map(Number);
   if (ipParts.length !== 4 || ipParts.some((p) => Number.isNaN(p))) {
     return [];
   }
 
+  // length === 4 且无 NaN 已保证各段存在，默认值 0 仅用于类型收窄
+  const [ip0 = 0, ip1 = 0, ip2 = 0] = ipParts;
   // /22 掩码第三段 252，/23 掩码第三段 254
   const maskThird = prefixLength === 22 ? 252 : 254;
-  const networkThird = ipParts[2] & maskThird;
+  const networkThird = ip2 & maskThird;
   const subnetCount = prefixLength === 22 ? 4 : 2;
 
-  const subnets = [];
+  const subnets: string[] = [];
   for (let i = 0; i < subnetCount; i++) {
-    subnets.push(`${ipParts[0]}.${ipParts[1]}.${networkThird + i}.0/24`);
+    subnets.push(`${ip0}.${ip1}.${networkThird + i}.0/24`);
   }
   return subnets;
 }
 
 const ipv4Prefix = computed(() => {
   const cidr = network.value?.ipv4_cidr;
-  return cidr ? parseInt(cidr.split("/")[1], 10) : 32;
+  // 非法 CIDR（缺 "/"）时与原实现一致返回 NaN，各处比较均回落 false
+  return cidr ? Number.parseInt(cidr.split("/")[1] ?? "", 10) : 32;
 });
 
 const subnet24List = computed(() =>
   ipv4Prefix.value === 22 || ipv4Prefix.value === 23
-    ? generateSubnet24List(network.value.ipv4_cidr)
+    ? generateSubnet24List(network.value?.ipv4_cidr)
     : []
 );
 
@@ -207,7 +226,7 @@ const ipBlocks = computed(() =>
 
 /** IP 状态映射：ip_address → active/inactive（未记录视为未使用） */
 const ipStatusMap = computed(() => {
-  const map = new Map();
+  const map = new Map<string, string>();
   ipv4Ips.value.forEach((ip) => {
     map.set(ip.ip_address, ip.status || "inactive");
   });
@@ -215,7 +234,7 @@ const ipStatusMap = computed(() => {
 });
 
 /** IP 块三态样式类（旧版 ipBlockStatusClass） */
-function ipBlockClass(ip) {
+function ipBlockClass(ip: string): string {
   const status = ipStatusMap.value.get(ip);
   const isUsed = ipStatusMap.value.has(ip);
   if (!isUsed) {
@@ -225,7 +244,7 @@ function ipBlockClass(ip) {
 }
 
 /** IP 块状态文案（旧版 ipStateText） */
-function ipStateText(ip) {
+function ipStateText(ip: string): string {
   const isUsed = ipStatusMap.value.has(ip);
   if (!isUsed) {
     return t("network.unused");
@@ -243,7 +262,7 @@ const usageRate = computed(() =>
 // 状态过滤：仅作用于可视化网格显隐，不影响下方列表（旧版语义）
 const ipFilter = ref("all");
 
-function ipBlockVisible(ip) {
+function ipBlockVisible(ip: string): boolean {
   if (ipFilter.value === "all") {
     return true;
   }
@@ -272,7 +291,7 @@ async function refreshUsage() {
   );
 }
 
-function formatDns(dns) {
+function formatDns(dns: string[] | null | undefined): string {
   return Array.isArray(dns) ? dns.join(", ") : dns || "-";
 }
 </script>
@@ -288,7 +307,7 @@ function formatDns(dns) {
             class="usage-tab-btn"
             :class="{ active: activeTab === 'ipv4' }"
             role="tab"
-            :aria-selected="String(activeTab === 'ipv4')"
+            :aria-selected="activeTab === 'ipv4'"
             @click="activeTab = 'ipv4'"
           >
             IPv4
@@ -298,7 +317,7 @@ function formatDns(dns) {
             class="usage-tab-btn"
             :class="{ active: activeTab === 'ipv6' }"
             role="tab"
-            :aria-selected="String(activeTab === 'ipv6')"
+            :aria-selected="activeTab === 'ipv6'"
             @click="activeTab = 'ipv6'"
           >
             IPv6

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 使用率迷你进度条（移植自旧版 agents.js renderUsageBar）：
  * >85% 红、>60% 橙、其余绿；未上报（null/非数值）显示 "-"。
@@ -6,10 +6,13 @@
  */
 import { computed } from "vue";
 
-const props = defineProps({
-  /** 使用率百分数（数值或可转数值的字符串，null 表示未上报） */
-  value: { type: [Number, String], default: null }
-});
+const props = withDefaults(
+  defineProps<{
+    /** 使用率百分数（数值或可转数值的字符串，null 表示未上报） */
+    value?: number | string | null;
+  }>(),
+  { value: null }
+);
 
 const pct = computed(() => {
   if (props.value == null) {

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 系统配置页签（移植自旧版 system-config 分区 + systemManager.js）：
  * 会话设置 / LDAP / SSO 三张表单卡片内联实现，服务管理与证书管理拆分为
@@ -8,15 +8,29 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client.js";
-import { isSectionReadonly } from "../../utils/roleCapabilities.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiGet, apiPost, apiPut } from "../../api/client";
+import { isSectionReadonly } from "../../utils/roleCapabilities";
+import { showToast } from "../../composables/useToast";
 import CertificateCard from "./CertificateCard.vue";
 import ServicesCard from "./ServicesCard.vue";
+import type { LdapConfigResponse } from "../../types/api/generated/LdapConfigResponse";
+import type { UpdateLdapConfigRequest } from "../../types/api/generated/UpdateLdapConfigRequest";
+import type { SsoConfigResponse } from "../../types/api/generated/SsoConfigResponse";
+import type { UpdateSsoConfigRequest } from "../../types/api/generated/UpdateSsoConfigRequest";
 
-const props = defineProps({
-  active: { type: Boolean, default: false }
-});
+/** server 段配置（GET /api/system/config 的 server 段，后端未生成 ts-rs 类型；其余字段原样带回） */
+interface ServerSection {
+  page_timeout?: number;
+  public_url?: string;
+  [key: string]: unknown;
+}
+
+/** 系统配置载荷（本页签仅消费 server 段） */
+interface SystemConfigPayload {
+  server?: ServerSection | null;
+}
+
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -26,7 +40,8 @@ const readonly = isSectionReadonly("system");
 // ==================== 会话设置（server 段） ====================
 
 // 最近一次加载的 server 段原文：PUT 整体替换，保存时原样带回其余字段
-let serverBase = null;
+// （初始空对象与 JS 展开 null 等价，均为仅覆盖两个编辑字段的载荷）
+let serverBase: ServerSection = {};
 
 const pageTimeout = ref("30");
 const publicUrl = ref("");
@@ -34,7 +49,7 @@ const publicUrl = ref("");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/config");
+    const result = await apiGet<SystemConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -57,7 +72,7 @@ watch(
 
 const savingConfig = ref(false);
 
-async function saveSystemConfig() {
+async function saveSystemConfig(): Promise<void> {
   if (savingConfig.value) {
     return;
   }
@@ -96,7 +111,7 @@ const ldapHasPassword = ref(false);
 const ldapQuery = useQuery({
   queryKey: ["ldap-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/ldap/config");
+    const result = await apiGet<LdapConfigResponse>("/api/system/ldap/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -125,13 +140,13 @@ watch(
 
 const savingLdap = ref(false);
 
-async function saveLdapConfig() {
+async function saveLdapConfig(): Promise<void> {
   if (savingLdap.value) {
     return;
   }
   savingLdap.value = true;
   try {
-    const config = {
+    const config: UpdateLdapConfigRequest = {
       enabled: ldapEnabled.value,
       url: ldapUrl.value,
       bind_dn: ldapBindDn.value || "",
@@ -154,7 +169,7 @@ async function saveLdapConfig() {
 
 const testingLdap = ref(false);
 
-async function testLdapConnection() {
+async function testLdapConnection(): Promise<void> {
   if (testingLdap.value) {
     return;
   }
@@ -184,7 +199,7 @@ const ssoHasSecret = ref(false);
 const ssoQuery = useQuery({
   queryKey: ["sso-config"],
   queryFn: async () => {
-    const result = await apiGet("/api/system/sso/config");
+    const result = await apiGet<SsoConfigResponse>("/api/system/sso/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -211,13 +226,13 @@ watch(
 
 const savingSso = ref(false);
 
-async function saveSsoConfig() {
+async function saveSsoConfig(): Promise<void> {
   if (savingSso.value) {
     return;
   }
   savingSso.value = true;
   try {
-    const config = {
+    const config: UpdateSsoConfigRequest = {
       enabled: ssoEnabled.value,
       issuer_url: ssoIssuerUrl.value,
       client_id: ssoClientId.value,
@@ -239,7 +254,7 @@ async function saveSsoConfig() {
 
 const testingSso = ref(false);
 
-async function testSsoConnection() {
+async function testSsoConnection(): Promise<void> {
   if (testingSso.value) {
     return;
   }

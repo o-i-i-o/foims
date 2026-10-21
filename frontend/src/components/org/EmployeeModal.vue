@@ -1,25 +1,31 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 人员管理弹窗（移植自旧版 openEmployeeModal + employee-modal/employee-edit-modal）：
  * 列出组织节点下的员工，支持新增/编辑/删除（工位管理人的员工引用由后端
  * 自动解绑）。员工列表接口返回普通数组（非分页）。
  */
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client.js";
-import { showToast } from "../../composables/useToast.js";
+import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
 import NavIcon from "../NavIcon.vue";
 import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
+import type { Employee } from "../../types/api/generated/Employee";
+import type { EmployeeCreate } from "../../types/api/generated/EmployeeCreate";
+import type { EmployeeUpdate } from "../../types/api/generated/EmployeeUpdate";
 
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  orgId: { type: String, default: "" },
-  orgName: { type: String, default: "" }
-});
+const props = withDefaults(
+  defineProps<{
+    open?: boolean;
+    orgId?: string;
+    orgName?: string;
+  }>(),
+  { open: false, orgId: "", orgName: "" }
+);
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -28,11 +34,14 @@ const queryClient = useQueryClient();
 
 const employeesQuery = useQuery({
   queryKey: computed(() => ["employees", props.orgId]),
-  queryFn: async () => {
-    const result = await apiGet(`/api/resources/employees?org_id=${encodeURIComponent(props.orgId)}`);
+  queryFn: async (): Promise<Employee[]> => {
+    const result = await apiGet<Employee[]>(
+      `/api/resources/employees?org_id=${encodeURIComponent(props.orgId)}`
+    );
     if (!result.success) {
       throw new Error(result.message || t("employee.load_failed"));
     }
+    // 员工列表接口返回普通数组（非分页），非数组响应按空列表兜底
     return Array.isArray(result.data) ? result.data : [];
   },
   enabled: computed(() => props.open && Boolean(props.orgId))
@@ -43,7 +52,7 @@ const employees = computed(() =>
 );
 
 /** 性别取值显示文案 */
-function genderText(gender) {
+function genderText(gender: string): string {
   if (gender === "male") {
     return t("employee.gender_male");
   }
@@ -55,15 +64,32 @@ function genderText(gender) {
 
 // ==================== 新增/编辑表单 ====================
 
-const editOpen = ref(false);
-const editForm = reactive({ id: "", name: "", gender: "unknown", phone: "", email: "", hireDate: "" });
+/** 编辑表单状态（gender 保持 string：select v-model 会回写 string 值） */
+interface EmployeeFormState {
+  id: string;
+  name: string;
+  gender: string;
+  phone: string;
+  email: string;
+  hireDate: string;
+}
 
-function openCreate() {
+const editOpen = ref(false);
+const editForm = reactive<EmployeeFormState>({
+  id: "",
+  name: "",
+  gender: "unknown",
+  phone: "",
+  email: "",
+  hireDate: ""
+});
+
+function openCreate(): void {
   Object.assign(editForm, { id: "", name: "", gender: "unknown", phone: "", email: "", hireDate: "" });
   editOpen.value = true;
 }
 
-function openEdit(employee) {
+function openEdit(employee: Employee): void {
   Object.assign(editForm, {
     id: employee.id,
     name: employee.name || "",
@@ -77,7 +103,7 @@ function openEdit(employee) {
 
 const saveMutation = useMutation({
   mutationFn: () => {
-    const body = {
+    const body: EmployeeUpdate = {
       name: editForm.name.trim(),
       gender: editForm.gender || "unknown",
       phone: editForm.phone.trim(),
@@ -85,9 +111,18 @@ const saveMutation = useMutation({
       hire_date: editForm.hireDate || null
     };
     if (editForm.id) {
-      return apiPut(`/api/resources/employees/${editForm.id}`, body);
+      return apiPut<unknown, EmployeeUpdate>(`/api/resources/employees/${editForm.id}`, body);
     }
-    return apiPost("/api/resources/employees", { ...body, org_id: props.orgId });
+    // 新增载荷键集与编辑不同（EmployeeCreate.name 必填 string），独立构造
+    const createBody: EmployeeCreate = {
+      name: editForm.name.trim(),
+      gender: editForm.gender || "unknown",
+      phone: editForm.phone.trim(),
+      email: editForm.email.trim(),
+      hire_date: editForm.hireDate || null,
+      org_id: props.orgId
+    };
+    return apiPost<unknown, EmployeeCreate>("/api/resources/employees", createBody);
   },
   onSuccess: (result) => {
     if (result.success) {
@@ -100,7 +135,7 @@ const saveMutation = useMutation({
   }
 });
 
-function handleSubmit() {
+function handleSubmit(): void {
   if (!editForm.name.trim()) {
     showToast(t("employee.name_required"), "warning");
     return;
@@ -110,10 +145,10 @@ function handleSubmit() {
 
 // ==================== 删除 ====================
 
-const deletingEmployee = ref(null);
+const deletingEmployee = ref<Employee | null>(null);
 
 const deleteMutation = useMutation({
-  mutationFn: (employee) => apiDelete(`/api/resources/employees/${employee.id}`),
+  mutationFn: (employee: Employee) => apiDelete(`/api/resources/employees/${employee.id}`),
   onSuccess: (result) => {
     if (result.success) {
       showToast(result.message, "success");
@@ -124,7 +159,7 @@ const deleteMutation = useMutation({
   }
 });
 
-function handleDeleteConfirmed() {
+function handleDeleteConfirmed(): void {
   const employee = deletingEmployee.value;
   deletingEmployee.value = null;
   if (employee) {

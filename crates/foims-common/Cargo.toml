@@ -1,6 +1,6 @@
 [package]
 name = "foims-common"
-version = "0.3.8"
+version = "0.3.9"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Common - shared infra: responses, errors, config, crypto, db pool, net utils, rate limiting"
@@ -16,6 +16,9 @@ sqlx = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# Rust→TS 类型导出（API 载荷类型加 #[derive(TS)]，cargo test export_bindings 生成）
+ts-rs = { workspace = true }
 
 # Validation
 validator = { workspace = true }
