@@ -247,8 +247,12 @@ pub struct SnmpTrapUsmUser {
 pub struct SnmpTrapConfig {
     #[serde(default)]
     pub enabled: bool,
+    /// 监听地址主机部分（IPv4/IPv6/主机名；端口见 [`Self::port`]）。
     #[serde(default = "default_trap_bind_addr")]
     pub bind_addr: String,
+    /// 监听端口（标准 trap 端口 162 需 root 权限，可改用非特权端口）。
+    #[serde(default = "default_trap_port")]
+    pub port: u16,
     #[serde(default)]
     pub communities: Vec<String>,
     #[serde(default)]
@@ -258,11 +262,22 @@ pub struct SnmpTrapConfig {
 }
 
 fn default_trap_bind_addr() -> String {
-    "0.0.0.0:162".to_string()
+    "0.0.0.0".to_string()
+}
+
+const fn default_trap_port() -> u16 {
+    162
 }
 
 const fn default_trap_cooldown_secs() -> u64 {
     30
+}
+
+impl SnmpTrapConfig {
+    /// 监听端点（`host:port` 拼接，供 UDP 绑定与日志输出）。
+    pub fn bind_endpoint(&self) -> String {
+        format!("{}:{}", self.bind_addr, self.port)
+    }
 }
 
 impl Default for SnmpTrapConfig {
@@ -270,6 +285,7 @@ impl Default for SnmpTrapConfig {
         Self {
             enabled: false,
             bind_addr: default_trap_bind_addr(),
+            port: default_trap_port(),
             communities: Vec::new(),
             users: Vec::new(),
             cooldown_secs: default_trap_cooldown_secs(),
@@ -343,12 +359,15 @@ pub struct AgentConfig {
     /// 判重。启动为空时自动生成并写回配置文件；配置页可查看/重新生成。
     #[serde(default)]
     pub enrollment_token: String,
-    /// QUIC 上报监听开关（UDP 9100，nginx 不代理 UDP，需防火墙放行）。
+    /// QUIC 上报监听开关（nginx 不代理 UDP，需防火墙放行监听端口）。
     #[serde(default)]
     pub enabled: bool,
-    /// QUIC 监听地址；[::] 双栈（IPv4-mapped 兼容 IPv4 agent）。
+    /// QUIC 监听地址主机部分；[::] 双栈（IPv4-mapped 兼容 IPv4 agent）。
     #[serde(default = "default_agent_bind_addr")]
     pub bind_addr: String,
+    /// QUIC 监听端口（UDP，默认 9100）。
+    #[serde(default = "default_agent_port")]
+    pub port: u16,
     /// 上报间隔下限（秒）：响应控制面下发的 report_interval 不低于该值。
     #[serde(default = "default_agent_report_interval")]
     pub report_interval_secs: u64,
@@ -375,7 +394,11 @@ pub struct AgentConfig {
 }
 
 fn default_agent_bind_addr() -> String {
-    "[::]:9100".to_string()
+    "[::]".to_string()
+}
+
+const fn default_agent_port() -> u16 {
+    9100
 }
 
 const fn default_agent_report_interval() -> u64 {
@@ -398,12 +421,20 @@ const fn default_agent_offline_factor() -> u32 {
     3
 }
 
+impl AgentConfig {
+    /// 监听端点（`host:port` 拼接，供 QUIC 绑定与日志输出）。
+    pub fn bind_endpoint(&self) -> String {
+        format!("{}:{}", self.bind_addr, self.port)
+    }
+}
+
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             enrollment_token: String::new(),
             enabled: false,
             bind_addr: default_agent_bind_addr(),
+            port: default_agent_port(),
             report_interval_secs: default_agent_report_interval(),
             collect_interval_secs: default_agent_collect_interval(),
             max_report_bytes: default_agent_max_report_bytes(),

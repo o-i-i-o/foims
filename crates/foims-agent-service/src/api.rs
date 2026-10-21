@@ -24,8 +24,6 @@ use foims_common::{log_info, log_warn};
 
 use crate::packaging::{self, PackageInputs};
 
-/// 默认上报端口兜底：监听地址缺合法端口段时按 9100 补齐。
-const DEFAULT_AGENT_PORT: &str = "9100";
 /// agent.toml 采集间隔 clamp 范围（与 agent 侧 foims-agent-core 保持一致）
 const COLLECT_INTERVAL_MIN_SECS: u64 = 1;
 const COLLECT_INTERVAL_MAX_SECS: u64 = 60;
@@ -114,6 +112,7 @@ pub async fn download_config_package<S: ConfigProvider>(
         &agent.report_url_override,
         &public_url,
         &agent.bind_addr,
+        agent.port,
         &headers,
         &uri,
     )?;
@@ -205,23 +204,17 @@ fn is_port_segment(segment: &str) -> bool {
     !segment.is_empty() && segment.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// 拆分监听地址为 (主机, 端口)。端口段非法（裸 [::]、缺端口等）时取默认
-/// 端口 9100；裸 IPv6 的末段无法与端口区分，原样视为主机段（agent 端
-/// 配置校验会拒绝非法形式）。
-fn split_bind_addr(bind_addr: &str) -> (&str, &str) {
-    if let Some(idx) = bind_addr.rfind(']') {
+/// 拆分手动覆盖地址为 (主机, 显式端口段)。仅处理已通过 `valid_override_addr`
+/// 校验的 host[:port] 形式；裸 IPv6 已被校验拒绝，不会走到这里。
+fn split_override_addr(addr: &str) -> (&str, Option<&str>) {
+    if let Some(idx) = addr.rfind(']') {
         // [v6]:port 或 [v6]
-        let (host, rest) = bind_addr.split_at(idx + 1);
-        let port = rest.strip_prefix(':').filter(|p| is_port_segment(p));
-        return (host, port.unwrap_or(DEFAULT_AGENT_PORT));
+        let (host, rest) = addr.split_at(idx + 1);
+        return (host, rest.strip_prefix(':'));
     }
-    if bind_addr.contains('[') {
-        // 方括号不闭合等畸形：整体视为主机段，交白名单校验拒绝
-        return (bind_addr, DEFAULT_AGENT_PORT);
-    }
-    match bind_addr.rsplit_once(':') {
-        Some((host, port)) if is_port_segment(port) => (host, port),
-        _ => (bind_addr, DEFAULT_AGENT_PORT),
+    match addr.rsplit_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (addr, None),
     }
 }
 
@@ -236,14 +229,14 @@ fn resolve_report_addr(
     report_url_override: &str,
     public_url: &str,
     bind_addr: &str,
+    bind_port: u16,
     headers: &axum::http::HeaderMap,
     uri: &axum::http::Uri,
 ) -> Result<String, AppError> {
-    let listen_port = split_bind_addr(bind_addr).1;
     if use_public_url {
         let host = host_from_public_url(public_url)
             .ok_or_else(|| AppError::Validation(msg("server.agent.public_url_missing")))?;
-        let addr = format!("{host}:{listen_port}");
+        let addr = format!("{host}:{bind_port}");
         if !valid_server_addr(&addr) {
             return Err(AppError::Validation(
                 msg("server.common.invalid_param").with("param", "server.public_url"),
@@ -258,16 +251,15 @@ fn resolve_report_addr(
                 "server.agent.invalid_report_override",
             )));
         }
-        let (host, _) = split_bind_addr(override_addr);
-        // host == 原串说明无显式端口段（host 或 [v6]），补监听端口
-        let addr = if host == override_addr {
-            format!("{host}:{listen_port}")
-        } else {
-            override_addr.to_string()
+        // 无显式端口段（host 或 [v6]）时补监听端口
+        let (host, port) = split_override_addr(override_addr);
+        let addr = match port {
+            Some(_) => override_addr.to_string(),
+            None => format!("{host}:{bind_port}"),
         };
         return Ok(addr);
     }
-    resolve_server_addr(bind_addr, headers, uri)
+    resolve_server_addr(bind_addr, bind_port, headers, uri)
 }
 
 /// 校验手动覆盖地址为严格 host[:port] 形式：主机名/IPv4 或方括号 IPv6，
@@ -305,17 +297,18 @@ fn host_from_public_url(public_url: &str) -> Option<String> {
     (!host.is_empty()).then(|| host.to_string())
 }
 
-/// 监听地址推导分支（优先级 3）：统一以监听地址（agent.bind_addr）为准——
-/// 主机部分为通配地址（[::]/::/0.0.0.0/空）时按请求 Host 推导（h2c 无
-/// Host 头，仅 :authority 伪头，故再以 URI authority 兜底），端口恒取
-/// 监听端口；最终结果经白名单校验，非法时返回参数错误。
+/// 监听地址推导分支（优先级 3）：统一以监听配置（agent.bind_addr 主机 +
+/// agent.port 端口）为准——主机部分为通配地址（[::]/::/0.0.0.0/空）时按
+/// 请求 Host 推导（h2c 无 Host 头，仅 :authority 伪头，故再以 URI
+/// authority 兜底），端口恒取监听端口；最终结果经白名单校验，非法时返回
+/// 参数错误。
 fn resolve_server_addr(
     bind_addr: &str,
+    bind_port: u16,
     headers: &axum::http::HeaderMap,
     uri: &axum::http::Uri,
 ) -> Result<String, AppError> {
-    let (bind_host, port) = split_bind_addr(bind_addr);
-    let mut host = if matches!(bind_host, "" | "0.0.0.0" | "::" | "[::]") {
+    let mut host = if matches!(bind_addr, "" | "0.0.0.0" | "::" | "[::]") {
         host_from_headers(headers)
             .or_else(|| uri.host().map(str::to_string))
             .ok_or_else(|| {
@@ -324,14 +317,14 @@ fn resolve_server_addr(
                 )
             })?
     } else {
-        bind_host.to_string()
+        bind_addr.to_string()
     };
     // 请求 Host 为 IPv6 字面量时补回方括号（host_from_headers/Uri::host 已剥去），
     // 裸 IPv6 直接拼端口会产生歧义地址
     if host.contains(':') && !host.starts_with('[') {
         host = format!("[{host}]");
     }
-    let addr = format!("{host}:{port}");
+    let addr = format!("{host}:{bind_port}");
     if !valid_server_addr(&addr) {
         return Err(AppError::Validation(
             msg("server.common.invalid_param").with("param", "agent.bind_addr"),
@@ -363,23 +356,25 @@ fn host_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        host_from_public_url, resolve_report_addr, resolve_server_addr, split_bind_addr,
+        host_from_public_url, resolve_report_addr, resolve_server_addr, split_override_addr,
         valid_override_addr, valid_server_addr,
     };
     use axum::http::{HeaderMap, Uri};
 
     #[test]
-    fn test_split_bind_addr() {
-        // 常规 host:port 与 [v6]:port：原样拆分
-        assert_eq!(split_bind_addr("127.0.0.1:9100"), ("127.0.0.1", "9100"));
-        assert_eq!(split_bind_addr("[::]:9100"), ("[::]", "9100"));
-        assert_eq!(split_bind_addr("[::1]:9443"), ("[::1]", "9443"));
-        // 缺合法端口段：端口回退默认 9100
-        assert_eq!(split_bind_addr("127.0.0.1"), ("127.0.0.1", "9100"));
-        assert_eq!(split_bind_addr("[::]"), ("[::]", "9100"));
+    fn test_split_override_addr() {
+        // host:port 与 [v6]:port：拆分出主机与显式端口段
         assert_eq!(
-            split_bind_addr("agent.example-com_cn"),
-            ("agent.example-com_cn", "9100")
+            split_override_addr("127.0.0.1:9100"),
+            ("127.0.0.1", Some("9100"))
+        );
+        assert_eq!(split_override_addr("[::1]:9443"), ("[::1]", Some("9443")));
+        // 缺端口段（host 或 [v6]）：端口为 None，由调用方补监听端口
+        assert_eq!(split_override_addr("127.0.0.1"), ("127.0.0.1", None));
+        assert_eq!(split_override_addr("[::]"), ("[::]", None));
+        assert_eq!(
+            split_override_addr("agent.example-com_cn"),
+            ("agent.example-com_cn", None)
         );
     }
 
@@ -396,20 +391,20 @@ mod tests {
 
         // 监听主机为通配地址：主机取请求 Host（忽略其端口），端口取监听端口
         assert_eq!(
-            resolve_server_addr("[::]:9100", &headers, &uri).unwrap(),
+            resolve_server_addr("[::]", 9100, &headers, &uri).unwrap(),
             "foims.example.com:9100"
         );
         assert_eq!(
-            resolve_server_addr("0.0.0.0:9100", &headers, &uri).unwrap(),
+            resolve_server_addr("0.0.0.0", 9100, &headers, &uri).unwrap(),
             "foims.example.com:9100"
         );
         // 监听主机可路由：原样作为上报地址
         assert_eq!(
-            resolve_server_addr("agent.example-com_cn:9100", &headers, &uri).unwrap(),
+            resolve_server_addr("agent.example-com_cn", 9100, &headers, &uri).unwrap(),
             "agent.example-com_cn:9100"
         );
         assert_eq!(
-            resolve_server_addr("[2001:db8::1]:9100", &headers, &uri).unwrap(),
+            resolve_server_addr("[2001:db8::1]", 9100, &headers, &uri).unwrap(),
             "[2001:db8::1]:9100"
         );
     }
@@ -426,7 +421,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(
-            resolve_server_addr("[::]:9100", &headers, &uri).unwrap(),
+            resolve_server_addr("[::]", 9100, &headers, &uri).unwrap(),
             "[2001:db8::1]:9100"
         );
     }
@@ -507,7 +502,8 @@ mod tests {
                 true,
                 "",
                 "https://foims.example.com:8443/",
-                "[::]:9100",
+                "[::]",
+                9100,
                 &empty_headers,
                 &uri
             )
@@ -515,7 +511,7 @@ mod tests {
             "foims.example.com:9100"
         );
         assert_eq!(
-            resolve_report_addr(true, "", "", "[::]:9100", &empty_headers, &uri)
+            resolve_report_addr(true, "", "", "[::]", 9100, &empty_headers, &uri)
                 .unwrap_err()
                 .status_code(),
             axum::http::StatusCode::BAD_REQUEST
@@ -527,7 +523,8 @@ mod tests {
                 false,
                 "relay.example.com",
                 "",
-                "[::]:9100",
+                "[::]",
+                9100,
                 &empty_headers,
                 &uri
             )
@@ -539,7 +536,8 @@ mod tests {
                 false,
                 "relay.example.com:9443",
                 "",
-                "[::]:9100",
+                "[::]",
+                9100,
                 &empty_headers,
                 &uri
             )
@@ -551,7 +549,8 @@ mod tests {
                 false,
                 "[2001:db8::1]",
                 "",
-                "[::]:9100",
+                "[::]",
+                9100,
                 &empty_headers,
                 &uri
             )
@@ -560,7 +559,7 @@ mod tests {
         );
         // 覆盖地址非法：400
         assert_eq!(
-            resolve_report_addr(false, "2001:db8::1", "", "[::]:9100", &empty_headers, &uri)
+            resolve_report_addr(false, "2001:db8::1", "", "[::]", 9100, &empty_headers, &uri)
                 .unwrap_err()
                 .status_code(),
             axum::http::StatusCode::BAD_REQUEST
@@ -572,7 +571,8 @@ mod tests {
                 false,
                 "",
                 "",
-                "agent.example-com_cn:9100",
+                "agent.example-com_cn",
+                9100,
                 &empty_headers,
                 &uri
             )

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * SNMP Trap 接收配置卡片（移植自旧版 systemManager.js 的 trap 段）：
- * 启用开关 / 监听地址拆分（host:port）/ 冷却窗口 / 团体名白名单 /
+ * 启用开关 / 监听地址与端口 / 冷却窗口 / 团体名白名单 /
  * v3 USM 用户表（协议下拉 + 密码掩码 *** 沿用规则 + 逐行校验）。
  * PUT /api/system/config 会整体替换 snmp 段，基础参数原样带回避免丢配置。
  */
@@ -24,7 +24,9 @@ interface TrapUserConfig {
 /** trap 段配置（GET /api/system/config 的 snmp.trap 段，后端未生成 ts-rs 类型） */
 interface TrapSection {
   enabled?: boolean;
+  /** 监听地址主机部分（IPv4/主机名/方括号 IPv6），端口见 port */
   bind_addr?: string | null;
+  port?: number | null;
   communities?: string[] | null;
   users?: TrapUserConfig[] | null;
   cooldown_secs?: number | null;
@@ -132,12 +134,8 @@ watch(
     };
     const trap = snmp.trap || {};
     trapEnabled.value = Boolean(trap.enabled);
-    // 磁盘上 bind_addr 为 host:port，加载时拆分到地址/端口两个输入框
-    const bindMatch = (trap.bind_addr || "0.0.0.0:162").match(
-      /^(\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/
-    );
-    bindHost.value = bindMatch?.[1] ?? "0.0.0.0";
-    bindPort.value = bindMatch?.[2] ?? "162";
+    bindHost.value = trap.bind_addr || "0.0.0.0";
+    bindPort.value = String(trap.port ?? 162);
     cooldown.value = String(trap.cooldown_secs ?? 30);
     communities.value = (trap.communities || []).join(", ");
     trapUsers.value = (trap.users || []).map((user) => buildRow(user));
@@ -250,7 +248,8 @@ async function saveSnmpTrapConfig(): Promise<void> {
         ...snmpBase,
         trap: {
           enabled: trapEnabled.value,
-          bind_addr: `${host}:${port}`,
+          bind_addr: host,
+          port,
           communities: communityList,
           users,
           cooldown_secs: cooldownSecs

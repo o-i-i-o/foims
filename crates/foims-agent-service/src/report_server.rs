@@ -69,7 +69,7 @@ pub fn spawn_report_server_task(
         log_debug!("log.agent.report_disabled");
         return;
     }
-    let bind_addr = config.load().agent.bind_addr.clone();
+    let bind_addr = config.load().agent.bind_endpoint();
     log_info!("log.agent.report_enabling", bind = bind_addr);
     tokio::spawn(async move {
         let ctx = ReportContext {

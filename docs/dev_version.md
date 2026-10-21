@@ -282,3 +282,11 @@ v0.12.0
 6. 版本联动：根 Cargo.toml 0.28.0→0.29.0（仅 lib）；子 crate z+1：foims-common 0.3.9、foims-models 0.2.11、foims-auth 0.1.5、foims-resource 0.1.10、foims-agent-service 0.1.13、foims-visualization 0.2.6、foims-x509-management 0.2.4、foims-init 0.1.8、foims-data-management 0.2.5
 7. 验证：cargo fmt --check、clippy --release -D warnings 通过；cargo test --workspace 882 通过 0 失败（含 172 export_bindings）；vue-tsc 0 错、vite build 通过；biome 0 诊断、oxlint 287 文件 0 错；gen-ts-types.sh 重跑 172 生成物哈希与入库版本一致（零漂移）；pak.sh 部署后 curl 冒烟三入口 200、登录/auth/me/system info/资源 rooms 全 200；浏览器 e2e 登录→资源页→可视化页（17 个 SVG 拓扑元素）→系统页七页签全过，console 零 JS 运行时错误（3 条 ERR_ABORTED 为路由切换在途查询取消的预期行为）
 8. 遗留漂移清理与管理员改密补全（同批追加）：清理后端从未产出的展示层死键——PullMacModal 设备行 ip_address（响应无此键展示恒「-」，整行删除）、IpPage/SubnetUsageModal/SVGRenderer 四处 port_device_name·port_device_number（全仓后端零产出，逐字迁移遗留死分支，SVGRenderer 端口行保持「无」展示行为不变）；LoginPage CA 探测改用生成 CaStatus 类型替换临时内联收窄；补全管理员改密（编辑弹窗密码框此前静默无效的历史缺陷）：UserUpdate 新增可选 password（ts-rs 类型联动再生成，生成物仅 UserUpdate.ts +6/-1），update_user 过等保策略（复杂度+与当前密码及历史不重复）并预哈希，用户信息更新与密码历史同事务，重置即吊销历史令牌并刷新 password_changed_at（同请求重新启用到期用户不再误触 409），审计日志补 password_reset 布尔（不落密码明文）；UserModal 编辑态用户名置只读（后端忽略不可改的诚实 UI）；tsconfig target/lib 升至 ES2024（当前 TS 5.9.3 支持上限，ES2025 需待 typescript 升级）；验证 clippy/test 882 全过、vue-tsc/build/biome/oxlint 全绿、pak.sh 部署后临时用户全链路实测编辑重置密码→新密码登录成功→清理删除
+
+v0.13.0
+2026102115062001
+1. 监听配置拆分为主机+端口两键（功能优化y+1）：config.toml [snmp.trap] 与 [agent] 段不再用 bind_addr 合写 host:port，改为 bind_addr（主机部分）+ port（u16，业界通行的 host/port 分离写法，与 [database] 段对齐）——SnmpTrapConfig 默认 0.0.0.0/162、AgentConfig 默认 [::]/9100，两结构各新增 bind_endpoint() 供 UDP/QUIC 绑定与日志拼接端点；config.toml.example 同步，本地 config.toml 顺带清理 v0.2.0 已删除却残留的 agent.dist_dir 死键
+2. 消费方联动：foims-agent-service trap.rs/report_server.rs 改用 bind_endpoint()；api.rs 删 DEFAULT_AGENT_PORT 兜底与 split_bind_addr（监听地址不再需要拆分），新增 split_override_addr 仅服务手动覆盖地址解析，resolve_report_addr/resolve_server_addr 签名改收 bind_addr+bind_port，测试同步；主程序 validate_config_for_save 的 agent 段校验改为 bind_addr 非空 + port 1-65535 两查
+3. 前端：AgentServiceCard/SnmpTrapCard 删除加载时 host:port 正则拆分与保存时拼接逻辑，直接读写 bind_addr/port 两字段（界面双输入框不变）
+4. 升级注意：旧配置文件中合写的 bind_addr 需手工拆分为 bind_addr+port（无兼容回退层，属预期破坏性变更）；agent 侧 agent.toml 的 server_addr 合写形式不变（agent 端独立配置格式）
+5. 联动：根 Cargo.toml 0.29.0→0.29.1，foims-common 0.3.9→0.3.10，foims-agent-service 0.1.13→0.1.14

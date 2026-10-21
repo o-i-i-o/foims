@@ -64,7 +64,7 @@ async fn run_trap_receiver(
         Err(message) => {
             log_error!(
                 "system.snmp_trap_bind_failed",
-                addr = config.bind_addr,
+                addr = config.bind_endpoint(),
                 error = message
             );
             return;
@@ -93,7 +93,9 @@ async fn run_trap_receiver(
 
 /// 按配置构建通知接收器。
 async fn build_receiver(config: &SnmpTrapConfig) -> Result<NotificationReceiver, String> {
-    let mut builder = NotificationReceiver::builder().bind(config.bind_addr.as_str());
+    // 端点串先落局部变量：builder 捕获 &str，临时 String 不能内联传参
+    let bind_endpoint = config.bind_endpoint();
+    let mut builder = NotificationReceiver::builder().bind(bind_endpoint.as_str());
 
     if !config.communities.is_empty() {
         builder = builder.communities(config.communities.iter().map(String::as_str));

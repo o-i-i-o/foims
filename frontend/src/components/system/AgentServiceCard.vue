@@ -19,7 +19,9 @@ import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 /** agent 段配置（GET /api/system/config 的 agent 段，后端未生成 ts-rs 类型） */
 interface AgentConfigSection {
   enabled: boolean;
+  /** 监听地址主机部分（IPv4/主机名/方括号 IPv6），端口见 port */
   bind_addr: string;
+  port: number;
   report_interval_secs: number;
   collect_interval_secs: number;
   use_public_url: boolean;
@@ -81,10 +83,8 @@ watch(
       offline_factor: agent.offline_factor
     };
     agentEnabled.value = Boolean(agent.enabled);
-    // 磁盘上 bind_addr 为 host:port，加载时拆分到地址/端口两个输入框
-    const bindMatch = (agent.bind_addr || "[::]:9100").match(/^(\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+):(\d+)$/);
-    agentBindHost.value = bindMatch?.[1] ?? "[::]";
-    agentBindPort.value = bindMatch?.[2] ?? "9100";
+    agentBindHost.value = agent.bind_addr || "[::]";
+    agentBindPort.value = String(agent.port ?? 9100);
     agentInterval.value = String(agent.report_interval_secs ?? 60);
     agentCollectInterval.value = String(agent.collect_interval_secs ?? 5);
     agentUsePublicUrl.value = Boolean(agent.use_public_url);
@@ -127,7 +127,8 @@ async function saveAgentConfig(): Promise<void> {
     const agent: AgentConfigSection = {
       ...agentBase,
       enabled: agentEnabled.value,
-      bind_addr: `${bindHost}:${bindPort}`,
+      bind_addr: bindHost,
+      port: bindPort,
       report_interval_secs: interval,
       collect_interval_secs: collectInterval,
       use_public_url: agentUsePublicUrl.value,

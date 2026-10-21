@@ -88,22 +88,17 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
         ));
     }
 
-    // Agent：监听地址端口合法（绑定失败会令 QUIC 接收不启动）、上报间隔与
+    // Agent：监听主机与端口合法（绑定失败会令 QUIC 接收不启动）、上报间隔与
     // 历史保留期在业务区间内（与 agent 端 clamp / 清理任务上限对齐）
     let agent = &config.agent;
-    let (host, port) = agent.bind_addr.rsplit_once(':').ok_or_else(|| {
-        AppError::Validation(
-            msg("server.common.invalid_param").with("param", "agent.bind_addr (host:port)"),
-        )
-    })?;
-    let port: u16 = port.parse().map_err(|_| {
-        AppError::Validation(
-            msg("server.common.invalid_param").with("param", "agent.bind_addr port (1-65535)"),
-        )
-    })?;
-    if host.trim().is_empty() || port == 0 {
+    if agent.bind_addr.trim().is_empty() {
         return Err(AppError::Validation(
-            msg("server.common.invalid_param").with("param", "agent.bind_addr (host:port)"),
+            msg("server.common.invalid_param").with("param", "agent.bind_addr"),
+        ));
+    }
+    if agent.port == 0 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with("param", "agent.port (1-65535)"),
         ));
     }
     if !(10..=3600).contains(&agent.report_interval_secs) {
