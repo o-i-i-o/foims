@@ -4,4 +4,9 @@ export type UserUpdate = { email: string | null, role: string | null, enabled: b
 /**
  * 单独密码有效期（天），None 表示不修改
  */
-password_expiry_days: number | null, };
+password_expiry_days: number | null, 
+/**
+ * 管理员重置密码（None = 不修改；写入前过等保策略与历史重复检查）
+ * bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝
+ */
+password: string | null, };

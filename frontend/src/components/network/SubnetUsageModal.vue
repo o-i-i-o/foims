@@ -24,12 +24,8 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-/** GET /ip 行：模板引用的 port_device_name 不在后端列表响应中
- * （恒回退 "-"），保留可选键以兼容原模板展示 */
-type IpRow = IpDetailWithNames & { port_device_name?: string | null };
-
 /** GET /ip 响应形态兼容：旧版裸 data 键与现行分页 items（旧版 ipData 归一链） */
-type IpsResponse = { data?: IpRow[]; items?: IpRow[] };
+type IpsResponse = { data?: IpDetailWithNames[]; items?: IpDetailWithNames[] };
 
 // IP 可视化网格最多渲染 256 个地址块（旧版 maxDisplayIps 语义）
 const MAX_DISPLAY_IPS = 256;
@@ -51,9 +47,9 @@ const networkQuery = useQuery({
 const ipsQuery = useQuery({
   queryKey: computed(() => ["subnet-ips", props.subnetId]),
   enabled: computed(() => !!props.subnetId),
-  queryFn: async (): Promise<IpRow[]> => {
+  queryFn: async (): Promise<IpDetailWithNames[]> => {
     // 按 subnet_id 过滤拉取：全库拉取在 IP 超过 page_size 上限时还会静默缺数据
-    const result = await apiGet<IpsResponse | IpRow[]>(
+    const result = await apiGet<IpsResponse | IpDetailWithNames[]>(
       `/api/resources/ip?subnet_id=${props.subnetId}&page_size=1000`
     );
     if (!result.success) {
@@ -69,7 +65,7 @@ const network = computed(() => networkQuery.data.value ?? null);
 const allNetworkIps = computed(() =>
   Array.isArray(ipsQuery.data.value) ? ipsQuery.data.value : []
 );
-const isV6 = (ip: IpRow) => ip.ip_address?.includes(":");
+const isV6 = (ip: IpDetailWithNames) => ip.ip_address?.includes(":");
 const ipv4Ips = computed(() => allNetworkIps.value.filter((ip) => !isV6(ip)));
 const ipv6Ips = computed(() => allNetworkIps.value.filter((ip) => isV6(ip)));
 
@@ -544,7 +540,7 @@ function formatDns(dns: string[] | null | undefined): string {
                           {{ ip.status }}
                         </span>
                       </td>
-                      <td>{{ ip.workstation_name || ip.cabinet_position_name || ip.port_device_name || "-" }}</td>
+                      <td>{{ ip.workstation_name || ip.cabinet_position_name || "-" }}</td>
                       <td>{{ ip.mac_address || "-" }}</td>
                       <td>{{ ip.hostname || "-" }}</td>
                     </tr>

@@ -15,6 +15,7 @@ import ForgotPasswordModal from "../components/ForgotPasswordModal.vue";
 import AppToast from "../components/AppToast.vue";
 import { i18n, changeLanguage } from "../i18n/index";
 import type { ApiResult } from "../types/api";
+import type { CaStatus } from "../types/api/generated/CaStatus";
 import type { EmailLoginRequest } from "../types/api/generated/EmailLoginRequest";
 import type { InitStatus } from "../types/api/generated/InitStatus";
 import type { LdapLoginRequest } from "../types/api/generated/LdapLoginRequest";
@@ -217,8 +218,7 @@ async function setupAuthMethods() {
 
 async function setupCaDownload() {
   try {
-    // generated CaInfo 为 CA 列表项，本端点实际返回 { available } 开关，按字段收窄
-    const result = await apiGet<{ available?: boolean }>("/api/certificate/ca/info");
+    const result = await apiGet<CaStatus>("/api/certificate/ca/info");
     if (result.success && result.data?.available) {
       caAvailable.value = true;
     }

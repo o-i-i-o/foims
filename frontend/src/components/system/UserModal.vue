@@ -14,7 +14,8 @@ import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
 import type { User } from "../../types/api/generated/User";
 
-/** 表单提交载荷（新增/编辑共用；编辑端点后端 UserUpdate 仅取 email/role/enabled/password_expiry_days，username/password 为前端提交超集） */
+/** 表单提交载荷（新增/编辑共用；编辑时 username 后端忽略——用户名不可改，
+ * 表单置只读仍随载荷提交；password 走管理员重置语义：置空沿用原密码） */
 interface UserFormPayload {
   username: string;
   email: string;
@@ -283,6 +284,7 @@ async function handleSave(): Promise<void> {
               name="username"
               autocomplete="username"
               required
+              :readonly="isEdit"
               :placeholder="t('user.username_placeholder')"
             >
           </div>

@@ -17,16 +17,15 @@ import Pagination from "../components/Pagination.vue";
 import ThSearch from "../components/ThSearch.vue";
 import PullMacModal from "../components/ip/PullMacModal.vue";
 
-// 列表行类型：generated IpDetailWithNames + 联查附加的端口主机名
-//（接口层未入 generated，与 SubnetUsageModal 的 IpRow 同款扩展）
-type IpRow = IpDetailWithNames & { port_device_name?: string | null };
+// 列表行类型：generated IpDetailWithNames（/api/resources/ip 行形状）
+type IpRow = IpDetailWithNames;
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// 位置列：工位 > 机柜 > 端口所属设备 > 观测设备（旧版优先级语义）
+// 位置列：工位 > 机柜 > 观测设备（旧版优先级语义）
 function locationText(row: IpRow): string {
-  return row.workstation_name || row.cabinet_name || row.port_device_name || row.device_name || "-";
+  return row.workstation_name || row.cabinet_name || row.device_name || "-";
 }
 
 // 子网列：网段名（区域名），未知时统一回显「未知」

@@ -18,11 +18,9 @@ import type { MacPullDefaults } from "../../types/api/generated/MacPullDefaults"
 import type { Network } from "../../types/api/generated/Network";
 import type { PullIpDetailsRequest } from "../../types/api/generated/PullIpDetailsRequest";
 
-/** 设备列表行：后端在 DeviceWithDetails 基础上注入 snmp_configured 标记；
- * ip_address 列表响应并不返回（模板展示恒回退 "-"），保留键以兼容原模板 */
+/** 设备列表行：后端在 DeviceWithDetails 基础上注入 snmp_configured 标记 */
 type PullDeviceItem = DeviceWithDetails & {
   snmp_configured: boolean;
-  ip_address?: string | null;
 };
 
 const emit = defineEmits<{ close: []; saved: [] }>();
@@ -198,7 +196,6 @@ const deviceLabel = (dev: PullDeviceItem): string => dev.name || dev.hostname ||
               >
               <label :for="`pull-mac-device-${dev.id}`" class="user-info">
                 <span class="user-name">{{ deviceLabel(dev) }}</span>
-                <span class="user-email">{{ dev.ip_address || "-" }}</span>
               </label>
             </div>
           </div>

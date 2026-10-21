@@ -78,6 +78,14 @@ pub struct UserUpdate {
         message = "server.user.validation.password_expiry_range"
     ))]
     pub password_expiry_days: Option<i32>,
+    /// 管理员重置密码（None = 不修改；写入前过等保策略与历史重复检查）
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    /// bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝
+    #[validate(custom(
+        function = "crate::models::validate_password_max_bytes",
+        message = "server.user.validation.password_max_length"
+    ))]
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]

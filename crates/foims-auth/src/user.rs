@@ -268,9 +268,11 @@ pub async fn update_user<P: AuthProvider>(
 
     // 重新启用防护：仅把到期被禁用户翻回启用而不重置密码或调整有效期时，
     // password_changed_at 仍早于到期点，下轮定时扫描或下次登录会立即再次
-    // 禁用（静默回滚）。此处显式 409 引导管理员先重置密码或调整有效期
+    // 禁用（静默回滚）。此处显式 409 引导管理员先重置密码或调整有效期；
+    // 同请求重置密码视为已处理过期问题，不再拦截
     let effective_expiry_days = req.password_expiry_days.unwrap_or(current_expiry_days);
-    if req.enabled == Some(true)
+    if req.password.is_none()
+        && req.enabled == Some(true)
         && !current_enabled
         && effective_expiry_days > 0
         && Utc::now() > password_changed_at + chrono::Duration::days(effective_expiry_days as i64)
@@ -304,34 +306,52 @@ pub async fn update_user<P: AuthProvider>(
 
     let now = Utc::now();
 
-    // 仅在实际降权/提权或实际禁用时吊销历史令牌（强制重新登录）。
+    // 管理员重置密码：写入前过等保策略（复杂度 + 与当前密码及历史不重复）
+    // 并预哈希；新密码生效即过期作废，同请求重新启用不再触发上方 409
+    let new_password_hash = match req.password.as_deref() {
+        Some(pw) => {
+            crate::password_policy::validate_password(&conn, id, pw).await?;
+            Some(hash_password(pw).await?)
+        }
+        None => None,
+    };
+
+    // 仅在实际降权/提权、实际禁用或重置密码时吊销历史令牌（强制重新登录）。
     // 吊销条件必须对比现值：编辑表单总是提交 role，若以"参数是否提供"
     // 判定会每次编辑都吊销——管理员编辑自己的邮箱/密码有效期时会把
     // 自己踢下线，后续请求 401 且 refresh 同样被拒，表现为强制跳登录页
     let role_changed = req.role.as_deref().is_some_and(|r| r != current_role);
     let disabling = req.enabled == Some(false) && current_enabled;
+    let password_reset = new_password_hash.is_some();
 
-    // 权限/启用状态/有效期变更单语句完成：状态或角色变更时同语句吊销
+    // 权限/启用状态/有效期/密码单语句完成：状态或角色变更时同语句吊销
     // 历史令牌（强制重新登录）；拆成两条语句时第二条失败会导致降权已
-    // 生效但旧令牌未被强制下线（D-2）
+    // 生效但旧令牌未被强制下线（D-2）。
+    // 用户信息更新与密码历史记录同事务：保证「新密码生效 ⇔ 历史已记录」，
+    // 失败时整体回滚，避免出现未入历史的密码变更弱化重复使用检查
+    let mut tx = conn.begin().await?;
     sqlx::query(
         "UPDATE users SET
          email = COALESCE($1, email),
          role = COALESCE($2, role),
          enabled = COALESCE($3, enabled),
-         password_expiry_days = COALESCE($6, password_expiry_days),
+         password_expiry_days = COALESCE($4, password_expiry_days),
+         password_hash = COALESCE($5, password_hash),
+         password_changed_at = COALESCE($6, password_changed_at),
          tokens_invalidated_at = CASE WHEN $7::BOOLEAN THEN NOW() ELSE tokens_invalidated_at END,
-         updated_at = $4
-         WHERE id = $5",
+         updated_at = $8
+         WHERE id = $9",
     )
     .bind(&req.email)
     .bind(&req.role)
     .bind(req.enabled)
+    .bind(req.password_expiry_days)
+    .bind(&new_password_hash)
+    .bind(password_reset.then_some(now))
+    .bind(role_changed || disabling || password_reset)
     .bind(now)
     .bind(id)
-    .bind(req.password_expiry_days)
-    .bind(role_changed || disabling)
-    .execute(&conn)
+    .execute(&mut *tx)
     .await
     .map_err(|e| {
         // 并发同邮箱的 TOCTOU 兜底：预检（create_user 同款）不可覆盖编辑路径
@@ -344,7 +364,15 @@ pub async fn update_user<P: AuthProvider>(
         AppError::from(e)
     })?;
 
-    let details = json!({"email": req.email, "role": req.role, "enabled": req.enabled, "password_expiry_days": req.password_expiry_days});
+    if let Some(hashed) = &new_password_hash {
+        crate::password_policy::record_history(&conn, &mut tx, id, hashed)
+            .await
+            .map_err(AppError::from)?;
+    }
+
+    tx.commit().await?;
+
+    let details = json!({"email": req.email, "role": req.role, "enabled": req.enabled, "password_expiry_days": req.password_expiry_days, "password_reset": req.password.is_some()});
     log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;
     log_info!("log.user.updated", id = id);
 
