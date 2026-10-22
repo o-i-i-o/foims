@@ -25,6 +25,10 @@
 // Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
 // SPDX-License-Identifier: MIT
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 // 国际化支持
 #[macro_use]
 extern crate rust_i18n;

@@ -12,6 +12,10 @@
 //! 服务注册不由本程序完成：foims 单元文件随 DEB 包安装
 //! （scripts/build-pkgs.sh）或由运维手动部署，nginx 单元文件由发行版包提供。
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 use std::path::PathBuf;
 
 use chrono::{Local, NaiveDateTime, TimeZone};
@@ -318,7 +322,7 @@ mod tests {
         let output = "ActiveState=active\nSubState=running\n\
                       UnitFileState=enabled\nStatusText=FOIMS 运行中\n\
                       ActiveEnterTimestamp=Fri 2026-09-04 12:20:31 CST\n";
-        let status = ServiceStatus::from_show_output(&output);
+        let status = ServiceStatus::from_show_output(output);
         assert!(status.is_active());
         assert!(status.is_enabled());
         assert_eq!(status.sub_state, "running");
@@ -330,7 +334,7 @@ mod tests {
     #[test]
     fn 空status_text应视为未设置() {
         let output = "ActiveState=inactive\nSubState=dead\nUnitFileState=disabled\nStatusText=\n";
-        let status = ServiceStatus::from_show_output(&output);
+        let status = ServiceStatus::from_show_output(output);
         assert!(!status.is_active());
         assert!(!status.is_enabled());
         assert!(status.status_text.is_none());

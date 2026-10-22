@@ -693,7 +693,9 @@ mod tests {
 
     #[test]
     fn 上报校验_字段超长拒绝() {
-        let cases: Vec<(&str, Box<dyn Fn(&mut AgentReport)>)> = vec![
+        // 别名收敛元组类型，降内联复杂度
+        type OversizeCase<'a> = (&'a str, Box<dyn Fn(&mut AgentReport)>);
+        let cases: Vec<OversizeCase> = vec![
             (
                 "machine_id",
                 Box::new(|r: &mut AgentReport| r.machine_id = "m".repeat(129)),

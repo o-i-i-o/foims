@@ -55,7 +55,11 @@ pub async fn get_notifications(
     );
     count_qb.push_bind(user_id);
     count_qb.push(read_clause);
-    let total: i64 = count_qb.build_query_scalar().fetch_one(&conn).await?;
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .persistent(false)
+        .fetch_one(&conn)
+        .await?;
 
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         "SELECT id, user_id, title, content, notification_type, read, created_at::TIMESTAMPTZ FROM notifications WHERE user_id = ",
@@ -66,7 +70,11 @@ pub async fn get_notifications(
     qb.push(" ").push(order_clause);
     qb.push(" LIMIT ").push_bind(page_size);
     qb.push(" OFFSET ").push_bind(offset);
-    let notifications = qb.build_query_as::<Notification>().fetch_all(&conn).await?;
+    let notifications = qb
+        .build_query_as::<Notification>()
+        .persistent(false)
+        .fetch_all(&conn)
+        .await?;
 
     Ok(foims_common::ok_json(
         paged_response(notifications, total, &pagination),

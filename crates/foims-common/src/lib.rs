@@ -5,6 +5,10 @@
 //! i18n 消息类型（[`AppMessage`]）、PostgreSQL 错误归类映射
 //! （[`classify_db_error`]）与多语言日志宏基础设施（[`log_i18n`]）。
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 mod api;
 mod db_error;
 mod error;

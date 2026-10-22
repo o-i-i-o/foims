@@ -126,7 +126,11 @@ pub async fn get_operation_logs(
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
-        let logs = qb.build_query_as::<OperationLog>().fetch_all(&conn).await?;
+        let logs = qb
+            .build_query_as::<OperationLog>()
+            .persistent(false)
+            .fetch_all(&conn)
+            .await?;
 
         (total, logs)
     } else {
@@ -141,7 +145,11 @@ pub async fn get_operation_logs(
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
-        let logs = qb.build_query_as::<OperationLog>().fetch_all(&conn).await?;
+        let logs = qb
+            .build_query_as::<OperationLog>()
+            .persistent(false)
+            .fetch_all(&conn)
+            .await?;
 
         (total, logs)
     };

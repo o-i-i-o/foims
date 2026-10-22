@@ -127,7 +127,11 @@ pub async fn list_agents<S: ConfigProvider>(
         query.status.as_deref(),
         query.keyword.as_deref(),
     );
-    let total: i64 = count_builder.build_query_scalar().fetch_one(&pool).await?;
+    let total: i64 = count_builder
+        .build_query_scalar()
+        .persistent(false)
+        .fetch_one(&pool)
+        .await?;
 
     // 列表行（NUMERIC 统一 cast float8 读取；不取 raw_metrics）
     let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
@@ -149,7 +153,11 @@ pub async fn list_agents<S: ConfigProvider>(
         .push_bind(pagination.page_size)
         .push(" OFFSET ")
         .push_bind(pagination.offset);
-    let rows = rows_builder.build().fetch_all(&pool).await?;
+    let rows = rows_builder
+        .build()
+        .persistent(false)
+        .fetch_all(&pool)
+        .await?;
 
     let items: Vec<Value> = rows
         .iter()
@@ -401,8 +409,11 @@ pub async fn patch_agent<S: ConfigProvider>(
     }
     builder.push(" WHERE id = ").push_bind(id);
     builder.push(" RETURNING id, label, status");
-    let updated: Option<(Uuid, Option<String>, String)> =
-        builder.build_query_as().fetch_optional(&pool).await?;
+    let updated: Option<(Uuid, Option<String>, String)> = builder
+        .build_query_as()
+        .persistent(false)
+        .fetch_optional(&pool)
+        .await?;
     let Some((id, label, status)) = updated else {
         return Err(AppError::NotFound(msg("server.agent.not_found")));
     };

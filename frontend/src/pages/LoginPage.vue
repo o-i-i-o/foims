@@ -301,7 +301,7 @@ async function submitPasswordLogin(usernameValue: string, passwordValue: string,
       body.captcha_id = captchaState.password.id;
       body.captcha_text = captchaInput.password.trim();
     }
-    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login", body, { skipAuthCheck: true });
+    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login", body);
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
@@ -327,8 +327,7 @@ async function submitEmailLogin(mail: string, code: string, remember: boolean) {
   try {
     const result = await apiPost<LoginPayload, EmailLoginRequest>(
       "/api/auth/login/email",
-      { email: mail, code, remember_me: remember },
-      { skipAuthCheck: true }
+      { email: mail, code, remember_me: remember }
     );
 
     if (result.success) {
@@ -364,7 +363,7 @@ async function submitLdapLogin(usernameValue: string, passwordValue: string, rem
       body.captcha_id = captchaState.ldap.id;
       body.captcha_text = captchaInput.ldap.trim();
     }
-    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login/ldap", body, { skipAuthCheck: true });
+    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login/ldap", body);
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
@@ -425,7 +424,7 @@ async function handleTwoFactorSubmit() {
         body.captcha_id = tempAuthData.captcha.captchaId;
         body.captcha_text = tempAuthData.captcha.captchaText;
       }
-      result = await apiPost<LoginPayload, LdapTwoFactorBody>("/api/auth/login/ldap", body, { skipAuthCheck: true });
+      result = await apiPost<LoginPayload, LdapTwoFactorBody>("/api/auth/login/ldap", body);
     } else {
       result = await apiPost<LoginPayload, TwoFactorLoginRequest>(
         "/api/auth/login/two-factor",
@@ -434,8 +433,7 @@ async function handleTwoFactorSubmit() {
           password: tempAuthData.password || "",
           two_factor_code: code,
           remember_me: tempAuthData.remember
-        },
-        { skipAuthCheck: true }
+        }
       );
     }
 
@@ -566,7 +564,7 @@ async function handleSendLoginCode() {
   clearError();
 
   try {
-    const result = await apiPost("/api/auth/login/send-code", { email: mail }, { skipAuthCheck: true });
+    const result = await apiPost("/api/auth/login/send-code", { email: mail });
 
     if (result.success) {
       startCountdown(60);

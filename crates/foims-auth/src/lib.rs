@@ -4,6 +4,10 @@
 //! 应用层 fail2ban、SMTP 邮件与审计操作日志。handler 面向 [`provider::AuthProvider`]
 //! 泛型编写，由主程序 `AppState` 实现以提供连接池、JWT 工具与配置。
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 pub mod app_fail2ban;
 pub mod captcha;
 pub mod extractor;

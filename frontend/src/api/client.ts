@@ -104,11 +104,9 @@ export function redirectToLogin(): void {
   window.location.href = "/index.html";
 }
 
-/** client 层请求选项：在 RequestInit 基础上扩展认证跳过开关 */
+/** client 层请求选项：在 RequestInit 基础上将 headers 收窄为普通记录 */
 interface RequestOptions extends Omit<RequestInit, "headers"> {
   headers?: Record<string, string>;
-  /** 跳过 401 刷新重试（公共认证端点由 isPublicAuthEndpoint 判定，此项仅登录页显式使用） */
-  skipAuthCheck?: boolean;
 }
 
 /** 401 处理：公共认证端点返回真实错误；其余刷新令牌重试，失败跳登录页 */
@@ -118,7 +116,7 @@ async function handleUnauthorized<T>(
   options: RequestOptions,
   retryCount: number
 ): Promise<ApiResult<T>> {
-  if (isPublicAuthEndpoint(url) || options.skipAuthCheck === true) {
+  if (isPublicAuthEndpoint(url)) {
     return parseErrorResponse<T>(response, t("api.auth_failed"), "unauthorized");
   }
 
@@ -284,7 +282,6 @@ export async function request<T = unknown>(
     },
     credentials: "include"
   };
-  delete mergedOptions.skipAuthCheck;
 
   if (options.body instanceof FormData && mergedOptions.headers) {
     delete mergedOptions.headers["Content-Type"];

@@ -365,6 +365,71 @@ pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String
 // 此处再导出保持 `foims_auth::jwt::hash_password` 调用路径稳定
 pub use foims_common::crypto::hash_password;
 
+// ==================== Token 黑名单 ====================
+
+pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, sqlx::Error> {
+    let token_hash = foims_common::net::generate_token_hash(token);
+
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM revoked_tokens WHERE token_hash = $1 AND expiry > NOW()",
+    )
+    .bind(&token_hash)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
+/// 校验用户存在性：存在返回 Some(uid)，不存在/未提供返回 None
+///（撤销令牌与操作日志写入共用，避免引用已删除用户导致 FK 报错）
+pub(crate) async fn resolve_valid_user_id(
+    pool: &sqlx::PgPool,
+    user_id: Option<Uuid>,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    if let Some(uid) = user_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(uid)
+            .fetch_one(pool)
+            .await?;
+        if exists { Ok(Some(uid)) } else { Ok(None) }
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn revoke_token(
+    pool: &sqlx::PgPool,
+    token: &str,
+    user_id: Option<Uuid>,
+    expiry: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    let token_hash = foims_common::net::generate_token_hash(token);
+    let valid_user_id = resolve_valid_user_id(pool, user_id).await?;
+
+    sqlx::query("INSERT INTO revoked_tokens (token_hash, user_id, expiry) VALUES ($1, $2, $3)")
+        .bind(&token_hash)
+        .bind(valid_user_id)
+        .bind(expiry)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query("DELETE FROM revoked_tokens WHERE expiry < NOW()")
+        .execute(pool)
+        .await?;
+
+    let deleted_count = result.rows_affected();
+    if deleted_count > 0 {
+        // 仅供 token_cleanup 定时任务调用，例行日志降为 debug 避免刷屏
+        foims_common::log_debug!("log.token.revoked_cleaned", count = deleted_count);
+    }
+
+    Ok(deleted_count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -866,69 +931,4 @@ mod tests {
             .unwrap_or_else(|e| panic!("密码哈希失败: {e}"));
         assert_ne!(hashed, hashed2);
     }
-}
-
-// ==================== Token 黑名单 ====================
-
-pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, sqlx::Error> {
-    let token_hash = foims_common::net::generate_token_hash(token);
-
-    let count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM revoked_tokens WHERE token_hash = $1 AND expiry > NOW()",
-    )
-    .bind(&token_hash)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(count > 0)
-}
-
-/// 校验用户存在性：存在返回 Some(uid)，不存在/未提供返回 None
-///（撤销令牌与操作日志写入共用，避免引用已删除用户导致 FK 报错）
-pub(crate) async fn resolve_valid_user_id(
-    pool: &sqlx::PgPool,
-    user_id: Option<Uuid>,
-) -> Result<Option<Uuid>, sqlx::Error> {
-    if let Some(uid) = user_id {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-            .bind(uid)
-            .fetch_one(pool)
-            .await?;
-        if exists { Ok(Some(uid)) } else { Ok(None) }
-    } else {
-        Ok(None)
-    }
-}
-
-pub async fn revoke_token(
-    pool: &sqlx::PgPool,
-    token: &str,
-    user_id: Option<Uuid>,
-    expiry: chrono::DateTime<chrono::Utc>,
-) -> Result<(), sqlx::Error> {
-    let token_hash = foims_common::net::generate_token_hash(token);
-    let valid_user_id = resolve_valid_user_id(pool, user_id).await?;
-
-    sqlx::query("INSERT INTO revoked_tokens (token_hash, user_id, expiry) VALUES ($1, $2, $3)")
-        .bind(&token_hash)
-        .bind(valid_user_id)
-        .bind(expiry)
-        .execute(pool)
-        .await?;
-
-    Ok(())
-}
-
-pub async fn cleanup_expired_revoked_tokens(pool: &sqlx::PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query("DELETE FROM revoked_tokens WHERE expiry < NOW()")
-        .execute(pool)
-        .await?;
-
-    let deleted_count = result.rows_affected();
-    if deleted_count > 0 {
-        // 仅供 token_cleanup 定时任务调用，例行日志降为 debug 避免刷屏
-        foims_common::log_debug!("log.token.revoked_cleaned", count = deleted_count);
-    }
-
-    Ok(deleted_count)
 }

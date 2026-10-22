@@ -97,6 +97,7 @@ pub async fn get_scheduled_tasks(
     qb.push(" ").push(order_clause);
     let tasks: Vec<ScheduledTask> = qb
         .build_query_as()
+        .persistent(false)
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 

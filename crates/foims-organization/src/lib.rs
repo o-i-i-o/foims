@@ -4,6 +4,10 @@
 //! 子模块，员工挂在组织节点下（`employee`），组织类型模板见 `org_template`。
 //! 本文件仅做模块组装与路径再导出（`foims_organization::*` 保持不变）。
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 pub mod employee;
 pub mod org_template;
 pub mod organization;

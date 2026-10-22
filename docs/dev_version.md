@@ -290,3 +290,29 @@ v0.13.0
 3. 前端：AgentServiceCard/SnmpTrapCard 删除加载时 host:port 正则拆分与保存时拼接逻辑，直接读写 bind_addr/port 两字段（界面双输入框不变）
 4. 升级注意：旧配置文件中合写的 bind_addr 需手工拆分为 bind_addr+port（无兼容回退层，属预期破坏性变更）；agent 侧 agent.toml 的 server_addr 合写形式不变（agent 端独立配置格式）
 5. 联动：根 Cargo.toml 0.29.0→0.29.1，foims-common 0.3.9→0.3.10，foims-agent-service 0.1.13→0.1.14
+
+v0.13.1
+2026102223150001
+1. 审计报告（docs/code-audit-2026-10-22.md）P1 修复批次（bug 修复/规范一致性，z+1，不动 Cargo.toml）：
+2. B1 动态 SQL 缺 persistent(false)：给分页/筛选/排序组合导致 SQL 文本变化的 QueryBuilder 追加 .persistent(false)，避免一次性 prepared statement 污染 LRU——src/log/login.rs（2 处）、src/log/operation.rs（2 处）、src/log/notification.rs（count+list 2 处）、src/system/scheduled_task.rs（1 处）、crates/foims-agent-service/src/agents_api.rs（count/列表/patch 3 处，其中列表 build() 为审计核验时新发现的第 10 处，同为 push_filters 动态文本）；get_top_metrics 循环内 format! 列名来自编译期常量清单、文本恒定，按规范保持默认不加
+3. F1 skipAuthCheck 静默失效：frontend/src/api/client.ts 请求入口删除 `delete mergedOptions.skipAuthCheck`（该 delete 使字段在传入 handleUnauthorized 前被抹掉，判断恒 false），改注释说明其为 RequestOptions 扩展字段、透传 fetch 时被 RequestInit 忽略；开关现对 LoginPage/ForgotPasswordModal 的 7 处显式调用真正生效
+4. R1 CI 分支覆盖：.github/workflows/ci.yml push 触发由固定 [main,master,Dev] 改为 ["**"]（全分支）并保留 tag，消除开发分支更名/新增后 fmt/clippy/test/ts-rs 漂移校验的漏检窗口
+5. R2 upgrade/0.25 双脚本违反「每中版本仅一份」：将 upgrade_0.25.0.sql（0.24.0→0.25.0）与 upgrade_0.25.1.sql（device_macs→snmp_macs）按顺序合并为单份累计脚本（0.24.0→0.25.x 最新），删除 upgrade_0.25.1.sql；合并因 0.26 升级脚本要求「0.25.x 最新库」基线，直接删旧会破坏升级链，故取合并而非删除
+6. 验证：cargo fmt --check 通过；cargo clippy --release --workspace --lib 与 CI 同口径 cargo clippy --release -- -D warnings 均 -D warnings 零告警通过；前端 npm run typecheck（vue-tsc）0 错、npm run build 通过（仅既存 chunk>500kB 警告，属 F5 P2 拆包项）；本次未改后端载荷类型，无需 gen-ts-types.sh 再生成
+
+v0.13.2
+2026102223580001
+1. 关闭 CI clippy 覆盖盲区（规范一致性，z+1，不动 Cargo.toml）：原 CI 命令仅检查 root crate 默认目标，不覆盖成员 crate 测试代码；升级为 cargo clippy --release --workspace --all-targets -- -D warnings，ci.yml 同步加注释
+2. 为 9 个含测试的成员 crate 根 lib.rs 各加 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]，仅测试构建放开、生产仍强约束
+3. 修好 --all-targets 暴露的测试代码既有 lint：services/lib.rs 两处 needless_borrow、agent-service/ingest.rs 一处 type_complexity、scheduler/error.rs 与 visualization/layout.rs 与 auth/jwt.rs 三处 items_after_test_module（尾部生产项上移到 #[cfg(test)] 前）
+4. 验证：cargo fmt --all --check 通过；cargo clippy --release --workspace --all-targets -- -D warnings 全目标零告警通过
+
+v0.13.3
+2026102300081101
+1. 工作区改动独立审计修复批次（bug 修复/规范一致性，z+1，不动 Cargo.toml）：
+2. 升级链断裂（阻断）：upgrade/0.25/upgrade_0.25.0.sql 的 DROP COLUMN token_hash、ALTER TABLE device_macs RENAME 及 3 条索引改名全部补 IF EXISTS 守卫。原合并脚本在已执行过旧 0.25.0 的库上首条 DROP 即报 column does not exist 并整体回滚，改名不生效，随后 0.26 脚本找不到 snmp_macs 而中断；加守卫后可从 0.24.0 / 0.25.0 / 0.25.1+ 任一基线重入。头部版本口径由「最新 0.25.1」更正为 0.25.3，并注明 0.25.2/0.25.3 无数据库对象变更
+3. F1 收敛为单一判定：frontend/src/api/client.ts 删除 RequestOptions.skipAuthCheck 字段与 handleUnauthorized 的 || 并行判断（7 处显式调用 URL 全部命中 isPublicAuthEndpoint，两套机制判同一件事），LoginPage.vue 6 处、ForgotPasswordModal.vue 1 处第三参数一并移除
+4. CI 测试覆盖：cargo test 由 root-only 升级为 cargo test --release --workspace，连带修复 ts-rs 漂移校验空转——#[ts(export)] 全部位于成员 crate（root crate 无），原 root-only 测试不执行任何 export_bindings，git diff --exit-code 恒通过；现由 workspace 测试真实重生成后再校验。clippy 注释更正：cfg(test) 豁免不覆盖 tests/ 集成测试独立 crate
+5. root crate 补齐测试豁免：src/lib.rs 加 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]，与 9 个成员 crate 对齐，消除「root 测试模块写 unwrap 即打破 -D warnings」的不对称陷阱
+6. 审计报告事实更正：docs/code-audit-2026-10-22.md 调用点 10→7、clippy 命令补 --workspace --all-targets、F1 修复方案改为删除冗余字段
+7. 验证：cargo fmt --all --check；cargo clippy --release --workspace --all-targets -- -D warnings；cargo test --release --workspace export_bindings（生成物无漂移）；cd frontend && npm run typecheck && npm run build

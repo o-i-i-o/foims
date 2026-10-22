@@ -525,6 +525,18 @@ pub async fn get_room_cabinets_with_positions(
     ))
 }
 
+impl From<VisualizationError> for foims_common::AppError {
+    fn from(err: VisualizationError) -> Self {
+        match err {
+            VisualizationError::Database(m) => foims_common::AppError::Database(m),
+            VisualizationError::NotFound(m) => foims_common::AppError::NotFound(m),
+            VisualizationError::Validation(m) => foims_common::AppError::Validation(m),
+            VisualizationError::Conflict(m) => foims_common::AppError::Conflict(m),
+            VisualizationError::Internal(m) => foims_common::AppError::Internal(m),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -744,17 +756,5 @@ mod tests {
             body.contains(r#""message":"server.error.internal""#),
             "响应体: {body}"
         );
-    }
-}
-
-impl From<VisualizationError> for foims_common::AppError {
-    fn from(err: VisualizationError) -> Self {
-        match err {
-            VisualizationError::Database(m) => foims_common::AppError::Database(m),
-            VisualizationError::NotFound(m) => foims_common::AppError::NotFound(m),
-            VisualizationError::Validation(m) => foims_common::AppError::Validation(m),
-            VisualizationError::Conflict(m) => foims_common::AppError::Conflict(m),
-            VisualizationError::Internal(m) => foims_common::AppError::Internal(m),
-        }
     }
 }

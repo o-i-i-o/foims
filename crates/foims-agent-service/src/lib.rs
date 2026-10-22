@@ -16,6 +16,10 @@
 //! - [`trap`]：SNMP Trap/Inform 接收（自资源管理模块迁入，采集服务）；
 //! - [`tasks`]：离线判定、SNMP 轮询与历史清理调度任务执行器。
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 /// 站点 CA 公钥路径（公开物料，作 agent 信任锚，设计 §3.1）
 pub const SITE_CA_PATH: &str = "/etc/ssl/foims-ca/ca.pem";
 /// 站点 CA 私钥路径（Agent 证书签发需要，由证书管理页生成）

@@ -25,8 +25,7 @@ async function handleSubmit() {
   try {
     const result = await apiPost<unknown, { email: string }>(
       "/api/auth/forgot-password",
-      { email: email.value },
-      { skipAuthCheck: true }
+      { email: email.value }
     );
 
     if (result.success) {

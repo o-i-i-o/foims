@@ -43,6 +43,20 @@ impl From<sqlx::Error> for SchedulerError {
 
 pub type SchedulerResult<T> = Result<T, SchedulerError>;
 
+impl From<SchedulerError> for foims_common::AppError {
+    fn from(err: SchedulerError) -> Self {
+        match err {
+            SchedulerError::Database(m) => foims_common::AppError::Database(m),
+            SchedulerError::NotFound(m) => foims_common::AppError::NotFound(m),
+            SchedulerError::Validation(m) => foims_common::AppError::Validation(m),
+            SchedulerError::Conflict(m) => foims_common::AppError::Conflict(m),
+            SchedulerError::TaskNotFound(m) => foims_common::AppError::NotFound(m),
+            SchedulerError::Execution(m) => foims_common::AppError::Internal(m),
+            SchedulerError::Internal(m) => foims_common::AppError::Internal(m),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,20 +100,6 @@ mod tests {
                 assert_eq!(m.key(), "server.db.operation_failed");
             }
             other => panic!("应映射为 Database，实际 {other}"),
-        }
-    }
-}
-
-impl From<SchedulerError> for foims_common::AppError {
-    fn from(err: SchedulerError) -> Self {
-        match err {
-            SchedulerError::Database(m) => foims_common::AppError::Database(m),
-            SchedulerError::NotFound(m) => foims_common::AppError::NotFound(m),
-            SchedulerError::Validation(m) => foims_common::AppError::Validation(m),
-            SchedulerError::Conflict(m) => foims_common::AppError::Conflict(m),
-            SchedulerError::TaskNotFound(m) => foims_common::AppError::NotFound(m),
-            SchedulerError::Execution(m) => foims_common::AppError::Internal(m),
-            SchedulerError::Internal(m) => foims_common::AppError::Internal(m),
         }
     }
 }

@@ -52,7 +52,11 @@ pub async fn get_login_logs(
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
-        let logs = qb.build_query_as::<LoginLog>().fetch_all(&conn).await?;
+        let logs = qb
+            .build_query_as::<LoginLog>()
+            .persistent(false)
+            .fetch_all(&conn)
+            .await?;
 
         (total, logs)
     } else {
@@ -75,7 +79,11 @@ pub async fn get_login_logs(
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
-        let logs = qb.build_query_as::<LoginLog>().fetch_all(&conn).await?;
+        let logs = qb
+            .build_query_as::<LoginLog>()
+            .persistent(false)
+            .fetch_all(&conn)
+            .await?;
 
         (total, logs)
     };

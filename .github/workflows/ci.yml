@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "master", "Dev" ]
+    # 全分支触发：避免开发分支（如 vue3-test）更名或新增后落入 fmt/clippy/test/ts-rs
+    # 漂移校验的漏检窗口；保留 tag 触发以覆盖正式版发布
+    branches: [ "**" ]
     tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master", "Dev" ]
@@ -74,11 +76,16 @@ jobs:
       - name: 检查代码格式
         run: cargo fmt --check
 
+      # --workspace --all-targets：覆盖各成员 crate 的 lib/bin/tests 全部目标，
+      # 关闭旧命令（仅 root crate 默认目标）对成员 crate 的漏检窗口。
+      # 各 crate 根 #![cfg_attr(test, allow(..))] 只豁免 crate 内部测试模块；
+      # tests/ 集成测试是独立 crate（不置 cfg(test)），其中仍禁止 unwrap/expect。
+      # 生产代码在所有目标上均受 -D warnings 强约束
       - name: 运行 clippy 检查
-        run: cargo clippy --release -- -D warnings
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
 
       - name: 运行测试
-        run: cargo test --release
+        run: cargo test --release --workspace
 
       # ts-rs 类型生成物漂移校验：export_bindings 测试重跑后，
       # frontend/src/types/api/generated/ 不得产生与入库版本（git add -N

@@ -1,5 +1,9 @@
 //! FOIMS 定时任务：基于 tokio-cron-scheduler 的调度基础设施。
 
+// 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
+// workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 pub mod cron;
 pub mod error;
 pub mod executor;
