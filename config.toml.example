@@ -88,7 +88,8 @@ enabled = true
 bind_addr = "0.0.0.0"
 port = 162
 
-# v1/v2c community 白名单；留空表示接受任意 community（仅建议内网环境）
+# v1/v2c community 白名单；留空时拒绝处理全部 v1/v2c 通知
+# （防伪造来源注入站内通知），需接收 v1/v2c trap 必须配置白名单
 communities = []
 
 # 同一来源地址的通知冷却窗口（秒）：窗口内的后续 trap 只记服务日志，

@@ -240,7 +240,8 @@ pub struct SnmpTrapUsmUser {
 
 /// SNMP Trap/Inform 接收配置。
 ///
-/// - `communities`：v1/v2c community 白名单，空列表表示接受任意 community；
+/// - `communities`：v1/v2c community 白名单，空列表时拒绝处理全部 v1/v2c
+///   通知（防伪造来源注入站内通知）；
 /// - `users`：v3 USM 用户表，为空时拒绝全部 v3 通知；
 /// - `cooldown_secs`：同一来源地址的通知冷却窗口，窗口内只记服务日志不重复写站内通知。
 #[derive(Debug, Deserialize, Clone, Serialize)]
