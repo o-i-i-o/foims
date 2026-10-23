@@ -19,6 +19,8 @@ echo 构建前端
 echo 安装到生产目录
 sudo cp -f target/release/foims /usr/bin/foims
 sudo mkdir -p /opt/foims/web
+# 目标目录已存在时 cp 会嵌套成 static/dist，先清空再镜像
+sudo rm -rf /opt/foims/web/static
 sudo cp -rf frontend/dist /opt/foims/web/static
 sudo cp -f config.toml /opt/foims/
 
