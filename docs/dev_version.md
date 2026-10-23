@@ -316,3 +316,9 @@ v0.13.3
 5. root crate 补齐测试豁免：src/lib.rs 加 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]，与 9 个成员 crate 对齐，消除「root 测试模块写 unwrap 即打破 -D warnings」的不对称陷阱
 6. 审计报告事实更正：docs/code-audit-2026-10-22.md 调用点 10→7、clippy 命令补 --workspace --all-targets、F1 修复方案改为删除冗余字段
 7. 验证：cargo fmt --all --check；cargo clippy --release --workspace --all-targets -- -D warnings；cargo test --release --workspace export_bindings（生成物无漂移）；cd frontend && npm run typecheck && npm run build
+
+v0.14.0
+2026102319534701
+1. 修复 SNMP 轮询设备不可达误判在线（功能 bug，y+1）：poll_and_upsert 中系统组三 OID（sysName/sysDescr/sysUpTime）全部无响应（超时）时原实现仍走 upsert——status 翻 active、last_seen=NOW()，导致不可达设备在主机监控页恒显示在线且离线翻转逻辑（依赖 last_seen 停更）永不触发，仪表盘主机负载卡片（top-metrics 仅统计快照列非空的 active 行）与主机状态展示互相矛盾；修复为系统组全空时按采集失败处理（return Err，不 upsert、不刷新 last_seen），连续两轮失败后由既有离线翻转统一置 offline
+2. 仪表盘榜单卡片重排（UI 调整）：主机负载卡片移至 dashboard-grid 首位，子网列表由第二位移至第四位（新序：主机负载/IP/日志/子网/机房/机柜）
+3. 联动：根 Cargo.toml 0.29.1→0.29.2，foims-agent-service 0.1.14→0.1.15

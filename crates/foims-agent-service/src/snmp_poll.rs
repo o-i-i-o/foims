@@ -175,6 +175,14 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
 
     // 系统组（一期）：sysName/sysDescr/sysUpTime，缺失容忍
     let info = read_system_info(&client).await;
+    // 设备可达性判定：系统组三个 OID 全部无响应说明设备不可达（后续
+    // 指标采集必然同样超时）。此时按采集失败处理（不 upsert、不刷新
+    // last_seen），否则该行会被误标记 active 并永不触发离线翻转，
+    // 仪表盘负载卡片与主机状态展示互相矛盾
+    if info.hostname.is_none() && info.os.is_none() && info.uptime_secs.is_none() {
+        tracing::debug!("SNMP 采集无任何响应: 设备 {device_name}（{device_id}，{ip}），按失败处理");
+        return Err(());
+    }
     // sysName 缺失/为空时回落设备名，保证列表可读
     let hostname = info.hostname.unwrap_or_else(|| device_name.to_string());
     let hostname = truncate_to_column_width(&hostname, MAX_HOSTNAME_LEN);

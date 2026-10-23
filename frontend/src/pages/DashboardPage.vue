@@ -282,28 +282,55 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
     </div>
 
     <div class="dashboard-grid">
-      <article class="dashboard-card" @click="openSection($event, 'resources', 'networks')">
+      <!-- 主机负载：CPU/内存/温度 三页签轮播（无权限角色不渲染卡片） -->
+      <article
+        v-if="!auth.hiddenSections.includes('agents')"
+        class="dashboard-card host-metrics-card"
+        @click="openSection($event, 'agents')"
+        @mouseenter="onCardMouseEnter"
+        @mouseleave="onCardMouseLeave"
+      >
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">🌐</span><span>{{ t("dashboard.top_networks") }}</span></h3>
+          <h3><span class="card-icon">🖥️</span><span>{{ t("dashboard.host_metrics") }}</span></h3>
           <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
         </header>
-        <div class="dashboard-card-body">
+        <div class="dashboard-card-body host-metrics-body">
+          <div class="host-metrics-tabs" role="tablist" :aria-label="t('dashboard.host_metrics')">
+            <button
+              v-for="metric in HOST_METRIC_KEYS"
+              :key="metric"
+              type="button"
+              class="host-metrics-tab"
+              :class="{ active: hostMetricActive === metric }"
+              role="tab"
+              :aria-selected="hostMetricActive === metric ? 'true' : 'false'"
+              @click="selectHostMetric(metric)"
+            >
+              {{ t(`dashboard.metric_${metric}`) }}
+            </button>
+          </div>
           <ul class="top-list">
-            <template v-if="networksQuery.isLoading.value">
+            <template v-if="hostMetricsQuery.isLoading.value">
               <li v-for="n in 3" :key="'sk' + n" class="loading-item"><span class="skeleton"></span></li>
             </template>
-            <li v-else-if="networksQuery.isError.value" class="empty-list-item">{{ networksQuery.error.value?.message }}</li>
-            <li v-else-if="networksQuery.data.value.length === 0" class="empty-list-item">{{ t("dashboard.no_network_data") }}</li>
+            <li v-else-if="hostMetricsQuery.isError.value" class="empty-list-item">{{ hostMetricsQuery.error.value?.message }}</li>
+            <li v-else-if="hostMetricItems.length === 0" class="empty-list-item">{{ t("dashboard.no_host_metrics_data") }}</li>
             <template v-else>
-              <li v-for="network in networksQuery.data.value" :key="network.name">
+              <li v-for="(item, index) in hostMetricItems" :key="`${item.ip}-${index}`">
                 <div class="item-name">
-                  <span class="item-icon">🌐</span>
+                  <span class="item-icon">{{ index + 1 }}</span>
                   <div>
-                    <div>{{ network.name || "-" }}</div>
-                    <div class="item-meta">{{ network.ipv4_cidr || network.ipv6_cidr || "-" }}</div>
+                    <div>{{ hostName(item) }}</div>
+                    <div class="item-meta">{{ hostMeta(item) }}</div>
                   </div>
                 </div>
-                <span class="item-value">{{ network.network_region_name || "-" }}</span>
+                <span v-if="hostMetricActive === 'temperature'" class="item-value">{{ tempText(item.value) }}</span>
+                <span v-else class="agent-usage">
+                  <span class="agent-usage-bar">
+                    <span class="agent-usage-fill" :class="`agent-usage-${usageLevel(item.value)}`" :style="{ width: usageWidth(item.value) }"></span>
+                  </span>
+                  <span class="agent-usage-num">{{ usageNum(item.value) }}%</span>
+                </span>
               </li>
             </template>
           </ul>
@@ -368,6 +395,34 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
         </div>
       </article>
 
+      <article class="dashboard-card" @click="openSection($event, 'resources', 'networks')">
+        <header class="dashboard-card-header">
+          <h3><span class="card-icon">🌐</span><span>{{ t("dashboard.top_networks") }}</span></h3>
+          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
+        </header>
+        <div class="dashboard-card-body">
+          <ul class="top-list">
+            <template v-if="networksQuery.isLoading.value">
+              <li v-for="n in 3" :key="'sk' + n" class="loading-item"><span class="skeleton"></span></li>
+            </template>
+            <li v-else-if="networksQuery.isError.value" class="empty-list-item">{{ networksQuery.error.value?.message }}</li>
+            <li v-else-if="networksQuery.data.value.length === 0" class="empty-list-item">{{ t("dashboard.no_network_data") }}</li>
+            <template v-else>
+              <li v-for="network in networksQuery.data.value" :key="network.name">
+                <div class="item-name">
+                  <span class="item-icon">🌐</span>
+                  <div>
+                    <div>{{ network.name || "-" }}</div>
+                    <div class="item-meta">{{ network.ipv4_cidr || network.ipv6_cidr || "-" }}</div>
+                  </div>
+                </div>
+                <span class="item-value">{{ network.network_region_name || "-" }}</span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </article>
+
       <article class="dashboard-card" @click="openSection($event, 'resources', 'rooms')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">🏠</span><span>{{ t("dashboard.top_rooms") }}</span></h3>
@@ -424,60 +479,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
         </div>
       </article>
 
-      <!-- 主机负载：CPU/内存/温度 三页签轮播（无权限角色不渲染卡片） -->
-      <article
-        v-if="!auth.hiddenSections.includes('agents')"
-        class="dashboard-card host-metrics-card"
-        @click="openSection($event, 'agents')"
-        @mouseenter="onCardMouseEnter"
-        @mouseleave="onCardMouseLeave"
-      >
-        <header class="dashboard-card-header">
-          <h3><span class="card-icon">🖥️</span><span>{{ t("dashboard.host_metrics") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
-        </header>
-        <div class="dashboard-card-body host-metrics-body">
-          <div class="host-metrics-tabs" role="tablist" :aria-label="t('dashboard.host_metrics')">
-            <button
-              v-for="metric in HOST_METRIC_KEYS"
-              :key="metric"
-              type="button"
-              class="host-metrics-tab"
-              :class="{ active: hostMetricActive === metric }"
-              role="tab"
-              :aria-selected="hostMetricActive === metric ? 'true' : 'false'"
-              @click="selectHostMetric(metric)"
-            >
-              {{ t(`dashboard.metric_${metric}`) }}
-            </button>
-          </div>
-          <ul class="top-list">
-            <template v-if="hostMetricsQuery.isLoading.value">
-              <li v-for="n in 3" :key="'sk' + n" class="loading-item"><span class="skeleton"></span></li>
-            </template>
-            <li v-else-if="hostMetricsQuery.isError.value" class="empty-list-item">{{ hostMetricsQuery.error.value?.message }}</li>
-            <li v-else-if="hostMetricItems.length === 0" class="empty-list-item">{{ t("dashboard.no_host_metrics_data") }}</li>
-            <template v-else>
-              <li v-for="(item, index) in hostMetricItems" :key="`${item.ip}-${index}`">
-                <div class="item-name">
-                  <span class="item-icon">{{ index + 1 }}</span>
-                  <div>
-                    <div>{{ hostName(item) }}</div>
-                    <div class="item-meta">{{ hostMeta(item) }}</div>
-                  </div>
-                </div>
-                <span v-if="hostMetricActive === 'temperature'" class="item-value">{{ tempText(item.value) }}</span>
-                <span v-else class="agent-usage">
-                  <span class="agent-usage-bar">
-                    <span class="agent-usage-fill" :class="`agent-usage-${usageLevel(item.value)}`" :style="{ width: usageWidth(item.value) }"></span>
-                  </span>
-                  <span class="agent-usage-num">{{ usageNum(item.value) }}%</span>
-                </span>
-              </li>
-            </template>
-          </ul>
-        </div>
-      </article>
     </div>
   </section>
 </template>
