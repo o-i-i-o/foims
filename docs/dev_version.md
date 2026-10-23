@@ -336,3 +336,9 @@ v0.14.2
 1. 修复 SNMP trap 监听绑定失败（部署配置修正 + 文档对齐）：早期 bind_addr 字段语义为 URL（host:port），后改为独立 host + port 字段，部署配置 /etc/foims/config.toml（及 Debian 包安装留存模板）未同步仍为 "0.0.0.0:162"，与 port 默认值 162 拼接成 "0.0.0.0:162:162" 导致启动报错；按设计保留配置异常报错行为（不加兼容逻辑），修正部署配置 bind_addr 为纯主机部分并配置 community 白名单
 2. 统一修正三处与实现矛盾的文档（空白名单实为拒绝处理而非接受任意）：config.toml.example 注释、SnmpTrapConfig 字段文档（foims-common/config.rs）、系统配置页 snmp_trap 帮助文案（zh/en）
 3. 实测验证：trap 监听 0.0.0.0:162 启动、v2c trap（白名单命中）接收、站内通知落库全链路通畅
+
+v0.14.3
+2026102323151801
+1. 恢复模态框原版带页头/页脚布局（布局修复）：重构期原版 modals.css 的外壳段未移植，遗留体系弹窗（全局确认框、拓扑连接/容器/详情）无外壳样式渲染破版，Vue 体系 ModalShell 又将原版视觉简化（浅色页头、无分隔线页脚、整体滚动）；新建全局 styles/components/modals.css 逐字移植外壳段并桥接两套类名（遗留 .modal/.modal-content/.close 与 Vue .modal-overlay/.modal-dialog/.modal-close），恢复深色标题栏（背景+白色竖条装饰）、关闭钮白色圆形悬停旋转、页脚上分隔线与按钮最小宽 90px、body 独立滚动（页头页脚常驻）、弹窗偏上 2rem 布局与入场动画
+2. 消除四份重复外壳样式：ModalShell.vue/ConfirmModal.vue/ChangePasswordModal.vue/LogDetailsModal.vue 删除各自 scoped 外壳样式改走全局，仅保留弹窗专属宽度与内容样式；ChangePasswordModal 页脚外置出 form 滚动区（submit 按钮 form 属性关联）保证页脚常驻；ConfirmModal 走全局按钮样式
+3. 浏览器实测通过：修改密码弹窗/资源管理弹窗深色页头+分隔线页脚+body 独立滚动全部符合原版视觉

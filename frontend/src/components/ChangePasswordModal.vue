@@ -63,11 +63,11 @@ async function handleSubmit() {
   <div class="modal-overlay" @click.self="emit('close')">
     <div class="modal-dialog" role="dialog" aria-modal="true" :aria-label="t('auth.change_password')">
       <header class="modal-header">
-        <h3>{{ t("auth.change_password") }}</h3>
+        <h3 class="modal-title">{{ t("auth.change_password") }}</h3>
         <button type="button" class="modal-close" :aria-label="t('common.close')" @click="emit('close')">&times;</button>
       </header>
 
-      <form class="modal-body" @submit.prevent="handleSubmit">
+      <form id="change-password-form" class="modal-body" @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="change-password-old">
             {{ t("auth.old_password") }}<span class="required">*</span>
@@ -109,149 +109,29 @@ async function handleSubmit() {
             required
           >
         </div>
-
-        <footer class="modal-footer">
-          <button type="button" class="btn-secondary" @click="emit('close')">
-            {{ t("common.cancel") }}
-          </button>
-          <button type="submit" class="btn-primary" :disabled="submitting">
-            {{ submitting ? t("common.processing") : t("common.save") }}
-          </button>
-        </footer>
       </form>
+
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" @click="emit('close')">
+          {{ t("common.cancel") }}
+        </button>
+        <button type="submit" form="change-password-form" class="btn-primary" :disabled="submitting">
+          {{ submitting ? t("common.processing") : t("common.save") }}
+        </button>
+      </footer>
     </div>
   </div>
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 50%);
-  padding: var(--space-md);
-}
-
+/* 外壳/页头/页脚/表单样式见全局 modals.css 与 forms.css；此处仅保留
+   弹窗专属宽度与提交中禁用态（footer 外置出滚动区保证页脚常驻） */
 .modal-dialog {
-  width: 100%;
   max-width: 420px;
-  background: var(--color-bg-white);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.05rem;
-  color: var(--color-text);
-}
-
-.modal-close {
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.modal-close:hover {
-  color: var(--color-danger);
-}
-
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.form-group label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.required {
-  margin-left: 2px;
-  color: var(--color-danger);
-}
-
-.form-group input {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  background: var(--color-bg-white);
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.form-group input:focus {
-  border-color: var(--control-border-focus);
-  box-shadow: var(--control-shadow);
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-sm);
-  margin-top: var(--space-sm);
-}
-
-.btn-primary,
-.btn-secondary {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: var(--color-bg-white);
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-hover);
 }
 
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: var(--color-bg-white);
-  border-color: var(--control-border);
-  color: var(--color-text-secondary);
-}
-
-.btn-secondary:hover {
-  border-color: var(--control-border-hover);
-  color: var(--color-text);
 }
 </style>

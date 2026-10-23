@@ -36,7 +36,7 @@ const detailsText = computed<string | null>(() => {
   <div class="modal-overlay" @click.self="emit('close')">
     <div class="modal-dialog" role="dialog" aria-modal="true" :aria-label="t('logs.details')">
       <header class="modal-header">
-        <h3>{{ t("logs.details") }}</h3>
+        <h3 class="modal-title">{{ t("logs.details") }}</h3>
         <button type="button" class="modal-close" :aria-label="t('common.close')" @click="emit('close')">&times;</button>
       </header>
       <div class="modal-body">
@@ -85,59 +85,12 @@ const detailsText = computed<string | null>(() => {
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(0 0 0 / 50%);
-  padding: var(--space-md);
-}
-
+/* 外壳/页头/页脚样式见全局 styles/components/modals.css；此处仅保留
+   弹窗专属宽度与日志详情内容网格（旧版 pages/logs.css 移植段） */
 .modal-dialog {
-  width: 100%;
   max-width: 560px;
-  max-height: 85vh;
-  overflow-y: auto;
-  background: var(--color-bg-white);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
 }
 
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.05rem;
-  color: var(--color-text);
-}
-
-.modal-close {
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.modal-close:hover {
-  color: var(--color-danger);
-}
-
-.modal-body {
-  padding: var(--space-lg);
-}
-
-/* ===== 日志详情弹窗字段网格（旧版 pages/logs.css 移植） ===== */
 .log-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
