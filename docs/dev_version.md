@@ -330,3 +330,9 @@ v0.14.1
 3. 修复 SNMP CPU 采集永远为空（功能 bug）：snmp_metrics.rs 的 ssCpuRaw* 11 个计数器 OID 缺少 .0 标量实例后缀，agent 全部返回 No Such Instance 异常 → counters 恒 None → usage_pct 恒空（负载/内存/温度/磁盘/网络正常佐证仅 CPU 分支断裂）；补齐 .0 后缀
 4. 本机 snmpd 联调验证：环回对照设备（移动笔记本，IP=127.0.0.1）配置 SNMP 后下一轮轮询自动纳入主机监控（source=snmp，sysName 识别），加密存库/解密使用链路（AES-256-GCM）实测通畅
 5. 联动：无 Cargo.toml 版本变化（z 段内功能 bug 修复批次随 v0.14.0 联动已完成，本条仅 y+1 记录）
+
+v0.14.2
+2026102321331201
+1. 修复 SNMP trap 监听绑定失败（部署配置修正 + 文档对齐）：早期 bind_addr 字段语义为 URL（host:port），后改为独立 host + port 字段，部署配置 /etc/foims/config.toml（及 Debian 包安装留存模板）未同步仍为 "0.0.0.0:162"，与 port 默认值 162 拼接成 "0.0.0.0:162:162" 导致启动报错；按设计保留配置异常报错行为（不加兼容逻辑），修正部署配置 bind_addr 为纯主机部分并配置 community 白名单
+2. 统一修正三处与实现矛盾的文档（空白名单实为拒绝处理而非接受任意）：config.toml.example 注释、SnmpTrapConfig 字段文档（foims-common/config.rs）、系统配置页 snmp_trap 帮助文案（zh/en）
+3. 实测验证：trap 监听 0.0.0.0:162 启动、v2c trap（白名单命中）接收、站内通知落库全链路通畅
