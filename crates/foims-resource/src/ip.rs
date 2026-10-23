@@ -193,7 +193,7 @@ pub async fn get_ip_details<P: DbProvider>(
         .await?;
 
     let mut data_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, subnet_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at, position_id FROM ip_with_details",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, subnet_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at, position_id, workstation_id FROM ip_with_details",
     );
     push_ip_filters(&mut data_builder, &filters);
     data_builder

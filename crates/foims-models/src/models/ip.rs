@@ -63,6 +63,8 @@ pub struct IpDetailWithNames {
     pub updated_at: DateTime<Utc>,
     /// 设备绑定的机位 ID（机柜可视化按机位批量过滤 IP）。
     pub position_id: Option<Uuid>,
+    /// 设备绑定的工位 ID（工位可视化按工位归并 IP，名称列不可作键）。
+    pub workstation_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
@@ -574,6 +576,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             position_id: Some(Uuid::new_v4()),
+            workstation_id: Some(Uuid::new_v4()),
         };
         let first = serde_json::to_value(&record)?;
         let back: IpDetailWithNames = serde_json::from_value(first.clone())?;

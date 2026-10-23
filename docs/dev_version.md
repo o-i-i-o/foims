@@ -342,3 +342,12 @@ v0.14.3
 1. 恢复模态框原版带页头/页脚布局（布局修复）：重构期原版 modals.css 的外壳段未移植，遗留体系弹窗（全局确认框、拓扑连接/容器/详情）无外壳样式渲染破版，Vue 体系 ModalShell 又将原版视觉简化（浅色页头、无分隔线页脚、整体滚动）；新建全局 styles/components/modals.css 逐字移植外壳段并桥接两套类名（遗留 .modal/.modal-content/.close 与 Vue .modal-overlay/.modal-dialog/.modal-close），恢复深色标题栏（背景+白色竖条装饰）、关闭钮白色圆形悬停旋转、页脚上分隔线与按钮最小宽 90px、body 独立滚动（页头页脚常驻）、弹窗偏上 2rem 布局与入场动画
 2. 消除四份重复外壳样式：ModalShell.vue/ConfirmModal.vue/ChangePasswordModal.vue/LogDetailsModal.vue 删除各自 scoped 外壳样式改走全局，仅保留弹窗专属宽度与内容样式；ChangePasswordModal 页脚外置出 form 滚动区（submit 按钮 form 属性关联）保证页脚常驻；ConfirmModal 走全局按钮样式
 3. 浏览器实测通过：修改密码弹窗/资源管理弹窗深色页头+分隔线页脚+body 独立滚动全部符合原版视觉
+
+v0.14.4
+2026102400592801
+1. 修复工位/机位可视化数据链断裂（功能缺陷修复，z+1，不动 Cargo.toml）：
+2. 工位画布 IP 恒空：/api/resources/ip 行（IpDetailWithNames）不含 workstation_id——视图 ip_with_details 只暴露 workstation_name（名称不可作匹配键），而 SVGVisualization.js 与 SVGDataManager.js 按 ipDetail.workstation_id 归并 IP，映射恒空导致工位卡片 IP 恒显示 viz.no_ip。修复为视图列尾追加 dv.workstation_id，ip.rs 列表查询列与 IpDetailWithNames 结构体同步补字段（列尾追加，兼容 CREATE OR REPLACE VIEW 只允许尾部加列的限制）；前端归并逻辑无需改动。
+3. 工位/机位「端口」恒显示无端口：SVGRenderer.js 两处硬编码 viz.no_port，注释称后端 IP 行不含端口归属字段（实际 interface_name/physical_type/interface_role 已随视图与查询返回）。改为取 ipDetail.interface_name（缺失时兜底 viz.no_port）并删除过时注释，机位 tooltip 同步。
+4. 升级脚本 upgrade/0.29/upgrade_0.29.0.sql（0.29 中版本唯一一份）：CREATE OR REPLACE VIEW ip_with_details 追加 workstation_id，幂等可重入；无表结构（列/索引/约束）变更，foims-init 建表代码（schema/tables/views.rs）已同步，check.rs 仅校验视图存在性（视图列不在其校验范围）。
+5. 生成类型：cargo test --workspace export_bindings 重新导出，仅 IpDetailWithNames.ts 增加 workstation_id，其余生成物无漂移。
+6. 验证：cargo fmt --all --check 通过；cargo clippy --release --workspace --all-targets -- -D warnings 零告警（EXIT=0）；cd frontend && npm run typecheck 0 错、npm run build 通过（仅既存 useToast 动态导入与 chunk>500kB 警告）。

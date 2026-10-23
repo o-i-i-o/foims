@@ -4,4 +4,8 @@ export type IpDetailWithNames = { id: string, device_interface_id: string, devic
 /**
  * 设备绑定的机位 ID（机柜可视化按机位批量过滤 IP）。
  */
-position_id: string | null, };
+position_id: string | null, 
+/**
+ * 设备绑定的工位 ID（工位可视化按工位归并 IP，名称列不可作键）。
+ */
+workstation_id: string | null, };

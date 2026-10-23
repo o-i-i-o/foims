@@ -46,8 +46,8 @@ export class SVGRenderer {
 
     const ipDetail = workstation.ipDetail || null;
     const ipAddress = ipDetail ? ipDetail.ip_address : t("viz.no_ip");
-    // 后端 /api/resources/ip 行不含端口归属字段，端口信息恒为无
-    const portInfo = t("viz.no_port");
+    // 端口归属取 IP 行携带的网口名（/api/resources/ip 的 interface_name）
+    const portInfo = ipDetail?.interface_name || t("viz.no_port");
 
     const statusClass =
       ipDetail?.status ? `status-${ipDetail.status}` : "status-unknown";
@@ -224,8 +224,8 @@ export class SVGRenderer {
     text.dataset.relY = height / 2 + 4;
     text.textContent = position.name;
 
-    // 后端 /api/resources/ip 行不含端口归属字段，端口信息恒为无
-    const portsLabel = t("viz.no_port");
+    // 端口归属取 IP 行携带的网口名（/api/resources/ip 的 interface_name）
+    const portsLabel = position.ipDetail?.interface_name || t("viz.no_port");
 
     const ipAddress = position.ipDetail ? position.ipDetail.ip_address : t("viz.no_ip");
 

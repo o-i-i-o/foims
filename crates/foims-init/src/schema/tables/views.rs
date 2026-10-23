@@ -38,7 +38,9 @@ const VIEWS: &[(&str, &str)] = &[
             imm.last_seen,
             imm.created_at,
             imm.updated_at,
-            dv.position_id
+            dv.position_id,
+            -- 工位归属 ID：工位可视化按工位归并 IP 展示（名称列无法充当键）
+            dv.workstation_id
         FROM interface_ips imm
         JOIN device_interfaces di ON imm.device_interface_id = di.id
         JOIN devices dv ON di.device_id = dv.id
