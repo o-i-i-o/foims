@@ -114,6 +114,7 @@ log:
     snmp:
       auth_built: "Authentication built"
       if_name_walk_failed: "SNMP walk for interface name map failed"
+      loopback_ip_allowed: "Target IP {{ip}} is loopback, connection allowed"
       ports_walk_failed: "SNMP walk for port collection table failed, fields left empty"
       private_ip_allowed: "Target IP {{ip}} is private, connection allowed"
       test_connecting: "Connecting: {{addr}} (timeout: {{timeout}}s)"

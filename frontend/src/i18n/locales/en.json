@@ -1886,7 +1886,6 @@
         "ip_required": "IP address is required",
         "link_local_forbidden": "Connecting to link-local addresses is not allowed",
         "lldp_fetch_failed": "Failed to fetch LLDP neighbors: {{error}}",
-        "loopback_forbidden": "Connecting to loopback addresses is not allowed",
         "multicast_forbidden": "Connecting to multicast addresses is not allowed",
         "not_configured": "SNMP is not configured on this device",
         "ports_fetch_failed": "Failed to fetch device port info: {{error}}",

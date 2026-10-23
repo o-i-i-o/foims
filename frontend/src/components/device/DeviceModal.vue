@@ -83,6 +83,19 @@ function maskToNull(value: string): string | null {
   return value;
 }
 
+/**
+ * SNMP 掩码字段的提交载荷（双层 Option 语义）：掩码=用户未改动（返回
+ * undefined，JSON.stringify 省略键，后端按键缺失处理=保留原值）；空串=
+ * 主动清空（null，后端 SET NULL）；有值=更新新值。掩码误发 null 会把
+ * 已存配置清空（设备 SNMP 信息"无法保存"的根因）。
+ */
+function snmpSecretPayload(value: string): string | null | undefined {
+  if (value === PASSWORD_MASK) {
+    return undefined;
+  }
+  return maskToNull(value);
+}
+
 // ==================== 表单状态 ====================
 
 /** 表单状态；snmpPort/powerWatts 为数字输入 v-model，清空时为空串 */
@@ -562,9 +575,10 @@ async function getDeviceInfoFromSnmp(): Promise<void> {
 const saving = ref(false);
 
 const saveMutation = useMutation({
-  // PUT 走 DeviceUpdate（双层 Option 语义与原发送键集一致，null=清空），
-  // POST 复用同一键集。template_id 为原代码即发送的附加键
-  // （后端 DeviceUpdate 未声明该字段，serde 静默忽略），保留以维持请求体逐键一致。
+  // PUT 走 DeviceUpdate 双层 Option 语义（键缺失=不修改、null=清空、
+  // 值=更新，掩码键经 snmpSecretPayload 归一），POST 复用同一键集
+  // （DeviceCreate 为单层 Option，null/缺省均不配置）。template_id 为
+  // 原代码即发送的附加键（后端 DeviceUpdate 未声明，serde 静默忽略）。
   mutationFn: async ({
     cards,
     powerWatts
@@ -572,7 +586,14 @@ const saveMutation = useMutation({
     cards: CardSyncPayload[];
     powerWatts: number | null;
   }) => {
-    const deviceData: DeviceUpdate & { template_id: string | null } = {
+    // 三个掩码键放宽为可缺省：undefined 经 JSON.stringify 省略键，后端
+    // 双层 Option 按键缺失处理（不修改）；null 仍表示主动清空
+    const deviceData: Omit<DeviceUpdate, "snmp_community" | "snmp_auth_password" | "snmp_priv_password"> & {
+      template_id: string | null;
+      snmp_community?: string | null;
+      snmp_auth_password?: string | null;
+      snmp_priv_password?: string | null;
+    } = {
       name: form.name.trim(),
       hostname: form.hostname || null,
       device_type: form.deviceType || "other",
@@ -591,12 +612,12 @@ const saveMutation = useMutation({
       snmp_version: form.snmpVersion || "v2c",
       snmp_port: Number.parseInt(String(form.snmpPort), 10) || 161,
       power_watts: powerWatts,
-      snmp_community: maskToNull(form.snmpCommunity),
+      snmp_community: snmpSecretPayload(form.snmpCommunity),
       snmp_username: form.snmpUsername || null,
       snmp_auth_protocol: form.snmpAuthProtocol || null,
-      snmp_auth_password: maskToNull(form.snmpAuthPassword),
+      snmp_auth_password: snmpSecretPayload(form.snmpAuthPassword),
       snmp_priv_protocol: form.snmpPrivProtocol || null,
-      snmp_priv_password: maskToNull(form.snmpPrivPassword),
+      snmp_priv_password: snmpSecretPayload(form.snmpPrivPassword),
       cards
     };
     const result = props.device?.id

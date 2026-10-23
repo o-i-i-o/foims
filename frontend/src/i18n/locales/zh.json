@@ -1886,7 +1886,6 @@
         "ip_required": "IP地址不能为空",
         "link_local_forbidden": "不允许连接链路本地地址",
         "lldp_fetch_failed": "获取LLDP邻居失败: {{error}}",
-        "loopback_forbidden": "不允许连接回环地址",
         "multicast_forbidden": "不允许连接组播地址",
         "not_configured": "该设备未配置SNMP",
         "ports_fetch_failed": "获取设备端口信息失败: {{error}}",

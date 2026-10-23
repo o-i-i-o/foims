@@ -823,15 +823,13 @@ pub async fn test_snmp_connection<P: DbProvider>(
         _ => return Err(AppError::Validation(msg("server.device.snmp.ip_required"))),
     };
 
-    // 拒绝回环/组播/链路本地地址防止 SSRF；私有地址属机房管理正常目标，
-    // 仅告警放行
+    // 拒绝组播/链路本地地址防止 SSRF；回环与私有地址属机房管理正常目标
+    // （本机 snmpd 联调、环回对照设备），仅告警放行
     let parsed_ip: std::net::IpAddr = ip
         .parse()
         .map_err(|_| AppError::Validation(msg("server.device.snmp.ip_invalid").with("ip", &ip)))?;
     if parsed_ip.is_loopback() {
-        return Err(AppError::Validation(msg(
-            "server.device.snmp.loopback_forbidden",
-        )));
+        log_warn!("log.device.snmp.loopback_ip_allowed", ip = ip);
     }
     if parsed_ip.is_multicast() {
         return Err(AppError::Validation(msg(
@@ -1340,18 +1338,6 @@ mod tests {
             expected_key,
             "IP {ip:?} 的拒绝原因不符"
         );
-    }
-
-    #[tokio::test]
-    async fn test_snmp_rejects_loopback_addresses() {
-        // IPv4/IPv6 回环均禁止
-        assert_snmp_ip_rejected(Some("127.0.0.1"), "server.device.snmp.loopback_forbidden").await;
-        assert_snmp_ip_rejected(
-            Some("127.255.255.254"),
-            "server.device.snmp.loopback_forbidden",
-        )
-        .await;
-        assert_snmp_ip_rejected(Some("::1"), "server.device.snmp.loopback_forbidden").await;
     }
 
     #[tokio::test]

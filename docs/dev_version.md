@@ -322,3 +322,11 @@ v0.14.0
 1. 修复 SNMP 轮询设备不可达误判在线（功能 bug，y+1）：poll_and_upsert 中系统组三 OID（sysName/sysDescr/sysUpTime）全部无响应（超时）时原实现仍走 upsert——status 翻 active、last_seen=NOW()，导致不可达设备在主机监控页恒显示在线且离线翻转逻辑（依赖 last_seen 停更）永不触发，仪表盘主机负载卡片（top-metrics 仅统计快照列非空的 active 行）与主机状态展示互相矛盾；修复为系统组全空时按采集失败处理（return Err，不 upsert、不刷新 last_seen），连续两轮失败后由既有离线翻转统一置 offline
 2. 仪表盘榜单卡片重排（UI 调整）：主机负载卡片移至 dashboard-grid 首位，子网列表由第二位移至第四位（新序：主机负载/IP/日志/子网/机房/机柜）
 3. 联动：根 Cargo.toml 0.29.1→0.29.2，foims-agent-service 0.1.14→0.1.15
+
+v0.14.1
+2026102321055601
+1. 修复设备 SNMP 信息保存被掩码清空（功能 bug，y+1）：DeviceModal 编辑回显对 community/auth_password/priv_password 显示掩码，提交时 maskToNull 将掩码归一为 null——后端 DeviceUpdate 双层 Option 语义中 null=清空，导致仅修改其他字段保存时已配置的 SNMP 凭据被静默清空；修复为 snmpSecretPayload 三态归一（掩码→undefined 省略键=保留原值、空串→null=主动清空、有值→更新），发送载荷类型相应放宽三个掩码键为可缺省
+2. SNMP 测试端点回环地址从拒绝改为告警放行：环回是机房管理正常目标（本机 snmpd 联调、环回对照设备），与私有地址同为 log_warn 放行，组播/链路本地保留拒绝；同步删除 test_snmp_rejects_loopback_addresses 单测与前端 loopback_forbidden 消息键，新增 log.device.snmp.loopback_ip_allowed 日志键（zh/en）
+3. 修复 SNMP CPU 采集永远为空（功能 bug）：snmp_metrics.rs 的 ssCpuRaw* 11 个计数器 OID 缺少 .0 标量实例后缀，agent 全部返回 No Such Instance 异常 → counters 恒 None → usage_pct 恒空（负载/内存/温度/磁盘/网络正常佐证仅 CPU 分支断裂）；补齐 .0 后缀
+4. 本机 snmpd 联调验证：环回对照设备（移动笔记本，IP=127.0.0.1）配置 SNMP 后下一轮轮询自动纳入主机监控（source=snmp，sysName 识别），加密存库/解密使用链路（AES-256-GCM）实测通畅
+5. 联动：无 Cargo.toml 版本变化（z 段内功能 bug 修复批次随 v0.14.0 联动已完成，本条仅 y+1 记录）
