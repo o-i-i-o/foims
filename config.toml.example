@@ -40,12 +40,12 @@ cors_allowed_origins = []
 
 [server.listen]
 # UDS socket 文件路径，需与 nginx upstream 配置一致
-# 生产：/run/foims/api.sock（systemd RuntimeDirectory 管理）
+# systemd RuntimeDirectory 管理
 uds_path = "/run/foims/api.sock"
 
 # UDS socket 属组（须为反代 worker 进程的属组；Debian/Ubuntu nginx 为 www-data 或 nginx）
 # deb 安装时 postinst 自动检测 nginx worker 用户并改写此值，手动部署需自行保持一致
-uds_group = "www-data"
+uds_group = "nginx"
 
 [jwt]
 # 请替换为随机生成的 32 字符以上密钥（含大小写字母、数字、特殊字符）

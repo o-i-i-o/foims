@@ -43,8 +43,9 @@ sudo systemctl daemon-reload
 
 echo 重启服务
 sudo systemctl restart foims
-sudo systemctl restart nginx
 sudo systemctl status foims
+
+sudo systemctl restart nginx
 sudo systemctl status nginx
 
 exit
