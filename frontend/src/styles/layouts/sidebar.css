@@ -117,14 +117,6 @@
     transform: rotate(180deg);
   }
 
-  .sidebar-menu {
-    list-style: none;
-    padding: var(--space-md) 0;
-    flex: 1;
-    overflow: hidden auto;
-    min-height: 0;
-  }
-
   .sidebar-menu li {
     margin-bottom: var(--space-sm);
   }
