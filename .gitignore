@@ -13,3 +13,4 @@ node_exporter/
 windows_exporter/
 frontend/dist/
 frontend/node_modules/
+*.log
