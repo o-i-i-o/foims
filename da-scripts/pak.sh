@@ -1,9 +1,8 @@
 #!/bin/sh
 set -e
-echo 删除旧程序
-sudo rm -f /usr/bin/foims
-# 旧版静态资源目录（/opt/foims）已废弃：统一到 /usr/share/foims/web
-sudo rm -rf /opt/foims
+
+WORKDIR=$(pwd)
+cd /media/oi-io/data/foims
 
 echo 编译后端
 cargo build --release
@@ -12,20 +11,35 @@ echo 构建前端
 (cd frontend && npm run build)
 
 echo 安装到生产目录
-sudo cp -f target/release/foims /usr/bin/foims
-# 前端静态资源：Linux 标准 share 布局，nginx $web_dir 直接指向该目录
-# （入口页 index/init_index/main.html 与 assets/、icons/、favicon.ico 同级）
+
+echo 删除旧版静态资源
 sudo rm -rf /usr/share/foims/web
+
+echo 删除旧版程序
+sudo rm -f /usr/bin/foims
+
+sudo cp -f target/release/foims /usr/bin/foims
+
 sudo mkdir -p /usr/share/foims/web
 sudo cp -rf frontend/dist/. /usr/share/foims/web/
-# 权限与安装包一致：目录 755、文件 644（nginx worker 只读访问）
+
+echo 配置静态资源文件目录权限
 sudo find /usr/share/foims/web -type d -exec chmod 755 {} +
 sudo find /usr/share/foims/web -type f -exec chmod 644 {} +
-# 配置唯一落点 /etc/foims/config.toml
+
+echo 拷贝配置文件到 /etc/foims/config.toml
 sudo mkdir -p /etc/foims
 sudo cp -f config.toml /etc/foims/config.toml
-# 数据库备份目录（与安装包 postinst 的属主/权限一致）
-sudo install -d -o foims -g foims -m 750 /usr/share/foims/backups
+
+echo 更新Nginx配置文件
+sudo rm -f /etc/nginx/conf.d/foims.conf
+sudo cp -f deploy/nginx/foims.conf /etc/nginx/conf.d/foims.conf
+
+echo 更新foims服务文件
+sudo rm -f /etc/systemd/system/foims.service
+sudo cp -f deploy/services/foims.service /etc/systemd/system/foims.service
+sudo systemctl daemon-reload
+
 
 echo 重启服务
 sudo systemctl restart foims
@@ -33,4 +47,4 @@ sudo systemctl restart nginx
 sudo systemctl status foims
 sudo systemctl status nginx
 
-exit 0
+exit
