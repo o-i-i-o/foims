@@ -176,7 +176,7 @@ frontend/
 ```
 
 - dev：`cd frontend && npm run dev`（5173）；构建：`npm run build`，产物
-  `dist/` 部署到 `/opt/foims/web/static`。
+  `dist/` 部署到 `/usr/share/foims/web`（内容直接铺开，无 `static/` 中间层）。
 - 缓存与版本：Vite 内容指纹（`assets/` 哈希文件名）承担静态资源长缓存，
   **无需手工 bump `?v=`/MODULE_VERSION**；nginx 对 `/assets/` 长缓存、
   入口页 `no-cache`（见 `deploy/nginx/foims.conf`）。

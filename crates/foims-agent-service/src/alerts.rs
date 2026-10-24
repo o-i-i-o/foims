@@ -28,7 +28,7 @@ const CONFIG_TYPE: &str = "agent";
 const CONFIG_KEY: &str = "alert_thresholds";
 /// 站内通知类型标识（notifications.notification_type 列）
 const NOTIFICATION_TYPE: &str = "agent_alert";
-/// 通知标题 i18n key（前端按用户语言翻译，key 见 web/static/i18n JSON）
+/// 通知标题 i18n key（前端按用户语言翻译，key 见 frontend/src/i18n 文案）
 const NOTIFICATION_TITLE_KEY: &str = "server.notification.agent_alert.title";
 
 /// 告警指标名（host_alert_states.metric 列）与通知正文 key 成对定义
@@ -205,7 +205,7 @@ struct AlertEvent<'a> {
 }
 
 /// 向全部管理员写一条指标超标通知（单条失败即整体失败，由调用方保持
-/// 状态不翻转以待重试；标题/正文为前端翻译 key，见 web/static/i18n JSON）。
+/// 状态不翻转以待重试；标题/正文为前端翻译 key，见 frontend/src/i18n 文案）。
 /// 邮件方式按「通知配置」中主机告警的邮件开关决定是否发送，发送失败
 /// 仅记日志（邮件丢失可接受，站内通知失败才阻塞状态翻转）。
 async fn notify_admins(

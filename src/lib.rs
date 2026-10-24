@@ -21,7 +21,7 @@
 //! （连接池）与 `AuthProvider`（认证扩展）trait，由本 crate 的
 //! [`app_state::AppState`] 实现。
 
-// FOIMS - Organization IT Information Management System
+// FOIMS - Organization Infrastructure Management System
 // Copyright (c) 2024-2025 oi-io <boss@oi-io.cc>
 // SPDX-License-Identifier: MIT
 

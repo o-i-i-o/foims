@@ -26,7 +26,7 @@ pub use types::{
 
 pub use verification::{get_verification_code, verify_code};
 
-pub use config::{get_backup_dir, update_config_database, update_config_enabled};
+pub use config::{BACKUP_DIR, get_backup_dir, update_config_database, update_config_enabled};
 
 pub use check::{
     check_has_data, check_required_tables_exist, get_required_tables, get_table_columns,

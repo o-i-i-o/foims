@@ -4,11 +4,16 @@ use config::Config as ConfigBuilder;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-// 配置文件搜索路径（按优先级）
-pub const CONFIG_PATHS: [&str; 3] = [
-    "/etc/foims/config", // 系统配置目录（生产环境）- 最高优先级
-    "/opt/foims/config", // 应用目录（备用）
-    "config",            // 当前目录（开发环境）
+// 配置文件搜索路径（按优先级）：系统配置目录（服务/安装包部署）→ 当前目录（仅开发
+// 环境直接运行二进制时使用；systemd 单元不设工作目录，不会命中此项）
+//
+// 不保留旧版 /opt/foims/config.toml 备用路径：/opt/foims 已废弃（旧静态资源
+// 目录，前端资源改到 /usr/share/foims/web），配置只落在 /etc/foims 或开发
+// 工作目录，避免"同一份配置存在两个可写副本"导致运维改错文件、升级/回滚
+// 互相覆盖。
+pub const CONFIG_PATHS: [&str; 2] = [
+    "/etc/foims/config", // 系统配置目录（生产唯一落点）- 最高优先级
+    "config",            // 当前目录（仅开发直接运行二进制，不用于服务部署）
 ];
 
 // 获取配置文件路径

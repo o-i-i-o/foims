@@ -16,12 +16,17 @@
 #     %postun 对齐 purge 清理）
 #   - systemd 单元唯一来源为 deploy/services/foims.service，本脚本不再内嵌副本
 #   - 前端为 Vue 3 + Vite 工程（frontend/），打包前现场构建（npm ci +
-#     vite build），产物 dist/ 布局部署到 /opt/foims/web/static；
+#     vite build），产物 dist/ 内容直接铺开到 /usr/share/foims/web（入口页与
+#     assets/、icons/、favicon.ico 同级，无 static/ 中间层）；
 #     旧版原生 JS 前端已存档于 web-archive/，不进包
 #   - 配置文件以 config.toml.example 副本为基础打包（去除 .example 后缀）：
 #     仓库/开发机的本地 config.toml 可能含真实数据库连接信息，不进包；
 #     数据库连接要素由安装后的初始化向导在页面填写并回写配置文件；
-#     JWT 密钥由本脚本生成随机 32 字符替换示例占位符
+#     JWT 密钥由本脚本生成随机 32 字符替换示例占位符；
+#     配置唯一落点为 /etc/foims/config.toml
+#   - 数据库备份统一落在 /usr/share/foims/backups（postinst 建目录并
+#     归属 foims:foims 0750，systemd 单元 ReadWritePaths 放行；purge/erase
+#     时清理）
 #   - nginx 生产配置安装到 /etc/nginx/conf.d/foims.conf（conffile）；
 #     nginx/PostgreSQL 不做包级强制依赖（兼容源码编译安装，无 dpkg 包
 #     记录的场景），改为 preinst 强制检查其 systemd 服务单元或运行中
@@ -90,7 +95,6 @@ rm -rf "$DEBPAK_DIR"
 echo ""
 echo "3. 创建目录结构..."
 mkdir -p "$DEBPAK_DIR/usr/bin"
-mkdir -p "$DEBPAK_DIR/opt/foims"
 mkdir -p "$DEBPAK_DIR/var/log/foims"
 mkdir -p "$DEBPAK_DIR/etc/foims"
 mkdir -p "$DEBPAK_DIR/etc/nginx/conf.d"
@@ -112,8 +116,8 @@ fi
 
 echo ""
 echo "5. 构建并复制前端资源..."
-# 前端为 Vue 3 + Vite 工程：打包前现场构建，产物部署到 /opt/foims/web/static
-# （部署布局沿用旧版，nginx $web_dir 路由零改动）。Node 工具链缺失即中止，
+# 前端为 Vue 3 + Vite 工程：打包前现场构建，产物部署到 /usr/share/foims/web
+# （Linux 标准 share 布局，nginx $web_dir 直接指向该目录）。Node 工具链缺失即中止，
 # 避免打出缺前端资源的安装包
 if ! command -v npm >/dev/null 2>&1; then
     echo "错误：未找到 npm，前端构建需要 Node.js 工具链" >&2
@@ -128,10 +132,11 @@ if [ ! -d "frontend/dist" ]; then
     echo "错误：frontend/dist 不存在，前端构建疑似失败" >&2
     exit 1
 fi
-mkdir -p "$DEBPAK_DIR/opt/foims/web"
-cp -r frontend/dist "$DEBPAK_DIR/opt/foims/web/static"
-find "$DEBPAK_DIR/opt/foims/web" -type d -exec chmod 755 {} \;
-find "$DEBPAK_DIR/opt/foims/web" -type f -exec chmod 644 {} \;
+mkdir -p "$DEBPAK_DIR/usr/share/foims/web"
+# 用 dist/. 镜像内容（不留 web/dist 嵌套，隐藏文件一并拷入）
+cp -r frontend/dist/. "$DEBPAK_DIR/usr/share/foims/web/"
+find "$DEBPAK_DIR/usr/share/foims/web" -type d -exec chmod 755 {} \;
+find "$DEBPAK_DIR/usr/share/foims/web" -type f -exec chmod 644 {} \;
 
 # 配置文件打包（conffile，升级时 dpkg 保留本地修改）：
 # 以 config.toml.example 副本去除示例后缀进包——本地 config.toml 可能
@@ -251,9 +256,9 @@ Depends: libc6 (>= 2.31), adduser
 Recommends: fail2ban
 Suggests: nginx (>= 1.28.1), postgresql (>= 15)
 Homepage: https://github.com/example/foims
-Description: Organization IT Information Management System
- FOIMS - Organization IT Information Management System based on Rust
- Axum and PostgreSQL, with web interface.
+Description: Organization Infrastructure Management System
+ FOIMS is a high-performance organization infrastructure management
+ platform based on Rust Axum and PostgreSQL, with a web interface.
  Features include:
   - IP allocation and tracking
   - Switch management with SNMP support
@@ -328,7 +333,7 @@ case "$1" in
         if ! getent passwd foims > /dev/null; then
             adduser --system \
                 --shell /usr/sbin/nologin \
-                --home /opt/foims \
+                --home /usr/share/foims \
                 --no-create-home \
                 --gecos "FOIMS Service Account" \
                 --group \
@@ -337,8 +342,14 @@ case "$1" in
 
         # 创建必要的目录
         install -d -o foims -g foims -m 755 /var/log/foims
-        install -d -o foims -g foims -m 755 /opt/foims
         install -d -o foims -g foims -m 755 /etc/foims
+        # 数据库备份目录（初始化向导与定时备份任务的唯一落点）
+        install -d -o foims -g foims -m 750 /usr/share/foims/backups
+
+        # 旧版静态资源目录（/opt/foims）已废弃：升级时清理残留，避免
+        # 旧版前端文件与旧配置副本被误用；目录清空后一并删除
+        rm -rf /opt/foims/web /opt/foims/config.toml
+        rmdir /opt/foims 2>/dev/null || true
 
         # 证书目录：服务用户 foims 需在运行期（证书管理页）写入生成，
         # 750 仅属组可见；nginx master 以 root 读取私钥不受影响
@@ -473,8 +484,10 @@ case "$1" in
             deb-systemd-helper purge foims.service >/dev/null || true
         fi
 
-        # 删除数据目录
-        rm -rf /opt/foims/*
+        # 删除旧版数据目录（0.29 及以前版本的静态资源目录）
+        rm -rf /opt/foims
+        # 删除数据库备份（purge 语义为彻底清除）
+        rm -rf /usr/share/foims/backups
 
         # 删除证书物料（站点根 CA 与全部生成/导入证书，purge 语义为彻底清除）
         rm -rf /etc/ssl/foims-ca /etc/ssl/foims-certs /etc/ssl/foims-import-certs /etc/ssl/foims-import-cas
@@ -540,7 +553,7 @@ cat > "$DEBPAK_DIR/usr/share/doc/foims/changelog" << EOF
 foims ($VERSION) stable; urgency=medium
 
   * Release version $VERSION
-  * Organization IT Information Management System with web interface
+  * Organization Infrastructure Management System with web interface
 
  -- oi-io <boss@oi-io.cc>  $(date -R)
 EOF
@@ -554,15 +567,15 @@ fi
 echo ""
 echo "15. 创建 man 手册页..."
 cat > "$DEBPAK_DIR/usr/share/man/man1/foims.1" << EOF
-.TH FOIMS 1 "$(date +'%B %Y')" "foims $VERSION" "Organization IT Information Management System"
+.TH FOIMS 1 "$(date +'%B %Y')" "foims $VERSION" "Organization Infrastructure Management System"
 .SH NAME
-foims \- Organization IT Information Management System
+foims \- Organization Infrastructure Management System
 .SH SYNOPSIS
 .B foims
 .RI [ options ]
 .SH DESCRIPTION
 .B foims
-is an organization IT information management system based on Rust
+is an organization infrastructure management system based on Rust
 Axum and PostgreSQL, with a web interface.
 .PP
 Features include:
@@ -593,11 +606,14 @@ nginx reverse proxy configuration (installed as a conffile).
 TLS certificates managed by the built-in certificate manager
 (default_cert.pem/.key is generated at install time by the postinst).
 .TP
-.I /opt/foims/
-Application resources directory.
+.I /usr/share/foims/web/
+Frontend static resources served by nginx (document root).
 .TP
 .I /var/log/foims/
 Log files directory.
+.TP
+.I /usr/share/foims/backups/
+Database backups created by the setup wizard and scheduled backup task.
 .TP
 .I /usr/share/foims/deploy/
 Reference nginx/systemd/fail2ban deployment configurations.
@@ -660,8 +676,6 @@ chmod 644 "$DEBPAK_DIR/usr/share/doc/foims/copyright"
 
 # 为特定目录设置权限
 chmod 755 "$DEBPAK_DIR/usr/bin"
-chmod 755 "$DEBPAK_DIR/opt"
-chmod 755 "$DEBPAK_DIR/opt/foims"
 chmod 755 "$DEBPAK_DIR/var"
 chmod 755 "$DEBPAK_DIR/var/log"
 chmod 755 "$DEBPAK_DIR/var/log/foims"
@@ -674,6 +688,8 @@ chmod 755 "$DEBPAK_DIR/usr/lib"
 chmod 755 "$DEBPAK_DIR/usr/lib/systemd"
 chmod 755 "$DEBPAK_DIR/usr/lib/systemd/system"
 chmod 755 "$DEBPAK_DIR/usr/share"
+chmod 755 "$DEBPAK_DIR/usr/share/foims"
+chmod 755 "$DEBPAK_DIR/usr/share/foims/web"
 chmod 755 "$DEBPAK_DIR/usr/share/doc"
 chmod 755 "$DEBPAK_DIR/usr/share/doc/foims"
 chmod 755 "$DEBPAK_DIR/usr/share/man"
@@ -737,7 +753,7 @@ cat > "$RPMTOP/SPECS/foims.spec" << SPEC_EOF
 Name:           foims
 Version:        $VERSION
 Release:        1
-Summary:        Organization IT Information Management System
+Summary:        Organization Infrastructure Management System
 License:        GPL-3.0-or-later
 URL:            https://github.com/example/foims
 Source0:        pak.tar.gz
@@ -746,8 +762,9 @@ Recommends:     fail2ban
 Suggests:       nginx >= 1.28.1 postgresql-server >= 15
 
 %description
-FOIMS - Organization IT Information Management System based on Rust
-Axum and PostgreSQL, with web interface. Features include IP
+FOIMS is a high-performance organization infrastructure management
+platform based on Rust Axum and PostgreSQL, with a web interface.
+Features include IP
 allocation and tracking, switch management with SNMP support,
 network topology visualization, and cabinet/workstation management.
 
@@ -793,8 +810,12 @@ fi
 NOLOGIN=/usr/sbin/nologin
 [ -x "\$NOLOGIN" ] || NOLOGIN=/sbin/nologin
 getent group foims >/dev/null 2>&1 || groupadd -r foims
-id foims >/dev/null 2>&1 || useradd -r -g foims -s "\$NOLOGIN" -d /opt/foims -M -c "FOIMS Service Account" foims
-install -d -o foims -g foims -m 755 /var/log/foims /opt/foims /etc/foims
+id foims >/dev/null 2>&1 || useradd -r -g foims -s "\$NOLOGIN" -d /usr/share/foims -M -c "FOIMS Service Account" foims
+install -d -o foims -g foims -m 755 /var/log/foims /etc/foims
+install -d -o foims -g foims -m 750 /usr/share/foims/backups
+# 旧版静态资源目录（/opt/foims）已废弃：升级时清理残留
+rm -rf /opt/foims/web /opt/foims/config.toml
+rmdir /opt/foims 2>/dev/null || true
 install -d -o foims -g foims -m 750 /etc/ssl/foims-ca /etc/ssl/foims-certs
 if [ -f /etc/foims/config.toml ]; then
     chown foims:foims /etc/foims/config.toml
@@ -858,7 +879,8 @@ fi
 # %config(noreplace) 修改过的配置留 .rpmsave 由运维自行处置）
 %postun
 if [ "\$1" -eq 0 ]; then
-    rm -rf /opt/foims/*
+    rm -rf /opt/foims
+    rm -rf /usr/share/foims/backups
     rm -rf /etc/ssl/foims-ca /etc/ssl/foims-certs /etc/ssl/foims-import-certs /etc/ssl/foims-import-cas
     rm -f /etc/systemd/system/foims.service.d/uds-group.conf
     rmdir --ignore-fail-on-non-empty /etc/systemd/system/foims.service.d 2>/dev/null || true
@@ -867,7 +889,7 @@ fi
 
 %files
 %attr(755,root,root) /usr/bin/foims
-/opt/foims/web/static
+/usr/share/foims/web
 /var/log/foims
 %dir /etc/foims
 %config(noreplace) /etc/foims/config.toml

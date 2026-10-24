@@ -1,3 +1,12 @@
+# FOIMS 主配置示例（安装包以本文件副本落为 /etc/foims/config.toml）
+#
+# 搜索路径（按优先级）：
+#   1. /etc/foims/config.toml —— 生产唯一落点
+#   2. ./config.toml          —— 仅开发环境直接运行二进制时使用
+#                                （服务/安装包部署一律只读 /etc/foims/config.toml）
+# 前端静态资源目录：/usr/share/foims/web（nginx 托管，与配置无关）；
+# 旧版 /opt/foims 目录已废弃，不再作为配置搜索路径。
+
 [database]
 host = "localhost"
 port = 5432

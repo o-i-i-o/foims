@@ -43,7 +43,7 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 ## 🧭 Architecture
 
 - The backend listens on a UDS over h2c (default `/run/foims/api.sock`) and does not directly expose a TCP port.
-- The frontend is a Vue 3 + Vite project (repo root `frontend/`, MPA with three entries: login / init wizard / main app); the `vite build` output is deployed to the nginx static directory (`/opt/foims/web/static`). The legacy vanilla-JS frontend is archived under `web-archive/` (read-only reference).
+- The frontend is a Vue 3 + Vite project (repo root `frontend/`, MPA with three entries: login / init wizard / main app); the `vite build` output is deployed to the nginx static directory (`/usr/share/foims/web`). The legacy vanilla-JS frontend is archived under `web-archive/` (read-only reference).
 - Two exceptions are in-process UDP listeners (not proxied by nginx; allow them through the firewall): Agent metric reporting (UDP 9100 by default, HTTP/3) and SNMP Trap reception (UDP 162 by default, configurable).
 - TLS certificates, security response headers, and static asset caching are all handled at the nginx layer; see samples in [deploy/nginx/](deploy/nginx/).
 
@@ -65,7 +65,7 @@ cd foims
 cp config.toml.example config.toml
 ```
 
-The configuration file is searched by priority: `/etc/foims/config.toml` → `/opt/foims/config.toml` → `./config.toml`. See [🔧 Configuration](#-configuration) for details.
+The configuration file is searched by priority: `/etc/foims/config.toml` → `./config.toml` (the latter is only for running the binary directly in a development checkout; services and package installations read `/etc/foims/config.toml` only. The legacy `/opt/foims` directory is retired and no longer holds configuration or static resources). See [🔧 Configuration](#-configuration) for details.
 
 ### 2. Prepare the Database
 

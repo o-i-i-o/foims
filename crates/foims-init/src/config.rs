@@ -2,12 +2,14 @@
 
 use crate::types::DatabaseConfig;
 
+/// 数据库备份目录（全仓唯一备份落点：初始化向导的 pg_dump 与定时备份任务共用）。
+///
+/// 由安装包 postinst 创建为 `foims:foims 0750`，并在 systemd 单元的
+/// `ReadWritePaths` 中放行（`ProtectSystem=strict` 下 /usr 默认为只读）。
+pub const BACKUP_DIR: &str = "/usr/share/foims/backups";
+
 pub fn get_backup_dir() -> String {
-    if let Some(home) = std::env::var_os("HOME") {
-        format!("{}/foims_backups", home.to_string_lossy())
-    } else {
-        "/opt/foims/backups".to_string()
-    }
+    BACKUP_DIR.to_string()
 }
 
 /// 原子化写回配置文件：先写同目录临时文件再 rename 覆盖。config.toml
@@ -116,14 +118,10 @@ mod tests {
     }
 
     #[test]
-    fn get_backup_dir_跟随home环境变量() {
-        let dir = get_backup_dir();
-        if let Some(home) = std::env::var_os("HOME") {
-            let expected = format!("{}/foims_backups", home.to_string_lossy());
-            assert_eq!(dir, expected);
-        } else {
-            assert_eq!(dir, "/opt/foims/backups");
-        }
+    fn get_backup_dir_统一为安装包约定路径() {
+        // 备份目录是固定路径（不随 HOME 变化）：安装包 postinst 在此建目录并
+        // 由 systemd 单元 ReadWritePaths 放行，运行期不改写
+        assert_eq!(get_backup_dir(), "/usr/share/foims/backups");
     }
 
     /// 更新 enabled 开关并保留同表其他键

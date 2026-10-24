@@ -56,7 +56,8 @@ impl TaskExecutor for BackupTaskExecutor {
         let db_config = ctx.db_config.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            let backup_dir = "/var/lib/foims/backups";
+            // 备份目录与初始化向导共用 foims-init 的唯一定义，避免两套口径
+            let backup_dir = foims_init::BACKUP_DIR;
             let path =
                 foims_data_management::backup_to_file(&db_config, backup_dir, "foims_backup")?;
             foims_data_management::cleanup_old_backup_files(backup_dir, 7)?;

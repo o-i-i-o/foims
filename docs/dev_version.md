@@ -351,3 +351,31 @@ v0.14.4
 4. 升级脚本 upgrade/0.29/upgrade_0.29.0.sql（0.29 中版本唯一一份）：CREATE OR REPLACE VIEW ip_with_details 追加 workstation_id，幂等可重入；无表结构（列/索引/约束）变更，foims-init 建表代码（schema/tables/views.rs）已同步，check.rs 仅校验视图存在性（视图列不在其校验范围）。
 5. 生成类型：cargo test --workspace export_bindings 重新导出，仅 IpDetailWithNames.ts 增加 workstation_id，其余生成物无漂移。
 6. 验证：cargo fmt --all --check 通过；cargo clippy --release --workspace --all-targets -- -D warnings 零告警（EXIT=0）；cd frontend && npm run typecheck 0 错、npm run build 通过（仅既存 useToast 动态导入与 chunk>500kB 警告）。
+
+v0.15.0
+2026102419061001
+1. 主配置搜索路径收敛（功能优化 y+1）：foims-common CONFIG_PATHS 由三项降为两项——/etc/foims/config.toml（生产唯一落点）→ ./config.toml（仅系统路径缺失时回退，适配开发/手动部署），删除 /opt/foims/config.toml 备用路径；/opt/foims 自此只存程序资源（web/static），避免同一配置存在两个可写副本导致运维改错文件、升级与回滚互相覆盖
+2. 备份目录统一为 /usr/share/foims/backups（全仓唯一落点）：foims-init 新增 BACKUP_DIR 常量并对外导出，get_backup_dir 去掉 $HOME/foims_backups 与 /opt/foims/backups 两套回退；定时备份任务（src/system/task_executors.rs）由硬编码 /var/lib/foims/backups 改为复用 foims_init::BACKUP_DIR——原路径既与向导备份目录不一致，也不在 systemd ProtectSystem=strict 的 ReadWritePaths 白名单内，发布包部署下会写盘失败
+3. 部署与打包同步：deploy/services/foims.service 增加 ReadWritePaths=/usr/share/foims 并更新路径约定注释；scripts/build-pkgs.sh deb postinst / rpm %post 创建 /usr/share/foims/backups（foims:foims 0750），deb purge 与 rpm %postun 清理该目录，man FILES 补条目；da-scripts/pak.sh 配置落点由 /opt/foims/ 改为 /etc/foims/config.toml 并预建备份目录
+4. 文档与示例：README.md / README_EN.md 配置搜索顺序同步为两条路径，config.toml.example 顶部补搜索顺序说明（含 /opt/foims 不再读配置）
+5. 核实 nginx 默认证书链路无误（不改代码）：deb postinst / rpm %post 在安装时用 openssl 自签 /etc/ssl/foims-certs/default_cert.pem/.key（已存在且剩余≥1 天则跳过），nginx 配置注释与实现一致；foims 本体只监听 UDS（/run/foims/api.sock），自身不需要证书，agent QUIC 使用的 agent_cert.pem 由站点 CA 单独签发，与 HTTPS 默认证书互不影响
+6. 联动：根 Cargo.toml 0.29.2→0.29.3，foims-common 0.3.10→0.3.11，foims-init 0.1.8→0.1.9；无数据库结构变更（无需 upgrade SQL 与 foims-init 建表/校验同步）
+7. 验证：cargo fmt --all --check；cargo clippy --release --workspace --all-targets -- -D warnings；cargo test --release --workspace（含新增备份目录固定值单测）
+
+v0.16.0
+2026102419450101
+1. 前端资源目录改为 Linux 标准 share 布局（功能优化 y+1）：/opt/foims/web/static → /usr/share/foims/web，dist/ 内容直接铺开（入口页 index/init_index/main.html 与 assets/、icons/、favicon.ico 同级，取消 static/ 中间层；nginx 路由 URL 不变，仍为 /index.html、/assets/、/icons/、/favicon.ico）；/opt/foims 目录自此完全废弃
+2. deploy/nginx/foims.conf：$web_dir 改为 /usr/share/foims/web，6 处 alias（入口页/favicon/assets/icons）去掉 static/ 段，头注释同步产物布局
+3. deploy/services/foims.service：WorkingDirectory 改为 /usr/share/foims（相对配置回退 ./config.toml 不再命中旧 /opt/foims）；ReadWritePaths 由整目录 /usr/share/foims 收窄为 /usr/share/foims/backups，静态资源目录对服务进程只读
+4. scripts/build-pkgs.sh：deb 暂存/复制路径改 /usr/share/foims/web（cp -r dist/. 镜像，避免 web/dist 嵌套），删除 /opt 目录创建与 chmod；deb postinst / rpm %post 的 adduser|useradd home 改 /usr/share/foims、install -d 去掉 /opt/foims，并清理旧版 /opt/foims/web 与 /opt/foims/config.toml 残留后 rmdir；purge / %postun 改 rm -rf /opt/foims；rpm %files 改 /usr/share/foims/web；man FILES 条目同步
+5. da-scripts/pak.sh 同步手动部署：清理 /opt/foims，静态资源改为 /usr/share/foims/web（cp dist/. + 目录 755/文件 644，与安装包一致），删去 /opt 相关空目录与 ls 步骤
+6. 文档与注释统一：README.md / README_EN.md / AGENTS.md / docs/code-style.md 的静态目录路径；config.toml.example 说明 /opt/foims 已废弃；foims-common CONFIG_PATHS 注释与 foims-agent-service alerts.rs 的 i18n 引用（web/static/i18n JSON → frontend/src/i18n）
+7. 全仓路径复查（本次新统一口径）：配置 /etc/foims、日志 /var/log/foims（log_dir 取 CARGO_PKG_NAME）、socket /run/foims、证书 /etc/ssl/foims-*、备份 /usr/share/foims/backups、静态 /usr/share/foims/web；剩余绝对路径仅 /tmp/foims_import（初始化导入 SQL 临时件，进程 PrivateTmp 下隔离）与 agent 侧独立的 /etc/foims-agent、/var/lib/foims-agent
+8. 联动：根 Cargo.toml 0.29.3→0.29.4，foims-common 0.3.11→0.3.12，foims-agent-service 0.1.15→0.1.16（均仅注释变更）；无数据库结构变更
+9. 验证：cargo fmt --all --check；cargo clippy --release --workspace --all-targets -- -D warnings；cargo test --release --workspace；bash -n scripts/build-pkgs.sh 与 sh -n da-scripts/pak.sh 语法通过；全仓 grep 确认除废弃清理语句与历史记录外无 /opt/foims、web/static 残留
+
+v0.16.1
+2026102420353001
+1. 修正 foims.service 的工作目录语义（部署配置纠偏，z+1，不动 Cargo.toml）：该单元仅用于生产（开发以 da-scripts/pak.sh 模拟生产部署），与 CONFIG_PATHS 的 ./config.toml 相对回退无关；删除 v0.16.0 引入的 WorkingDirectory=/usr/share/foims，回归 systemd 默认 /，避免相对路径被意外命中
+2. 口径统一：foims.service 路径约定改为“配置 /etc/foims/config.toml（生产唯一落点）”，并注明 ./config.toml 仅供开发直接运行二进制；crates/foims-common CONFIG_PATHS 注释、config.toml.example 搜索顺序说明、README.md / README_EN.md 同步（去掉“手动部署”歧义）
+3. 验证：systemd-analyze verify deploy/services/foims.service 无输出（通过）；cargo fmt --all --check；cargo clippy --release --workspace --all-targets -- -D warnings；grep 确认全仓除历史记录外无 WorkingDirectory 残留

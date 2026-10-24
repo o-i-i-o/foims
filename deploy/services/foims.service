@@ -7,8 +7,12 @@
 #
 # 路径约定（与 scripts/build-pkgs.sh 打包布局一致）：
 #   二进制   /usr/bin/foims
-#   静态资源 /opt/foims/web（static_files.rs 搜索路径第一位）
-#   配置     /etc/foims/config.toml（CONFIG_PATHS 最高优先级）
+#   静态资源 /usr/share/foims/web（nginx 直接托管，入口页与 assets/、icons/ 均在根下）
+#   配置     /etc/foims/config.toml（生产唯一落点）
+#   备份     /usr/share/foims/backups（定时/向导 pg_dump 的唯一落点）
+# /opt/foims 已废弃（旧版静态资源目录，升级时由包脚本清理）。
+# 本单元仅用于生产（开发可用 da-scripts/pak.sh 模拟生产部署）：CONFIG_PATHS 的
+#   相对回退 ./config.toml 仅供开发环境直接运行二进制，与本单元无关。
 #
 # UDS 监听路径需三方一致：config.toml [server.listen] uds_path、
 #   本单元的 RuntimeDirectory=foims、deploy/nginx/foims.conf 的 upstream。
@@ -18,7 +22,7 @@
 #   deb 安装时 postinst 自动检测实际用户，通过 drop-in 覆盖 SupplementaryGroups。
 
 [Unit]
-Description=FOIMS - Organization IT Information Management System
+Description=FOIMS - Organization Infrastructure Management System
 Documentation=man:foims(1)
 After=network.target postgresql.service
 Wants=postgresql.service
@@ -29,7 +33,9 @@ User=foims
 Group=foims
 # 允许 foims 进程将 UDS 的属组改为 nginx 运行组（与 uds_group 配置一致）
 SupplementaryGroups=www-data
-WorkingDirectory=/opt/foims
+# 不设置 WorkingDirectory（systemd 默认 /）：生产配置只认 /etc/foims/config.toml，
+# 服务不读相对路径资源（静态由 nginx 托管、日志与备份均为绝对路径），
+# 留空可避免 ./config.toml 这类开发路径被意外命中
 ExecStart=/usr/bin/foims
 Restart=always
 RestartSec=5s
@@ -46,7 +52,10 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/foims /var/log/foims /etc/foims
+# ReadWritePaths 逐项对应运行期写入点：/var/log/foims（日志）、/etc/foims
+# （config.toml 回写与加密密钥）、/usr/share/foims/backups（数据库备份）。
+# 静态资源目录（/usr/share/foims/web）刻意不列入：服务进程不应能改写自身资源。
+ReadWritePaths=/var/log/foims /etc/foims /usr/share/foims/backups
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
