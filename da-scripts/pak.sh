@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-WORKDIR=$(pwd)
+NGINXCONF=/etc/nginx/nginx.conf
 cd /media/oi-io/data/foims
 
 echo 编译后端
@@ -27,13 +27,21 @@ echo 配置静态资源文件目录权限
 sudo find /usr/share/foims/web -type d -exec chmod 755 {} +
 sudo find /usr/share/foims/web -type f -exec chmod 644 {} +
 
+echo 更新Nginx配置文件
+sudo rm -f /etc/nginx/conf.d/foims.conf
+sudo cp -f deploy/nginx/foims.conf /etc/nginx/conf.d/foims.conf
+
 echo 拷贝配置文件到 /etc/foims/config.toml
 sudo mkdir -p /etc/foims
 sudo cp -f config.toml /etc/foims/config.toml
 
-echo 更新Nginx配置文件
-sudo rm -f /etc/nginx/conf.d/foims.conf
-sudo cp -f deploy/nginx/foims.conf /etc/nginx/conf.d/foims.conf
+echo 修改配置文件中sock用户归属和nginx运行用户一致
+# 1) 从 nginx.conf 提取 user 的值（去掉分号、空白）
+NGINX_USER=$(sudo sed -n 's/^[[:space:]]*user[[:space:]]\+\([^;]*\);.*/\1/p' /etc/nginx/nginx.conf | head -n1 | xargs)
+
+# 2) 用该值替换 config.toml 中 uds_group 的双引号内内容
+sudo sed -i -E "s/^([[:space:]]*uds_group[[:space:]]*=[[:space:]]*\")[^\"]*(\".*)$/\1${NGINX_USER}\2/" /etc/foims/config.toml
+
 
 echo 更新foims服务文件
 sudo rm -f /etc/systemd/system/foims.service
