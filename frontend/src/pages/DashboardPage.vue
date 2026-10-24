@@ -489,16 +489,11 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
  骨架条与 agent-usage 迷你条为本页使用到的 utilities/agents 分层片段，
  以 scoped 形式内联（unlayered 优先级与原 pages 层语义一致）。*/
 
-/* 内容上方预留一行留白，避免统计卡片贴住视口顶部 */
-#dashboard {
-  padding-top: var(--space-md);
-}
-
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-lg);
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-lg);
 }
 
 .dashboard-grid {
