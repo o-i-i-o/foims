@@ -6,33 +6,19 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import {
+  clearLogs,
+  getLogForwarding,
+  getLogStats,
+  saveLogForwarding as saveLogForwardingConfig,
+  testLogForwarding as sendLogForwardingTest
+} from "../../api/logs";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import { formatDate } from "../../utils/formatter";
 import ConfirmModal from "../ConfirmModal.vue";
+import type { LogForwarding, LogsStats } from "../../api/logs";
 import type { ClearLogsRequest } from "../../types/api/generated/ClearLogsRequest";
-
-/** 单类日志统计（后端 json! 动态构造，未生成 ts-rs 类型） */
-interface LogCategoryStats {
-  count?: number;
-  oldest?: string | null;
-}
-
-/** 日志统计载荷（GET /api/system/logs/stats） */
-interface LogsStatsPayload {
-  operation_logs?: LogCategoryStats | null;
-  login_logs?: LogCategoryStats | null;
-  notifications?: LogCategoryStats | null;
-}
-
-/** 日志外发配置载荷（GET 返回 / PUT 提交同形） */
-interface LogForwardingPayload {
-  enabled?: boolean;
-  protocol?: string | null;
-  host?: string | null;
-  port?: number | null;
-}
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
@@ -46,7 +32,7 @@ const readonly = isSectionReadonly("system");
 const statsQuery = useQuery({
   queryKey: ["logs-stats"],
   queryFn: async () => {
-    const result = await apiGet<LogsStatsPayload>("/api/system/logs/stats");
+    const result = await getLogStats();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -55,7 +41,7 @@ const statsQuery = useQuery({
   enabled: computed(() => props.active)
 });
 
-const stats = computed<LogsStatsPayload>(() => statsQuery.data.value ?? {});
+const stats = computed<LogsStats>(() => statsQuery.data.value ?? {});
 
 // 最早记录时间（无记录时不显示）
 function oldestText(value: string | null | undefined): string {
@@ -99,7 +85,7 @@ async function doClearLogs(): Promise<void> {
       log_type: clearType.value,
       days: Math.min(Math.max(Number.parseInt(clearDays.value, 10) || 0, 0), 36500)
     };
-    const result = await apiPost("/api/system/logs/clear", payload);
+    const result = await clearLogs(payload);
     if (result.success) {
       showToast(result.message, "success");
       queryClient.invalidateQueries({ queryKey: ["logs-stats"] });
@@ -121,7 +107,7 @@ const forwardingPort = ref("514");
 const forwardingQuery = useQuery({
   queryKey: ["log-forwarding"],
   queryFn: async () => {
-    const result = await apiGet<LogForwardingPayload>("/api/system/logs/forwarding");
+    const result = await getLogForwarding();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -152,13 +138,13 @@ async function saveLogForwarding(): Promise<void> {
   }
   savingForwarding.value = true;
   try {
-    const payload: LogForwardingPayload = {
+    const payload: LogForwarding = {
       enabled: forwardingEnabled.value === "true",
       protocol: forwardingProtocol.value || "udp",
       host: forwardingHost.value.trim(),
       port: Number.parseInt(forwardingPort.value, 10) || 514
     };
-    const result = await apiPut("/api/system/logs/forwarding", payload);
+    const result = await saveLogForwardingConfig(payload);
     // 成功失败均使用后端返回的 message 提示
     showToast(result.message, result.success ? "success" : "error");
   } finally {
@@ -174,7 +160,7 @@ async function testLogForwarding(): Promise<void> {
   }
   testingForwarding.value = true;
   try {
-    const result = await apiPost("/api/system/logs/forwarding/test", {});
+    const result = await sendLogForwardingTest();
     showToast(result.message, result.success ? "success" : "error");
   } finally {
     testingForwarding.value = false;

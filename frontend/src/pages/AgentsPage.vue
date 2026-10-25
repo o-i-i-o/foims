@@ -194,7 +194,7 @@ function handleDeleteConfirmed() {
       <button type="button" class="btn btn-secondary btn-sm" @click="showThreshold = true">{{ t("agents.alert_threshold") }}</button>
     </div>
     <div class="table-container">
-      <table id="agents-table" class="data-table" aria-label="Agent hosts">
+      <table id="agents-table" class="data-table" :aria-label="t('nav.agents')">
         <thead>
           <tr>
             <th class="col-center">{{ t("common.status") }}</th>

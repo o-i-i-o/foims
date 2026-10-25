@@ -370,7 +370,7 @@ async function handleSave(): Promise<void> {
         </div>
         <div class="form-group">
           <label for="user-2fa-secret">{{ t("two_factor.secret_key") }}</label>
-          <input id="user-2fa-secret" :value="secret" type="text" readonly aria-label="2FA secret key">
+          <input id="user-2fa-secret" :value="secret" type="text" readonly :aria-label="t('two_factor.secret_key')">
         </div>
         <div class="form-group">
           <label for="user-2fa-verify-code">{{ t("two_factor.verify_code") }}</label>
@@ -382,7 +382,7 @@ async function handleSave(): Promise<void> {
             inputmode="numeric"
             autocomplete="one-time-code"
             :placeholder="t('two_factor.verify_code_placeholder')"
-            aria-label="2FA verification code"
+            :aria-label="t('two_factor.verify_code')"
           >
         </div>
         <div v-if="enableError" class="error-message show" role="alert" aria-live="polite">{{ enableError }}</div>
@@ -400,7 +400,7 @@ async function handleSave(): Promise<void> {
             inputmode="numeric"
             autocomplete="one-time-code"
             :placeholder="t('two_factor.disable_code_placeholder')"
-            aria-label="Disable 2FA code"
+            :aria-label="t('two_factor.disable_code_placeholder')"
           >
         </div>
         <div v-if="disableError" class="error-message show" role="alert" aria-live="polite">{{ disableError }}</div>

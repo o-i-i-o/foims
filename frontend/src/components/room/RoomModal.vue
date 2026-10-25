@@ -20,26 +20,15 @@ import { readPowerWattsInput } from "../../utils/power";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import NetworkConfigRow from "./NetworkConfigRow.vue";
-import type { CabinetBrief } from "../../types/api/generated/CabinetBrief";
 import type { CabinetSyncItem } from "../../types/api/generated/CabinetSyncItem";
 import type { Employee } from "../../types/api/generated/Employee";
-import type { NetOutletBrief } from "../../types/api/generated/NetOutletBrief";
-import type { NetworkInfo } from "../../types/api/generated/NetworkInfo";
 import type { OrganizationTreeNode } from "../../types/api/generated/OrganizationTreeNode";
 import type { Room } from "../../types/api/generated/Room";
 import type { RoomCreate } from "../../types/api/generated/RoomCreate";
 import type { RoomChildrenSync } from "../../types/api/generated/RoomChildrenSync";
 import type { RoomNetOutletsSync } from "../../types/api/generated/RoomNetOutletsSync";
-import type { WorkstationBrief } from "../../types/api/generated/WorkstationBrief";
 import type { WorkstationSyncItem } from "../../types/api/generated/WorkstationSyncItem";
-
-/** GET /rooms/{id}/brief 轻量数据（room.rs get_room_brief 组装：Room 字段 + 各子项 brief） */
-type RoomBrief = Room & {
-  networks: NetworkInfo[];
-  workstations: WorkstationBrief[];
-  cabinets: CabinetBrief[];
-  net_outlets: NetOutletBrief[];
-};
+import type { RoomBrief } from "../../types/api/contracts";
 
 const props = withDefaults(
   defineProps<{
@@ -490,7 +479,7 @@ function submit(): void {
               step="any"
               autocomplete="off"
             >
-            <select v-model="form.powerUnit" class="form-control" aria-label="Unit">
+            <select v-model="form.powerUnit" class="form-control" :aria-label="t('common.unit')">
               <option value="W">W</option>
               <option value="kW">kW</option>
             </select>

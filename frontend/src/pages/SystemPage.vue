@@ -37,7 +37,7 @@ const { activeTab, switchTab } = useSubTabs({
 </script>
 
 <template>
-  <section id="system" class="content-section active" aria-label="System">
+  <section id="system" class="content-section active" :aria-label="t('nav.system')">
     <div class="tabs" role="tablist">
       <button
         v-for="tab in TABS"

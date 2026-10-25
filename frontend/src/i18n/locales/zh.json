@@ -17,9 +17,11 @@
     "expand_sidebar": "展开导航栏",
     "load_system_info": "加载系统信息",
     "load_system_config": "加载系统配置",
-    "load_page": "加载页面 {{page}}"
+    "load_page": "加载页面 {{page}}",
+    "main_navigation": "主导航"
   },
   "common": {
+    "unit": "单位",
     "section_migrating": "该分区正在向新界面迁移，暂未开放。",
     "name": "名称",
     "save": "保存",
@@ -763,6 +765,7 @@
     "config_saved": "配置已保存"
   },
   "user": {
+    "list": "用户列表",
     "email": "邮箱",
     "role": "角色",
     "role_admin": "超级管理员",
@@ -1170,6 +1173,7 @@
   },
   "data-management": {
     "data_management": "数据管理",
+    "export_module": "导出模块",
     "download_template": "下载模板",
     "import_result": "导入结果",
     "database_management": "数据库管理",
@@ -1276,7 +1280,8 @@
   "language": {
     "native_name": "中文",
     "title": "语言",
-    "toggle": "切换语言"
+    "toggle": "切换语言",
+    "select": "选择语言"
   },
   "api": {
     "account_disabled": "账户已被禁用，请联系管理员",

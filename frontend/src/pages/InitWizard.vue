@@ -369,7 +369,7 @@ onMounted(() => {
   <div class="init-container">
     <div class="init-header">
       <div class="init-lang-switch">
-        <select id="language-selector" v-model="currentLanguage" aria-label="Select Language">
+        <select id="language-selector" v-model="currentLanguage" :aria-label="t('language.select')">
           <option value="zh">中文</option>
           <option value="en">English</option>
         </select>

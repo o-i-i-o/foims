@@ -423,3 +423,14 @@ v0.18.0
 7. 文档：docs/code-style.md §3.1/§3.2/§3.3/§3.7/§4 同步（useSubTabs 统一子页签、apiPatch、下载判定顺序、禁止绕过封装直调 request/fetch、client.ts 与 download.ts 后缀）
 8. 联动：仅前端修改，frontend/package.json 0.1.1→0.1.2（y+1 对应 c+1）并同步 package-lock.json；根 Cargo.toml 不动；无数据库结构变更
 9. 验证：npm run typecheck 0 错；npm run build 无告警（已无 chunk>500kB）；npm run selfcheck:viz 全过；biome check frontend 22 文件 0 诊断；oxlint frontend/src 288 文件 0 warning 0 error
+
+v0.19.0
+2026102511095901
+1. 域级 API 传输层落地（功能优化 y+1）：新增 api/logs.ts，把日志/通知域的 URL 与载荷类型收进模块（操作/登录日志与通知分页 URL 拼装、通知已读两个 PUT、系统日志统计/清理/外发配置三组读写、外发测试），职责边界与既有 api/visualization.ts 一致（只组 URL/请求体返回 ApiResult，不做 toast 与 i18n）；LogsPage 与 LogsManagementCard 不再拼 /api/ 字面量，组件内手写的 LogsStatsPayload/LogForwardingPayload/LogCategoryStats 迁为模块导出类型（LogsStats/LogForwarding/LogCategoryStats）
+2. LogsPage 退回共享分页实现：该页曾保留一份页内克隆的 local usePagedList（三参 buildUrl、无页大小切换，与共享版并行演化）——删除 86 行克隆代码改用 composables/usePagedList，buildUrl 改四参签名（pageSize 显式传入），页大小常量改 defaultPageSize；共享实现是唯一分页来源
+3. 手写契约去重：RoomBrief（Room + networks/workstations/cabinets/net_outlets 四个 brief 列表，后端 get_room_brief 跨表组装）原在 ResourcesPage 与 RoomModal 各定义一份，统一抽到 types/api/contracts.ts 并由两处 type-only 导入，顺带清掉五个随之无用的 generated 类型导入；四份同名 interface SystemConfigPayload 按段改名为 RateLimitConfigPayload/ServerConfigPayload/AgentConfigPayload/SnmpConfigPayload（形状本就不同，同名易误判为重复定义）
+4. 消除类型硬转：usePagedList 新增 SortableTable（sort + toggleSort）作为表头排序工具的最小依赖，PagedList<T> 改为 extends 它；sortClass/onThSort 入参由 PagedList<T> 放宽为 SortableTable，ScheduledTasksTab 的 as unknown as PagedList<ScheduledTask> 边界断言删除（无分页列表不再需要伪造分页字段）
+5. 无障碍标签全量 i18n 化：55 处硬编码英文 aria-label（表格/区块/表单控件/仅图标按钮，涉及 18 个组件与页面）全部改为 :aria-label="t('<键>')"，优先复用既有词条（nav.*/resources.*/logs.*/smtp.*/ldap.*/sso.*/agent_service.*/cert.*/config.*/two_factor.*/user.*/services.title/system.scheduled_tasks），新增 5 键：nav.main_navigation、common.unit、language.select、user.list、data-management.export_module（zh/en 同步）
+6. 文档：docs/code-style.md §3.1/§3.2/§3.3/§3.4/§3.7/§4 同步（api/<域>.ts 目录位、usePagedList 四参签名与 SortableTable、域级封装与渐进迁移、aria-label 必须走 i18n、手写契约落点与禁同名重复定义）
+7. 联动：仅前端修改，frontend/package.json 0.1.2→0.1.3（y+1 对应 c+1）并同步 package-lock.json；根 Cargo.toml 不动；无数据库结构变更
+8. 验证：npm run typecheck 0 错；npm run build 通过（入口与各页面 chunk 体积不变，无 chunk>500kB 告警）；npm run selfcheck:viz 全过；npx oxlint frontend/src 290 文件 0 warning 0 error。注意：本轮发现审计命令缺口——根仓未安装 @biomejs/biome，`npx biome` 解析到同名旧包 biome@0.3.3（无 check 子命令，静默 exit 0），故此前「biome 0 诊断」结论不可信；本轮未改 CSS，需在补齐 @biomejs/biome devDependency 后重跑全量样式审计

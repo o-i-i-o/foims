@@ -18,17 +18,12 @@ import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
 import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter";
 import { getDeviceTypeName } from "../config/deviceOptions";
 import { showToast } from "../composables/useToast";
-import type { CabinetBrief } from "../types/api/generated/CabinetBrief";
 import type { CabinetWithNetworks } from "../types/api/generated/CabinetWithNetworks";
 import type { CableLinkWithDetails } from "../types/api/generated/CableLinkWithDetails";
 import type { DeviceWithDetails } from "../types/api/generated/DeviceWithDetails";
-import type { NetOutletBrief } from "../types/api/generated/NetOutletBrief";
 import type { Network } from "../types/api/generated/Network";
-import type { NetworkInfo } from "../types/api/generated/NetworkInfo";
 import type { NetworkRegion } from "../types/api/generated/NetworkRegion";
-import type { Room } from "../types/api/generated/Room";
 import type { RoomWithNetworks } from "../types/api/generated/RoomWithNetworks";
-import type { WorkstationBrief } from "../types/api/generated/WorkstationBrief";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
@@ -46,17 +41,7 @@ import LldpModal from "../components/device/LldpModal.vue";
 import CableLinkModal from "../components/cable/CableLinkModal.vue";
 import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
 import CablePrintArea from "../components/cable/CablePrintArea.vue";
-
-/**
- * GET /rooms/{id}/brief 轻量数据（room.rs get_room_brief 组装：Room 字段 + 各子项
- * brief），与 RoomModal 内部未导出的同名类型保持结构一致。
- */
-type RoomBrief = Room & {
-  networks: NetworkInfo[];
-  workstations: WorkstationBrief[];
-  cabinets: CabinetBrief[];
-  net_outlets: NetOutletBrief[];
-};
+import type { RoomBrief } from "../types/api/contracts";
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -507,7 +492,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
 </script>
 
 <template>
-  <section id="resources" class="content-section active" aria-label="Resources">
+  <section id="resources" class="content-section active" :aria-label="t('nav.resources')">
     <div class="tabs" role="tablist">
       <button
         v-for="tab in TABS"
@@ -534,7 +519,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       role="tabpanel"
     >
       <div class="table-container">
-        <table id="network-regions-table" class="data-table" aria-label="Network regions">
+        <table id="network-regions-table" class="data-table" :aria-label="t('resources.network_regions')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -638,7 +623,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
     <!-- ==================== 子网页签 ==================== -->
     <div v-show="activeTab === 'networks'" id="networks-tab" class="tab-content" :class="{ active: activeTab === 'networks' }" role="tabpanel">
       <div class="table-container">
-        <table id="networks-table" class="data-table" aria-label="Subnets">
+        <table id="networks-table" class="data-table" :aria-label="t('resources.network_segments')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -727,7 +712,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
     <!-- ==================== 房间页签 ==================== -->
     <div v-show="activeTab === 'rooms'" id="rooms-tab" class="tab-content" :class="{ active: activeTab === 'rooms' }" role="tabpanel">
       <div class="table-container">
-        <table id="rooms-table" class="data-table" aria-label="Rooms">
+        <table id="rooms-table" class="data-table" :aria-label="t('resources.rooms')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -840,7 +825,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
     <!-- ==================== 机柜页签 ==================== -->
     <div v-show="activeTab === 'cabinets'" id="cabinets-tab" class="tab-content" :class="{ active: activeTab === 'cabinets' }" role="tabpanel">
       <div class="table-container">
-        <table id="cabinets-table" class="data-table" aria-label="Cabinets">
+        <table id="cabinets-table" class="data-table" :aria-label="t('resources.cabinets')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -935,7 +920,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
     <!-- ==================== 设备页签 ==================== -->
     <div v-show="activeTab === 'devices'" id="devices-tab" class="tab-content" :class="{ active: activeTab === 'devices' }" role="tabpanel">
       <div class="table-container">
-        <table id="devices-table" class="data-table" aria-label="Devices">
+        <table id="devices-table" class="data-table" :aria-label="t('resources.devices')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -1048,7 +1033,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
     <!-- ==================== 线路页签 ==================== -->
     <div v-show="activeTab === 'cable-links'" id="cable-links-tab" class="tab-content" :class="{ active: activeTab === 'cable-links' }" role="tabpanel">
       <div class="table-container">
-        <table id="cable-links-table" class="data-table" aria-label="Cable links">
+        <table id="cable-links-table" class="data-table" :aria-label="t('resources.cable_links')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>

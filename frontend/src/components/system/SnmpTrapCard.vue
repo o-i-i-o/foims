@@ -41,8 +41,8 @@ interface SnmpConfigSection {
   trap?: TrapSection | null;
 }
 
-/** 系统配置载荷（本卡片仅消费 snmp 段） */
-interface SystemConfigPayload {
+/** GET/PUT /api/system/config 局部载荷（本卡片仅带 snmp 段） */
+interface SnmpConfigPayload {
   snmp?: SnmpConfigSection | null;
 }
 
@@ -82,7 +82,7 @@ const PRIV_PROTOCOLS = ["des", "3des", "aes128", "aes192", "aes256"];
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<SystemConfigPayload>("/api/system/config");
+    const result = await apiGet<SnmpConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }

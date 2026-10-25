@@ -23,8 +23,8 @@ interface RateLimitSection {
   email_window_secs?: number;
 }
 
-/** 系统配置载荷（本页签仅消费 rate_limit 段） */
-interface SystemConfigPayload {
+/** GET/PUT /api/system/config 局部载荷（本页签仅带 rate_limit 段） */
+interface RateLimitConfigPayload {
   rate_limit?: RateLimitSection | null;
 }
 
@@ -39,7 +39,7 @@ const readonly = isSectionReadonly("system");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<SystemConfigPayload>("/api/system/config");
+    const result = await apiGet<RateLimitConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }

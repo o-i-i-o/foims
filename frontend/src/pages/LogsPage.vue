@@ -5,10 +5,10 @@
  * 数据层为 TanStack Query 首次实战接线：queryFn 内对归一化失败（success:false）
  * 抛出以进入 error 态；通知已读操作经 useMutation + 失效缓存刷新。
  */
-import { computed, reactive, ref, watch, type Ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../api/client";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
+import { loginLogsUrl, markAllNotificationsRead, markNotificationRead, notificationsUrl, operationLogsUrl } from "../api/logs";
 import {
   formatDateTime,
   getOperationTypeText,
@@ -17,8 +17,8 @@ import {
   translateServerKey
 } from "../utils/formatter";
 import { showToast } from "../composables/useToast";
+import { usePagedList } from "../composables/usePagedList";
 import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
-import type { Paged } from "../types/api";
 import type { LoginLog } from "../types/api/generated/LoginLog";
 import type { Notification } from "../types/api/generated/Notification";
 import type { OperationLog } from "../types/api/generated/OperationLog";
@@ -50,114 +50,16 @@ const OPERATION_PAGE_SIZE = 50;
 const LOGIN_PAGE_SIZE = 50;
 const NOTIFICATION_PAGE_SIZE = 20;
 
-/** 本地分页列表选项（页内克隆版固定页大小，buildUrl 为三参签名） */
-interface LocalPagedListOptions {
-  tag: string;
-  pageSize: number;
-  /** 查询启用条件（页签切换懒加载） */
-  enabled?: Ref<boolean> | boolean;
-  /** 附加查询键（搜索词变化触发重新查询） */
-  extraKey?: Ref<Record<string, unknown>>;
-  /** 组装分页请求 URL（页码/排序字段/排序方向） */
-  buildUrl: (page: number, sortBy: string, sortOrder: string) => string;
-}
-
-/** 本地分页列表返回状态（与共享 usePagedList 的 PagedList 同形状，无页大小切换） */
-interface LocalPagedList<T> {
-  page: number;
-  pageSize: number;
-  sort: { by: string; order: "asc" | "desc" };
-  toggleSort: (key: string) => void;
-  items: T[];
-  total: number;
-  totalPages: number;
-  isError: boolean;
-  errorMessage: string;
-}
-
-/**
- * 分页列表封装：created_at 倒序为默认排序，排序切换重置页码；
- * 空页且页码越界（末页数据删除后）自动回退最后一页。
- */
-function usePagedList<T>(options: LocalPagedListOptions): LocalPagedList<T> {
-  const { tag, pageSize, enabled, buildUrl, extraKey } = options;
-  const page = ref(1);
-  const sort = reactive({ by: "created_at", order: "desc" });
-
-  const query = useQuery({
-    queryKey: computed(() => [
-      tag,
-      { page: page.value, sortBy: sort.by, sortOrder: sort.order, ...extraKey?.value }
-    ]),
-    queryFn: async (): Promise<Paged<T> | null> => {
-      const result = await apiGet<Paged<T>>(buildUrl(page.value, sort.by, sort.order));
-      if (!result.success) {
-        // apiClient 已将失败归一为 { success:false } 不抛异常，
-        // 此处显式抛出让查询进入 error 态（isError/error.message 可渲染）
-        throw new Error(result.message || t("common.load_failed"));
-      }
-      return result.data;
-    },
-    enabled
-  });
-
-  watch(
-    () => query.data.value,
-    (data) => {
-      if (!data || !Array.isArray(data.items) || data.items.length !== 0 || page.value <= 1) {
-        return;
-      }
-      const totalPages = data.total_pages || Math.ceil((data.total || 0) / pageSize);
-      if (totalPages > 0 && page.value > totalPages) {
-        page.value = totalPages;
-      }
-    }
-  );
-
-  function toggleSort(key: string): void {
-    if (sort.by === key) {
-      sort.order = sort.order === "asc" ? "desc" : "asc";
-    } else {
-      sort.by = key;
-      sort.order = "asc";
-    }
-    page.value = 1;
-  }
-
-  return reactive({
-    page,
-    sort,
-    toggleSort,
-    pageSize,
-    items: computed(() => (Array.isArray(query.data.value?.items) ? query.data.value.items : [])),
-    total: computed(() => query.data.value?.total ?? 0),
-    totalPages: computed(() => query.data.value?.total_pages ?? 1),
-    isError: computed(() => query.isError.value),
-    errorMessage: computed(() => query.error.value?.message || t("common.load_failed"))
-  }) as LocalPagedList<T>;
-}
-
 // ==================== 操作日志（含搜索） ====================
 
 const operationSearch = ref("");
 
 const operation = usePagedList<OperationLog>({
   tag: "logs-operation",
-  pageSize: OPERATION_PAGE_SIZE,
+  defaultPageSize: OPERATION_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "operation"),
   extraKey: computed(() => ({ search: operationSearch.value })),
-  buildUrl: (page, sortBy, sortOrder) => {
-    const params = new URLSearchParams({
-      page: String(page),
-      page_size: String(OPERATION_PAGE_SIZE),
-      sort_by: sortBy,
-      sort_order: sortOrder
-    });
-    if (operationSearch.value) {
-      params.set("action", operationSearch.value);
-    }
-    return `/api/logs/operation?${params}`;
-  }
+  buildUrl: (page, pageSize, sortBy, sortOrder) => operationLogsUrl({ page, pageSize, sortBy, sortOrder }, operationSearch.value)
 });
 
 // 搜索框位于操作日志表头：防抖 500ms，搜索词变化重置页码
@@ -176,34 +78,22 @@ watch(searchInput, (value) => {
 
 const login = usePagedList<LoginLog>({
   tag: "logs-login",
-  pageSize: LOGIN_PAGE_SIZE,
+  defaultPageSize: LOGIN_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "login"),
-  buildUrl: (page, sortBy, sortOrder) =>
-    `/api/logs/login?${new URLSearchParams({
-      page: String(page),
-      page_size: String(LOGIN_PAGE_SIZE),
-      sort_by: sortBy,
-      sort_order: sortOrder
-    })}`
+  buildUrl: (page, pageSize, sortBy, sortOrder) => loginLogsUrl({ page, pageSize, sortBy, sortOrder })
 });
 
 const notifications = usePagedList<Notification>({
   tag: "notifications",
-  pageSize: NOTIFICATION_PAGE_SIZE,
+  defaultPageSize: NOTIFICATION_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "notifications"),
-  buildUrl: (page, sortBy, sortOrder) =>
-    `/api/notifications?${new URLSearchParams({
-      page: String(page),
-      page_size: String(NOTIFICATION_PAGE_SIZE),
-      sort_by: sortBy,
-      sort_order: sortOrder
-    })}`
+  buildUrl: (page, pageSize, sortBy, sortOrder) => notificationsUrl({ page, pageSize, sortBy, sortOrder })
 });
 
 // ==================== 通知已读操作 ====================
 
 const markReadMutation = useMutation({
-  mutationFn: (id: string) => apiPut(`/api/notifications/${id}/read`, {}),
+  mutationFn: (id: string) => markNotificationRead(id),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -216,7 +106,7 @@ const markReadMutation = useMutation({
 const showMarkAllConfirm = ref(false);
 
 const markAllMutation = useMutation({
-  mutationFn: () => apiPut("/api/notifications/mark-all-read", {}),
+  mutationFn: () => markAllNotificationsRead(),
   onSuccess: (result) => {
     if (result.success) {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -238,7 +128,7 @@ const detailsLog = ref<OperationLog | null>(null);
 </script>
 
 <template>
-  <section id="logs" class="content-section active" aria-label="Logs">
+  <section id="logs" class="content-section active" :aria-label="t('nav.logs')">
     <div class="tabs" role="tablist">
       <button
         v-for="tab in TABS"
@@ -258,7 +148,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
     <div id="operation-tab" v-show="activeTab === 'operation'" class="tab-content" :class="{ active: activeTab === 'operation' }" role="tabpanel">
       <div class="table-container">
-        <table id="operation-logs-table" class="data-table" aria-label="Operation logs">
+        <table id="operation-logs-table" class="data-table" :aria-label="t('logs.operation_logs')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -356,7 +246,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
     <div id="login-tab" v-show="activeTab === 'login'" class="tab-content" :class="{ active: activeTab === 'login' }" role="tabpanel">
       <div class="table-container">
-        <table id="login-logs-table" class="data-table" aria-label="Login logs">
+        <table id="login-logs-table" class="data-table" :aria-label="t('logs.login_logs')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
@@ -422,7 +312,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
     <div id="notifications-tab" v-show="activeTab === 'notifications'" class="tab-content" :class="{ active: activeTab === 'notifications' }" role="tabpanel">
       <div class="table-container">
-        <table id="notifications-table" class="data-table" aria-label="Notifications list">
+        <table id="notifications-table" class="data-table" :aria-label="t('logs.notifications')">
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>

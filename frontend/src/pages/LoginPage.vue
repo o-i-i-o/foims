@@ -1117,7 +1117,7 @@ onUnmounted(() => {
             <select
               id="language-selector"
               v-model="currentLanguage"
-              aria-label="Select Language"
+              :aria-label="t('language.select')"
               @change="changeLanguage(currentLanguage)"
             >
               <option value="zh">中文</option>

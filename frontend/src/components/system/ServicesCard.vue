@@ -200,7 +200,7 @@ onUnmounted(() => {
       </div>
     </header>
     <div class="table-container cert-table-container">
-      <table class="data-table" aria-label="Services">
+      <table class="data-table" :aria-label="t('services.title')">
         <thead>
           <tr>
             <th>{{ t("services.col_service") }}</th>

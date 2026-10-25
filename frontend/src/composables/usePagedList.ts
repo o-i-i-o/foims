@@ -27,16 +27,23 @@ export interface UsePagedListOptions {
 }
 
 /**
+ * 表头排序工具的最小依赖：分页列表与无分页列表（如定时任务）共用的形态，
+ * sortClass/onThSort 只消费 sort 与 toggleSort，不关心分页字段。
+ */
+export interface SortableTable {
+  sort: { by: string; order: "asc" | "desc" };
+  toggleSort: (key: string) => void;
+}
+
+/**
  * usePagedList 返回的列表状态（reactive 解包后的形状），
  * 供 seqIndex/sortClass/onThSort 等辅助函数引用。
  */
-export interface PagedList<T> {
+export interface PagedList<T> extends SortableTable {
   page: number;
   pageSize: number;
-  sort: { by: string; order: "asc" | "desc" };
-  toggleSort: (key: string) => void;
-  changePageSize: (size: number) => void;
   pageSizeOptions: number[];
+  changePageSize: (size: number) => void;
   items: T[];
   total: number;
   totalPages: number;
@@ -129,7 +136,7 @@ export function seqIndex<T>(list: PagedList<T>, index: number): number {
 }
 
 /** 排序列头公共类绑定（sorted/asc/desc 三态，与 LogsPage 表头一致） */
-export function sortClass<T>(list: PagedList<T>, key: string): Record<string, boolean> {
+export function sortClass(list: SortableTable, key: string): Record<string, boolean> {
   return {
     sorted: list.sort.by === key,
     asc: list.sort.by === key && list.sort.order === "asc",
@@ -141,7 +148,7 @@ export function sortClass<T>(list: PagedList<T>, key: string): Record<string, bo
  * 表头点击排序：表头内嵌过滤输入框、搜索弹层等控件时不触发排序
  * （旧版 initSortEvents 的 closest 守卫语义）
  */
-export function onThSort<T>(event: MouseEvent, list: PagedList<T>, key: string): void {
+export function onThSort(event: MouseEvent, list: SortableTable, key: string): void {
   if (event.target instanceof Element && event.target.closest("input, select, textarea, button, a, .th-search-popover")) {
     return;
   }

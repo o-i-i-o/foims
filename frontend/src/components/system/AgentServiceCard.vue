@@ -32,8 +32,8 @@ interface AgentConfigSection {
   offline_factor?: number;
 }
 
-/** 系统配置载荷（本卡片仅消费 agent 段） */
-interface SystemConfigPayload {
+/** GET/PUT /api/system/config 局部载荷（本卡片仅带 agent 段） */
+interface AgentConfigPayload {
   agent?: AgentConfigSection | null;
 }
 
@@ -61,7 +61,7 @@ const agentReportOverride = ref("");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<SystemConfigPayload>("/api/system/config");
+    const result = await apiGet<AgentConfigPayload>("/api/system/config");
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -134,7 +134,7 @@ async function saveAgentConfig(): Promise<void> {
       use_public_url: agentUsePublicUrl.value,
       report_url_override: reportOverride
     };
-    const result = await apiPut<SystemConfigPayload, { agent: AgentConfigSection }>("/api/system/config", { agent });
+    const result = await apiPut<AgentConfigPayload, { agent: AgentConfigSection }>("/api/system/config", { agent });
     if (result.success) {
       showToast(t("agent_service.save_success"), "success");
       // 接收器随服务启动，监听地址/开关保存后需重启生效
@@ -247,7 +247,7 @@ async function regenerateToken(): Promise<void> {
       </div>
       <div v-if="!readonly" class="config-switch">
         <label for="agent-service-enabled">
-          <input id="agent-service-enabled" v-model="agentEnabled" type="checkbox" aria-label="Enable agent report receiver">
+          <input id="agent-service-enabled" v-model="agentEnabled" type="checkbox" :aria-label="t('agent_service.enabled')">
           <span>{{ t("agent_service.enabled") }}</span>
         </label>
         <button type="button" class="btn btn-primary btn-sm" :disabled="savingAgent" @click="saveAgentConfig">
@@ -262,19 +262,19 @@ async function regenerateToken(): Promise<void> {
         <div class="form-row">
           <div class="form-group">
             <label for="agent-service-bind-addr">{{ t("agent_service.bind_addr") }}</label>
-            <input id="agent-service-bind-addr" v-model="agentBindHost" type="text" :placeholder="t('agent_service.bind_addr_placeholder')" autocomplete="off" aria-label="Agent listen address">
+            <input id="agent-service-bind-addr" v-model="agentBindHost" type="text" :placeholder="t('agent_service.bind_addr_placeholder')" autocomplete="off" :aria-label="t('agent_service.bind_addr')">
           </div>
           <div class="form-group">
             <label for="agent-service-bind-port">{{ t("agent_service.bind_port") }}</label>
-            <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1" max="65535" placeholder="9100" aria-label="Agent listen port">
+            <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1" max="65535" placeholder="9100" :aria-label="t('agent_service.bind_port')">
           </div>
           <div class="form-group">
             <label for="agent-service-interval">{{ t("agent_service.report_interval") }}</label>
-            <input id="agent-service-interval" v-model="agentInterval" type="number" min="10" max="3600" placeholder="60" aria-label="Agent report interval in seconds">
+            <input id="agent-service-interval" v-model="agentInterval" type="number" min="10" max="3600" placeholder="60" :aria-label="t('agent_service.report_interval')">
           </div>
           <div class="form-group">
             <label for="agent-service-collect-interval">{{ t("agent_service.collect_interval") }}</label>
-            <input id="agent-service-collect-interval" v-model="agentCollectInterval" type="number" min="1" max="60" placeholder="5" aria-label="Agent collect interval in seconds">
+            <input id="agent-service-collect-interval" v-model="agentCollectInterval" type="number" min="1" max="60" placeholder="5" :aria-label="t('agent_service.collect_interval')">
           </div>
         </div>
       </section>
@@ -290,7 +290,7 @@ async function regenerateToken(): Promise<void> {
           </div>
           <div v-show="!agentUsePublicUrl" class="form-group">
             <label for="agent-report-url-override">{{ t("agent_service.report_url_override") }}</label>
-            <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com:9100" autocomplete="off" aria-label="Agent report address override">
+            <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com:9100" autocomplete="off" :aria-label="t('agent_service.report_url_override')">
           </div>
         </div>
         <div class="form-row">
@@ -314,14 +314,14 @@ async function regenerateToken(): Promise<void> {
         <div class="form-row">
           <div class="form-group">
             <label for="agent-dist-os">{{ t("system.agent_os") }}</label>
-            <select id="agent-dist-os" v-model="distOs" class="form-control" aria-label="Agent operating system" @change="onOsChange">
+            <select id="agent-dist-os" v-model="distOs" class="form-control" :aria-label="t('system.agent_os')" @change="onOsChange">
               <option value="linux">linux</option>
               <option value="windows">windows</option>
             </select>
           </div>
           <div class="form-group">
             <label for="agent-dist-format">{{ t("system.agent_format") }}</label>
-            <select id="agent-dist-format" v-model="distFormat" class="form-control" :disabled="formats.length <= 1" aria-label="Agent package format">
+            <select id="agent-dist-format" v-model="distFormat" class="form-control" :disabled="formats.length <= 1" :aria-label="t('system.agent_format')">
               <option v-for="format in formats" :key="format" :value="format">{{ format.toUpperCase() }}</option>
             </select>
           </div>

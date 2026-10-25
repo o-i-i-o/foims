@@ -245,17 +245,17 @@ async function saveNotificationSettings(): Promise<void> {
         <div class="form-row">
           <div class="form-group">
             <label for="smtp-host">{{ t("smtp.host") }}</label>
-            <input id="smtp-host" v-model="smtpHost" type="text" :placeholder="t('smtp.host_placeholder')" aria-label="SMTP server">
+            <input id="smtp-host" v-model="smtpHost" type="text" :placeholder="t('smtp.host_placeholder')" :aria-label="t('smtp.host')">
           </div>
           <div class="form-group">
             <label for="smtp-port">{{ t("smtp.port") }}</label>
-            <input id="smtp-port" v-model="smtpPort" type="number" placeholder="587" aria-label="SMTP port">
+            <input id="smtp-port" v-model="smtpPort" type="number" placeholder="587" :aria-label="t('smtp.port')">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label for="smtp-username">{{ t("smtp.username") }}</label>
-            <input id="smtp-username" v-model="smtpUsername" type="text" :placeholder="t('smtp.username_placeholder')" aria-label="SMTP username" autocomplete="off">
+            <input id="smtp-username" v-model="smtpUsername" type="text" :placeholder="t('smtp.username_placeholder')" :aria-label="t('smtp.username')" autocomplete="off">
           </div>
           <div class="form-group">
             <label for="smtp-password">{{ t("smtp.password") }}</label>
@@ -265,18 +265,18 @@ async function saveNotificationSettings(): Promise<void> {
               type="password"
               autocomplete="new-password"
               :placeholder="t(smtpHasPassword ? 'smtp.password_configured' : 'smtp.password_input')"
-              aria-label="SMTP password"
+              :aria-label="t('smtp.password')"
             >
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label for="smtp-from">{{ t("smtp.from") }}</label>
-            <input id="smtp-from" v-model="smtpFrom" type="email" :placeholder="t('smtp.from_placeholder')" aria-label="Sender email" autocomplete="off">
+            <input id="smtp-from" v-model="smtpFrom" type="email" :placeholder="t('smtp.from_placeholder')" :aria-label="t('smtp.from')" autocomplete="off">
           </div>
           <div class="form-group">
             <label for="smtp-secure-type">{{ t("smtp.secure_type") }}</label>
-            <select id="smtp-secure-type" v-model="secureType" aria-label="SSL connection type">
+            <select id="smtp-secure-type" v-model="secureType" :aria-label="t('smtp.secure_type')">
               <option value="none">{{ t("smtp.ssl_none") }}</option>
               <option value="ssl">{{ t("smtp.ssl_ssl") }}</option>
               <option value="starttls">{{ t("smtp.ssl_starttls") }}</option>

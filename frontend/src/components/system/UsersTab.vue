@@ -98,7 +98,7 @@ async function doDelete(id: string): Promise<void> {
 <template>
   <div class="tab-content" :class="{ active: props.active }">
     <div class="table-container">
-      <table class="data-table" aria-label="User list">
+      <table class="data-table" :aria-label="t('user.list')">
         <thead>
           <tr>
             <th class="index-column">{{ t("common.index") }}</th>

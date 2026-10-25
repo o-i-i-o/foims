@@ -273,7 +273,7 @@ async function confirmRestoreConfig(): Promise<void> {
             </div>
             <h3>{{ t("data-management.csv_export") }}</h3>
             <div v-if="!readonly" class="export-actions">
-              <select id="export-type" v-model="exportType" class="form-control" aria-label="Select export module">
+              <select id="export-type" v-model="exportType" class="form-control" :aria-label="t('data-management.export_module')">
                 <option value="all">{{ t("data-management.module_all") }}</option>
                 <option value="organization">{{ t("data-management.module_organization") }}</option>
                 <option value="network">{{ t("data-management.module_network") }}</option>

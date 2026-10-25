@@ -164,7 +164,7 @@ function downloadCa(): void {
         </div>
       </div>
       <div class="table-container cert-table-container">
-        <table class="data-table" aria-label="CAs">
+        <table class="data-table" :aria-label="t('cert.ca_section')">
           <thead>
             <tr>
               <th>{{ t("cert.ca_col_id") }}</th>
@@ -222,7 +222,7 @@ function downloadCa(): void {
         </div>
       </div>
       <div class="table-container cert-table-container">
-        <table class="data-table" aria-label="Certificates">
+        <table class="data-table" :aria-label="t('cert.list_section')">
           <thead>
             <tr>
               <th>{{ t("cert.col_file") }}</th>

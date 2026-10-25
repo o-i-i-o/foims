@@ -11,12 +11,11 @@ import { apiDelete, apiGet, apiPost } from "../../api/client";
 import { formatDateTime } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
-import { onThSort, sortClass } from "../../composables/usePagedList";
+import { onThSort, sortClass, type SortableTable } from "../../composables/usePagedList";
 import ConfirmModal from "../ConfirmModal.vue";
 import NavIcon from "../NavIcon.vue";
 import ScheduledTaskModal from "./ScheduledTaskModal.vue";
 import TaskLogsModal from "./TaskLogsModal.vue";
-import type { PagedList } from "../../composables/usePagedList";
 import type { ScheduledTask } from "../../types/api/generated/ScheduledTask";
 
 /** 任务立即执行响应载荷（后端 json! 动态构造，未生成 ts-rs 类型） */
@@ -34,9 +33,8 @@ const readonly = isSectionReadonly("system");
 // ==================== 列表（无分页，仅排序） ====================
 
 const sort = reactive<{ by: string; order: "asc" | "desc" }>({ by: "created_at", order: "desc" });
-// 兼容 sortClass/onThSort 的 list 形态：无分页列表复用排序工具类
-// （工具函数仅消费 sort/toggleSort 两字段，边界断言补齐 PagedList 其余字段形状）
-const sortList = reactive({
+// 无分页列表复用排序工具：sortClass/onThSort 只消费 sort 与 toggleSort
+const sortList: SortableTable = {
   sort,
   toggleSort(key: string): void {
     if (sort.by === key) {
@@ -46,7 +44,7 @@ const sortList = reactive({
       sort.order = "asc";
     }
   }
-}) as unknown as PagedList<ScheduledTask>;
+};
 
 const tasksQuery = useQuery({
   queryKey: computed(() => ["scheduled-tasks", { sortBy: sort.by, sortOrder: sort.order }]),
@@ -190,7 +188,7 @@ function openCreate(): void {
 <template>
   <div class="tab-content" :class="{ active: props.active }">
     <div class="table-container">
-      <table class="data-table" aria-label="Scheduled tasks">
+      <table class="data-table" :aria-label="t('system.scheduled_tasks')">
         <thead>
           <tr>
             <th class="index-column">{{ t("common.index") }}</th>

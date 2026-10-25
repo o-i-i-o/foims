@@ -17,9 +17,11 @@
     "expand_sidebar": "Expand Navigation",
     "load_system_info": "Load system info",
     "load_system_config": "Load system config",
-    "load_page": "Load page {{page}}"
+    "load_page": "Load page {{page}}",
+    "main_navigation": "Main Navigation"
   },
   "common": {
+    "unit": "Unit",
     "section_migrating": "This section is being migrated to the new UI and is not yet available.",
     "name": "Name",
     "save": "Save",
@@ -763,6 +765,7 @@
     "config_saved": "Config saved"
   },
   "user": {
+    "list": "User list",
     "email": "Email",
     "role": "Role",
     "role_admin": "Super Administrator",
@@ -1170,6 +1173,7 @@
   },
   "data-management": {
     "data_management": "Data Management",
+    "export_module": "Export module",
     "download_template": "Download Template",
     "import_result": "Import Result",
     "database_management": "Database Management",
@@ -1276,7 +1280,8 @@
   "language": {
     "native_name": "EN",
     "title": "Language",
-    "toggle": "Switch Language"
+    "toggle": "Switch Language",
+    "select": "Select Language"
   },
   "api": {
     "account_disabled": "Account disabled, please contact administrator",

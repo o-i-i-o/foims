@@ -287,7 +287,7 @@ function submit() {
               step="any"
               autocomplete="off"
             >
-            <select v-model="form.powerUnit" class="form-control" aria-label="Unit">
+            <select v-model="form.powerUnit" class="form-control" :aria-label="t('common.unit')">
               <option value="W">W</option>
               <option value="kW">kW</option>
             </select>

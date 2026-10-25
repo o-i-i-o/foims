@@ -169,6 +169,8 @@ frontend/
     ├── components/        通用组件 + 按域分组组件（<域>/<名称>Modal.vue 等）
     ├── composables/       组合式函数（useToast/usePagedList/useSubTabs/useModalStack…）
     ├── api/client.ts      API 客户端（契约见 3.3，全站唯一请求出口）
+    ├── api/<域>.ts        域级传输层（logs/visualization…：路径 + 载荷类型集中于此）
+    ├── types/api/         载荷类型（generated/ 为 ts-rs 只读产物，contracts.ts 手写契约）
     ├── i18n/              vue-i18n 实例 + 双语词条 locales/{zh,en}.json
     ├── stores/            pinia store（auth）
     ├── router/            vue-router（hash 模式，NAV_ITEMS 即侧边栏数据源）
@@ -195,7 +197,10 @@ frontend/
 - 服务端状态用 TanStack Query（`@tanstack/vue-query`）管理缓存与失效；
   客户端会话态用 pinia（`stores/auth.js`）。禁止手工维护平行的缓存副本。
 - 分页列表统一 `usePagedList`（排序/页大小/越界回退/跨页序号）+
-  `Pagination.vue`，不要各页面自写一套。
+  `Pagination.vue`，不要各页面自写一套（历史克隆版已全部退回共享实现）。
+  `buildUrl(page, pageSize, sortBy, sortOrder)` 为四参签名；无分页列表
+  （如定时任务）复用 `sortClass/onThSort` 时只需提供 `SortableTable`
+  （`sort` + `toggleSort`），禁止用 `as unknown as PagedList` 补形状。
 - 分区子页签统一 `useSubTabs`（route.query.tab 深链优先 → localStorage 记忆 →
   清单首项默认，切换回写并用 replace 更新 query）；画布类页面传
   `syncQuery: false`，切换副作用走 `onSwitch`。不要再在各页面手写
@@ -227,6 +232,10 @@ frontend/
   `utils/download.ts`。判定顺序：`Content-Disposition: attachment` 或下载类
   Content-Type 优先于 JSON 解析（配置备份等端点以 `application/json` +
   `attachment` 下发）。
+- 域级封装：同一后端子域的 URL 与载荷类型收进 `api/<域>.ts`（参照
+  `api/logs.ts`、`api/visualization.ts`），页面与组件不再拼 `/api/...` 字面量。
+  该模块只做「组装 URL / 请求体 → 返回 `ApiResult`」，不做 toast、不做 i18n；
+  存量页面按域渐进迁移，新增与改动代码必须走域模块。
 
 ### 3.4 i18n
 
@@ -237,6 +246,8 @@ frontend/
   词条文件无需关心）；组件内 `t("device.conflict_summary", { count: 3 })`。
 - 切换语言统一 `changeLanguage`（`i18n/index.js`：持久化 localStorage 并
   同步 `<html lang>`），禁止组件自行改 `i18n.global.locale`。
+- 无障碍属性同样走 i18n：`aria-label` 必须绑 `:aria-label="t('…')"`
+  （表格、区块、仅图标按钮一律给标签），禁止写死英文或其他单语种文案。
 
 ### 3.5 校验命令
 
@@ -313,7 +324,10 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
   CI 对生成物做漂移校验（`git diff --exit-code`）。
 - **手写契约**：`types/api/index.ts` 的 `ApiResult<T>`（client 层归一化
   信封，`data: T | null`）与 `Paged<T>`（`paged_response` 五键）手写维护，
-  与 Rust 信封结构有意不同，不从后端导出。
+  与 Rust 信封结构有意不同，不从后端导出；后端 json!/跨表组装出的响应
+  （如 `GET /rooms/{id}/brief`、日志统计、日志外发）放
+  `types/api/contracts.ts` 或对应 `api/<域>.ts` 并导出，禁止在多个组件里
+  各定义一份同名接口。
 - **API 调用泛型化**：`apiGet<T>` / `apiPost<T, B>` / `apiPut<T, B>` /
   `apiPatch<T, B>` / `apiDelete<T, B>` 必须显式给出载荷类型，优先消费
   generated 类型；T 缺省为 `unknown`，禁止用 `as` 绕过泛型标注。
@@ -339,6 +353,7 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 | 结构校验清单 | `foims-init/src/check.rs` 与 schema 同步增补 |
 | 前端分页列表 | `usePagedList` + `Pagination.vue`（排序/页大小/越界回退） |
 | 前端分区子页签 | `useSubTabs`（深链 + 记忆 + 切换副作用） |
+| 前端域级接口 | `api/<域>.ts`（URL + 载荷类型集中，页面不拼 `/api/` 字面量） |
 | 前端通知 | `showToast`（`composables/useToast.ts`）；确认框 `ConfirmModal.vue` |
 | 前端弹窗 | `ModalShell.vue` + `useModalStack`（Esc 只关最上层） |
 | 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network"`（frontend/src/utils/） |

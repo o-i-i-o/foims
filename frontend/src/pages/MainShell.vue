@@ -88,7 +88,7 @@ onMounted(() => {
   <!-- 根节点不得复用 id="app"：该 id 已属 main.html 挂载容器，
        模板根再占用会在 DOM 里形成嵌套重复 id，污染 querySelector("#app") 语义 -->
   <div>
-    <aside id="app-sidebar" class="sidebar" role="navigation" aria-label="Main Navigation">
+    <aside id="app-sidebar" class="sidebar" role="navigation" :aria-label="t('nav.main_navigation')">
       <header class="sidebar-header">
         <button
           id="sidebar-toggle-btn"
