@@ -267,7 +267,9 @@ bash da-scripts/gen-ts-types.sh
 cd frontend && npm run build
 
 # CSS 结构与格式 lint（根 biome.json；CSS 归 Biome，无 stylelint）
-npx @biomejs/biome@2.5.15 check frontend   # 本地装了二进制则直接 `biome check frontend`
+# 规范命令（与 CI 完全一致，版本固定）：
+npx --yes @biomejs/biome@2.5.15 check frontend
+# 本机已装同版本 devDependency 时可直接：npx biome check frontend
 
 # JS 质量 lint（根 .oxlintrc.json；web-archive/ 与 frontend/dist/ 已忽略）
 npx oxlint@1.88.0
@@ -286,6 +288,13 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
   `useLayeredStyles` 强制 @layer 层序），JS 质量归 **Oxlint**
   （`.oxlintrc.json`）。版本号与 `ci.yml` frontend job、biome.json schema
   三处联动，升级须同步。
+- Biome 工具就位：根 `package.json`/`package-lock.json` 被 `.gitignore` 的
+  `/package*` 排除（不入库），因此本地 `@biomejs/biome` 属本机前置，CI 由
+  `npx --yes @biomejs/biome@<version>` 自取；两者版本必须相同。
+- 空跑防护：审计命令的“0 诊断”须先证明命令确实在执行——历史上 `npx biome`
+  曾解析到 npm 上同名旧包 biome@0.3.3（无 check 子命令，静默 exit 0）；修改
+  biome 依赖/配置后可放一个不合格式的 CSS 探针（如 `.probe{color:red}`）确认
+  `check` 报错后再删除。
 - 抑制约定：经评估的误报以 `// biome-ignore lint/<rule>: 中文理由` 行内
   豁免，禁止无理由豁免与文件级豁免。
 

@@ -445,3 +445,11 @@ v0.19.1
 6. 文档：docs/code-style.md §3.1/§3.3 同步（域模块清单、同名符号 as 别名导入、按段配置的泛型读写）
 7. 未做（下一轮）：LoginPage 吉祥物动画内核（597-1021 行，约 425 行命令式 DOM + 定时器）外提为 composables/useLoginMascot.ts 需像素级行为等价与浏览器冒烟，本轮只做认证端点收敛
 8. 验证：npm run typecheck 0 错；npm run build 通过（main 78.38 kB、client 372.34 kB、SystemPage 119.05 kB，无 chunk>500kB）；npm run selfcheck:viz 全过；npx oxlint frontend/src 295 文件 0 warning 0 error；biome 仍不可用（根仓未装 @biomejs/biome，本轮未改 CSS）；仅前端修改，package.json 保持 0.1.3（z 段不联动版本），根 Cargo.toml 不动，无数据库结构变更
+
+v0.19.2
+2026102511542101
+1. 恢复真实的 CSS/格式审计（z，工具缺口修复）：根 devDependencies 安装 @biomejs/biome 2.5.15（与 ci.yml 固定版本、biome.json schema 2.5.15 三者一致），npx biome 不再解析到 npm 上同名旧包 biome@0.3.3；根 package.json/package-lock.json 受 .gitignore 的 /package* 排除，属本机前置不入库，CI 仍由 npx --yes @biomejs/biome@2.5.15 自取，两者版本必须相同
+2. 空跑防护与验证：临时放不合格式的 CSS 探针 frontend/src/styles/__audit_probe.css（.probe{color:red}），biome check 报 formatter 2 错（Checked 23 files）确认命令真在执行，随后删除探针恢复 22 文件
+3. 真实审计结果：npx biome check frontend 与 CI 等价命令 npx --yes @biomejs/biome@2.5.15 check frontend 均为 Checked 22 files、0 诊断、退出码 0（范围即 frontend/src/styles 全部 22 个 CSS：components/layouts/pages 子目录 + toasts/init/login/reset/variables）；v0.19.0 与 v0.19.1 中「biome 0 诊断不可信」的记录就此关闭，此前结论复核为真
+4. 文档：docs/code-style.md §3.5 审计命令统一为「npx --yes @biomejs/biome@2.5.15 check frontend」（与 CI 一致）并补本机直跑方式；新增两条约定——Biome 工具就位（根 package.json 不入库、本地与 CI 版本必须相同）与空跑防护（“0 诊断”需先用不合格式探针证明命令真在检查）
+5. 验证：本轮未改前端源码与样式，typecheck/build/selfcheck:viz 不受影响未重跑；biome 真实运行 0 诊断；按 CI 精确版本复核 oxlint：本地 npx oxlint 解析为 1.89.0、CI 固定 1.88.0，用 npx --yes oxlint@1.88.0 frontend/src 重跑仍为 295 文件 0 warning 0 error（版本漂移未影响结论，是否同步固定待定）；根 package.json 仅新增 devDependencies，不入库无版本联动（frontend/package.json 保持 0.1.3，Cargo.toml 不动）
