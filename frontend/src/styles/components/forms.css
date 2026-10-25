@@ -62,7 +62,6 @@
   .form-group textarea,
   .nc-input {
     width: 100%;
-    min-width: 120px;
   }
 
   .form-group textarea {
