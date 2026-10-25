@@ -279,6 +279,9 @@
       "detect_faulty": "Faulty",
       "power_unit": "W"
     },
+    "snmp_hub": {
+      "title": "SNMP"
+    },
     "snmp_no_auth": "No Auth",
     "snmp_no_priv": "No Privacy",
     "snmp_v2c": "SNMPv1/v2c",

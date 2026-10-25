@@ -13,7 +13,7 @@ import NavIcon from "../NavIcon.vue";
 import type { DeviceLag } from "../../types/api/generated/DeviceLag";
 import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
 
-const props = defineProps<{ deviceId: string }>();
+const props = defineProps<{ deviceId: string; embedded?: boolean }>();
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -90,7 +90,7 @@ loadData();
 </script>
 
 <template>
-  <ModalShell size="lg" @close="emit('close')">
+  <ModalShell size="lg" :embedded="embedded" @close="emit('close')">
     <template #title>
       {{ t("device.lag.title") }} - {{ deviceName }}
       <template v-if="phase === 'ready' || phase === 'empty'">

@@ -17,7 +17,7 @@ import LocateModal from "./LocateModal.vue";
 import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
 import type { SnmpMac } from "../../types/api/generated/SnmpMac";
 
-const props = defineProps<{ deviceId: string }>();
+const props = defineProps<{ deviceId: string; embedded?: boolean }>();
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -213,7 +213,7 @@ loadData();
 </script>
 
 <template>
-  <ModalShell size="lg" @close="emit('close')">
+  <ModalShell size="lg" :embedded="embedded" @close="emit('close')">
     <template #title>
       {{ t("device.mac_table") }} - {{ deviceName }}
       <template v-if="phase === 'ready' || phase === 'empty'">

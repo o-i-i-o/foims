@@ -34,8 +34,9 @@ const props = withDefaults(
   defineProps<{
     deviceId: string;
     deviceName?: string;
+    embedded?: boolean;
   }>(),
-  { deviceName: "" }
+  { deviceName: "", embedded: false }
 );
 
 const emit = defineEmits<{ close: [] }>();
@@ -373,7 +374,7 @@ async function applySnmpResults(
 </script>
 
 <template>
-  <ModalShell size="xl" @close="emit('close')">
+  <ModalShell size="xl" :embedded="embedded" @close="emit('close')">
     <template #title>{{ props.deviceName }} - {{ t("device.unified_ports") }}</template>
     <div class="port-groups-container">
       <p v-if="nicsQuery.isLoading.value" class="empty-message">{{ t("common.loading") }}</p>

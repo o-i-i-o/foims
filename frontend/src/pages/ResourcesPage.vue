@@ -34,14 +34,7 @@ import NetworkRegionModal from "../components/network/NetworkRegionModal.vue";
 import RoomModal from "../components/room/RoomModal.vue";
 import SubnetUsageModal from "../components/network/SubnetUsageModal.vue";
 import DeviceModal from "../components/device/DeviceModal.vue";
-import UnifiedDevicePortsModal from "../components/device/UnifiedDevicePortsModal.vue";
-import ArpModal from "../components/device/ArpModal.vue";
-import LldpModal from "../components/device/LldpModal.vue";
-import EntityModal from "../components/device/EntityModal.vue";
-import VlanLedgerModal from "../components/device/VlanLedgerModal.vue";
-import CdpModal from "../components/device/CdpModal.vue";
-import LagModal from "../components/device/LagModal.vue";
-import PoeModal from "../components/device/PoeModal.vue";
+import DeviceSnmpModal from "../components/device/DeviceSnmpModal.vue";
 import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
 import LocateModal from "../components/device/LocateModal.vue";
 import CableLinkModal from "../components/cable/CableLinkModal.vue";
@@ -212,17 +205,11 @@ const roomModal = reactive<{ open: boolean; room: RoomBrief | null }>({ open: fa
 const cabinetModal = reactive<{ open: boolean; cabinet: CabinetWithNetworks | null }>({ open: false, cabinet: null });
 // 设备弹窗：device 为 null = 新增，对象 = 编辑回显（GET /devices/{id} 完整数据）
 const deviceModal = reactive<{ open: boolean; device: DeviceWithDetails | null }>({ open: false, device: null });
-// 统一端口/MAC/LLDP 弹窗（deviceId + deviceName 供标题与接口调用）
-const portsModal = reactive({ open: false, deviceId: "", deviceName: "" });
-const arpModal = reactive({ open: false, deviceId: "" });
-const lldpModal = reactive({ open: false, deviceId: "" });
-// 第二层网络侧台账弹窗（各自 deviceId）
-const entityModal = reactive({ open: false, deviceId: "" });
-const vlanModal = reactive({ open: false, deviceId: "" });
-const cdpModal = reactive({ open: false, deviceId: "" });
-const lagModal = reactive({ open: false, deviceId: "" });
-const poeModal = reactive({ open: false, deviceId: "" });
-// SNMP 事件（全局或按设备）与终端定位弹窗
+// 设备 SNMP 汇聚弹窗：原设备行的端口/MAC表/LLDP/硬件清单/VLAN/CDP/LAG/PoE/
+// 观测事件 9 个 SNMP 入口收敛为单按钮唤起，弹窗内以标签切换（deviceId +
+// deviceName 供标题与各子功能接口调用）
+const snmpHub = reactive({ open: false, deviceId: "", deviceName: "" });
+// SNMP 事件（全局工具栏，不限设备）与终端定位弹窗
 const eventsModal = reactive({ open: false, deviceId: "" });
 const locateModal = reactive({ open: false });
 // 线路弹窗：linkId 为 "" = 新增，非空 = 编辑（弹窗内取详情回填）
@@ -1002,84 +989,12 @@ function deviceLocationText(item: DeviceWithDetails): string {
                   </button>
                   <button
                     type="button"
-                    class="icon-btn btn-primary"
-                    :data-tooltip="t('device.ports')"
-                    :aria-label="t('device.ports')"
-                    @click="portsModal.deviceId = item.id; portsModal.deviceName = item.name || ''; portsModal.open = true"
-                  >
-                    <NavIcon name="listP" tall />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-success"
-                    :data-tooltip="t('device.mac_table')"
-                    :aria-label="t('device.mac_table')"
-                    @click="arpModal.deviceId = item.id; arpModal.open = true"
-                  >
-                    <NavIcon name="listM" tall />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-warning"
-                    :data-tooltip="t('device.lldp')"
-                    :aria-label="t('device.lldp')"
-                    @click="lldpModal.deviceId = item.id; lldpModal.open = true"
-                  >
-                    <NavIcon name="listL" tall />
-                  </button>
-                  <button
-                    type="button"
                     class="icon-btn btn-secondary"
-                    :data-tooltip="t('device.entity.menu')"
-                    :aria-label="t('device.entity.menu')"
-                    @click="entityModal.deviceId = item.id; entityModal.open = true"
+                    :data-tooltip="t('device.snmp_hub.title')"
+                    :aria-label="t('device.snmp_hub.title')"
+                    @click="snmpHub.deviceId = item.id; snmpHub.deviceName = item.name || ''; snmpHub.open = true"
                   >
-                    <NavIcon name="listE" tall />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-secondary"
-                    :data-tooltip="t('device.vlan_ledger.menu')"
-                    :aria-label="t('device.vlan_ledger.menu')"
-                    @click="vlanModal.deviceId = item.id; vlanModal.open = true"
-                  >
-                    <NavIcon name="listV" tall />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-secondary"
-                    :data-tooltip="t('device.cdp.menu')"
-                    :aria-label="t('device.cdp.menu')"
-                    @click="cdpModal.deviceId = item.id; cdpModal.open = true"
-                  >
-                    <NavIcon name="listC" tall />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-secondary"
-                    :data-tooltip="t('device.lag.menu')"
-                    :aria-label="t('device.lag.menu')"
-                    @click="lagModal.deviceId = item.id; lagModal.open = true"
-                  >
-                    <NavIcon name="listG" tall />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-secondary"
-                    :data-tooltip="t('device.poe.menu')"
-                    :aria-label="t('device.poe.menu')"
-                    @click="poeModal.deviceId = item.id; poeModal.open = true"
-                  >
-                    <NavIcon name="power" />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn btn-secondary"
-                    :data-tooltip="t('device.snmp_events.title')"
-                    :aria-label="t('device.snmp_events.title')"
-                    @click="eventsModal.deviceId = item.id; eventsModal.open = true"
-                  >
-                    <NavIcon name="zap" />
+                    <NavIcon name="snmp" />
                   </button>
                   <button
                     type="button"
@@ -1275,46 +1190,11 @@ function deviceLocationText(item: DeviceWithDetails): string {
       @close="deviceModal.open = false"
       @saved="queryClient.invalidateQueries({ queryKey: ['devices'] })"
     />
-    <UnifiedDevicePortsModal
-      v-if="portsModal.open"
-      :device-id="portsModal.deviceId"
-      :device-name="portsModal.deviceName"
-      @close="portsModal.open = false"
-    />
-    <ArpModal
-      v-if="arpModal.open"
-      :device-id="arpModal.deviceId"
-      @close="arpModal.open = false"
-    />
-    <LldpModal
-      v-if="lldpModal.open"
-      :device-id="lldpModal.deviceId"
-      @close="lldpModal.open = false"
-    />
-    <EntityModal
-      v-if="entityModal.open"
-      :device-id="entityModal.deviceId"
-      @close="entityModal.open = false"
-    />
-    <VlanLedgerModal
-      v-if="vlanModal.open"
-      :device-id="vlanModal.deviceId"
-      @close="vlanModal.open = false"
-    />
-    <CdpModal
-      v-if="cdpModal.open"
-      :device-id="cdpModal.deviceId"
-      @close="cdpModal.open = false"
-    />
-    <LagModal
-      v-if="lagModal.open"
-      :device-id="lagModal.deviceId"
-      @close="lagModal.open = false"
-    />
-    <PoeModal
-      v-if="poeModal.open"
-      :device-id="poeModal.deviceId"
-      @close="poeModal.open = false"
+    <DeviceSnmpModal
+      v-if="snmpHub.open"
+      :device-id="snmpHub.deviceId"
+      :device-name="snmpHub.deviceName"
+      @close="snmpHub.open = false"
     />
     <SnmpEventsModal
       v-if="eventsModal.open"

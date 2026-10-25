@@ -195,6 +195,8 @@ export const ICONS: Record<string, IconShape[]> = {
   ),
   // 自动分配 IP（闪电）
   zap: icon({ tag: "polygon", points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2" }),
+  // 设备 SNMP 汇聚入口（activity 脉搏线，语义为轮询/监测）
+  snmp: icon({ tag: "polyline", points: "22 12 18 12 15 21 9 3 6 12 2 12" }),
   // 打印（打印机，线缆标签打印）
   printer: icon(
     { tag: "polyline", points: "6 9 6 2 18 2 18 9" },

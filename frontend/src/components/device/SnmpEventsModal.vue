@@ -17,7 +17,10 @@ import type { SnmpEvent } from "../../types/api/generated/SnmpEvent";
 import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
 import type { Paged } from "../../types/api";
 
-const props = withDefaults(defineProps<{ deviceId?: string }>(), { deviceId: "" });
+const props = withDefaults(defineProps<{ deviceId?: string; embedded?: boolean }>(), {
+  deviceId: "",
+  embedded: false
+});
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -169,7 +172,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <ModalShell size="lg" @close="emit('close')">
+  <ModalShell size="lg" :embedded="embedded" @close="emit('close')">
     <template #title>{{ t("device.snmp_events.title") }}</template>
     <div class="modal-body-scroll">
       <!-- 筛选工具区 -->
