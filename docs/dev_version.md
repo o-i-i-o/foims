@@ -379,3 +379,15 @@ v0.16.1
 1. 修正 foims.service 的工作目录语义（部署配置纠偏，z+1，不动 Cargo.toml）：该单元仅用于生产（开发以 da-scripts/pak.sh 模拟生产部署），与 CONFIG_PATHS 的 ./config.toml 相对回退无关；删除 v0.16.0 引入的 WorkingDirectory=/usr/share/foims，回归 systemd 默认 /，避免相对路径被意外命中
 2. 口径统一：foims.service 路径约定改为“配置 /etc/foims/config.toml（生产唯一落点）”，并注明 ./config.toml 仅供开发直接运行二进制；crates/foims-common CONFIG_PATHS 注释、config.toml.example 搜索顺序说明、README.md / README_EN.md 同步（去掉“手动部署”歧义）
 3. 验证：systemd-analyze verify deploy/services/foims.service 无输出（通过）；cargo fmt --all --check；cargo clippy --release --workspace --all-targets -- -D warnings；grep 确认全仓除历史记录外无 WorkingDirectory 残留
+
+v0.17.0
+2026102508590001
+1. 可视化画布生态彻底 Vue 3 + TS 重写（模块级 x+1）：删除 modules/visualization/ 下 11 个命令式 JS（共 5,414 行）与桥接层三件（legacyBridge/legacyModalLoader/legacyResources）及 templates/modals/ 5 份 HTML 片段，不再保留任何 .js 源文件；新分层：pages/VisualizationPage.vue（唯一状态持有者：页签、下拉、三套数据编排、弹窗与确认流）+ components/visualization/（WorkstationCanvas/CabinetCanvas/TopologyCanvas 三块声明式画布 + CanvasGridLayer 共享网格层 + 拓扑四弹窗 ConnectionCreate/ConnectionDetail/ContainerCoord/DeviceDetailPanel）+ composables/useCanvasViewport.ts·useCanvasTooltip.ts（视口与浮层，三画布共享）+ utils/visualization/geometry.ts（纯几何与布局算法）·viewModel.ts（载荷→视图模型）·resources.ts·icons.ts + api/visualization.ts
+2. 渲染层声明式化：不再命令式创建/删除 SVG 节点，设备/机位/容器/连线全部由 nodes+connections 经 computed 派生，拖动期间仅在组件内保留预览矩形，连线路径随之自动重算（删除旧 updateConnectionPaths 增量重画与 _updateChildPositions 回写）；机位矩形由柜体矩形+U 区间实时推导
+3. 坐标唯一真相收口到响应式视图模型：拖动落定由画布 emit 矩形、页面写回，保存经 buildLayoutItems 投影，彻底取消「保存时从 SVG DOM 反读属性」；同步收敛视图模型 API（WorkstationCanvas 只留 nodes/door，CabinetCanvas 只留 nodes/totalWidth，删除 container/viewBox/ownerIds/containerWidth/uHeight 等无人消费的派生字段与归属过滤死逻辑）
+4. 旧语义逐项保留：三态返回（saved/empty/stale/error，布局请求失败不得触发自动排布落库）、渲染代次 token 丢弃过期响应、机柜分批渲染（16 柜/批，批内统一拉机位 IP，重排命缓存零请求）与 cabinetSettled 保存闸门、600ms（工位）/500ms（拓扑）/150ms（机柜容器 resize）防抖、房间级（ROOM_GAP 80）与机柜级（40）分组推挤、缩放 ±2% 预设回显与 fit 档、子页签 localStorage 持久化、组织子树筛选、自动发现/自动布局/连线模式
+5. 交互与修复：WorkstationModal 不再向 document 派发 foims:workstation-saved CustomEvent，改为类型化 saved 载荷（id/roomId/x/y）；工位弹窗保存后按当前房间重载以同步标签与房间归属，机柜/机位弹窗保存后重载以重算 U 高与机位矩形；拓扑节点删除、工位/机柜布局删除统一走 ConfirmModal；设备详情面板的移除改为确认后执行
+6. 工程收尾：tsconfig 关闭 allowJs 并删除 src/modules/visualization 的 exclude 例外；MainShell 去掉 <KeepAlive include="VisualizationPage"> 特例（离场即销毁，状态由页面自行持有，重新进入重新加载）；modals.css 删除遗留体系死选择器（.modal:not(.modal-dialog)/.modal-content/.close/[id$="-ips-container"]）并改注释为 ModalShell 单体系；docs/code-style.md §3.6 重写为「可视化画布（工位/机柜/拓扑）」职责分层与四条约束（坐标唯一真相/三态语义/渲染代次/模板 ref 传递方式），§3.1 目录树与 §3.7 import 后缀规则同步
+7. 验证：cd frontend && npm run typecheck 0 错；npm run build 通过（仅既存 useToast 动态导入与 chunk>500kB 警告）；biome check frontend 0 诊断；oxlint 292 文件 0 warning 0 error；两个可执行自检脚本全过（入口 `cd frontend && npm run selfcheck:viz`，带 ts-resolve-hook 补无扩展名 import 的 .ts 解析；geometry 24 项含推挤/锚点错开/正交折线，viewmodel 11 项含坐标回退与分组筛选）；浏览器冒烟（vite dev + 已运行后端）：工位 10 个节点/网格 19 条/标尺/门、机柜 1 柜 10 个 U 刻度、拓扑 13 设备 9 容器 2 连线且缩放 24%→30% 生效，console 零错误、无 ≥400 请求
+8. 联动：根 Cargo.toml 0.29.4→0.30.0（仅 lib，本次仅前端；子 crate 版本不动）；无数据库结构变更（无需 upgrade SQL 与 foims-init 同步）
+9. 遗留说明：布局为空时选定房间仍会自动排布并落库一次（沿用旧版 showWorkstationRoom 语义，首次进入即出图）；拓扑画布缩放初始为 fit（适应画布）而非固定 100%，与旧版 _fitView 一致

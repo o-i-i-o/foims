@@ -1,7 +1,9 @@
 /**
  * 可视化几何算法的可执行自检（P0 安全网）。
  *
- * 运行：`node scripts/visualization-geometry.selfcheck.ts`
+ * 运行：在 frontend/ 下执行 `npm run selfcheck:viz`（内含本脚本与视图模型自检）。
+ * 该命令带 ts-resolve-hook，补上无扩展名 import 的 .ts 解析；直接 `node` 运行
+ * 会因 `../src/utils/visualization/geometry` 无法解析而失败。
  * （Node ≥ 22.6 原生擦除类型，不引入测试框架依赖；脚本在 tsconfig include
  * 之外，故不参与 vue-tsc 检查）。
  *

@@ -1,7 +1,7 @@
 /**
  * 视图模型组装的可执行自检（P1 安全网）。
  *
- * 运行：`node scripts/visualization-viewmodel.selfcheck.ts`
+ * 运行：在 frontend/ 下执行 `npm run selfcheck:viz`（内含几何自检与本脚本）。
  * （Node ≥ 22.6 原生擦除类型；脚本在 tsconfig include 之外，不参与 vue-tsc）。
  *
  * 覆盖：布局索引、门元素归属、工位坐标回退、IP 归并优先级、机柜视图、

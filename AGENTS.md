@@ -41,7 +41,8 @@
   与 `npm run build`；后端载荷类型变更后运行
   `bash da-scripts/gen-ts-types.sh` 再生成 TS 类型（生成物提交入库，
   CI 漂移校验，禁止手改 `frontend/src/types/api/generated/`）。
-  审计用独立二进制 `biome check frontend`（CSS+格式）与 `oxlint`（JS 质量）。
+  审计用独立二进制 `biome check frontend`（CSS+格式）与 `oxlint`（JS 质量）；
+  可视化纯函数用 `cd frontend && npm run selfcheck:viz`（geometry/viewmodel 自检）。
 - 前端 SFC 一律 `<script setup lang="ts">`；新增前端代码一律 TypeScript，
   禁止 any（用 unknown + 收窄）；API 载荷类型优先取
   `frontend/src/types/api/generated/` 生成物，手写类型只放前端自有契约。

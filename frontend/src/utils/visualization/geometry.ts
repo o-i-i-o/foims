@@ -5,7 +5,7 @@
  * 里，并与 DOM 读写交织（坐标写在 SVG 属性上、保存时再反读）。本模块只做
  * 「输入矩形 → 输出矩形/路径」的纯函数，坐标的唯一真相交给响应式视图模型。
  *
- * 自检脚本：`node src/utils/visualization/geometry.selfcheck.ts`
+ * 自检脚本：在 frontend/ 下执行 `npm run selfcheck:viz`
  * （Node ≥ 22.6 原生擦除类型，无需额外依赖）。
  */
 import type {

@@ -243,6 +243,9 @@ npx @biomejs/biome@2.5.15 check frontend   # 本地装了二进制则直接 `bio
 # JS 质量 lint（根 .oxlintrc.json；web-archive/ 与 frontend/dist/ 已忽略）
 npx oxlint@1.88.0
 
+# 可视化纯函数自检（geometry 与 viewmodel 两个可执行脚本）
+cd frontend && npm run selfcheck:viz
+
 # i18n 双向 parity
 node -e "const zh=require('./frontend/src/i18n/locales/zh.json'),en=require('./frontend/src/i18n/locales/en.json'); \
 const f=(o,p='')=>Object.entries(o).flatMap(([k,v])=>typeof v==='object'?f(v,p+k+'.'):[p+k]); \
