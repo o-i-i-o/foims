@@ -9,12 +9,24 @@ CSS 源文件在 `frontend/src/styles/`（全局层）与 Vue SFC 的 `<style>`
 > 配套工具：**Biome**（仓库根 `biome.json`，CSS lint + 格式化，
 > 独立二进制；JS 侧由 oxlint 负责，配置 `.oxlintrc.json`）。
 >
-> **优先级声明：本文档仅作意图与解释说明，与 `biome.json` 冲突时一律以
-> `biome.json` 为准**（lint 工具是执行标准，文档是背景补充）。
+> **优先级声明（两档效力来源）**：
+> - **工具强制**（以 `biome.json` 为准，违反即 CI 失败）：@layer 层序
+>   （nursery `useLayeredStyles`）、`!important` 禁令（`complexity.noImportantStyles`）、
+>   2 空格缩进排版（`css.formatter`）、recommended 规则集；
+> - **评审强制**（Biome 无对应规则，靠 PR 评审 gate 把关）：属性书写顺序、
+>   命名风格、嵌套深度、颜色值/单位规范、响应式策略等其余章节。
+>
+> 本文档是**意图与解释说明**：与 `biome.json` 冲突时格式/层序/`!important`
+> 类以工具为准；"评审强制"类规则不因工具未覆盖而失效，违反时在评审中纠正。
+> **注意检查范围**：`biome.json` 的 `files.includes` 仅覆盖
+> `frontend/src/styles/**`，Vue SFC 的 `<style>` 块（含 `scoped`）不在
+> Biome 兜底范围内，其规范一律靠评审保障。
 
-1. 颜色、间距、圆角、阴影、断点一律走 CSS 变量（`variables.css`），禁零散硬编码；
+1. 颜色、间距、圆角、阴影一律走 CSS 变量（`variables.css`），禁零散硬编码；
+   断点值仅作文档约定，媒体查询中硬编码 px（见第七、八节）；
 2. 主色 lime + 副色 gray（Open Color 色板），低饱和中性色，禁高饱和艳色与纯黑 #000；
-3. 尺寸自适应优先 `auto-fit` / `min()` / `clamp()` 原生方案，媒体查询只处理结构性变化；
+3. 尺寸自适应优先 `auto-fit` / `min()` / `clamp()` 原生方案，媒体查询只处理结构性变化
+   （断点值必须硬编码 px，见第八节）；
 4. 2 空格缩进、一行一个属性，样式克制简约，不写花哨渐变，不要 AI 模板感。
 
 ---
@@ -49,11 +61,16 @@ frontend/src/styles/
 ├── reset.css            # 重置样式（项目统一基础，勿在别处重复 reset）
 ├── components/          # 跨页面复用组件（buttons/forms/tables/badges/device-modals…）
 ├── layouts/             # 布局框架（sidebar/main-content…）
-├── pages/               # 分区页面专属样式（agents/system/visualization）
+├── pages/               # 分区页面专属样式（agents/system/visualization/organization）
 ├── login.css            # 登录页专属（@layer pages）
 ├── init.css             # 初始化向导专属（@layer reset + @layer pages）
 └── toasts.css           # 全局通知（@layer components）
 ```
+
+> `init.css` 的 `@layer reset` 段是**豁免的入口级重置**：初始化向导是独立
+> 入口（`entries/init.ts`），不加载全局 `reset.css`，故自带一段向导页基础
+> 重置——属"勿在别处重复 reset"的既定例外，不是违规；登录页同理独立，
+> 但未另设 reset 段。
 
 ### 1.2 加载方式与 @layer 层序
 
@@ -62,13 +79,18 @@ frontend/src/styles/
   引内部样式，新增页面样式在对应入口的导入链或组件 `<style scoped>` 中落位。
 - **@layer 层序全局固定**（`variables.css` 头部声明，Biome
   `useLayeredStyles` 强制）：
-  `variables → reset → components → modals → layouts → pages → utilities → responsive`；
-  全局文件按归属包进对应 layer（如 `@layer components { … }`）。
+  `variables → reset → components → modals → layouts → pages → responsive`；
+  全局文件按归属包进对应 layer（如 `@layer components { … }`）。旧版
+  utilities 层已废除（Vue 重构后零使用，同名片段均就地并入所属层或
+  组件 scoped）。
 - 组件特有样式写 SFC `<style scoped>`（unlayered，优先级高于所有 layer，
   语义等同"pages 层之上的本组件覆盖"，范本：`pages/DashboardPage.vue`）；
   跨组件复用的样式禁止写进 scoped 块。
 - 归属判断：跨页面复用进 `styles/components/`，仅单页使用进
   `styles/pages/` 或组件 scoped；拿不准时看同类先例。
+- scoped 块内**禁止使用 `@layer`**：unlayered 才享有"高于所有层"的覆盖
+  语义，一旦包进 `@layer` 即回到层序规则、覆盖失效；Biome 检查范围不
+  含 `.vue` 文件，此禁令靠评审保障（见顶部优先级声明）。
 - 文件名一律 kebab-case：`cable-label-print.css`、`device-modals.css`。
 
 ---
@@ -162,11 +184,14 @@ CSS 排版由 Biome formatter 托管（`biome.json`：2 空格缩进），提交
    按 id 定位的场景沿用（见 `components/tables.css`），新增样式不引入
 2. **禁止全局标签选择器裸写样式**：`div {}`、`p {}` 会污染全局
 3. **嵌套规则最深 4 层**，复合选择器至多 5 个简单选择器
-4. **`!important` 全面禁止**；确需压制时在评审中说明理由并就近
-   行内注释豁免，禁止无理由豁免与文件级豁免
+4. **`!important` 全面禁止**：已由 Biome `complexity.noImportantStyles`
+   工具强制（违反即检查失败）；确需压制效果时不使用 `!important`，
+   改用层序调整（如 `cable-label-print.css` 置于 `@layer responsive` 末层）
+   或提升选择器语义，理由写在评审与就近注释中。
 
-（1/3/4 为人工约定，评审把关；Biome 强制的是 @layer 层序
-（`useLayeredStyles`）与格式，其余靠本节约束。）
+（1/3 为评审强制，属性顺序与命名风格靠本节约定、评审把关；Biome 工具
+强制的是 @layer 层序（`useLayeredStyles`）、`!important`
+（`noImportantStyles`）与格式排版。）
 
 ### 5.2 正反例
 
@@ -244,6 +269,9 @@ transition: box-shadow var(--transition-normal);
 | lg | 992px | 大屏（侧栏收窄） |
 
 断点数值以 `variables.css` 头部注释为准，不要随手造新断点。
+**媒体查询条件中必须硬编码与上表一致的 px 数值**：CSS 变量不能用于
+`@media` 条件（`@media (width <= var(--breakpoint-md))` 是非法写法），
+表值仅作文档约定与人机对照，不生成 `--breakpoint-*` 变量。
 
 ---
 
@@ -257,7 +285,8 @@ transition: box-shadow var(--transition-normal);
    `@layer responsive` 段或所在 layer 内，如 `components/tables.css` 的
    表格横滚），无独立 responsive.css，也不新建；
 3. **条件用现代范围语法**：`@media (width <= 768px)`，
-   不写 `max-width: 768px` 旧式。
+   不写 `max-width: 768px` 旧式；断点 px 值一律硬编码（见上节，
+   媒体查询无法消费 CSS 变量）。
 
 ```css
 /* 组件文件 @layer responsive 段中的写法 */
@@ -323,13 +352,18 @@ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 
 | 工具 | 作用 | 运行方式 |
 |------|------|----------|
-| **Biome** | CSS lint + 格式化：@layer 层序强制（`useLayeredStyles`）、结构检查与 2 空格排版（配置仓库根 `biome.json`） | `biome check frontend` |
+| **Biome** | CSS lint + 格式化：@layer 层序强制（nursery `useLayeredStyles`）、`!important` 禁令（`complexity.noImportantStyles`）、结构检查与 2 空格排版（`css.formatter`）；配置仓库根 `biome.json`，**检查范围仅 `frontend/src/styles/**`，不含 `.vue` 的 `<style>` 块** | `biome check frontend` |
 | **Vite 构建** | 打包压缩、内容指纹；导入/语法错误构建即失败 | `cd frontend && npm run build` |
 
 - **无 PostCSS/autoprefixer**：目标为现代常青浏览器
   （项目不考虑老旧基础设施兼容性），需要前缀时手写。
 - Biome 豁免约定与 `docs/code-style.md` §3.5 一致：
-  `// biome-ignore lint/<rule>: 中文理由`，禁止无理由/文件级豁免。
+  `// biome-ignore lint/<rule>: 中文理由`，禁止无理由/文件级豁免；
+  `noImportantStyles` 为 error 级工具禁令，不接受常规豁免，确需压制
+  按第五节改走层序方案。
+- **范围外评审 gate**：属性顺序、命名风格、颜色值、`//` 注释、scoped 块
+  禁 `@layer` 等"评审强制"项与 SFC `<style>` 块均无工具兜底，评审时逐项
+  核对本文档。
 
 ---
 

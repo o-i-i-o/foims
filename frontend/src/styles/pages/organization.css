@@ -1,0 +1,566 @@
+/* 组织管理页专属样式（自 OrganizationPage.vue 非 scoped 块上收）：
+   组织树节点/徽章配色/模板编辑器/图标选择面板被页面、递归节点组件
+   （OrgTreeNode/TemplateTypeNode）与人员弹窗共用，scoped 无法跨组件命中，
+   按归属进 pages 层全局加载（类名 org-* 前缀无全局冲突） */
+@layer pages {
+  .org-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: 0;
+    flex-wrap: wrap;
+  }
+
+  .org-search-input {
+    flex: 1;
+    max-width: 320px;
+    min-width: 200px;
+    width: 100%;
+  }
+
+  .org-actions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .org-tree-container {
+    background: var(--color-bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    min-height: 400px;
+    overflow-x: auto;
+  }
+
+  .org-empty-state {
+    text-align: center;
+    padding: var(--space-xl) var(--space-md);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-base);
+  }
+
+  /* 入场动画（keyframes 对应旧版 utilities/animations.css 同名定义） */
+  @keyframes org-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ==================== 树节点 ==================== */
+
+  .org-node-wrapper {
+    position: relative;
+    animation: org-fade-in var(--transition-slow) ease;
+  }
+
+  .org-node {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast);
+    cursor: default;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .org-node:hover {
+    background-color: var(--color-bg-hover);
+    border-color: var(--color-border-light);
+  }
+
+  /* 展开/折叠按钮 */
+  .org-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: transform var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .org-toggle:hover {
+    color: var(--color-primary);
+  }
+
+  .org-toggle-icon {
+    transition: transform var(--transition-fast);
+  }
+
+  .org-toggle.expanded .org-toggle-icon {
+    transform: rotate(90deg);
+  }
+
+  .org-toggle-placeholder {
+    display: inline-block;
+    width: 20px;
+    flex-shrink: 0;
+  }
+
+  /* 节点图标：底衬以图标自身颜色生成浅色圆角背景，SVG 缩放至底衬内 */
+  .org-node-icon {
+    font-size: 1.2rem;
+    color: var(--color-text);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .org-node-icon .org-icon,
+  .org-node-icon .org-icon-legacy {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  .org-node-icon .org-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .org-node-name {
+    font-weight: 500;
+    color: var(--color-text);
+    font-size: var(--font-size-base);
+  }
+
+  .org-node-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  /* 节点类型徽章配色：底色统一取文字 token 的 10% 透明度（同文件 color-mix 模式） */
+  .org-node-type-badge[data-type="headquarters"] {
+    background: color-mix(
+      in srgb,
+      var(--color-secondary-hover) 8%,
+      transparent
+    );
+    /* 比主色深一档的 lime 文字：主色向文字色深化 */
+    color: color-mix(in srgb, var(--color-primary) 85%, var(--color-text));
+  }
+
+  .org-node-type-badge[data-type="building"] {
+    background: color-mix(in srgb, var(--color-blue) 10%, transparent);
+    color: var(--color-blue);
+  }
+
+  .org-node-type-badge[data-type="floor"] {
+    background: color-mix(in srgb, var(--color-info) 10%, transparent);
+    color: var(--color-info);
+  }
+
+  .org-node-type-badge[data-type="data_center"] {
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
+  }
+
+  .org-node-type-badge[data-type="telecom_closet"],
+  .org-node-type-badge[data-type="cabinet"] {
+    background: color-mix(in srgb, var(--color-ipv6) 10%, transparent);
+    color: var(--color-ipv6);
+  }
+
+  .org-node-type-badge[data-type="office"] {
+    background: color-mix(in srgb, var(--color-success) 10%, transparent);
+    color: var(--color-success);
+  }
+
+  .org-node-type-badge[data-type="hall"] {
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    color: var(--color-warning-text);
+  }
+
+  .org-node-type-badge[data-type="workstation"] {
+    background: color-mix(in srgb, var(--color-secondary) 10%, transparent);
+    color: var(--color-secondary);
+  }
+
+  .org-node-type-badge[data-type="cabinet_position"] {
+    background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+    color: var(--color-orange);
+  }
+
+  .org-node-desc {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 节点操作按钮：默认隐藏，悬停节点时显形 */
+  .org-node-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .org-node:hover .org-node-actions {
+    opacity: 1;
+  }
+
+  /* 树节点图标按钮形态：无边框、透明底，着色/悬浮由全局 buttons.css 提供 */
+  .icon-btn.btn-add-child {
+    background: transparent;
+    border: none;
+  }
+
+  .icon-btn.btn-employees {
+    background: transparent;
+    border: none;
+    color: var(--color-primary);
+  }
+
+  .icon-btn.btn-employees:hover {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+
+  /* 子节点容器：嵌套 padding-left 逐层缩进 + 竖向引导线 */
+  .org-children {
+    position: relative;
+    padding-left: 24px;
+  }
+
+  .org-children::before {
+    content: "";
+    position: absolute;
+    left: 28px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--color-border-light);
+  }
+
+  /* ==================== 人员管理弹窗 ==================== */
+
+  .employee-modal-org {
+    color: var(--color-text-secondary);
+    font-weight: 400;
+    font-size: 0.9em;
+    margin-left: 6px;
+  }
+
+  .employee-table-container {
+    max-height: 380px;
+    overflow: auto;
+  }
+
+  .employee-actions-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+  }
+
+  .modal-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  /* 父级信息 */
+  .org-parent-info {
+    background: var(--control-bg-muted);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+  }
+
+  .org-parent-info p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .org-no-child-hint {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* ==================== 模板管理 ==================== */
+
+  .org-template-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-md);
+  }
+
+  .org-template-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .org-template-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-white);
+    transition: border-color var(--transition-fast);
+  }
+
+  .org-template-item:hover {
+    border-color: var(--color-primary);
+  }
+
+  .org-template-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .org-template-info strong {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
+
+  .org-template-levels {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  .org-template-level-path {
+    display: block;
+  }
+
+  .org-template-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .org-template-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ==================== 模板编辑器 ==================== */
+
+  .org-template-tree-container {
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    background: var(--color-bg-white);
+    margin-bottom: var(--space-sm);
+    min-height: 80px;
+  }
+
+  .org-template-type-node {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .org-template-type-row {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    padding: 3px 0;
+  }
+
+  .org-template-type-root > .org-template-type-row {
+    background: var(--color-primary-light);
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  .org-template-root-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-primary);
+    color: var(--color-bg-white);
+    flex-shrink: 0;
+    letter-spacing: 1px;
+  }
+
+  /* 图标选择按钮（内嵌 SVG 图标） */
+  .org-template-icon-btn {
+    font-size: 1.05rem;
+    color: var(--color-text);
+    flex-shrink: 0;
+    width: 2em;
+    height: 2em;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+      border-color var(--transition-fast),
+      background-color var(--transition-fast);
+    position: relative;
+  }
+
+  .org-template-icon-btn .org-icon,
+  .org-template-icon-btn .org-icon-legacy {
+    width: 1.35em;
+    height: 1.35em;
+  }
+
+  .org-template-icon-btn:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+
+  /* 图标选择面板：按 业务组织/物理地点/功能空间 分组 */
+  .org-icon-picker {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: var(--z-popover);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    width: 264px;
+    max-height: 320px;
+    overflow: auto;
+    background: var(--color-bg-white);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    margin-top: 4px;
+  }
+
+  .org-icon-picker-group-title {
+    font-size: 0.72rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+  }
+
+  .org-icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .org-icon-picker-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    min-width: 0;
+    padding: 0;
+    font-size: 1.2rem;
+    color: var(--color-text);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+
+  .org-icon-picker-item .org-icon,
+  .org-icon-picker-item .org-icon-legacy {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  .org-icon-picker-item:hover {
+    background: var(--color-bg-hover);
+  }
+
+  .org-icon-picker-item.active {
+    background: var(--color-primary-light);
+    outline: 2px solid var(--color-primary);
+  }
+
+  .org-template-type-row .org-template-type-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* 行内「添加子层级/删除」图标按钮：统一 icon-btn 尺寸，仅保留防挤压 */
+  .org-template-type-row .icon-btn.btn-add-child,
+  .org-template-type-row .icon-btn.btn-delete {
+    flex-shrink: 0;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+  }
+
+  .org-template-type-children {
+    margin-left: 20px;
+    padding-left: 16px;
+    border-left: 2px solid
+      color-mix(in srgb, var(--color-primary) 25%, transparent);
+    margin-top: 6px;
+    margin-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* 子节点悬停时高亮整条引导线 */
+  .org-template-type-children:hover {
+    border-left-color: var(--color-primary);
+  }
+
+  /* ==================== 响应式 ==================== */
+
+  @media (width <= 768px) {
+    .org-toolbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .org-actions {
+      justify-content: flex-start;
+    }
+
+    .org-node {
+      flex-wrap: wrap;
+      padding: var(--space-xs) var(--space-sm);
+    }
+
+    .org-node-actions {
+      opacity: 1;
+      flex-wrap: wrap;
+    }
+
+    .org-node-desc {
+      display: none;
+    }
+  }
+}

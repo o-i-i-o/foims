@@ -1,5 +1,5 @@
 // 主应用入口：装载全局样式（variables 先行建立 @layer 层序：variables <
-// reset < components < layouts < pages < utilities < responsive）并接线
+// reset < components < modals < layouts < pages < responsive）并接线
 // Pinia（auth store）、Vue Router（hash 模式 + RBAC 守卫）与
 // TanStack Query（分区页数据获取统一走 useQuery）。
 import { createApp } from "vue";
@@ -34,6 +34,8 @@ import "../styles/pages/visualization.css";
 import "../styles/pages/agents.css";
 // pages 层：系统管理页（配置卡片/证书/服务/导入导出/通知矩阵/日志统计）
 import "../styles/pages/system.css";
+// pages 层：组织管理页（树节点/徽章配色/模板编辑器，被递归子组件与弹窗跨组件命中）
+import "../styles/pages/organization.css";
 
 import App from "../pages/MainShell.vue";
 import { i18n } from "../i18n/index";

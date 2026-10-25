@@ -555,9 +555,10 @@ function formatDns(dns: string[] | null | undefined): string {
   </ModalShell>
 </template>
 
-<style>
-/* 网段使用情况弹窗样式（移植自旧版 css/pages/network-usage.css 全量，
- usage 与 ipv6 前缀类名无跨页冲突，非 scoped 供动态内容跨组件命中） */
+<style scoped>
+/* 网段使用情况弹窗样式（移植自旧版 css/pages/network-usage.css 全量）：
+ 全部类仅命中本组件模板（含 v-for 渲染的表格行，ModalShell 无 Teleport），
+ 改 scoped 消除 .table/.ipv6-address 等通用类名的全局泄漏 */
 .network-usage-container {
   font-size: 0.875rem;
 }

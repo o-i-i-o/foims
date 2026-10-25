@@ -499,3 +499,11 @@ v0.19.7
 2. 安装踩坑：从 ^6.0.3 单装改为别名声明后直接 npm install 不重建 node_modules/typescript（残留 TS 6.0.3，lock 内 root 别名 spec 与节点条目不一致），需 rm -rf node_modules package-lock.json 干净重建；最小复现确认别名方案在 npm 11.19.1 下本身正常
 3. 文档：docs/code-style.md §3.5「TypeScript 版本边界」改写为「TypeScript 7 双安装」（含 .bin/tsc 抢占与 TS 7.1 后收敛条件），新增 npm run tsc 命令示例，依赖声明策略中 typescript 例外条目移除（别名同样走 latest + lock 兼底）
 4. 验证：npm run tsc → Version 7.0.2；vue-tsc 解析链路实测 typescript→@typescript/typescript6→@typescript/old/lib/tsc.js（TS 6.0.3）；npm run typecheck 0 错；npm run build 通过（client 372.30 kB）；npm run selfcheck:viz 全过；frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更
+
+v0.19.8
+2026102515021101
+1. CSS 规范工具标准落地（z 段）：biome.json 的 linter.rules.complexity 新增 noImportantStyles=error，把 !important 禁令从「人工约定」升格为工具强制（该规则归属 complexity 域，非 style 域）；启用后回归 biome check frontend 原 22 文件 0 违规
+2. CSS-style.md 按审计勘误修订：顶部优先级声明拆为「工具强制（层序/noImportantStyles/2 空格排版/recommended）/评审强制（属性顺序/命名/嵌套/颜色值）」两档效力来源；明示媒体查询条件必须硬编码 px 值（CSS 变量不能用于 @media，不生成 --breakpoint-* 变量，修正开头「断点走 CSS 变量」旧表述）；补充 init.css 入口级 reset 豁免说明（独立入口不加载全局 reset.css，属既定例外）；全档标注 Biome files.includes 仅覆盖 frontend/src/styles/**、不含 .vue 的 <style> 块，scoped 块禁 @layer 靠评审保障；!important 措辞第五/十一/十二节同步为工具强制
+3. utilities 层废除（z 段）：全库检索 @layer utilities 实现块零使用（旧 web-archive 遗产占位，同名片段已就地移植），从 variables.css 头部层序声明移除，新层序 variables→reset→components→modals→layouts→pages→responsive；同步修正引用旧层序的注释（entries/main.ts 头注释、CSS-style.md 层序与目录清单）
+4. 两个非 scoped <style> 块归位：SubnetUsageModal.vue 的 usage/ipv6 前缀类实测全部仅命中本组件模板（ModalShell 无 Teleport，表格行为 v-for Vue 渲染），改 <style scoped> 消除 .table/.ipv6-address/.no-ipv6-info 等通用类名与后代裸标签选择器的 unlayered 全局泄漏；OrganizationPage.vue 的 org-* 类被递归子组件 OrgTreeNode.vue/TemplateTypeNode.vue 跨组件命中（scoped 无法穿透），整体上收至新建全局 styles/pages/organization.css（@layer pages，entries/main.ts 追加导入），org-fade-in keyframes 随迁，SFC 减重 561 行并入 Biome 兜底范围
+5. 版本：本次为纯前端样式与配置修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；验证 biome check frontend 23 文件 0 违规、npm run typecheck 0 错、npm run build 通过

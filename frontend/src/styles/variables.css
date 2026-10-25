@@ -1,11 +1,4 @@
-@layer variables,
-  reset,
-  components,
-  modals,
-  layouts,
-  pages,
-  utilities,
-  responsive;
+@layer variables, reset, components, modals, layouts, pages, responsive;
 
 @layer variables {
   /**
