@@ -403,10 +403,10 @@ async function applySnmpResults(
       </template>
     </div>
     <template #footer>
-      <button type="button" class="btn btn-primary" @click="openPortDetail(null)">
+      <button type="button" class="btn-primary" @click="openPortDetail(null)">
         {{ t("device.add_device_port") }}
       </button>
-      <button type="button" class="btn btn-secondary" :disabled="syncing" @click="startSnmpSync">
+      <button type="button" class="btn-secondary" :disabled="syncing" @click="startSnmpSync">
         {{ syncing ? t("device.fetching_snmp") : t("device.sync_snmp_ports") }}
       </button>
     </template>

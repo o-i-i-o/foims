@@ -73,7 +73,7 @@ async function handleSubmit(): Promise<void> {
       </div>
     </form>
     <template #footer>
-      <button type="button" class="btn btn-primary" :disabled="saving" @click="handleSubmit">
+      <button type="button" class="btn-primary" :disabled="saving" @click="handleSubmit">
         {{ t("cert.import") }}
       </button>
     </template>

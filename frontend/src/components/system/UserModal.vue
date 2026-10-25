@@ -397,17 +397,17 @@ async function handleSave(): Promise<void> {
     </div>
 
     <template #footer>
-      <button v-if="step === 'account'" type="button" class="btn btn-primary" @click="goTo2faStep">
+      <button v-if="step === 'account'" type="button" class="btn-primary" @click="goTo2faStep">
         {{ t("user.next_step") }}
       </button>
       <template v-else>
-        <button type="button" class="btn btn-secondary" @click="backToAccount">
+        <button type="button" class="btn-secondary" @click="backToAccount">
           {{ t("user.previous_step") }}
         </button>
         <button
           v-if="twoFactorView === 'setup'"
           type="button"
-          class="btn btn-primary"
+          class="btn-primary"
           :disabled="enabling"
           @click="handleEnable"
         >
@@ -416,13 +416,13 @@ async function handleSave(): Promise<void> {
         <button
           v-if="twoFactorView === 'manage'"
           type="button"
-          class="btn btn-danger"
+          class="btn-danger"
           :disabled="disabling"
           @click="handleDisable"
         >
           {{ t("two_factor.disable") }}
         </button>
-        <button type="button" class="btn btn-primary" :disabled="saving" @click="handleSave">
+        <button type="button" class="btn-primary" :disabled="saving" @click="handleSave">
           {{ t("common.save") }}
         </button>
       </template>

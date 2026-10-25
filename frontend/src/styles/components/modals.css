@@ -180,12 +180,24 @@
     flex-shrink: 0;
   }
 
-  .modal-footer .btn {
+  /* 页脚按钮统一为独立色彩变体类写法（btn-primary 等，不带 btn 基类）；
+   此处自带完整按钮视觉基座，色彩/hover 由 buttons.css 的 .btn-* 变体提供 */
+  .modal-footer .btn-primary,
+  .modal-footer .btn-secondary,
+  .modal-footer .btn-danger,
+  .modal-footer .btn-info {
     min-width: 90px;
     padding: 0.6rem 1.5rem;
     font-size: 0.9rem;
     font-weight: 500;
+    border: none;
     border-radius: var(--radius-md);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--btn-height);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
     transition:
       transform var(--transition-fast),
       box-shadow var(--transition-fast),
@@ -193,7 +205,28 @@
       color var(--transition-fast);
   }
 
-  /* hover/active 位移由 .btn:hover/.btn:active（buttons.css）提供，此处不重复 */
+  .modal-footer .btn-primary:hover,
+  .modal-footer .btn-secondary:hover,
+  .modal-footer .btn-danger:hover,
+  .modal-footer .btn-info:hover {
+    transform: translateY(-1px);
+  }
+
+  /* 小号档（如连接详情弹窗）：压缩内边距与高度，覆盖上方基座 */
+  .modal-footer .btn-sm {
+    min-width: 80px;
+    height: 36px;
+    padding: 0 0.9rem;
+    font-size: 0.85rem;
+  }
+
+  @media (width <= 768px) {
+    .modal-footer .btn-sm {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
+      min-width: 60px;
+    }
+  }
 
   /* 层叠模态框的层级由 useModalStack 保证只关最上层 */
 }

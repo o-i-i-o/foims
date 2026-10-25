@@ -544,7 +544,7 @@ const saveMutation = useMutation({
     <template #footer>
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn-primary"
         :disabled="saveMutation.isPending.value"
         @click="saveMutation.mutate()"
       >

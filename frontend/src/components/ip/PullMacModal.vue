@@ -216,7 +216,7 @@ const deviceLabel = (dev: PullDeviceItem): string => dev.name || dev.hostname ||
       </div>
     </form>
     <template #footer>
-      <button type="submit" class="btn btn-primary" form="pull-mac-form" :disabled="pullMutation.isPending.value">
+      <button type="submit" class="btn-primary" form="pull-mac-form" :disabled="pullMutation.isPending.value">
         <span v-if="pullMutation.isPending.value" class="loading" aria-hidden="true"></span>
         {{ pullMutation.isPending.value ? t("ip.pulling") : t("common.confirm") }}
       </button>

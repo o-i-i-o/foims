@@ -95,7 +95,7 @@ function selectedItems(): CableLinkWithDetails[] {
       </div>
     </form>
     <template #footer>
-      <button type="button" class="btn btn-primary" @click="printSelected">
+      <button type="button" class="btn-primary" @click="printSelected">
         {{ t("cable_link.print") }}
       </button>
     </template>

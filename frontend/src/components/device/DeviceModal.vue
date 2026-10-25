@@ -954,13 +954,13 @@ onMounted(async () => {
     </form>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" :disabled="testingSnmp" @click="testSnmpConnection">
+      <button type="button" class="btn-secondary" :disabled="testingSnmp" @click="testSnmpConnection">
         {{ testingSnmp ? t("common.testing") : t("device.test_snmp") }}
       </button>
-      <button type="button" class="btn btn-primary" :disabled="fetchingSnmp" @click="getDeviceInfoFromSnmp">
+      <button type="button" class="btn-primary" :disabled="fetchingSnmp" @click="getDeviceInfoFromSnmp">
         {{ fetchingSnmp ? t("device.fetching_snmp") : t("device.get_snmp_info") }}
       </button>
-      <button type="button" class="btn btn-primary" :disabled="saving" @click="submit">
+      <button type="button" class="btn-primary" :disabled="saving" @click="submit">
         {{ saving ? t("common.saving") : t("common.save") }}
       </button>
     </template>

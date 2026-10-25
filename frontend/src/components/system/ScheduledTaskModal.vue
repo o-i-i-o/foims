@@ -382,7 +382,7 @@ async function handleSubmit(): Promise<void> {
         <input v-model="enabled" type="checkbox">
         <span>{{ t("scheduled_tasks.enabled") }}</span>
       </label>
-      <button type="button" class="btn btn-primary" :disabled="submitInFlight" @click="handleSubmit">
+      <button type="button" class="btn-primary" :disabled="submitInFlight" @click="handleSubmit">
         {{ t("common.save") }}
       </button>
     </template>

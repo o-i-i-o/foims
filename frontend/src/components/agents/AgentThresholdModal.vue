@@ -175,7 +175,7 @@ function handleSubmit() {
         <input v-model="form.enabled" type="checkbox">
         <span>{{ t("agents.alert_enabled") }}</span>
       </label>
-      <button type="submit" class="btn btn-primary" form="agent-alert-threshold-form" :disabled="saveMutation.isPending.value">
+      <button type="submit" class="btn-primary" form="agent-alert-threshold-form" :disabled="saveMutation.isPending.value">
         {{ t("common.save") }}
       </button>
     </template>

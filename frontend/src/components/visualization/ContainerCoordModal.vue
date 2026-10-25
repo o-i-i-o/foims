@@ -79,10 +79,10 @@ function submit(): void {
     </div>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" @click="emit('close')">
+      <button type="button" class="btn-secondary" @click="emit('close')">
         {{ t("common.cancel") }}
       </button>
-      <button type="button" class="btn btn-primary" @click="submit">
+      <button type="button" class="btn-primary" @click="submit">
         {{ t("common.save") }}
       </button>
     </template>

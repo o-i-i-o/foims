@@ -91,7 +91,7 @@ function confirmDecisions(): void {
       </button>
     </div>
     <template #footer>
-      <button type="button" class="btn btn-primary" @click="confirmDecisions">
+      <button type="button" class="btn-primary" @click="confirmDecisions">
         {{ t("device.conflict_confirm") }}
       </button>
     </template>

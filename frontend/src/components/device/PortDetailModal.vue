@@ -262,7 +262,7 @@ const deleteMutation = useMutation({
       <button
         v-if="!isNewPort"
         type="button"
-        class="btn btn-danger"
+        class="btn-danger"
         :disabled="deleteMutation.isPending.value"
         @click="confirmingDelete = true"
       >
@@ -270,7 +270,7 @@ const deleteMutation = useMutation({
       </button>
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn-primary"
         :disabled="saveMutation.isPending.value"
         @click="saveMutation.mutate()"
       >

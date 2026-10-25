@@ -122,13 +122,13 @@ async function confirmDelete(): Promise<void> {
       <button
         v-if="!connection.derived"
         type="button"
-        class="btn btn-danger btn-sm"
+        class="btn-danger btn-sm"
         :disabled="deleting"
         @click="confirmingDelete = true"
       >
         {{ t("viz.delete_connection") }}
       </button>
-      <button type="button" class="btn btn-secondary btn-sm" @click="emit('close')">
+      <button type="button" class="btn-secondary btn-sm" @click="emit('close')">
         {{ t("common.close") }}
       </button>
     </template>

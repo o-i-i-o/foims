@@ -154,7 +154,7 @@ loadData();
       </table>
     </div>
     <template #footer>
-      <button type="button" class="btn btn-primary" @click="syncLldpData">
+      <button type="button" class="btn-primary" @click="syncLldpData">
         {{ t("device.sync_from_snmp") }}
       </button>
     </template>

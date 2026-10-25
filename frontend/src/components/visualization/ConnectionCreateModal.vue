@@ -247,7 +247,7 @@ async function submit(): Promise<void> {
     <template #footer>
       <button
         type="submit"
-        class="btn btn-primary"
+        class="btn-primary"
         form="topology-connection-form"
         :disabled="submitting"
       >

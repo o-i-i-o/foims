@@ -514,3 +514,10 @@ v0.19.9
 2. 前端注释去旧版化（z 段，约 230 处/150+ 文件）：清除「移植自旧版 modules/xxx.js」「对应旧版 main.html NNN 行」「旧版 X 语义」等考古性溯源注释，统一改写为基于当前代码逻辑的行为描述（pages/components/composables/utils/config/api/router/entries/i18n/styles 与 vite.config.js）；与事实不符的注释同步纠偏（i18n/index.ts 语言包位置、api/client.ts 改直陈当前契约、ConfirmModal/LogDetailsModal 样式来源表述、visualization.css/main.html 挂载描述、tables.css 列宽对应模板等）
 3. 合理保留：代码标识符 legacy 系列（legacyRegionList/registerLegacy 表“失联网段数据”、.org-icon-legacy 表遗留图标形态、vue-i18n legacy:false 库 API）不动；web-archive/ 只读存档不动
 4. 版本：纯注释修订，frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无后端载荷变更无需再生成 TS 类型；验证 npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规，grep 旧版/web-archive/原生 JS/存档 引用归零
+
+v0.19.10
+2026102515335801
+1. 模态框页脚按钮样式全局统一为独立色彩变体类写法（btn-primary 等，不带 btn 基类）：此前全库存在两种写法（资源管理 network/room/cabinet/workstation 与 org/system 密码类弹窗用变体独用，设备/线路/可视化/agents/ip 等弹窗用 btn+变体双写），页脚布局样式仅靠 modals.css 的 `.modal-footer .btn` 与 buttons.css 的 `.btn` 基类命中双写方，独用方退化为浏览器默认按钮外观；本次将 18 个弹窗组件（device 5、system 6、cable 2、visualization 3、agents 1、ip 1）共 34 处页脚按钮类名 `btn btn-*` 改为 `btn-*`，全库页脚按钮归一
+2. modals.css 页脚按钮基座重写：`.modal-footer .btn` 改为显式枚举 `.modal-footer .btn-primary/.btn-secondary/.btn-danger/.btn-info`，补齐 border/cursor/display:flex/对齐/height:var(--btn-height)/box-shadow 等原由 btn 基类提供、去掉基类后会丢失的视觉属性，并补 `:hover` 位移（原依赖 `.btn:hover`）；新增 `.modal-footer .btn-sm` 小档覆盖（含 ≤768px 压缩，命中连接详情弹窗）；变体色彩/hover 换色仍由 buttons.css 提供不重复
+3. 范围收敛：仅改模态框页脚（`<template #footer>`/ConfirmModal 自建 modal-footer）按钮，页面正文与卡片内 `btn btn-*` 工具栏按钮（system 各 Tab/Card、DataManagementTab 等）与 CIDR 动态行 `btn btn-icon-sm` 图标按钮不在页脚基座选择器命中范围，保持原写法不动；登录/初始化入口的 login-btn-*/init-btn-* 独立家族不涉及
+4. 版本：纯前端样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；验证 npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规、oxlint 295 文件 0 警告 0 错误
