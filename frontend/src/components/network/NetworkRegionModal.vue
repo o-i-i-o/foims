@@ -101,14 +101,16 @@ function submit(): void {
 <template>
   <ModalShell :title="props.region ? t('network.edit_region') : t('network.add_region')" @close="emit('close')">
     <form @submit.prevent="submit">
-      <div class="form-group">
-        <label for="network-region-name">
-          <span>{{ t("common.name") }}</span><span class="required">*</span>
-        </label>
-        <input id="network-region-name" v-model="form.name" type="text" autocomplete="off" required>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="network-region-name">
+            <span>{{ t("common.name") }}</span><span class="required">*</span>
+          </label>
+          <input id="network-region-name" v-model="form.name" type="text" autocomplete="off" required>
+        </div>
       </div>
       <div class="form-row">
-        <div class="form-group cidr-column">
+        <div class="form-group cidr-group">
           <span class="group-label">{{ t("network.ipv4_cidrs") }}</span>
           <div class="cidr-input-list">
             <div v-for="(_, index) in ipv4Cidrs" :key="`v4-${index}`" class="cidr-input-row">
@@ -120,7 +122,7 @@ function submit(): void {
             </div>
           </div>
         </div>
-        <div class="form-group cidr-column">
+        <div class="form-group cidr-group">
           <span class="group-label">{{ t("network.ipv6_cidrs") }}</span>
           <div class="cidr-input-list">
             <div v-for="(_, index) in ipv6Cidrs" :key="`v6-${index}`" class="cidr-input-row">

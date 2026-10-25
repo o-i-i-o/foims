@@ -161,25 +161,25 @@ function unbanIp(): void {
     </header>
 
     <!-- 配置 -->
-    <div class="nc-fields">
-      <div class="nc-field">
+    <div class="form-row">
+      <div class="form-group">
         <label for="app-fail2ban-enabled">{{ t("security.enabled") }}</label>
-        <select id="app-fail2ban-enabled" v-model="enabled" :disabled="readonly">
+        <select id="app-fail2ban-enabled" v-model="enabled" :disabled="readonly" :aria-label="t('security.enabled')">
           <option value="true">{{ t("common.yes") }}</option>
           <option value="false">{{ t("common.no") }}</option>
         </select>
       </div>
-      <div class="nc-field">
+      <div class="form-group">
         <label for="app-fail2ban-findtime">{{ t("security.findtime") }}</label>
-        <input id="app-fail2ban-findtime" v-model="findtime" type="number" min="60" max="86400" :disabled="readonly">
+        <input id="app-fail2ban-findtime" v-model="findtime" type="number" min="60" max="86400" :disabled="readonly" :aria-label="t('security.findtime')">
       </div>
-      <div class="nc-field">
+      <div class="form-group">
         <label for="app-fail2ban-maxretry">{{ t("security.maxretry") }}</label>
-        <input id="app-fail2ban-maxretry" v-model="maxRetry" type="number" min="1" max="100" :disabled="readonly">
+        <input id="app-fail2ban-maxretry" v-model="maxRetry" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('security.maxretry')">
       </div>
-      <div class="nc-field">
+      <div class="form-group">
         <label for="app-fail2ban-bantime">{{ t("security.bantime") }}</label>
-        <input id="app-fail2ban-bantime" v-model="bantime" type="number" min="60" max="604800" :disabled="readonly">
+        <input id="app-fail2ban-bantime" v-model="bantime" type="number" min="60" max="604800" :disabled="readonly" :aria-label="t('security.bantime')">
       </div>
     </div>
 

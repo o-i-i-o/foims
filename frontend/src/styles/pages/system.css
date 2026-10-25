@@ -2,8 +2,7 @@
   /* 系统管理分区页样式（配置卡片/数据管理 +
    通知矩阵/收件人清单/日志统计类） */
 
-  .system-config-section,
-  .notification-config-section {
+  .system-config-section {
     margin: 0 auto;
     padding: var(--space-lg);
     background: var(--color-bg-white);
@@ -11,8 +10,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  .system-config-section h3,
-  .notification-config-section h3 {
+  .system-config-section h3 {
     color: var(--color-text);
     font-size: 1.1rem;
     font-weight: 600;
@@ -26,8 +24,7 @@
     gap: var(--space-sm);
   }
 
-  .system-config-section h3::before,
-  .notification-config-section h3::before {
+  .system-config-section h3::before {
     content: "";
     width: 4px;
     height: 20px;

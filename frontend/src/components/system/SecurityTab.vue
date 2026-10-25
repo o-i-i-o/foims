@@ -179,37 +179,37 @@ async function savePasswordPolicy(): Promise<void> {
             {{ t("common.save") }}
           </button>
         </header>
-        <div class="nc-fields">
-          <div class="nc-field">
+        <div class="form-row">
+          <div class="form-group">
             <label for="rate-limit-enabled">{{ t("config.rate_limit_enabled") }}</label>
-            <select id="rate-limit-enabled" v-model="rateEnabled" :disabled="readonly">
+            <select id="rate-limit-enabled" v-model="rateEnabled" :disabled="readonly" :aria-label="t('config.rate_limit_enabled')">
               <option value="true">{{ t("common.yes") }}</option>
               <option value="false">{{ t("common.no") }}</option>
             </select>
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="rate-limit-ip">{{ t("config.rate_limit_ip") }}</label>
-            <input id="rate-limit-ip" v-model="rateIpLimit" type="number" min="1" max="10000" :disabled="readonly">
+            <input id="rate-limit-ip" v-model="rateIpLimit" type="number" min="1" max="10000" :disabled="readonly" :aria-label="t('config.rate_limit_ip')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="rate-limit-user">{{ t("config.rate_limit_user") }}</label>
-            <input id="rate-limit-user" v-model="rateUserLimit" type="number" min="1" max="10000" :disabled="readonly">
+            <input id="rate-limit-user" v-model="rateUserLimit" type="number" min="1" max="10000" :disabled="readonly" :aria-label="t('config.rate_limit_user')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="rate-limit-login">{{ t("config.rate_limit_login") }}</label>
-            <input id="rate-limit-login" v-model="rateLoginLimit" type="number" min="1" max="100" :disabled="readonly">
+            <input id="rate-limit-login" v-model="rateLoginLimit" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('config.rate_limit_login')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="rate-limit-window">{{ t("config.rate_limit_window") }}</label>
-            <input id="rate-limit-window" v-model="rateWindow" type="number" min="10" max="3600" :disabled="readonly">
+            <input id="rate-limit-window" v-model="rateWindow" type="number" min="10" max="3600" :disabled="readonly" :aria-label="t('config.rate_limit_window')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="rate-limit-email">{{ t("config.rate_limit_email") }}</label>
-            <input id="rate-limit-email" v-model="rateEmailLimit" type="number" min="1" max="100" :disabled="readonly">
+            <input id="rate-limit-email" v-model="rateEmailLimit" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('config.rate_limit_email')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="rate-limit-email-window">{{ t("config.rate_limit_email_window") }}</label>
-            <input id="rate-limit-email-window" v-model="rateEmailWindow" type="number" min="60" max="86400" :disabled="readonly">
+            <input id="rate-limit-email-window" v-model="rateEmailWindow" type="number" min="60" max="86400" :disabled="readonly" :aria-label="t('config.rate_limit_email_window')">
           </div>
         </div>
       </section>
@@ -225,38 +225,38 @@ async function savePasswordPolicy(): Promise<void> {
             {{ t("common.save") }}
           </button>
         </header>
-        <!-- 输入字段：第一行 -->
-        <div class="nc-fields">
-          <div class="nc-field">
+        <!-- 输入字段 -->
+        <div class="form-row">
+          <div class="form-group">
             <label for="password-policy-min-length">{{ t("config.password_min_length") }}</label>
-            <input id="password-policy-min-length" v-model="policyMinLength" type="number" min="8" max="128" :disabled="readonly">
+            <input id="password-policy-min-length" v-model="policyMinLength" type="number" min="8" max="128" :disabled="readonly" :aria-label="t('config.password_min_length')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="password-policy-history">{{ t("config.password_history") }}</label>
-            <input id="password-policy-history" v-model="policyHistory" type="number" min="0" max="24" :disabled="readonly">
+            <input id="password-policy-history" v-model="policyHistory" type="number" min="0" max="24" :disabled="readonly" :aria-label="t('config.password_history')">
           </div>
         </div>
-        <!-- 复选框字段：第二行 -->
-        <div class="nc-fields">
-          <div class="nc-field">
+        <!-- 复选框字段 -->
+        <div class="form-row">
+          <div class="form-group">
             <label class="checkbox-label">
               <input v-model="requireUpper" type="checkbox" class="form-checkbox" :disabled="readonly">
               <span>{{ t("config.password_require_upper") }}</span>
             </label>
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label class="checkbox-label">
               <input v-model="requireLower" type="checkbox" class="form-checkbox" :disabled="readonly">
               <span>{{ t("config.password_require_lower") }}</span>
             </label>
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label class="checkbox-label">
               <input v-model="requireDigit" type="checkbox" class="form-checkbox" :disabled="readonly">
               <span>{{ t("config.password_require_digit") }}</span>
             </label>
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label class="checkbox-label">
               <input v-model="requireSpecial" type="checkbox" class="form-checkbox" :disabled="readonly">
               <span>{{ t("config.password_require_special") }}</span>

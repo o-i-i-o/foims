@@ -521,3 +521,28 @@ v0.19.10
 2. modals.css 页脚按钮基座重写：`.modal-footer .btn` 改为显式枚举 `.modal-footer .btn-primary/.btn-secondary/.btn-danger/.btn-info`，补齐 border/cursor/display:flex/对齐/height:var(--btn-height)/box-shadow 等原由 btn 基类提供、去掉基类后会丢失的视觉属性，并补 `:hover` 位移（原依赖 `.btn:hover`）；新增 `.modal-footer .btn-sm` 小档覆盖（含 ≤768px 压缩，命中连接详情弹窗）；变体色彩/hover 换色仍由 buttons.css 提供不重复
 3. 范围收敛：仅改模态框页脚（`<template #footer>`/ConfirmModal 自建 modal-footer）按钮，页面正文与卡片内 `btn btn-*` 工具栏按钮（system 各 Tab/Card、DataManagementTab 等）与 CIDR 动态行 `btn btn-icon-sm` 图标按钮不在页脚基座选择器命中范围，保持原写法不动；登录/初始化入口的 login-btn-*/init-btn-* 独立家族不涉及
 4. 版本：纯前端样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；验证 npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规、oxlint 295 文件 0 警告 0 错误
+
+v0.19.11
+2026102514523901
+1. 网络区域弹窗主体布局收齐至资源管理模块「同行表单变体」范式（上轮页脚按钮统一时未覆盖的遗漏项）：NetworkRegionModal 此前是模块内唯一未采「标量字段入 .form-row 网格 + label 左定宽 + 控件右 flex:1」的弹窗——名称字段为裸 .form-group（label 100px 居中、无 form-row 的 margin-bottom 行距节奏）、IPv4/IPv6 CIDR 为 .cidr-column「标题在上整列居中」堆叠双列（与同子模块 NetworkModal 的 IPv4/IPv6 同行布局分属两套语法，三块内容左缘参差为「不协调」主因）；现名称并入独立 .form-row（label 基准 80px 与其余行同源），IPv4/IPv6 各占一整行 .cidr-group（左标题 + 右动态输入列表），描述块 textarea 维持 form-group-block 不动；ModalShell 加 size="md" 与 NetworkModal 宽度档对齐
+2. forms.css CIDR 样式块重写：废弃堆叠式 .cidr-column 一组规则（flex-direction:column + 标题 max-width:320px 左对齐），改为 .cidr-group 同行基座（align-items:flex-start 顶对齐多行列表、group-label 覆盖为 width:auto/min-width:80px/上内边距取 --control-padding-y 与首行输入框取齐、cidr-input-list flex:1 撑满右侧）；.cidr-input-list/.cidr-input-row/.cidr-input/.cidr-btn-group 行内结构与 +/− 图标按钮不变；.cidr-* 类仅 NetworkRegionModal 单点使用，无其它组件回归风险
+3. 验证 grep 全库 cidr-column 零残留；版本：纯前端布局修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规、oxlint 295 文件 0 警告 0 错误
+
+v0.19.12
+2026102515035401
+1. 网络区域弹窗 CIDR 区改回双列（用户反馈修正 v0.19.11 的方向选择）：IPv4 CIDR / IPv6 CIDR 回到同一 .form-row 网格下左右两列、标题在上整列居中的堆叠式（.cidr-group 单列全行语法废弃，恢复 .cidr-column 类与 forms.css 对应规则）；名称字段保留上轮成果仍居独立 .form-row
+2. size="md" 回退为默认档：经计算 form-row 两列需 280×2+16(gap)=576px，md 弹窗 max-width 600px 扣除 .modal-body 左右 0.75rem 内边距后仅余 576px 属临界值（auto-fit 会回落单列且亚像素环境下不确定），默认档 640px 内部 616px 才能稳定落两列，宽度统一目标让位于双列需求
+3. 验证：grep 全库 cidr-group 零残留；版本：纯前端布局修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.13
+2026102515132201
+1. 网络区域弹窗 CIDR 区最终形态：两列 × 同行内联（用户反馈 v0.19.12 的「标题在上整列居中」堆叠式视觉上回到初始不协调状态）：在 v0.19.11 已认可的「同行表单变体」基座（标题左定宽居中 + 动态列表右 flex:1 + 顶对齐）上把 IPv4/IPv6 两个 .cidr-group 同置于一个 .form-row，靠 auto-fit minmax(280px,1fr) 网格自然分栏成左右两列，与子网弹窗 NetworkModal 的两列同行布局同构；最终结构为名称一列（整行）、CIDR 两列、描述整行
+2. forms.css 再次重写该块：删除 .cidr-column 堆叠规则（flex-direction:column/align-items:center/标题 max-width:320px 左对齐），恢复 .cidr-group 内联基座三组规则；.cidr-input-list/.cidr-input-row/.cidr-input/.cidr-btn-group 行内结构与 +/− 图标按钮不变；标题取 min-width:80px 与 form-row 内 label 同源，宽度档保持默认（640px，body 内部 616px，双列需 576px 可稳定成立；md 档 600px 属临界不采用）；本轮回溯修正 v0.19.11/v0.19.12 两次方向试探，最终收敛为「同行内联 + 两列」
+3. 版本：纯前端布局修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；grep 全库 cidr-column 零残留；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规、oxlint 295 文件 0 警告 0 错误
+
+v0.19.14
+2026102515284101
+1. 系统模块各子模块卡片布局统一至资源管理/表单范式（字段栅格归一）：容器层经核实已统一（各卡片均用 config-card/config-card-header/config-card-title/icon）；真正的遗留不协调在于部分卡片字段区用了设备网卡编辑器专用体系 network-card.css 的 .nc-fields/.nc-field（标签在上堆叠式、.nc-input 控件）而非模块统一的 form-row/form-group 同行表单变体；本次转换三个偏离组件：SecurityTab（限流 7 字段 + 密码策略 2 输入 + 4 复选，共 13 nc-field → form-row/form-group，复选沿用 AgentServiceCard 已有的 form-group+label.checkbox-label 范式）、Fail2banCard（配置 4 nc-field → form-row/form-group）、LogsManagementCard（日志转发 4 nc-field → form-row/form-group，其 clear-logs-form 此前已是 form-row）；转换后统一为控件补 :aria-label 与 SystemConfigTab 范例对齐；nc-field 系统目录全域清零
+2. 范例核对与外层包裹统一：SystemInfoTab（form-row + dl.config-field 只读字段）、UsersTab/ScheduledTasksTab（tab-content > table-container > data-table）已完全符合资源管理范式无需改动；NotificationTab 外层包裹类从孤例 .notification-config-section 改为与其他页签一致的 .system-config-section（二者原本同一 ruleset 样式等价，属命名不一致），同步删除 system.css 中三处冗余的 .notification-config-section 选择器
+3. 范围收敛：Fail2banCard 手动封禁行（input + 封/解按钮）为特例动作控件非配置字段栅格，本轮不动；ServicesCard/CertificateCard 为表/动作区无表单字段、AgentServiceCard/SnmpTrapCard/SystemConfigTab 已用 form-row，无需转换；.form-checkbox 无样式定义但为模块现有 checkbox 标记惯例（AgentServiceCard 已用），保留以同构
+4. 版本：纯前端布局与样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；grep 全库 nc-field（系统目录）与 notification-config-section 零残留；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规、oxlint 295 文件 0 警告 0 错误

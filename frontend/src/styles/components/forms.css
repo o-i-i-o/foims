@@ -292,29 +292,24 @@
     gap: var(--space-xs);
   }
 
-  /* CIDR 双列分组：标题在上、输入行在下，整体在列内水平居中；
-   子项自顶向下紧凑排列，与另一列行数不一致时也不会被网格拉伸出空隙 */
-  .cidr-column {
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-xs);
+  /* CIDR 分组（网络区域弹窗）：套用模块统一的「同行表单变体」——标题在左定宽居中、
+   动态输入列表在右撑满；IPv4/IPv6 两个分组同处一个 form-row 即成左右两列，
+   与子网等弹窗的两列同行布局同构。多行列表顶对齐，标题上内边距取控件内边距
+   与首行输入框文字取齐；两列行数不一致时也不会被网格拉伸出空隙 */
+  .modal .form-row .form-group.cidr-group {
+    align-items: flex-start;
   }
 
-  /* 标题与输入行同宽、左缘对齐：选择器需覆盖上方「同行表单变体」的
-   .modal .form-row .form-group label（定宽居中）规则；
-   .group-label 为原 label 改成的 span 分组标题，同样适用 */
-  .modal .form-row .form-group.cidr-column > label,
-  .modal .form-row .form-group.cidr-column > .group-label {
-    width: 100%;
-    max-width: 320px;
+  .modal .form-row .form-group.cidr-group > .group-label {
+    width: auto;
+    min-width: 80px;
+    padding-top: var(--control-padding-y);
+    text-align: center;
+  }
+
+  .modal .form-row .form-group.cidr-group > .cidr-input-list {
+    flex: 1;
     min-width: 0;
-    padding-top: 0;
-    text-align: left;
-  }
-
-  .modal .form-row .form-group.cidr-column > .cidr-input-list {
-    width: 100%;
-    max-width: 320px;
   }
 
   .cidr-input-row {

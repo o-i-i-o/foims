@@ -219,28 +219,28 @@ async function testLogForwarding(): Promise<void> {
       </section>
       <section class="section">
         <h3>{{ t("logs.forwarding_title") }}</h3>
-        <div class="nc-fields">
-          <div class="nc-field">
+        <div class="form-row">
+          <div class="form-group">
             <label for="log-forwarding-enabled">{{ t("logs.forwarding_enabled") }}</label>
-            <select id="log-forwarding-enabled" v-model="forwardingEnabled" :disabled="readonly">
+            <select id="log-forwarding-enabled" v-model="forwardingEnabled" :disabled="readonly" :aria-label="t('logs.forwarding_enabled')">
               <option value="true">{{ t("common.yes") }}</option>
               <option value="false">{{ t("common.no") }}</option>
             </select>
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="log-forwarding-protocol">{{ t("logs.forwarding_protocol") }}</label>
-            <select id="log-forwarding-protocol" v-model="forwardingProtocol" :disabled="readonly">
+            <select id="log-forwarding-protocol" v-model="forwardingProtocol" :disabled="readonly" :aria-label="t('logs.forwarding_protocol')">
               <option value="udp">UDP</option>
               <option value="tcp">TCP</option>
             </select>
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="log-forwarding-host">{{ t("logs.forwarding_host") }}</label>
-            <input id="log-forwarding-host" v-model="forwardingHost" type="text" :placeholder="t('logs.forwarding_host_placeholder')" autocomplete="off" :disabled="readonly">
+            <input id="log-forwarding-host" v-model="forwardingHost" type="text" :placeholder="t('logs.forwarding_host_placeholder')" autocomplete="off" :disabled="readonly" :aria-label="t('logs.forwarding_host')">
           </div>
-          <div class="nc-field">
+          <div class="form-group">
             <label for="log-forwarding-port">{{ t("logs.forwarding_port") }}</label>
-            <input id="log-forwarding-port" v-model="forwardingPort" type="number" min="1" max="65535" placeholder="514" :disabled="readonly">
+            <input id="log-forwarding-port" v-model="forwardingPort" type="number" min="1" max="65535" placeholder="514" :disabled="readonly" :aria-label="t('logs.forwarding_port')">
           </div>
         </div>
         <div v-if="!readonly" class="action-buttons">

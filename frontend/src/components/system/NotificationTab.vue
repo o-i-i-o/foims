@@ -219,7 +219,7 @@ async function saveNotificationSettings(): Promise<void> {
 
 <template>
   <div class="tab-content" :class="{ active: props.active }">
-    <div class="notification-config-section">
+    <div class="system-config-section">
       <!-- SMTP 服务器设置 -->
       <section class="config-card">
         <header class="config-card-header">
