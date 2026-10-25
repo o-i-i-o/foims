@@ -47,7 +47,7 @@ allow_attributes = "warn"
 
 # Crypto (AES)
 aes-gcm = "0.11.1"
-arc-swap = "1.9.2"
+arc-swap = "1.9.3"
 
 # Async trait
 async-trait = "0.1.92"
@@ -79,7 +79,7 @@ ipnetwork = "0.21.1"
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
-openidconnect = { version = "4.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
 rand = "0.10.3"
 
 # Serialization
@@ -87,7 +87,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
 # Rust→TS 类型导出（前端 generated/ 由 cargo test export_bindings 生成）
-ts-rs = { version = "12", features = ["serde-compat", "no-serde-warnings", "chrono-impl", "uuid-impl", "serde-json-impl"] }
+ts-rs = { version = "12.0.1", features = ["serde-compat", "no-serde-warnings", "chrono-impl", "uuid-impl", "serde-json-impl"] }
 sha2 = "0.11.1"
 
 # SQLx
@@ -101,7 +101,7 @@ thiserror = "2.0.21"
 time = "0.3.55"
 
 # Async
-tokio = { version = "1.53.3", features = ["full"] }
+tokio = { version = "1.54.1", features = ["full"] }
 
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
@@ -123,17 +123,17 @@ h3 = "0.0.8"
 h3-quinn = "0.0.10"
 http = "1.5.0"
 quinn = { version = "0.11.12", default-features = false, features = ["log", "rustls-ring", "runtime-tokio"] }
-rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std"] }
+rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std"] }
 
 # UUID
-uuid = { version = "1.28.0", features = ["v4", "serde"] }
+uuid = { version = "1.29.0", features = ["v4", "serde"] }
 
 # Validation
 validator = { version = "0.21.0", features = ["derive"] }
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
 
 # x509 证书解析（foims-common 证书剩余寿命辅助：agent 续期链路共用）
-x509-parser = "0.18"
+x509-parser = "0.18.1"
 
 [features]
 default = []
@@ -178,7 +178,7 @@ uuid = { workspace = true }
 validator = { workspace = true }
 
 [dev-dependencies]
-regex = "1"
+regex = "1.13.1"
 
 [lints]
 workspace = true

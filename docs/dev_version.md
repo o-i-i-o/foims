@@ -453,3 +453,42 @@ v0.19.2
 3. 真实审计结果：npx biome check frontend 与 CI 等价命令 npx --yes @biomejs/biome@2.5.15 check frontend 均为 Checked 22 files、0 诊断、退出码 0（范围即 frontend/src/styles 全部 22 个 CSS：components/layouts/pages 子目录 + toasts/init/login/reset/variables）；v0.19.0 与 v0.19.1 中「biome 0 诊断不可信」的记录就此关闭，此前结论复核为真
 4. 文档：docs/code-style.md §3.5 审计命令统一为「npx --yes @biomejs/biome@2.5.15 check frontend」（与 CI 一致）并补本机直跑方式；新增两条约定——Biome 工具就位（根 package.json 不入库、本地与 CI 版本必须相同）与空跑防护（“0 诊断”需先用不合格式探针证明命令真在检查）
 5. 验证：本轮未改前端源码与样式，typecheck/build/selfcheck:viz 不受影响未重跑；biome 真实运行 0 诊断；按 CI 精确版本复核 oxlint：本地 npx oxlint 解析为 1.89.0、CI 固定 1.88.0，用 npx --yes oxlint@1.88.0 frontend/src 重跑仍为 295 文件 0 warning 0 error（版本漂移未影响结论，是否同步固定待定）；根 package.json 仅新增 devDependencies，不入库无版本联动（frontend/package.json 保持 0.1.3，Cargo.toml 不动）
+
+v0.19.3
+2026102512112201
+1. 审计工具链升到 latest 并固定：@biomejs/biome 2.5.15 → 2.6.3（根 devDependencies 精确固定 + biome.json $schema + ci.yml npx 版本 + docs 命令示例四处联动），oxlint 1.88.0 → 1.89.0（根 devDependencies 新增精确固定 + ci.yml + docs），本地与 CI 版本漂移消除
+2. biome 2.6.3 安装踩坑：npmmirror 未同步 @biomejs/cli-linux-x64@2.6.3（404），npm 只装到 musl 变体并报 Cannot find module '@biomejs/cli-linux-x64/biome'；改用官方源 npm i --no-save --no-package-lock --registry=https://registry.npmjs.org @biomejs/cli-linux-x64@2.6.3 补齐，恢复 biome 2.6.3 可执行
+3. 配置迁移：biome migrate --write 把 $schema 升到 2.6.3（迁移把 files.includes 压成单行，已按仓库风格手工恢复多行）；迁移后 check 22 文件 0 诊断，并用 .probe{color:red} 探针验证新版本确实在执行后删除
+4. 前端 TypeScript 5.9.3 → 6.0.3（^6.0.3）：实测 typescript 7.0.2 与 vue-tsc 3.3.13 硬不兼容（vue-tsc 用 typescript/lib/tsc 定位编译器，TS 7 不再导出该子路径，直接 ERR_PACKAGE_PATH_NOT_EXPORTED），6.0.3 下 typecheck 与 build 均通过，具体版本边界写入文档
+5. 其余前端依赖复查无需变更：npm outdated 仅 typescript 一行，@tanstack/vue-query 5.104.5、pinia 4.1.0、vue 3.5.44、vue-i18n 11.4.16、vue-router 5.4.0、@vitejs/plugin-vue 6.0.10、vite（lock 实装 8.3.5）、vue-tsc 3.3.13 均已是 latest；根 vue-tsc ^3.3.13 亦为 latest
+6. 有意未动项：ci.yml 的 GitHub Actions 版本（checkout v4→v7、setup-node v4→v7、upload-artifact v4→v7、download-artifact v4→v8、action-gh-release v1→v3）跨多个大版本且涉及发布产物路径行为（注释依赖 v4 公共祖先规则），本地无法实跑验证，待单独一轮带冒烟升级；node-version 24 与 zig 0.13.0 为注释明确锁定项，保持
+7. 文档：docs/code-style.md §3.5 命令版本更新，并新增三条约定——升级四处联动（根 devDependencies / $schema / ci.yml / 文档命令）、镜像缺包处置（官方源补装平台二进制）、TypeScript 版本边界（vue-tsc 与 TS 7 不兼容）
+8. 验证：npm run typecheck 0 错（TS 6.0.3）；npm run build 通过（client 372.34 kB，无 chunk>500kB）；npm run selfcheck:viz 全过；biome 22 文件 0 诊断（本地 2.6.3 与 CI 等价命令 exit 0）；oxlint 1.89.0 在 frontend/src 295 文件与仓库根全量 299 文件均 0 warning 0 error；仅工具链与依赖变更，frontend/package.json version 保持 0.1.3，根 Cargo.toml 不动，无数据库变更
+
+v0.19.4
+2026102512280601
+1. 版本策略定案：lint 工具继续精确固定版本，不用 @latest。理由——CI 的 lint 步骤是阻断门需可复现（上游发版不应让同一提交时红时绿），biome.json 的 $schema 只能写具体版本无法跟随 latest，latest 会把“定期升级”变成“随机构建中断”；真正痛点（版本散落多处、手工升级漏改）改用脚本解决。上一轮试改 latest 的两处改动已全部回退，无入库残留
+2. 新增 da-scripts/upgrade-lint-tools.sh（可执行）：一键同步四处引用点——ci.yml 的 npx 版本、根 devDependencies、biome.json 的 $schema、docs/code-style.md 命令示例；因采用正则全量替换，对“某处漏改”的半改状态也能收敛；随后官方源安装本机二进制（缺平台包时自动补装 @biomejs/cli-<平台>）、探针验证（不合格式 CSS 必须被检出）、跑 biome check 与 oxlint，并提示大版本改动时的 migrate 事项
+3. 新增 --check 模式：只校验四处一致性 + 本机二进制版本 + registry latest，不一致即 exit 1；实测人为把 ci.yml 改为 2.6.2、docs 改为 1.88.0 后被拦下（exit 1），upgrade 一键恢复为 2.6.3/1.89.0 且与漂移前备份逐字节一致（无副作用）；已最新时走幂等路径只校验不改写
+4. ci.yml 注释同步：明确写明“版本有意固定（不用 @latest：阻断门需可复现）”，升级统一走脚本
+5. da-scripts/release_check.sh 加固：fe_biome / fe_oxlint 改为优先调用 node_modules/.bin/ 下按 package.json 固定的二进制，缺失才回退 PATH 并告警，避免 PATH 上的同名旧包（biome@0.3.3 静默 exit 0）冒充检查
+6. 文档：docs/code-style.md §3.5 新增脚本命令（upgrade / --check）与“版本策略”条目（固定精确版本 + 脚本治理漏同步 + release_check 优先本机固定二进制）
+7. 验证：upgrade-lint-tools.sh --check exit 0（四处 2.6.3/1.89.0 一致）；upgrade 幂等路径 exit 0（探针验证通过、biome 22 文件 0 诊断、oxlint 299 文件 0/0）；release_check 两个前端函数实测通过（走 node_modules 二进制）；npm run build 通过（client 372.34 kB）；脚本均通过 bash -n / sh -n 语法检查；frontend/package.json version 保持 0.1.3，根 Cargo.toml 不动
+
+v0.19.5
+2026102512412401
+1. 论证修正（不改决策）：此前把“本地 npx 缓存可能命中旧版本”当作反对 @latest 的理由不成立——@latest 的解析结果是 registry 的 dist-tag，同一时间点在不同机器/CI 上结果一致（镜像同步滞后除外）；固定版本命中缓存时内容不变（按版本号与 tarball 校验），缓存滞后属缓存问题，正确修法是刷新缓存而不是同步版本号。保留精确版本的实质理由收窄为两条：阻断门需跨时间可复现、biome.json 的 $schema 只能写具体版本
+2. da-scripts/upgrade-lint-tools.sh：npm view 全部改为 npm view --prefer-online（packument 本地缓存会导致漏掉刚发布的版本，使“已是最新”判断失真），report_latest 与 upgrade 判定共三处
+3. docs/code-style.md §3.5 新增“缓存与版本策略分开治理”条目：明确同一时间点一致性由 dist-tag 保证，本地与 CI 版本差异用 npx --prefer-online / npm cache verify / npm view --prefer-online 解决，不得改用浮动版本号
+4. 验证：--check exit 0（四处 2.6.3/1.89.0 一致，registry latest 一致）；upgrade 幂等路径 exit 0（探针通过、biome 22 文件 0 诊断、oxlint 0/0）；bash -n 语法通过
+
+v0.19.6
+2026102513141201
+1. 前端依赖声明改为 latest（vue / vue-router / pinia / vue-i18n / @tanstack/vue-query / @vitejs/plugin-vue / vite / vue-tsc）：实际解析版本未变（全部本就是 latest），入库的 package-lock.json 锁定实际版本，CI 走 npm ci 不影响可复现性；typescript 例外保留 ^6.0.3（实测 TS 7.0.2 与 vue-tsc 3.3.13 硬不兼容）
+2. 主 workspace 升级到各 crate 最新稳定版：zip 8.6.0→9.1.0（major）、tokio 1.53.3→1.54.1、uuid 1.28.0→1.29.0、rustls 0.23→0.23.46、arc-swap 1.9.2→1.9.3、openidconnect 4.0→4.0.1、ts-rs 12→12.0.1、x509-parser 0.18→0.18.1（含 foims-x509-management 独立声明）、regex 1→1.13.1（dev）、rcgen 0.14→0.14.10（agent-service / common / x509-management 三处）
+3. zip 9 破坏性变更适配 2 处：write::FileOptions 新增两个生命周期参数（原 FileOptions::<'_, ()> 编译失败）改为 write::SimpleFileOptions；ZipFile::name() 改为返回 Result<Cow<str>, ZipError>，在导入端 map_err 转 DataError 并沿用既有 i18n 键（新增注释说明）
+4. foims-agent 独立 workspace 同步升级：tokio 1.53.2→1.54.1、serde_json 1.0.151→1.0.154、rustls 0.23→0.23.46、toml 1.1.6→1.1.8、uuid 1.27.0→1.29.0、x509-parser 0.18→0.18.1、rustix 1.1→1.1.5、rcgen 0.14→0.14.10（两处）、tempfile 3→3.27.0
+5. foims-portal（已被 .gitignore 排除、不入库，仅本机部署）同步升级：anyhow、axum-server 0.7→0.8（0.x 跨 minor）、rustls、serde_json、tokio、toml、uuid；cargo check 通过，axum-server 0.8 无需改代码
+6. 验证：cargo check 三棵依赖树全过；cargo fmt 已跑；cargo clippy --release --workspace --all-targets -D warnings 0 警告；cargo test --release --workspace 除 crypto::tests 14 项环境性失败（/etc/foims/encryption.key 属 foims:foims 0600、当前用户无读权限，与 release_check.sh 既有判定一致）外全过；ts-rs export_bindings 重跑后 frontend/src/types/api/generated 无漂移；npm ci --dry-run 通过（latest 声明与 lock 一致）；前端 typecheck/build/selfcheck:viz 全过
+7. 文档：docs/code-style.md §3.5 新增“依赖声明策略”条目（前端 latest + lock 兼底、后端写具体版本 + Cargo.lock、三棵依赖树各自维护，与 lint 工具固定版本策略明确区分）；临时审计脚本用后即删，未入库
+8. 版本：Cargo.toml 仅依赖版本变更，[package].version 与 frontend/package.json version 均不变（z 段普通修改）

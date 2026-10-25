@@ -268,11 +268,16 @@ cd frontend && npm run build
 
 # CSS 结构与格式 lint（根 biome.json；CSS 归 Biome，无 stylelint）
 # 规范命令（与 CI 完全一致，版本固定）：
-npx --yes @biomejs/biome@2.5.15 check frontend
+npx --yes @biomejs/biome@2.6.3 check frontend
 # 本机已装同版本 devDependency 时可直接：npx biome check frontend
 
 # JS 质量 lint（根 .oxlintrc.json；web-archive/ 与 frontend/dist/ 已忽略）
-npx oxlint@1.88.0
+npx oxlint@1.89.0
+
+# lint 工具链版本升级：一次改写全部引用点（ci.yml / package.json /
+# biome.json 的 $schema / 本文），再安装本机二进制 + 探针验证 + 全量检查
+bash da-scripts/upgrade-lint-tools.sh           # 升到 npm latest
+bash da-scripts/upgrade-lint-tools.sh --check   # 只校验四处一致性与本机版本
 
 # 可视化纯函数自检（geometry 与 viewmodel 两个可执行脚本）
 cd frontend && npm run selfcheck:viz
@@ -286,11 +291,43 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 
 - lint 职责划分：CSS 结构/格式归 **Biome**（`biome.json`，含
   `useLayeredStyles` 强制 @layer 层序），JS 质量归 **Oxlint**
-  （`.oxlintrc.json`）。版本号与 `ci.yml` frontend job、biome.json schema
-  三处联动，升级须同步。
+  （`.oxlintrc.json`）。
+- 版本策略：两个工具一律**固定精确版本**，不用 `@latest`——lint 是 CI 阻断门，
+  需可复现（上游发版不应让同一提交时红时绿），且 `biome.json` 的 `$schema`
+  只能写具体版本。“忘记同步”这个真痛点用
+  `da-scripts/upgrade-lint-tools.sh` 解决：它把版本改全四处（`ci.yml` 的 npx
+  版本、根 `devDependencies`、`biome.json` 的 `$schema`、本文命令示例）、
+  安装本机二进制、跑探针与全量检查；手改漏一处可被 `--check` 拦下。
 - Biome 工具就位：根 `package.json`/`package-lock.json` 被 `.gitignore` 的
   `/package*` 排除（不入库），因此本地 `@biomejs/biome` 属本机前置，CI 由
   `npx --yes @biomejs/biome@<version>` 自取；两者版本必须相同。
+  `da-scripts/release_check.sh` 优先调用 `node_modules/.bin/` 中的二进制，
+  PATH 上的同名旧包不再可能冒充检查。
+- 镜像缺包处置：npm 镜像（如 npmmirror）可能未同步 Biome 的平台二进制，
+  表现为安装后只剩 musl 变体、`biome` 报
+  `Cannot find module '@biomejs/cli-linux-x64/biome'`；补装走官方源：
+  `npm i --no-save --no-package-lock --registry=https://registry.npmjs.org`
+  `@biomejs/cli-linux-x64@<同期版本>`。
+- TypeScript 版本边界：`vue-tsc` 通过 `typescript/lib/tsc` 定位编译器，
+  TypeScript 7.x（原生化重写）不再导出该子路径，升级后 typecheck 直接报
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`；因此 typescript 钉在 6.x（`^6.0.3`，经
+  typecheck + build 验证），升 7 需等 vue-tsc 换用新入口。
+- 缓存与版本策略分开治理：`@latest` 的解析结果是 registry 的 dist-tag，
+  同一时间点在不同机器/CI 上拉取结果一致；本地与 CI 出现版本差异，原因是
+  本地 npm/npx 缓存或镜像同步滞后，**修法是刷新缓存**（`npx --prefer-online`、
+  `npm cache verify`、`npm view --prefer-online`），不是去改版本号。固定版本
+  命中缓存时内容不变（按版本号与 tarball 校验），保留固定版本的理由只有两条：
+  阻断门需跨时间可复现、`$schema` 只能写具体版本。
+- 依赖声明策略（与上面的“lint 工具固定版本”不同，两者不要混用）：
+  - 前端 `frontend/package.json` 的 npm 依赖用 `latest` 声明，实际版本由**入库的
+    `package-lock.json`** 锁定（CI 走 `npm ci`，严格按 lock 安装），所以声明浮动
+    不影响构建可复现性；升级即 `npm install <包>@latest` 后跑 typecheck + build。
+    唯一例外：`typescript` 保持 `^6.0.3`（见上条，TS 7 会让 vue-tsc 直接崩）。
+  - 后端 Rust 无 `latest` 语义（crates.io 只有具体版本号）：`Cargo.toml` 写具体
+    版本、入库的 `Cargo.lock` 锁实际版本；升级 = 改版本串后跑
+    `cargo check/clippy/test`，跨 major 需适配 API。
+  - 仓库有三棵独立依赖树：主 workspace、`foims-agent/Cargo.toml`（独立 workspace）、
+    `foims-portal/`（`.gitignore` 排除，本地部署，升级后需单独 `cargo check`）。
 - 空跑防护：审计命令的“0 诊断”须先证明命令确实在执行——历史上 `npx biome`
   曾解析到 npm 上同名旧包 biome@0.3.3（无 check 子命令，静默 exit 0）；修改
   biome 依赖/配置后可放一个不合格式的 CSS 探针（如 `.probe{color:red}`）确认

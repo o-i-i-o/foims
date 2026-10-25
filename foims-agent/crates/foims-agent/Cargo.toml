@@ -27,7 +27,7 @@ rustix = { workspace = true }
 
 [dev-dependencies]
 # machine-id / 续期落盘等测试的自签证书
-rcgen = "0.14"
+rcgen = "0.14.10"
 
 [lints]
 workspace = true

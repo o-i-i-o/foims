@@ -12,16 +12,16 @@
     "selfcheck:viz": "node --experimental-strip-types --import ./scripts/ts-resolve-hook.mjs scripts/visualization-geometry.selfcheck.ts && node --experimental-strip-types --import ./scripts/ts-resolve-hook.mjs scripts/visualization-viewmodel.selfcheck.ts"
   },
   "dependencies": {
-    "@tanstack/vue-query": "^5.104.5",
-    "pinia": "^4.1.0",
-    "vue": "^3.5.44",
-    "vue-i18n": "^11.4.16",
-    "vue-router": "^5.4.0"
+    "@tanstack/vue-query": "latest",
+    "pinia": "latest",
+    "vue": "latest",
+    "vue-i18n": "latest",
+    "vue-router": "latest"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.10",
-    "typescript": "^5.9.3",
-    "vite": "^8.3.4",
-    "vue-tsc": "^3.3.13"
+    "@vitejs/plugin-vue": "latest",
+    "typescript": "^6.0.3",
+    "vite": "latest",
+    "vue-tsc": "latest"
   }
 }

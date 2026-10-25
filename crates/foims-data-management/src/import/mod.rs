@@ -390,7 +390,16 @@ fn read_zip_entries(file_data: &[u8]) -> DataResult<Vec<(String, Vec<u8>)>> {
         let mut file = zip.by_index(i).map_err(|e| {
             DataError::Internal(msg("server.import_export.zip_entry_read_failed").with("error", e))
         })?;
-        let name = file.name().to_string();
+        // zip 9 起 name() 返回 Result：条目名可能非 UTF-8 或编码损坏，
+        // 按条目读取失败处理（沿用既有错误键，不新增 i18n 文案）
+        let name = file
+            .name()
+            .map_err(|e| {
+                DataError::Internal(
+                    msg("server.import_export.zip_entry_read_failed").with("error", e),
+                )
+            })?
+            .to_string();
         if name.contains("..") || name.contains('/') || name.contains('\\') {
             return Err(DataError::Validation(
                 msg("server.import_export.invalid_zip_entry").with("name", &name),

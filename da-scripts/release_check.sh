@@ -51,10 +51,26 @@ fe_build() {
 }
 
 # Biome：CSS 审计 + 格式检查（配置见根 biome.json，存档目录已排除）
-fe_biome() { biome check frontend; }
+# 优先用根 node_modules 中按 package.json 固定的版本（与 CI 的 npx 版本一致），
+# 避免 PATH 上的同名旧包（历史上 biome@0.3.3 无 check 子命令、静默 exit 0）冒充检查
+fe_biome() {
+    if [ -x node_modules/.bin/biome ]; then
+        node_modules/.bin/biome check frontend
+    else
+        echo "警告：未找到 node_modules/.bin/biome（版本不受控），回退 PATH 中的 biome" >&2
+        biome check frontend
+    fi
+}
 
 # Oxlint：JS 代码质量（配置见根 .oxlintrc.json，存档目录已排除）
-fe_oxlint() { oxlint; }
+fe_oxlint() {
+    if [ -x node_modules/.bin/oxlint ]; then
+        node_modules/.bin/oxlint
+    else
+        echo "警告：未找到 node_modules/.bin/oxlint（版本不受控），回退 PATH 中的 oxlint" >&2
+        oxlint
+    fi
+}
 
 # ---- 检查执行框架 ----
 

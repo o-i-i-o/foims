@@ -46,7 +46,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 # 纯逻辑单测的临时构造
-tempfile = "3"
+tempfile = "3.27.0"
 
 [lints]
 workspace = true

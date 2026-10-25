@@ -19,7 +19,7 @@ use serde_json::Value;
 use sqlx::{Connection, PgConnection};
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
-use zip::{ZipWriter, write::FileOptions};
+use zip::{ZipWriter, write::SimpleFileOptions};
 
 /// devices 表中密文存储的凭据列：导出时一律置空（redact），
 /// 不以明文或密文形式离开本实例——密文跨实例密钥不同无法解密，
@@ -31,7 +31,7 @@ const DEVICE_SECRET_COLUMNS: &[&str] =
 /// 将多个文件打包为 ZIP 字节流。
 pub(crate) fn zip_files(files: Vec<(String, Vec<u8>)>) -> DataResult<Vec<u8>> {
     let mut buf = Cursor::new(Vec::new());
-    let options = FileOptions::<'_, ()>::default()
+    let options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o644);
 

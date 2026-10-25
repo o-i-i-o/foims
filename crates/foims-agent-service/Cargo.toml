@@ -21,7 +21,7 @@ if-addrs = { workspace = true }
 pem = "4"
 quinn = { workspace = true }
 rand = { workspace = true }
-rcgen = { version = "0.14", features = ["x509-parser"] }
+rcgen = { version = "0.14.10", features = ["x509-parser"] }
 rpm = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
