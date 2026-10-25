@@ -2,8 +2,8 @@
 /**
  * 资源管理页（移植自旧版 main.html resources 分区 + resourceTabs.js，
  * 按页签分批迁移：已迁移 = 网络区域/子网/房间/机柜/设备/线路六个页签）：
- * 页签记忆（route.query.tab 优先 → localStorage → 默认网络区域，与
- * 旧版 setActiveSubtab 同键名 foims_subtab_resources）。
+ * 页签记忆由 useSubTabs 统一承载（route.query.tab 优先 → localStorage →
+ * 默认网络区域，记忆键 foims_subtab_resources 与旧版 setActiveSubtab 同名）。
  * 数据层为 TanStack Query：各表分页 20/页、列排序、page_size 可选
  * （10/20/50/100，切换重置页码）；子网页签 4 列表头搜索弹层防抖 300ms
  * 服务端过滤；行内操作（使用情况/子项列表/信息点/机位/编辑/删除）
@@ -11,10 +11,10 @@
  */
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiGet } from "../api/client";
 import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList";
+import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
 import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter";
 import { getDeviceTypeName } from "../config/deviceOptions";
 import { showToast } from "../composables/useToast";
@@ -61,9 +61,9 @@ type RoomBrief = Room & {
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 页签状态（记忆 + 深链，与 LogsPage 同模式） ====================
+// ==================== 页签状态（记忆 + 深链） ====================
 
-// 本批已迁移页签
+// 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
   { id: "network-regions", titleKey: "resources.network_regions" },
   { id: "networks", titleKey: "resources.network_segments" },
@@ -71,55 +71,12 @@ const TABS = [
   { id: "cabinets", titleKey: "resources.cabinets" },
   { id: "devices", titleKey: "resources.devices" },
   { id: "cable-links", titleKey: "resources.cable_links" }
-];
-const SUBTAB_KEY = "foims_subtab_resources";
+] as const satisfies readonly [SubTabMeta, ...SubTabMeta[]];
 
-const route = useRoute();
-const router = useRouter();
-
-function readInitialTab(): string {
-  // 深链 #/resources?tab=networks 优先，其次恢复上次记忆的页签，默认网络区域
-  const fromQuery = String(route.query.tab ?? "");
-  if (TABS.some((tab) => tab.id === fromQuery)) {
-    return fromQuery;
-  }
-  try {
-    const saved = localStorage.getItem(SUBTAB_KEY);
-    if (saved !== null && TABS.some((tab) => tab.id === saved)) {
-      return saved;
-    }
-  } catch {
-    // 存储被禁用时忽略
-  }
-  return "network-regions";
-}
-
-const activeTab = ref(readInitialTab());
-
-function switchTab(tabId: string): void {
-  if (tabId === activeTab.value) {
-    return;
-  }
-  activeTab.value = tabId;
-  try {
-    localStorage.setItem(SUBTAB_KEY, tabId);
-  } catch {
-    // 存储被禁用时仅会话内生效
-  }
-  // hash query 记录页签，便于书签直达（replace 不产生历史记录）
-  router.replace({ query: { ...route.query, tab: tabId } });
-}
-
-// 浏览器前进/后退时按 URL 同步页签
-watch(
-  () => route.query.tab,
-  (value) => {
-    const tabId = String(value ?? "");
-    if (TABS.some((tab) => tab.id === tabId) && tabId !== activeTab.value) {
-      activeTab.value = tabId;
-    }
-  }
-);
+const { activeTab, switchTab } = useSubTabs({
+  storageKey: "foims_subtab_resources",
+  tabs: TABS
+});
 
 // ==================== 分页列表封装（共享 composable，见 composables/usePagedList.js） ====================
 

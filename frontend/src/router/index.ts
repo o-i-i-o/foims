@@ -1,20 +1,12 @@
 /**
  * 主应用路由：hash 模式（与旧版 #dashboard 深链保持一致，无需 nginx 改动）。
  * 分区清单即导航数据源（侧边栏按 NAV_ITEMS 顺序渲染），八个分区均已登记
- * Vue 实现组件。
+ * Vue 实现组件；分区组件按路由懒加载，首屏只装载壳层与所在分区。
  */
 import { createRouter, createWebHashHistory } from "vue-router";
-import type { Component } from "vue";
+import type { RouteRecordRaw } from "vue-router";
 import { hasSession } from "../utils/session";
 import { getHiddenSections } from "../utils/roleCapabilities";
-import LogsPage from "../pages/LogsPage.vue";
-import DashboardPage from "../pages/DashboardPage.vue";
-import OrganizationPage from "../pages/OrganizationPage.vue";
-import ResourcesPage from "../pages/ResourcesPage.vue";
-import IpPage from "../pages/IpPage.vue";
-import VisualizationPage from "../pages/VisualizationPage.vue";
-import AgentsPage from "../pages/AgentsPage.vue";
-import SystemPage from "../pages/SystemPage.vue";
 
 /** 路由 meta 声明合并：覆盖本路由表实际用到的字段 */
 declare module "vue-router" {
@@ -40,15 +32,15 @@ export interface NavItem {
 }
 
 const SECTION_COMPONENTS = {
-  dashboard: DashboardPage,
-  organization: OrganizationPage,
-  resources: ResourcesPage,
-  ip: IpPage,
-  visualization: VisualizationPage,
-  agents: AgentsPage,
-  logs: LogsPage,
-  system: SystemPage
-} satisfies Record<string, Component>;
+  dashboard: () => import("../pages/DashboardPage.vue"),
+  organization: () => import("../pages/OrganizationPage.vue"),
+  resources: () => import("../pages/ResourcesPage.vue"),
+  ip: () => import("../pages/IpPage.vue"),
+  visualization: () => import("../pages/VisualizationPage.vue"),
+  agents: () => import("../pages/AgentsPage.vue"),
+  logs: () => import("../pages/LogsPage.vue"),
+  system: () => import("../pages/SystemPage.vue")
+} satisfies Record<string, RouteRecordRaw["component"]>;
 
 /** 分区 ID 联合类型：由分区组件映射表的键派生，保证清单与组件一一对应 */
 type SectionName = keyof typeof SECTION_COMPONENTS;

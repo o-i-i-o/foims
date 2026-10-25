@@ -2,7 +2,7 @@
 /**
  * 数据管理页签（移植自旧版 data-management 分区 + systemManager.js）：
  * Agent 上报服务 / SNMP Trap 接收 / 导入导出（CSV 校验含 magic bytes
- * 双重防线）/ 日志管理四张卡片。
+ * 双重防线）/ 配置文件备份恢复 / 日志管理五张卡片。
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -10,6 +10,7 @@ import { apiGet, apiPost } from "../../api/client";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import { downloadBlobResult } from "../../utils/download";
+import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
 import AgentServiceCard from "./AgentServiceCard.vue";
 import SnmpTrapCard from "./SnmpTrapCard.vue";
@@ -159,6 +160,90 @@ async function exportDatabase(): Promise<void> {
   downloadBlobResult(result, `foims_backup_${new Date().toISOString().slice(0, 10)}.sql`);
   showToast(t("import_export.export_db_success"), "success");
 }
+
+// ==================== 配置文件备份 / 恢复 ====================
+
+// 恢复暂存：（备份导出的 JSON 载荷 + 原文件名）二次确认后提交
+const configFileInput = ref<HTMLInputElement | null>(null);
+const backingUp = ref(false);
+const restoring = ref(false);
+const restoreCandidate = ref<{ name: string; config: unknown } | null>(null);
+
+async function backupConfigFile(): Promise<void> {
+  if (backingUp.value) {
+    return;
+  }
+  backingUp.value = true;
+  try {
+    // 端点以 application/json + attachment 下发，client 层已按附件归一为 Blob
+    const result = await apiGet("/api/system/config/backup");
+    if (!result.success) {
+      showToast(`${t("import_export.backup_failed")}: ${result.message}`, "error");
+      return;
+    }
+    downloadBlobResult(result, `foims_config_backup_${new Date().toISOString().slice(0, 10)}.json`);
+    showToast(t("import_export.backup_success"), "success");
+  } finally {
+    backingUp.value = false;
+  }
+}
+
+function triggerRestoreConfig(): void {
+  const input = configFileInput.value;
+  if (!input) {
+    return;
+  }
+  // 清空上次选择，保证重复选择同一文件也触发 change
+  input.value = "";
+  input.click();
+}
+
+async function handleRestoreFile(event: Event): Promise<void> {
+  // 模板 change 事件目标恒为文件输入框（边界断言）
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file || restoring.value) {
+    return;
+  }
+  // 服务端备份产物为 JSON（旧版 accept=".toml" 与后端产物不符）
+  if (!file.name.toLowerCase().endsWith(".json")) {
+    showToast(t("import_export.invalid_file_type"), "error");
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    showToast(t("import_export.config_invalid"), "error");
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    showToast(t("import_export.config_invalid"), "error");
+    return;
+  }
+  restoreCandidate.value = { name: file.name, config: parsed };
+}
+
+async function confirmRestoreConfig(): Promise<void> {
+  const candidate = restoreCandidate.value;
+  restoreCandidate.value = null;
+  if (!candidate || restoring.value) {
+    return;
+  }
+  restoring.value = true;
+  try {
+    // 后端以整体 Config 为载荷：字段校验与脱敏值还原均由服务端完成
+    const result = await apiPost("/api/system/config/restore", candidate.config);
+    if (!result.success) {
+      showToast(`${t("import_export.restore_failed")}: ${result.message}`, "error");
+      return;
+    }
+    showToast(t("import_export.restore_success"), "success");
+    showToast(t("system.config_saved_restart_needed"), "warning");
+  } finally {
+    restoring.value = false;
+  }
+}
 </script>
 
 <template>
@@ -211,9 +296,21 @@ async function exportDatabase(): Promise<void> {
               </button>
             </div>
           </section>
+          <section class="section">
+            <h3>{{ t("data-management.config_file") }}</h3>
+            <div v-if="!readonly" class="export-actions">
+              <button type="button" class="btn btn-primary btn-sm" :disabled="backingUp" @click="backupConfigFile">
+                {{ t("data-management.config_backup") }}
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="restoring" @click="triggerRestoreConfig">
+                {{ t("data-management.config_restore") }}
+              </button>
+            </div>
+          </section>
         </div>
-        <!-- 隐藏文件选择框：导入按钮触发点击 -->
+        <!-- 隐藏文件选择框：导入/恢复按钮触发点击 -->
         <input ref="importFileInput" type="file" accept=".zip,.csv" hidden @change="handleImportFile">
+        <input ref="configFileInput" type="file" accept=".json,application/json" hidden @change="handleRestoreFile">
       </section>
 
       <LogsManagementCard :active="props.active" />
@@ -231,5 +328,15 @@ async function exportDatabase(): Promise<void> {
         </div>
       </div>
     </ModalShell>
+
+    <!-- 恢复配置：覆盖磁盘配置属破坏性操作，二次确认后提交 -->
+    <ConfirmModal
+      v-if="restoreCandidate"
+      :title="t('data-management.config_restore')"
+      :message="t('data-management.config_restore_confirm', { name: restoreCandidate.name })"
+      danger
+      @confirm="confirmRestoreConfig"
+      @cancel="restoreCandidate = null"
+    />
   </div>
 </template>

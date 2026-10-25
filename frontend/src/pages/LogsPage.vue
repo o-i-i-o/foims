@@ -7,7 +7,6 @@
  */
 import { computed, reactive, ref, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPut } from "../api/client";
 import {
@@ -18,6 +17,7 @@ import {
   translateServerKey
 } from "../utils/formatter";
 import { showToast } from "../composables/useToast";
+import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
 import type { Paged } from "../types/api";
 import type { LoginLog } from "../types/api/generated/LoginLog";
 import type { Notification } from "../types/api/generated/Notification";
@@ -32,59 +32,17 @@ const queryClient = useQueryClient();
 
 // ==================== 页签状态（记忆 + 深链） ====================
 
+// 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
   { id: "operation", titleKey: "logs.operation_logs" },
   { id: "login", titleKey: "logs.login_logs" },
   { id: "notifications", titleKey: "logs.notifications" }
-];
-const SUBTAB_KEY = "foims_subtab_logs";
+] as const satisfies readonly [SubTabMeta, ...SubTabMeta[]];
 
-const route = useRoute();
-const router = useRouter();
-
-function readInitialTab(): string {
-  // 深链 #/logs?tab=login 优先，其次恢复上次记忆的页签，默认操作日志
-  const fromQuery = String(route.query.tab ?? "");
-  if (TABS.some((tab) => tab.id === fromQuery)) {
-    return fromQuery;
-  }
-  try {
-    const saved = localStorage.getItem(SUBTAB_KEY);
-    if (saved !== null && TABS.some((tab) => tab.id === saved)) {
-      return saved;
-    }
-  } catch {
-    // 存储被禁用时忽略
-  }
-  return "operation";
-}
-
-const activeTab = ref(readInitialTab());
-
-function switchTab(tabId: string) {
-  if (tabId === activeTab.value) {
-    return;
-  }
-  activeTab.value = tabId;
-  try {
-    localStorage.setItem(SUBTAB_KEY, tabId);
-  } catch {
-    // 存储被禁用时仅会话内生效
-  }
-  // hash query 记录页签，便于书签直达（replace 不产生历史记录）
-  router.replace({ query: { ...route.query, tab: tabId } });
-}
-
-// 浏览器前进/后退时按 URL 同步页签
-watch(
-  () => route.query.tab,
-  (value) => {
-    const tabId = String(value ?? "");
-    if (TABS.some((tab) => tab.id === tabId) && tabId !== activeTab.value) {
-      activeTab.value = tabId;
-    }
-  }
-);
+const { activeTab, switchTab } = useSubTabs({
+  storageKey: "foims_subtab_logs",
+  tabs: TABS
+});
 
 // ==================== 分页列表（排序 + 越界回退） ====================
 

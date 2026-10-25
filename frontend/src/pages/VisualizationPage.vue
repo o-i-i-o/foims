@@ -49,6 +49,7 @@ import {
   workstationsByRoomPath,
 } from "../api/visualization";
 import { showToast } from "../composables/useToast";
+import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
 import { fetchAllPages, notifyLoadFailure } from "../utils/pagedFetch";
 import {
   CABINET_BATCH_SIZE,
@@ -116,48 +117,26 @@ const { t } = useI18n();
 
 // ==================== 页签 ====================
 
-/** 页签 id 沿用旧版（localStorage 中已记住的偏好继续有效） */
+/** 页签 id 沿用旧版（localStorage 中已记住的偏好继续有效）；画布页签不参与 hash 深链 */
 const TABS = [
-  { id: "workstation-visualization", labelKey: "visualization.workstation" },
-  { id: "cabinet-visualization", labelKey: "visualization.cabinet" },
-  { id: "global-visualization", labelKey: "visualization.device" },
-] as const;
+  { id: "workstation-visualization", titleKey: "visualization.workstation" },
+  { id: "cabinet-visualization", titleKey: "visualization.cabinet" },
+  { id: "global-visualization", titleKey: "visualization.device" },
+] as const satisfies readonly [SubTabMeta, ...SubTabMeta[]];
 
-type TabId = (typeof TABS)[number]["id"];
-
-const SUBTAB_KEY = "foims_subtab_visualization";
-
-function readInitialTab(): TabId {
-  try {
-    const saved = localStorage.getItem(SUBTAB_KEY);
-    const hit = TABS.find((tab) => tab.id === saved);
-    if (hit) {
-      return hit.id;
+const { activeTab, switchTab } = useSubTabs({
+  storageKey: "foims_subtab_visualization",
+  tabs: TABS,
+  syncQuery: false,
+  // 切到拓扑时才拉取拓扑数据；离开拓扑页签时关闭已打开的连线详情弹窗
+  onSwitch: (tabId) => {
+    if (tabId === "global-visualization") {
+      void ensureTopologyLoaded();
+    } else if (connectionDetail.value) {
+      connectionDetail.value = null;
     }
-  } catch {
-    // 存储被禁用时按默认页签展示
   }
-  return TABS[0].id;
-}
-
-const activeTab = ref<TabId>(readInitialTab());
-
-function switchTab(tabId: TabId): void {
-  if (activeTab.value === tabId) {
-    return;
-  }
-  activeTab.value = tabId;
-  try {
-    localStorage.setItem(SUBTAB_KEY, tabId);
-  } catch {
-    // 存储被禁用时仅会话内生效
-  }
-  if (tabId === "global-visualization") {
-    void ensureTopologyLoaded();
-  } else if (connectionDetail.value) {
-    connectionDetail.value = null;
-  }
-}
+});
 
 // ==================== 组织与房间下拉 ====================
 
@@ -1322,7 +1301,7 @@ onBeforeUnmount(() => {
         :aria-controls="tab.id"
         @click="switchTab(tab.id)"
       >
-        {{ t(tab.labelKey) }}
+        {{ t(tab.titleKey) }}
       </button>
     </div>
 

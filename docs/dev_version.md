@@ -411,3 +411,15 @@ v0.17.3
 4. 文档同步：docs/code-style.md §3.1 目录树标注图标裁剪约定，并修正 api/client.js → api/client.ts
 5. 联动：仅前端修改，frontend/package.json 0.1.0→0.1.1（z+1）并同步 package-lock.json 根版本，根 Cargo.toml 不动；无数据库结构变更
 6. 验证：cd frontend && npm run typecheck 0 错；npm run build 通过（INEFFECTIVE_DYNAMIC_IMPORT 告警消失，仅余 chunk>500kB）；npm run selfcheck:viz 全过
+
+v0.18.0
+2026102510554901
+1. 路由懒加载拆包（功能优化 y+1）：router 的 8 个分区组件由静态 import 改为 () => import()，SECTION_COMPONENTS 用 RouteRecordRaw["component"] 约束（键仍由 SectionName 派生）；入口 main 546.60 kB→78.30 kB（gzip 137.18→26.62），VisualizationPage/ResourcesPage/SystemPage/LogsPage/AgentsPage/IpPage/DashboardPage/OrganizationPage 各自独立 chunk，chunk>500kB 构建告警消除
+2. 子页签逻辑收口到 composables/useSubTabs.ts（消除 SystemPage/ResourcesPage/LogsPage/VisualizationPage 四份重复的 readInitialTab/switchTab/watch）：入参 storageKey + tabs 元组（首项即默认，非空由类型保证）+ syncQuery（默认 true，可视化画布页签传 false）+ onSwitch（拓扑页签拉数据/离开时关连线详情）；页签 id 经 as const satisfies SubTabMeta 收窄为字面量联合，activeTab 用 shallowRef + Ref<Id> 断言避免 ref 深层解包宽化泛型；TABS 字段 labelKey 统一为 titleKey
+3. api/client.ts 补 apiPatch（此前 AgentsPage 状态切换裸调 request 传 method）——AgentsPage 改 apiPatch(`/api/agents/${id}`, { status: next })，AgentServiceCard 配置包下载裸 request 改 apiGet，request 随之降为模块内部函数（不再对外暴露），全站请求出口收敛为 apiGet/apiPost/apiPut/apiPatch/apiDelete
+4. 配置备份/恢复入口回归（旧版 systemManager.js 有、Vue 版无任何入口，后端 /api/system/config/backup|restore 因此长期未接线）：数据管理页「导入导出」卡新增「配置文件」区块——备份→GET backup 下载服务端文件名；恢复→选 .json →JSON.parse 并校非数组对象→ConfirmModal 二次确认→POST restore（整体 Config 载荷，字段校验与脱敏值还原由服务端完成）→成功提示重启生效
+5. client 下载判定纠偏：改为「Content-Disposition: attachment 或下载类 Content-Type 优先于 JSON 解析」，修复 backup 端点以 application/json+attachment 下发时被当普通 JSON 消费、丢掉文件名与 Blob 的问题（其他下载端点行为不变）；恢复文件类型按实际产物 JSON 校验（旧版 accept=.toml 与后端 JSON 产物不符）
+6. i18n：data-management 新增 config_file/config_backup/config_restore/config_restore_confirm，import_export 新增 backup_success/config_invalid（zh/en 同步）
+7. 文档：docs/code-style.md §3.1/§3.2/§3.3/§3.7/§4 同步（useSubTabs 统一子页签、apiPatch、下载判定顺序、禁止绕过封装直调 request/fetch、client.ts 与 download.ts 后缀）
+8. 联动：仅前端修改，frontend/package.json 0.1.1→0.1.2（y+1 对应 c+1）并同步 package-lock.json；根 Cargo.toml 不动；无数据库结构变更
+9. 验证：npm run typecheck 0 错；npm run build 无告警（已无 chunk>500kB）；npm run selfcheck:viz 全过；biome check frontend 22 文件 0 诊断；oxlint frontend/src 288 文件 0 warning 0 error

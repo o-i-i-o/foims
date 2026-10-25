@@ -210,19 +210,25 @@ async function makeRequest<T>(
     }
 
     const contentType = response.headers.get("Content-Type") || "";
+    const disposition = response.headers.get("Content-Disposition") || "";
 
-    if (contentType.includes("application/json")) {
-      return translateServerMessage((await response.json()) as ApiResult<T>);
-    }
-
-    if (DOWNLOAD_CONTENT_TYPES.some((type) => contentType.includes(type))) {
+    // 附件响应优先按下载归一：配置备份等端点以 application/json +
+    // attachment 下发，若先走 JSON 解析会丢掉文件名并让调用方拿到普通载荷
+    if (
+      disposition.includes("attachment") ||
+      DOWNLOAD_CONTENT_TYPES.some((type) => contentType.includes(type))
+    ) {
       // 下载载荷为 Blob：以 isBlob 标记区分于常规 JSON 载荷（边界归一，调用方按 isBlob 分支）
       return {
         success: true,
         data: await response.blob(),
         isBlob: true,
-        filename: extractFilename(response.headers.get("Content-Disposition"))
+        filename: extractFilename(disposition)
       } as unknown as ApiResult<T>;
+    }
+
+    if (contentType.includes("application/json")) {
+      return translateServerMessage((await response.json()) as ApiResult<T>);
     }
 
     // 非 JSON 非 download：先取出原文再按 JSON 解析（body 只读一次），失败按错误处理并保留原文
@@ -263,11 +269,12 @@ async function makeRequest<T>(
 }
 
 /**
- * 请求入口：组装默认头后交 makeRequest。会话续期交给 401 恢复路径：
+ * 请求入口（内部）：组装默认头后交 makeRequest。会话续期交给 401 恢复路径：
  * 主动刷新阈值依赖全局计时状态，TanStack Query 场景下由服务端 401
- * 驱动重试更可靠。
+ * 驱动重试更可靠。对外只暴露 apiGet/apiPost/apiPut/apiPatch/apiDelete，
+ * 避免调用方自行拼 method/body 绕过封装。
  */
-export async function request<T = unknown>(
+async function request<T = unknown>(
   url: string,
   options: RequestOptions = {},
   retryCount = 0
@@ -306,6 +313,14 @@ export function apiPut<T = unknown, B = unknown>(
   options: RequestOptions = {}
 ): Promise<ApiResult<T>> {
   return request<T>(url, { method: "PUT", body: JSON.stringify(data), ...options });
+}
+
+export function apiPatch<T = unknown, B = unknown>(
+  url: string,
+  data?: B,
+  options: RequestOptions = {}
+): Promise<ApiResult<T>> {
+  return request<T>(url, { method: "PATCH", body: JSON.stringify(data), ...options });
 }
 
 export function apiDelete<T = unknown, B = unknown>(

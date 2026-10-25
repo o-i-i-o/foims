@@ -1186,7 +1186,11 @@
     "module_cabinet": "机柜（含机位/配线架）",
     "module_device": "设备（含端口/网卡/接口/IP）",
     "module_cable_link": "线路",
-    "module_visualization": "可视化布局与拓扑"
+    "module_visualization": "可视化布局与拓扑",
+    "config_file": "配置文件",
+    "config_backup": "备份配置文件",
+    "config_restore": "恢复配置文件",
+    "config_restore_confirm": "恢复将覆盖当前配置文件并需要重启服务生效，确定使用「{{name}}」恢复吗？"
   },
   "two_factor": {
     "title": "双因素认证设置",
@@ -1511,6 +1515,8 @@
   },
   "import_export": {
     "backup_failed": "备份配置失败",
+    "backup_success": "配置已备份，正在下载",
+    "config_invalid": "配置文件格式不正确（请选择备份导出的 JSON 文件）",
     "download_template_failed": "下载导入模板失败",
     "export_db_failed": "导出数据库失败",
     "export_db_success": "数据库导出成功，正在下载",

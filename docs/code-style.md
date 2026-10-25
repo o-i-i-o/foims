@@ -167,7 +167,7 @@ frontend/
     ├── entries/           入口装配（login/init/main：createApp + 样式 + 插件）
     ├── pages/             页面级组件（MainShell + 各分区 Page）
     ├── components/        通用组件 + 按域分组组件（<域>/<名称>Modal.vue 等）
-    ├── composables/       组合式函数（useToast/usePagedList/useModalStack…）
+    ├── composables/       组合式函数（useToast/usePagedList/useSubTabs/useModalStack…）
     ├── api/client.ts      API 客户端（契约见 3.3，全站唯一请求出口）
     ├── i18n/              vue-i18n 实例 + 双语词条 locales/{zh,en}.json
     ├── stores/            pinia store（auth）
@@ -196,6 +196,10 @@ frontend/
   客户端会话态用 pinia（`stores/auth.js`）。禁止手工维护平行的缓存副本。
 - 分页列表统一 `usePagedList`（排序/页大小/越界回退/跨页序号）+
   `Pagination.vue`，不要各页面自写一套。
+- 分区子页签统一 `useSubTabs`（route.query.tab 深链优先 → localStorage 记忆 →
+  清单首项默认，切换回写并用 replace 更新 query）；画布类页面传
+  `syncQuery: false`，切换副作用走 `onSwitch`。不要再在各页面手写
+  `readInitialTab/switchTab/watch` 三件套。
 - 用户通知一律 `showToast`（`composables/useToast.js`）；确认框用
   `ConfirmModal.vue`；`alert/confirm` 禁用。
 - 弹窗统一 `ModalShell.vue` 外壳（遮罩/标题栏/插槽/Esc 关闭）；嵌套子弹窗
@@ -209,7 +213,8 @@ frontend/
 
 ### 3.3 API 客户端契约
 
-- 全站请求统一走 `api/client.js`（`apiGet/apiPost/…`），**永不 reject**：
+- 全站请求统一走 `api/client.ts`（`apiGet/apiPost/apiPut/apiPatch/apiDelete`），
+  **永不 reject**：
   失败归一为 `{ success: false, message, … }`，调用方按 `success` 分支，
   **不写 try/catch 死代码**。唯一例外：探活类 raw fetch（连接失败属预期
   的静默重试，如初始化向导等待后端重启），必须注释说明。
@@ -219,7 +224,9 @@ frontend/
   （公共端点除外，`isPublicAuthEndpoint` 白名单），429 按 `Retry-After`
   退避。
 - 文件下载归一为 `{ success, data: Blob, isBlob: true, filename }`，落盘用
-  `utils/download.js`。
+  `utils/download.ts`。判定顺序：`Content-Disposition: attachment` 或下载类
+  Content-Type 优先于 JSON 解析（配置备份等端点以 `application/json` +
+  `attachment` 下发）。
 
 ### 3.4 i18n
 
@@ -308,8 +315,9 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
   信封，`data: T | null`）与 `Paged<T>`（`paged_response` 五键）手写维护，
   与 Rust 信封结构有意不同，不从后端导出。
 - **API 调用泛型化**：`apiGet<T>` / `apiPost<T, B>` / `apiPut<T, B>` /
-  `apiDelete<T, B>` 必须显式给出载荷类型，优先消费 generated 类型；T 缺省
-  为 `unknown`，禁止用 `as` 绕过泛型标注。
+  `apiPatch<T, B>` / `apiDelete<T, B>` 必须显式给出载荷类型，优先消费
+  generated 类型；T 缺省为 `unknown`，禁止用 `as` 绕过泛型标注。
+  禁止绕过封装直接调 `request()` 或裸 `fetch`（探活例外见 3.3）。
 - **SFC 类型化**：`<script setup lang="ts">`；props 用 `defineProps<{...}>()`
   （默认值 `withDefaults`），emits 用元组签名 `defineEmits<{ save: [v: X] }>()`；
   ref/reactive 依赖推导，复杂表单状态建 interface。
@@ -330,6 +338,7 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 | 建表/视图/触发器 | foims-init `schema/tables/`，重复结构数据驱动（见 views.rs） |
 | 结构校验清单 | `foims-init/src/check.rs` 与 schema 同步增补 |
 | 前端分页列表 | `usePagedList` + `Pagination.vue`（排序/页大小/越界回退） |
+| 前端分区子页签 | `useSubTabs`（深链 + 记忆 + 切换副作用） |
 | 前端通知 | `showToast`（`composables/useToast.ts`）；确认框 `ConfirmModal.vue` |
 | 前端弹窗 | `ModalShell.vue` + `useModalStack`（Esc 只关最上层） |
 | 前端 IP 校验 | `import { isValidIP, isIpInCidr } from "../utils/network"`（frontend/src/utils/） |

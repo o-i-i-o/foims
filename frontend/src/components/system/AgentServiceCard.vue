@@ -8,7 +8,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut, request } from "../../api/client";
+import { apiGet, apiPost, apiPut } from "../../api/client";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
@@ -169,7 +169,7 @@ function onOsChange(): void {
 const tokenQuery = useQuery({
   queryKey: ["enrollment-token"],
   queryFn: async () => {
-    const result = await request<EnrollmentTokenResponse>("/api/agents/enrollment-token");
+    const result = await apiGet<EnrollmentTokenResponse>("/api/agents/enrollment-token");
     if (!result.success) {
       throw new Error(result.message || t("system.agent_token_load_failed"));
     }
@@ -202,7 +202,7 @@ async function downloadConfigPackage(): Promise<void> {
   distDownloading.value = true;
   try {
     const format = distFormat.value;
-    const result = await request(`/api/agents/config-package?format=${encodeURIComponent(format)}`);
+    const result = await apiGet(`/api/agents/config-package?format=${encodeURIComponent(format)}`);
     if (!result.success) {
       showToast(`${t("system.agent_config_download_failed")}: ${result.message || ""}`, "error");
       return;

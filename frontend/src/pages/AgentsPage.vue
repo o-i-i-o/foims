@@ -11,7 +11,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, request } from "../api/client";
+import { apiDelete, apiGet, apiPatch } from "../api/client";
 import { formatTime } from "../utils/formatter";
 import { showToast } from "../composables/useToast";
 import type { Paged } from "../types/api";
@@ -140,7 +140,7 @@ const deleteTarget = ref<AgentListItem | null>(null);
 
 const statusMutation = useMutation({
   mutationFn: ({ id, next }: { id: number | string; next: string }) =>
-    request(`/api/agents/${id}`, { method: "PATCH", body: JSON.stringify({ status: next }) }),
+    apiPatch(`/api/agents/${id}`, { status: next }),
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("agents.status_updated"), "success");

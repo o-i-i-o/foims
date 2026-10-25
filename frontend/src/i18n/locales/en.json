@@ -1186,7 +1186,11 @@
     "module_cabinet": "Cabinets (incl. positions & patch panels)",
     "module_device": "Devices (incl. ports, NICs, interfaces & IPs)",
     "module_cable_link": "Cable Links",
-    "module_visualization": "Visualization Layouts & Topology"
+    "module_visualization": "Visualization Layouts & Topology",
+    "config_file": "Config File",
+    "config_backup": "Back Up Config",
+    "config_restore": "Restore Config",
+    "config_restore_confirm": "Restoring overwrites the current config file and requires a service restart. Restore with \"{{name}}\"?"
   },
   "two_factor": {
     "title": "Two-Factor Authentication Setup",
@@ -1511,6 +1515,8 @@
   },
   "import_export": {
     "backup_failed": "Failed to back up configuration",
+    "backup_success": "Configuration backed up, downloading",
+    "config_invalid": "Invalid config file format (please choose the JSON file exported by backup)",
     "download_template_failed": "Failed to download import template",
     "export_db_failed": "Failed to export database",
     "export_db_success": "Database exported, downloading",
