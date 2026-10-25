@@ -1,6 +1,6 @@
 /**
- * 展示格式化工具（移植自旧版 web/static/js/utils/formatter.js 中日志页使用项，
- * 其余格式化函数随对应页面迁移时补充）。
+ * 展示格式化工具（日志页使用项为主，
+ * 其余格式化函数随需要补充）。
  */
 import { i18n } from "../i18n/index";
 
@@ -147,7 +147,7 @@ export function formatPowerValue(watts: number | null | undefined, unit: string)
   return `${watts} W`;
 }
 
-/** 操作类型图标：按 action 关键词匹配 emoji（与旧版逐字一致） */
+/** 操作类型图标：按 action 关键词匹配 emoji */
 export function getActionIcon(action: string | null | undefined): string {
   if (!action) {
     return "📋";

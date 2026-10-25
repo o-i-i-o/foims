@@ -1,8 +1,6 @@
 <script setup lang="ts">
 /**
- * 设备新增/编辑弹窗（移植自旧版 modals/device/device-modal.html +
- * device.js openDeviceModal/submitDeviceForm/fillDeviceFormForEdit +
- * deviceSnmp.js 测试/取信息）：
+ * 设备新增/编辑弹窗：
  * - 基础字段：名称/类型/模板/序列号/主机名（只读，SNMP 拉取）/品牌/型号/
  *   经销商/位置/功耗（W|kW）/描述；
  * - 位置级联：组织/房型 → 房间 → 工位与机柜（互斥）→ 机位（依赖机柜）；
@@ -229,7 +227,7 @@ function extractItems<T>(result: ApiResult<T[] | Paged<T>>): T[] {
   return Array.isArray(data?.items) ? data.items : [];
 }
 
-/** 按组织/房型过滤加载房间选项；原选中值失效时重置（旧版 fillSelect 语义） */
+/** 按组织/房型过滤加载房间选项；原选中值失效时重置 */
 async function reloadRooms(): Promise<void> {
   const seq = ++roomsSeq;
   const params = new URLSearchParams({ page_size: "1000" });

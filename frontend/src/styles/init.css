@@ -10,7 +10,7 @@
 
 @layer pages {
   /* ============================================================
-   FOIMS 系统初始化页样式（逐字迁自旧版 web/static/css/pages/foims_init.css）
+   FOIMS 系统初始化页样式（独立入口，不加载全局 reset）
    - 依赖 variables.css 的 CSS 变量（颜色/圆角/阴影）
    - 作用域：通用类一律挂 .init- 前缀（.init-btn/.init-form-group 等），
             专属结构走 .init-body / .init-* / .step-* / .status-* 类名，

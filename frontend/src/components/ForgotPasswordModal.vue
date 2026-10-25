@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
- * 忘记密码模态框（移植自 web/static/modals/auth/forgot-password-modal.html
- * + login.js handleForgotPassword）。模板片段改为 SFC 内联，不再走
- * modalLoader 动态加载。
+ * 忘记密码模态框。模板内联于 SFC，
+ * 不经全局弹窗外壳动态加载。
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";

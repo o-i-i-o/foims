@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 房间网段配置行（移植自旧版 room.js NetworkConfigManager 行模板）：
+ * 房间网段配置行：
  * 区域下拉联动网段下拉（options 端点按 region_id 过滤，TanStack 缓存），
  * 行间 excludeIds 去重防重复选同一网段；两个 select 均 required，
  * 未选择时由 dynamic-lists.css 的 :invalid 规则显示必填星号。

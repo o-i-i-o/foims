@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
- * 主机详情弹窗（移植自旧版 modals/agents/agent-detail-modal.html
- * + agents.js fillAgentDetail/loadAgentHistory/renderAllCharts）：
- * 分组卡片（系统/CPU/内存/磁盘/网络/温度风扇）+ 近 24h SVG 迷你趋势五卡。
- * 详情与历史各走一条 useQuery；曲线为声明式渲染，无需旧版的
- * 延迟测量时序（SVG 按 viewBox 等比缩放，容器宽度不影响绘制）。
+ * 主机详情弹窗：分组卡片（系统/CPU/内存/磁盘/网络/温度风扇）+ 近 24h SVG 迷你趋势五卡。
+ * 详情与历史各走一条 useQuery；曲线为声明式渲染，无延迟测量时序依赖
+ * （SVG 按 viewBox 等比缩放，容器宽度不影响绘制）。
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
@@ -28,7 +26,7 @@ interface AgentDetail {
   raw_metrics: RawMetrics | null;
 }
 
-/** raw_metrics 上报 JSON 的消费字段（全部可选：旧版 agent 上报可能缺键） */
+/** raw_metrics 上报 JSON 的消费字段（全部可选：agent 上报可能缺键） */
 interface RawMetrics {
   machine_id?: string | null;
   collected_at?: string | null;

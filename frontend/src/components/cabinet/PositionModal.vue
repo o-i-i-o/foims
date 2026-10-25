@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 机位新增/编辑弹窗（移植自旧版 modals/cabinet/cabinet-position-modal.html
- * + modules/position.js openCabinetPositionModal/submitCabinetPositionForm）：
+ * 机位新增/编辑弹窗：
  * - 房间/机柜级联：房间选项从机柜数据源去重派生，机柜按房间过滤；
  * - 名称/机柜必填，U 位为有效正整数且起始不大于结束；
  * - 编辑模式通过 cabinet_id 反查所属房间后回显级联。
@@ -91,7 +90,7 @@ const cabinetOptions = computed<CabinetWithNetworks[]>(() => {
   return Array.isArray(data) ? data : [];
 });
 
-// 房间切换 → 机柜选项刷新，旧选中作废（与旧版 innerHTML 重建一致）
+// 房间切换 → 机柜选项刷新，旧选中作废
 function onRoomChange() {
   form.cabinetId = "";
 }

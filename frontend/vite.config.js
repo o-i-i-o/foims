@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
 // FOIMS 前端构建配置：MPA 三入口（登录 / 初始化向导 / 主应用）
-// 产物入口文件名沿用旧版布局（index / init_index / main），nginx 路由零改动
+// 产物入口文件名保持三入口布局（index / init_index / main），nginx 路由零改动
 export default defineConfig({
   plugins: [vue()],
 

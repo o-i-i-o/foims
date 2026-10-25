@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 开源组件清单弹窗（移植自旧版 open-source-modal + systemManager 的
- * OPEN_SOURCE_COMPONENTS 常量）：与 NOTICE 同步维护，数据以 cargo-cyclonedx
+ * 开源组件清单弹窗：与 NOTICE 同步维护，数据以 cargo-cyclonedx
  * 生成的 SBOM 为准（见 docs/sbom/）。
  */
 import { useI18n } from "vue-i18n";

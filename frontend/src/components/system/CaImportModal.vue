@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * CA 导入弹窗（移植自旧版 ca-import-modal.html）：证书与私钥两个必选
+ * CA 导入弹窗：证书与私钥两个必选
  * 文件（PEM），FormData multipart 提交。
  */
 import { ref } from "vue";

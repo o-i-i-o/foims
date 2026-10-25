@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
- * 层级模板管理弹窗（移植自旧版 openTemplateManagement + org-template-modal
- * + openTemplateEditor + org-template-editor-modal）：模板列表（名称/层级
+ * 层级模板管理弹窗：模板列表（名称/层级
  * 路径/描述）与树形编辑器（层级类型树 + 图标选择 + 快捷填充）。层级以响应
- * 式树数据维护（替代旧版 DOM 收集），提交前校验类型名全局唯一（同名会静默
+ * 式树数据维护，提交前校验类型名全局唯一（同名会静默
  * 覆盖子级）。模板变更影响节点类型解析，保存/删除后同步失效组织树缓存。
  */
 import { computed, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from "vue";
@@ -104,7 +103,7 @@ function collectLevels(
   return map;
 }
 
-/** 收集图标映射（含默认图标，与旧版 collectIcons 一致） */
+/** 收集图标映射（含默认图标） */
 function collectIcons(
   nodes: TplTypeNode[],
   icons: Record<string, string> = {}

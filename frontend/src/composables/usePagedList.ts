@@ -1,7 +1,7 @@
 /**
  * 分页列表与表头排序公共工具（自 ResourcesPage 抽出，供多分区页面复用）：
  * usePagedList 工厂（排序 + 越界回退 + 可变页大小）、跨页连续序号、
- * 表头三态类与点击排序守卫（对应旧版 initSortEvents 的 closest 语义）。
+ * 表头三态类与点击排序守卫（点击落在输入控件内时不触发排序）。
  */
 import { computed, reactive, ref, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -52,7 +52,7 @@ export interface PagedList<T> extends SortableTable {
 }
 
 /**
- * 分页列表封装：默认 created_at 倒序（旧版按名称排序的列表经 defaultSort
+ * 分页列表封装：默认 created_at 倒序（需按名称等字段排序的列表经 defaultSort
  * 指定），排序/页大小切换重置页码；空页且页码越界（末页数据删除后）自动
  * 回退最后一页。
  */
@@ -146,7 +146,7 @@ export function sortClass(list: SortableTable, key: string): Record<string, bool
 
 /**
  * 表头点击排序：表头内嵌过滤输入框、搜索弹层等控件时不触发排序
- * （旧版 initSortEvents 的 closest 守卫语义）
+ * （closest 守卫）
  */
 export function onThSort(event: MouseEvent, list: SortableTable, key: string): void {
   if (event.target instanceof Element && event.target.closest("input, select, textarea, button, a, .th-search-popover")) {

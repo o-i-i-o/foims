@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 证书签发弹窗（移植自旧版 cert-generate-modal.html）：签发 CA 下拉
+ * 证书签发弹窗：签发 CA 下拉
  * （无私钥的 CA 仅供信任导出不可签发，默认选站点根 CA）+ CN/主体/
  * 有效期/SAN。SAN 逗号分隔，空转 null。
  */

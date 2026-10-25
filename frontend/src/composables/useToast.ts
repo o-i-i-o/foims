@@ -1,5 +1,5 @@
 /**
- * 全局通知（showToast）：旧版 web/static/js/utils/toast.js 的 Vue 对应物。
+ * 全局通知（showToast）：全站唯一通知入口，模块级响应式队列 + 渲染组件订阅。
  * 通知统一走 showToast，禁止 alert()（项目硬性规范）。
  */
 import { reactive } from "vue";

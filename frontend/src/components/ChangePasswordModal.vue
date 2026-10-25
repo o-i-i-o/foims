@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 修改密码模态框（移植自旧版 authManager.initChangePassword +
- * modals/system/change-password-modal.html）。
+ * 修改密码模态框。
  * 等保要求：改密成功后服务端吊销全部令牌，前端延时跳转登录页重新认证。
  * 样式为 SFC 自包含（shell 未迁移 modals.css，避免引入整包组件样式）。
  */

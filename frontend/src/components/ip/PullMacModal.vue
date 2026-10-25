@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 拉取 MAC 弹窗（移植自旧版 modals/ip/pull-mac-modal.html + ipDetail.js）：
+ * 拉取 MAC 弹窗：
  * 左列 SNMP 设备复选列表（勾选一个或多个作为本次拉取设备），右列目标子网
  * 下拉（空值 = 全部子网）。设备/子网/默认拉取配置三查询并行，就绪后按
  * 服务端保存的上次拉取配置预选（设备与现存可选项求交，已删除的剔除）。
@@ -27,7 +27,7 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
-// 设备列表：page_size=1000 全量拉取（旧版 fetchOptionItems 语义）
+// 设备列表：page_size=1000 全量拉取
 const devicesQuery = useQuery({
   queryKey: ["ip-pull-devices"],
   queryFn: async (): Promise<Paged<PullDeviceItem> | null> => {
@@ -52,7 +52,7 @@ const networksQuery = useQuery({
 });
 
 // 默认拉取配置：服务端保存的上次拉取设备集合与子网；读取失败不阻塞弹窗，
-// 仅不预选（旧版 console.debug + 空 defaults 语义）
+// 仅不预选
 const defaultsQuery = useQuery({
   queryKey: ["ip-pull-defaults"],
   queryFn: async (): Promise<MacPullDefaults> => {
@@ -71,7 +71,7 @@ const snmpDevices = computed(() =>
   (devicesQuery.data.value?.items ?? []).filter((dev) => dev.snmp_configured)
 );
 
-// 设备列表占位文案（优先级对齐旧版）：网络异常 → 加载失败；空列表 →
+// 设备列表占位文案（按优先级判定）：网络异常 → 加载失败；空列表 →
 // 暂无设备；无 SNMP 设备 → 暂无配置 SNMP 的设备
 const devicePlaceholder = computed(() => {
   if (devicesQuery.isError.value) {
@@ -90,7 +90,7 @@ const devicePlaceholder = computed(() => {
 // 子网选择值：空串 = 全部子网；默认子网已被删除时 select 赋值自然回落空值
 const subnetId = ref("");
 
-// 勾选集合（设备数据与默认配置就绪后预选一次，与旧版渲染时预选等价）
+// 勾选集合（设备数据与默认配置就绪后预选一次）
 const checkedIds = ref(new Set<string>());
 let defaultsApplied = false;
 
@@ -126,7 +126,7 @@ function isChecked(event: Event): boolean {
 }
 
 // 子网下拉数据：正常时占位选项（全部子网）+ 全量网段；
-// 异常/空数据时旧版语义为仅保留占位选项（异常文案或全部子网）
+// 异常/空数据时仅保留占位选项（异常文案或全部子网）
 const networkOptions = computed(() => {
   if (networksQuery.isError.value) {
     return null;
@@ -171,7 +171,7 @@ function submitPull(): void {
   pullMutation.mutate(payload);
 }
 
-// 设备显示名：名称优先，其次主机名，最后回退 id（旧版语义）
+// 设备显示名：名称优先，其次主机名，最后回退 id
 const deviceLabel = (dev: PullDeviceItem): string => dev.name || dev.hostname || dev.id;
 </script>
 
@@ -225,7 +225,7 @@ const deviceLabel = (dev: PullDeviceItem): string => dev.name || dev.hostname ||
 </template>
 
 <style scoped>
-/* 复选列表样式（旧版 logs.css 的 users 系列类，本弹窗专用） */
+/* 复选列表样式（本弹窗专用） */
 .users-checkbox-list {
   max-height: 200px;
   overflow-y: auto;

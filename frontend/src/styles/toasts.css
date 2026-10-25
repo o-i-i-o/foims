@@ -1,12 +1,11 @@
 @layer components {
   /* ============================================================
    Toast 通知样式（自包含）
-   - 不依赖外部 @keyframes（slideIn/fadeOut），避免在未加载
-     utilities/animations.css 的页面（如 init 初始化页）上动画
+   - 不依赖外部 @keyframes，避免在未加载
+     全局动画定义的页面（如 init 初始化页）上动画
      失效、出现闪烁/突兀出现的问题。
    - 显隐由 AppToast.vue 的 TransitionGroup（name="toast"）驱动
-     （toast-enter / toast-leave 过渡类 + transition），旧版 toast.js
-     的 .toast-visible 与 .toast-hiding 类切换已随 Vue 化废弃移除。
+     （toast-enter / toast-leave 过渡类 + transition）。
    ============================================================ */
 
   .toast-container {
@@ -37,7 +36,7 @@
     line-height: 1.4;
   }
 
-  /* TransitionGroup 过渡类：右侧视口外滑入与滑出（等效旧版 slideIn/fadeOut） */
+  /* TransitionGroup 过渡类：右侧视口外滑入与滑出 */
   .toast-enter-from,
   .toast-leave-to {
     opacity: 0;

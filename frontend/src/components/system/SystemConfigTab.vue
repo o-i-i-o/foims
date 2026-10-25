@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 系统配置页签（移植自旧版 system-config 分区 + systemManager.js）：
+ * 系统配置页签：
  * 会话设置 / LDAP / SSO 三张表单卡片内联实现，服务管理与证书管理拆分为
  * 子组件。会话与 Agent/SNMP/限流等共用 /api/system/config（queryKey
  * ["system-config"]），保存仅替换 server 段并带回其余字段避免丢配置。
@@ -93,7 +93,7 @@ async function saveSystemConfig(): Promise<void> {
     const result = await updateSystemConfig({ server });
     if (result.success) {
       showToast(t("system.config_save_success"), "success");
-      // 部分配置需重启生效：保存即提示（旧版 sessionStorage 标记机制简化为立即提示）
+      // 部分配置需重启生效：保存即提示
       showToast(t("system.config_saved_restart_needed"), "warning");
       queryClient.invalidateQueries({ queryKey: ["system-config"] });
     } else {

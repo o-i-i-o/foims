@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 线缆标签打印区（移植自旧版 cableLink.js printCableLabels）：
+ * 线缆标签打印区：
  * 25x38+40 规格——标签 25mm x 38mm、步进 40mm，一枚标签独占一页；
  * 每条线路打印两枚（A端+B端 与 B端+A端，本端在前、对端在后）。
  * 挂载后立即调起浏览器打印，打印结束/取消（afterprint）后通知父组件移除；

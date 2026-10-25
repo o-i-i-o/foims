@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 系统管理页（移植自旧版 main.html system 分区七页签壳）：
+ * 系统管理页（七页签壳）：
  * 系统信息 / 用户管理 / 系统配置 / SMTP 配置 / 导入导出 / 定时任务 / 安全。
  * 页签常驻挂载（v-show）以保证各子页签查询组件的 enabled 按需加载语义，
  * 页签记忆 + hash query 深链由 useSubTabs 统一承载（与日志/资源分区同机制）。

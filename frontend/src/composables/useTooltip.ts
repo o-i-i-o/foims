@@ -1,5 +1,5 @@
 /**
- * 全局轻量 Tooltip（移植自旧版 web/static/js/utils/tooltip.js）。
+ * 全局轻量 Tooltip。
  *
  * 事件委托为所有带 data-tooltip 属性的元素显示悬浮提示，浮动层挂在
  * body 上（fixed 定位）避免被容器 overflow 裁剪，同时支持键盘焦点触达。

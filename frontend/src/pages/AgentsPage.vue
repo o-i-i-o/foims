@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
- * 主机监控页（移植自旧版 main.html agents 分区 + modules/agents.js）：
- * 状态/关键字筛选 + 分页列表 + 30s 自动刷新（窗口失焦自动暂停，TanStack
- * refetchInterval 默认语义，与旧版 document.hidden 跳过一致）+ 行内管理
+ * 主机监控页：状态/关键字筛选 + 分页列表 + 30s 自动刷新（窗口失焦自动暂停，
+ * TanStack refetchInterval 默认语义）+ 行内管理
  * 操作（详情/禁用/启用/删除）+ 告警阈值配置弹窗。
  *
  * 使用率列复用 AgentUsageBar；关键字输入为草稿态（回车/查询按钮提交），
@@ -22,7 +21,7 @@ import AgentDetailModal from "../components/agents/AgentDetailModal.vue";
 import AgentThresholdModal from "../components/agents/AgentThresholdModal.vue";
 import AgentUsageBar from "../components/agents/AgentUsageBar.vue";
 
-// 自动刷新周期与每页条数（与旧版一致）
+// 自动刷新周期与每页条数
 const REFRESH_INTERVAL_MS = 30000;
 const PAGE_SIZE = 20;
 
@@ -75,7 +74,7 @@ const listQuery = useQuery({
     }
     return result.data;
   },
-  // 30s 轮询沿用当前页与筛选；窗口失焦时 TanStack 默认暂停（同旧版）
+  // 30s 轮询沿用当前页与筛选；窗口失焦时 TanStack 默认暂停轮询
   refetchInterval: REFRESH_INTERVAL_MS
 });
 
@@ -249,7 +248,7 @@ function handleDeleteConfirmed() {
               >
                 <NavIcon name="eye" />
               </button>
-              <!-- SNMP 采集行不经上报鉴权，禁用/启用仅对 Agent 行有意义（旧版语义） -->
+              <!-- SNMP 采集行不经上报鉴权，禁用/启用仅对 Agent 行有意义 -->
               <button
                 v-if="agent.source !== 'snmp' && agent.status === 'active'"
                 type="button"

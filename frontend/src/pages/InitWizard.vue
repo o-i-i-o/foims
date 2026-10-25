@@ -1,14 +1,12 @@
 <script setup lang="ts">
 /**
- * 初始化向导（移植自旧版 web/static/js/modules/foims_init/ + init_index.html）：
- * 五步流程 PostgreSQL 检查 → 数据库配置 → 数据库初始化 → 管理员账户 → 完成。
+ * 初始化向导：五步流程 PostgreSQL 检查 → 数据库配置 → 数据库初始化 → 管理员账户 → 完成。
  *
  * 网络层复用 apiClient（/api/init/* 与 /api/auth/init-status 均为公共端点，
- * 永不 reject，message 已就地翻译）。契约与旧版一致：
+ * 永不 reject，message 已就地翻译）。端点契约：
  * - /api/init/check-pgsql 返回顶层 { installed, running, message, error }
  * - 其余端点为 { success, message, data } 标准包裹
- * - 旧版 escapeHtml/innerHTML 动态渲染改为模板插值（自动转义）
- * - 旧版「重新检查」整页 reload 改为重跑检查请求
+ * 动态内容一律模板插值（自动转义）；「重新检查」重跑检查请求，不整页刷新。
  */
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -42,7 +40,7 @@ const hideLoading = () => {
   loadingCount.value = Math.max(0, loadingCount.value - 1);
 };
 
-// 页内错误条：5 秒自动隐藏，新提示重置计时（与旧版 showError 语义一致）
+// 页内错误条：5 秒自动隐藏，新提示重置计时
 const errorMessage = ref("");
 const errorVisible = ref(false);
 let errorHideTimer: number | undefined;
@@ -58,7 +56,7 @@ function showError(message: string): void {
   }, 5000);
 }
 
-// 各检查步骤共用的兜底错误文案键（与旧版 T_KEY_* 一致）
+// 各检查步骤共用的兜底错误文案键
 const unknownError = computed(() => t("init.unknown_error"));
 
 /**
@@ -76,7 +74,7 @@ function translateErrorField(errorKey: string | undefined): string {
 
 // ==================== 语言切换 ====================
 const currentLanguage = ref(i18n.global.locale.value);
-// 动态状态块文案在请求时定稿：语言切换后按旧版语义重新拉取
+// 动态状态块文案在请求时定稿：语言切换后重新拉取
 watch(currentLanguage, (lang) => {
   changeLanguage(lang);
   checkPostgreSQL();
@@ -106,7 +104,7 @@ async function checkPostgreSQL() {
   pgCheck.value = "loading";
   const result = await apiGet<unknown>("/api/init/check-pgsql");
   hideLoading();
-  // 该端点返回顶层结构而非统一信封（与旧版契约一致），按字段形状收窄
+  // 该端点返回顶层结构而非统一信封，按字段形状收窄
   const envelope = result as PgCheckResponse;
   if (envelope.installed && envelope.running) {
     pgCheck.value = "success";

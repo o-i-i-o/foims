@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * 通用确认弹窗（移植自旧版 utils/confirm.js + modals/common/confirm-modal.html）。
+ * 通用确认弹窗。
  * v-if 控制挂载，确认/取消经事件通知调用方；Esc 与点击遮罩视为取消。
- * 样式为 SFC 自包含（shell 未迁移 modals.css，避免引入整包组件样式）。
+ * 样式为 SFC 自包含（不依赖全局组件样式包）。
  */
 import { onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";

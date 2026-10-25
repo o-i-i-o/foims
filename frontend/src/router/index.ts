@@ -1,5 +1,5 @@
 /**
- * 主应用路由：hash 模式（与旧版 #dashboard 深链保持一致，无需 nginx 改动）。
+ * 主应用路由：hash 模式（#dashboard 式深链无需 nginx 改动）。
  * 分区清单即导航数据源（侧边栏按 NAV_ITEMS 顺序渲染），八个分区均已登记
  * Vue 实现组件；分区组件按路由懒加载，首屏只装载壳层与所在分区。
  */
@@ -19,8 +19,8 @@ declare module "vue-router" {
 }
 
 /**
- * 一级分区（顺序与旧版侧边栏一致）：name 同时是路由名、
- * 分区 ID 与 RBAC 能力表（roleCapabilities.js）的键
+ * 一级分区（数组顺序即侧边栏渲染顺序）：name 同时是路由名、
+ * 分区 ID 与 RBAC 能力表（utils/roleCapabilities）的键
  */
 export interface NavItem {
   /** 分区 ID（路由名 / RBAC 能力表键） */

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * 仪表盘（移植自旧版 modules/dashboard.js + main.html 127-257 行）：
- * 5 张统计卡（dashboard-stats 单端点）+ 6 张榜单卡（5 个分页接口 +
+ * 仪表盘：5 张统计卡（dashboard-stats 单端点）+ 6 张榜单卡（5 个分页接口 +
  * 主机负载 top-metrics）+ 主机负载三页签 10s 轮播（悬停暂停、手动切换
- * 后永久停止）。旧版 dashboard-stats 失败后的三接口计数兜底已评估删除：
+ * 后永久停止）。dashboard-stats 失败后不做计数兜底：
  * 兜底与主端点同源依赖数据库，失败场景下同样不可用，仅会以 0 掩盖错误。
- * 查询统一 TanStack Query（staleTime 60s 对应旧版客户端缓存 TTL）。
+ * 查询统一 TanStack Query（staleTime 60s）。
  */
 import { computed, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -67,7 +66,7 @@ const statsQuery = useQuery({
 });
 
 const statValues = computed(() => {
-  // 加载中展示 0（与旧版静态初始值一致），失败如实展示 "-"
+  // 加载中展示 0，失败如实展示 "-"
   if (statsQuery.isError.value) {
     return { networks: "-", regions: "-", ips: "-", active: "-", ops: "-" };
   }
@@ -226,12 +225,12 @@ function tempText(value: number | string | null): string {
 // ==================== 卡片跳转 ====================
 
 /**
- * 卡片点击跳转（旧版 data-nav/data-tab 委托逻辑的声明式版本）：
- * 命中卡片内链接或按钮时不跳转（view-all 按钮维持旧版无动作）；
+ * 卡片点击跳转（声明式事件处理）：
+ * 命中卡片内链接或按钮时不跳转（view-all 按钮不触发分区跳转）；
  * 携带 tab 的卡片以 query 形式深链，目标分区迁移后按 query 定位页签。
  */
 function openSection(event: MouseEvent, name: string, tab?: string): void {
-  // 事件目标由卡片内 DOM 触发，按 Element 收窄以复用旧版 closest 守卫
+  // 事件目标由卡片内 DOM 触发，按 Element 收窄以使用 closest 守卫
   const target = event.target as Element;
   if (target.closest("a") || target.closest("button")) {
     return;
@@ -484,9 +483,8 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 </template>
 
 <style scoped>
-/* 页面样式移植自旧版 pages/dashboard.css（.main-body 为旧版 body 类，
- Vue 壳由 main-content.css 的 .main-content 提供底色，不移植）；
- 骨架条与 agent-usage 迷你条为本页使用到的 utilities/agents 分层片段，
+/* 页面 scoped 样式（底色由布局层 main-content.css 的 .main-content 提供）；
+ 骨架条与 agent-usage 迷你条为本页使用到的动画/进度片段，
  以 scoped 形式内联（unlayered 优先级与原 pages 层语义一致）。*/
 
 .dashboard-stats {
@@ -668,7 +666,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   color: #fff;
 }
 
-/* 使用率迷你进度条（旧版 pages/agents.css 同名片段，>85% 红、>60% 橙） */
+/* 使用率迷你进度条（>85% 红、>60% 橙） */
 .agent-usage {
   display: inline-flex;
   align-items: center;
@@ -711,7 +709,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   white-space: nowrap;
 }
 
-/* 骨架条（旧版 utilities/animations.css 同名片段） */
+/* 加载骨架条 shimmer 动画占位 */
 .skeleton {
   display: inline-block;
   width: 100%;

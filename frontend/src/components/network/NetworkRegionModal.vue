@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
- * 网络区域新增/编辑弹窗（移植自旧版 modals/network/network-region-modal.html
- * + networks.js openNetworkRegionModal/submitNetworkRegionForm）：
+ * 网络区域新增/编辑弹窗：
  * 名称 + IPv4/IPv6 CIDR 动态行（至少保留一行，末行删除改为清空）+ 描述。
- * CIDR 动态行旧版为 DOM 增删，此处以响应式数组表达同一语义。
+ * CIDR 动态行以响应式数组维护。
  */
 import { reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -47,7 +46,7 @@ function addRow(list: string[]): void {
 }
 
 /**
- * 删除一行：多行时移除；仅剩末行时清空输入（旧版 addCidrInputRow 语义），
+ * 删除一行：多行时移除；仅剩末行时清空输入，
  * 行数不减保证始终有输入位
  */
 function removeRow(list: string[], index: number): void {
@@ -58,7 +57,7 @@ function removeRow(list: string[], index: number): void {
   }
 }
 
-/** 收集 CIDR 值：去空格、滤空串，全空返回 null（旧版 getCidrValues 语义） */
+/** 收集 CIDR 值：去空格、滤空串，全空返回 null */
 function collectCidrs(list: string[]): string[] | null {
   const values = list.map((v) => v.trim()).filter((v) => v.length > 0);
   return values.length > 0 ? values : null;

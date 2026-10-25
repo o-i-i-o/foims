@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 网卡配置编辑器（移植自旧版 utils/networkCardManager.js 的 DOM 动态构建：
- * 网卡 → 网口 → IP 三级嵌套动态行）。
+ * 网卡配置编辑器（网卡 → 网口 → IP 三级嵌套动态行）。
  * - 房间上下文：watch roomId 拉取房间配置网段，IP 行的区域/网段下拉按房间过滤；
  * - 遗留数据：编辑回显中不属于房间配置的区域/网段以带标记选项保留显示，
  *   由 collectData 与后端校验共同拦截；
@@ -574,7 +573,7 @@ async function autoAssignIp(ipRow: IpRowState): Promise<void> {
 }
 
 // 房间上下文变化后清洗选择：区域/网段不在新选项集中时重置
-// （旧版 refreshIpRowDropdowns 的"值不在选项集中即失效"语义）
+// （“值不在选项集中即失效”语义）
 watch([regionOptions, roomNetworks], () => {
   for (const card of cards) {
     for (const port of card.ports) {

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 组织节点编辑弹窗（移植自旧版 openOrgModal + organization-modal.html +
- * submitOrgForm）：编辑模式仅改名称/描述（类型由模板决定不可改）；新增
+ * 组织节点编辑弹窗：编辑模式仅改名称/描述（类型由模板决定不可改）；新增
  * 下级时类型由 allowed-child-types 接口决定；新增根节点需先选层级模板，
  * 选中后根类型自动锁定为模板根（type_path 固定 "0"）。
  */

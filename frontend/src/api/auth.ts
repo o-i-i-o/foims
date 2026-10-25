@@ -14,7 +14,7 @@ import type { TwoFactorLoginRequest } from "../types/api/generated/TwoFactorLogi
 import type { User } from "../types/api/generated/User";
 import type { UserLogin } from "../types/api/generated/UserLogin";
 
-// 验证码字段仅在触发后携带（与旧版请求字节形态一致，其余场景不发 null 键）
+// 验证码字段仅在触发后携带（未触发时不发 null 键，保持请求体最小形态）
 export type LoginBody = Omit<UserLogin, "captcha_id" | "captcha_text"> & {
   captcha_id?: string | null;
   captcha_text?: string | null;

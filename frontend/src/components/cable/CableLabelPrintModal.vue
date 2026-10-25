@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 线缆标签批量打印弹窗（移植自旧版 cableLink.js openCableLabelPrintModal）：
- * 列出当前页线路（A/B 端编号），默认全选，勾选计数实时显示
+ * 线缆标签批量打印弹窗：列出当前页线路（A/B 端编号），默认全选，勾选计数实时显示
  * （cable_link.print_count：N 条线路 / 2N 枚标签）；确认后经 CablePrintArea
  * 一次性打印所选线路的两端标签。
  */
@@ -21,7 +20,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-// 默认全选（与旧版一致）
+// 打开弹窗默认全选
 const checked = ref<boolean[]>(props.items.map(() => true));
 const selectAll = ref(true);
 const printing = ref(false);

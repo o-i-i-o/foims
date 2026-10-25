@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 日志管理页（移植自旧版 web/static/main.html logs 分区 + modules/log.js）：
- * 操作日志 / 登录日志 / 通知三个页签，排序 + 分页 + 操作日志搜索。
+ * 日志管理页：操作日志 / 登录日志 / 通知三个页签，排序 + 分页 + 操作日志搜索。
  * 数据层为 TanStack Query 首次实战接线：queryFn 内对归一化失败（success:false）
  * 抛出以进入 error 态；通知已读操作经 useMutation + 失效缓存刷新。
  */
@@ -401,7 +400,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
 <style scoped>
 /* 操作日志表：搜索框取代原操作列表头，收窄时间/操作人/结果列，
- 让出宽度给含按钮与搜索框的最后一列（旧版 pages/logs.css 移植） */
+ 让出宽度给含按钮与搜索框的最后一列 */
 #operation-logs-table td.col-time {
   width: 170px;
   white-space: nowrap;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 用户管理页签（移植自旧版 main.html users 分区 + modules/userManager.js）：
+ * 用户管理页签：
  * 分页列表（8 列 + 表头排序）+ 新增/编辑（两步弹窗含 2FA 管理）+ 删除确认。
  * 列表与弹窗数据源共享 ["users"] 查询键；auditor/user 只读隐藏写控件。
  */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 证书导入弹窗（移植自旧版 cert-import-modal.html）：证书与私钥必选、
+ * 证书导入弹窗：证书与私钥必选、
  * 附带 CA 可选（仅供终端导出信任，不参与校验）。
  */
 import { ref } from "vue";

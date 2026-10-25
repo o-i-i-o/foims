@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 数据管理页签（移植自旧版 data-management 分区 + systemManager.js）：
+ * 数据管理页签：
  * Agent 上报服务 / SNMP Trap 接收 / 导入导出（CSV 校验含 magic bytes
  * 双重防线）/ 配置文件备份恢复 / 日志管理五张卡片。
  */
@@ -199,7 +199,7 @@ async function handleRestoreFile(event: Event): Promise<void> {
   if (!file || restoring.value) {
     return;
   }
-  // 服务端备份产物为 JSON（旧版 accept=".toml" 与后端产物不符）
+  // 服务端备份产物为 JSON，仅接受 .json 文件
   if (!file.name.toLowerCase().endsWith(".json")) {
     showToast(t("import_export.invalid_file_type"), "error");
     return;

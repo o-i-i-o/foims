@@ -40,7 +40,7 @@
     font-size: var(--font-size-base);
   }
 
-  /* 入场动画（keyframes 对应旧版 utilities/animations.css 同名定义） */
+  /* 树入场淡入动画 */
   @keyframes org-fade-in {
     from {
       opacity: 0;

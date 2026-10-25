@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * 系统信息页签（移植自旧版 system-info-tab + systemManager.loadSystemInfo）：
+ * 系统信息页签：
  * 系统信息只读字段（名称/数据库状态/系统时间/运行时长）+ 商业许可占位卡
- * （注册/购买入口暂未开放，不绑定任何真实连接，与旧版一致）+ 关于卡
+ * （注册/购买入口暂未开放，不绑定任何真实连接）+ 关于卡
  * （版本/作者/联系方式/开源组件清单弹窗）。
  */
 import { computed, ref } from "vue";

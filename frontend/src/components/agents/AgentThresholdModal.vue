@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 主机告警阈值配置弹窗（移植自旧版 modals/agents/agent-alert-threshold-modal.html
- * + agents.js openAlertThresholdModal/saveAlertThresholds）：
+ * 主机告警阈值配置弹窗：
  * 四项阈值留空不监控，整数范围校验（百分比 1-100 / 温度 1-200）；
  * 保存后服务端立即评估一轮告警。
  */

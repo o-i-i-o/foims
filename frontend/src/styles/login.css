@@ -5,7 +5,7 @@
    - 依赖: variables.css 的 CSS 变量（颜色/层级），不依赖组件库 CSS
    - 作用域: 选择器挂在 .login-body / #login-page / .login-* 前缀类上
             （含 .login-modal 家族与 .login-form-group 等通用名），
-            避免与 main.html 的组件类同名冲突
+            避免与主应用的全局组件类同名冲突
    - 说明: 本页不加载 reset.css，开头的 .login-body 通配重置与 .sr-only
           为就地提供的最小等价集
    ============================================================ */

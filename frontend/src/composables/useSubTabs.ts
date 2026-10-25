@@ -6,7 +6,7 @@
  * - 切换：写回 localStorage 并用 replace 更新 query（不产生历史记录）；
  * - 前进/后退：监听 query 反向同步（仅深链模式）。
  *
- * 记忆值与 query 值都必须命中页签清单，脏值（旧版遗留/手改 URL）回落到默认项。
+ * 记忆值与 query 值都必须命中页签清单，脏值（历史遗留/手改 URL）回落到默认项。
  */
 import { shallowRef, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";

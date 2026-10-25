@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 迷你趋势曲线（移植自旧版 agents.js renderSparklineSeries）：
+ * 迷你趋势曲线：
  * 固定 viewBox（0 0 320 96）自绘 polyline，每序列独立配色（lineClass）。
  * max/min 标注由 formatValue 人性化；null/缺失值视为断点（分段 polyline），
  * 孤立单点渲染为实心圆点；全部无数据时渲染"暂无历史数据"。
@@ -27,7 +27,7 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-// 与旧版一致的画布尺寸与内边距
+// 画布尺寸与内边距（与固定 viewBox 一致）
 const WIDTH = 320;
 const HEIGHT = 96;
 const PAD = 6;

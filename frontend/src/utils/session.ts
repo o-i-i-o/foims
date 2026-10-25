@@ -1,6 +1,5 @@
 /**
  * 会话管理：HttpOnly Cookie 承载真实凭证，此处仅缓存用户信息副本。
- * 与旧版 web/static/js/utils/sessionManager.js 语义一致：
  * rememberMe 决定存 localStorage 还是 sessionStorage，两存储严格互斥。
  */
 import type { User } from "../types/api/generated/User";

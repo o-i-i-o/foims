@@ -1,6 +1,5 @@
 @layer modals {
-  /* 统一设备端口管理样式，逐字移植自旧版
-   web/static/css/modals/unified-device-ports.css */
+  /* 统一设备端口管理样式 */
 
   /* ============ 端口分组容器 ============ */
   .port-groups-container {

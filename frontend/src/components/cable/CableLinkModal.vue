@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 线路新增/编辑弹窗（移植自旧版 modals/cable/cable-link-modal.html +
- * cableLink.js openCableLinkModal/populateEndpointCascade/submitCableLinkForm）：
+ * 线路新增/编辑弹窗：
  * - A/B 两端对称级联（createSide 工厂复用）：端点类型 → 范围 → 端点；
  *   设备接口流程为 房间 → 机柜（可选「不限机柜」）→ 设备 → 端点（接口/端口）；
  * - 范围选择器：信息点/设备接口按房间、配线架按机柜（选项来自

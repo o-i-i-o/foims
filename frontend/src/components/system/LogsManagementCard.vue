@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 日志管理卡片（移植自旧版 systemManager.js 的日志段）：统计三卡 /
+ * 日志管理卡片：统计三卡 /
  * 日志清理（天数校验 + 确认弹窗）/ 日志外发 syslog 配置与测试报文。
  */
 import { computed, ref, watch } from "vue";

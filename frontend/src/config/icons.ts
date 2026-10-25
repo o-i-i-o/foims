@@ -1,9 +1,9 @@
 /**
- * 导航与页脚图标形状描述（移植自旧版 web/static/main.html 的内联 SVG）。
+ * 导航与页脚图标形状描述（以结构化数据定义内联 SVG 形状）。
  *
  * 统一 viewBox="0 0 24 24"、stroke=currentColor、stroke-width=2、圆角线帽，
  * 各图标仅记录内部形状元素，由 NavIcon 组件渲染（避免 v-html 绕过审计）。
- * 形状来源为 lucide 图标集的 24px 线性风格，与旧版逐字对齐。
+ * 形状来源为 lucide 图标集的 24px 线性风格。
  */
 
 /**
@@ -20,8 +20,8 @@ export interface IconShape {
 const icon = (...shapes: IconShape[]): IconShape[] => shapes;
 
 /**
- * 「顶部字母 + 列表」的单体组合图标（24x32 纵向视窗，移植自旧版
- * listBadgeIcon）：上部白底圆内 currentColor 字母，下部完整 list 线条。
+ * 「顶部字母 + 列表」的单体组合图标（24x32 纵向视窗）：
+ * 上部白底圆内 currentColor 字母，下部完整 list 线条。
  * 字母经 shape.children 由 NavIcon 渲染为文本子节点。
  */
 function listBadgeIcon(letter: string): IconShape[] {

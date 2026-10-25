@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 服务管理卡片（移植自旧版 systemManager.js 服务段）：foims / nginx 双行
+ * 服务管理卡片：foims / nginx 双行
  * 状态表（systemd 注册态/运行态/自启/运行时长），操作按钮按当前状态禁用
  * 无意义项。后端对 stop/restart 先响应后延迟执行：重启由前端轮询确认
  * 恢复（foims 恢复后整页刷新，nginx 仅刷新状态表），停止仅提示恢复方式。

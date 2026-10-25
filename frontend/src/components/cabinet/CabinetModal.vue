@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 机柜新增/编辑弹窗（移植自旧版 modals/cabinet/cabinet-modal.html
- * + cabinet.js openCabinetModal/submitCabinetForm）：
+ * 机柜新增/编辑弹窗：
  * - 基础字段：房间（仅机房类：机房/弱电井/其他）/ 名称 / 容量 / 电源功率（W|kW）/ 描述；
  * - 机位动态行：名称 + 起始 U/结束 U（1-48，结束不小于起始）+ 描述；
  * - 配线架动态行：仅名称。

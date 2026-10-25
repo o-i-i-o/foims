@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 网段新增/编辑弹窗（移植自旧版 modals/network/network-modal.html
- * + networks.js openNetworkModal/submitNetworkForm）：
+ * 网段新增/编辑弹窗：
  * 名称/区域/双栈 CIDR/网关/DNS/描述；网关校验（格式合法、与地址族一致、
  * 必须落在对应 CIDR 网段内），DNS 以逗号或空白分隔且最多 5 条。
  */
@@ -38,7 +37,7 @@ interface NetworkFormState {
   description: string;
 }
 
-/** DNS 数组回显为文本：未配置（null/非数组）返回空串（旧版回显语义） */
+/** DNS 数组回显为文本：未配置（null/非数组）返回空串 */
 function joinDns(dns: string[] | null | undefined): string {
   return Array.isArray(dns) ? dns.join(", ") : "";
 }
@@ -73,7 +72,7 @@ const regionOptions = computed<NetworkRegion[]>(() => regionsQuery.data.value?.i
 
 const saving = ref(false);
 
-/** DNS 文本解析：逗号/空白分隔，超 5 条提示并返回 null（旧版 parseDnsList 语义） */
+/** DNS 文本解析：逗号/空白分隔，超 5 条提示并返回 null */
 function parseDnsList(dnsStr: string): string[] | null {
   if (!dnsStr?.trim()) {
     return null;

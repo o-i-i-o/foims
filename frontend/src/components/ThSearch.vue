@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 表头搜索弹层（移植自旧版 ui.js initThSearchPopovers 通用交互）：
+ * 表头搜索弹层（列头图标按钮 + 弹出搜索面板的通用交互）：
  * 多根组件，须直接置于 th.th-searchable 内（与列名 span 并列，样式与
  * absolute 定位均由 tables.css 的 .data-table th 后代选择器提供）。
  * 放大镜按钮开合弹层；同一时刻全页仅展开一个（模块级登记当前展开实例）；
@@ -13,7 +13,7 @@ import { useI18n } from "vue-i18n";
 const props = withDefaults(
   defineProps<{
     modelValue?: string;
-    /** 输入框无障碍标签（旧版按列语义传入，如 "Search name"） */
+    /** 输入框无障碍标签（按列语义传入，如 "Search name"） */
     ariaLabel?: string;
   }>(),
   { modelValue: "", ariaLabel: "" }

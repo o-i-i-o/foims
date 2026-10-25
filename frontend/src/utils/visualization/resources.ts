@@ -1,9 +1,8 @@
 /**
  * 可视化页的组织/房间下拉数据加工（纯函数，无 DOM 依赖）。
  *
- * 旧实现 `utils/legacyResources.js` 直接创建 `<option>` 并注入目标 select，
- * 需要等待元素出现、维护级联加载序号。Vue 化后下拉由模板 `v-for` 渲染，
- * 本模块只负责把接口载荷加工成「选项数组」，加载时序交给响应式状态。
+ * 下拉由模板 `v-for` 渲染，本模块只负责把接口载荷加工成「选项数组」，
+ * 不触碰 DOM，加载时序交给响应式状态。
  */
 import type { OrganizationTreeNode } from "../../types/api/generated/OrganizationTreeNode";
 import type { RoomQuery } from "../../api/visualization";

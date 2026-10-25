@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /**
- * IP 详情页（移植自旧版 main.html ip 分区 + ipDetail.js）：只读列表展示
- * 各设备网口的 IP 观测数据，11 列（位置/设备/类型/子网/IP/MAC/端口主机名/
+ * IP 详情页：只读列表展示各设备网口的 IP 观测数据，11 列（位置/设备/类型/子网/IP/MAC/端口主机名/
  * 状态/最后在线/创建时间），4 列表头搜索弹层（防抖 300ms 服务端过滤），
  * MAC 列头「拉取」按钮打开拉取 MAC 弹窗。默认按 updated_at 倒序、每页
- * 100 条（旧版 IP_PAGE_SIZE），页大小可选 10/20/50/100。
+ * 100 条，页大小可选 10/20/50/100。
  */
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -23,7 +22,7 @@ type IpRow = IpDetailWithNames;
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// 位置列：工位 > 机柜 > 观测设备（旧版优先级语义）
+// 位置列取址优先级：工位 > 机柜 > 观测设备
 function locationText(row: IpRow): string {
   return row.workstation_name || row.cabinet_name || row.device_name || "-";
 }
@@ -41,7 +40,7 @@ const ipFilterParams = reactive({ device_name: "", device_type: "", network: "",
 const ipList = usePagedList<IpRow>({
   tag: "ip",
   defaultPageSize: 100,
-  // 旧版 ipTableState 默认 updated_at 倒序
+  // 列表默认按最后在线时间倒序
   defaultSortBy: "updated_at",
   defaultSortOrder: "desc",
   extraKey: computed(() => ({ ...ipFilterParams })),

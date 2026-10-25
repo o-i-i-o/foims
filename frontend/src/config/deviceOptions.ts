@@ -1,6 +1,5 @@
 /**
- * 设备模块共享下拉选项（值与旧版 device.js DEVICE_TYPE_OPTIONS /
- * utils/networkCardManager.js PHYSICAL_TYPES/INTERFACE_ROLES 一致）：
+ * 设备模块共享下拉选项（设备类型/网卡物理类型/接口角色的集中定义）：
  * DeviceModal / DeviceTemplateModal / NetworkCardEditor / PortDetailModal 复用。
  */
 

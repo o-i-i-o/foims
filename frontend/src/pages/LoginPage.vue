@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 登录页（移植自 web/static/js/login.js + loginView.js + authManager.js 登录相关逻辑）
+ * 登录页
  *
  * 功能：密码 / 邮箱验证码 / LDAP / SSO 四种登录方式、2FA 动态码、图形验证码
  * 联动、忘记密码模态框、会话探测跳转、i18n、动画角色（鼠标追踪/眨眼/偷看/

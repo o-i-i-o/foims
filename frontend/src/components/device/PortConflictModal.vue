@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * SNMP 端口名称冲突确认弹窗（移植自旧版 modals/device/port-conflict-modal.html +
- * unifiedDevicePorts.js showConflictModal/syncConflictSelections）：
+ * SNMP 端口名称冲突确认弹窗：
  * - 汇总条：冲突数与新增数（device.conflict_summary）；
  * - 冲突行：端口名 + 「现有描述 → SNMP 描述」+ 逐项决策下拉（跳过/覆盖），
  *   默认全部跳过；
@@ -35,7 +34,7 @@ const emit = defineEmits<{ close: []; confirm: [decisions: Record<string, PortDe
 
 const { t } = useI18n();
 
-// 逐项决策：{ 端口名: "skip" | "overwrite" }，默认跳过（与旧版一致）
+// 逐项决策：{ 端口名: "skip" | "overwrite" }，默认跳过
 const decisions = reactive<Record<string, PortDecision>>({});
 for (const c of props.conflicts) {
   decisions[c.snmpPort.name] = "skip";

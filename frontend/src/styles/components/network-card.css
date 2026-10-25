@@ -1,6 +1,5 @@
 @layer modals {
-  /* 网卡管理器样式（网卡 → 网口 → IP），逐字移植自旧版
-   web/static/css/modals/network-card-manager.css
+  /* 网卡管理器样式（网卡 → 网口 → IP）：
    结构：network-card-item > [card-level-bar, nc-fields, nc-port-item]
         nc-port-item > [port-level-bar, nc-fields, port-ips-container > nc-ip-item]
         nc-ip-item > [ip-level-bar, nc-fields, nc-fields]

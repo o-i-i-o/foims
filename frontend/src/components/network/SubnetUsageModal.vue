@@ -1,12 +1,10 @@
 <script setup lang="ts">
 /**
- * 网段使用情况弹窗（移植自旧版 modals/network/subnet-usage-modal.html
- * + networks.js showNetworkUsage/buildIPv4Content/buildIPv6Content 及
- * 页面样式 network-usage.css 全量）：
+ * 网段使用情况弹窗：
  * IPv4/IPv6 双页签（单栈隐藏切换）；IPv4 统计 8 项 + 状态过滤 + IP 可视化
  * 网格（掩码 <22 不渲染提示；/22·/23 划分 /24 子网页签；块数上限 256）+
  * IP 列表；IPv6 信息网格 + 列表；刷新按钮重拉 IP 数据并按页签回执提示。
- * 旧版以 token 丢弃并发打开的过期响应，此处查询键含 subnetId，数据随键切换。
+ * 并发打开的过期响应由查询键（含 subnetId）天然隔离，数据随键切换。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -24,10 +22,10 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-/** GET /ip 响应形态兼容：旧版裸 data 键与现行分页 items（旧版 ipData 归一链） */
+/** GET /ip 响应形态兼容：分页 items 与裸 data 键两种载荷 */
 type IpsResponse = { data?: IpDetailWithNames[]; items?: IpDetailWithNames[] };
 
-// IP 可视化网格最多渲染 256 个地址块（旧版 maxDisplayIps 语义）
+// IP 可视化网格最多渲染 256 个地址块
 const MAX_DISPLAY_IPS = 256;
 
 // ==================== 数据查询 ====================
@@ -55,7 +53,7 @@ const ipsQuery = useQuery({
     if (!result.success) {
       throw new Error(result.message || t("ip.load_failed"));
     }
-    // 归一化响应形态：分页对象 / 裸数组（旧版 ipData 兼容链）
+    // 归一化响应形态：分页对象 / 裸数组
     const data = result.data;
     return Array.isArray(data) ? data : (data?.data ?? data?.items ?? []);
   }
@@ -76,12 +74,12 @@ const hasIPv6 = computed(() => !!network.value?.ipv6_cidr);
 
 const activeTab = ref("ipv4");
 
-// 单栈网段没有切换意义：隐藏按钮组仅保留网段名（旧版语义）
+// 单栈网段没有切换意义：隐藏按钮组仅保留网段名
 const showTabButtons = computed(() => hasIPv4.value && hasIPv6.value);
 
 // ==================== IPv4 统计与可视化 ====================
 
-/** 计算网段总 IP 数：2^(32-前缀) - 2；/31、/32 按 0 处理（旧版 calculateTotalIps） */
+/** 计算网段总 IP 数：2^(32-前缀) - 2；/31、/32 按 0 处理 */
 function calculateTotalIps(cidr: string | null | undefined): number {
   if (!cidr) {
     return 0;
@@ -101,7 +99,7 @@ function calculateTotalIps(cidr: string | null | undefined): number {
 /**
  * 生成可视化网格的 IP 地址列表：CIDR 基址先按前缀掩码取网络地址
  * （基址可能不是网络地址，如 10.0.0.77/24），从网络地址+1 起递增
- * （跳过网络地址），最多 MAX_DISPLAY_IPS 个（旧版 generateIpAddresses）
+ * （跳过网络地址），最多 MAX_DISPLAY_IPS 个
  */
 function generateIpAddresses(cidr: string | null | undefined): string[] {
   if (!cidr) {
@@ -155,7 +153,7 @@ function generateIpAddresses(cidr: string | null | undefined): string[] {
   return ipAddresses;
 }
 
-/** 生成 /22、/23 网段划分为 /24 的子网列表（旧版 generateSubnet24List） */
+/** 生成 /22、/23 网段划分为 /24 的子网列表 */
 function generateSubnet24List(cidr: string | null | undefined): string[] {
   if (!cidr) {
     return [];
@@ -229,7 +227,7 @@ const ipStatusMap = computed(() => {
   return map;
 });
 
-/** IP 块三态样式类（旧版 ipBlockStatusClass） */
+/** IP 块三态样式类（未使用/活跃/非活跃） */
 function ipBlockClass(ip: string): string {
   const status = ipStatusMap.value.get(ip);
   const isUsed = ipStatusMap.value.has(ip);
@@ -239,7 +237,7 @@ function ipBlockClass(ip: string): string {
   return status === "active" ? "ip-used-active" : "ip-used-inactive";
 }
 
-/** IP 块状态文案（旧版 ipStateText） */
+/** IP 块状态文案 */
 function ipStateText(ip: string): string {
   const isUsed = ipStatusMap.value.has(ip);
   if (!isUsed) {
@@ -255,7 +253,7 @@ const usageRate = computed(() =>
   totalIps.value > 0 ? ((usedIps.value / totalIps.value) * 100).toFixed(2) : "0.00"
 );
 
-// 状态过滤：仅作用于可视化网格显隐，不影响下方列表（旧版语义）
+// 状态过滤：仅作用于可视化网格显隐，不影响下方列表
 const ipFilter = ref("all");
 
 function ipBlockVisible(ip: string): boolean {
@@ -556,7 +554,7 @@ function formatDns(dns: string[] | null | undefined): string {
 </template>
 
 <style scoped>
-/* 网段使用情况弹窗样式（移植自旧版 css/pages/network-usage.css 全量）：
+/* 网段使用情况弹窗样式：
  全部类仅命中本组件模板（含 v-for 渲染的表格行，ModalShell 无 Teleport），
  改 scoped 消除 .table/.ipv6-address 等通用类名的全局泄漏 */
 .network-usage-container {
@@ -921,7 +919,7 @@ function formatDns(dns: string[] | null | undefined): string {
   color: var(--color-text-muted);
 }
 
-/* 刷新按钮加载态 spinner（旧版 utilities 层 .loading，仅本弹窗使用） */
+/* 刷新按钮加载态 spinner（仅本弹窗使用） */
 .usage-loading {
   display: inline-block;
   width: 14px;

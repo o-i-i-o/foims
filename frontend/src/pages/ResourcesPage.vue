@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
- * 资源管理页（移植自旧版 main.html resources 分区 + resourceTabs.js，
- * 按页签分批迁移：已迁移 = 网络区域/子网/房间/机柜/设备/线路六个页签）：
+ * 资源管理页：网络区域/子网/房间/机柜/设备/线路六个页签。
  * 页签记忆由 useSubTabs 统一承载（route.query.tab 优先 → localStorage →
- * 默认网络区域，记忆键 foims_subtab_resources 与旧版 setActiveSubtab 同名）。
+ * 默认网络区域，记忆键 foims_subtab_resources）。
  * 数据层为 TanStack Query：各表分页 20/页、列排序、page_size 可选
  * （10/20/50/100，切换重置页码）；子网页签 4 列表头搜索弹层防抖 300ms
  * 服务端过滤；行内操作（使用情况/子项列表/信息点/机位/编辑/删除）
@@ -83,7 +82,7 @@ const regions = usePagedList<NetworkRegion>({
 // ==================== 子网页签（4 列表头搜索过滤） ====================
 
 // 输入态（表头搜索框 v-model）与查询参数分离：输入经防抖 300ms 同步进
-// 查询参数（旧版 applyNetworkFilters 防抖语义），queryKey 仅引用查询参数
+// 查询参数，queryKey 仅引用查询参数
 const networkFilters = reactive({ name: "", region: "", ipv4: "", ipv6: "" });
 const networkFilterParams = reactive({ name: "", region: "", ipv4: "", ipv6: "" });
 
@@ -133,7 +132,7 @@ const rooms = usePagedList<RoomWithNetworks>({
   tag: "rooms",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "rooms"),
-  // 旧版房间列表默认按名称升序
+  // 房间列表默认按名称升序
   defaultSortBy: "name",
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -151,7 +150,7 @@ const cabinets = usePagedList<CabinetWithNetworks>({
   tag: "cabinets",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cabinets"),
-  // 旧版机柜列表默认按名称升序
+  // 机柜列表默认按名称升序
   defaultSortBy: "name",
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -169,7 +168,7 @@ const devices = usePagedList<DeviceWithDetails>({
   tag: "devices",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "devices"),
-  // 旧版设备列表默认按名称升序
+  // 设备列表默认按名称升序
   defaultSortBy: "name",
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -187,7 +186,7 @@ const cableLinks = usePagedList<CableLinkWithDetails>({
   tag: "cable-links",
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cable-links"),
-  // 旧版线路列表默认按更新时间倒序
+  // 线路列表不指定排序参数，沿用 usePagedList 默认（created_at 倒序）
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
     `/api/resources/cable-links?${new URLSearchParams({
       page: String(page),
@@ -259,7 +258,7 @@ async function editDevice(id: string): Promise<void> {
   deviceModal.open = true;
 }
 
-// 行内单行打印：直接以该行两端编号调起打印（不经弹窗，旧版语义）；
+// 行内单行打印：直接以该行两端编号调起打印（不经弹窗）；
 // seq 变化强制重挂载打印区，保证重复点击同一行也能再次调起打印
 const directPrint = reactive<{ seq: number; items: CableLinkWithDetails[] | null }>({ seq: 0, items: null });
 
@@ -274,7 +273,7 @@ function editCableLink(id: string): void {
   cableLinkModal.open = true;
 }
 
-// 批量打印：列出当前页线路供勾选（旧版 openCableLabelPrintModal）
+// 批量打印：列出当前页线路供勾选
 function openCableLabelPrintModal(): void {
   if (cableLinks.items.length === 0) {
     showToast(t("cable_link.print_empty"), "warning");
@@ -306,7 +305,7 @@ async function editCabinet(id: string): Promise<void> {
 
 /**
  * 房间子项列表弹窗："其他"房间工位与机柜均可能存在，优先展示有数据的
- * 一类（旧版 openRoomChildrenListModal 语义）。
+ * 一类。
  */
 async function openRoomChildrenListModal(roomId: string): Promise<void> {
   const result = await apiGet<RoomWithNetworks>(`/api/resources/rooms/${roomId}`);
@@ -455,7 +454,7 @@ function isCabinetRoomType(roomType: string): boolean {
   return type === "data_center" || type === "telecom_closet";
 }
 
-// 端点/链路类型标签：未知枚举原样回显（与旧版 getEndpointTypeLabel 一致）
+// 端点/链路类型标签：未知枚举原样回显
 function endpointTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     net_outlet: t("cable_link.endpoint_net_outlet"),

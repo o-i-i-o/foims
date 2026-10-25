@@ -1,8 +1,6 @@
 <script setup lang="ts">
 /**
- * 设备模板管理弹窗（移植自旧版 modals/device/device-template-modal.html +
- * device.js openDeviceTemplateModal/loadDeviceTemplateList/editDeviceTemplate/
- * deleteDeviceTemplate）：
+ * 设备模板管理弹窗：
  * - 模板列表：名称/类型/品牌/型号，行内操作编辑与删除；
  * - 行内编辑：名称必填（name_required），类型下拉复用 9 个 device_type.* key，
  *   品牌/型号/描述可空；保存走 PUT /device-templates/{id}；
@@ -126,7 +124,7 @@ const deleteMutation = useMutation({
       <p v-if="templatesQuery.isLoading.value" class="empty-hint">{{ t("common.loading") }}</p>
       <p v-else-if="templates.length === 0" class="empty-hint">{{ t("device_template.empty") }}</p>
       <template v-else>
-        <!-- 编辑态：行内容器替换为编辑表单（旧版 itemEl.innerHTML 替换语义） -->
+        <!-- 编辑态：行内容器原位切换为编辑表单 -->
         <div v-for="tmpl in templates" :key="tmpl.id" class="device-template-item">
           <template v-if="editingId === tmpl.id">
             <form class="device-template-edit-form" @submit.prevent="updateMutation.mutate({ id: tmpl.id })">

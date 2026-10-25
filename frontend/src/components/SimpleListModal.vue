@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 通用简单列表弹窗（移植自旧版 modals/common/simple-list-modal.html
- * + ui.js openSimpleListModal）：适合工位/机柜/信息点/机位这类
+ * 通用简单列表弹窗：适合工位/机柜/信息点/机位这类
  * 无复杂交互的只读列表。自动追加序号列，空数据显示 no_data。
  */
 import { useI18n } from "vue-i18n";

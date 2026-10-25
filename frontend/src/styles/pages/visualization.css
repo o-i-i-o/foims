@@ -1,6 +1,6 @@
 @layer pages {
-  /* 可视化页面作用域：.visualization-page（main.html 中 section#visualization 的样式钩子，
-   ID 仅保留给 JS 查找，样式一律走类选择器） */
+  /* 可视化页面作用域：.visualization-page（VisualizationPage.vue 根节点的样式钩子，
+     不设 ID，样式一律走类选择器） */
   .visualization-page.content-section.active {
     position: relative;
     display: flex;

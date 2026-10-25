@@ -1,6 +1,5 @@
 @layer modals {
-  /* 线缆标签批量打印，逐字移植自旧版
-   web/static/css/modals/cable-label-print.css
+  /* 线缆标签批量打印样式：
    规格说明：25x38+40 —— 标签 25mm 宽 x 38mm 高，标签间步进 40mm。
    纸张固定为标签步进尺寸（@page size: 25mm 40mm），一枚标签独占一页，
    页底 2mm 空白即标签间隔；标签内容仍为一枚印两端（上=本端、下=对端）。

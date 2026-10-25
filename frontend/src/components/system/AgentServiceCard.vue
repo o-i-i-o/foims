@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * Agent 配置卡片（移植自旧版 data-management 分区 agent-service 段 +
- * systemManager.js Agent 分发段）：上报接收服务参数（监听地址/上报与
+ * Agent 配置卡片：上报接收服务参数（监听地址/上报与
  * 采集间隔/上报地址模式）+ Agent 设置（版本/注册令牌/配置包分发）。
  * 与会话设置共用 ["system-config"]（保存仅替换 agent 段并带回其余字段）。
  */
@@ -301,7 +300,7 @@ async function regenerateToken(): Promise<void> {
         <div class="form-row">
           <dl class="config-field">
             <dt>{{ t("system.agent_enrollment_token") }}</dt>
-            <!-- 加载失败显式提示（旧版为 error toast，此处渲染为字段文案避免查询重试风暴） -->
+            <!-- 加载失败显式提示（渲染为字段文案，避免查询重试风暴） -->
             <dd class="field-value">{{ tokenQuery.isError.value ? t("system.agent_token_load_failed") : enrollmentToken || t("system.agent_token_missing") }}</dd>
           </dl>
           <div v-if="!readonly" class="form-group">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 使用率迷你进度条（移植自旧版 agents.js renderUsageBar）：
+ * 使用率迷你进度条：
  * >85% 红、>60% 橙、其余绿；未上报（null/非数值）显示 "-"。
  * 列表 CPU/内存/磁盘列与详情弹窗内存卡共用。
  */

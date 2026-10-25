@@ -1,7 +1,7 @@
 /**
- * vue-i18n 实例：复用旧版 web/static/i18n 的 zh/en JSON（迁移期单一来源）。
+ * vue-i18n 实例：语言包为随构建入库的 src/i18n/locales/ zh/en JSON（单一来源）。
  *
- * 旧版自定义 t() 的占位符语法为 {{name}}，vue-i18n 为 {name}；消息中的
+ * 语言包历史文案的占位符语法为 {{name}}，vue-i18n 为 {name}；消息中的
  * @ | $ 是 vue-i18n 消息格式的特殊字符（链接消息/复数/字面量），需转义。
  * 导入时统一归一化：{{name}} → {name}，其余特殊字符转义为字面量
  * （已核对现网语言包：花括号仅来自占位符，@ 仅 1 处、| 为 0 处）。
@@ -49,7 +49,7 @@ function detectInitialLanguage(): string {
   return browserLang;
 }
 
-/** 递归归一化消息文案：旧版占位符与特殊字符转 vue-i18n 语法 */
+/** 递归归一化消息文案：历史占位符与特殊字符转 vue-i18n 语法 */
 function normalizeLeaf(value: unknown): string | MessageTree {
   if (typeof value === "string") {
     return value
@@ -88,7 +88,7 @@ export const i18n = createI18n({
   fallbackWarn: false
 });
 
-/** 切换语言并持久化（与旧版行为一致：同步 <html lang>） */
+/** 切换语言并持久化：内存态 + localStorage + 同步 <html lang> */
 export function changeLanguage(lang: string): void {
   if (!SUPPORTED_LANGUAGES.has(lang)) {
     return;

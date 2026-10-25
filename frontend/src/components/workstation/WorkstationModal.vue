@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 工位新增/编辑弹窗（移植自旧版 modals/workstation/workstation-modal.html
- * + modules/workstation.js openWorkstationModal/submitWorkstationForm）：
+ * 工位新增/编辑弹窗：
  * - 房间（仅办公类：办公/大堂/接待/其他）级联管理人（按房间所属组织取员工）；
  * - 名称/管理人必填；X/Y 坐标不随表单提交，而是经 `saved` 事件携带给
  *   可视化页应用到画布布局（element_layouts）。
@@ -87,8 +86,8 @@ const roomOrgMap = computed(() => new Map(roomOptions.value.map((room) => [room.
 
 // ==================== 管理人下拉（按房间所属组织取员工） ====================
 
-// 旧版以序号守卫丢弃快速切换房间时的过期员工响应；vue-query 按 orgId 分键
-// 缓存天然隔离并发结果，等价替代
+// 快速切换房间时的过期员工响应由 vue-query 按 orgId 分键
+// 天然隔离，无需序号守卫
 const managerOrgId = computed(() => roomOrgMap.value.get(form.roomId) || "");
 
 const employeesQuery = useQuery({
@@ -107,7 +106,7 @@ const employeesQuery = useQuery({
 
 const employeeOptions = computed(() => (Array.isArray(employeesQuery.data.value) ? employeesQuery.data.value : []));
 
-// 房间切换 → 管理人跟随新房间的所属组织刷新，旧选中作废（与旧版一致）
+// 房间切换 → 管理人跟随新房间的所属组织刷新，旧选中作废
 function onRoomChange(): void {
   form.managerId = "";
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 定时任务创建/编辑弹窗（移植自旧版 scheduledTaskManager.js）：
+ * 定时任务创建/编辑弹窗：
  * 任务类型五选一 + cron 五字段逐段校验（含预览与示例表）+
  * mac_sync 设备复选/子网下拉配置 + log_cleanup / ip_status_sync 天数配置。
  */

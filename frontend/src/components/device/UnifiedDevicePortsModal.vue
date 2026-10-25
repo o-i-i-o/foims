@@ -1,8 +1,6 @@
 <script setup lang="ts">
 /**
- * 统一设备端口管理弹窗（移植自旧版 modals/device/unified-device-ports-modal.html +
- * unifiedDevicePorts.js manageUnifiedDevicePorts/renderAllPortGroups/startSnmpSync/
- * applySnmpResults/refreshModalView）：
+ * 统一设备端口管理弹窗：
  * - 数据源 GET /devices/{id}/nics（网卡 → 网口），每张网卡一组端口方块，
  *   组内按 sort_order 与名称排序；托管与非托管网口统一展示，点击编辑；
  * - 端口方块显示名称末尾数字段，tooltip 汇总名称/MAC/IP/网段/VLAN/类型/
@@ -75,7 +73,7 @@ function extractPortLastNumber(portName: string): string {
   return portName;
 }
 
-/** 组内端口排序：sort_order 优先，其次名称（与旧版一致） */
+/** 组内端口排序：sort_order 优先，其次名称 */
 function sortedPorts(card: NicCard): NicPort[] {
   const ports = Array.isArray(card.ports) ? [...card.ports] : [];
   ports.sort(
@@ -296,7 +294,7 @@ async function applySnmpResults(
     speed: p.speed || null
   });
 
-  // 任务表 + 递归执行器逐个提交（与旧版一致），失败仅计数由汇总提示体现
+  // 任务表 + 递归执行器逐个提交，失败仅计数由汇总提示体现
   const tasks: Array<() => Promise<void>> = [];
   for (const p of toAdd) {
     tasks.push(async () => {

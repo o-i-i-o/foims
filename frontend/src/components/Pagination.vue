@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * 通用分页控件（移植自旧版 utils/pagination.js renderPagination）：
+ * 通用分页控件：
  * 上一页/下一页 + 页码省略序列 + 总数信息，总页数 > 7 时出现跳页框。
  * 根元素为 .pagination-container，调用方置于 .table-container 之后
  * （布局层 sticky 页脚规则依赖该相邻结构）。
  * 传入 pageSize（>0）时在总数信息后渲染每页条数选择器
- * （旧版 appendPaginationToTable 的 onPageSizeChange 语义：切换后由调用方重置页码重拉）。
+ * （每页条数切换后由调用方重置页码重拉）。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -15,7 +15,7 @@ const props = withDefaults(
     page: number;
     totalPages: number;
     total?: number;
-    /** 每页条数：>0 时渲染选择器并回显当前值（旧版默认选项 10/20/50/100） */
+    /** 每页条数：>0 时渲染选择器并回显当前值（默认选项 10/20/50/100） */
     pageSize?: number;
     pageSizeOptions?: number[];
   }>(),
@@ -29,7 +29,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-// 页码序列：null 表示省略号（与旧版 generatePageNumbers 一致）
+// 页码序列：null 表示省略号
 const pages = computed<(number | null)[]>(() => {
   const { page, totalPages } = props;
   if (totalPages <= 7) {

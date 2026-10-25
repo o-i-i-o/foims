@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * SNMP Trap 接收配置卡片（移植自旧版 systemManager.js 的 trap 段）：
+ * SNMP Trap 接收配置卡片：
  * 启用开关 / 监听地址与端口 / 冷却窗口 / 团体名白名单 /
  * v3 USM 用户表（协议下拉 + 密码掩码 *** 沿用规则 + 逐行校验）。
  * PUT /api/system/config 会整体替换 snmp 段，基础参数原样带回避免丢配置。

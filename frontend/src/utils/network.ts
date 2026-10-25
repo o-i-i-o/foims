@@ -1,10 +1,10 @@
 /**
- * IP 地址与 CIDR 工具函数（IPv4/IPv6，移植自旧版 web/static/js/utils/network.js）。
+ * IP 地址与 CIDR 工具函数（IPv4/IPv6）。
  *
  * IPv4 八位组拒绝前导零（如 "01"，避免八进制歧义）。
  * 本文件收录前端已接线页面的依赖链（网段弹窗校验、设备网卡 IP 校验）：
  * isIPv6 / isValidIP / isValidIPv4 / isValidIPv6 / isIpInCidr 及其内部实现，
- * 其余旧版函数待所属页面迁移时再补。
+ * 未收录的函数按页面所需再补。
  */
 
 /** 判断是否为 IPv6 地址（按是否含冒号粗判，配合 isValidIPv6 使用）。 */
@@ -118,7 +118,7 @@ function ipv6ToInt(ipv6: string): bigint | null {
 /** IPv4 CIDR（如 "192.168.1.0/24"）→ {start, end} 数值范围，非法返回 null。 */
 function ipv4CidrToRange(cidr: string): { start: bigint; end: bigint } | null {
   const [ip, prefixLen] = cidr.split("/");
-  // 缺省前缀长度与旧版一致按 NaN 处理（parseInt(undefined) 等价 parseInt("")）
+  // 缺省前缀长度按 NaN 处理（parseInt(undefined) 等价 parseInt("")）
   const prefix = Number.parseInt(prefixLen ?? "", 10);
   if (!ip || Number.isNaN(prefix) || prefix < 0 || prefix > 32) {
     return null;
@@ -140,7 +140,7 @@ function ipv4CidrToRange(cidr: string): { start: bigint; end: bigint } | null {
 /** IPv6 CIDR → {start, end} 数值范围，非法返回 null。 */
 function ipv6CidrToRange(cidr: string): { start: bigint; end: bigint } | null {
   const [ip, prefixLen] = cidr.split("/");
-  // 缺省前缀长度与旧版一致按 NaN 处理（parseInt(undefined) 等价 parseInt("")）
+  // 缺省前缀长度按 NaN 处理（parseInt(undefined) 等价 parseInt("")）
   const prefix = Number.parseInt(prefixLen ?? "", 10);
   if (!ip || Number.isNaN(prefix) || prefix < 0 || prefix > 128) {
     return null;

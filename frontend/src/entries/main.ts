@@ -8,7 +8,7 @@ import { createPinia } from "pinia";
 
 import "../styles/variables.css";
 import "../styles/reset.css";
-// components 层：与旧版 web/static/css/components 同名文件逐字一致
+// components 层：共享组件样式（tooltip/按钮/表单/表格/徽标/卡片）
 import "../styles/components/tooltip.css";
 import "../styles/components/buttons.css";
 import "../styles/components/forms.css";
@@ -27,8 +27,8 @@ import "../styles/components/cable-label-print.css";
 import "../styles/toasts.css";
 import "../styles/layouts/sidebar.css";
 import "../styles/layouts/main-content.css";
-// pages 层：可视化页（画布/拓扑/机位弹窗等由原生 JS 动态创建的 DOM 拿不到
-// scoped 属性，页面级样式必须走全局层）
+// pages 层：可视化页（v-html 注入的图标与跨组件共享的画布/拓扑/机位弹窗
+// DOM 拿不到 scoped 属性，页面级样式必须走全局层）
 import "../styles/pages/visualization.css";
 // pages 层：主机监控页与详情/阈值弹窗
 import "../styles/pages/agents.css";

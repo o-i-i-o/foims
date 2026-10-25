@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * 操作日志详情弹窗（移植自旧版 showLogDetails + modals/log/log-details-modal.html）。
+ * 操作日志详情弹窗。
  * log 对象由调用方直接传入（不再经 JSON 序列化挂 data 属性）。
- * 样式为 SFC 自包含（模态壳复用改密弹窗骨架 + 详情字段网格取自旧版 pages/logs.css）。
+ * 样式为 SFC 自包含 + 全局模态壳样式（styles/components/modals.css）。
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
@@ -86,7 +86,7 @@ const detailsText = computed<string | null>(() => {
 
 <style scoped>
 /* 外壳/页头/页脚样式见全局 styles/components/modals.css；此处仅保留
-   弹窗专属宽度与日志详情内容网格（旧版 pages/logs.css 移植段） */
+   弹窗专属宽度与日志详情内容网格 */
 .modal-dialog {
   max-width: 560px;
 }

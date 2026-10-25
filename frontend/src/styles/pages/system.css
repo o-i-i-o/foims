@@ -1,6 +1,6 @@
 @layer pages {
-  /* 系统管理分区页样式（移植自旧版 pages/system-config.css + data-management.css，
-   并入 logs.css 中系统页使用的通知矩阵/收件人清单/日志统计类） */
+  /* 系统管理分区页样式（配置卡片/数据管理 +
+   通知矩阵/收件人清单/日志统计类） */
 
   .system-config-section,
   .notification-config-section {
@@ -571,7 +571,7 @@
     background: var(--color-bg-white);
   }
 
-  /* ==================== 通知设置（移植自旧版 logs.css 系统页类） ==================== */
+  /* ==================== 通知设置 ==================== */
 
   .notification-settings-section {
     margin-top: 2rem;
@@ -650,7 +650,7 @@
     color: var(--color-text-muted);
   }
 
-  /* ==================== 日志统计 / 清理（移植自旧版 logs.css 系统页类） ==================== */
+  /* ==================== 日志统计 / 清理 ==================== */
 
   .logs-stats-grid {
     display: grid;

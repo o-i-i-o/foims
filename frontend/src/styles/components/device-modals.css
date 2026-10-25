@@ -1,7 +1,5 @@
 @layer modals {
-  /* 设备弹窗辅助样式（模板管理列表 + 加载态/工具行），
-   逐字移植自旧版 web/static/css/components/modals.css 的
-   device-template 与宽幅滚动辅助两段 */
+  /* 设备弹窗辅助样式（模板管理列表 + 加载态/工具行） */
 
   /* ==================== 设备模板管理 ==================== */
   .device-template-list {
@@ -86,8 +84,7 @@
 
   /* ==================== 宽幅与滚动辅助（MAC/LLDP 等数据表模态框） ==================== */
 
-  /* 旧版 .modal-body.modal-body-scroll：MAC/LLDP 长表滚动区（新外壳 body
-   不可挂类，由弹窗内滚动容器承接） */
+  /* MAC/LLDP 长表滚动区（外壳 body 不可挂类，由弹窗内滚动容器承接） */
   .modal-body-scroll {
     max-height: 31.25rem;
     overflow-y: auto;

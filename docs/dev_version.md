@@ -507,3 +507,10 @@ v0.19.8
 3. utilities 层废除（z 段）：全库检索 @layer utilities 实现块零使用（旧 web-archive 遗产占位，同名片段已就地移植），从 variables.css 头部层序声明移除，新层序 variables→reset→components→modals→layouts→pages→responsive；同步修正引用旧层序的注释（entries/main.ts 头注释、CSS-style.md 层序与目录清单）
 4. 两个非 scoped <style> 块归位：SubnetUsageModal.vue 的 usage/ipv6 前缀类实测全部仅命中本组件模板（ModalShell 无 Teleport，表格行为 v-for Vue 渲染），改 <style scoped> 消除 .table/.ipv6-address/.no-ipv6-info 等通用类名与后代裸标签选择器的 unlayered 全局泄漏；OrganizationPage.vue 的 org-* 类被递归子组件 OrgTreeNode.vue/TemplateTypeNode.vue 跨组件命中（scoped 无法穿透），整体上收至新建全局 styles/pages/organization.css（@layer pages，entries/main.ts 追加导入），org-fade-in keyframes 随迁，SFC 减重 561 行并入 Biome 兜底范围
 5. 版本：本次为纯前端样式与配置修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；验证 biome check frontend 23 文件 0 违规、npm run typecheck 0 错、npm run build 通过
+
+v0.19.9
+2026102514190601
+1. 前端重构完成度核实：frontend/src 共 212 个 .ts + 83 个 .vue（83/83 全部 <script setup lang="ts">）+ 23 个 .css，无任何 .js 源码残留；三入口 HTML 均指向 /src/entries/*.ts，i18n 语言包已入库 src/i18n/locales/（zh/en），确认原生 JS → Vue 3 + TS 重构已全量完成
+2. 前端注释去旧版化（z 段，约 230 处/150+ 文件）：清除「移植自旧版 modules/xxx.js」「对应旧版 main.html NNN 行」「旧版 X 语义」等考古性溯源注释，统一改写为基于当前代码逻辑的行为描述（pages/components/composables/utils/config/api/router/entries/i18n/styles 与 vite.config.js）；与事实不符的注释同步纠偏（i18n/index.ts 语言包位置、api/client.ts 改直陈当前契约、ConfirmModal/LogDetailsModal 样式来源表述、visualization.css/main.html 挂载描述、tables.css 列宽对应模板等）
+3. 合理保留：代码标识符 legacy 系列（legacyRegionList/registerLegacy 表“失联网段数据”、.org-icon-legacy 表遗留图标形态、vue-i18n legacy:false 库 API）不动；web-archive/ 只读存档不动
+4. 版本：纯注释修订，frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无后端载荷变更无需再生成 TS 类型；验证 npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规，grep 旧版/web-archive/原生 JS/存档 引用归零

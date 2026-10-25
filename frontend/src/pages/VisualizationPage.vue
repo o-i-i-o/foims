@@ -1,13 +1,10 @@
 <script setup lang="ts">
 /**
- * 可视化页（工位 / 机柜 / 拓扑三画布）。
- *
- * 旧版由 modules/visualization/ 的 11 个命令式类驱动：数据加载散落在
- * SVGDataManager / TopologyDataManager，坐标只存在于 SVG 属性上，保存时反读 DOM，
- * 分组推挤靠删除重建整张图。现在本页只负责「数据编排 + 状态持有」：
+ * 可视化页（工位 / 机柜 / 拓扑三画布）：本页只负责「数据编排 + 状态持有」，
+ * 渲染与交互下沉到画布组件。
  *
  * - 坐标的唯一真相是响应式视图模型：拖动落定由画布 emit 矩形，本页同步写回，
- *   保存时经 `buildLayoutItems` 投影成布局项，不再从 DOM 反读；
+ *   保存时经 `buildLayoutItems` 投影成布局项，不从 DOM 反读；
  * - 每次加载带渲染代次 token：快速切换房间/组织时旧响应直接丢弃；
  * - 三态返回（stale / error / empty）保留原语义：布局请求失败必须与「确认无
  *   布局」区分，否则自动排布会整表 upsert 覆盖已保存布局；
@@ -117,7 +114,7 @@ const { t } = useI18n();
 
 // ==================== 页签 ====================
 
-/** 页签 id 沿用旧版（localStorage 中已记住的偏好继续有效）；画布页签不参与 hash 深链 */
+/** 页签 id 即 localStorage 偏好记忆键值；画布页签不参与 hash 深链 */
 const TABS = [
   { id: "workstation-visualization", titleKey: "visualization.workstation" },
   { id: "cabinet-visualization", titleKey: "visualization.cabinet" },
@@ -160,7 +157,7 @@ async function loadOrganizationTree(): Promise<void> {
 
 /**
  * 工位视图默认组织：取第一个组织节点的最后一个下级，无下级时取该节点本身
- * （与旧版一致：刷新后组织下拉停在最常用的末级组织）。
+ * （刷新后组织下拉停在最常用的末级组织）。
  */
 function applyDefaultWorkstationOrg(): void {
   const firstRoot = orgTree.value[0];

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 应用层 Fail2ban 卡片（移植自旧版 fail2banManager.js）：状态徽章 +
+ * 应用层 Fail2ban 卡片：状态徽章 +
  * 配置（findtime/max_retry/bantime）+ 已封禁/追踪 IP 表 + 手动封禁/解禁。
  * 封禁/解禁与保存均为写操作，auditor/user（system 分区只读）隐藏。
  */

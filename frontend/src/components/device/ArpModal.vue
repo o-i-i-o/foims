@@ -1,8 +1,6 @@
 <script setup lang="ts">
 /**
- * MAC 表弹窗（移植自旧版 modals/device/arp-modal.html +
- * deviceMacLldp.js viewArpTable/renderMacTable/groupByNetwork/filterEntries/
- * bindCollapseEvents/syncMacData）：
+ * MAC 表弹窗：
  * - 加载设备名 + GET /devices/{id}/macs，按 IPv4（含"."）与 IPv6（含":"）
  *   分页签展示，页签标题带条数；
  * - 表格按网段分组折叠（默认收起）：IPv4 归 /24，IPv6 按 fe80/ULA/240e 等
@@ -120,7 +118,7 @@ function filterEntries(list: SnmpMac[], term: string): SnmpMac[] {
 const ipv4Entries = computed(() => entries.value.filter((e) => e.ip_address?.includes(".")));
 const ipv6Entries = computed(() => entries.value.filter((e) => e.ip_address?.includes(":")));
 
-// ==================== 网段分组（与旧版 groupByNetwork 一致） ====================
+// ==================== 网段分组 ====================
 
 function groupNetworkOf(entry: SnmpMac, type: "ipv4" | "ipv6"): string {
   if (type === "ipv4") {
@@ -189,7 +187,7 @@ function buildGroups(list: SnmpMac[], type: "ipv4" | "ipv6") {
 const ipv4Groups = computed(() => buildGroups(filterEntries(ipv4Entries.value, ipv4Search.value), "ipv4"));
 const ipv6Groups = computed(() => buildGroups(filterEntries(ipv6Entries.value, ipv6Search.value), "ipv6"));
 
-// ==================== 分组折叠（默认全部收起，与旧版一致） ====================
+// ==================== 分组折叠（默认全部收起） ====================
 
 const expandedGroups = ref(new Set<string>());
 

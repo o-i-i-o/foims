@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 站点根 CA 生成弹窗（移植自旧版 ca-generate-modal.html + systemManager.js）：
+ * 站点根 CA 生成弹窗：
  * CN 必填 + 主体五字段 + 有效期（默认 7300 天）；可选字段空串转 null。
  */
 import { ref } from "vue";

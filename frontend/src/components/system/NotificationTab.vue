@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * SMTP 配置页签（移植自旧版 system-notification 分区 + systemManager.js）：
+ * SMTP 配置页签：
  * SMTP 服务器卡片（未配置属正常业务态）+ 通知设置卡片（方式矩阵 +
  * 收件人复选清单）。Webhook 列为占位（暂未实现）保留展示。
  */

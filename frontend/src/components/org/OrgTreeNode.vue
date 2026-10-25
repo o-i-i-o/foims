@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 组织树节点（递归组件，移植自旧版 modules/organization.js renderTreeNode
- * 与树交互逻辑）：展开/折叠（展开/收起全部按钮经全局展开态联动）、搜索
+ * 组织树节点（递归组件）：展开/折叠（展开/收起全部按钮经全局展开态联动）、搜索
  * 过滤（子树命中才可见，纯祖先命中强制展开）、行内操作按钮（悬停显形）。
  * 操作经注入的 orgTreeCtx.onAction 上抛页面处理；图标经注入的
  * orgTreeCtx.resolveIcon 按所属模板优先解析。
@@ -41,7 +40,7 @@ const hasChildren = computed(() => children.value.length > 0);
 const typeLabel = computed(() => getOrgTypeLabel(props.node.org_type));
 const nodeIcon = computed(() => ctx.resolveIcon(props.node.org_type, props.node.template_id));
 
-// 展开状态：初始跟随全局展开态（新渲染的节点与旧版 allExpanded 初始渲染一致），
+// 展开状态：初始跟随全局展开态（新渲染的节点与全局展开/收起一致），
 // 全局展开/收起时同步所有节点；单节点点击独立切换
 const selfExpanded = ref(ctx.allExpanded.value);
 watch(ctx.allExpanded, (value) => {

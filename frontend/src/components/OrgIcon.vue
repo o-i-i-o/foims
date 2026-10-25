@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 组织节点图标渲染（移植自旧版 config/org-icons.js renderOrgIcon）：
+ * 组织节点图标渲染：
  * 已知 key 渲染带语义配色的 SVG（结构化形状，避免 v-html）；
  * 历史 emoji 值原样文本输出（文本插值自动转义）；空值用默认图标。
  */

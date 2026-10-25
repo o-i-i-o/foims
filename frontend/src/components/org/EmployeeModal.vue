@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 人员管理弹窗（移植自旧版 openEmployeeModal + employee-modal/employee-edit-modal）：
+ * 人员管理弹窗：
  * 列出组织节点下的员工，支持新增/编辑/删除（工位管理人的员工引用由后端
  * 自动解绑）。员工列表接口返回普通数组（非分页）。
  */

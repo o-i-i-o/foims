@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * 主界面壳（移植自旧版 web/static/main.html 骨架 + navigation.js +
- * authManager.js 壳层逻辑）：侧边栏（收起/展开、RBAC 菜单隐藏、用户信息、
+ * 主界面壳：侧边栏（收起/展开、RBAC 菜单隐藏、用户信息、
  * 语言切换、修改密码、退出登录）+ 主内容 RouterView。
  *
- * 分区内容页由 RouterView 按路由懒加载渲染，侧边栏视觉与交互样式复用旧版
- * layouts/sidebar.css（@layer layouts）。
+ * 分区内容页由 RouterView 按路由懒加载渲染，侧边栏视觉与交互样式
+ * 由 layouts/sidebar.css（@layer layouts）承载。
  */
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -39,7 +38,7 @@ const collapsed = ref(readCollapsedState());
 
 function applyCollapsedState(value: boolean) {
   collapsed.value = value;
-  // 收起样式由 body.sidebar-collapsed 驱动（布局层 CSS 按旧版结构编写）
+  // 收起样式由 body.sidebar-collapsed 驱动（布局层 CSS 按类切换展开/收起两套结构）
   document.body.classList.toggle("sidebar-collapsed", value);
   try {
     localStorage.setItem(SIDEBAR_COLLAPSE_KEY, value ? "1" : "0");
@@ -60,7 +59,7 @@ const visibleNavItems = computed(() => NAV_ITEMS.filter((item) => !auth.hiddenSe
 
 const showChangePassword = ref(false);
 
-/** 登录态复核（移植自旧版 checkLoginStatus）：失败一律回登录页 */
+/** 登录态复核：失败一律回登录页 */
 async function verifySession() {
   if (!auth.user) {
     return;

@@ -1,5 +1,5 @@
 /**
- * 认证状态 store：包装 utils/session.js 的用户信息副本为响应式状态。
+ * 认证状态 store：包装 utils/session 的用户信息副本为响应式状态。
  * 真实凭证由 HttpOnly Cookie 承载，store 仅承担界面所需的用户快照
  * （角色分区可见性 / 侧边栏用户名 / 登出）。
  */

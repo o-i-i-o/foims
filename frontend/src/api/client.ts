@@ -2,18 +2,16 @@
  * API 客户端：处理所有 API 请求。
  * 使用 HttpOnly Cookie 进行认证（credentials: include），防止 XSS 窃取 token。
  *
- * 契约与旧版 web/static/js/utils/apiClient.js 一致：
+ * 请求契约：
  * - 永不 reject：所有失败归一为 { success: false, message, errorType, ... }；
  * - 服务端响应形如 { success, message: "<i18n key>", message_params?, data }，
  *   message 在此处就地翻译（message_key 保留原始键供调用方分支）；
  * - 401 先刷新令牌重试（公共认证端点除外），429 按 Retry-After 退避重试；
  * - 文件下载响应归一为 { success, data: Blob, isBlob: true, filename }。
  *
- * 与旧版的差异（Vue 重构）：
- * - 移除并发 GET 去重与 data-mutation 事件广播：由 TanStack Query 的
- *   查询去重与缓存失效机制取代；
- * - 移除 refreshThreshold 主动刷新阈值：TanStack Query 的 queryFn 统一
- *   走 401 恢复路径，会话续期完全由服务端驱动的 401 重试承担。
+ * 设计要点：不做并发 GET 去重与 data-mutation 事件广播——查询去重与缓存
+ * 失效统一由 TanStack Query 承担；不设 refreshThreshold 主动刷新阈值，
+ * 会话续期完全由服务端驱动的 401 重试承担（queryFn 统一走 401 恢复路径）。
  */
 import { i18n } from "../i18n/index";
 import { clearSession } from "../utils/session";

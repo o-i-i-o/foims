@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /**
- * 组织管理页（移植自旧版 main.html organization 分区 + modules/organization.js
- * + pages/organization.css）：组织树（展开/折叠/搜索过滤）+ 节点 CRUD +
+ * 组织管理页：组织树（展开/折叠/搜索过滤）+ 节点 CRUD +
  * 人员管理 + 层级模板管理。数据层为 TanStack Query：树/模板/可用类型三查询
- * （可用类型对应旧版模块级缓存，staleTime Infinity），写操作经 useMutation
- * 后失效缓存。搜索为旧版客户端过滤语义：命中节点显示并强制展开其祖先链。
+ * （可用类型元数据基本不变，staleTime Infinity 仅首次请求），写操作经 useMutation
+ * 后失效缓存。搜索为客户端过滤：命中节点显示并强制展开其祖先链。
  */
 import { computed, provide, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -52,7 +51,7 @@ const availableTypesQuery = useQuery({
     }
     return { types: result.data?.types ?? [], icons: result.data?.icons ?? {} };
   },
-  // 对应旧版模块级缓存（loadOrgTypesFromAPI 仅首次请求）
+  // 可用类型元数据基本不变：仅首次请求后永久缓存
   staleTime: Infinity
 });
 
@@ -95,7 +94,7 @@ watch(searchInput, (value) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     searchKeyword.value = value.trim().toLowerCase();
-    // 清空搜索即整树重渲染：展开/折叠状态还原（对应旧版重新加载树）
+    // 清空搜索即整树重渲染：展开/折叠状态还原
     if (!searchKeyword.value) {
       renderEpoch.value += 1;
     }
@@ -104,8 +103,8 @@ watch(searchInput, (value) => {
 
 /**
  * 搜索命中集合：visible 为命中节点及其祖先链；expand 为纯祖先命中
- * （自身不匹配但后代匹配）的强制展开集合。对应旧版按名称过滤并展开
- * 祖先容器的 DOM 操作。
+ * （自身不匹配但后代匹配）的强制展开集合。过滤与展开均由响应式
+ * 计算派生，不触碰 DOM。
  */
 const searchState = computed(() => {
   const keyword = searchKeyword.value;
@@ -138,7 +137,6 @@ const searchState = computed(() => {
 const allExpanded = ref(false);
 
 // 树渲染代际：数据变化或清空搜索时整树重挂载，节点展开态还原
-// （对应旧版每次 loadOrganizationTree 全量重渲染的行为）
 const renderEpoch = ref(0);
 watch(treeQuery.data, () => {
   renderEpoch.value += 1;

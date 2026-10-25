@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 安全页签（移植自旧版 security 分区 + fail2banManager.js/systemManager.js）：
+ * 安全页签：
  * 限流设置（共享 ["system-config"] 查询键）/ 等保密码策略 / 应用层 Fail2ban。
  */
 import { computed, ref, watch } from "vue";

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * LLDP 邻居弹窗（移植自旧版 modals/device/lldp-modal.html +
- * deviceMacLldp.js viewLldpNeighbors/renderLldpTable/syncLldpData）：
+ * LLDP 邻居弹窗：
  * - 加载设备名 + GET /devices/{id}/lldp-neighbors，表格六列：序号/本地端口/
  *   邻居设备/邻居端口/Chassis ID/系统描述；
  * - 邻居端口展示：neighbor_port_id 非 MAC 格式时优先取 port_id，
- *   否则退回 port_desc，再退回 port_id（与旧版一致）；
+ *   否则退回 port_desc，再退回 port_id；
  * - 系统描述列 title 悬停展示全文；
  * - 同步：POST /devices/{id}/lldp/sync 后重新加载；空数据态提供同步按钮。
  */
@@ -76,7 +75,7 @@ async function syncLldpData(): Promise<void> {
   }
 }
 
-// ==================== 邻居端口展示逻辑（与旧版一致） ====================
+// ==================== 邻居端口展示逻辑 ====================
 
 function isMac(str: string): boolean {
   return /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(str);

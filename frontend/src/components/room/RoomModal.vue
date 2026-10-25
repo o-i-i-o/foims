@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 房间新增/编辑弹窗（移植自旧版 modals/room/room-modal.html
- * + room.js openRoomModal/submitRoomForm）：
+ * 房间新增/编辑弹窗：
  * - 基础字段：组织（树形缩进下拉）/ 房型 / 名称 / 电源功率（W|kW 单位换算）/ 描述；
  * - 网段配置行：区域 + 网段级联下拉，行间去重，至少保留一行；
  * - 子项动态行按房型分区：办公类（办公室/大厅/前台）仅工位、
@@ -130,7 +129,7 @@ function addNetworkConfig(): void {
 }
 
 function removeNetworkConfig(index: number): void {
-  // 至少保留一行网段配置（旧版 keep_one_network 语义）
+  // 至少保留一行网段配置
   if (networkConfigs.length <= 1) {
     showToast(t("room.keep_one_network"), "warning");
     return;
@@ -218,7 +217,7 @@ function addNetOutlet(): void {
 
 // ==================== 下拉选项（组织树 / 组织员工） ====================
 
-/** 组织下拉行（树形按深度缩进展示，旧版 loadOrgsForSelect 语义） */
+/** 组织下拉行（树形按深度缩进展示） */
 interface OrgOptionRow {
   id: string;
   name: string;
@@ -314,7 +313,7 @@ function validateChildren(): string | null {
 
 const saveMutation = useMutation({
   mutationFn: async (): Promise<string> => {
-    // 前置校验链（与旧版 submitRoomForm 顺序一致）
+    // 提交前置校验链
     if (!form.name.trim()) {
       throw new Error(t("room.name_required"));
     }
@@ -379,7 +378,7 @@ const saveMutation = useMutation({
       name: cab.name.trim(),
       capacity: cab.capacity
     }));
-    // 机房类仅机柜、办公类仅工位、"其他"两类齐全（与旧版按房型构造键集一致）
+    // 机房类仅机柜、办公类仅工位、"其他"两类齐全
     const childrenData: RoomChildrenSync = showCabinets.value
       ? {
           cabinets: cabinetItems,

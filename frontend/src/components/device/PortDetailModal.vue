@@ -1,8 +1,6 @@
 <script setup lang="ts">
 /**
- * 端口详情弹窗（移植自旧版 modals/device/device-port-detail-modal.html +
- * unifiedDevicePorts.js openPortDetailModal/collectPortFormData/submitPortForm/
- * deletePort）：统一端口管理的新增/编辑表单。
+ * 端口详情弹窗：统一端口管理的新增/编辑表单。
  * - 配置项与设备模态框网口容器一致：名称/物理形态/接口角色/端口类型/状态/
  *   Native VLAN/VLAN/速率/MAC/设备管理/描述；
  * - 「设备管理」勾选后该网口进入设备编辑模态框管理；端口模态框新建的端口

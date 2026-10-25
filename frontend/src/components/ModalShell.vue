@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 通用弹窗外壳（视觉样式见全局 styles/components/modals.css，与旧版
- * components/modals.css 外壳段逐字一致）：遮罩 + 深色页头（标题竖条 +
+ * 通用弹窗外壳（视觉样式见全局 styles/components/modals.css）：遮罩 + 深色页头（标题竖条 +
  * 关闭按钮）+ body/footer 插槽。Esc 与点击遮罩视为关闭；size 为宽度
  * 档位（sm 480 / md 600 / lg 900 / xl 90vw，min() 保证窄视口不溢出）。
  */
