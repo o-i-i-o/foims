@@ -11,7 +11,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             subnet_id UUID NOT NULL REFERENCES network_cidrs(id),
             ip_address INET NOT NULL,
             ip_version SMALLINT NOT NULL DEFAULT 4,
-            description TEXT,
             status VARCHAR(20) NOT NULL DEFAULT 'active'
                 CONSTRAINT chk_interface_ips_status CHECK (status IN ('active', 'inactive', 'reserved')),
             last_seen TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

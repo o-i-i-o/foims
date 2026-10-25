@@ -379,15 +379,14 @@ pub async fn apply_network_config(
                 let ip_version = detect_ip_version(&ip.ip_address)?;
 
                 sqlx::query(
-                    "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-                     VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
+                    "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, status, last_seen, created_at, updated_at)
+                     VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9)",
                 )
                 .bind(Uuid::new_v4())
                 .bind(port_id)
                 .bind(subnet_id)
                 .bind(&ip.ip_address)
                 .bind(ip_version)
-                .bind(&ip.description)
                 .bind("active")
                 .bind(now)
                 .bind(now)
@@ -439,7 +438,7 @@ pub async fn fetch_device_network_config(
                 nc.name AS network_name,
                 nr.name AS network_region,
                 host(m.ip_address) as ip_address,
-                m.ip_version, di.mac_address AS mac_address, m.description,
+                m.ip_version, di.mac_address AS mac_address,
                 m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
               FROM interface_ips m
               JOIN device_interfaces di ON m.device_interface_id = di.id

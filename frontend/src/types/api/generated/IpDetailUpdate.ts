@@ -4,7 +4,7 @@ export type IpDetailUpdate = { device_interface_id: string | null | null,
 /**
  * 有值才校验：与 IpDetailCreate 同口径拒绝带掩码/非法地址
  */
-ip_address: string | null, description: string | null, 
+ip_address: string | null, 
 /**
  * 取值白名单：active / inactive / reserved（与前端 formatter 展示口径一致；
  * DB 侧有 CHECK 约束兜底，应用层前置拦截非法值）

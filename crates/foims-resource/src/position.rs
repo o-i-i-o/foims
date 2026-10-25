@@ -306,7 +306,7 @@ async fn fetch_position_ips(
         r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
            nc.network_region_id AS network_region_id,
            nc.name AS network_name, nr.name AS network_region,
-           host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description,
+           host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address,
            m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
            FROM interface_ips m
            JOIN device_interfaces di ON m.device_interface_id = di.id

@@ -599,3 +599,12 @@ v0.19.23
 1. 设备模态框网卡编辑器 IP 容器删除“描述”字段（NetworkCardEditor.vue）：移除 IP 行模板末尾的 .nc-field（common.description 标签 + v-model=ipRow.description 的文本输入框，nc-ip-desc-* ），仅保留网络区域/网络名称/IP 地址三个字段
 2. 保留数据通路说明：ipRow.description 仍由 loadCardData 回填并在提交载荷中带回 description——IP 同步为整体替换语义，若连同 payload 一起删除会让后端已存的既有 IP 描述在下次保存时被静默置 null（数据丢失），故本次仅移除 UI 输入控件不改保存语义；.nc-field 与 common.description 均为其他字段复用的共享类/文案，无死样式残留
 3. 版本：纯前端 UI 修订（无后端载荷/结构/DB 变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.20.0
+2026102517382001
+1. 删除 IP 描述字段（interface_ips.description）全链路下线（接 v0.19.23，用户要求“从后端代码和数据库中删除”）：数据库结构变更属功能级 y+1（z 归零 v0.19.23→v0.20.0）
+2. 数据库：执行 upgrade/0.30/upgrade_0.30.0.sql（0.30 中版本唯一一份，幂等）——DROP VIEW ip_with_details → ALTER TABLE interface_ips DROP COLUMN description → 重建视图（列序同旧版仅去 description）；已对开发库 localhost:5432/foims 执行，复核列与视图均无 description
+3. 后端：foims-models/models/ip.rs 从 6 个 IP 结构删 description 字段（IpDetail/IpDetailWithNames/IpDetailCreate/IpSyncItem/AutoAssignIpRequest/IpDetailUpdate，保留 Port/NetworkCard 自身 description）+ 删除 test_ip_detail_create_description_too_long、修正其余相关测试；foims-resource/ip.rs 删除搜索子句 description ILIKE、ip_with_details SELECT 列、3 处 interface_ips INSERT（列名去 description 且绑定参 $6..$10 重编为 $6..$9、删对应 .bind）、pull 两处 SELECT m.description、create/auto_assign/batch 三处响应 IpDetail 字面量与审计日志 json 的 description；nic.rs 同步网卡 IP INSERT 重编号与 SELECT、workstation.rs/position.rs IP 子查询删 m.description；foims-data-management/spec.rs 删 interface_ips 的 Col::Plain("description")；snmp.rs:748 的 description 属 SnmpPort（网口）未动
+4. foims-init：schema/tables/ips.rs 建表删 description TEXT、schema/tables/views.rs 视图删 imm.description、check.rs interface_ips 列清单删 "description"
+5. 前端：NetworkCardEditor.vue 删除 IP 行六处 description 通路（IpRowState 字段/emptyIpRow/loadCardData 回填/validate 全空行判定与 ipDescription 局部量/提交 payload）；bash da-scripts/gen-ts-types.sh 重生 6 个 IP 生成物均已无 description（IpDetail/IpDetailWithNames/IpDetailCreate/IpSyncItem/AutoAssignIpRequest/IpDetailUpdate）
+6. 联动：根 Cargo.toml 0.30.0→0.30.1（y+1 对应 c+1），foims-models 0.2.11→0.2.12、foims-resource 0.1.10→0.1.11、foims-data-management 0.2.5→0.2.6、foims-init 0.1.9→0.1.10（cargo update --workspace --offline 同步 Cargo.lock）；本次为后端驱动的功能删除，前端仅随之清理数据通路（非独立前端功能变更），frontend/package.json version 保持 0.1.3；验证 cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test -p foims-models 314 passed、npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规

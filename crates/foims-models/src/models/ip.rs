@@ -26,7 +26,6 @@ pub struct IpDetail {
     pub ip_version: i16,
     #[sqlx(default)]
     pub mac_address: Option<String>,
-    pub description: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -56,7 +55,6 @@ pub struct IpDetailWithNames {
     pub ip_version: i16,
     pub mac_address: Option<String>,
     pub hostname: Option<String>,
-    pub description: Option<String>,
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -78,8 +76,6 @@ pub struct IpDetailCreate {
         message = "server.ip.validation.ip_address_invalid"
     ))]
     pub ip_address: String,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
 }
 
 // ==================== 设备网卡配置同步模型（网卡 → 网口 → IP） ====================
@@ -94,8 +90,6 @@ pub struct IpSyncItem {
         message = "server.ip.validation.ip_address_invalid"
     ))]
     pub ip_address: String,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, Clone, ts_rs::TS)]
@@ -161,8 +155,6 @@ pub struct AutoAssignIpRequest {
     pub subnet_id: Uuid,
     pub device_interface_id: Option<Uuid>,
     pub device_id: Uuid,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
@@ -188,8 +180,6 @@ pub struct IpDetailUpdate {
         message = "server.ip.validation.ip_address_invalid"
     ))]
     pub ip_address: Option<String>,
-    #[validate(length(max = 255, message = "server.common.validation.description_length"))]
-    pub description: Option<String>,
     /// 取值白名单：active / inactive / reserved（与前端 formatter 展示口径一致；
     /// DB 侧有 CHECK 约束兜底，应用层前置拦截非法值）
     #[validate(custom(
@@ -217,8 +207,7 @@ mod tests {
         let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
             "device_interface_id": Uuid::new_v4(),
             "subnet_id": Uuid::new_v4(),
-            "ip_address": "192.168.1.10",
-            "description": "办公 IP"
+            "ip_address": "192.168.1.10"
         }))?;
         assert!(req.validate().is_ok());
         Ok(())
@@ -245,19 +234,6 @@ mod tests {
             };
             assert!(errors.errors().contains_key("ip_address"));
         }
-        Ok(())
-    }
-
-    #[test]
-    fn test_ip_detail_create_description_too_long() -> Result<(), serde_json::Error> {
-        let req: IpDetailCreate = serde_json::from_value(serde_json::json!({
-            "ip_address": "1.2.3.4",
-            "description": "D".repeat(256)
-        }))?;
-        let Err(errors) = req.validate() else {
-            panic!("超长描述应被拒绝");
-        };
-        assert!(errors.errors().contains_key("description"));
         Ok(())
     }
 
@@ -374,8 +350,7 @@ mod tests {
     fn test_auto_assign_and_pull_requests() -> Result<(), serde_json::Error> {
         let assign: AutoAssignIpRequest = serde_json::from_value(serde_json::json!({
             "subnet_id": Uuid::new_v4(),
-            "device_id": Uuid::new_v4(),
-            "description": "自动分配"
+            "device_id": Uuid::new_v4()
         }))?;
         assert!(assign.validate().is_ok());
         assert_eq!(assign.device_interface_id, None);
@@ -534,7 +509,6 @@ mod tests {
             ip_address: "192.168.1.10".to_string(),
             ip_version: 4,
             mac_address: Some("aa:bb:cc:dd:ee:ff".to_string()),
-            description: None,
             status: "active".to_string(),
             last_seen: Utc::now(),
             created_at: Utc::now(),
@@ -570,7 +544,6 @@ mod tests {
             ip_version: 4,
             mac_address: None,
             hostname: None,
-            description: None,
             status: "active".to_string(),
             last_seen: Utc::now(),
             created_at: Utc::now(),

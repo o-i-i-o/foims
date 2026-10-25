@@ -33,7 +33,6 @@ const VIEWS: &[(&str, &str)] = &[
             COALESCE(nr.name, 'unknown')::text AS network_region,
             host(imm.ip_address) as ip_address,
             imm.ip_version,
-            imm.description,
             imm.status,
             imm.last_seen,
             imm.created_at,

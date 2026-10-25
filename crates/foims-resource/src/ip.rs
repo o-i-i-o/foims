@@ -58,8 +58,6 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
             .push_bind(pattern)
             .push(" OR hostname ILIKE ")
             .push_bind(pattern)
-            .push(" OR description ILIKE ")
-            .push_bind(pattern)
             .push(" OR device_name ILIKE ")
             .push_bind(pattern)
             .push(" OR workstation_name ILIKE ")
@@ -193,7 +191,7 @@ pub async fn get_ip_details<P: DbProvider>(
         .await?;
 
     let mut data_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, subnet_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, description, status, last_seen, created_at, updated_at, position_id, workstation_id FROM ip_with_details",
+        "SELECT id, device_interface_id, device_id, device_type, device_name, interface_name, physical_type, interface_role, subnet_id, workstation_name, cabinet_position_name, room_name, cabinet_name, org_name, network_name, network_region, ip_address::TEXT as ip_address, ip_version, mac_address, hostname, status, last_seen, created_at, updated_at, position_id, workstation_id FROM ip_with_details",
     );
     push_ip_filters(&mut data_builder, &filters);
     data_builder
@@ -237,7 +235,7 @@ pub async fn get_device_ips<P: DbProvider>(
             nc.name AS network_name,
             nr.name AS network_region,
             host(m.ip_address) as ip_address,
-            m.ip_version, di.mac_address AS mac_address, m.description,
+            m.ip_version, di.mac_address AS mac_address,
             m.status, m.last_seen, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
         FROM interface_ips m
         JOIN device_interfaces di ON m.device_interface_id = di.id
@@ -356,15 +354,14 @@ pub async fn create_device_ip<P: DbProvider>(
     };
 
     sqlx::query(
-        "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
+        "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9)",
     )
     .bind(ip_id)
     .bind(interface_id)
     .bind(subnet_id)
     .bind(&req.ip_address)
     .bind(ip_version)
-    .bind(&req.description)
     .bind("active")
     .bind(now)
     .bind(now)
@@ -407,7 +404,6 @@ pub async fn create_device_ip<P: DbProvider>(
         ip_address: req.ip_address.clone(),
         ip_version,
         mac_address: None,
-        description: req.description.clone(),
         status: "active".to_string(),
         last_seen: now,
         created_at: now,
@@ -416,8 +412,7 @@ pub async fn create_device_ip<P: DbProvider>(
 
     let details = serde_json::json!({
         "device_id": id.to_string(),
-        "ip_address": mapping.ip_address,
-        "description": mapping.description
+        "ip_address": mapping.ip_address
     });
     log_op_best_effort(
         &state.pool()?.get_conn(),
@@ -950,7 +945,7 @@ pub async fn pull_ip_details<P: DbProvider>(
                 r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
                    nc.network_region_id AS network_region_id,
                    nc.name AS network_name, nr.name AS network_region,
-                   host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
+                   host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.status,
                    m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
                    FROM interface_ips m
                    JOIN device_interfaces di ON m.device_interface_id = di.id
@@ -967,7 +962,7 @@ pub async fn pull_ip_details<P: DbProvider>(
                 r"SELECT m.id, m.device_interface_id, di.device_id, m.subnet_id,
                    nc.network_region_id AS network_region_id,
                    nc.name AS network_name, nr.name AS network_region,
-                   host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.description, m.status,
+                   host(m.ip_address) as ip_address, m.ip_version, di.mac_address AS mac_address, m.status,
                    m.last_seen::TIMESTAMPTZ, m.created_at::TIMESTAMPTZ, m.updated_at::TIMESTAMPTZ
                    FROM interface_ips m
                    JOIN device_interfaces di ON m.device_interface_id = di.id
@@ -1137,7 +1132,6 @@ pub async fn auto_assign_ip<P: DbProvider>(
     let req_subnet_id = req.subnet_id;
     let device_id = req.device_id;
     let device_interface_id = req.device_interface_id;
-    let description = req.description.clone();
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
@@ -1223,15 +1217,14 @@ pub async fn auto_assign_ip<P: DbProvider>(
     };
 
     let insert_result = sqlx::query(
-        "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
+        "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, status, last_seen, created_at, updated_at)
+         VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9)",
     )
     .bind(id)
     .bind(interface_id)
     .bind(req_subnet_id)
     .bind(&assigned_ip)
     .bind(ip_version_num)
-    .bind(&description)
     .bind("active")
     .bind(now)
     .bind(now)
@@ -1265,7 +1258,6 @@ pub async fn auto_assign_ip<P: DbProvider>(
         ip_address: assigned_ip.clone(),
         ip_version: ip_version_num,
         mac_address: None,
-        description,
         status: "active".to_string(),
         last_seen: now,
         created_at: now,
@@ -1275,7 +1267,6 @@ pub async fn auto_assign_ip<P: DbProvider>(
     let details = serde_json::json!({
         "device_id": device_id.to_string(),
         "ip_address": mapping.ip_address,
-        "description": mapping.description,
         "auto_assigned": true
     });
     log_op_best_effort(
@@ -1521,15 +1512,14 @@ pub async fn batch_create_ip_details<P: DbProvider>(
         };
 
         if let Err(err) = sqlx::query(
-            "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, description, status, last_seen, created_at, updated_at)
-             VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9, $10)",
+            "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, status, last_seen, created_at, updated_at)
+             VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9)",
         )
         .bind(*id)
         .bind(interface_id)
         .bind(subnet_id)
         .bind(&ip_req.ip_address)
         .bind(*ip_version_num)
-        .bind(&ip_req.description)
         .bind("active")
         .bind(now)
         .bind(now)
@@ -1564,7 +1554,6 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             ip_address: ip_req.ip_address.clone(),
             ip_version: *ip_version_num,
             mac_address: None,
-            description: ip_req.description.clone(),
             status: "active".to_string(),
             last_seen: now,
             created_at: now,

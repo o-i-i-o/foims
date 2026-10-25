@@ -181,7 +181,6 @@ interface IpRowState {
   regionId: string;
   subnetId: string;
   ipAddress: string;
-  description: string;
   /** 自动分配请求进行中（防连点覆盖） */
   assigning: boolean;
 }
@@ -218,7 +217,6 @@ function emptyIpRow(): IpRowState {
     regionId: "",
     subnetId: "",
     ipAddress: "",
-    description: "",
     assigning: false
   };
 }
@@ -358,7 +356,6 @@ function buildCardRow(cardData: DeviceCard, portsData: DeviceCardPort[]): CardRo
         regionId: ipData.network_region_id || "",
         subnetId: ipData.subnet_id || "",
         ipAddress: ipData.ip_address || "",
-        description: ipData.description || "",
         assigning: false
       });
     }
@@ -450,9 +447,8 @@ function collectData(): { cards: CardSyncPayload[]; errors: string[] } {
         const ipNum = ipIdx + 1;
         const subnetId = ipRow.subnetId || null;
         const ipAddress = ipRow.ipAddress.trim();
-        const ipDescription = ipRow.description.trim() || null;
 
-        if (!subnetId && !ipAddress && !ipDescription) {
+        if (!subnetId && !ipAddress) {
           return; // 全空行跳过
         }
         if (!subnetId) {
@@ -500,8 +496,7 @@ function collectData(): { cards: CardSyncPayload[]; errors: string[] } {
           // 同步语义整体替换，原请求即无 id 键；显式 null 与缺键在 serde Option 下等价
           id: null,
           subnet_id: subnetId,
-          ip_address: ipAddress,
-          description: ipDescription
+          ip_address: ipAddress
         };
         if (ipRow.regionId) {
           ipData.network_region_id = ipRow.regionId;

@@ -440,7 +440,6 @@ pub const TABLE_SPECS: &[TableSpec] = &[
             },
             Col::Plain("ip_address"),
             Col::Plain("ip_version"),
-            Col::Plain("description"),
             Col::Plain("status"),
         ],
         key: &["ip_address"],

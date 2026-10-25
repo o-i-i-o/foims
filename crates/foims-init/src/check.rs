@@ -359,7 +359,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "subnet_id",
             "ip_address",
             "ip_version",
-            "description",
             "status",
             "last_seen",
             "created_at",
