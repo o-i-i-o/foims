@@ -557,3 +557,10 @@ v0.19.16
 2026102516133601
 1. 系统页卡片布局调整（清单第 1 项）：数据管理 tab 内 AgentServiceCard（“Agent 配置”）的“Agent 服务配置”段（section_service）内容由单列竖排改为固定两栏。该段处于 .data-management-container（1fr 1fr）的半宽 section 内，内部一个 .form-row 的 4 个字段（监听地址/端口/上报间隔/采集间隔）因 auto-fit minmax(280px,1fr) 在窄容器中回落为单列；新增可复用工具类 .form-row.form-row-2col（grid-template-columns: repeat(2, minmax(0,1fr))，特异性 0,2,0 覆盖 .form-row 基样式 0,1,0；minmax(0,1fr) 防窄列内容撑爆），仅挂在服务配置那一 form-row，不影响 Agent 配置段（section_agent）与其他卡片
 2. 版本：纯前端布局修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.17
+2026102516241301
+1. SNMP Trap 接收卡片 v3 USM 用户表“添加用户”按钮位置调整（清单第 2 项）：从表格上方标题行移到所属表格删除按钮列的标题行（表头单元格）；沿用既有表头动作单元格范式 .data-table th.th-inline-action（IpPage 已用，含 btn-sm 覆盖与保持 table-cell 不破坏 fixed 列宽的注释），th v-if="!readonly" 内放 btn btn-secondary btn-sm
+2. 标题行包裹层清理：原 .group-label-row（仅此一处使用、无任何 CSS 定义）是个裸包裹层，使 system.css:173 的直接子选择器 `.form-group-block > .group-label`（注释已点名“SNMP v3 用户表”、标题左对齐取齐正文）一直未命中；去掉该包裹层后 group-label 成为 form-group-block 直接子元素，恰好套用既定块标题样式；grep 全库 group-label-row 零残留
+3. 列宽平衡：删除列原按 2 字“删除”设为 10%，现表头放 4 字“添加用户”，为避免 fixed 布局横向溢出（snmp-trap-users-container 注释明确防横滚）将第 6 列 10%→14%，从两个密码列（nth-child(3)/(5)）各让 2%（20%→18%）保持列宽和 100%
+4. 版本：纯前端布局与样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规

@@ -310,12 +310,7 @@ async function saveSnmpTrapConfig(): Promise<void> {
     </div>
     <div class="form-row">
       <div class="form-group form-group-block">
-        <div class="group-label-row">
-          <span class="group-label">{{ t("snmp_trap.users") }}</span>
-          <button v-if="!readonly" type="button" class="btn btn-secondary btn-sm" @click="addUser">
-            {{ t("snmp_trap.add_user") }}
-          </button>
-        </div>
+        <span class="group-label">{{ t("snmp_trap.users") }}</span>
         <div class="table-container snmp-trap-users-container">
           <table class="data-table">
             <thead>
@@ -325,7 +320,11 @@ async function saveSnmpTrapConfig(): Promise<void> {
                 <th>{{ t("snmp_trap.auth_password") }}</th>
                 <th>{{ t("snmp_trap.priv_protocol") }}</th>
                 <th>{{ t("snmp_trap.priv_password") }}</th>
-                <th v-if="!readonly"></th>
+                <th v-if="!readonly" class="th-inline-action">
+                  <button type="button" class="btn btn-secondary btn-sm" @click="addUser">
+                    {{ t("snmp_trap.add_user") }}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
