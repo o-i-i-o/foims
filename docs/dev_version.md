@@ -593,3 +593,9 @@ v0.19.22
 1. SNMP community 术语再校正（用户反馈：英文用标准 “string”、中文经考证用“团体名”更标准）：接 v0.19.21 将口径改为——英文统一为 Community String（补回 String）、中文统一为团体名。覆盖设备与 Trap 两处 i18n 展示文案（不改键名）：① device.snmp_community 英“Community”→“Community String”、中“团体字”→“团体名”；② snmp_community_length 英补回“string”、中“SNMP团体字…”→“SNMP团体名…”；③ snmp_trap.communities 标签英“v1/v2c Community”→“v1/v2c Community String”、中“v1/v2c 团体字”→“v1/v2c 团体名”；④ guide.snmp_trap 英“v1/v2c Community…at least one community…”→“v1/v2c Community String…at least one community string…”、中“团体字”→“团体名”
 2. 注释与生成物同步：DeviceModal.vue/SnmpTrapCard.vue 顶部文档注释“团体字”→“团体名”；因 generated/DeviceUpdate.ts 的“SNMP 团体字”源自后端 #[derive(TS)] 字段文档注释（禁手改生成物），改后端 crates/foims-models/src/models/device.rs:522 snmp_community 的 `/// 双层 Option：null 清空 SNMP 团体字`→“团体名”，再跑 bash da-scripts/gen-ts-types.sh 重生生成物同步；grep 全库（frontend/src + crates + src）团体字 零残留，git diff 仅 7 个预期文件无意外漂移
 3. 版本：后端为文档注释修订（无功能/结构/载荷/DB 变更）、前端文案与注释修订；cargo fmt rc=0、cargo test export_bindings 全 workspace 编译通过；frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.23
+2026102517240801
+1. 设备模态框网卡编辑器 IP 容器删除“描述”字段（NetworkCardEditor.vue）：移除 IP 行模板末尾的 .nc-field（common.description 标签 + v-model=ipRow.description 的文本输入框，nc-ip-desc-* ），仅保留网络区域/网络名称/IP 地址三个字段
+2. 保留数据通路说明：ipRow.description 仍由 loadCardData 回填并在提交载荷中带回 description——IP 同步为整体替换语义，若连同 payload 一起删除会让后端已存的既有 IP 描述在下次保存时被静默置 null（数据丢失），故本次仅移除 UI 输入控件不改保存语义；.nc-field 与 common.description 均为其他字段复用的共享类/文案，无死样式残留
+3. 版本：纯前端 UI 修订（无后端载荷/结构/DB 变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规

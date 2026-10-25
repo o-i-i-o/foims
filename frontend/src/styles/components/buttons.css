@@ -122,7 +122,6 @@
   /* 图标按钮：用于表格行内操作，文字含义通过 data-tooltip 悬浮提示展示 */
   .icon-btn {
     position: relative;
-    display: inline-flex;
     align-items: center;
     justify-content: center;
     height: 30px;
@@ -130,7 +129,6 @@
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--color-text-muted);
     cursor: pointer;
     transition:
       background-color var(--transition-fast),

@@ -824,16 +824,6 @@ defineExpose({ collectData, loadExisting, resetForAdd });
                   </button>
                 </div>
               </div>
-              <div class="nc-field">
-                <label :for="`nc-ip-desc-${ipRow.key}`">{{ t("common.description") }}</label>
-                <input
-                  :id="`nc-ip-desc-${ipRow.key}`"
-                  v-model="ipRow.description"
-                  type="text"
-                  class="nc-input"
-                  autocomplete="off"
-                >
-              </div>
             </div>
           </div>
         </div>
