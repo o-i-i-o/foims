@@ -492,3 +492,10 @@ v0.19.6
 6. 验证：cargo check 三棵依赖树全过；cargo fmt 已跑；cargo clippy --release --workspace --all-targets -D warnings 0 警告；cargo test --release --workspace 除 crypto::tests 14 项环境性失败（/etc/foims/encryption.key 属 foims:foims 0600、当前用户无读权限，与 release_check.sh 既有判定一致）外全过；ts-rs export_bindings 重跑后 frontend/src/types/api/generated 无漂移；npm ci --dry-run 通过（latest 声明与 lock 一致）；前端 typecheck/build/selfcheck:viz 全过
 7. 文档：docs/code-style.md §3.5 新增“依赖声明策略”条目（前端 latest + lock 兼底、后端写具体版本 + Cargo.lock、三棵依赖树各自维护，与 lint 工具固定版本策略明确区分）；临时审计脚本用后即删，未入库
 8. 版本：Cargo.toml 仅依赖版本变更，[package].version 与 frontend/package.json version 均不变（z 段普通修改）
+
+v0.19.7
+2026102513353801
+1. TypeScript 升入 7 时代官方双安装（vuejs/language-tools PR #6123 方案，vue-tsc 3.3.13 支持）：frontend devDependencies 改为 typescript: npm:@typescript/typescript6@latest（TS 6 JS API 兼容层，实装 6.0.2；vue-tsc 的 resolveTscPath 检测到该别名后经其内部依赖 @typescript/old——实装 typescript 6.0.3——拿完整 TS 6 编译器供 typecheck/build 用）+ typescript7: npm:typescript@latest（TS 7.0.2 原生编译器）；scripts 新增 tsc 入口（node node_modules/typescript7/bin/tsc）让 tsc 命令稳定走 TS 7 原生——npm 对 .bin/tsc 同名冲突无优先级保证（实测被提升的 @typescript/old 的 tsc 6.0.3 抢占，故不用裸 .bin/tsc）
+2. 安装踩坑：从 ^6.0.3 单装改为别名声明后直接 npm install 不重建 node_modules/typescript（残留 TS 6.0.3，lock 内 root 别名 spec 与节点条目不一致），需 rm -rf node_modules package-lock.json 干净重建；最小复现确认别名方案在 npm 11.19.1 下本身正常
+3. 文档：docs/code-style.md §3.5「TypeScript 版本边界」改写为「TypeScript 7 双安装」（含 .bin/tsc 抢占与 TS 7.1 后收敛条件），新增 npm run tsc 命令示例，依赖声明策略中 typescript 例外条目移除（别名同样走 latest + lock 兼底）
+4. 验证：npm run tsc → Version 7.0.2；vue-tsc 解析链路实测 typescript→@typescript/typescript6→@typescript/old/lib/tsc.js（TS 6.0.3）；npm run typecheck 0 错；npm run build 通过（client 372.30 kB）；npm run selfcheck:viz 全过；frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更

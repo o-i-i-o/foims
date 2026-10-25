@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc --noEmit",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "tsc": "node node_modules/typescript7/bin/tsc",
     "selfcheck:viz": "node --experimental-strip-types --import ./scripts/ts-resolve-hook.mjs scripts/visualization-geometry.selfcheck.ts && node --experimental-strip-types --import ./scripts/ts-resolve-hook.mjs scripts/visualization-viewmodel.selfcheck.ts"
   },
   "dependencies": {
@@ -20,7 +21,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "latest",
-    "typescript": "^6.0.3",
+    "typescript": "npm:@typescript/typescript6@latest",
+    "typescript7": "npm:typescript@latest",
     "vite": "latest",
     "vue-tsc": "latest"
   }

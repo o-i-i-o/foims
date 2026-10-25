@@ -260,6 +260,9 @@ frontend/
 # 类型检查（vue-tsc 全量；npm run build 已前置含此步，开发循环可单跑）
 cd frontend && npm run typecheck
 
+# 裸 tsc（TS 7 原生编译器，构建/脚本用；.vue 与全量类型检查入口仍是 vue-tsc）
+cd frontend && npm run tsc -- --version
+
 # 后端载荷 TS 类型再生成（ts-rs export_bindings；生成物提交入库，CI 漂移校验）
 bash da-scripts/gen-ts-types.sh
 
@@ -308,10 +311,16 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
   `Cannot find module '@biomejs/cli-linux-x64/biome'`；补装走官方源：
   `npm i --no-save --no-package-lock --registry=https://registry.npmjs.org`
   `@biomejs/cli-linux-x64@<同期版本>`。
-- TypeScript 版本边界：`vue-tsc` 通过 `typescript/lib/tsc` 定位编译器，
-  TypeScript 7.x（原生化重写）不再导出该子路径，升级后 typecheck 直接报
-  `ERR_PACKAGE_PATH_NOT_EXPORTED`；因此 typescript 钉在 6.x（`^6.0.3`，经
-  typecheck + build 验证），升 7 需等 vue-tsc 换用新入口。
+- TypeScript 7 双安装：`vue-tsc` 通过 `typescript/lib/tsc` 定位编译器，
+  TypeScript 7.x（原生化重写）不再导出该子路径，单装 TS 7 会让 typecheck 直接报
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`。已采用 vue-tsc 3.3.8+ 官方双安装方案
+  （vuejs/language-tools PR #6123）：`typescript` 别名指向
+  `npm:@typescript/typescript6@latest`（TS 6 JS API 兼容层，vue-tsc 检测到该别名后
+  经其内部依赖 `@typescript/old` 拿到完整 TS 6 编译器），`typescript7` 别名指向
+  `npm:typescript@latest`（TS 7 原生编译器）；`npm run tsc` 显式走 typescript7，
+  因为 npm 对 `.bin/tsc` 同名冲突无优先级保证，会被提升的 `@typescript/old` 的
+  bin 抢占为 TS 6；typecheck/build 的类型检查仍由 vue-tsc（TS 6 链路）承担。
+  TS 7.1 发布新 API、vue-tsc 官方适配后可收敛双安装。
 - 缓存与版本策略分开治理：`@latest` 的解析结果是 registry 的 dist-tag，
   同一时间点在不同机器/CI 上拉取结果一致；本地与 CI 出现版本差异，原因是
   本地 npm/npx 缓存或镜像同步滞后，**修法是刷新缓存**（`npx --prefer-online`、
@@ -321,8 +330,8 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 - 依赖声明策略（与上面的“lint 工具固定版本”不同，两者不要混用）：
   - 前端 `frontend/package.json` 的 npm 依赖用 `latest` 声明，实际版本由**入库的
     `package-lock.json`** 锁定（CI 走 `npm ci`，严格按 lock 安装），所以声明浮动
-    不影响构建可复现性；升级即 `npm install <包>@latest` 后跑 typecheck + build。
-    唯一例外：`typescript` 保持 `^6.0.3`（见上条，TS 7 会让 vue-tsc 直接崩）。
+    不影响构建可复现性；升级即 `npm install <包>@latest` 后跑 typecheck + build；
+    `typescript`/`typescript7` 同样走 latest（npm 别名双安装，见上条）。
   - 后端 Rust 无 `latest` 语义（crates.io 只有具体版本号）：`Cargo.toml` 写具体
     版本、入库的 `Cargo.lock` 锁实际版本；升级 = 改版本串后跑
     `cargo check/clippy/test`，跨 major 需适配 API。
