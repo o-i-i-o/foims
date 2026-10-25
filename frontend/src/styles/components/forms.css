@@ -135,6 +135,11 @@
     margin-bottom: 0;
   }
 
+  /* 固定两栏：覆盖 auto-fit 断点，用于窄容器（如半宽 section）内仍需并排的字段 */
+  .form-row.form-row-2col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   /* 功率单位下拉：不随同行表单变体的控件撑满规则拉伸，保持自适应宽
    （声明提前避免与 .modal/.config-card 高特异度 select 组成降序对） */
   .power-input-row select {

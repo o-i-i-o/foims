@@ -257,7 +257,7 @@ async function regenerateToken(): Promise<void> {
       <!-- 上报接收服务参数：监听地址作为默认上报地址来源 -->
       <section class="section">
         <h3>{{ t("agent_service.section_service") }}</h3>
-        <div class="form-row">
+        <div class="form-row form-row-2col">
           <div class="form-group">
             <label for="agent-service-bind-addr">{{ t("agent_service.bind_addr") }}</label>
             <input id="agent-service-bind-addr" v-model="agentBindHost" type="text" :placeholder="t('agent_service.bind_addr_placeholder')" autocomplete="off" :aria-label="t('agent_service.bind_addr')">
