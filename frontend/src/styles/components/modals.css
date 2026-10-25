@@ -1,12 +1,7 @@
 @layer modals {
-  /* 模态框外壳：逐字移植自旧版 web/static/css/components/modals.css 的
-   外壳段 + utilities/animations.css 的模态框动画，并桥接两套类名体系——
-   - 遗留体系（legacyModalLoader 注入的原版 HTML）：遮罩 .modal（靠 .active
-     切换显示）、外壳 .modal-content、标题 h3.modal-title、关闭钮 .close；
-   - Vue 体系（ModalShell.vue）：遮罩 .modal-overlay（v-if 控制，无需
-     display 切换）、外壳 .modal.modal-dialog（保留 .modal 类供
-     「.modal .form-group」等后代规则继续命中）、关闭钮 .modal-close。
-   .modal 的遮罩规则统一用 :not(.modal-dialog) 排除 Vue 外壳。 */
+  /* 模态框外壳（ModalShell.vue）：遮罩 .modal-overlay（v-if 控制）、
+   外壳 .modal.modal-dialog、标题 h3.modal-title、关闭钮 .modal-close。
+   .modal 类保留在外壳上，供「.modal .form-group」等后代规则继续命中。 */
 
   /* ==================== 入场动画 ==================== */
   @keyframes fade-in {
@@ -32,7 +27,6 @@
   }
 
   /* ==================== 遮罩 ==================== */
-  .modal:not(.modal-dialog),
   .modal-overlay {
     position: fixed;
     z-index: var(--z-modal);
@@ -44,16 +38,6 @@
     background-color: rgb(0 0 0 / 60%);
     backdrop-filter: blur(4px);
     animation: fade-in var(--transition-slow);
-  }
-
-  .modal:not(.modal-dialog).active {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 2rem 1rem;
-  }
-
-  .modal-overlay {
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -61,7 +45,6 @@
   }
 
   /* ==================== 外壳 ==================== */
-  .modal-content,
   .modal-dialog {
     background-color: var(--color-bg-white);
     margin: 1.75rem auto;
@@ -82,23 +65,18 @@
   }
 
   /* 宽度档位：min() 保证窄视口下不溢出（原生响应式，无需媒体查询） */
-  .modal-content.modal-lg,
-  .modal-content.modal-xl,
   .modal-dialog.modal-lg {
     max-width: min(900px, calc(100vw - 2rem));
   }
 
-  .modal-content.modal-sm,
   .modal-dialog.modal-sm {
     max-width: min(480px, calc(100vw - 2rem));
   }
 
-  .modal-content.modal-md,
   .modal-dialog.modal-md {
     max-width: min(600px, calc(100vw - 2rem));
   }
 
-  .modal-content.modal-lg-custom,
   .modal-dialog.modal-xl {
     max-width: 90vw;
   }
@@ -135,7 +113,6 @@
   }
 
   /* ==================== 关闭按钮（白色圆形，悬停旋转） ==================== */
-  .close,
   .modal-close {
     color: var(--color-bg-white);
     font-size: 1.5rem;
@@ -158,7 +135,6 @@
     flex-shrink: 0;
   }
 
-  .close:hover,
   .modal-close:hover {
     opacity: 1;
     background-color: rgb(255 255 255 / 25%);
@@ -219,13 +195,5 @@
 
   /* hover/active 位移由 .btn:hover/.btn:active（buttons.css）提供，此处不重复 */
 
-  /* ==================== 模态框内表单容器字段 ==================== */
-  .modal .form-group [id$="-ips-container"] {
-    flex: 1;
-    min-width: 0;
-    width: 100%;
-  }
-
-  /* 层叠模态框的层级由 legacyModalLoader 打开时按顺序写内联 z-index
-   （基准 1050、每层 +50），Vue 体系由 useModalStack 注销最上层 */
+  /* 层叠模态框的层级由 useModalStack 保证只关最上层 */
 }

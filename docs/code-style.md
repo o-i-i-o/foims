@@ -170,9 +170,9 @@ frontend/
     ├── router/            vue-router（hash 模式，NAV_ITEMS 即侧边栏数据源）
     ├── styles/            CSS（规范见 docs/CSS-style.md，@layer 层序体系）
     ├── utils/             纯工具（network/pagedFetch/formatter/session…）
+    │   └── visualization/  画布算法与视图模型（geometry/viewModel/resources/icons）
     ├── config/            静态配置（deviceOptions/icons/orgConfig）
-    ├── modules/visualization/  拓扑画布遗留模块（原生 JS 逐字迁移，见 3.6）
-    └── templates/modals/  拓扑遗留模态 HTML 片段（legacyModalLoader 消费）
+    └── modules/           已退役：可视化画布生态已全量 Vue + TS 化（见 3.6）
 ```
 
 - dev：`cd frontend && npm run dev`（5173）；构建：`npm run build`，产物
@@ -257,18 +257,33 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 - 抑制约定：经评估的误报以 `// biome-ignore lint/<rule>: 中文理由` 行内
   豁免，禁止无理由豁免与文件级豁免。
 
-### 3.6 拓扑可视化遗留模块
+### 3.6 可视化画布（工位 / 机柜 / 拓扑）
 
-`modules/visualization/`、`templates/modals/` 与桥接层
-（`utils/legacyBridge.js` / `legacyModalLoader.js` / `legacyResources.js`）
-是旧版拓扑画布生态的逐字迁移（命令式原生 JS），经桥接层适配 Vue 端设施
-（i18n/showToast/openModal）。约束：
+可视化分区已全量 Vue + TS 化（旧 `modules/visualization/` 命令式 JS 生态与
+`templates/modals/`、桥接层 `legacyBridge/legacyModalLoader/legacyResources`
+均已删除，不得重建）。职责分层：
 
-- **只维护不扩展**：新交互功能一律用 Vue 组件实现，禁止新增命令式模块
-  或往桥接层堆函数；待画布 Vue 化后整体退役。
-- 桥接层改动保持"函数体逐字迁移 + 依赖来源替换"的既有模式，不重构。
-- 遗留模块内拼进 `innerHTML`/模板字符串的用户可控值仍必须过
-  `escapeHtml`（Vue 模板插值自动转义，遗留命令式代码不享受该保障）。
+- `pages/VisualizationPage.vue`：唯一状态持有者——页签、组织/房间下拉、三套
+  数据编排（加载/自动排布/保存）、弹窗开关与确认流；
+- `components/visualization/`：`WorkstationCanvas/CabinetCanvas/TopologyCanvas`
+  三块声明式画布（`CanvasGridLayer` 共享网格层）+ 拓扑四弹窗；
+- `composables/useCanvasViewport.ts`/`useCanvasTooltip.ts`：视口（viewBox/缩放/
+  坐标换算/容器测量）与悬浮提示，三画布共享；
+- `utils/visualization/geometry.ts`：纯几何与布局算法（自动排布/机柜 U 位/
+  分组包围盒与推挤/连线路径锚点），无 DOM 与 i18n 依赖；
+- `utils/visualization/viewModel.ts`：载荷 → 画布视图模型（节点矩形、分组）；
+- `api/visualization.ts`：该分区全部接口。
+
+约束：
+
+- **坐标唯一真相是响应式视图模型**：拖动落定由画布 emit 矩形、页面写回，保存经
+  `buildLayoutItems` 投影，禁止从 SVG DOM 反读属性。
+- **三态语义**：布局加载区分 `saved/empty/stale/error`，请求失败或已被取代时
+  禁止触发自动排布落库（否则整表 upsert 会覆盖已保存布局）。
+- **渲染代次**：切房间/组织用递增 token 丢弃过期响应；机柜分批渲染在途
+  （`cabinetSettled=false`）时拒绝整表保存。
+- 模板 ref 由组件自行 `ref()` 持有后作为参数传入 composable（模板里写
+  `ref="x"`），禁止在 composable 内隐式创建模板 ref。
 
 ### 3.7 TypeScript 规范
 
@@ -289,9 +304,8 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 - **SFC 类型化**：`<script setup lang="ts">`；props 用 `defineProps<{...}>()`
   （默认值 `withDefaults`），emits 用元组签名 `defineEmits<{ save: [v: X] }>()`；
   ref/reactive 依赖推导，复杂表单状态建 interface。
-- **import 后缀规则**：一律无后缀（`from "../api/client"`）；仅指向保留
-  `.js` 的遗留文件（§3.6 三件桥接/加载器与 `modules/visualization/`）的
-  import 保留 `.js` 后缀。
+- **import 后缀规则**：一律无后缀（`from "../api/client"`），工程内已无保留
+  的 `.js` 源文件（`tsconfig.json` 的 `allowJs` 已关闭）。
 - **类型导入**：`verbatimModuleSyntax` 开启，类型导入必须 `import type`。
 - **i18n 消息类型**：消息键为运行时数据（i18n JSON 维护），i18n 实例按
   宽化 schema 消费（`t(key: string): string`），禁止为消息键生成字面量

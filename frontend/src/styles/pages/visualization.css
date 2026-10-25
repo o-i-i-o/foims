@@ -82,6 +82,13 @@
     pointer-events: none;
   }
 
+  /* 细网格 pattern 的格线：与主网格同色系降透明度，仅作背景纹理 */
+  .grid-minor-line {
+    stroke: var(--chart-grid-line);
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
   /* 坐标标注：跟随视口顶边/左边，字号由 JS 按视口宽度设置 */
   .grid-label {
     fill: var(--chart-grid-label);

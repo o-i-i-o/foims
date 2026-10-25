@@ -13,12 +13,11 @@
     "noFallthroughCasesInSwitch": true,
     "verbatimModuleSyntax": true,
 
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
     "resolveJsonModule": true,
     "noEmit": true,
     "skipLibCheck": true
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "src/modules/visualization"]
+  "exclude": ["node_modules", "dist"]
 }

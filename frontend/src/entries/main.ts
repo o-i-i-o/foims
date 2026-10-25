@@ -15,8 +15,7 @@ import "../styles/components/forms.css";
 import "../styles/components/tables.css";
 import "../styles/components/badges.css";
 import "../styles/components/cards.css";
-// modals 层：模态框外壳（遮罩/页头/页脚/关闭钮，逐字移植旧版
-// components/modals.css 外壳段，兼容遗留 .modal-content 与 Vue .modal-dialog）
+// modals 层：模态框外壳（遮罩/页头/页脚/关闭钮，ModalShell.vue 的样式来源）
 import "../styles/components/modals.css";
 // modals 层：模态框动态列表（房间网段/工位/机柜/信息点、机柜机位/配线架）
 import "../styles/components/dynamic-lists.css";

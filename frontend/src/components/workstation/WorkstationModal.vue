@@ -3,10 +3,8 @@
  * 工位新增/编辑弹窗（移植自旧版 modals/workstation/workstation-modal.html
  * + modules/workstation.js openWorkstationModal/submitWorkstationForm）：
  * - 房间（仅办公类：办公/大堂/接待/其他）级联管理人（按房间所属组织取员工）；
- * - 名称/管理人必填；X/Y 坐标仅随 foims:workstation-saved 事件交给可视化层
- *   应用到画布布局（element_layouts），不随表单提交到 API。
- * 保存成功后派发同名 CustomEvent：visualizationManager 中的原生监听会把
- * 画布元素移动到指定坐标并静默保存布局。
+ * - 名称/管理人必填；X/Y 坐标不随表单提交，而是经 `saved` 事件携带给
+ *   可视化页应用到画布布局（element_layouts）。
  */
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -31,7 +29,19 @@ const props = withDefaults(
   { workstation: null, position: null }
 );
 
-const emit = defineEmits<{ close: []; saved: [] }>();
+const emit = defineEmits<{
+  close: [];
+  /** 保存成功：携带元素 id 与坐标（null 表示未填写），由可视化层应用到画布 */
+  saved: [payload: WorkstationSavedPayload];
+}>();
+
+/** 保存事件载荷（坐标已四舍五入并钳制非负） */
+export interface WorkstationSavedPayload {
+  id: string;
+  roomId: string;
+  x: number | null;
+  y: number | null;
+}
 
 const { t } = useI18n();
 
@@ -157,18 +167,13 @@ async function submitSave(): Promise<void> {
     const x = Number(form.x);
     const y = Number(form.y);
     const hasPosition = form.x !== "" && form.y !== "" && !Number.isNaN(x) && !Number.isNaN(y);
-    document.dispatchEvent(
-      new CustomEvent("foims:workstation-saved", {
-        detail: {
-          id: result.data?.id || parsedId,
-          room_id: form.roomId,
-          x: hasPosition ? Math.max(0, Math.round(x)) : null,
-          y: hasPosition ? Math.max(0, Math.round(y)) : null
-        }
-      })
-    );
     showToast(t("workstation.save_success"), "success");
-    emit("saved");
+    emit("saved", {
+      id: result.data?.id || parsedId || "",
+      roomId: form.roomId,
+      x: hasPosition ? Math.max(0, Math.round(x)) : null,
+      y: hasPosition ? Math.max(0, Math.round(y)) : null,
+    });
     emit("close");
   } catch (error) {
     console.error("提交工位表单失败:", error);
