@@ -205,3 +205,21 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
         Ok("server.task.agent_snmp_poll_completed".to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 读取正整数否则回落默认() {
+        let cfg = serde_json::json!({"interval_secs": 60, "zero": 0, "neg": -1, "text": "x"});
+        assert_eq!(config_u64(&cfg, "interval_secs", 300), 60);
+        // 缺失键 → 默认
+        assert_eq!(config_u64(&cfg, "missing", 300), 300);
+        // 0 被过滤 → 默认
+        assert_eq!(config_u64(&cfg, "zero", 300), 300);
+        // 负数/非数字（as_u64 返回 None）→ 默认
+        assert_eq!(config_u64(&cfg, "neg", 300), 300);
+        assert_eq!(config_u64(&cfg, "text", 300), 300);
+    }
+}

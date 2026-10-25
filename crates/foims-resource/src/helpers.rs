@@ -350,3 +350,25 @@ pub(crate) async fn ensure_power_limit_covers_allocated(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 合法标识符原样返回() {
+        assert_eq!(validated_identifier("users").ok(), Some("users"));
+        assert_eq!(validated_identifier("net_region").ok(), Some("net_region"));
+        assert_eq!(validated_identifier("Tbl_2").ok(), Some("Tbl_2"));
+    }
+
+    #[test]
+    fn 空串与非法字符拒绝防注入() {
+        assert!(validated_identifier("").is_err());
+        // 引号/空白/分号/连字符等注入载荷均拒绝
+        assert!(validated_identifier("users; DROP").is_err());
+        assert!(validated_identifier("a b").is_err());
+        assert!(validated_identifier("tbl\"").is_err());
+        assert!(validated_identifier("col-1").is_err());
+    }
+}

@@ -264,3 +264,28 @@ async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<(i32, u32), a
     }
     map
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ent_class_name_映射已知与未知类别() {
+        assert_eq!(ent_class_name(Some(3)).as_deref(), Some("chassis"));
+        assert_eq!(ent_class_name(Some(4)).as_deref(), Some("port"));
+        assert_eq!(ent_class_name(Some(6)).as_deref(), Some("fan"));
+        // 未知数值回退 class<N>
+        assert_eq!(ent_class_name(Some(99)).as_deref(), Some("class99"));
+        // 缺失保持缺失
+        assert_eq!(ent_class_name(None), None);
+    }
+
+    #[test]
+    fn truth_to_bool_仅识别_1_与_2() {
+        assert_eq!(truth_to_bool(Some(1)), Some(true));
+        assert_eq!(truth_to_bool(Some(2)), Some(false));
+        assert_eq!(truth_to_bool(Some(0)), None);
+        assert_eq!(truth_to_bool(Some(3)), None);
+        assert_eq!(truth_to_bool(None), None);
+    }
+}

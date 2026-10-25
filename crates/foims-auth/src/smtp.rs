@@ -32,6 +32,56 @@ async fn send_with_timeout(transport: SmtpTransport, email: Message) -> Result<(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 合法地址解析成功() {
+        assert!(parse_address("ops@example.com").is_ok());
+        assert!(parse_address("a.b+c@sub.example.co.uk").is_ok());
+    }
+
+    #[test]
+    fn 非法地址返回校验错误() {
+        assert!(parse_address("not-an-email").is_err());
+    }
+
+    #[test]
+    fn secure_与_qq_主机走_relay_其余明文构造成功() {
+        let base = SmtpConfig {
+            host: "smtp.example.com".to_string(),
+            port: 587,
+            username: "u".to_string(),
+            password: "p".to_string(),
+            from: "ops@example.com".to_string(),
+            secure: true,
+        };
+        // secure 走 relay（STARTTLS），仅构造传输器不建立连接
+        assert!(build_smtp_transport(&base).is_ok());
+        // 明文分支：builder_dangerous 同样只构造不连接
+        let insecure = SmtpConfig {
+            secure: false,
+            host: "mail.example.com".to_string(),
+            ..base.clone()
+        };
+        assert!(build_smtp_transport(&insecure).is_ok());
+        // QQ 邮箱即便 secure=false 也强制走 relay
+        let qq = SmtpConfig {
+            secure: false,
+            host: "smtp.qq.com".to_string(),
+            ..base
+        };
+        assert!(build_smtp_transport(&qq).is_ok());
+    }
+
+    #[test]
+    fn 通知方式默认全启用() {
+        let m = NotificationMethods::default();
+        assert!(m.mac_change && m.agent_alert && m.snmp_event);
+    }
+}
+
 /// 解析邮箱地址，失败时返回携带原始地址的验证错误。
 fn parse_address(raw: &str) -> Result<Address, AppError> {
     raw.parse().map_err(|e| {

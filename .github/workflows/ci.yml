@@ -47,6 +47,12 @@ jobs:
       - name: Oxlint（JS 质量检查）
         run: npx --yes oxlint@1.89.0
 
+      # 可视化纯函数自检（geometry/viewmodel，纯逻辑无浏览器依赖），
+      # 与后端单测同源把关视图模型计算，防止纯函数层回归无人拦截
+      - name: 可视化纯函数自检
+        working-directory: frontend
+        run: npm run selfcheck:viz
+
   # 主程序任务：检查（fmt/clippy/test）→ 编译 → deb / rpm / zip 产物。
   # 不再级联 agent（见 agent-build 任务），两任务并行互不等待。
   build:
@@ -81,13 +87,18 @@ jobs:
       # --workspace --all-targets：覆盖各成员 crate 的 lib/bin/tests 全部目标，
       # 关闭旧命令（仅 root crate 默认目标）对成员 crate 的漏检窗口。
       # 各 crate 根 #![cfg_attr(test, allow(..))] 只豁免 crate 内部测试模块；
-      # tests/ 集成测试是独立 crate（不置 cfg(test)），其中仍禁止 unwrap/expect。
+      # 若将来新增 tests/ 集成测试（独立 crate，不置 cfg(test)），其中仍禁止 unwrap/expect。
       # 生产代码在所有目标上均受 -D warnings 强约束
       - name: 运行 clippy 检查
         run: cargo clippy --release --workspace --all-targets -- -D warnings
 
       - name: 运行测试
         run: cargo test --release --workspace
+
+      # foims-portal 为独立 workspace（不并入主 workspace），其单测须单独触发，
+      # 否则门户逻辑（临时账号/验证码/存储）回归无 CI 兜底
+      - name: 运行门户测试（独立 workspace）
+        run: cargo test --release --manifest-path foims-portal/Cargo.toml
 
       # ts-rs 类型生成物漂移校验：export_bindings 测试重跑后，
       # frontend/src/types/api/generated/ 不得产生与入库版本（git add -N
@@ -145,11 +156,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # dpkg-deb 为 ubuntu-latest 自带；rpm 提供 rpmbuild（Agent rpm 组装）
+      # dpkg-deb 为 ubuntu-latest 自带；rpm 提供 rpmbuild（Agent rpm 组装）。
+      # build-essential/pkg-config 供本机 target 的 cargo test 编译 ring（cc）使用。
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y rpm
+          sudo apt-get install -y rpm build-essential pkg-config
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -161,6 +173,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: foims-agent
+
+      # 交叉产物无法在 runner 上执行，先对本机 target（x86_64）跑一遍单测，
+      # 让 agent-core/protocol/collectors 的逻辑回归在跨平台构建前就被把关
+      - name: 运行 Agent 本机测试
+        working-directory: foims-agent
+        run: cargo test --release
 
       - name: 安装 zig 交叉后端
         uses: mlugg/setup-zig@v2

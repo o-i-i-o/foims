@@ -343,3 +343,75 @@ fn format_mac_address(bytes: &[u8]) -> String {
             .join(":")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_mac_address_判定() {
+        assert!(is_mac_address("AA:BB:CC:DD:EE:FF"));
+        assert!(is_mac_address("00:11:22:33:44:55"));
+        assert!(!is_mac_address("00:11:22:33:44")); // 5 段
+        assert!(!is_mac_address("00:11:22:33:44:5G")); // 非十六进制
+        assert!(!is_mac_address("not-a-mac"));
+        assert!(!is_mac_address(""));
+    }
+
+    #[test]
+    fn format_mac_address_六字节冒号分隔其余逐字节() {
+        assert_eq!(
+            format_mac_address(&[0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+            "AA:BB:CC:DD:EE:FF"
+        );
+        assert_eq!(format_mac_address(&[0x01, 0x02]), "01:02");
+        assert_eq!(format_mac_address(&[]), "");
+    }
+
+    #[test]
+    fn is_printable_string_可见字符与制表符() {
+        assert!(is_printable_string(b"sw-01 eth0"));
+        assert!(is_printable_string(b"a\tb"));
+        assert!(!is_printable_string(&[0x00, 0x41])); // 含 NUL
+        assert!(!is_printable_string(&[0xFF]));
+    }
+
+    #[test]
+    fn format_lldp_id_按子类型分派() {
+        assert_eq!(format_lldp_id(&[], 1), "");
+        // subtype 1/2/5/6/7：按 UTF-8 文本
+        assert_eq!(format_lldp_id(b"Gi0/1", 1), "Gi0/1");
+        // subtype 3/4：MAC 格式化
+        assert_eq!(format_lldp_id(&[0x0A, 0x0B], 4), "0A:0B");
+        // 其它子类型：可打印则文本，否则 MAC
+        assert_eq!(format_lldp_id(b"host", 8), "host");
+        assert_eq!(format_lldp_id(&[0x01, 0x02, 0x03], 8), "01:02:03");
+    }
+
+    #[test]
+    fn get_local_port_name_优先级回退() {
+        let if_name: HashMap<String, String> = [("1".to_string(), "eth0".to_string())]
+            .into_iter()
+            .collect();
+        let port_id: HashMap<String, String> = [("2".to_string(), "AA:BB:CC:DD:EE:FF".to_string())]
+            .into_iter()
+            .collect();
+        let port_desc: HashMap<String, String> =
+            [("2".to_string(), "GigabitEthernet2".to_string())]
+                .into_iter()
+                .collect();
+        // if_name 命中优先
+        assert_eq!(
+            get_local_port_name("1", &if_name, &port_id, &port_desc),
+            "eth0"
+        );
+        // port_id 为 MAC：取 port_desc 描述
+        assert_eq!(
+            get_local_port_name("2", &if_name, &port_id, &port_desc),
+            "GigabitEthernet2"
+        );
+        // 均为空：回退 local_port_num 本身
+        let empty: HashMap<String, String> = HashMap::new();
+        assert_eq!(get_local_port_name("9", &empty, &empty, &empty), "9");
+    }
+}

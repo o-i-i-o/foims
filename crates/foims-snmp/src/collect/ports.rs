@@ -254,3 +254,63 @@ pub async fn get_device_ports_via_snmp(
     debug!("获取接口列表完成: {} 条记录", ports.len());
     Ok(ports)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derive_port_status_管理态优先运营态次之() {
+        assert_eq!(
+            derive_port_status(Some(2), Some(1)).as_deref(),
+            Some("admin-down")
+        );
+        assert_eq!(derive_port_status(Some(1), Some(1)).as_deref(), Some("up"));
+        assert_eq!(
+            derive_port_status(Some(1), Some(2)).as_deref(),
+            Some("down")
+        );
+        assert_eq!(
+            derive_port_status(Some(1), Some(6)).as_deref(),
+            Some("down")
+        );
+        assert_eq!(derive_port_status(Some(1), None), None);
+        assert_eq!(derive_port_status(None, Some(1)), None);
+    }
+
+    #[test]
+    fn format_speed_整千进位为吉比特否则兆比特() {
+        assert_eq!(format_speed(0), None);
+        assert_eq!(format_speed(1000).as_deref(), Some("1Gbps"));
+        assert_eq!(format_speed(10000).as_deref(), Some("10Gbps"));
+        assert_eq!(format_speed(2500).as_deref(), Some("2500Mbps"));
+    }
+
+    #[test]
+    fn derive_port_speed_优先高速表回退速率表() {
+        assert_eq!(
+            derive_port_speed(Some(&Value::Gauge32(10000)), None).as_deref(),
+            Some("10Gbps")
+        );
+        // ifHighSpeed=0 视为缺失，回退 ifSpeed（bps）
+        assert_eq!(
+            derive_port_speed(
+                Some(&Value::Gauge32(0)),
+                Some(&Value::Gauge32(1_000_000_000))
+            )
+            .as_deref(),
+            Some("1Gbps")
+        );
+        assert_eq!(derive_port_speed(None, None), None);
+    }
+
+    #[test]
+    fn port_list_members_解析高位在前位图() {
+        // 0b1000_0000 → 第 1 位（dot1dBasePort 1）；0b0000_0001 → 第 8 位
+        assert_eq!(port_list_members(&[0x80]), vec![1]);
+        assert_eq!(port_list_members(&[0x01]), vec![8]);
+        assert_eq!(port_list_members(&[0x00]), Vec::<u32>::new());
+        // 两字节：第1字节 bit0=port1，第2字节 bit7=port16
+        assert_eq!(port_list_members(&[0x80, 0x01]), vec![1, 16]);
+    }
+}

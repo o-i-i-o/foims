@@ -368,3 +368,18 @@ pub(crate) async fn log_login(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 生成六位数字验证码() {
+        // 随机生成：不断言具体值，仅断言长度与字符集（避免 flaky）
+        for _ in 0..20 {
+            let code = generate_six_digit_code();
+            assert_eq!(code.len(), 6);
+            assert!(code.chars().all(|c| c.is_ascii_digit()));
+        }
+    }
+}

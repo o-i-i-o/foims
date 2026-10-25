@@ -765,3 +765,61 @@ pub async fn test_sso_connection<P: AuthProvider>(
 
     Ok(foims_common::ok_json((), "server.sso.test_success"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn issuer_https_校验通过() {
+        assert!(validate_issuer_scheme("https://idp.example.com").is_ok());
+        assert!(validate_issuer_scheme("https://idp.example.com/realm").is_ok());
+    }
+
+    #[test]
+    fn 回环_http_豁免允许本地测试场景() {
+        assert!(validate_issuer_scheme("http://localhost").is_ok());
+        assert!(validate_issuer_scheme("http://127.0.0.1:8080").is_ok());
+        assert!(validate_issuer_scheme("http://[::1]:8443").is_ok());
+    }
+
+    #[test]
+    fn 非回环_http_拒绝防认证绕过() {
+        // 非回环 http 中间人可替换签名密钥，一律拒绝
+        assert!(validate_issuer_scheme("http://idp.example.com").is_err());
+        assert!(validate_issuer_scheme("http://10.0.0.5").is_err());
+        // 空 authority 与无 scheme 均拒绝
+        assert!(validate_issuer_scheme("https://").is_err());
+        assert!(validate_issuer_scheme("idp.example.com").is_err());
+    }
+
+    #[test]
+    fn redirect_uri_去除空白与拒绝空值() {
+        let cfg = SsoConfig {
+            redirect_uri: "  https://foims.example.com/api/auth/sso/callback  ".to_string(),
+            ..SsoConfig::default()
+        };
+        assert_eq!(
+            resolve_redirect_uri(&cfg).unwrap_or_else(|e| panic!("合法 URI 应通过: {e}")),
+            "https://foims.example.com/api/auth/sso/callback"
+        );
+        let blank = SsoConfig {
+            redirect_uri: "   ".to_string(),
+            ..SsoConfig::default()
+        };
+        assert!(resolve_redirect_uri(&blank).is_err());
+    }
+
+    #[test]
+    fn 错误跳转携带_key_指向登录页() {
+        use axum::http::{StatusCode, header};
+        let resp = sso_error_redirect("sso_state_invalid");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            resp.headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok()),
+            Some("/index.html?sso_error=sso_state_invalid")
+        );
+    }
+}

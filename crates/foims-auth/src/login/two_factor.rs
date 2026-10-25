@@ -54,6 +54,60 @@ pub struct TwoFactorCodeLoginRequest {
     pub captcha_text: Option<String>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn uid() -> Uuid {
+        Uuid::new_v4()
+    }
+
+    #[test]
+    fn 首次占位成功且同窗口重复占位判定为重放() {
+        let id = uid();
+        assert!(claim_totp_code(id, "111111"));
+        // 同一 TTL 窗口内重复使用同一码：判定为重放，拒绝
+        assert!(!claim_totp_code(id, "111111"));
+    }
+
+    #[test]
+    fn 不同码互不影响() {
+        let id = uid();
+        assert!(claim_totp_code(id, "111111"));
+        assert!(claim_totp_code(id, "222222"));
+        assert!(claim_totp_code(id, "333333"));
+    }
+
+    #[test]
+    fn 校验失败回滚后同码可重新占位() {
+        let id = uid();
+        assert!(claim_totp_code(id, "999999"));
+        release_totp_code(id, "999999");
+        assert!(claim_totp_code(id, "999999"));
+    }
+
+    #[test]
+    fn 超出保留上限后最旧码被驱逐可重新占位() {
+        let id = uid();
+        for code in ["1", "2", "3"] {
+            assert!(claim_totp_code(id, code));
+        }
+        // 第 4 个码挤占，触发 drain 移除最旧的 "1"
+        assert!(claim_totp_code(id, "4"));
+        // "1" 已不在窗口内，重新占位应成功
+        assert!(claim_totp_code(id, "1"));
+    }
+
+    #[test]
+    fn 用户之间重放记录相互隔离() {
+        let a = uid();
+        let b = uid();
+        assert!(claim_totp_code(a, "555555"));
+        // 另一用户的同码不受 a 的占位影响
+        assert!(claim_totp_code(b, "555555"));
+    }
+}
+
 /// 原子占位一个 TOTP 码：未被使用则登记并返回 true，TTL 内已使用则返回 false。
 /// 「先占位、后校验、失败回滚」替代旧的「检查→异步校验→记录」三步，
 /// 消除并发请求携带同一验证码时同时通过重放检查的竞态窗口。

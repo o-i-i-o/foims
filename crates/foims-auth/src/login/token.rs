@@ -635,3 +635,23 @@ pub(crate) fn append_cookie_to_response(
     response.headers_mut().append(SET_COOKIE, header_value);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 清除cookie_字段与_secure_开关() {
+        let plain = create_clear_cookie("foims_access", false);
+        assert_eq!(plain.name(), "foims_access");
+        assert_eq!(plain.value(), "");
+        assert_eq!(plain.path(), Some("/"));
+        assert!(plain.http_only().unwrap_or(false));
+        assert!(!plain.secure().unwrap_or(false));
+        // 清除型 cookie：max_age 归零使浏览器立即失效
+        assert!(plain.max_age().is_some_and(|d| d.is_zero()));
+
+        let secured = create_clear_cookie("foims_refresh", true);
+        assert!(secured.secure().unwrap_or(false));
+    }
+}

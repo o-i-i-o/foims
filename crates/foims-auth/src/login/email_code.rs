@@ -30,6 +30,36 @@ const EMAIL_SEND_WINDOW: std::time::Duration = std::time::Duration::from_secs(36
 static EMAIL_SEND_RECORDS: std::sync::LazyLock<DashMap<String, Vec<std::time::Instant>>> =
     std::sync::LazyLock::new(DashMap::new);
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 窗口内达到上限后拒绝并给出等待秒数() {
+        let key = format!("target:{}", Uuid::new_v4());
+        // EMAIL_SEND_LIMIT=3：前 3 次放行
+        assert!(check_email_send_limit(&key).is_ok());
+        assert!(check_email_send_limit(&key).is_ok());
+        assert!(check_email_send_limit(&key).is_ok());
+        // 第 4 次拒绝，剩余等待秒数下限为 1
+        let wait = check_email_send_limit(&key).err();
+        assert!(wait.is_some(), "超过上限应返回 Err(等待秒数)");
+        assert!(wait.unwrap_or(0) >= 1);
+    }
+
+    #[test]
+    fn 不同键各自独立计数() {
+        let a = format!("ip:{}", Uuid::new_v4());
+        let b = format!("ip:{}", Uuid::new_v4());
+        for _ in 0..EMAIL_SEND_LIMIT {
+            assert!(check_email_send_limit(&a).is_ok());
+        }
+        // a 已耗尽配额，b 仍可发送
+        assert!(check_email_send_limit(&a).is_err());
+        assert!(check_email_send_limit(&b).is_ok());
+    }
+}
+
 /// 滑动窗口频控检查并登记一次发送；超过限制时返回需等待的秒数
 fn check_email_send_limit(key: &str) -> Result<(), u64> {
     let now = std::time::Instant::now();
