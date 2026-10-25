@@ -14,7 +14,10 @@ use foims_common::{AppError, msg};
 use foims_models::DeviceLag;
 
 use foims_snmp::collect::lag::get_lags_via_snmp;
-use foims_snmp::core::get_device_snmp_config;
+use foims_snmp::core::{get_device_snmp_config, truncate_to_column_width};
+
+/// device_lags.agg_name 列宽（VARCHAR(100)，与建表契约一致）
+const AGG_NAME_MAX_CHARS: usize = 100;
 
 /// 将 u32 列表构造为 JSONB 数组值。
 fn u32_array_json(values: &[u32]) -> serde_json::Value {
@@ -90,6 +93,11 @@ pub async fn sync_lags_from_snmp<P: DbProvider>(
     let mut tx = conn.begin().await?;
     for r in &records {
         seen.push(r.agg_ifindex);
+        // agg_name 列宽 VARCHAR(100)：入库前按字符截断（B7）
+        let agg_name = r
+            .agg_name
+            .as_deref()
+            .map(|n| truncate_to_column_width(n, AGG_NAME_MAX_CHARS));
         let member_ifindexes = u32_array_json(&r.member_ifindexes);
         let member_names = str_array_json(&r.member_names);
         let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
@@ -104,7 +112,7 @@ pub async fn sync_lags_from_snmp<P: DbProvider>(
         .bind(Uuid::new_v4())
         .bind(device_id)
         .bind(r.agg_ifindex)
-        .bind(&r.agg_name)
+        .bind(agg_name)
         .bind(&member_ifindexes)
         .bind(&member_names)
         .bind(&r.lacp_state)

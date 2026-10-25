@@ -28,14 +28,13 @@ use tokio::sync::Semaphore;
 
 use foims_snmp::collect::metrics as snmp_metrics;
 use foims_snmp::core::{
-    DeviceForSnmp, build_auth, format_snmp_error, snmp_target, truncate_to_column_width,
+    DeviceForSnmp, SNMP_TIMEOUT_SECS, build_auth, format_snmp_error, snmp_target,
+    truncate_to_column_width,
 };
 use foims_snmp::events::record_events;
 
 use crate::alerts::{self, MetricValues};
 
-/// 单设备 SNMP 单次请求超时（秒），与设备测试路径（get_device_info_via_snmp）一致
-const SNMP_TIMEOUT_SECS: u64 = 5;
 /// 单轮轮询的最大并发设备数：避免大量离线设备同时超时拖垮运行时
 const POLL_CONCURRENCY: usize = 8;
 /// hostname/os 入库截断宽度（与 ingest 文本校验上限对齐）
@@ -61,7 +60,7 @@ struct SnmpSysInfo {
     uptime_secs: Option<i64>,
 }
 
-/// 单轮 SNMP 轮询入口：采集全部已配置设备并回写 agents，
+/// 单轮 SNMP 轮询入口：采集全部已配置设备并 upsert `monitored_hosts`（source='snmp'）行，
 /// 返回 (成功台数, 失败台数)。
 pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
     let devices = match load_snmp_devices(pool).await {
@@ -349,6 +348,10 @@ async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics
 
 /// 建立设备 SNMP 会话（周期轮询关闭内建重试：默认 Retry（3 次 × 5s +
 /// 1s 退避）会把单个 OID 拖到 23s，足以挤占下一轮调度窗口）。
+///
+/// 超时口径：轮询路径以本常量 [`SNMP_TIMEOUT_SECS`] 为唯一来源构造会话；
+/// 指标采集函数则读取 `params.timeout_secs`（上游 to_snmp_params_async 统一
+/// 置为同值 5s），两处数值同源一致，改常量时需同步上游赋值。
 async fn connect_snmp(params: &foims_snmp::SnmpParamsLegacy) -> Result<Client<UdpHandle>, String> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(SNMP_TIMEOUT_SECS);

@@ -2412,7 +2412,7 @@
         "body_link_flip": "Device {{device}} interface {{interface}} link state changed to {{direction}}",
         "body_reboot": "Device {{device}} appears to have rebooted, estimated downtime {{downtime}}",
         "body_unknown_endpoint": "Device {{device}} interface {{interface}} found unregistered endpoint IP {{ip}} / MAC {{mac}}",
-        "body_arp_conflict": "Device {{device}} interface {{interface}} detected ARP conflict IP {{ip}} / MAC {{mac}}",
+        "body_arp_conflict": "Device {{device}} interface {{interface}} detected ARP conflict IP {{ip}} / MACs {{mac}} (one IP claimed by multiple MACs)",
         "body_poe_off": "Device {{device}} interface {{interface}} PoE power lost (class {{class}})"
       }
     },
@@ -2843,7 +2843,8 @@
     "snmp": {
       "events_retrieved": "SNMP observation events retrieved",
       "located": "Located {{count}} record(s)",
-      "invalid_locator": "Invalid locator (provide a valid MAC or IP)"
+      "invalid_locator": "Invalid locator (provide a valid MAC or IP)",
+      "invalid_time": "Invalid time range (ISO-8601 expected)"
     }
   },
   "ldap": {

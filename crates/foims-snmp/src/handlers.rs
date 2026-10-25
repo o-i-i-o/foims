@@ -134,7 +134,8 @@ pub async fn test_snmp_connection<P: DbProvider>(
         auth_pass: auth_pass.clone(),
         priv_proto: priv_proto.clone(),
         priv_pass: priv_pass.clone(),
-        timeout_secs: 10,
+        // 连通性探测用短超时（C3：单一口径，由 params.timeout_secs 承载）
+        timeout_secs: 5,
     };
 
     // 记录测试参数（敏感凭据只记录是否设置，不记录明文）
@@ -149,7 +150,7 @@ pub async fn test_snmp_connection<P: DbProvider>(
         username = username_label
     );
 
-    match test_snmp(&snmp_params, 5).await {
+    match test_snmp(&snmp_params).await {
         Ok(sys_descr) => Ok(foims_common::ok_json(
             serde_json::json!({ "sysDescr": sys_descr }),
             "server.device.snmp.test_success",

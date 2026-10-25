@@ -15,7 +15,19 @@ use foims_common::{AppError, msg};
 use foims_models::{DeviceEntity, DeviceSensor};
 
 use foims_snmp::collect::entity::{get_entities_via_snmp, get_sensors_via_snmp};
-use foims_snmp::core::get_device_snmp_config;
+use foims_snmp::core::{get_device_snmp_config, truncate_opt_to_column_width};
+
+/// device_entities 各变长列列宽（与建表契约一致；descr 为 TEXT 不限）
+const ENT_CLASS_MAX_CHARS: usize = 32;
+const ENT_NAME_MAX_CHARS: usize = 255;
+const ENT_MODEL_MAX_CHARS: usize = 128;
+const ENT_SERIAL_MAX_CHARS: usize = 128;
+const ENT_MFG_MAX_CHARS: usize = 128;
+const ENT_HW_REV_MAX_CHARS: usize = 32;
+const ENT_FW_REV_MAX_CHARS: usize = 64;
+const ENT_SW_REV_MAX_CHARS: usize = 64;
+/// device_sensors.name 列宽（VARCHAR(255)）
+const SENSOR_NAME_MAX_CHARS: usize = 255;
 
 /// 读库：返回设备已落库的物理实体清单。
 pub async fn get_device_entities<P: DbProvider>(
@@ -115,15 +127,40 @@ pub async fn sync_entities_from_snmp<P: DbProvider>(
         .bind(Uuid::new_v4())
         .bind(device_id)
         .bind(r.ent_index)
-        .bind(&r.ent_class)
-        .bind(&r.name)
+        // B7：各变长列入库前按列宽截断（超宽截断优于必败写入）
+        .bind(truncate_opt_to_column_width(
+            r.ent_class.as_deref(),
+            ENT_CLASS_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.name.as_deref(),
+            ENT_NAME_MAX_CHARS,
+        ))
         .bind(&r.descr)
-        .bind(&r.model_name)
-        .bind(&r.serial_num)
-        .bind(&r.mfg_name)
-        .bind(&r.hw_rev)
-        .bind(&r.fw_rev)
-        .bind(&r.sw_rev)
+        .bind(truncate_opt_to_column_width(
+            r.model_name.as_deref(),
+            ENT_MODEL_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.serial_num.as_deref(),
+            ENT_SERIAL_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.mfg_name.as_deref(),
+            ENT_MFG_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.hw_rev.as_deref(),
+            ENT_HW_REV_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.fw_rev.as_deref(),
+            ENT_FW_REV_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.sw_rev.as_deref(),
+            ENT_SW_REV_MAX_CHARS,
+        ))
         .bind(r.is_fru)
         .bind(r.parent_index)
         .bind(now)
@@ -177,7 +214,10 @@ pub async fn sync_entities_from_snmp<P: DbProvider>(
         .bind(r.sensor_precision)
         .bind(r.sensor_value)
         .bind(r.sensor_status)
-        .bind(&r.name)
+        .bind(truncate_opt_to_column_width(
+            r.name.as_deref(),
+            SENSOR_NAME_MAX_CHARS,
+        ))
         .bind(now)
         .execute(&mut *sp)
         .await;

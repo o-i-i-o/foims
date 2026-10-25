@@ -13,7 +13,10 @@ use foims_common::{AppError, msg};
 use foims_models::DeviceVlan;
 
 use foims_snmp::collect::vlan::get_vlans_via_snmp;
-use foims_snmp::core::get_device_snmp_config;
+use foims_snmp::core::{get_device_snmp_config, truncate_to_column_width};
+
+/// device_vlans.name 列宽（VARCHAR(64)，与建表契约一致）
+const VLAN_NAME_MAX_CHARS: usize = 64;
 
 /// 将 u32 列表构造为 JSONB 数组值（ifIndex 成员端口，无需 Result 路径）。
 fn u32_array_json(values: &[u32]) -> serde_json::Value {
@@ -79,6 +82,11 @@ pub async fn sync_vlans_from_snmp<P: DbProvider>(
     let mut tx = conn.begin().await?;
     for r in &records {
         seen.push(r.vlan_id);
+        // name 列宽 VARCHAR(64)：入库前按字符截断（B7，超宽截断优于必败写入）
+        let name = r
+            .name
+            .as_deref()
+            .map(|n| truncate_to_column_width(n, VLAN_NAME_MAX_CHARS));
         let member_ports = u32_array_json(&r.member_ports);
         let untagged_ports = u32_array_json(&r.untagged_ports);
         let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
@@ -92,7 +100,7 @@ pub async fn sync_vlans_from_snmp<P: DbProvider>(
         .bind(Uuid::new_v4())
         .bind(device_id)
         .bind(r.vlan_id)
-        .bind(&r.name)
+        .bind(name)
         .bind(&member_ports)
         .bind(&untagged_ports)
         .bind(now)

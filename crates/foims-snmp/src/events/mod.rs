@@ -6,6 +6,8 @@
 pub mod api;
 pub mod notify;
 
+use std::collections::HashSet;
+
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -14,6 +16,8 @@ use foims_models::{
     SNMP_EVENT_ARP_CONFLICT, SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP, SNMP_EVENT_POE_OFF,
     SNMP_EVENT_UNKNOWN_ENDPOINT,
 };
+
+use crate::core::truncate_to_column_width;
 
 // 通知 helper 与 API handler 一并再导出，供 crate 内/外同路径调用
 pub use api::{list_snmp_events, locate_device};
@@ -55,6 +59,21 @@ impl ObsEvent {
             .unwrap_or("")
             .to_string()
     }
+
+    /// detail.macs 数组拼接为逗号分隔串（ARP 冲突通知用；A1：此前
+    /// 冲突事件误读 mac 字段，模板 {{mac}} 永远渲染为空）
+    fn macs_field(&self) -> String {
+        self.detail
+            .get("macs")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default()
+    }
 }
 
 /// 是否需要发站内通知（仅关键事件；arp_added/arp_removed/cdp_* 只落表不通知）。
@@ -81,11 +100,21 @@ fn notification_body_key(event_type: &str) -> Option<&'static str> {
     }
 }
 
+/// snmp_events.interface 列宽（VARCHAR(100)，与建表契约一致）
+const EVENT_INTERFACE_MAX_CHARS: usize = 100;
+
+/// 同源事件抑制窗口（分钟）：同设备+同类型+同端口+同 detail 在窗口内
+/// 已落库时不重复落库与通知（C7：冲突/移除等持续性事件在轮询间隔
+/// 短于事件持续时长时会逐轮重复，形成事件表膨胀与通知风暴；
+/// 键含 interface，避免不同端口的同方向事件被互相抑制）
+const EVENT_SUPPRESSION_WINDOW_MINUTES: i64 = 30;
+
 /// 批量落库观测事件，并对关键事件逐条发站内通知；`unknown_endpoint`
 /// 另按「通知配置」中 snmp_event 邮件开关发邮件。
 ///
 /// 事件表为事实源：落库失败即返回错误（由调用方记日志），通知/邮件失败
-/// 仅记日志、不影响事件落库。
+/// 仅记日志、不影响事件落库。文案用的设备名查询失败降级为 UUID，
+/// 不阻断落库（C7）。
 pub async fn record_events(
     pool: &PgPool,
     device_id: Uuid,
@@ -97,44 +126,95 @@ pub async fn record_events(
 
     // 设备名用于通知与邮件文案（查询失败降级为 UUID 字符串）
     let device_name: String =
-        sqlx::query_scalar::<_, String>("SELECT name FROM devices WHERE id = $1")
+        match sqlx::query_scalar::<_, String>("SELECT name FROM devices WHERE id = $1")
             .bind(device_id)
             .fetch_optional(pool)
-            .await?
-            .unwrap_or_else(|| device_id.to_string());
+            .await
+        {
+            Ok(Some(name)) => name,
+            Ok(None) => device_id.to_string(),
+            Err(e) => {
+                log_warn!(
+                    "log.snmp.device_name_lookup_failed",
+                    device_id = device_id,
+                    error = e
+                );
+                device_id.to_string()
+            }
+        };
 
-    let mut inserted = 0usize;
-    for ev in events {
-        let occurred_at = chrono::Utc::now();
-        sqlx::query(
-            r"INSERT INTO snmp_events (id, device_id, event_type, interface, severity, detail, occurred_at, created_at)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $7)",
-        )
-        .bind(Uuid::new_v4())
-        .bind(device_id)
-        .bind(ev.event_type)
-        .bind(ev.interface.as_deref())
-        .bind(&ev.severity)
-        .bind(&ev.detail)
-        .bind(occurred_at)
-        .execute(pool)
-        .await?;
-        inserted += 1;
+    // 抑制过滤：命中窗口内已落库事件或本批重复键的条目丢弃
+    // 键为 (event_type, interface, detail)，端口维度参与去重
+    let window_start =
+        chrono::Utc::now() - chrono::Duration::minutes(EVENT_SUPPRESSION_WINDOW_MINUTES);
+    let recent: Vec<(String, Option<String>, serde_json::Value)> = sqlx::query_as(
+        "SELECT event_type, interface, detail FROM snmp_events WHERE device_id = $1 AND occurred_at >= $2",
+    )
+    .bind(device_id)
+    .bind(window_start)
+    .fetch_all(pool)
+    .await?;
+    let mut seen_keys: HashSet<(String, String, String)> = recent
+        .into_iter()
+        .map(|(t, i, d)| (t, i.unwrap_or_default(), d.to_string()))
+        .collect();
+    let pending: Vec<&ObsEvent> = events
+        .iter()
+        .filter(|ev| {
+            seen_keys.insert((
+                ev.event_type.to_string(),
+                ev.interface.clone().unwrap_or_default(),
+                ev.detail.to_string(),
+            ))
+        })
+        .collect();
+    if pending.is_empty() {
+        return Ok(());
     }
+
+    // 单语句 UNNEST 批量插入（C7：此前逐行 round-trip，首轮全量
+    // arp_added 场景下会放大成数百次网络往返）
+    let occurred_at = chrono::Utc::now();
+    let ids: Vec<Uuid> = pending.iter().map(|_| Uuid::new_v4()).collect();
+    let event_types: Vec<&str> = pending.iter().map(|e| e.event_type).collect();
+    let interfaces: Vec<Option<String>> = pending
+        .iter()
+        .map(|e| {
+            e.interface
+                .as_deref()
+                .map(|i| truncate_to_column_width(i, EVENT_INTERFACE_MAX_CHARS))
+        })
+        .collect();
+    let severities: Vec<&str> = pending.iter().map(|e| e.severity.as_str()).collect();
+    let details: Vec<&serde_json::Value> = pending.iter().map(|e| &e.detail).collect();
+
+    let rows = sqlx::query(
+        r"INSERT INTO snmp_events (id, device_id, event_type, interface, severity, detail, occurred_at, created_at)
+          SELECT unnest($3::uuid[]), $1, unnest($4::text[]), unnest($5::text[]), unnest($6::text[]), unnest($7::jsonb[]), $2, $2",
+    )
+    .bind(device_id)
+    .bind(occurred_at)
+    .bind(&ids)
+    .bind(&event_types)
+    .bind(&interfaces)
+    .bind(&severities)
+    .bind(&details)
+    .execute(pool)
+    .await?;
     log_info!(
         "log.snmp.event_recorded",
         device_id = device_id,
-        count = inserted
+        count = rows.rows_affected()
     );
 
-    // 通知仅对关键事件；失败逐条降级记日志，不回滚已落库事件
-    if events.iter().any(|e| should_notify(e.event_type)) {
+    // 通知仅对关键事件（抑制后的集合）；失败逐条降级记日志，不回滚已落库事件
+    if pending.iter().any(|e| should_notify(e.event_type)) {
         let admin_ids: Vec<Uuid> = sqlx::query_scalar(
             "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'secadmin')",
         )
         .fetch_all(pool)
         .await?;
-        for ev in events.iter().filter(|e| should_notify(e.event_type)) {
+        for ev in pending.iter().filter(|e| should_notify(e.event_type)) {
             notify_event(pool, &device_name, ev, &admin_ids).await;
         }
     }
@@ -158,11 +238,17 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
             ("device".to_string(), device_name.to_string()),
             ("downtime".to_string(), ev.str_field("downtime")),
         ],
-        SNMP_EVENT_UNKNOWN_ENDPOINT | SNMP_EVENT_ARP_CONFLICT => vec![
+        SNMP_EVENT_UNKNOWN_ENDPOINT => vec![
             ("device".to_string(), device_name.to_string()),
             ("interface".to_string(), iface.clone()),
             ("ip".to_string(), ev.str_field("ip")),
             ("mac".to_string(), ev.str_field("mac")),
+        ],
+        SNMP_EVENT_ARP_CONFLICT => vec![
+            ("device".to_string(), device_name.to_string()),
+            ("interface".to_string(), iface.clone()),
+            ("ip".to_string(), ev.str_field("ip")),
+            ("mac".to_string(), ev.macs_field()),
         ],
         SNMP_EVENT_POE_OFF => vec![
             ("device".to_string(), device_name.to_string()),
@@ -265,5 +351,25 @@ mod tests {
         assert_eq!(ev.str_field("direction"), "down");
         // 缺失字段返回空串而非 panic
         assert_eq!(ev.str_field("absent"), "");
+    }
+
+    #[test]
+    fn obs_event_macs_field_joins_array() {
+        // A1：冲突通知的 mac 插值取自 macs 数组拼接
+        let ev = ObsEvent::new(
+            SNMP_EVENT_ARP_CONFLICT,
+            None,
+            "warning",
+            serde_json::json!({ "ip": "10.0.0.1", "macs": ["AA:01", "BB:02"] }),
+        );
+        assert_eq!(ev.macs_field(), "AA:01, BB:02");
+        // 非冲突事件/缺字段返回空串
+        let plain = ObsEvent::new(
+            SNMP_EVENT_UNKNOWN_ENDPOINT,
+            None,
+            "warning",
+            serde_json::json!({ "mac": "AA:01" }),
+        );
+        assert_eq!(plain.macs_field(), "");
     }
 }

@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use async_snmp::{Client, VarBind, oid};
 use tracing::debug;
 
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+};
 
 async fn snmp_walk<F>(
     client: &Client,
@@ -64,15 +66,14 @@ pub async fn get_lldp_neighbors_via_snmp(
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 11 {
             let if_index = oid_parts[10].to_string();
-            if let Some(name) = vb.value.as_str() {
-                if !name.is_empty() {
-                    if_name_map.insert(if_index, name.to_string());
-                }
-            } else if let Some(name) = vb.value.as_bytes() {
-                let name_str = String::from_utf8_lossy(name).to_string();
-                if !name_str.is_empty() {
-                    if_name_map.insert(if_index, name_str);
-                }
+            // 名称归一（B3）：trim/空串/异常字面量不写入映射
+            let name = clean_snmp_text(vb.value.as_str()).or_else(|| {
+                vb.value
+                    .as_bytes()
+                    .and_then(|b| clean_snmp_text(Some(&String::from_utf8_lossy(b))))
+            });
+            if let Some(name) = name {
+                if_name_map.insert(if_index, name);
             }
         }
         Ok(())
@@ -209,9 +210,11 @@ pub async fn get_lldp_neighbors_via_snmp(
                     if let Some(port_id) = vb.value.as_bytes() {
                         let subtype = port_subtype_map.get(&key).copied().unwrap_or(1);
                         let port_id_str = format_lldp_id(port_id, subtype);
+                        // C6：调试日志不再输出邻居原始字节（含 MAC 等设备
+                        // 标识），仅保留格式化结果与类型
                         debug!(
-                            "邻居端口 {:?} subtype={} raw={:?} formatted={}",
-                            key, subtype, port_id, port_id_str
+                            "邻居端口 {:?} subtype={} formatted={}",
+                            key, subtype, port_id_str
                         );
                         entry.neighbor_port_id = Some(port_id_str);
                     }
@@ -230,19 +233,24 @@ pub async fn get_lldp_neighbors_via_snmp(
                     }
                 }
                 9 => {
-                    if let Some(sys_name) = vb.value.as_str() {
-                        entry.neighbor_sys_name = Some(sys_name.to_string());
-                    } else if let Some(sys_name) = vb.value.as_bytes() {
-                        entry.neighbor_sys_name =
-                            Some(String::from_utf8_lossy(sys_name).to_string());
+                    // B3：系统名/描述同样走归一入口（trim/空串/异常字面量 → None）
+                    let sys_name = clean_snmp_text(vb.value.as_str()).or_else(|| {
+                        vb.value
+                            .as_bytes()
+                            .and_then(|b| clean_snmp_text(Some(&String::from_utf8_lossy(b))))
+                    });
+                    if sys_name.is_some() {
+                        entry.neighbor_sys_name = sys_name;
                     }
                 }
                 10 => {
-                    if let Some(sys_desc) = vb.value.as_str() {
-                        entry.neighbor_sys_desc = Some(sys_desc.to_string());
-                    } else if let Some(sys_desc) = vb.value.as_bytes() {
-                        entry.neighbor_sys_desc =
-                            Some(String::from_utf8_lossy(sys_desc).to_string());
+                    let sys_desc = clean_snmp_text(vb.value.as_str()).or_else(|| {
+                        vb.value
+                            .as_bytes()
+                            .and_then(|b| clean_snmp_text(Some(&String::from_utf8_lossy(b))))
+                    });
+                    if sys_desc.is_some() {
+                        entry.neighbor_sys_desc = sys_desc;
                     }
                 }
                 _ => {}

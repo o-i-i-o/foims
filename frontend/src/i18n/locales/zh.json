@@ -2412,7 +2412,7 @@
         "body_link_flip": "设备 {{device}} 端口 {{interface}} 链路状态变为 {{direction}}",
         "body_reboot": "设备 {{device}} 疑似重启，估算停机时长 {{downtime}}",
         "body_unknown_endpoint": "设备 {{device}} 端口 {{interface}} 发现未登记终端 IP {{ip}} / MAC {{mac}}",
-        "body_arp_conflict": "设备 {{device}} 端口 {{interface}} 检测到 ARP 冲突 IP {{ip}} / MAC {{mac}}",
+        "body_arp_conflict": "设备 {{device}} 端口 {{interface}} 检测到 ARP 冲突 IP {{ip}} / MAC {{mac}}（同一 IP 被多个 MAC 声明）",
         "body_poe_off": "设备 {{device}} 端口 {{interface}} PoE 供电中断（类别 {{class}}）"
       }
     },
@@ -2843,7 +2843,8 @@
     "snmp": {
       "events_retrieved": "获取 SNMP 观测事件成功",
       "located": "定位到 {{count}} 条记录",
-      "invalid_locator": "定位参数非法（MAC/IP 至少给一个且格式正确）"
+      "invalid_locator": "定位参数非法（MAC/IP 至少给一个且格式正确）",
+      "invalid_time": "时间范围非法（应为 ISO-8601 格式）"
     }
   },
   "ldap": {

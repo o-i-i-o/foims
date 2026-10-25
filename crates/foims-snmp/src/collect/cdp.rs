@@ -15,7 +15,10 @@ use tracing::debug;
 use foims_common::log_warn;
 use foims_models::{CdpRecord, DeviceCdp, SNMP_EVENT_CDP_ADDED, SNMP_EVENT_CDP_REMOVED};
 
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error,
+    is_exception_literal, snmp_target,
+};
 use crate::events::ObsEvent;
 
 /// walk cdpCacheTable 单列，返回 `(本地 ifIndex, 缓存条目) → 值` 映射。
@@ -24,7 +27,12 @@ async fn walk_cdp_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value
         4 => oid!(1, 3, 6, 1, 4, 1, 9, 9, 23, 1, 1, 1, 1, 4),
         6 => oid!(1, 3, 6, 1, 4, 1, 9, 9, 23, 1, 1, 1, 1, 6),
         7 => oid!(1, 3, 6, 1, 4, 1, 9, 9, 23, 1, 1, 1, 1, 7),
-        _ => oid!(1, 3, 6, 1, 4, 1, 9, 9, 23, 1, 1, 1, 1, 8),
+        8 => oid!(1, 3, 6, 1, 4, 1, 9, 9, 23, 1, 1, 1, 1, 8),
+        // C2：越界列号显式拒绝，禁止兜底分支静默 walk 错列
+        other => {
+            tracing::debug!("未知 CDP 列号 {other}，跳过");
+            return HashMap::new();
+        }
     };
     let mut map = HashMap::new();
     let Ok(mut walk) = client.walk(base) else {
@@ -58,7 +66,8 @@ fn column_str(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<Stri
         .map(str::to_string)
         .or_else(|| v.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()))?;
     let t = s.trim_matches('\0').trim();
-    if t.is_empty() {
+    if t.is_empty() || is_exception_literal(t) {
+        // B3：异常字面量不作为真实邻居字段
         None
     } else {
         Some(t.to_string())
@@ -92,16 +101,25 @@ pub async fn get_cdp_neighbors_via_snmp(
     let platform = walk_cdp_column(&client, 8).await;
 
     let mut neighbors = Vec::new();
-    for key in device_id.keys() {
+    // C1：四列索引并集驱动并排序（确定性输出）；无 device_id 的条目
+    // 仍按自然键要求跳过，但不再因 walk 到达顺序丢失可比对记录
+    let mut keys: Vec<(u32, u32)> = device_id
+        .keys()
+        .chain(address.keys())
+        .chain(device_port.keys())
+        .chain(platform.keys())
+        .copied()
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    for key in keys {
         // 无邻居设备 ID 的缓存条目跳过（自然键的一部分，缺失无法判定增删）
+        let key = &key;
         let Some(neighbor_device_id) = column_str(&device_id, key) else {
             continue;
         };
         let if_index = key.0;
-        let local_port = if_descr
-            .get(&if_index)
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
+        let local_port = clean_snmp_text(if_descr.get(&if_index).and_then(|v| v.as_str()))
             .unwrap_or_else(|| if_index.to_string());
         neighbors.push(CdpRecord {
             local_port,

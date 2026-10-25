@@ -14,10 +14,15 @@ use foims_models::{DeviceLldp, LldpNeighbor};
 
 use foims_snmp::collect::lldp::get_lldp_neighbors_via_snmp;
 use foims_snmp::core::DeviceForSnmp;
+use foims_snmp::core::truncate_opt_to_column_width;
 use foims_snmp::core::truncate_to_column_width;
 
 /// device_lldps.local_port 列宽（VARCHAR(50)，与建表契约一致）
 const LOCAL_PORT_MAX_CHARS: usize = 50;
+/// device_lldps.neighbor_chassis_id / neighbor_port_id 列宽（VARCHAR(100)）
+const NEIGHBOR_ID_MAX_CHARS: usize = 100;
+/// device_lldps.neighbor_port_desc / neighbor_sys_name 列宽（VARCHAR(255)）
+const NEIGHBOR_TEXT_MAX_CHARS: usize = 255;
 
 /// 获取设备的 LLDP 邻居（先校验设备/IP/SNMP 配置，再走 SNMP 采集）。
 pub async fn get_lldp_neighbors(
@@ -129,10 +134,23 @@ pub async fn sync_lldp_from_snmp<P: DbProvider>(
         .bind(Uuid::new_v4())
         .bind(device_id)
         .bind(&local_port)
-        .bind(&neighbor.neighbor_chassis_id)
-        .bind(&neighbor.neighbor_port_id)
-        .bind(&neighbor.neighbor_port_desc)
-        .bind(&neighbor.neighbor_sys_name)
+        // B7：各变长列入库前按列宽截断（超宽截断优于必败写入）
+        .bind(truncate_opt_to_column_width(
+            neighbor.neighbor_chassis_id.as_deref(),
+            NEIGHBOR_ID_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            neighbor.neighbor_port_id.as_deref(),
+            NEIGHBOR_ID_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            neighbor.neighbor_port_desc.as_deref(),
+            NEIGHBOR_TEXT_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            neighbor.neighbor_sys_name.as_deref(),
+            NEIGHBOR_TEXT_MAX_CHARS,
+        ))
         .bind(&neighbor.neighbor_sys_desc)
         .bind(now)
         .execute(&mut *sp)

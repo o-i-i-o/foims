@@ -113,16 +113,17 @@ pub async fn get_device_mac_table<P: DbProvider>(
         }
     }
 
-    // 删除本次同步中未出现的陈旧记录
-    if !seen_ips.is_empty() {
-        sqlx::query(
-            "DELETE FROM snmp_arp_entries WHERE device_id = $1 AND host(ip_address) NOT IN (SELECT unnest($2::text[]))",
-        )
-        .bind(device_id)
-        .bind(&seen_ips)
-        .execute(&mut *tx)
-        .await?;
-    }
+    // 删除本次同步中未出现的陈旧记录（A2：采集成功即以太表为准，
+    // 空表时 seen_ips 为空数组，NOT IN 恒真→全部清理；此前
+    // `!seen_ips.is_empty()` 守卫会让设备清空 ARP 表后旧行永不清理，
+    // 陈旧行持续触发 arp_removed 事件不收敛）
+    sqlx::query(
+        "DELETE FROM snmp_arp_entries WHERE device_id = $1 AND host(ip_address) NOT IN (SELECT unnest($2::text[]))",
+    )
+    .bind(device_id)
+    .bind(&seen_ips)
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 

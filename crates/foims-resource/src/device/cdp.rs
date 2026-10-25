@@ -16,13 +16,21 @@ use foims_common::{AppError, msg};
 use foims_models::DeviceCdp;
 
 use foims_snmp::collect::cdp::{diff_cdp_neighbors, get_cdp_neighbors_via_snmp};
-use foims_snmp::core::{get_device_snmp_config, truncate_to_column_width};
+use foims_snmp::core::{
+    get_device_snmp_config, truncate_opt_to_column_width, truncate_to_column_width,
+};
 use foims_snmp::events::record_events;
 
 /// device_cdps.local_port 列宽（VARCHAR(50)，与建表契约一致）
 const LOCAL_PORT_MAX_CHARS: usize = 50;
 /// device_cdps.neighbor_device_id 列宽（VARCHAR(255)）
 const NEIGHBOR_ID_MAX_CHARS: usize = 255;
+/// device_cdps.neighbor_port 列宽（VARCHAR(100)）
+const NEIGHBOR_PORT_MAX_CHARS: usize = 100;
+/// device_cdps.neighbor_address 列宽（VARCHAR(64)）
+const NEIGHBOR_ADDR_MAX_CHARS: usize = 64;
+/// device_cdps.neighbor_platform 列宽（VARCHAR(128)）
+const NEIGHBOR_PLATFORM_MAX_CHARS: usize = 128;
 
 /// 读库：返回设备已落库的 CDP 邻居。
 pub async fn get_device_cdps<P: DbProvider>(
@@ -109,9 +117,18 @@ pub async fn sync_cdps_from_snmp<P: DbProvider>(
         .bind(device_id)
         .bind(&local_port)
         .bind(&neighbor_device_id)
-        .bind(&r.neighbor_port)
-        .bind(&r.neighbor_address)
-        .bind(&r.neighbor_platform)
+        .bind(truncate_opt_to_column_width(
+            r.neighbor_port.as_deref(),
+            NEIGHBOR_PORT_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.neighbor_address.as_deref(),
+            NEIGHBOR_ADDR_MAX_CHARS,
+        ))
+        .bind(truncate_opt_to_column_width(
+            r.neighbor_platform.as_deref(),
+            NEIGHBOR_PLATFORM_MAX_CHARS,
+        ))
         .bind(now)
         .execute(&mut *sp)
         .await;

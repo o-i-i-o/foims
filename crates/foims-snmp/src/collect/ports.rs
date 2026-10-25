@@ -9,7 +9,9 @@ use tracing::debug;
 use foims_common::log_warn;
 use foims_models::SnmpPort;
 
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+};
 
 /// walk 单弧索引标量表：返回（实例尾弧 → 值）映射。
 ///
@@ -224,11 +226,8 @@ pub async fn get_device_ports_via_snmp(
 
     let mut ports = Vec::new();
     for (if_index, value) in if_descr {
-        let name = value
-            .as_str()
-            .map(std::string::ToString::to_string)
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| if_index.to_string());
+        // 名称归一（B3）：trim/空串/异常字面量均回落为 ifIndex 字符串
+        let name = clean_snmp_text(value.as_str()).unwrap_or_else(|| if_index.to_string());
 
         let status = derive_port_status(
             value_as_i32(if_admin.get(&if_index)),

@@ -68,6 +68,16 @@ fn cpu_raw_oids() -> [async_snmp::Oid; 11] {
 /// CPU Raw 计数器中 Idle 的下标（usage 分子）
 const CPU_RAW_IDLE_IDX: usize = 3;
 
+/// Wait（iowait）下标：计入 total 但归入非 busy 侧（B5：与 top 口径一致，
+/// I/O 等待不算 CPU 使用率）
+const CPU_RAW_WAIT_IDX: usize = 4;
+
+/// total 计入口径下标（B5）：User/Nice/System/Idle/Wait/Interrupt/SoftIrq/Steal。
+/// 排除 Kernel（net-snmp 中 Kernel=System+Interrupt+SoftIrq 的重叠和，
+/// 一并求和会双倍计入内核时间）与 Guest/GuestNice（guest 时间已包含
+/// 在 User/Nice 内，另属虚拟化客户负载的重复计数）。
+const CPU_RAW_TOTAL_IDXS: [usize; 8] = [0, 1, 2, 3, 4, 6, 7, 8];
+
 /// hrStorageType 取值：Ram（物理内存行）
 fn storage_type_ram() -> async_snmp::Oid {
     oid!(1, 3, 6, 1, 2, 1, 25, 2, 1, 2)
@@ -86,7 +96,8 @@ const STORAGE_DESCR_AVAIL_MEM: &str = "Available memory";
 // 上一轮状态（raw_metrics 私有键 _snmp_state）
 // ============================================================
 
-/// CPU 计数器快照：ssCpuRaw* 全量求和 + idle 分量（差值算使用率）
+/// CPU 计数器快照：ssCpuRaw* 按 B5 口径求和 + 非 busy（Idle+Wait）分量
+///（差值算使用率）
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CpuCounters {
     pub total: u64,
@@ -264,11 +275,18 @@ pub fn cpu_usage_pct(prev: CpuCounters, cur: CpuCounters) -> Option<f64> {
     Some((100.0 * (1.0 - idle as f64 / total as f64)).clamp(0.0, 100.0))
 }
 
-/// 网卡速率（bit/s）：Δbytes×8/elapsed，Counter32 回绕校正。
+/// 网卡速率（bit/s）：Δbytes×8/elapsed，按计数器位宽分道回绕处理。
 ///
 /// 合理性校验：Δbytes ≤ elapsed×cap/8×1.1（cap 取 ifSpeed，低于
-/// [`MIN_KNOWN_SPEED_BPS`] 视为未知用 100 Gbps 兜底）；超限（计数器回绕
-/// 未校正/设备计数清零）→ None，防止出现虚假峰值。
+/// [`MIN_KNOWN_SPEED_BPS`] 视为未知用 100 Gbps 兜底）；超限（计数器未校正/
+/// 设备计数清零）→ None，防止出现虚假峰值。
+///
+/// B2：ifHCInOctets（Counter64）与 ifInOctets（Counter32）共用本函数，
+/// cur<prev 时仅当 prev 落在 32 位计数空间才按 2^32 回绕校正；
+/// prev 超过 u32 最大值说明本轮使用的是 64 位计数器，其 cur<prev 只
+/// 可能是设备重启计数清零（2^64 回绕在现实流量下不可达），无法可信
+/// 差值 → None；旧实现无差别加 2^32 既会产出虚假峰值，也会在
+/// prev−cur>2^32 时使 u64 减法下溢。
 pub fn iface_rate_bps(
     prev: u64,
     cur: u64,
@@ -278,7 +296,15 @@ pub fn iface_rate_bps(
     if elapsed_secs <= 0 {
         return None;
     }
-    let delta = delta32(prev, cur);
+    let delta = if cur >= prev {
+        cur - prev
+    } else if prev <= u64::from(u32::MAX) {
+        // Counter32 回绕：(2^32 − prev) + cur，区间内不会下溢
+        (u64::from(u32::MAX) - prev) + cur + 1
+    } else {
+        // Counter64 空间计数清零：丢弃本轮差值，等下轮重建基线
+        return None;
+    };
     let cap = match speed_bps {
         Some(s) if s >= MIN_KNOWN_SPEED_BPS => s,
         _ => DEFAULT_SPEED_CAP_BPS,
@@ -388,6 +414,18 @@ pub fn detect_link_flips(
             json!({ "direction": direction, "admin_down": admin_down }),
         ));
     }
+    // 接口消失补报：上轮 up 而本轮 ifTable 不再报告该接口（板卡拔出/
+    // 子接口删除等）此前静默漏报；标 vanished 并取 info 控制告警面
+    for (iface, &old) in &prev.if_status {
+        if old == 1 && !cur_status.contains_key(iface) {
+            events.push(ObsEvent::new(
+                SNMP_EVENT_LINK_FLIP,
+                Some(iface.clone()),
+                SNMP_SEVERITY_INFO,
+                json!({ "direction": "down", "vanished": true }),
+            ));
+        }
+    }
     events
 }
 
@@ -428,8 +466,9 @@ fn format_secs(secs: i64) -> String {
 // 采集实现
 // ============================================================
 
-/// CPU：GET ssCpuRaw* 11 个计数器 → 求和与 idle 分量 → 与上一轮差值算
-/// 使用率。Idle 缺失时整体 None（无法定义使用率），其余缺失按 0 计入。
+/// CPU：GET ssCpuRaw* 11 个计数器 → 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和与
+/// 非 busy（Idle+Wait）分量 → 与上一轮差值算使用率。Idle 缺失时整体
+/// None（无法定义使用率），其余缺失按 0 计入。
 async fn collect_cpu(
     client: &Client<UdpHandle>,
     prev: Option<CpuCounters>,
@@ -453,8 +492,20 @@ async fn collect_cpu(
                 None
             } else {
                 let idle = vals.get(CPU_RAW_IDLE_IDX).copied().flatten();
-                let total: u64 = vals.iter().flatten().sum();
-                idle.map(|idle| CpuCounters { total, idle })
+                let wait = vals
+                    .get(CPU_RAW_WAIT_IDX)
+                    .copied()
+                    .flatten()
+                    .unwrap_or_default();
+                let total: u64 = CPU_RAW_TOTAL_IDXS
+                    .iter()
+                    .filter_map(|i| vals.get(*i).copied().flatten())
+                    .sum();
+                // 非 busy 侧含 Wait（B5）：usage = 1−(Idle+Wait)/total
+                idle.map(|idle| CpuCounters {
+                    total,
+                    idle: idle + wait,
+                })
             }
         }
         Err(e) => {
@@ -1085,6 +1136,13 @@ mod tests {
         // 32 位回绕：prev=MAX−149 回绕归零 → Δ=150 字节 → 4 bit/s
         let rate = iface_rate_bps(u64::from(u32::MAX) - 149, 0, 300, Some(1_000_000)).unwrap();
         assert!((rate - 4.0).abs() < 0.01);
+        // B2 回归：prev 超出 32 位空间（Counter64）时 cur<prev 属计数清零，
+        // 应拒绝差值；旧实现加 2^32 校正会下溢恐慌或产出虚假峰值
+        assert_eq!(
+            iface_rate_bps(40_000_000_000, 100, 300, Some(1_000_000_000)),
+            None,
+            "64 位计数器 cur<prev 应判 None"
+        );
         // 时段非法
         assert_eq!(iface_rate_bps(0, 100, 0, None), None);
         assert_eq!(iface_rate_bps(0, 100, -5, None), None);

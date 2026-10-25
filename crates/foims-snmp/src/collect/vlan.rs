@@ -12,7 +12,9 @@ use tracing::debug;
 use foims_models::VlanRecord;
 
 use super::ports::{port_list_members, value_as_i32, walk_index_value_map};
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+};
 
 pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRecord>, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
@@ -72,16 +74,23 @@ pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRec
     };
 
     let mut vlans = Vec::new();
-    for vlan in names.keys() {
+    // C1：名称/egress/untagged 三列索引并集驱动并排序——此前仅以
+    // names.keys() 驱动，不返回名称列的 VLAN（行存在但无 name 列）
+    // 会连成员位图一起丢失
+    let mut vlan_ids: Vec<u32> = names
+        .keys()
+        .chain(egress.keys())
+        .chain(untagged.keys())
+        .copied()
+        .collect();
+    vlan_ids.sort_unstable();
+    vlan_ids.dedup();
+    for vlan in vlan_ids {
+        let vlan = &vlan;
         if !(1u32..=4094).contains(vlan) {
             continue;
         }
-        let name = names
-            .get(vlan)
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string);
+        let name = clean_snmp_text(names.get(vlan).and_then(|v| v.as_str()));
         vlans.push(VlanRecord {
             vlan_id: i32::try_from(*vlan).unwrap_or(0),
             name,

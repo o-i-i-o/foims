@@ -3,7 +3,8 @@
 //! pethPsePortTable（1.3.6.1.2.1.105.1.3.1）实例索引为
 //! (pethPsePortGroupIndex, pethPsePortIndex) 双弧，`pethPsePortIfIndex`(.7)
 //! 关联真实 ifIndex，端口名经 ifDescr 表映射。实测功率 best-effort 取 Cisco
-//! `cpdExtPsePortSensor`（0.1W→W 换算），缺失 NULL。
+//! `cpeExtPsePortPwrConsumption`（CISCO-PHYSICAL-ADDTL-STATS-MIB，0.1W→W
+//! 换算），缺失 NULL。
 //!
 //! 供电中断 diff 与第一层 ARP 同构：某端口 `detectionStatus` 由 delivering(3)
 //! 转入 disabled(1)/fault(4)/test(5)/other(6) 之一即产出 `poe_port_off`(warning)。
@@ -18,7 +19,9 @@ use foims_common::log_warn;
 use foims_models::{DevicePoePort, PoeRecord, SNMP_EVENT_POE_OFF, SNMP_SEVERITY_WARNING};
 
 use super::ports::value_as_i32;
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+};
 use crate::events::ObsEvent;
 
 /// PoE 检测态：deliveringPower(3)。
@@ -30,7 +33,12 @@ async fn walk_poe_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value
         2 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 2),
         5 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 5),
         6 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 6),
-        _ => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 7),
+        7 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 7),
+        // C2：越界列号显式拒绝，禁止兜底分支静默 walk 错列
+        other => {
+            tracing::debug!("未知 PoE 列号 {other}，跳过");
+            return HashMap::new();
+        }
     };
     let mut map = HashMap::new();
     let Ok(mut walk) = client.walk(base) else {
@@ -60,6 +68,33 @@ fn i32_at(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<i32> {
     map.get(key).and_then(|v| value_as_i32(Some(v)))
 }
 
+/// walk cpeExtPsePortPwrConsumption（CISCO-PHYSICAL-ADDTL-STATS-MIB
+/// 1.3.6.1.4.1.9.9.16.1.1.3.1.4，单弧 ifIndex 索引，单位 0.1W）。
+/// B6：既有注释宣称实测功率 best-effort，此前实现缺失（硬编码
+/// None）；非 Cisco 设备不实现该表，walk 失败记告警返回空集（NULL）。
+async fn walk_poe_power_consumption(client: &Client) -> HashMap<u32, f64> {
+    let mut map = HashMap::new();
+    let Ok(mut walk) = client.walk(oid!(1, 3, 6, 1, 4, 1, 9, 9, 16, 1, 1, 3, 1, 4)) else {
+        log_warn!("log.device.snmp.poe_walk_failed");
+        return map;
+    };
+    while let Some(result) = walk.next().await {
+        let Ok(vb) = result else { continue };
+        if vb.value.is_exception() {
+            if matches!(vb.value, Value::EndOfMibView) {
+                break;
+            }
+            continue;
+        }
+        if let (Some(&if_index), Some(raw)) = (vb.oid.arcs().last(), value_as_i32(Some(&vb.value)))
+        {
+            // 0.1W → W 换算
+            map.insert(if_index, f64::from(raw) / 10.0);
+        }
+    }
+    map
+}
+
 pub async fn get_poe_ports_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<PoeRecord>, SnmpError> {
@@ -84,23 +119,30 @@ pub async fn get_poe_ports_via_snmp(
     let detection = walk_poe_column(&client, 5).await;
     let class_map = walk_poe_column(&client, 6).await;
     let if_index_map = walk_poe_column(&client, 7).await;
+    let power_map = walk_poe_power_consumption(&client).await;
 
+    // 端口名与实测功率均按 ifIndex 对齐（B6：cpdExt 实测功率
+    // 非 Cisco 缺失时 NULL，不阻断其余字段）
+    let mut keys: Vec<&(u32, u32)> = if_index_map.keys().collect();
+    keys.sort_unstable();
     let mut ports = Vec::new();
-    for (key, value) in &if_index_map {
-        let Some(if_index) = value_as_i32(Some(value)) else {
+    for key in keys {
+        let Some(if_index) = value_as_i32(if_index_map.get(key)) else {
             continue;
         };
-        let if_name = if_descr
-            .get(&(if_index as u32))
-            .and_then(|v| v.as_str())
-            .map(str::to_string);
+        let if_name = clean_snmp_text(if_descr.get(&(if_index as u32)).and_then(|v| v.as_str()));
+        let measured_power_w = if if_index >= 0 {
+            power_map.get(&(if_index as u32)).copied()
+        } else {
+            None
+        };
         ports.push(PoeRecord {
             if_index,
             if_name,
             admin_status: i32_at(&admin, key),
             detection_status: i32_at(&detection, key),
             power_class: i32_at(&class_map, key),
-            measured_power_w: None,
+            measured_power_w,
         });
     }
 

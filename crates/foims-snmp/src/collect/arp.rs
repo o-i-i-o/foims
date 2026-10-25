@@ -10,7 +10,9 @@ use tracing::debug;
 use foims_common::log_warn;
 use foims_models::ArpEntry;
 
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+};
 use crate::events::ObsEvent;
 
 fn parse_vlan_from_interface(iface: &str) -> Option<i32> {
@@ -48,12 +50,8 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
         }
         let oid_parts = vb.oid.arcs();
         if let Some(&if_index) = oid_parts.last() {
-            let name = vb
-                .value
-                .as_str()
-                .map(std::string::ToString::to_string)
-                .unwrap_or_default();
-            if !name.is_empty() {
+            // 名称归一（B3）：trim/空串/异常字面量不写入映射
+            if let Some(name) = clean_snmp_text(vb.value.as_str()) {
                 map.insert(if_index, name);
             }
         }
@@ -161,7 +159,9 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
     let vlan_map = walk_vlan_map(&client).await;
 
     let mut entries = Vec::new();
-    let mut seen_ips = std::collections::HashSet::new();
+    // 去重键为 (ip, mac)：IPv4 arpEntries 与 ipNetToPhysical 双表存在重叠，
+    // 按 IP 去重会把「同 IP 多 MAC」在采集层丢弃，使冲突检测永不成真（A1）
+    let mut seen_pairs: HashSet<(String, String)> = HashSet::new();
 
     debug!("尝试获取IPv4 ARP表");
     let arp_oid = oid!(1, 3, 6, 1, 2, 1, 4, 22, 1, 2);
@@ -200,8 +200,9 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
                     bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
                 );
 
-                if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
-                    seen_ips.insert(ip_addr.clone());
+                if mac_addr != "00:00:00:00:00:00"
+                    && seen_pairs.insert((ip_addr.clone(), mac_addr.clone()))
+                {
                     let interface = if_name_map.get(&if_index).cloned();
                     let vlan_id = vlan_map.get(&mac_addr).copied().or_else(|| {
                         interface
@@ -250,8 +251,9 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
                 bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
             );
 
-            if mac_addr != "00:00:00:00:00:00" && !seen_ips.contains(&ip_addr) {
-                seen_ips.insert(ip_addr.clone());
+            if mac_addr != "00:00:00:00:00:00"
+                && seen_pairs.insert((ip_addr.clone(), mac_addr.clone()))
+            {
                 let interface = if_name_map.get(&if_index).cloned();
                 let vlan_id = vlan_map.get(&mac_addr).copied().or_else(|| {
                     interface
@@ -315,8 +317,12 @@ pub fn diff_arp_entries(
     let new_ips: HashSet<&str> = new.iter().map(|e| e.ip_address.as_str()).collect();
 
     // 新增条目（本轮出现、旧表无该 IP）：登记 IP 落 arp_added，未登记落 unknown_endpoint
+    // 同一新增 IP 多 MAC 时仅按首个条目产出一条事件，避免风暴（冲突另有专门事件）
+    let mut handled_new_ips: HashSet<&str> = HashSet::new();
     for entry in new {
-        if old_ips.contains(entry.ip_address.as_str()) {
+        if old_ips.contains(entry.ip_address.as_str())
+            || !handled_new_ips.insert(entry.ip_address.as_str())
+        {
             continue;
         }
         if registered_ips.contains(&entry.ip_address) {
@@ -352,7 +358,7 @@ pub fn diff_arp_entries(
         }
     }
 
-    // 冲突：同一 IP 本轮学到多个不同 MAC
+    // 冲突：同一 IP 本轮学到多个不同 MAC（MAC 列表排序去重，保证事件确定性）
     let mut macs_by_ip: HashMap<&str, Vec<&str>> = HashMap::new();
     for entry in new {
         macs_by_ip
@@ -360,9 +366,10 @@ pub fn diff_arp_entries(
             .or_default()
             .push(entry.mac_address.as_str());
     }
-    for (ip, macs) in macs_by_ip {
-        let distinct: HashSet<&&str> = macs.iter().collect();
-        if distinct.len() > 1 {
+    for (ip, mut macs) in macs_by_ip {
+        macs.sort_unstable();
+        macs.dedup();
+        if macs.len() > 1 {
             events.push(ObsEvent::new(
                 SNMP_EVENT_ARP_CONFLICT,
                 None,

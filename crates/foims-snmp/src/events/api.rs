@@ -26,16 +26,17 @@ pub async fn list_snmp_events<P: DbProvider>(
     let pool = state.pool()?.get_conn();
     let pagination = Pagination::new(query.page.unwrap_or(1), query.page_size.unwrap_or(20));
 
-    // 时间范围：ISO-8601 解析失败视为非法输入（早于查询返回校验错误）
+    // 时间范围：ISO-8601 解析失败视为非法输入（早于查询返回校验错误）；
+    // C10：专用 invalid_time 文案 key，不再复用定位器语义的 invalid_locator
     let start: Option<DateTime<Utc>> = match query.start.as_deref() {
         Some(s) => Some(s.parse().map_err(|_| {
-            AppError::Validation(msg("server.snmp.invalid_locator").with("field", "start"))
+            AppError::Validation(msg("server.snmp.invalid_time").with("field", "start"))
         })?),
         None => None,
     };
     let end: Option<DateTime<Utc>> = match query.end.as_deref() {
         Some(s) => Some(s.parse().map_err(|_| {
-            AppError::Validation(msg("server.snmp.invalid_locator").with("field", "end"))
+            AppError::Validation(msg("server.snmp.invalid_time").with("field", "end"))
         })?),
         None => None,
     };
@@ -128,6 +129,32 @@ fn normalize_mac(mac: &str) -> String {
         .collect()
 }
 
+/// MAC 等值匹配的全部书写形态（C8：此前用 REPLACE(UPPER(col)) 表达式
+/// 匹配，列侧函数运算无法走索引；改为把输入展开成常见入库形态后用
+/// `= ANY(...)` 纯列等值匹配）。
+#[must_use]
+fn mac_match_forms(mac_norm: &str) -> Vec<String> {
+    if mac_norm.is_empty() {
+        return Vec::new();
+    }
+    let mut forms = vec![mac_norm.to_string(), mac_norm.to_lowercase()];
+    if mac_norm.len() == 12 && mac_norm.chars().all(|c| c.is_ascii_hexdigit()) {
+        let groups: Vec<&str> = mac_norm
+            .as_bytes()
+            .chunks(2)
+            .map(|c| std::str::from_utf8(c).unwrap_or(""))
+            .collect();
+        for sep in [':', '-'] {
+            let joined = groups.join(&sep.to_string());
+            forms.push(joined.clone());
+            forms.push(joined.to_lowercase());
+        }
+    }
+    forms.sort();
+    forms.dedup();
+    forms
+}
+
 /// GET /api/snmp/locate?mac=...|ip=...：终端定位。
 ///
 /// ARP/FDB 学习条目（source='arp'）与网口静态 MAC 直查（source='static'）并集，
@@ -164,14 +191,15 @@ pub async fn locate_device<P: DbProvider>(
     }
 
     let mac_norm = mac_norm.unwrap_or_default();
-    let mac_bind: Option<&str> = if mac_norm.is_empty() {
-        None
-    } else {
-        Some(&mac_norm)
+    // C8：列侧纯等值 ANY 匹配（命中入库常见形态），不再对列做函数运算
+    let mac_forms: Option<Vec<String>> = {
+        let forms = mac_match_forms(&mac_norm);
+        (!forms.is_empty()).then_some(forms)
     };
     let ip_bind: Option<&str> = ip.as_deref();
 
     // ARP 命中 + 网口静态 MAC 直查，UNION ALL 归一列宽
+    //（IP 条件同样改为 INET 纯列等值，host() 表达式不参与匹配，C8）
     let rows = sqlx::query_as::<_, DeviceLocateResult>(
         r#"
         SELECT a.device_id,
@@ -182,16 +210,15 @@ pub async fn locate_device<P: DbProvider>(
                a.mac_address,
                EXISTS (
                    SELECT 1 FROM interface_ips ii
-                   WHERE host(ii.ip_address) = host(a.ip_address)
+                   WHERE ii.ip_address = a.ip_address
                ) AS registered,
                'arp' AS source,
                a.updated_at AS occurred_at,
                a.updated_at
           FROM snmp_arp_entries a
           JOIN devices d ON d.id = a.device_id
-         WHERE ($1::text IS NOT NULL
-                AND REPLACE(REPLACE(UPPER(a.mac_address), ':', ''), '-', '') = $1)
-            OR ($2::text IS NOT NULL AND host(a.ip_address) = $2)
+         WHERE ($1::text[] IS NOT NULL AND a.mac_address = ANY($1))
+            OR ($2::text IS NOT NULL AND a.ip_address = CAST($2 AS INET))
         UNION ALL
         SELECT di.device_id,
                d.name AS device_name,
@@ -205,13 +232,13 @@ pub async fn locate_device<P: DbProvider>(
                di.updated_at
           FROM device_interfaces di
           JOIN devices d ON d.id = di.device_id
-         WHERE $1::text IS NOT NULL
+         WHERE $1::text[] IS NOT NULL
            AND di.mac_address IS NOT NULL
-           AND REPLACE(REPLACE(UPPER(di.mac_address), ':', ''), '-', '') = $1
+           AND di.mac_address = ANY($1)
          ORDER BY device_name, interface
         "#,
     )
-    .bind(mac_bind)
+    .bind(&mac_forms)
     .bind(ip_bind)
     .fetch_all(&pool)
     .await?;
@@ -219,7 +246,7 @@ pub async fn locate_device<P: DbProvider>(
     let hit_count = rows.len();
     log_info!(
         "log.snmp.locate_query",
-        mac = mac_bind.unwrap_or(""),
+        mac = mac_norm.as_str(),
         ip = ip_bind.unwrap_or(""),
         hits = hit_count
     );
@@ -240,5 +267,22 @@ mod tests {
         assert_eq!(normalize_mac("AA-BB-CC-DD-EE-FF"), "AABBCCDDEEFF");
         assert_eq!(normalize_mac("aa.bb.cc.dd.ee.ff"), "AABBCCDDEEFF");
         assert_eq!(normalize_mac("  aabbccddeeFF "), "AABBCCDDEEFF");
+    }
+
+    #[test]
+    fn mac_match_forms_covers_common_stored_shapes() {
+        // C8：输入展开为纯/冒号/连字符 × 大小写形态，供列侧等值匹配
+        let forms = mac_match_forms("AABBCCDDEEFF");
+        assert!(forms.contains(&"AABBCCDDEEFF".to_string()));
+        assert!(forms.contains(&"aabbccddeeff".to_string()));
+        assert!(forms.contains(&"AA:BB:CC:DD:EE:FF".to_string()));
+        assert!(forms.contains(&"aa:bb:cc:dd:ee:ff".to_string()));
+        assert!(forms.contains(&"AA-BB-CC-DD-EE-FF".to_string()));
+        // 非 12 位十六进制输入不拆分组，仅保留原形态；空串返回空集
+        assert_eq!(
+            mac_match_forms("XYZ"),
+            vec!["XYZ".to_string(), "xyz".to_string()]
+        );
+        assert!(mac_match_forms("").is_empty());
     }
 }

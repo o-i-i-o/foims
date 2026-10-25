@@ -18,6 +18,10 @@ use foims_common::log_info;
 
 pub use config::{SwitchConfigError, get_device_ip_address, get_device_snmp_config};
 
+/// SNMP 请求超时单一口径（秒）：设备参数构造（[`DeviceForSnmp::to_snmp_params_async`]）
+/// 与轮询会话（agent-service 的 connect_snmp）共用，C9：消除 10s/5s 双源。
+pub const SNMP_TIMEOUT_SECS: u64 = 5;
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DeviceForSnmp {
     pub id: Uuid,
@@ -52,7 +56,8 @@ impl DeviceForSnmp {
             auth_pass: creds.auth_password,
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
-            timeout_secs: 10,
+            // C9：超时取共享常量，与轮询路径同源
+            timeout_secs: SNMP_TIMEOUT_SECS,
         })
     }
 }
@@ -64,11 +69,23 @@ pub struct DecryptedSnmpCredentials {
     pub priv_password: Option<String>,
 }
 
+/// 空白凭据归一：空串/全空白视为未配置（None）。
+///
+/// devices 表的密文列历史上可能被写入空串，解密后得到 "" 会被
+/// v1/v2c 分支当作合法 community 直接发包（空团体名绕过鉴权语义），
+/// 统一归一后由「未配置」显式报错，不静默降级。
+fn normalize_blank(value: Option<String>) -> Option<String> {
+    value.filter(|v| !v.trim().is_empty())
+}
+
 impl DecryptedSnmpCredentials {
     pub async fn from_device_snmp_async(switch: &DeviceForSnmp) -> Result<Self, AppError> {
-        let community = decrypt_credential_async(switch.snmp_community.as_deref()).await?;
-        let auth_password = decrypt_credential_async(switch.snmp_auth_password.as_deref()).await?;
-        let priv_password = decrypt_credential_async(switch.snmp_priv_password.as_deref()).await?;
+        let community =
+            normalize_blank(decrypt_credential_async(switch.snmp_community.as_deref()).await?);
+        let auth_password =
+            normalize_blank(decrypt_credential_async(switch.snmp_auth_password.as_deref()).await?);
+        let priv_password =
+            normalize_blank(decrypt_credential_async(switch.snmp_priv_password.as_deref()).await?);
         Ok(Self {
             community,
             auth_password,
@@ -153,24 +170,46 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
             // 协议支持性与密码长度，失败需转换为既有 String 错误
             let usm = UsmConfig::new(username.to_string());
 
+            // 半配置凭据一律显式报错，禁止静默降级安全级别
+            //（noAuthNoPriv 仅限四项全缺省；协议在而密码缺失多为解密
+            // 失败/存量脏数据，降级发包会以明文绕过设备侧 USM）
+            match (params.auth_proto.as_deref(), params.auth_pass.as_deref()) {
+                (Some(_), None) => return Err("SNMPv3认证协议已配置但认证密码缺失".to_string()),
+                (None, Some(_)) => return Err("SNMPv3认证密码已配置但认证协议缺失".to_string()),
+                _ => {}
+            }
+            match (params.priv_proto.as_deref(), params.priv_pass.as_deref()) {
+                (Some(_), None) => return Err("SNMPv3隐私协议已配置但隐私密码缺失".to_string()),
+                (None, Some(_)) => return Err("SNMPv3隐私密码已配置但隐私协议缺失".to_string()),
+                _ => {}
+            }
+
             let usm = match (params.auth_proto.as_deref(), params.auth_pass.as_deref()) {
                 (Some(proto), Some(auth_pass)) => {
                     let auth_protocol = parse_auth_protocol(proto)?;
 
-                    match (params.priv_proto.as_deref(), params.priv_pass.as_deref()) {
-                        (Some(proto), Some(priv_pass)) => usm
-                            .auth_priv(
-                                auth_protocol,
-                                auth_pass,
-                                parse_priv_protocol(proto)?,
-                                priv_pass,
-                            )
-                            .map_err(|e| format!("SNMPv3隐私配置无效: {e}"))?,
-                        _ => usm
-                            .auth(auth_protocol, auth_pass)
-                            .map_err(|e| format!("SNMPv3认证配置无效: {e}"))?,
+                    if let (Some(priv_proto), Some(priv_pass)) =
+                        (params.priv_proto.as_deref(), params.priv_pass.as_deref())
+                    {
+                        usm.auth_priv(
+                            auth_protocol,
+                            auth_pass,
+                            parse_priv_protocol(priv_proto)?,
+                            priv_pass,
+                        )
+                        .map_err(|e| format!("SNMPv3隐私配置无效: {e}"))?
+                    } else {
+                        usm.auth(auth_protocol, auth_pass)
+                            .map_err(|e| format!("SNMPv3认证配置无效: {e}"))?
                     }
                 }
+                // 隐私已配置而认证整体缺省：authPriv 必须建立在认证
+                // 之上，禁止静默丢弃隐私配置降级 noAuthNoPriv（B1）
+                (None, None) if params.priv_proto.is_some() => {
+                    return Err("SNMPv3隐私已配置但认证协议缺失".to_string());
+                }
+                // 四项全缺省：noAuthNoPriv（显式配置的空密文已被
+                // normalize_blank 归一为缺失，进入本分支即真实未配置）
                 _ => usm,
             };
 
@@ -248,14 +287,43 @@ pub fn truncate_to_column_width(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
 }
 
-pub async fn test_snmp(params: &SnmpParamsLegacy, timeout_secs: u64) -> Result<String, SnmpError> {
+/// 可选文本按列宽截断（入库前统一口径，None 透传）。
+#[must_use]
+pub fn truncate_opt_to_column_width(value: Option<&str>, max_chars: usize) -> Option<String> {
+    value.map(|v| truncate_to_column_width(v, max_chars))
+}
+
+/// 异常语义字面量（B3）：部分 v1/劣质固件会把异常语义写成
+/// DisplayString 文本而非 BER exception 标签，逃过 is_exception
+/// 类型判断后会以真实名称入库，字符串采集入口统一按此丢弃。
+#[must_use]
+pub fn is_exception_literal(text: &str) -> bool {
+    matches!(
+        text.trim()
+            .to_ascii_lowercase()
+            .replace(['_', '-'], "")
+            .as_str(),
+        "nosuchobject" | "nosuchinstance" | "nosuchname" | "endofmibview"
+    )
+}
+
+/// SNMP 字符串字段归一（B3）：trim + 空串/异常字面量视为缺失。
+#[must_use]
+pub fn clean_snmp_text(value: Option<&str>) -> Option<String> {
+    let text = value.map(str::trim).filter(|s| !is_exception_literal(s))?;
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// 连通性探测：GET sysDescr，超时取 `params.timeout_secs`（单一超时口径，
+/// 禁止调用侧再传第二超时参数造成双源）
+pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
-    let timeout = Duration::from_secs(timeout_secs);
+    let timeout = Duration::from_secs(params.timeout_secs);
 
     log_info!(
         "log.device.snmp.test_connecting",
         addr = addr,
-        timeout = timeout_secs
+        timeout = params.timeout_secs
     );
 
     let auth = build_auth(params).map_err(SnmpError::Message)?;
@@ -354,9 +422,11 @@ mod tests {
             community: None,
             username: username.map(str::to_string),
             auth_proto: auth_proto.map(str::to_string),
-            auth_pass: Some("auth-pass".to_string()),
+            // 密码跟随协议联动：协议缺省则密码也缺省（否则与 B1
+            // 半配置凭据校验矛盾，无法构造 authOnly/noAuth 等组合）
+            auth_pass: auth_proto.map(|_| "auth-pass".to_string()),
             priv_proto: priv_proto.map(str::to_string),
-            priv_pass: Some("priv-pass".to_string()),
+            priv_pass: priv_proto.map(|_| "priv-pass".to_string()),
             timeout_secs: 1,
         }
     }
@@ -496,7 +566,6 @@ mod tests {
 
     #[test]
     fn test_build_auth_v3_rejects_unsupported_protocols() {
-        // 不支持的认证协议
         let err = build_auth(&v3_params(Some("admin"), Some("RC4"), None))
             .err()
             .unwrap_or_default();
@@ -512,6 +581,56 @@ mod tests {
             err.contains("隐私协议"),
             "错误信息应指明隐私协议不支持: {err}"
         );
+    }
+
+    #[test]
+    fn test_build_auth_v3_rejects_partial_credentials() {
+        // B1：半配置凭据显式报错，禁止静默降级 noAuthNoPriv/authNoPriv
+        // 认证协议在而密码缺失
+        let mut params = v3_params(Some("admin"), Some("SHA-256"), None);
+        params.auth_pass = None;
+        let err = build_auth(&params).err().unwrap_or_default();
+        assert!(err.contains("认证密码缺失"), "应报认证密码缺失: {err}");
+        // 隐私协议在而隐私密码缺失
+        let mut params = v3_params(Some("admin"), Some("SHA-256"), Some("AES-128"));
+        params.priv_pass = None;
+        let err = build_auth(&params).err().unwrap_or_default();
+        assert!(err.contains("隐私密码缺失"), "应报隐私密码缺失: {err}");
+        // 隐私两项齐但认证两项齐缺：不支持的降级组合报错
+        let mut params = v3_params(Some("admin"), None, Some("AES-128"));
+        params.auth_pass = None;
+        let err = build_auth(&params).err().unwrap_or_default();
+        assert!(err.contains("认证协议缺失"), "应报认证协议缺失: {err}");
+    }
+
+    #[test]
+    fn test_normalize_blank_treats_whitespace_as_unset() {
+        // 空白密文解密产物归一为 None（A3 根治：避免空串绕过鉴权语义）
+        assert_eq!(normalize_blank(Some("".to_string())), None);
+        assert_eq!(normalize_blank(Some("   ".to_string())), None);
+        assert_eq!(normalize_blank(None), None);
+        assert_eq!(
+            normalize_blank(Some("public".to_string())).as_deref(),
+            Some("public")
+        );
+    }
+
+    #[test]
+    fn test_clean_snmp_text_rejects_exception_literals() {
+        // B3：异常字面量（含下划线/连字符/大小写变体）在字符串入口丢弃
+        assert!(is_exception_literal("noSuchObject"));
+        assert!(is_exception_literal(" NoSuch_Instance "));
+        assert!(is_exception_literal("no-such-name"));
+        assert!(is_exception_literal("endOfMibView"));
+        assert!(!is_exception_literal("GigabitEthernet0/1"));
+        // 归一：trim + 空串/异常字面量 → None
+        assert_eq!(
+            clean_snmp_text(Some("  ge0/0/1 ")).as_deref(),
+            Some("ge0/0/1")
+        );
+        assert_eq!(clean_snmp_text(Some("   ")), None);
+        assert_eq!(clean_snmp_text(Some("noSuchObject")), None);
+        assert_eq!(clean_snmp_text(None), None);
     }
 
     // ==================== 错误格式化 ====================

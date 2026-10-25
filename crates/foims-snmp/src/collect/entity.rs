@@ -14,7 +14,9 @@ use tracing::debug;
 use foims_models::{EntityRecord, SensorRecord};
 
 use super::ports::{value_as_i32, walk_index_value_map};
-use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+};
 
 /// entPhysicalClass 数值 → 可读类别名（未知值回退 `class<N>`）。
 fn ent_class_name(raw: Option<i32>) -> Option<String> {
@@ -46,16 +48,9 @@ fn truth_to_bool(raw: Option<i32>) -> Option<bool> {
     }
 }
 
-/// 取单弧索引列映射里的字符串值（去空白、空串视为 None）。
+/// 取单弧索引列映射里的字符串值（复用 B3 归一：trim/空串/异常字面量 → None）。
 fn str_value(map: &HashMap<u32, Value>, index: u32) -> Option<String> {
-    map.get(&index).and_then(|v| v.as_str()).and_then(|s| {
-        let t = s.trim();
-        if t.is_empty() {
-            None
-        } else {
-            Some(t.to_string())
-        }
-    })
+    clean_snmp_text(map.get(&index).and_then(|v| v.as_str()))
 }
 
 pub async fn get_entities_via_snmp(
@@ -140,7 +135,21 @@ pub async fn get_entities_via_snmp(
     .await;
 
     let mut entities = Vec::new();
-    for index in name_map.keys() {
+    // C1：取各列索引并集驱动——此前以 name_map.keys() 驱动，缺失
+    // entPhysicalName 列的实体整体丢行（名称字段应降级 NULL 而非丢
+    // 掉整个实体）；排序保证输出确定性
+    let mut indexes: Vec<u32> = descr
+        .keys()
+        .chain(name_map.keys())
+        .chain(class_map.keys())
+        .chain(model.keys())
+        .chain(serial.keys())
+        .copied()
+        .collect();
+    indexes.sort_unstable();
+    indexes.dedup();
+    for index in indexes {
+        let index = &index;
         entities.push(EntityRecord {
             ent_index: i32::try_from(*index).unwrap_or(0),
             ent_class: ent_class_name(value_as_i32(class_map.get(index))),
@@ -184,21 +193,29 @@ pub async fn get_sensors_via_snmp(
     let value_map = walk_sensor_columns(&client, 4).await;
     let status_map = walk_sensor_columns(&client, 5).await;
 
-    for key in type_map.keys() {
-        let (ent_index, _) = *key;
+    for key in type_map
+        .keys()
+        .chain(value_map.keys())
+        .chain(scale_map.keys())
+        .chain(precision_map.keys())
+        .chain(status_map.keys())
+        .copied()
+    {
+        // C1：并集驱动，单列缺失不丢整行传感器记录
+        let (ent_index, _) = key;
         by_key.insert(
-            *key,
+            key,
             SensorRecord {
                 ent_index,
-                sensor_type: value_as_i32(type_map.get(key)),
-                sensor_scale: value_as_i32(scale_map.get(key)),
-                sensor_precision: value_as_i32(precision_map.get(key)),
-                sensor_value: value_map.get(key).and_then(|v| match v {
+                sensor_type: value_as_i32(type_map.get(&key)),
+                sensor_scale: value_as_i32(scale_map.get(&key)),
+                sensor_precision: value_as_i32(precision_map.get(&key)),
+                sensor_value: value_map.get(&key).and_then(|v| match v {
                     Value::Integer(i) => Some(f64::from(*i)),
                     Value::Gauge32(g) => Some(f64::from(*g)),
                     _ => None,
                 }),
-                sensor_status: value_as_i32(status_map.get(key)),
+                sensor_status: value_as_i32(status_map.get(&key)),
                 name: None,
             },
         );
@@ -217,7 +234,12 @@ async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<(i32, u32), a
         2 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 2),
         3 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 3),
         4 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 4),
-        _ => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 5),
+        5 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 5),
+        // C2：越界列号显式拒绝，禁止兜底分支静默 walk 错列
+        other => {
+            tracing::debug!("未知传感器列号 {other}，跳过");
+            return HashMap::new();
+        }
     };
     let mut map = HashMap::new();
     let Ok(mut walk) = client.walk(base) else {
