@@ -179,6 +179,106 @@
     "lldp_neighbors": "LLDP邻居",
     "no_mac_data": "暂无MAC数据",
     "no_lldp_data": "暂无LLDP数据",
+    "entity": {
+      "menu": "硬件清单",
+      "title": "硬件实体清单",
+      "loading": "正在加载硬件清单...",
+      "syncing": "正在从SNMP同步硬件清单...",
+      "load_failed": "加载硬件清单失败",
+      "sync_failed": "同步硬件清单失败",
+      "empty": "暂无硬件实体数据",
+      "tab_entities": "实体清单",
+      "tab_sensors": "传感器",
+      "col_ent_index": "索引",
+      "col_class": "类别",
+      "col_name": "名称",
+      "col_descr": "描述",
+      "col_model": "型号",
+      "col_serial": "序列号",
+      "col_mfg": "制造商",
+      "col_hw": "硬件版本",
+      "col_fw": "固件版本",
+      "col_sw": "软件版本",
+      "col_fru": "FRU",
+      "col_parent": "父索引",
+      "fru_yes": "是",
+      "fru_no": "否"
+    },
+    "sensors": {
+      "empty": "暂无传感器数据",
+      "col_ent_index": "实体索引",
+      "col_type": "类型",
+      "col_scale": "量纲",
+      "col_precision": "精度",
+      "col_value": "读数",
+      "col_status": "状态",
+      "col_name": "名称"
+    },
+    "vlan_ledger": {
+      "menu": "VLAN台账",
+      "title": "VLAN 台账",
+      "loading": "正在加载VLAN台账...",
+      "syncing": "正在从SNMP同步VLAN台账...",
+      "load_failed": "加载VLAN台账失败",
+      "sync_failed": "同步VLAN台账失败",
+      "empty": "暂无VLAN数据",
+      "col_vlan_id": "VLAN ID",
+      "col_name": "名称",
+      "col_members": "成员端口",
+      "col_untagged": "Untagged端口",
+      "col_type": "类型",
+      "member_count": "{{count}} 个",
+      "type_trunk": "Trunk",
+      "type_access": "Access"
+    },
+    "cdp": {
+      "menu": "CDP邻居",
+      "title": "CDP 邻居",
+      "loading": "正在加载CDP邻居...",
+      "syncing": "正在从SNMP同步CDP邻居...",
+      "load_failed": "加载CDP邻居失败",
+      "sync_failed": "同步CDP邻居失败",
+      "empty": "暂无CDP数据（仅 Cisco 等支持 CDP 的设备返回）",
+      "col_local_port": "本地端口",
+      "col_neighbor": "邻居设备",
+      "col_neighbor_port": "邻居端口",
+      "col_address": "管理地址",
+      "col_platform": "平台"
+    },
+    "lag": {
+      "menu": "LAG聚合",
+      "title": "LAG 聚合口台账",
+      "loading": "正在加载LAG台账...",
+      "syncing": "正在从SNMP同步LAG台账...",
+      "load_failed": "加载LAG台账失败",
+      "sync_failed": "同步LAG台账失败",
+      "empty": "暂无LAG数据",
+      "col_agg": "聚合口",
+      "col_members": "成员端口",
+      "col_lacp": "LACP 状态",
+      "member_count": "{{count}} 个成员"
+    },
+    "poe": {
+      "menu": "PoE供电",
+      "title": "PoE 供电端口",
+      "loading": "正在加载PoE端口...",
+      "syncing": "正在从SNMP同步PoE端口...",
+      "load_failed": "加载PoE端口失败",
+      "sync_failed": "同步PoE端口失败",
+      "empty": "暂无PoE数据",
+      "col_port": "端口",
+      "col_admin": "管理状态",
+      "col_detect": "供电状态",
+      "col_class": "功率类别",
+      "col_power": "实测功率",
+      "admin_enabled": "启用",
+      "admin_disabled": "禁用",
+      "detect_disabled": "禁用",
+      "detect_searching": "检测中",
+      "detect_delivering": "供电中",
+      "detect_faulty": "故障",
+      "power_unit": "W"
+    },
     "snmp_no_auth": "无认证",
     "snmp_no_priv": "无加密",
     "snmp_v2c": "SNMPv1/v2c",
@@ -1905,6 +2005,39 @@
     },
     "device": {
       "created": "设备创建成功",
+      "cdp": {
+        "fetched": "获取CDP邻居成功",
+        "sync_changed": "同步 {{synced}} 条 CDP 记录",
+        "sync_unchanged": "CDP 数据无变化",
+        "sync_partial": "CDP 同步部分成功：{{synced}} 条成功，{{failed}} 条失败"
+      },
+      "entity": {
+        "fetched": "获取硬件实体清单成功",
+        "sync_changed": "同步 {{synced}} 条实体/传感器记录",
+        "sync_unchanged": "硬件清单数据无变化",
+        "sync_partial": "硬件清单同步部分成功：{{synced}} 条成功，{{failed}} 条失败"
+      },
+      "lag": {
+        "fetched": "获取LAG聚合口成功",
+        "sync_changed": "同步 {{synced}} 条 LAG 记录",
+        "sync_unchanged": "LAG 数据无变化",
+        "sync_partial": "LAG 同步部分成功：{{synced}} 条成功，{{failed}} 条失败"
+      },
+      "poe": {
+        "fetched": "获取PoE供电端口成功",
+        "sync_changed": "同步 {{synced}} 条 PoE 记录",
+        "sync_unchanged": "PoE 数据无变化",
+        "sync_partial": "PoE 同步部分成功：{{synced}} 条成功，{{failed}} 条失败"
+      },
+      "sensors": {
+        "fetched": "获取传感器数据成功"
+      },
+      "vlan": {
+        "fetched": "获取VLAN台账成功",
+        "sync_changed": "同步 {{synced}} 条 VLAN 记录",
+        "sync_unchanged": "VLAN 数据无变化",
+        "sync_partial": "VLAN 同步部分成功：{{synced}} 条成功，{{failed}} 条失败"
+      },
       "deleted": "设备删除成功",
       "fetched": "设备获取成功",
       "interface": {
@@ -1953,6 +2086,12 @@
       "not_found": "设备不存在",
       "snmp": {
         "arp_fetch_failed": "获取ARP表失败: {{error}}",
+        "cdp_fetch_failed": "获取CDP邻居失败: {{error}}",
+        "entity_fetch_failed": "获取硬件实体清单失败: {{error}}",
+        "lag_fetch_failed": "获取LAG聚合口失败: {{error}}",
+        "poe_fetch_failed": "获取PoE供电端口失败: {{error}}",
+        "sensor_fetch_failed": "获取传感器数据失败: {{error}}",
+        "vlan_fetch_failed": "获取VLAN台账失败: {{error}}",
         "info_fetch_failed": "获取设备信息失败: {{error}}",
         "info_retrieved": "获取设备信息成功",
         "ip_invalid": "IP地址格式无效: {{ip}}",
@@ -2273,7 +2412,8 @@
         "body_link_flip": "设备 {{device}} 端口 {{interface}} 链路状态变为 {{direction}}",
         "body_reboot": "设备 {{device}} 疑似重启，估算停机时长 {{downtime}}",
         "body_unknown_endpoint": "设备 {{device}} 端口 {{interface}} 发现未登记终端 IP {{ip}} / MAC {{mac}}",
-        "body_arp_conflict": "设备 {{device}} 端口 {{interface}} 检测到 ARP 冲突 IP {{ip}} / MAC {{mac}}"
+        "body_arp_conflict": "设备 {{device}} 端口 {{interface}} 检测到 ARP 冲突 IP {{ip}} / MAC {{mac}}",
+        "body_poe_off": "设备 {{device}} 端口 {{interface}} PoE 供电中断（类别 {{class}}）"
       }
     },
     "org_template": {

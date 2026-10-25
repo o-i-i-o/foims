@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use foims_common::{log_error, log_info, log_warn};
 use foims_models::{
-    SNMP_EVENT_ARP_CONFLICT, SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP,
+    SNMP_EVENT_ARP_CONFLICT, SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP, SNMP_EVENT_POE_OFF,
     SNMP_EVENT_UNKNOWN_ENDPOINT,
 };
 
@@ -57,7 +57,7 @@ impl ObsEvent {
     }
 }
 
-/// 是否需要发站内通知（仅关键事件；arp_added/arp_removed 只落表不通知）。
+/// 是否需要发站内通知（仅关键事件；arp_added/arp_removed/cdp_* 只落表不通知）。
 fn should_notify(event_type: &str) -> bool {
     matches!(
         event_type,
@@ -65,6 +65,7 @@ fn should_notify(event_type: &str) -> bool {
             | SNMP_EVENT_DEVICE_REBOOT
             | SNMP_EVENT_UNKNOWN_ENDPOINT
             | SNMP_EVENT_ARP_CONFLICT
+            | SNMP_EVENT_POE_OFF
     )
 }
 
@@ -75,6 +76,7 @@ fn notification_body_key(event_type: &str) -> Option<&'static str> {
         SNMP_EVENT_DEVICE_REBOOT => Some("server.notification.snmp_event.body_reboot"),
         SNMP_EVENT_UNKNOWN_ENDPOINT => Some("server.notification.snmp_event.body_unknown_endpoint"),
         SNMP_EVENT_ARP_CONFLICT => Some("server.notification.snmp_event.body_arp_conflict"),
+        SNMP_EVENT_POE_OFF => Some("server.notification.snmp_event.body_poe_off"),
         _ => None,
     }
 }
@@ -161,6 +163,18 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
             ("interface".to_string(), iface.clone()),
             ("ip".to_string(), ev.str_field("ip")),
             ("mac".to_string(), ev.str_field("mac")),
+        ],
+        SNMP_EVENT_POE_OFF => vec![
+            ("device".to_string(), device_name.to_string()),
+            ("interface".to_string(), iface.clone()),
+            (
+                "class".to_string(),
+                ev.detail
+                    .get("power_class")
+                    .and_then(|v| v.as_i64())
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+            ),
         ],
         _ => vec![("device".to_string(), device_name.to_string())],
     };

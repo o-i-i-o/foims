@@ -105,6 +105,17 @@ log:
     pool_status: "连接池状态 - 活跃: {{active}}，空闲: {{idle}}，等待: {{waiting}}，池大小: {{size}}"
     system_time_abnormal: "系统时间异常: {{error}}，使用0作为时间戳"
   device:
+    cdp:
+      record_write_failed: "CDP邻居记录写入失败 (local_port={{port}}): {{error}}"
+    entity:
+      record_write_failed: "硬件实体记录写入失败 (ent_index={{ent_index}}): {{error}}"
+      sensor_write_failed: "传感器记录写入失败 (ent_index={{ent_index}}): {{error}}"
+    lag:
+      record_write_failed: "LAG聚合口记录写入失败 (agg_ifindex={{agg_ifindex}}): {{error}}"
+    poe:
+      record_write_failed: "PoE供电端口记录写入失败 (if_index={{if_index}}): {{error}}"
+    vlan:
+      record_write_failed: "VLAN记录写入失败 (vlan_id={{vlan_id}}): {{error}}"
     lldp:
       record_write_failed: "LLDP记录写入失败 (local_port={{port}}): {{error}}"
     mac:
@@ -113,7 +124,12 @@ log:
     snmp_port_invalid: "SNMP 端口数据校验失败已跳过: device={{device_id}}, port={{name}}, 错误: {{error}}"
     snmp:
       auth_built: "认证构建成功"
+      cdp_walk_failed: "SNMP walk CDP邻居表失败，相关字段留空"
+      entity_walk_failed: "SNMP walk 实体表失败，相关字段留空"
       if_name_walk_failed: "SNMP walk 接口名称映射失败"
+      lag_walk_failed: "SNMP walk LAG聚合口表失败，相关字段留空"
+      poe_walk_failed: "SNMP walk PoE供电端口表失败，相关字段留空"
+      sensor_walk_failed: "SNMP walk 传感器表失败，相关字段留空"
       loopback_ip_allowed: "目标IP {{ip}} 为回环地址，允许连接"
       ports_walk_failed: "SNMP walk 端口采集表失败，相关字段留空"
       private_ip_allowed: "目标IP {{ip}} 为私有地址，允许连接"

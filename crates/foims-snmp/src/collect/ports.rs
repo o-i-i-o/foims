@@ -16,7 +16,7 @@ use crate::core::{SnmpError, SnmpParamsLegacy, build_auth, format_snmp_error, sn
 /// 适用于 ifTable（ifIndex）、BRIDGE-MIB（dot1dBasePort）、
 /// Q-BRIDGE-MIB 静态 VLAN 表（dot1qVlanIndex）等单弧索引表；
 /// walk 建立失败时记告警并返回空映射（字段降级为 NULL，不阻断同步）。
-async fn walk_index_value_map(
+pub(crate) async fn walk_index_value_map(
     client: &Client,
     base: async_snmp::Oid,
     warn_key: &'static str,
@@ -47,7 +47,7 @@ async fn walk_index_value_map(
 }
 
 /// SNMP Integer/Gauge32 值统一取 i32（其余类型返回 None）
-fn value_as_i32(value: Option<&Value>) -> Option<i32> {
+pub(crate) fn value_as_i32(value: Option<&Value>) -> Option<i32> {
     match value {
         Some(Value::Integer(i)) => Some(*i),
         Some(Value::Gauge32(g)) => i32::try_from(*g).ok(),
@@ -99,7 +99,7 @@ fn derive_port_speed(high: Option<&Value>, speed: Option<&Value>) -> Option<Stri
 
 /// 解析 PortList 位图（dot1qVlanStaticEgressPorts 值）：
 /// 第 p 位（高位在前）代表 dot1dBasePort p，返回置位的桥端口列表。
-fn port_list_members(bytes: &[u8]) -> Vec<u32> {
+pub(crate) fn port_list_members(bytes: &[u8]) -> Vec<u32> {
     bytes
         .iter()
         .enumerate()

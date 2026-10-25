@@ -20,6 +20,12 @@ pub const SNMP_EVENT_ARP_REMOVED: &str = "arp_removed";
 pub const SNMP_EVENT_ARP_CONFLICT: &str = "arp_conflict";
 /// 未登记终端（同步 IP 未匹配任何 interface_ips 且为新增）
 pub const SNMP_EVENT_UNKNOWN_ENDPOINT: &str = "unknown_endpoint";
+/// PoE 端口供电中断（detection_status 由 powering 转为非供电态）
+pub const SNMP_EVENT_POE_OFF: &str = "poe_port_off";
+/// CDP 邻居新增
+pub const SNMP_EVENT_CDP_ADDED: &str = "cdp_neighbor_added";
+/// CDP 邻居消失
+pub const SNMP_EVENT_CDP_REMOVED: &str = "cdp_neighbor_removed";
 
 /// 事件严重级别常量（与 snmp_events.severity CHECK 值域一致）。
 pub const SNMP_SEVERITY_INFO: &str = "info";

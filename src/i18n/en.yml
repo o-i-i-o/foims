@@ -105,6 +105,17 @@ log:
     pool_status: "Pool status - active: {{active}}, idle: {{idle}}, waiting: {{waiting}}, size: {{size}}"
     system_time_abnormal: "System clock abnormal: {{error}}, using 0 as timestamp"
   device:
+    cdp:
+      record_write_failed: "CDP neighbor record write failed (local_port={{port}}): {{error}}"
+    entity:
+      record_write_failed: "Entity record write failed (ent_index={{ent_index}}): {{error}}"
+      sensor_write_failed: "Sensor record write failed (ent_index={{ent_index}}): {{error}}"
+    lag:
+      record_write_failed: "LAG aggregate record write failed (agg_ifindex={{agg_ifindex}}): {{error}}"
+    poe:
+      record_write_failed: "PoE port record write failed (if_index={{if_index}}): {{error}}"
+    vlan:
+      record_write_failed: "VLAN record write failed (vlan_id={{vlan_id}}): {{error}}"
     lldp:
       record_write_failed: "LLDP record write failed (local_port={{port}}): {{error}}"
     mac:
@@ -113,7 +124,12 @@ log:
     snmp_port_invalid: "SNMP port data failed validation and was skipped: device={{device_id}}, port={{name}}, error: {{error}}"
     snmp:
       auth_built: "Authentication built"
+      cdp_walk_failed: "SNMP walk for CDP neighbor table failed, fields left empty"
+      entity_walk_failed: "SNMP walk for entity table failed, fields left empty"
       if_name_walk_failed: "SNMP walk for interface name map failed"
+      lag_walk_failed: "SNMP walk for LAG aggregate table failed, fields left empty"
+      poe_walk_failed: "SNMP walk for PoE port table failed, fields left empty"
+      sensor_walk_failed: "SNMP walk for sensor table failed, fields left empty"
       loopback_ip_allowed: "Target IP {{ip}} is loopback, connection allowed"
       ports_walk_failed: "SNMP walk for port collection table failed, fields left empty"
       private_ip_allowed: "Target IP {{ip}} is private, connection allowed"

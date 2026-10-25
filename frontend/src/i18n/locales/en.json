@@ -179,6 +179,106 @@
     "lldp_neighbors": "LLDP Neighbors",
     "no_mac_data": "No MAC data",
     "no_lldp_data": "No LLDP data",
+    "entity": {
+      "menu": "Hardware",
+      "title": "Hardware Entity Inventory",
+      "loading": "Loading hardware inventory...",
+      "syncing": "Syncing hardware inventory from SNMP...",
+      "load_failed": "Failed to load hardware inventory",
+      "sync_failed": "Failed to sync hardware inventory",
+      "empty": "No hardware entity data",
+      "tab_entities": "Entities",
+      "tab_sensors": "Sensors",
+      "col_ent_index": "Index",
+      "col_class": "Class",
+      "col_name": "Name",
+      "col_descr": "Description",
+      "col_model": "Model",
+      "col_serial": "Serial",
+      "col_mfg": "Manufacturer",
+      "col_hw": "HW Rev",
+      "col_fw": "FW Rev",
+      "col_sw": "SW Rev",
+      "col_fru": "FRU",
+      "col_parent": "Parent",
+      "fru_yes": "Yes",
+      "fru_no": "No"
+    },
+    "sensors": {
+      "empty": "No sensor data",
+      "col_ent_index": "Entity Index",
+      "col_type": "Type",
+      "col_scale": "Scale",
+      "col_precision": "Precision",
+      "col_value": "Reading",
+      "col_status": "Status",
+      "col_name": "Name"
+    },
+    "vlan_ledger": {
+      "menu": "VLANs",
+      "title": "VLAN Ledger",
+      "loading": "Loading VLAN ledger...",
+      "syncing": "Syncing VLAN ledger from SNMP...",
+      "load_failed": "Failed to load VLAN ledger",
+      "sync_failed": "Failed to sync VLAN ledger",
+      "empty": "No VLAN data",
+      "col_vlan_id": "VLAN ID",
+      "col_name": "Name",
+      "col_members": "Member Ports",
+      "col_untagged": "Untagged Ports",
+      "col_type": "Type",
+      "member_count": "{{count}}",
+      "type_trunk": "Trunk",
+      "type_access": "Access"
+    },
+    "cdp": {
+      "menu": "CDP",
+      "title": "CDP Neighbors",
+      "loading": "Loading CDP neighbors...",
+      "syncing": "Syncing CDP neighbors from SNMP...",
+      "load_failed": "Failed to load CDP neighbors",
+      "sync_failed": "Failed to sync CDP neighbors",
+      "empty": "No CDP data (only Cisco and CDP-capable devices return it)",
+      "col_local_port": "Local Port",
+      "col_neighbor": "Neighbor Device",
+      "col_neighbor_port": "Neighbor Port",
+      "col_address": "Management Address",
+      "col_platform": "Platform"
+    },
+    "lag": {
+      "menu": "LAG",
+      "title": "LAG Aggregate Ledger",
+      "loading": "Loading LAG ledger...",
+      "syncing": "Syncing LAG ledger from SNMP...",
+      "load_failed": "Failed to load LAG ledger",
+      "sync_failed": "Failed to sync LAG ledger",
+      "empty": "No LAG data",
+      "col_agg": "Aggregate",
+      "col_members": "Member Ports",
+      "col_lacp": "LACP State",
+      "member_count": "{{count}} members"
+    },
+    "poe": {
+      "menu": "PoE",
+      "title": "PoE Ports",
+      "loading": "Loading PoE ports...",
+      "syncing": "Syncing PoE ports from SNMP...",
+      "load_failed": "Failed to load PoE ports",
+      "sync_failed": "Failed to sync PoE ports",
+      "empty": "No PoE data",
+      "col_port": "Port",
+      "col_admin": "Admin State",
+      "col_detect": "Power State",
+      "col_class": "Power Class",
+      "col_power": "Measured Power",
+      "admin_enabled": "Enabled",
+      "admin_disabled": "Disabled",
+      "detect_disabled": "Disabled",
+      "detect_searching": "Searching",
+      "detect_delivering": "Delivering",
+      "detect_faulty": "Faulty",
+      "power_unit": "W"
+    },
     "snmp_no_auth": "No Auth",
     "snmp_no_priv": "No Privacy",
     "snmp_v2c": "SNMPv1/v2c",
@@ -1905,6 +2005,39 @@
     },
     "device": {
       "created": "Device created successfully",
+      "cdp": {
+        "fetched": "CDP neighbors fetched successfully",
+        "sync_changed": "Synced {{synced}} CDP records",
+        "sync_unchanged": "No CDP changes",
+        "sync_partial": "CDP sync partially succeeded: {{synced}} ok, {{failed}} failed"
+      },
+      "entity": {
+        "fetched": "Hardware entity list fetched successfully",
+        "sync_changed": "Synced {{synced}} entity/sensor records",
+        "sync_unchanged": "No hardware inventory changes",
+        "sync_partial": "Hardware inventory sync partially succeeded: {{synced}} ok, {{failed}} failed"
+      },
+      "lag": {
+        "fetched": "LAG aggregates fetched successfully",
+        "sync_changed": "Synced {{synced}} LAG records",
+        "sync_unchanged": "No LAG changes",
+        "sync_partial": "LAG sync partially succeeded: {{synced}} ok, {{failed}} failed"
+      },
+      "poe": {
+        "fetched": "PoE ports fetched successfully",
+        "sync_changed": "Synced {{synced}} PoE records",
+        "sync_unchanged": "No PoE changes",
+        "sync_partial": "PoE sync partially succeeded: {{synced}} ok, {{failed}} failed"
+      },
+      "sensors": {
+        "fetched": "Sensor data fetched successfully"
+      },
+      "vlan": {
+        "fetched": "VLAN ledger fetched successfully",
+        "sync_changed": "Synced {{synced}} VLAN records",
+        "sync_unchanged": "No VLAN changes",
+        "sync_partial": "VLAN sync partially succeeded: {{synced}} ok, {{failed}} failed"
+      },
       "deleted": "Device deleted successfully",
       "fetched": "Device retrieved successfully",
       "interface": {
@@ -1953,6 +2086,12 @@
       "not_found": "Device not found",
       "snmp": {
         "arp_fetch_failed": "Failed to fetch ARP table: {{error}}",
+        "cdp_fetch_failed": "Failed to fetch CDP neighbors: {{error}}",
+        "entity_fetch_failed": "Failed to fetch hardware entities: {{error}}",
+        "lag_fetch_failed": "Failed to fetch LAG aggregates: {{error}}",
+        "poe_fetch_failed": "Failed to fetch PoE ports: {{error}}",
+        "sensor_fetch_failed": "Failed to fetch sensors: {{error}}",
+        "vlan_fetch_failed": "Failed to fetch VLAN ledger: {{error}}",
         "info_fetch_failed": "Failed to fetch device info: {{error}}",
         "info_retrieved": "Device info retrieved successfully",
         "ip_invalid": "Invalid IP address: {{ip}}",
@@ -2273,7 +2412,8 @@
         "body_link_flip": "Device {{device}} interface {{interface}} link state changed to {{direction}}",
         "body_reboot": "Device {{device}} appears to have rebooted, estimated downtime {{downtime}}",
         "body_unknown_endpoint": "Device {{device}} interface {{interface}} found unregistered endpoint IP {{ip}} / MAC {{mac}}",
-        "body_arp_conflict": "Device {{device}} interface {{interface}} detected ARP conflict IP {{ip}} / MAC {{mac}}"
+        "body_arp_conflict": "Device {{device}} interface {{interface}} detected ARP conflict IP {{ip}} / MAC {{mac}}",
+        "body_poe_off": "Device {{device}} interface {{interface}} PoE power lost (class {{class}})"
       }
     },
     "org_template": {

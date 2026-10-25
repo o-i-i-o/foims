@@ -37,6 +37,12 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "snmp_arp_entries",
         "device_lldps",
         "snmp_events",
+        "device_entities",
+        "device_sensors",
+        "device_vlans",
+        "device_cdps",
+        "device_lags",
+        "device_poe_ports",
         "net_outlets",
         "patch_panels",
         // 链路与 IP
@@ -349,6 +355,99 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "detail",
             "occurred_at",
             "created_at",
+        ],
+    );
+    columns.insert(
+        "device_entities",
+        vec![
+            "id",
+            "device_id",
+            "ent_index",
+            "ent_class",
+            "name",
+            "descr",
+            "model_name",
+            "serial_num",
+            "mfg_name",
+            "hw_rev",
+            "fw_rev",
+            "sw_rev",
+            "is_fru",
+            "parent_index",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "device_sensors",
+        vec![
+            "id",
+            "device_id",
+            "ent_index",
+            "sensor_type",
+            "sensor_scale",
+            "sensor_precision",
+            "sensor_value",
+            "sensor_status",
+            "name",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "device_vlans",
+        vec![
+            "id",
+            "device_id",
+            "vlan_id",
+            "name",
+            "member_ports",
+            "untagged_ports",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "device_cdps",
+        vec![
+            "id",
+            "device_id",
+            "local_port",
+            "neighbor_device_id",
+            "neighbor_port",
+            "neighbor_address",
+            "neighbor_platform",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "device_lags",
+        vec![
+            "id",
+            "device_id",
+            "agg_ifindex",
+            "agg_name",
+            "member_ifindexes",
+            "member_names",
+            "lacp_state",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    columns.insert(
+        "device_poe_ports",
+        vec![
+            "id",
+            "device_id",
+            "if_index",
+            "if_name",
+            "admin_status",
+            "detection_status",
+            "power_class",
+            "measured_power_w",
+            "created_at",
+            "updated_at",
         ],
     );
     columns.insert(

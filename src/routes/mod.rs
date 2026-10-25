@@ -670,6 +670,51 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/devices/{id}/lldp/sync",
             post(foims_resource::sync_lldp_from_snmp::<AppState>),
         )
+        // ===== SNMP 第二层：网络侧清单/台账（读库 GET 非守卫，sync POST 归 admin）=====
+        .route(
+            "/api/resources/devices/{id}/entities",
+            get(foims_resource::get_device_entities::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/entities/sync",
+            post(foims_resource::sync_entities_from_snmp::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/sensors",
+            get(foims_resource::get_device_sensors::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/vlans",
+            get(foims_resource::get_device_vlans::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/vlans/sync",
+            post(foims_resource::sync_vlans_from_snmp::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/cdp",
+            get(foims_resource::get_device_cdps::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/cdp/sync",
+            post(foims_resource::sync_cdps_from_snmp::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/lag",
+            get(foims_resource::get_device_lags::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/lag/sync",
+            post(foims_resource::sync_lags_from_snmp::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/poe",
+            get(foims_resource::get_device_poe::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/poe/sync",
+            post(foims_resource::sync_poe_from_snmp::<AppState>),
+        )
         .route(
             "/api/resources/devices/{id}/snmp-info",
             get(foims_snmp::handlers::get_device_info_snmp::<AppState>),

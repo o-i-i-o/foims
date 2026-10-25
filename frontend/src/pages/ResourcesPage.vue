@@ -37,6 +37,11 @@ import DeviceModal from "../components/device/DeviceModal.vue";
 import UnifiedDevicePortsModal from "../components/device/UnifiedDevicePortsModal.vue";
 import ArpModal from "../components/device/ArpModal.vue";
 import LldpModal from "../components/device/LldpModal.vue";
+import EntityModal from "../components/device/EntityModal.vue";
+import VlanLedgerModal from "../components/device/VlanLedgerModal.vue";
+import CdpModal from "../components/device/CdpModal.vue";
+import LagModal from "../components/device/LagModal.vue";
+import PoeModal from "../components/device/PoeModal.vue";
 import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
 import LocateModal from "../components/device/LocateModal.vue";
 import CableLinkModal from "../components/cable/CableLinkModal.vue";
@@ -211,6 +216,12 @@ const deviceModal = reactive<{ open: boolean; device: DeviceWithDetails | null }
 const portsModal = reactive({ open: false, deviceId: "", deviceName: "" });
 const arpModal = reactive({ open: false, deviceId: "" });
 const lldpModal = reactive({ open: false, deviceId: "" });
+// 第二层网络侧台账弹窗（各自 deviceId）
+const entityModal = reactive({ open: false, deviceId: "" });
+const vlanModal = reactive({ open: false, deviceId: "" });
+const cdpModal = reactive({ open: false, deviceId: "" });
+const lagModal = reactive({ open: false, deviceId: "" });
+const poeModal = reactive({ open: false, deviceId: "" });
 // SNMP 事件（全局或按设备）与终端定位弹窗
 const eventsModal = reactive({ open: false, deviceId: "" });
 const locateModal = reactive({ open: false });
@@ -1019,6 +1030,51 @@ function deviceLocationText(item: DeviceWithDetails): string {
                   <button
                     type="button"
                     class="icon-btn btn-secondary"
+                    :data-tooltip="t('device.entity.menu')"
+                    :aria-label="t('device.entity.menu')"
+                    @click="entityModal.deviceId = item.id; entityModal.open = true"
+                  >
+                    <NavIcon name="listE" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-secondary"
+                    :data-tooltip="t('device.vlan_ledger.menu')"
+                    :aria-label="t('device.vlan_ledger.menu')"
+                    @click="vlanModal.deviceId = item.id; vlanModal.open = true"
+                  >
+                    <NavIcon name="listV" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-secondary"
+                    :data-tooltip="t('device.cdp.menu')"
+                    :aria-label="t('device.cdp.menu')"
+                    @click="cdpModal.deviceId = item.id; cdpModal.open = true"
+                  >
+                    <NavIcon name="listC" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-secondary"
+                    :data-tooltip="t('device.lag.menu')"
+                    :aria-label="t('device.lag.menu')"
+                    @click="lagModal.deviceId = item.id; lagModal.open = true"
+                  >
+                    <NavIcon name="listG" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-secondary"
+                    :data-tooltip="t('device.poe.menu')"
+                    :aria-label="t('device.poe.menu')"
+                    @click="poeModal.deviceId = item.id; poeModal.open = true"
+                  >
+                    <NavIcon name="power" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-secondary"
                     :data-tooltip="t('device.snmp_events.title')"
                     :aria-label="t('device.snmp_events.title')"
                     @click="eventsModal.deviceId = item.id; eventsModal.open = true"
@@ -1234,6 +1290,31 @@ function deviceLocationText(item: DeviceWithDetails): string {
       v-if="lldpModal.open"
       :device-id="lldpModal.deviceId"
       @close="lldpModal.open = false"
+    />
+    <EntityModal
+      v-if="entityModal.open"
+      :device-id="entityModal.deviceId"
+      @close="entityModal.open = false"
+    />
+    <VlanLedgerModal
+      v-if="vlanModal.open"
+      :device-id="vlanModal.deviceId"
+      @close="vlanModal.open = false"
+    />
+    <CdpModal
+      v-if="cdpModal.open"
+      :device-id="cdpModal.deviceId"
+      @close="cdpModal.open = false"
+    />
+    <LagModal
+      v-if="lagModal.open"
+      :device-id="lagModal.deviceId"
+      @close="lagModal.open = false"
+    />
+    <PoeModal
+      v-if="poeModal.open"
+      :device-id="poeModal.deviceId"
+      @close="poeModal.open = false"
     />
     <SnmpEventsModal
       v-if="eventsModal.open"

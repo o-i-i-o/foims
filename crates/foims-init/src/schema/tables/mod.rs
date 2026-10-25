@@ -4,6 +4,7 @@ mod agents;
 mod cabinets;
 mod cable_links;
 mod device_interfaces;
+mod device_inventory;
 mod device_nics;
 mod device_snmp;
 mod device_templates;
@@ -69,6 +70,9 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // SNMP 观测事件（引用 devices）：轮询/同步路径产出的事实源表
     snmp_events::create(pool).await?;
+
+    // 设备网络侧清单/台账（引用 devices）：ENTITY/传感器/VLAN/CDP/LAG/PoE
+    device_inventory::create(pool).await?;
 
     // 设备网卡（引用 devices，先于 device_interfaces 创建）
     device_nics::create(pool).await?;

@@ -210,6 +210,14 @@ export const ICONS: Record<string, IconShape[]> = {
   listM: listBadgeIcon("M"),
   // LLDP（列表 + 字母角标组合，24x32 视窗）
   listL: listBadgeIcon("L"),
+  // 硬件实体清单 ENTITY-MIB（列表 + 字母角标组合）
+  listE: listBadgeIcon("E"),
+  // VLAN 台账（列表 + 字母角标组合）
+  listV: listBadgeIcon("V"),
+  // CDP 邻居（列表 + 字母角标组合）
+  listC: listBadgeIcon("C"),
+  // LAG 聚合口台账（列表 + 字母角标组合）
+  listG: listBadgeIcon("G"),
   // 立即执行（定时任务行内操作）
   play: icon({ tag: "polygon", points: "5 3 19 12 5 21 5 3" }),
   // 启停切换（定时任务启用/禁用）
