@@ -402,3 +402,12 @@ v0.17.2
 2026102509335001
 1. 前端版本承载落点细化（普通修改 z+1，仅文档）：frontend/package.json 的 version 字段确立为前端版本号唯一落点，复用本文件 x/y/z 判级与 Cargo.toml 同机制独立联动（z 段不动 / y 段 c+1 / x 段 b+1 且 c 归零 / a 段手动，沿用 0.1.0 起独立计数）；仅前端修改不再 bump 根 Cargo.toml（联动对象由 lib 改为 package.json），仅后端修改照旧联动 Cargo.toml，混合修改按各自维度分别联动
 2. 文档同步：dev_version.md 规则头改写前端条款（删除「仅前端修改 lib 更新版本号」旧规则）；AGENTS.md 与 docs/code-style.md §1/§3.1 同步，「无独立前端版本号」表述废除
+
+v0.17.3
+2026102510341201
+1. 前端 i18n 补键（普通缺陷 z+1）：VisualizationPage 三处组织筛选下拉的 aria-label 引用了不存在的 organization.title（vue-i18n 回退输出原始键名），新增 organization.filter_label（zh「组织筛选」/en「Filter by organization」）并替换工位/机柜/拓扑三页签的引用
+2. api/client.ts 两处修复：非 JSON 非下载响应的兜底分支先 response.json() 再 response.text()，body 已被消费导致 text() 必抛 TypeError（错误被外层 catch 归一为 network_error，且 data:text 返回值不可达）——改为先取原文再 JSON.parse；showToastAuthError 的动态 import 改静态导入（useToast 仅依赖 vue，不存在其注释所称的循环引用，原写法反复触发 vite INEFFECTIVE_DYNAMIC_IMPORT 告警）
+3. 死代码与静态资源清理：删除无引用的 pages/SectionPlaceholder.vue（router 经 SECTION_COMPONENTS 直连各分区页），MainShell 头注释「当前统一为 SectionPlaceholder 占位」同步改写；public/icons/lucide 由 2142 个 vendored SVG 裁剪至 DEVICE_ICON_FILES 实际使用的 10 个（network/cpu/server/router/cctv/phone/monitor/laptop/printer/package，LICENSE 保留），部署产物 icons/lucide 120K→48K
+4. 文档同步：docs/code-style.md §3.1 目录树标注图标裁剪约定，并修正 api/client.js → api/client.ts
+5. 联动：仅前端修改，frontend/package.json 0.1.0→0.1.1（z+1）并同步 package-lock.json 根版本，根 Cargo.toml 不动；无数据库结构变更
+6. 验证：cd frontend && npm run typecheck 0 错；npm run build 通过（INEFFECTIVE_DYNAMIC_IMPORT 告警消失，仅余 chunk>500kB）；npm run selfcheck:viz 全过

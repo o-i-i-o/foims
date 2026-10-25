@@ -160,13 +160,15 @@ Ok(ok_json(paged_response(items, total, &pagination), "common.fetch_success"))
 frontend/
 ├── index.html / init_index.html / main.html  MPA 三入口（登录/初始化向导/主应用）
 ├── vite.config.js         构建配置（入口映射；dev 代理 /api → 本机 nginx:80）
-├── public/icons/          lucide 图标（URL /icons/lucide/，dev/生产均静态直服）
+├── public/icons/          lucide 图标（URL /icons/lucide/，dev/生产均静态直服；
+│                          仅保留拓扑设备类型实际使用的 10 个 SVG，新增设备类型时按
+│                          utils/visualization/icons.ts 的 DEVICE_ICON_FILES 取用同名文件）
 └── src/
     ├── entries/           入口装配（login/init/main：createApp + 样式 + 插件）
     ├── pages/             页面级组件（MainShell + 各分区 Page）
     ├── components/        通用组件 + 按域分组组件（<域>/<名称>Modal.vue 等）
     ├── composables/       组合式函数（useToast/usePagedList/useModalStack…）
-    ├── api/client.js      API 客户端（契约见 3.3，全站唯一请求出口）
+    ├── api/client.ts      API 客户端（契约见 3.3，全站唯一请求出口）
     ├── i18n/              vue-i18n 实例 + 双语词条 locales/{zh,en}.json
     ├── stores/            pinia store（auth）
     ├── router/            vue-router（hash 模式，NAV_ITEMS 即侧边栏数据源）
