@@ -129,6 +129,7 @@ async function testSmtpConnection(): Promise<void> {
 
 const macChange = ref(true);
 const agentAlert = ref(true);
+const snmpEvent = ref(true);
 const selectedIds = ref<Set<string>>(new Set());
 
 const usersQuery = useQuery({
@@ -174,6 +175,7 @@ watch(
     const methods = (settings.methods ?? {}) as Partial<NotificationMethods>;
     macChange.value = methods.mac_change !== false;
     agentAlert.value = methods.agent_alert !== false;
+    snmpEvent.value = methods.snmp_event !== false;
     selectedIds.value = new Set(settings.email_recipients || []);
   }
 );
@@ -201,7 +203,8 @@ async function saveNotificationSettings(): Promise<void> {
       email_recipients: [...selectedIds.value],
       methods: {
         mac_change: macChange.value,
-        agent_alert: agentAlert.value
+        agent_alert: agentAlert.value,
+        snmp_event: snmpEvent.value
       }
     };
     const result = await updateNotificationSettings(payload);
@@ -309,6 +312,11 @@ async function saveNotificationSettings(): Promise<void> {
               <tr>
                 <td>{{ t("notification.type_agent_alert") }}</td>
                 <td><input v-model="agentAlert" type="checkbox" :disabled="readonly"></td>
+                <td><span class="status-badge status-reserved">{{ t("notification.pending") }}</span></td>
+              </tr>
+              <tr>
+                <td>{{ t("notification.type_snmp_event") }}</td>
+                <td><input v-model="snmpEvent" type="checkbox" :disabled="readonly"></td>
                 <td><span class="status-badge status-reserved">{{ t("notification.pending") }}</span></td>
               </tr>
             </tbody>

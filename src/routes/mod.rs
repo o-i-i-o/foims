@@ -626,7 +626,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route(
             "/api/resources/devices/test-snmp",
-            post(foims_resource::test_snmp_connection::<AppState>),
+            post(foims_snmp::handlers::test_snmp_connection::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}",
@@ -652,7 +652,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route(
             "/api/resources/devices/{id}/test-snmp",
-            post(foims_resource::test_snmp_connection_by_id::<AppState>),
+            post(foims_snmp::handlers::test_snmp_connection_by_id::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/macs",
@@ -672,11 +672,19 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route(
             "/api/resources/devices/{id}/snmp-info",
-            get(foims_resource::get_device_info_snmp::<AppState>),
+            get(foims_snmp::handlers::get_device_info_snmp::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/snmp-ports",
-            get(foims_resource::get_device_ports_snmp::<AppState>),
+            get(foims_snmp::handlers::get_device_ports_snmp::<AppState>),
+        )
+        .route(
+            "/api/snmp/events",
+            get(foims_snmp::events::list_snmp_events::<AppState>),
+        )
+        .route(
+            "/api/snmp/locate",
+            get(foims_snmp::events::locate_device::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/interfaces",

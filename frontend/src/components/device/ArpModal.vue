@@ -8,11 +8,12 @@
  * - 搜索：IP/MAC 包含匹配，300ms 防抖（MAC 表可达数千行）；
  * - 同步：POST /devices/{id}/macs/sync 后重新加载；空数据态提供同步按钮。
  */
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet, apiPost } from "../../api/client";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
+import LocateModal from "./LocateModal.vue";
 import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
 import type { SnmpMac } from "../../types/api/generated/SnmpMac";
 
@@ -201,6 +202,13 @@ function toggleGroup(network: string): void {
   expandedGroups.value = next;
 }
 
+// 终端定位：从某条 ARP 记录跳转定位弹窗，预填该 MAC 并自动查询
+const locateModal = reactive({ open: false, mac: "" });
+function openLocate(mac: string): void {
+  locateModal.mac = mac;
+  locateModal.open = true;
+}
+
 loadData();
 </script>
 
@@ -284,11 +292,17 @@ loadData();
                     <th>{{ t("device.ip_address") }}</th>
                     <th>{{ t("device.mac_address") }}</th>
                     <th>{{ t("device.vlan_id") }}</th>
+                    <th>{{ t("device.locate.title") }}</th>
                   </tr>
                   <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
                     <td>{{ entry.ip_address }}</td>
                     <td>{{ entry.mac_address }}</td>
                     <td>{{ entry.vlan_id != null ? String(entry.vlan_id) : "-" }}</td>
+                    <td>
+                      <button type="button" class="btn btn-secondary btn-sm" @click="openLocate(entry.mac_address)">
+                        {{ t("device.locate.entry") }}
+                      </button>
+                    </td>
                   </tr>
                 </table>
               </div>
@@ -316,11 +330,17 @@ loadData();
                     <th>{{ t("device.ip_address") }}</th>
                     <th>{{ t("device.mac_address") }}</th>
                     <th>{{ t("device.vlan_id") }}</th>
+                    <th>{{ t("device.locate.title") }}</th>
                   </tr>
                   <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
                     <td>{{ entry.ip_address }}</td>
                     <td>{{ entry.mac_address }}</td>
                     <td>{{ entry.vlan_id != null ? String(entry.vlan_id) : "-" }}</td>
+                    <td>
+                      <button type="button" class="btn btn-secondary btn-sm" @click="openLocate(entry.mac_address)">
+                        {{ t("device.locate.entry") }}
+                      </button>
+                    </td>
                   </tr>
                 </table>
               </div>
@@ -329,5 +349,10 @@ loadData();
         </div>
       </div>
     </div>
+    <LocateModal
+      v-if="locateModal.open"
+      :prefill-mac="locateModal.mac"
+      @close="locateModal.open = false"
+    />
   </ModalShell>
 </template>

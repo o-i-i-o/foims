@@ -1,6 +1,6 @@
 [package]
 name = "foims-resource"
-version = "0.1.11"
+version = "0.1.12"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Resource - networks, rooms, cabinets, workstations, devices, IPs, cable links"
@@ -11,6 +11,8 @@ license = "GPL-3.0-or-later"
 foims-common = { path = "../foims-common" }
 foims-models = { path = "../foims-models" }
 foims-auth = { path = "../foims-auth" }
+# SNMP 域（协议层/采集/事件通知），依赖方向：本 crate → foims-snmp
+foims-snmp = { path = "../foims-snmp" }
 
 # Axum
 axum = { workspace = true }
@@ -40,8 +42,7 @@ ipnetwork = { workspace = true }
 # 并发表（SNMP 同步任务去重）
 dashmap = { workspace = true }
 
-# SNMP 探测
-async-snmp = "0.18.1"
+# SNMP 协议客户端已随域拆分迁至 foims-snmp（本 crate 经其 API 使用）
 
 # Async
 # （tokio::join 并行查询）

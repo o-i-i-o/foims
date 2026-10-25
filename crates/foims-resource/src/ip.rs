@@ -756,7 +756,7 @@ async fn sync_switch_macs(
     tx.commit().await?;
 
     for notice in pending_notifications {
-        match crate::helpers::send_mac_change_notification(
+        match foims_snmp::events::send_mac_change_notification(
             pool,
             &notice.workstation_id,
             &notice.ips,

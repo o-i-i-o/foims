@@ -26,6 +26,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::events::ObsEvent;
+use foims_models::{
+    SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP, SNMP_SEVERITY_CRITICAL, SNMP_SEVERITY_INFO,
+    SNMP_SEVERITY_WARNING,
+};
+
 /// 流量速率合理性兜底上限（bit/s）：ifSpeed 未知/过低（虚拟口）时的
 /// 校验基准，对应 100 Gbps
 const DEFAULT_SPEED_CAP_BPS: u64 = 100_000_000_000;
@@ -87,11 +93,20 @@ pub struct CpuCounters {
     pub idle: u64,
 }
 
-/// 单网卡收发字节计数器快照（差值算速率）
+/// 单网卡收发字节与错误/丢弃计数器快照（差值算速率与本轮错误增量）
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct IfaceCounters {
     pub in_octets: u64,
     pub out_octets: u64,
+    /// 入向错误计数（Counter32；旧状态缺字段降级 None）
+    #[serde(default)]
+    pub in_errors: Option<u64>,
+    #[serde(default)]
+    pub out_errors: Option<u64>,
+    #[serde(default)]
+    pub in_discards: Option<u64>,
+    #[serde(default)]
+    pub out_discards: Option<u64>,
 }
 
 /// 上一轮 SNMP 采集状态（monitored_hosts.raw_metrics 私有键 `_snmp_state`）。
@@ -106,6 +121,18 @@ pub struct SnmpState {
     pub cpu: Option<CpuCounters>,
     #[serde(default)]
     pub ifaces: BTreeMap<String, IfaceCounters>,
+    /// 上一轮各网口 ifOperStatus（IF-MIB 编码：1=up/2=down/…），供链路翻动检测
+    #[serde(default)]
+    pub if_status: BTreeMap<String, i32>,
+    /// 上一轮各网口 ifAdminStatus，用于 admin-down 降噪标注
+    #[serde(default)]
+    pub if_admin: BTreeMap<String, i32>,
+    /// 上一轮 sysUpTime（秒），供重启检测（回退即重启）
+    #[serde(default)]
+    pub last_boot_uptime: Option<i64>,
+    /// 上一轮采集时刻（unix 秒），供重启估算停机时长与轮询间隔
+    #[serde(default)]
+    pub last_poll_ts: Option<i64>,
 }
 
 // ============================================================
@@ -113,10 +140,22 @@ pub struct SnmpState {
 // ============================================================
 
 /// 单网卡速率结果（bit/s；差值不可得时为 None，与 agent 上报口径一致）
+#[derive(Debug, Clone, Default)]
 pub struct NetRate {
     pub iface: String,
     pub rx_bps: Option<f64>,
     pub tx_bps: Option<f64>,
+    /// ifOperStatus 文本（up/down/…）
+    pub status: Option<String>,
+    /// ifAdminStatus 文本（up/down/…）
+    pub admin_status: Option<String>,
+    /// 链路速率（Mbps，ifSpeed/1e6 归一，未知为 None）
+    pub speed_mbps: Option<u64>,
+    /// 本轮入向错误增量（Counter32 回绕校正；首轮/无增量为 None）
+    pub err_in_delta: Option<u64>,
+    pub err_out_delta: Option<u64>,
+    pub disc_in_delta: Option<u64>,
+    pub disc_out_delta: Option<u64>,
 }
 
 /// 单磁盘/文件系统条目（字节；SNMP 无 IOPS/繁忙度）
@@ -174,7 +213,8 @@ pub async fn collect(
     let disks = disks_from_storage(&storage);
     let swap = ucd_swap(client).await;
     let sensors = collect_sensors(client).await;
-    let (nets, state_ifaces) = collect_nets(client, prev, now_unix).await;
+    let (nets, state_ifaces, state_if_status, state_if_admin) =
+        collect_nets(client, prev, now_unix).await;
     let load = collect_load(client).await;
 
     SnmpSnapshot {
@@ -191,6 +231,11 @@ pub async fn collect(
             ts: now_unix,
             cpu: cpu_counters,
             ifaces: state_ifaces,
+            if_status: state_if_status,
+            if_admin: state_if_admin,
+            // 重启检测所需的 sysUpTime 由调用方（snmp_poll 读 system 组）回填
+            last_boot_uptime: None,
+            last_poll_ts: Some(now_unix),
         },
     }
 }
@@ -295,6 +340,88 @@ pub fn net_sums(nets: &[NetRate]) -> (Option<f64>, Option<f64>) {
         }
     }
     (rx, tx)
+}
+
+/// 重启判定的最小上机时长（秒）：上一轮 uptime 低于此值时不据此判重启
+/// （刚上线/采集初期满载时钟不具参考性）。
+const REBOOT_MIN_PREV_UPTIME_SECS: i64 = 300;
+
+/// 基于上一轮与本轮 ifOperStatus 比对，检出链路翻动（up↔down）事件（纯函数）。
+///
+/// - 基线：`prev.if_status` 为空（首轮/旧数据）时不发事件；
+/// - 方向：本轮 1=up、2=down 区分文案，其余编码归为 `changed`；
+/// - 降噪：admin-down（ifAdminStatus=2）导致的 oper down 标注 `admin_down=true`
+///   并降为 info（管理员主动关停不视为故障）；非 admin-down 的 down 为 critical，
+///   up 恢复为 info。
+pub fn detect_link_flips(
+    prev: &SnmpState,
+    cur_status: &BTreeMap<String, i32>,
+    cur_admin: &BTreeMap<String, i32>,
+) -> Vec<ObsEvent> {
+    let mut events = Vec::new();
+    if prev.if_status.is_empty() {
+        return events;
+    }
+    for (iface, &cur) in cur_status {
+        let Some(&old) = prev.if_status.get(iface) else {
+            continue;
+        };
+        if old == cur {
+            continue;
+        }
+        let direction = match cur {
+            1 => "up",
+            2 => "down",
+            _ => "changed",
+        };
+        let admin_down = cur == 2 && cur_admin.get(iface) == Some(&2);
+        // up 恢复、以及管理面 down 导致的 oper down 均降噪为 info；非预期 down 为 critical
+        let severity = if direction == "up" || admin_down {
+            SNMP_SEVERITY_INFO
+        } else {
+            SNMP_SEVERITY_CRITICAL
+        };
+        events.push(ObsEvent::new(
+            SNMP_EVENT_LINK_FLIP,
+            Some(iface.clone()),
+            severity,
+            json!({ "direction": direction, "admin_down": admin_down }),
+        ));
+    }
+    events
+}
+
+/// 基于 sysUpTime 回退检出设备重启（纯函数）。
+///
+/// `prev_uptime`/`cur_uptime` 为秒；本轮 < 上轮且上轮 > 300s 时判为重启，
+/// 估算停机时长 = 轮询间隔 `gap_secs` − 当前 uptime（负值钳 0）。
+pub fn detect_reboot(
+    prev_uptime: Option<i64>,
+    cur_uptime: Option<i64>,
+    gap_secs: i64,
+) -> Option<ObsEvent> {
+    let (prev, cur) = match (prev_uptime, cur_uptime) {
+        (Some(p), Some(c)) => (p, c),
+        _ => return None,
+    };
+    if cur >= prev || prev <= REBOOT_MIN_PREV_UPTIME_SECS {
+        return None;
+    }
+    let downtime = (gap_secs - cur).max(0);
+    Some(ObsEvent::new(
+        SNMP_EVENT_DEVICE_REBOOT,
+        None,
+        SNMP_SEVERITY_WARNING,
+        json!({ "downtime": format_secs(downtime), "downtime_secs": downtime }),
+    ))
+}
+
+/// 秒数格式化为 `Xh Ym Zs`（供重启通知文案 uptime 回退后估算停机时长）。
+fn format_secs(secs: i64) -> String {
+    let h = secs / 3600;
+    let m = (secs % 3600) / 60;
+    let s = secs % 60;
+    format!("{h}h {m}m {s}s")
 }
 
 // ============================================================
@@ -525,20 +652,36 @@ async fn collect_sensors(client: &Client<UdpHandle>) -> Vec<SensorRow> {
 }
 
 /// 流量：bulk walk ifTable + ifXTable 按行索引合并 → 过滤 up 且非环回 →
-/// 按接口名排序截断 → 与上一轮差值算速率。HC 64 位计数器优先，回落 32 位。
+/// 按接口名排序截断 → 与上一轮差值算速率与错误增量。HC 64 位计数器优先，回落 32 位。
+///
+/// 同时为全部非环回命名接口记录 ifOperStatus/ifAdminStatus（含 down），
+/// 供上层 [`detect_link_flips`] 比对上一轮状态检出链路翻动。
 async fn collect_nets(
     client: &Client<UdpHandle>,
     prev: Option<&SnmpState>,
     now_unix: i64,
-) -> (Vec<NetRate>, BTreeMap<String, IfaceCounters>) {
+) -> (
+    Vec<NetRate>,
+    BTreeMap<String, IfaceCounters>,
+    BTreeMap<String, i32>,
+    BTreeMap<String, i32>,
+) {
     // ifTable（base 1.3.6.1.2.1.2.2.1 共 9 分量；col2 descr / col3 type /
-    // col5 speed / col8 oper / col10 inOctets / col14 outOctets）
+    // col5 speed / col7 admin / col8 oper / col10 ifInOctets / col16 ifOutOctets，
+    // 错误/丢弃：col13 ifInDiscards / col14 ifInErrors / col19 ifOutDiscards /
+    // col20 ifOutErrors）
     let mut descrs: BTreeMap<u32, String> = BTreeMap::new();
     let mut types: BTreeMap<u32, u64> = BTreeMap::new();
     let mut speeds: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut admins: BTreeMap<u32, u64> = BTreeMap::new();
     let mut opers: BTreeMap<u32, u64> = BTreeMap::new();
     let mut in32: BTreeMap<u32, u64> = BTreeMap::new();
     let mut out32: BTreeMap<u32, u64> = BTreeMap::new();
+    // 错误/丢弃计数器（与 octets 同回落 32 位表）
+    let mut in_err: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut out_err: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut in_disc: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut out_disc: BTreeMap<u32, u64> = BTreeMap::new();
     for vb in &walk_all(client, oid!(1, 3, 6, 1, 2, 1, 2, 2, 1)).await {
         let Some((col, idx)) = table_parts(&vb.oid, 9) else {
             continue;
@@ -547,9 +690,14 @@ async fn collect_nets(
             2 => str_map(&vb.value, &mut descrs, idx),
             3 => num_map(&vb.value, &mut types, idx),
             5 => num_map(&vb.value, &mut speeds, idx),
+            7 => num_map(&vb.value, &mut admins, idx),
             8 => num_map(&vb.value, &mut opers, idx),
             10 => num_map(&vb.value, &mut in32, idx),
-            14 => num_map(&vb.value, &mut out32, idx),
+            13 => num_map(&vb.value, &mut in_disc, idx),
+            14 => num_map(&vb.value, &mut in_err, idx),
+            16 => num_map(&vb.value, &mut out32, idx),
+            19 => num_map(&vb.value, &mut out_disc, idx),
+            20 => num_map(&vb.value, &mut out_err, idx),
             _ => {}
         }
     }
@@ -570,8 +718,34 @@ async fn collect_nets(
         }
     }
 
+    // 命名解析：ifName 优先、回落 ifDescr；非环回（type 24）且有 oper 的
+    // 全部接口计入状态图（含 down），供链路翻动检测
+    let name_of = |idx: &u32| -> Option<String> {
+        names
+            .get(idx)
+            .or_else(|| descrs.get(idx))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    let mut if_status: BTreeMap<String, i32> = BTreeMap::new();
+    let mut if_admin: BTreeMap<String, i32> = BTreeMap::new();
+    for idx in opers.keys() {
+        if types.get(idx) == Some(&24) {
+            continue;
+        }
+        let Some(name) = name_of(idx) else {
+            continue;
+        };
+        if let Some(op) = opers.get(idx) {
+            if_status.insert(name.clone(), *op as i32);
+        }
+        if let Some(ad) = admins.get(idx) {
+            if_admin.insert(name, *ad as i32);
+        }
+    }
+
     let elapsed = prev.map_or(0, |p| now_unix - p.ts);
-    // 合并行键（两表索引对齐），过滤 up 且非环回（type 24），命名 ifName 优先
+    // 速率/错误仅统计 up 且非环回接口（与既有展示口径一致），按名排序截断
     let mut idxs: Vec<u32> = opers
         .keys()
         .filter(|idx| {
@@ -581,23 +755,12 @@ async fn collect_nets(
         })
         .copied()
         .collect();
-    idxs.sort_by_cached_key(|idx| {
-        names
-            .get(idx)
-            .or_else(|| descrs.get(idx))
-            .cloned()
-            .unwrap_or_default()
-    });
+    idxs.sort_by_cached_key(|idx| name_of(idx).unwrap_or_default());
 
     let mut nets = Vec::new();
     let mut state_ifaces = BTreeMap::new();
     for idx in idxs.into_iter().take(MAX_NET_IFACES) {
-        let Some(name) = names
-            .get(&idx)
-            .or_else(|| descrs.get(&idx))
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-        else {
+        let Some(name) = name_of(&idx) else {
             continue;
         };
         let cur_in = hc_in.get(&idx).copied().or_else(|| in32.get(&idx).copied());
@@ -613,22 +776,79 @@ async fn collect_nets(
             ),
             _ => (None, None),
         };
+        // 错误/丢弃本轮增量：Counter32 回绕校正；上一轮无该字段时 None
+        let prev_c = prev.and_then(|p| p.ifaces.get(&name));
+        let err_delta = |prev_v: Option<u64>, cur_v: Option<u64>| -> Option<u64> {
+            match (prev_v, cur_v) {
+                (Some(pv), Some(cv)) if elapsed >= MIN_RATE_ELAPSED_SECS => Some(delta32(pv, cv)),
+                _ => None,
+            }
+        };
+        let err_in_delta = err_delta(prev_c.and_then(|c| c.in_errors), in_err.get(&idx).copied());
+        let err_out_delta = err_delta(
+            prev_c.and_then(|c| c.out_errors),
+            out_err.get(&idx).copied(),
+        );
+        let disc_in_delta = err_delta(
+            prev_c.and_then(|c| c.in_discards),
+            in_disc.get(&idx).copied(),
+        );
+        let disc_out_delta = err_delta(
+            prev_c.and_then(|c| c.out_discards),
+            out_disc.get(&idx).copied(),
+        );
+
         if let (Some(ci), Some(co)) = (cur_in, cur_out) {
             state_ifaces.insert(
                 name.clone(),
                 IfaceCounters {
                     in_octets: ci,
                     out_octets: co,
+                    in_errors: in_err.get(&idx).copied(),
+                    out_errors: out_err.get(&idx).copied(),
+                    in_discards: in_disc.get(&idx).copied(),
+                    out_discards: out_disc.get(&idx).copied(),
                 },
             );
         }
         nets.push(NetRate {
+            speed_mbps: speed.map(|s| s / 1_000_000),
+            status: opers.get(&idx).map(|c| if_status_text(*c).to_string()),
+            admin_status: admins.get(&idx).map(|c| if_admin_text(*c).to_string()),
+            err_in_delta,
+            err_out_delta,
+            disc_in_delta,
+            disc_out_delta,
             iface: name,
             rx_bps,
             tx_bps,
         });
     }
-    (nets, state_ifaces)
+    (nets, state_ifaces, if_status, if_admin)
+}
+
+/// ifOperStatus 文本（1 up/2 down/3 testing/4 unknown/5 dormant/6 notPresent/7 lowerLayerUp）
+fn if_status_text(code: u64) -> &'static str {
+    match code {
+        1 => "up",
+        2 => "down",
+        3 => "testing",
+        4 => "unknown",
+        5 => "dormant",
+        6 => "notPresent",
+        7 => "lowerLayerUp",
+        _ => "unknown",
+    }
+}
+
+/// ifAdminStatus 文本（1 up/2 down/3 testing）
+fn if_admin_text(code: u64) -> &'static str {
+    match code {
+        1 => "up",
+        2 => "down",
+        3 => "testing",
+        _ => "unknown",
+    }
 }
 
 /// 负载：GET laLoad.1/2/3（字符串形式浮点），解析失败容忍缺失
@@ -778,7 +998,15 @@ pub fn build_report_json(
             "iface": n.iface,
             "rx_bps": n.rx_bps,
             "tx_bps": n.tx_bps,
-            "errors": Value::Null,
+            "status": n.status,
+            "admin_status": n.admin_status,
+            "speed_mbps": n.speed_mbps,
+            "errors": {
+                "in": n.err_in_delta,
+                "out": n.err_out_delta,
+                "in_discards": n.disc_in_delta,
+                "out_discards": n.disc_out_delta,
+            },
         })).collect::<Vec<Value>>(),
         "sensors": snap.sensors.iter().map(|s| json!({
             "label": s.label,
@@ -920,11 +1148,13 @@ mod tests {
                 iface: "eth0".into(),
                 rx_bps: Some(100.0),
                 tx_bps: None,
+                ..Default::default()
             },
             NetRate {
                 iface: "eth1".into(),
                 rx_bps: Some(50.0),
                 tx_bps: Some(20.0),
+                ..Default::default()
             },
         ];
         let (rx, tx) = net_sums(&nets);
@@ -934,6 +1164,7 @@ mod tests {
             iface: "eth0".into(),
             rx_bps: None,
             tx_bps: None,
+            ..Default::default()
         }];
         assert_eq!(net_sums(&empty), (None, None));
     }
@@ -978,11 +1209,15 @@ mod tests {
                 iface: "eth0".into(),
                 rx_bps: None,
                 tx_bps: Some(8000.0),
+                status: Some("up".into()),
+                err_in_delta: Some(3),
+                ..Default::default()
             }],
             state: SnmpState {
                 ts: 1728,
                 cpu: Some(CpuCounters { total: 10, idle: 8 }),
                 ifaces: BTreeMap::new(),
+                ..Default::default()
             },
         };
         let now = Utc::now();
@@ -1003,11 +1238,76 @@ mod tests {
         assert_eq!(report["disks"][0]["total"], 1000);
         assert!(report["disks"][0]["util_pct"].is_null());
         assert_eq!(report["nets"][0]["tx_bps"], 8000.0);
-        assert!(report["nets"][0]["errors"].is_null());
+        assert_eq!(report["nets"][0]["status"], "up");
+        assert_eq!(report["nets"][0]["errors"]["in"], 3);
         assert_eq!(report["sensors"][0]["kind"], "temp");
         assert_eq!(report["sensors"][0]["value"], 54.0);
         // 私有状态键随 JSON 写回
         assert_eq!(report["_snmp_state"]["cpu"]["total"], 10);
         assert!(report["collected_at"].is_string());
+    }
+
+    fn state_with_status(pairs: &[(&str, i32)]) -> SnmpState {
+        let mut s = SnmpState::default();
+        for (k, v) in pairs {
+            s.if_status.insert((*k).to_string(), *v);
+        }
+        s
+    }
+
+    #[test]
+    fn 链路翻动_基线不发事件与方向区分() {
+        // 基线：上一轮 if_status 空 → 无事件
+        let prev = SnmpState::default();
+        let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 1)].into_iter().collect();
+        let admin: BTreeMap<String, i32> = BTreeMap::new();
+        assert!(detect_link_flips(&prev, &cur, &admin).is_empty());
+
+        // 上一轮 up(1)，本轮 down(2) 且 admin up(1) → critical down
+        let prev = state_with_status(&[("ge0/1", 1)]);
+        let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 2)].into_iter().collect();
+        let admin: BTreeMap<String, i32> = [("ge0/1".to_string(), 1)].into_iter().collect();
+        let events = detect_link_flips(&prev, &cur, &admin);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "link_flip");
+        assert_eq!(events[0].severity, "critical");
+        assert_eq!(events[0].detail["direction"], "down");
+        assert_eq!(events[0].detail["admin_down"], false);
+
+        // down→up 恢复：info
+        let prev = state_with_status(&[("ge0/1", 2)]);
+        let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 1)].into_iter().collect();
+        let events = detect_link_flips(&prev, &cur, &BTreeMap::new());
+        assert_eq!(events[0].severity, "info");
+        assert_eq!(events[0].detail["direction"], "up");
+    }
+
+    #[test]
+    fn 链路翻动_admin_down降噪为info() {
+        // oper down(2) 且 admin down(2) → 标注 admin_down=true、降为 info
+        let prev = state_with_status(&[("ge0/1", 1)]);
+        let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 2)].into_iter().collect();
+        let admin: BTreeMap<String, i32> = [("ge0/1".to_string(), 2)].into_iter().collect();
+        let events = detect_link_flips(&prev, &cur, &admin);
+        assert_eq!(events[0].severity, "info");
+        assert_eq!(events[0].detail["admin_down"], true);
+    }
+
+    #[test]
+    fn 重启检测_回退与边界() {
+        // 无历史或无本轮 → None
+        assert!(detect_reboot(None, Some(100), 300).is_none());
+        assert!(detect_reboot(Some(1000), None, 300).is_none());
+        // uptime 递增（未重启）→ None
+        assert!(detect_reboot(Some(1000), Some(1300), 300).is_none());
+        // 上一轮 uptime ≤ 300s（刚上线）→ None（不据低时钟判重启）
+        assert!(detect_reboot(Some(200), Some(50), 300).is_none());
+        // 回退：上轮 3600s、本轮 60s、间隔 300s → 停机 = 300-60 = 240s
+        let ev = detect_reboot(Some(3600), Some(60), 300).unwrap_or_else(|| panic!("应检出重启"));
+        assert_eq!(ev.event_type, "device_reboot");
+        assert_eq!(ev.detail["downtime_secs"], 240);
+        // gap < cur 时停机时长钳 0
+        let ev = detect_reboot(Some(3600), Some(300), 100).unwrap_or_else(|| panic!("应检出重启"));
+        assert_eq!(ev.detail["downtime_secs"], 0);
     }
 }

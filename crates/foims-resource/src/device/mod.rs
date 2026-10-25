@@ -6,7 +6,6 @@ pub mod lldp;
 pub mod mac;
 pub mod nic;
 pub mod notify;
-pub mod snmp;
 pub mod template;
 
 pub use crud::*;
@@ -14,7 +13,6 @@ pub use interface::*;
 pub use lldp::*;
 pub use mac::*;
 pub use nic::*;
-pub use snmp::*;
 pub use template::*;
 
 use foims_common::{AppError, msg};

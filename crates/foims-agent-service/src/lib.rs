@@ -11,8 +11,8 @@
 //! - [`alerts`]：主机资源告警（全局阈值 + 状态翻转评估 + 站内通知）；
 //! - [`agents_api`]：Agent 列表/详情/历史/管理的 Web API；
 //! - [`snmp_poll`]：SNMP 设备轮询采集（纳入主机监控页，source='snmp'）；
-//! - [`snmp_metrics`]：SNMP 性能指标采集（CPU/内存/磁盘/温度/流量/负载
-//!   与差值计算，二期）；
+//!   性能指标采集（CPU/内存/磁盘/温度/流量/负载与差值计算，二期）
+//!   已随域拆分迁至 foims-snmp::collect::metrics；
 //! - [`trap`]：SNMP Trap/Inform 接收（自资源管理模块迁入，采集服务）；
 //! - [`tasks`]：离线判定、SNMP 轮询与历史清理调度任务执行器。
 
@@ -33,7 +33,6 @@ pub mod ingest;
 pub mod packaging;
 pub mod renew;
 pub mod report_server;
-pub mod snmp_metrics;
 pub mod snmp_poll;
 pub mod tasks;
 pub mod trap;

@@ -25,7 +25,6 @@ use validator::Validate;
 use super::nic::{
     get_or_create_auto_nic, port_group_prefix, validate_interface_role, validate_physical_type,
 };
-use super::snmp::{DeviceForSnmp, get_device_ports_via_snmp, truncate_to_column_width};
 use foims_auth::meta::{RequestMeta, log_op_best_effort};
 use foims_common::AppJson;
 use foims_common::DbProvider;
@@ -35,6 +34,9 @@ use foims_models::{
     DeviceInterface, DeviceInterfaceCreate, DeviceInterfaceUpdate, DeviceInterfaceWithDevice,
     SnmpPort,
 };
+use foims_snmp::collect::ports::get_device_ports_via_snmp;
+use foims_snmp::core::DeviceForSnmp;
+use foims_snmp::core::truncate_to_column_width;
 
 /// 接口联表查询列（含所属设备名），列表与单条查询共用。
 const INTERFACE_WITH_DEVICE_COLUMNS: &str = "di.id, di.device_id, d.name as device_name,

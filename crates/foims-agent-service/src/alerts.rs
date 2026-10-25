@@ -21,7 +21,7 @@ use foims_auth::extractor::AdminOrSecAdminUser;
 use foims_common::provider::ConfigProvider;
 use foims_common::{AppError, msg};
 
-use foims_resource::helpers::create_notification;
+use foims_snmp::events::create_notification;
 
 /// 阈值配置在 system_configs 中的存储位置
 const CONFIG_TYPE: &str = "agent";
@@ -292,9 +292,9 @@ pub async fn evaluate_report(
     Ok(())
 }
 
-/// 保存阈值后对全部在线 agent 的快照指标评估一轮（调低阈值立即触发告警，
-/// 仅覆盖 source='agent' 且 active 的主机；SNMP 设备指标二期待接入）。
-/// 内部失败逐台记日志，不向调用方传播（保存动作已成功，评估是尽力而为）。
+/// 保存阈值后对全部在线主机的快照指标评估一轮（调低阈值立即触发告警，
+/// 覆盖 source 为 'agent' 或 'snmp' 且 active 的主机）。内部失败逐台记
+/// 日志，不向调用方传播（保存动作已成功，评估是尽力而为）。
 pub async fn evaluate_all(pool: &sqlx::PgPool) {
     let thresholds = load_thresholds(pool).await;
     if !thresholds.enabled {
@@ -321,7 +321,7 @@ pub async fn evaluate_all(pool: &sqlx::PgPool) {
     >(
         "SELECT id, hostname, ip, cpu_usage::float8, mem_usage_pct::float8, \
              disk_usage_pct::float8, max_temp::float8 \
-             FROM monitored_hosts WHERE source = 'agent' AND status = 'active'",
+             FROM monitored_hosts WHERE source IN ('agent', 'snmp') AND status = 'active'",
     )
     .fetch_all(pool)
     .await;

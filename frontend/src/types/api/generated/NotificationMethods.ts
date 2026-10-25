@@ -14,4 +14,8 @@ mac_change: boolean,
 /**
  * 主机资源告警通知的邮件方式开关
  */
-agent_alert: boolean, };
+agent_alert: boolean, 
+/**
+ * SNMP 观测事件（未知终端等）通知的邮件方式开关
+ */
+snmp_event: boolean, };

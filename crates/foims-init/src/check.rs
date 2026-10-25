@@ -36,6 +36,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         "device_interfaces",
         "snmp_arp_entries",
         "device_lldps",
+        "snmp_events",
         "net_outlets",
         "patch_panels",
         // 链路与 IP
@@ -333,6 +334,21 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "neighbor_sys_desc",
             "created_at",
             "updated_at",
+        ],
+    );
+    // event_type 为 VARCHAR 存值，值域由代码常量约束（与既有枚举列口径一致）；
+    // severity 另由建表 SQL 的 CHECK（info|warning|critical）兜底
+    columns.insert(
+        "snmp_events",
+        vec![
+            "id",
+            "device_id",
+            "event_type",
+            "interface",
+            "severity",
+            "detail",
+            "occurred_at",
+            "created_at",
         ],
     );
     columns.insert(

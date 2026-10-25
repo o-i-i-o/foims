@@ -277,7 +277,57 @@
     "auto_assign_success": "已填入可用 IP：{{ip}}",
     "auto_assign_none": "该子网没有可用 IP",
     "auto_assign_failed": "自动分配 IP 失败",
-    "auto_assign_select_network": "请先选择子网"
+    "auto_assign_select_network": "请先选择子网",
+    "snmp_events": {
+      "title": "SNMP 观测事件",
+      "filter_device": "设备",
+      "filter_type": "类型",
+      "filter_severity": "级别",
+      "filter_start": "开始时间",
+      "filter_end": "结束时间",
+      "all_devices": "全部设备",
+      "all_types": "全部类型",
+      "all_severities": "全部级别",
+      "col_time": "时间",
+      "col_device": "设备",
+      "col_type": "类型",
+      "col_interface": "网口",
+      "col_severity": "级别",
+      "col_detail": "详情",
+      "direction": "方向",
+      "downtime": "停机时长",
+      "sev_info": "提示",
+      "sev_warning": "警告",
+      "sev_critical": "严重",
+      "type_link_flip": "链路翻动",
+      "type_device_reboot": "设备重启",
+      "type_arp_added": "ARP 新增",
+      "type_arp_removed": "ARP 移除",
+      "type_arp_conflict": "ARP 冲突",
+      "type_unknown_endpoint": "未知终端"
+    },
+    "locate": {
+      "title": "终端定位",
+      "by_mac": "按 MAC",
+      "by_ip": "按 IP",
+      "placeholder_mac": "输入 MAC 地址",
+      "placeholder_ip": "输入 IP 地址",
+      "search": "查询",
+      "searching": "定位中…",
+      "hits": "命中 {{count}} 条",
+      "no_result": "未定位到该终端",
+      "failed": "定位查询失败",
+      "entry": "定位此终端",
+      "source_static": "网口静态",
+      "source_arp": "ARP 学习",
+      "col_device": "设备",
+      "col_interface": "网口",
+      "col_registered": "登记",
+      "col_source": "来源",
+      "col_time": "时间",
+      "registered": "已登记",
+      "unknown": "未知终端"
+    }
   },
   "device_template": {
     "title": "设备模板管理",
@@ -854,7 +904,8 @@
     "email_recipients": "邮件收件人",
     "save_success": "通知设置保存成功",
     "save_failed": "通知设置保存失败",
-    "save_error": "保存通知设置失败"
+    "save_error": "保存通知设置失败",
+    "type_snmp_event": "SNMP 观测事件"
   },
   "agent_service": {
     "enabled": "启用接收",
@@ -975,7 +1026,16 @@
     "alert_placeholder_temp": "留空不监控",
     "alert_invalid_range": "阈值必须是 {{min}}-{{max}} 之间的整数，或留空不监控",
     "alert_save_success": "告警阈值已保存",
-    "alert_save_failed": "告警阈值保存失败"
+    "alert_save_failed": "告警阈值保存失败",
+    "nets_table": {
+      "iface": "网口",
+      "status": "状态",
+      "speed": "速率",
+      "rx": "接收",
+      "tx": "发送",
+      "errors": "本轮错误",
+      "discards": "本轮丢弃"
+    }
   },
   "logs": {
     "operation_logs": "操作日志",
@@ -2206,6 +2266,13 @@
         "body_mem": "主机 {{hostname}}（{{ip}}）内存使用率 {{value}}%，超过告警阈值 {{threshold}}%",
         "body_disk": "主机 {{hostname}}（{{ip}}）磁盘使用率 {{value}}%，超过告警阈值 {{threshold}}%",
         "body_temp": "主机 {{hostname}}（{{ip}}）最高温度 {{value}}℃，超过告警阈值 {{threshold}}℃"
+      },
+      "snmp_event": {
+        "title": "SNMP 观测事件",
+        "body_link_flip": "设备 {{device}} 端口 {{interface}} 链路状态变为 {{direction}}",
+        "body_reboot": "设备 {{device}} 疑似重启，估算停机时长 {{downtime}}",
+        "body_unknown_endpoint": "设备 {{device}} 端口 {{interface}} 发现未登记终端 IP {{ip}} / MAC {{mac}}",
+        "body_arp_conflict": "设备 {{device}} 端口 {{interface}} 检测到 ARP 冲突 IP {{ip}} / MAC {{mac}}"
       }
     },
     "org_template": {
@@ -2455,7 +2522,8 @@
         "cron_length": "cron表达式长度必须在1到100个字符之间",
         "name_length": "任务名称长度必须在1到100个字符之间",
         "type_length": "任务类型长度必须在1到50个字符之间"
-      }
+      },
+      "snmp_event_retention_invalid": "SNMP 事件保留天数配置非法（应在 1-3650），已回落缺省 30 天"
     },
     "user": {
       "created": "用户创建成功",
@@ -2630,6 +2698,11 @@
       "zip_finish_failed": "压缩包收尾失败",
       "zip_write_failed": "写入压缩包失败",
       "import_success": "数据导入成功"
+    },
+    "snmp": {
+      "events_retrieved": "获取 SNMP 观测事件成功",
+      "located": "定位到 {{count}} 条记录",
+      "invalid_locator": "定位参数非法（MAC/IP 至少给一个且格式正确）"
     }
   },
   "ldap": {

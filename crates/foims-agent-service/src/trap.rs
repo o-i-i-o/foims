@@ -26,7 +26,7 @@ use foims_common::{log_error, log_info, log_warn};
 use tokio::sync::broadcast::Receiver as ShutdownReceiver;
 use uuid::Uuid;
 
-use foims_resource::helpers::create_notification;
+use foims_snmp::events::create_notification;
 
 /// 站内通知类型标识（notifications.notification_type 列）
 const NOTIFICATION_TYPE_SNMP_TRAP: &str = "snmp_trap";
@@ -135,10 +135,10 @@ async fn build_receiver(config: &SnmpTrapConfig) -> Result<NotificationReceiver,
     builder.build().await.map_err(|e| e.to_string())
 }
 
-// 认证/加密协议字符串解析复用 device::snmp 的唯一定义
+// 认证/加密协议字符串解析复用 foims-snmp core 的唯一定义
 //（库内 FromStr 别名表 + AES-192/256 Blumenthal 旧别名，覆盖范围
 // 为本模块旧手写解析表的超集），不再各自维护匹配表
-use foims_resource::device::snmp::{parse_auth_protocol, parse_priv_protocol};
+use foims_snmp::core::{parse_auth_protocol, parse_priv_protocol};
 
 /// 按配置构建 USM 用户；配置非法时返回错误说明，调用方跳过该用户继续。
 fn build_usm_user(config: &SnmpTrapUsmUser) -> Result<UsmUser, String> {

@@ -10,7 +10,7 @@
 //! - 设备删除时 monitored_hosts 行经 device_id 外键级联清理。
 //!
 //! 采集范围（二期）：一期系统组（sysName/sysDescr/sysUpTime）+ 二期性能
-//! 指标（CPU/内存/磁盘/温度/流量/负载，见 [`snmp_metrics`]）。热列
+//! 指标（CPU/内存/磁盘/温度/流量/负载，见 [`foims_snmp::collect::metrics`]）。热列
 //! （cpu_usage/mem_usage_pct/disk_usage_pct/max_temp）仅在采得新值时
 //! 覆盖（COALESCE 保留旧值），raw_metrics 总是整体写回（含
 //! `_snmp_state` 差值状态）；同时向 host_metrics_history 追加曲线
@@ -26,12 +26,13 @@ use serde_json::Value;
 use sqlx::PgPool;
 use tokio::sync::Semaphore;
 
-use foims_resource::DeviceForSnmp;
-use foims_resource::device::snmp::{
-    build_auth, format_snmp_error, snmp_target, truncate_to_column_width,
+use foims_snmp::collect::metrics as snmp_metrics;
+use foims_snmp::core::{
+    DeviceForSnmp, build_auth, format_snmp_error, snmp_target, truncate_to_column_width,
 };
+use foims_snmp::events::record_events;
 
-use crate::snmp_metrics;
+use crate::alerts::{self, MetricValues};
 
 /// 单设备 SNMP 单次请求超时（秒），与设备测试路径（get_device_info_via_snmp）一致
 const SNMP_TIMEOUT_SECS: u64 = 5;
@@ -193,7 +194,28 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
     // 性能指标（二期）：差值依赖上一轮 raw_metrics._snmp_state
     let now = Utc::now();
     let prev_state = load_snmp_state(pool, &machine_id).await;
-    let snap = snmp_metrics::collect(&client, prev_state.as_ref(), now).await;
+    let mut snap = snmp_metrics::collect(&client, prev_state.as_ref(), now).await;
+    // 回填本轮 sysUpTime 到差值状态，供下一轮重启检测（uptime 回退即重启）
+    snap.state.last_boot_uptime = info.uptime_secs;
+
+    // 轮询侧观测事件：链路翻动（比对上一轮 ifOperStatus）+ 设备重启（uptime 回退）
+    let empty_state = snmp_metrics::SnmpState::default();
+    let prev_for_flip = prev_state.as_ref().unwrap_or(&empty_state);
+    let mut obs_events =
+        snmp_metrics::detect_link_flips(prev_for_flip, &snap.state.if_status, &snap.state.if_admin);
+    let gap_secs = prev_state
+        .as_ref()
+        .and_then(|p| p.last_poll_ts)
+        .map(|lp| now.timestamp() - lp)
+        .unwrap_or(0);
+    if let Some(reboot) = snmp_metrics::detect_reboot(
+        prev_state.as_ref().and_then(|p| p.last_boot_uptime),
+        info.uptime_secs,
+        gap_secs,
+    ) {
+        obs_events.push(reboot);
+    }
+
     let raw_metrics = snmp_metrics::build_report_json(
         &machine_id,
         &hostname,
@@ -255,6 +277,31 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
         }
     };
 
+    // 事件落库 + 通知：失败仅记日志，不影响本轮采集结果（事件表为事实源）
+    if !obs_events.is_empty()
+        && let Err(e) = record_events(pool, device_id, &obs_events).await
+    {
+        foims_common::log_error!(
+            "log.snmp.event_record_failed",
+            device_id = device_id,
+            error = e
+        );
+    }
+
+    // 阈值告警：把 source='snmp' 主机接入既有 evaluate_report 流程；失败仅记日志
+    let metric_values = MetricValues {
+        cpu_pct: cpu_usage,
+        mem_pct,
+        disk_pct,
+        temp_c: max_temp,
+    };
+    if let Err(e) = alerts::evaluate_report(pool, agent_id, &hostname, ip, metric_values).await {
+        foims_common::log_error!(
+            "log.task.agent_snmp_poll_failed",
+            error = format!("设备 {device_name}（{device_id}）告警评估失败: {e}")
+        );
+    }
+
     // 历史曲线快照：cpu/mem/disk/temp + 流量合计（与 agent 上报路径
     // ingest 的快照键保持一致）；冲突（同秒重复轮询）幂等跳过
     let (rx_bps, tx_bps) = snmp_metrics::net_sums(&snap.nets);
@@ -302,9 +349,7 @@ async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics
 
 /// 建立设备 SNMP 会话（周期轮询关闭内建重试：默认 Retry（3 次 × 5s +
 /// 1s 退避）会把单个 OID 拖到 23s，足以挤占下一轮调度窗口）。
-async fn connect_snmp(
-    params: &foims_resource::SnmpParamsLegacy,
-) -> Result<Client<UdpHandle>, String> {
+async fn connect_snmp(params: &foims_snmp::SnmpParamsLegacy) -> Result<Client<UdpHandle>, String> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(SNMP_TIMEOUT_SECS);
     let auth = build_auth(params)?;

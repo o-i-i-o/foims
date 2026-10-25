@@ -323,6 +323,9 @@ pub struct NotificationMethods {
     /// 主机资源告警通知的邮件方式开关
     #[serde(default = "default_true")]
     pub agent_alert: bool,
+    /// SNMP 观测事件（未知终端等）通知的邮件方式开关
+    #[serde(default = "default_true")]
+    pub snmp_event: bool,
 }
 
 fn default_true() -> bool {
@@ -334,6 +337,7 @@ impl Default for NotificationMethods {
         Self {
             mac_change: true,
             agent_alert: true,
+            snmp_event: true,
         }
     }
 }
@@ -483,6 +487,31 @@ pub async fn send_host_alert_email(
     send_notification_email(
         pool,
         &format!("主机资源告警 - {hostname}: {label}超标"),
+        &email_body,
+    )
+    .await
+}
+
+/// 发送未知终端接入告警邮件（SNMP ARP/FDB 同步发现未登记终端）。
+///
+/// 收件人复用 notification_recipients 机制；`ip`/`mac`/`interface`/`device_name`
+/// 为命中条目，注明在哪个设备端口学到。
+pub async fn send_unknown_endpoint_email(
+    pool: &PgPool,
+    device_name: &str,
+    interface: &str,
+    vlan_id: Option<i32>,
+    ip_address: &str,
+    mac_address: &str,
+) -> Result<(), AppError> {
+    let vlan_text = vlan_id.map_or_else(|| "-".to_string(), |v| v.to_string());
+    let email_body = format!(
+        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的终端，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nIP地址：{ip_address}\nMAC地址：{mac_address}\n\n请确认该终端是否授权接入。\n\n此致，\nFOIMS系统"
+    );
+
+    send_notification_email(
+        pool,
+        &format!("未知终端接入通知 - {device_name}/{interface}"),
         &email_body,
     )
     .await

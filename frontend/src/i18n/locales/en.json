@@ -277,7 +277,57 @@
     "auto_assign_success": "Filled available IP: {{ip}}",
     "auto_assign_none": "No available IP in this subnet",
     "auto_assign_failed": "Failed to auto-assign IP",
-    "auto_assign_select_network": "Select a subnet first"
+    "auto_assign_select_network": "Select a subnet first",
+    "snmp_events": {
+      "title": "SNMP Observation Events",
+      "filter_device": "Device",
+      "filter_type": "Type",
+      "filter_severity": "Severity",
+      "filter_start": "Start",
+      "filter_end": "End",
+      "all_devices": "All devices",
+      "all_types": "All types",
+      "all_severities": "All severities",
+      "col_time": "Time",
+      "col_device": "Device",
+      "col_type": "Type",
+      "col_interface": "Interface",
+      "col_severity": "Severity",
+      "col_detail": "Detail",
+      "direction": "Direction",
+      "downtime": "Downtime",
+      "sev_info": "Info",
+      "sev_warning": "Warning",
+      "sev_critical": "Critical",
+      "type_link_flip": "Link flap",
+      "type_device_reboot": "Device reboot",
+      "type_arp_added": "ARP added",
+      "type_arp_removed": "ARP removed",
+      "type_arp_conflict": "ARP conflict",
+      "type_unknown_endpoint": "Unknown endpoint"
+    },
+    "locate": {
+      "title": "Endpoint Locate",
+      "by_mac": "By MAC",
+      "by_ip": "By IP",
+      "placeholder_mac": "Enter MAC address",
+      "placeholder_ip": "Enter IP address",
+      "search": "Search",
+      "searching": "Locating…",
+      "hits": "{{count}} result(s)",
+      "no_result": "No matching endpoint found",
+      "failed": "Locate query failed",
+      "entry": "Locate this endpoint",
+      "source_static": "Static",
+      "source_arp": "ARP",
+      "col_device": "Device",
+      "col_interface": "Interface",
+      "col_registered": "Registered",
+      "col_source": "Source",
+      "col_time": "Time",
+      "registered": "Registered",
+      "unknown": "Unknown"
+    }
   },
   "device_template": {
     "title": "Device Template Management",
@@ -854,7 +904,8 @@
     "email_recipients": "Email Recipients",
     "save_success": "Notification settings saved successfully",
     "save_failed": "Failed to save notification settings",
-    "save_error": "Failed to save notification settings"
+    "save_error": "Failed to save notification settings",
+    "type_snmp_event": "SNMP Observation Event"
   },
   "agent_service": {
     "enabled": "Enable Receiver",
@@ -975,7 +1026,16 @@
     "alert_placeholder_temp": "Leave empty to skip",
     "alert_invalid_range": "Threshold must be an integer between {{min}} and {{max}}, or left empty to skip",
     "alert_save_success": "Alert thresholds saved",
-    "alert_save_failed": "Failed to save alert thresholds"
+    "alert_save_failed": "Failed to save alert thresholds",
+    "nets_table": {
+      "iface": "Interface",
+      "status": "Status",
+      "speed": "Speed",
+      "rx": "RX",
+      "tx": "TX",
+      "errors": "Errors (delta)",
+      "discards": "Discards (delta)"
+    }
   },
   "logs": {
     "operation_logs": "Operation Logs",
@@ -2206,6 +2266,13 @@
         "body_mem": "Host {{hostname}} ({{ip}}) memory usage {{value}}% exceeds the alert threshold {{threshold}}%",
         "body_disk": "Host {{hostname}} ({{ip}}) disk usage {{value}}% exceeds the alert threshold {{threshold}}%",
         "body_temp": "Host {{hostname}} ({{ip}}) max temperature {{value}}°C exceeds the alert threshold {{threshold}}°C"
+      },
+      "snmp_event": {
+        "title": "SNMP Observation Event",
+        "body_link_flip": "Device {{device}} interface {{interface}} link state changed to {{direction}}",
+        "body_reboot": "Device {{device}} appears to have rebooted, estimated downtime {{downtime}}",
+        "body_unknown_endpoint": "Device {{device}} interface {{interface}} found unregistered endpoint IP {{ip}} / MAC {{mac}}",
+        "body_arp_conflict": "Device {{device}} interface {{interface}} detected ARP conflict IP {{ip}} / MAC {{mac}}"
       }
     },
     "org_template": {
@@ -2455,7 +2522,8 @@
         "cron_length": "Cron expression must be 1 to 100 characters",
         "name_length": "Task name must be 1 to 100 characters",
         "type_length": "Task type must be 1 to 50 characters"
-      }
+      },
+      "snmp_event_retention_invalid": "Invalid SNMP event retention days (should be 1-3650), fell back to default 30"
     },
     "user": {
       "created": "User created",
@@ -2630,6 +2698,11 @@
       "zip_finish_failed": "Failed to finalize archive",
       "zip_write_failed": "Failed to write archive",
       "import_success": "Data imported successfully"
+    },
+    "snmp": {
+      "events_retrieved": "SNMP observation events retrieved",
+      "located": "Located {{count}} record(s)",
+      "invalid_locator": "Invalid locator (provide a valid MAC or IP)"
     }
   },
   "ldap": {

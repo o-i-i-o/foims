@@ -62,7 +62,15 @@ interface RawMetrics {
     iface?: string | null;
     rx_bps?: number | null;
     tx_bps?: number | null;
-    errors?: number | null;
+    status?: string | null;
+    admin_status?: string | null;
+    speed_mbps?: number | null;
+    errors?: {
+      in?: number | null;
+      out?: number | null;
+      in_discards?: number | null;
+      out_discards?: number | null;
+    } | null;
   }> | null;
   sensors?: Array<{
     label?: string | null;
@@ -179,6 +187,29 @@ function formatBps(bps: unknown): string {
     return `${(value / 1e3).toFixed(1)} Kbps`;
   }
   return `${Math.round(value)} bps`;
+}
+
+/** 端口链路状态徽标类：up=绿、down=红、其余中性 */
+function netStatusClass(status: string | null | undefined): string {
+  if (status === "up") {
+    return "status-up";
+  }
+  if (status === "down") {
+    return "status-down";
+  }
+  return "status-unknown";
+}
+
+/** 本轮错误增量（in+out，缺省计 0） */
+function netErrDelta(errors: { in?: number | null; out?: number | null } | null | undefined): number {
+  return (errors?.in ?? 0) + (errors?.out ?? 0);
+}
+
+/** 本轮丢弃增量（in_discards+out_discards，缺省计 0） */
+function netDiscDelta(
+  errors: { in_discards?: number | null; out_discards?: number | null } | null | undefined
+): number {
+  return (errors?.in_discards ?? 0) + (errors?.out_discards ?? 0);
 }
 
 /** 运行时长：>1 天 "x天y小时"、>1 小时 "x小时y分"、其余 "x分钟" */
@@ -359,11 +390,32 @@ function formatUnit(unit: string): (value: number) => string {
           <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}</h4>
           <div class="agent-rows">
             <p v-if="!(raw.nets ?? []).length" class="agent-detail-empty">{{ t("common.no_data") }}</p>
-            <div v-for="(net, index) in raw.nets" v-else :key="index" class="agent-net-row">
-              <span class="agent-net-iface">{{ net.iface || "-" }}</span>
-              <span class="agent-net-rate">↓ {{ formatBps(net.rx_bps) }} · ↑ {{ formatBps(net.tx_bps) }}</span>
-              <span class="agent-net-errors">{{ t("agents.label_errors") }}: {{ net.errors ?? 0 }}</span>
-            </div>
+            <table v-else class="agent-nets-table">
+              <thead>
+                <tr>
+                  <th>{{ t("agents.nets_table.iface") }}</th>
+                  <th class="col-center">{{ t("agents.nets_table.status") }}</th>
+                  <th class="col-center">{{ t("agents.nets_table.speed") }}</th>
+                  <th class="col-center">↓ {{ t("agents.nets_table.rx") }}</th>
+                  <th class="col-center">↑ {{ t("agents.nets_table.tx") }}</th>
+                  <th class="col-center">{{ t("agents.nets_table.errors") }}</th>
+                  <th class="col-center">{{ t("agents.nets_table.discards") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(net, index) in raw.nets" :key="index">
+                  <td>{{ net.iface || "-" }}</td>
+                  <td class="col-center">
+                    <span class="status-badge" :class="netStatusClass(net.status)">{{ net.status || "-" }}</span>
+                  </td>
+                  <td class="col-center">{{ net.speed_mbps != null ? `${net.speed_mbps} Mbps` : "-" }}</td>
+                  <td class="col-center">{{ formatBps(net.rx_bps) }}</td>
+                  <td class="col-center">{{ formatBps(net.tx_bps) }}</td>
+                  <td class="col-center">{{ netErrDelta(net.errors) }}</td>
+                  <td class="col-center">{{ netDiscDelta(net.errors) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 

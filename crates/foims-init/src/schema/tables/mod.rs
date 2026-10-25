@@ -21,6 +21,7 @@ mod organizations;
 mod patch_panels;
 mod revoked_tokens;
 mod rooms;
+mod snmp_events;
 mod system;
 mod topology;
 mod triggers;
@@ -65,6 +66,9 @@ pub async fn create_all_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
 
     // 设备 SNMP 采集域：MAC 观测/LLDP 邻居（引用 devices）
     device_snmp::create(pool).await?;
+
+    // SNMP 观测事件（引用 devices）：轮询/同步路径产出的事实源表
+    snmp_events::create(pool).await?;
 
     // 设备网卡（引用 devices，先于 device_interfaces 创建）
     device_nics::create(pool).await?;

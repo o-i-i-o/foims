@@ -37,6 +37,8 @@ import DeviceModal from "../components/device/DeviceModal.vue";
 import UnifiedDevicePortsModal from "../components/device/UnifiedDevicePortsModal.vue";
 import ArpModal from "../components/device/ArpModal.vue";
 import LldpModal from "../components/device/LldpModal.vue";
+import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
+import LocateModal from "../components/device/LocateModal.vue";
 import CableLinkModal from "../components/cable/CableLinkModal.vue";
 import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
 import CablePrintArea from "../components/cable/CablePrintArea.vue";
@@ -209,6 +211,9 @@ const deviceModal = reactive<{ open: boolean; device: DeviceWithDetails | null }
 const portsModal = reactive({ open: false, deviceId: "", deviceName: "" });
 const arpModal = reactive({ open: false, deviceId: "" });
 const lldpModal = reactive({ open: false, deviceId: "" });
+// SNMP 事件（全局或按设备）与终端定位弹窗
+const eventsModal = reactive({ open: false, deviceId: "" });
+const locateModal = reactive({ open: false });
 // 线路弹窗：linkId 为 "" = 新增，非空 = 编辑（弹窗内取详情回填）
 const cableLinkModal = reactive({ open: false, linkId: "" });
 // 标签打印弹窗：items 取当前页列表数据（行内单行打印直接经 CablePrintArea）
@@ -942,9 +947,17 @@ function deviceLocationText(item: DeviceWithDetails): string {
               </th>
               <th>{{ t("common.description") }}</th>
               <th>
-                <button type="button" class="btn btn-primary btn-sm" @click="deviceModal.device = null; deviceModal.open = true">
-                  {{ t("device.add") }}
-                </button>
+                <div class="device-toolbar-actions">
+                  <button type="button" class="btn btn-secondary btn-sm" @click="eventsModal.deviceId = ''; eventsModal.open = true">
+                    {{ t("device.snmp_events.title") }}
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="locateModal.open = true">
+                    {{ t("device.locate.title") }}
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" @click="deviceModal.device = null; deviceModal.open = true">
+                    {{ t("device.add") }}
+                  </button>
+                </div>
               </th>
             </tr>
           </thead>
@@ -1002,6 +1015,15 @@ function deviceLocationText(item: DeviceWithDetails): string {
                     @click="lldpModal.deviceId = item.id; lldpModal.open = true"
                   >
                     <NavIcon name="listL" tall />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn btn-secondary"
+                    :data-tooltip="t('device.snmp_events.title')"
+                    :aria-label="t('device.snmp_events.title')"
+                    @click="eventsModal.deviceId = item.id; eventsModal.open = true"
+                  >
+                    <NavIcon name="zap" />
                   </button>
                   <button
                     type="button"
@@ -1212,6 +1234,15 @@ function deviceLocationText(item: DeviceWithDetails): string {
       v-if="lldpModal.open"
       :device-id="lldpModal.deviceId"
       @close="lldpModal.open = false"
+    />
+    <SnmpEventsModal
+      v-if="eventsModal.open"
+      :device-id="eventsModal.deviceId"
+      @close="eventsModal.open = false"
+    />
+    <LocateModal
+      v-if="locateModal.open"
+      @close="locateModal.open = false"
     />
     <!-- 线路编辑弹窗：保存后仅 emit("saved")，需在此关闭并失效列表 -->
     <CableLinkModal

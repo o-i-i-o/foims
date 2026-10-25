@@ -381,6 +381,7 @@ pub mod organization;
 pub mod patch_panel;
 pub mod position;
 pub mod room;
+pub mod snmp_event;
 pub mod user;
 pub mod workstation;
 
@@ -397,6 +398,7 @@ pub use organization::*;
 pub use patch_panel::*;
 pub use position::*;
 pub use room::*;
+pub use snmp_event::*;
 pub use user::*;
 pub use workstation::*;
 
