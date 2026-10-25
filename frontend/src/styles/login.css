@@ -1020,7 +1020,6 @@
     justify-content: flex-end;
   }
 
-  .login-modal-footer .login-btn-secondary,
   .login-modal-footer .login-btn-primary {
     height: 40px;
     padding: 0 20px;
@@ -1031,16 +1030,6 @@
     cursor: pointer;
     border: 1.5px solid transparent;
     transition: all var(--transition-normal);
-  }
-
-  .login-modal-footer .login-btn-secondary {
-    background: var(--color-bg-secondary);
-    border-color: var(--color-border-light);
-    color: var(--color-text-secondary);
-  }
-
-  .login-modal-footer .login-btn-secondary:hover {
-    background: var(--color-border-light);
   }
 
   .login-modal-footer .login-btn-primary {

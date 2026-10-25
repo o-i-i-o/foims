@@ -873,11 +873,6 @@
     color: var(--color-text-secondary);
     margin-bottom: 10px;
   }
-
-  .mac-lldp-text-syncing {
-    margin-top: 10px;
-    color: var(--color-text-secondary);
-  }
 }
 
 /* 顶层 responsive 层：组件级移动端覆盖，需与 responsive.css 同层并靠更高特异性胜出 */

@@ -321,10 +321,6 @@
     color: var(--color-text-muted);
   }
 
-  .agent-spark-box {
-    width: 100%;
-  }
-
   .agent-spark {
     display: block;
     width: 100%;

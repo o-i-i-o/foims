@@ -490,16 +490,14 @@
 
   /* ==================== 导入导出 / 数据管理 ==================== */
 
-  .data-management-container,
-  .database-management-container {
+  .data-management-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-lg);
     min-width: 0;
   }
 
-  .data-management-container .section,
-  .database-management-container .section {
+  .data-management-container .section {
     background: var(--color-bg);
     border-radius: var(--radius-lg);
     padding: var(--space-md);
@@ -509,13 +507,11 @@
   }
 
   /* 数据管理/日志管理卡片化后：子区块置于 config-card 灰底之上，改用白底保持层次 */
-  .config-card .data-management-container .section,
-  .config-card .database-management-container .section {
+  .config-card .data-management-container .section {
     background: var(--color-bg-white);
   }
 
-  .data-management-container .section h3,
-  .database-management-container .section h3 {
+  .data-management-container .section h3 {
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--color-text);
@@ -736,8 +732,7 @@
   }
 
   @media (width <= 768px) {
-    .data-management-container,
-    .database-management-container {
+    .data-management-container {
       grid-template-columns: 1fr;
     }
 

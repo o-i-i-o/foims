@@ -173,9 +173,4 @@
     flex: 1;
     min-width: 0;
   }
-
-  .nc-address-group .auto-assign-ip-btn {
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
 }

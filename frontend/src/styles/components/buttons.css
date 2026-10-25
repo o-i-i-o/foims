@@ -143,32 +143,6 @@
     pointer-events: none;
   }
 
-  /* 单体组合图标（24x32 视窗）：加大显示尺寸，字母区与图标区同时完整呈现 */
-  .icon-btn svg.combo-icon {
-    width: 18px;
-    height: 24px;
-  }
-
-  /* 图标左上角字母角标：白底 + 字母继承按钮语义色（与图标同色），
-   位置内移压住图标左上角；不可用 currentColor 做背景（会被自身 color 覆盖） */
-  .icon-btn .icon-badge {
-    position: absolute;
-    top: 1px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
-    border-radius: 4px;
-    background: var(--color-bg-white);
-    color: inherit;
-    font-size: 7px;
-    font-weight: 700;
-    font-family: inherit;
-    line-height: 8px;
-    text-align: center;
-    pointer-events: none;
-  }
-
   .icon-btn:focus-visible {
     outline: none;
     box-shadow: var(--control-shadow);
@@ -239,46 +213,5 @@
       font-size: 0.8rem;
       min-width: 60px;
     }
-  }
-
-  /* ==========================================
-   帮助中心按钮（卡片/弹窗标题旁 ? 图标，见 helpManager.js）
-   ========================================== */
-  .help-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .help-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .help-btn:hover {
-    color: var(--color-primary);
-  }
-
-  .help-btn:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
-  }
-
-  /* 弹窗深色标题栏内反白 */
-  .modal-header .help-btn {
-    color: rgb(255 255 255 / 65%);
-  }
-
-  .modal-header .help-btn:hover {
-    color: rgb(255 255 255 / 100%);
   }
 }

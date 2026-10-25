@@ -141,8 +141,6 @@
     transform: rotate(90deg);
   }
 
-  /* 页头内帮助按钮反白由 buttons.css 的 .modal-header .help-btn 提供 */
-
   /* ==================== 内容区（body 独立滚动，页头页脚常驻） ==================== */
   .modal-body {
     padding: 0.75rem;
