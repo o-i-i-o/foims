@@ -7,7 +7,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import { getFail2banStatus, banIp as requestBanIp, unbanIp as requestUnbanIp, updateFail2banConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
@@ -15,14 +15,7 @@ import NavIcon from "../NavIcon.vue";
 import type { AppFail2banStatus } from "../../types/api/generated/AppFail2banStatus";
 import type { BannedIpInfo } from "../../types/api/generated/BannedIpInfo";
 import type { TrackedIpInfo } from "../../types/api/generated/TrackedIpInfo";
-import type { BanIpRequest } from "../../types/api/generated/BanIpRequest";
-import type { UnbanIpRequest } from "../../types/api/generated/UnbanIpRequest";
 import type { UpdateFail2banConfigRequest } from "../../types/api/generated/UpdateFail2banConfigRequest";
-
-/** 封禁/解封响应载荷（后端 json! 动态构造，仅取提示文案） */
-interface BanActionResponse {
-  message?: string;
-}
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
@@ -34,7 +27,7 @@ const readonly = isSectionReadonly("system");
 const statusQuery = useQuery({
   queryKey: ["fail2ban-app"],
   queryFn: async () => {
-    const result = await apiGet<AppFail2banStatus>("/api/system/fail2ban/app/status");
+    const result = await getFail2banStatus();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -81,7 +74,7 @@ async function saveConfig(): Promise<void> {
       max_retry: Number.parseInt(maxRetry.value, 10),
       bantime: Number.parseInt(bantime.value, 10)
     };
-    const result = await apiPut("/api/system/fail2ban/app/config", payload);
+    const result = await updateFail2banConfig(payload);
     if (result.success) {
       showToast(t("security.config_saved"), "success");
       queryClient.invalidateQueries({ queryKey: ["fail2ban-app"] });
@@ -101,7 +94,7 @@ const manualIp = ref("");
 const unbanTarget = ref("");
 
 async function doUnban(ip: string): Promise<boolean> {
-  const result = await apiPost<BanActionResponse, UnbanIpRequest>("/api/system/fail2ban/app/unban", { ip });
+  const result = await requestUnbanIp(ip);
   if (result.success) {
     showToast(result.data?.message || t("security.unban_success"), "success");
     queryClient.invalidateQueries({ queryKey: ["fail2ban-app"] });
@@ -127,7 +120,7 @@ async function banIp(): Promise<void> {
     showToast(t("security.input_ip"), "warning");
     return;
   }
-  const result = await apiPost<BanActionResponse, BanIpRequest>("/api/system/fail2ban/app/ban", { ip });
+  const result = await requestBanIp(ip);
   if (result.success) {
     showToast(result.data?.message || t("security.ban_success"), "success");
     manualIp.value = "";

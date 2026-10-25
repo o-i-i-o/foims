@@ -8,27 +8,13 @@
 import { computed, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPost } from "../../api/client";
+import { getSystemServices, runServiceOp, type ServiceStatusItem } from "../../api/system";
 import { formatUptime } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
-
-/** 单个 systemd 服务状态（后端 /api/system/services 行，后端未生成 ts-rs 类型） */
-interface ServiceStatusItem {
-  name: string;
-  unit: string;
-  registered: boolean;
-  active: boolean;
-  active_state: string | null;
-  sub_state: string | null;
-  enabled: boolean;
-  status_text?: string | null;
-  reload_supported: boolean;
-  uptime_seconds?: number | null;
-}
 
 /** 服务操作类型（与后端路由段一致） */
 type ServiceOp = "start" | "stop" | "restart" | "reload" | "enable" | "disable";
@@ -40,7 +26,7 @@ const readonly = isSectionReadonly("system");
 const servicesQuery = useQuery({
   queryKey: ["system-services"],
   queryFn: async () => {
-    const result = await apiGet<ServiceStatusItem[]>("/api/system/services");
+    const result = await getSystemServices();
     if (!result.success) {
       throw new Error(result.message || t("services.load_failed"));
     }
@@ -117,7 +103,7 @@ async function runOp(service: string, op: ServiceOp): Promise<void> {
   }
   opInFlight.value = true;
   try {
-    const result = await apiPost(`/api/system/services/${encodeURIComponent(service)}/${encodeURIComponent(op)}`, {});
+    const result = await runServiceOp(service, op);
     if (!result.success) {
       showToast(result.message, "error");
       return;
@@ -152,7 +138,7 @@ function waitForServiceRecovery(service: string): void {
       showToast(t("services.restart_timeout"), "warning");
       return;
     }
-    apiGet<ServiceStatusItem[]>("/api/system/services")
+    getSystemServices()
       .then((result) => {
         const target =
           result.success && Array.isArray(result.data)

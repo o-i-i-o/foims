@@ -7,7 +7,8 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import { apiGet } from "../../api/client";
+import { createScheduledTask, updateScheduledTask } from "../../api/scheduledTasks";
 import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 import CronExamplesModal from "./CronExamplesModal.vue";
@@ -278,9 +279,9 @@ async function handleSubmit(): Promise<void> {
 
   submitInFlight.value = true;
   try {
-    const result = isEdit.value
-      ? await apiPut<ScheduledTask, ScheduledTaskCreate>(`/api/system/scheduled-tasks/${props.task?.id}`, data)
-      : await apiPost<ScheduledTask, ScheduledTaskCreate>("/api/system/scheduled-tasks", data);
+    const result = isEdit.value && props.task
+      ? await updateScheduledTask(props.task.id, data)
+      : await createScheduledTask(data);
     if (result.success) {
       showToast(isEdit.value ? t("scheduled_tasks.update_success") : t("scheduled_tasks.create_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });

@@ -8,7 +8,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../../api/client";
+import { getSystemConfig, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 
@@ -82,7 +82,7 @@ const PRIV_PROTOCOLS = ["des", "3des", "aes128", "aes192", "aes256"];
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<SnmpConfigPayload>("/api/system/config");
+    const result = await getSystemConfig<SnmpConfigPayload>();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -256,7 +256,7 @@ async function saveSnmpTrapConfig(): Promise<void> {
         }
       }
     };
-    const result = await apiPut("/api/system/config", payload);
+    const result = await updateSystemConfig(payload);
     if (result.success) {
       showToast(t("snmp_trap.save_success"), "success");
       showToast(t("system.config_saved_restart_needed"), "warning");

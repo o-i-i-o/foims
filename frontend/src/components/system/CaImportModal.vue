@@ -6,7 +6,7 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiPost } from "../../api/client";
+import { importCa } from "../../api/system";
 import { showToast } from "../../composables/useToast";
 import ModalShell from "../ModalShell.vue";
 
@@ -35,7 +35,7 @@ async function handleSubmit(): Promise<void> {
 
   saving.value = true;
   try {
-    const result = await apiPost("/api/system/certificate/ca/import", fd);
+    const result = await importCa(fd);
     if (result.success) {
       showToast(result.message, "success");
       queryClient.invalidateQueries({ queryKey: ["certificates"] });

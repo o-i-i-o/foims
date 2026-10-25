@@ -6,7 +6,15 @@
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPost } from "../../api/client";
+import {
+  backupSystemConfig,
+  downloadCsvExport,
+  downloadDatabaseExport,
+  downloadImportTemplate,
+  importCsvData,
+  restoreSystemConfig,
+  type ImportResultRow
+} from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import { downloadBlobResult } from "../../utils/download";
@@ -15,18 +23,6 @@ import ModalShell from "../ModalShell.vue";
 import AgentServiceCard from "./AgentServiceCard.vue";
 import SnmpTrapCard from "./SnmpTrapCard.vue";
 import LogsManagementCard from "./LogsManagementCard.vue";
-
-/** 单表导入结果（后端 json! 动态构造，未生成 ts-rs 类型） */
-interface ImportResultRow {
-  table?: string;
-  inserted?: number;
-  updated?: number;
-}
-
-/** CSV 导入响应载荷 */
-interface ImportCsvResponse {
-  results?: ImportResultRow[] | null;
-}
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
@@ -104,7 +100,7 @@ async function handleImportFile(event: Event): Promise<void> {
     formData.append("file", file);
     showToast(t("import_export.importing"), "info");
     // 导入 CSV 模块数据（ZIP 内多个 表名.csv，或按表头识别的单个 CSV）
-    const result = await apiPost<ImportCsvResponse>("/api/system/import-export/import/csv", formData);
+    const result = await importCsvData(formData);
     if (result.success) {
       importResults.value = result.data?.results ?? [];
       if (importResults.value.length > 0) {
@@ -120,7 +116,7 @@ async function handleImportFile(event: Event): Promise<void> {
 }
 
 async function downloadTemplate(): Promise<void> {
-  const result = await apiGet("/api/system/import-export/template?type=all");
+  const result = await downloadImportTemplate();
   if (!result.success) {
     showToast(`${t("import_export.download_template_failed")}: ${result.message}`, "error");
     return;
@@ -135,9 +131,7 @@ async function exportCsvData(): Promise<void> {
   exporting.value = true;
   try {
     // 按模块导出 CSV 数据（ZIP 打包，每张业务表一个 表名.csv）
-    const result = await apiGet(
-      `/api/system/import-export/export/csv?type=${encodeURIComponent(exportType.value)}`
-    );
+    const result = await downloadCsvExport(exportType.value);
     if (!result.success) {
       showToast(`${t("import_export.export_failed")}: ${result.message}`, "error");
       return;
@@ -152,7 +146,7 @@ async function exportCsvData(): Promise<void> {
 }
 
 async function exportDatabase(): Promise<void> {
-  const result = await apiGet("/api/system/import-export/export/database");
+  const result = await downloadDatabaseExport();
   if (!result.success) {
     showToast(`${t("import_export.export_db_failed")}: ${result.message}`, "error");
     return;
@@ -176,7 +170,7 @@ async function backupConfigFile(): Promise<void> {
   backingUp.value = true;
   try {
     // 端点以 application/json + attachment 下发，client 层已按附件归一为 Blob
-    const result = await apiGet("/api/system/config/backup");
+    const result = await backupSystemConfig();
     if (!result.success) {
       showToast(`${t("import_export.backup_failed")}: ${result.message}`, "error");
       return;
@@ -233,7 +227,7 @@ async function confirmRestoreConfig(): Promise<void> {
   restoring.value = true;
   try {
     // 后端以整体 Config 为载荷：字段校验与脱敏值还原均由服务端完成
-    const result = await apiPost("/api/system/config/restore", candidate.config);
+    const result = await restoreSystemConfig(candidate.config);
     if (!result.success) {
       showToast(`${t("import_export.restore_failed")}: ${result.message}`, "error");
       return;

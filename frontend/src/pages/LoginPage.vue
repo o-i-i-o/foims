@@ -9,19 +9,30 @@
  */
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPost, refreshToken } from "../api/client";
+import { refreshToken } from "../api/client";
+import {
+  SSO_LOGIN_URL,
+  fetchCaptcha,
+  getAuthMethods,
+  getCaStatus,
+  getInitStatus,
+  login,
+  loginWithEmail,
+  loginWithLdap,
+  loginWithTwoFactor,
+  probeSession,
+  retryLdapWithTwoFactor,
+  sendLoginCode,
+  type LoginBody,
+  type LoginPayload,
+  type LdapTwoFactorBody
+} from "../api/auth";
+import { CA_DOWNLOAD_URL } from "../api/system";
 import { hasSession, setUser, clearSession } from "../utils/session";
 import ForgotPasswordModal from "../components/ForgotPasswordModal.vue";
 import AppToast from "../components/AppToast.vue";
 import { i18n, changeLanguage } from "../i18n/index";
 import type { ApiResult } from "../types/api";
-import type { CaStatus } from "../types/api/generated/CaStatus";
-import type { EmailLoginRequest } from "../types/api/generated/EmailLoginRequest";
-import type { InitStatus } from "../types/api/generated/InitStatus";
-import type { LdapLoginRequest } from "../types/api/generated/LdapLoginRequest";
-import type { TwoFactorLoginRequest } from "../types/api/generated/TwoFactorLoginRequest";
-import type { User } from "../types/api/generated/User";
-import type { UserLogin } from "../types/api/generated/UserLogin";
 
 const { t } = useI18n();
 
@@ -92,26 +103,6 @@ type TempAuthData =
 
 let tempAuthData: TempAuthData | null = null;
 
-// 验证码字段仅在触发后携带（与旧版请求字节形态一致，其余场景不发 null 键）
-type LoginBody = Omit<UserLogin, "captcha_id" | "captcha_text"> & {
-  captcha_id?: string | null;
-  captcha_text?: string | null;
-};
-
-// LDAP 2FA 重试载荷：原登录字段 + 动态码 code
-type LdapTwoFactorBody = Omit<LdapLoginRequest, "captcha_id" | "captcha_text"> & {
-  captcha_id?: string | null;
-  captcha_text?: string | null;
-  code: string;
-};
-
-// 登录端点载荷：2FA 分支返回 requires_two_factor（邮箱分支附带 username），否则为用户信息
-interface LoginPayload {
-  requires_two_factor?: boolean;
-  user: User;
-  username?: string;
-}
-
 // 发送验证码倒计时
 const sendingCode = ref(false);
 const sendCodeCountdown = ref(0);
@@ -168,9 +159,7 @@ async function checkLoginStatus() {
     return;
   }
   try {
-    // 不走统一客户端：/api/auth/me 的 401 若触发客户端级"跳登录页"
-    // 会形成本页自我重载循环，登录页需静默回退到未登录展示
-    const response = await fetch("/api/auth/me", { credentials: "include" });
+    const response = await probeSession();
     if (response.ok) {
       window.location.href = "/main.html";
       return;
@@ -191,7 +180,7 @@ async function checkLoginStatus() {
 /** 初始化模式（config.toml [init].enabled）时跳转初始化向导 */
 async function checkInitMode() {
   try {
-    const result = await apiGet<InitStatus>("/api/auth/init-status");
+    const result = await getInitStatus();
     if (result.success && result.data?.init_enabled) {
       window.location.href = "/init_index.html";
       return true;
@@ -204,7 +193,7 @@ async function checkInitMode() {
 
 async function setupAuthMethods() {
   try {
-    const result = await apiGet<{ email?: boolean; ldap?: boolean; sso?: boolean }>("/api/auth/methods");
+    const result = await getAuthMethods();
     if (!result.success || !result.data) {
       return;
     }
@@ -218,7 +207,7 @@ async function setupAuthMethods() {
 
 async function setupCaDownload() {
   try {
-    const result = await apiGet<CaStatus>("/api/certificate/ca/info");
+    const result = await getCaStatus();
     if (result.success && result.data?.available) {
       caAvailable.value = true;
     }
@@ -281,7 +270,7 @@ async function handleSubmit() {
     await submitLdapLogin(user, pwd, remember);
   } else if (mode.value === LOGIN_MODES.SSO) {
     // SSO：跳转后端发起 OIDC 授权码流程
-    window.location.href = "/api/auth/sso/login";
+    window.location.href = SSO_LOGIN_URL;
   } else {
     const mail = email.value.trim();
     const code = emailCode.value.trim();
@@ -301,7 +290,7 @@ async function submitPasswordLogin(usernameValue: string, passwordValue: string,
       body.captcha_id = captchaState.password.id;
       body.captcha_text = captchaInput.password.trim();
     }
-    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login", body);
+    const result = await login(body);
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
@@ -325,8 +314,7 @@ async function submitPasswordLogin(usernameValue: string, passwordValue: string,
 async function submitEmailLogin(mail: string, code: string, remember: boolean) {
   submitting.value = true;
   try {
-    const result = await apiPost<LoginPayload, EmailLoginRequest>(
-      "/api/auth/login/email",
+    const result = await loginWithEmail(
       { email: mail, code, remember_me: remember }
     );
 
@@ -363,7 +351,7 @@ async function submitLdapLogin(usernameValue: string, passwordValue: string, rem
       body.captcha_id = captchaState.ldap.id;
       body.captcha_text = captchaInput.ldap.trim();
     }
-    const result = await apiPost<LoginPayload, LoginBody>("/api/auth/login/ldap", body);
+    const result = await loginWithLdap(body);
 
     if (result.success) {
       if (result.data?.requires_two_factor) {
@@ -424,17 +412,14 @@ async function handleTwoFactorSubmit() {
         body.captcha_id = tempAuthData.captcha.captchaId;
         body.captcha_text = tempAuthData.captcha.captchaText;
       }
-      result = await apiPost<LoginPayload, LdapTwoFactorBody>("/api/auth/login/ldap", body);
+      result = await retryLdapWithTwoFactor(body);
     } else {
-      result = await apiPost<LoginPayload, TwoFactorLoginRequest>(
-        "/api/auth/login/two-factor",
-        {
-          username: tempAuthData.username,
-          password: tempAuthData.password || "",
-          two_factor_code: code,
-          remember_me: tempAuthData.remember
-        }
-      );
+      result = await loginWithTwoFactor({
+        username: tempAuthData.username,
+        password: tempAuthData.password || "",
+        two_factor_code: code,
+        remember_me: tempAuthData.remember
+      });
     }
 
     if (result.success) {
@@ -516,7 +501,7 @@ function formatErrorMessage(message: string): string {
 /** 拉取新验证码图片（点击图片可刷新） */
 async function refreshCaptcha(form: CaptchaForm) {
   try {
-    const result = await apiGet<{ captcha_id: string; svg: string }>("/api/auth/captcha");
+    const result = await fetchCaptcha();
     if (result.success && result.data) {
       // 先经 DOMParser 校验确为 svg 再注入，非 SVG 内容不进入 DOM
       const doc = new DOMParser().parseFromString(result.data.svg || "", "image/svg+xml");
@@ -564,7 +549,7 @@ async function handleSendLoginCode() {
   clearError();
 
   try {
-    const result = await apiPost("/api/auth/login/send-code", { email: mail });
+    const result = await sendLoginCode(mail);
 
     if (result.success) {
       startCountdown(60);
@@ -1467,7 +1452,7 @@ onUnmounted(() => {
           <!-- 站点根证书下载入口：CA 证书是公开数据，登录前即可下载；
                无 CA 时整体隐藏 -->
           <div v-if="caAvailable" class="ca-download-entry">
-            <a href="/api/certificate/ca/download" class="ca-download-link" download>
+            <a :href="CA_DOWNLOAD_URL" class="ca-download-link" download>
               {{ t("login.ca_download") }}
             </a>
           </div>

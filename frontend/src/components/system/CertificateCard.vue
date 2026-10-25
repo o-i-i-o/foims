@@ -7,7 +7,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPost } from "../../api/client";
+import { CA_DOWNLOAD_URL, applyCertificate, deleteCertificate, getCertificateInventory } from "../../api/system";
 import { formatDate } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
@@ -18,7 +18,6 @@ import CertGenerateModal from "./CertGenerateModal.vue";
 import CertImportModal from "./CertImportModal.vue";
 import type { CaInfo } from "../../types/api/generated/CaInfo";
 import type { CertFileInfo } from "../../types/api/generated/CertFileInfo";
-import type { CertificateInventory } from "../../types/api/generated/CertificateInventory";
 
 /** 证书清单行：文件信息 + 证书类型（自生成 / 导入） */
 type CertRow = CertFileInfo & { kind: "generated" | "imported" };
@@ -33,7 +32,7 @@ const readonly = isSectionReadonly("system");
 const certsQuery = useQuery({
   queryKey: ["certificates"],
   queryFn: async () => {
-    const result = await apiGet<CertificateInventory>("/api/system/certificate/list");
+    const result = await getCertificateInventory();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -103,8 +102,10 @@ async function onActionConfirmed(): Promise<void> {
   if (!action) {
     return;
   }
-  const path = `/api/system/certificate/${action.item.kind}/${encodeURIComponent(action.item.file_stem)}`;
-  const result = action.type === "apply" ? await apiPost(`${path}/apply`) : await apiDelete(path);
+  const result =
+    action.type === "apply"
+      ? await applyCertificate(action.item.kind, action.item.file_stem)
+      : await deleteCertificate(action.item.kind, action.item.file_stem);
   if (result.success) {
     showToast(result.message, "success");
     if (action.type === "delete") {
@@ -129,7 +130,7 @@ function onCaGenerateConfirmed(): void {
 
 // CA 下载：CA 证书为公开数据，直接浏览器新窗口下载 PEM
 function downloadCa(): void {
-  window.open("/api/certificate/ca/download", "_blank");
+  window.open(CA_DOWNLOAD_URL, "_blank");
 }
 </script>
 

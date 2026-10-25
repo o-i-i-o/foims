@@ -7,7 +7,13 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPost } from "../../api/client";
+import {
+  deleteScheduledTask,
+  getScheduledTask,
+  listScheduledTasks,
+  runScheduledTask,
+  toggleScheduledTask
+} from "../../api/scheduledTasks";
 import { formatDateTime } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
@@ -17,11 +23,6 @@ import NavIcon from "../NavIcon.vue";
 import ScheduledTaskModal from "./ScheduledTaskModal.vue";
 import TaskLogsModal from "./TaskLogsModal.vue";
 import type { ScheduledTask } from "../../types/api/generated/ScheduledTask";
-
-/** 任务立即执行响应载荷（后端 json! 动态构造，未生成 ts-rs 类型） */
-interface TaskRunResponse {
-  result?: { ok?: string; err?: string } | null;
-}
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
@@ -49,7 +50,7 @@ const sortList: SortableTable = {
 const tasksQuery = useQuery({
   queryKey: computed(() => ["scheduled-tasks", { sortBy: sort.by, sortOrder: sort.order }]),
   queryFn: async () => {
-    const result = await apiGet<ScheduledTask[]>(`/api/system/scheduled-tasks?sort_by=${sort.by}&sort_order=${sort.order}`);
+    const result = await listScheduledTasks(sort.by, sort.order);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -105,7 +106,7 @@ async function doRun(task: ScheduledTask): Promise<void> {
   }
   runningId.value = task.id;
   try {
-    const result = await apiPost<TaskRunResponse>(`/api/system/scheduled-tasks/${task.id}/run`);
+    const result = await runScheduledTask(task.id);
     if (result.success) {
       const runResult = result.data?.result;
       if (runResult?.ok) {
@@ -131,7 +132,7 @@ async function doToggle(task: ScheduledTask): Promise<void> {
   }
   togglingId.value = task.id;
   try {
-    const result = await apiPost(`/api/system/scheduled-tasks/${task.id}/toggle`);
+    const result = await toggleScheduledTask(task.id);
     if (result.success) {
       showToast(t("scheduled_tasks.toggle_success"), "success");
       refetch();
@@ -149,7 +150,7 @@ async function doDelete(task: ScheduledTask): Promise<void> {
   }
   deletingId.value = task.id;
   try {
-    const result = await apiDelete(`/api/system/scheduled-tasks/${task.id}`);
+    const result = await deleteScheduledTask(task.id);
     if (result.success) {
       showToast(t("scheduled_tasks.delete_success"), "success");
       refetch();
@@ -170,7 +171,7 @@ const showLogsModal = ref(false);
 
 async function openEdit(task: ScheduledTask): Promise<void> {
   // 列表行数据不含完整 config 明细，编辑前拉取详情回填
-  const result = await apiGet<ScheduledTask>(`/api/system/scheduled-tasks/${task.id}`);
+  const result = await getScheduledTask(task.id);
   if (!result.success) {
     showToast(`${t("common.load_failed")}: ${result.message || ""}`, "error");
     return;

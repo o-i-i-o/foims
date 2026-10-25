@@ -5,9 +5,8 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client";
+import { getScheduledTaskLogs } from "../../api/scheduledTasks";
 import { formatDateTime } from "../../utils/formatter";
-import type { Paged } from "../../types/api";
 import type { TaskLog } from "../../types/api/generated/TaskLog";
 import ModalShell from "../ModalShell.vue";
 
@@ -22,9 +21,7 @@ const { t } = useI18n();
 const logsQuery = useQuery({
   queryKey: ["task-logs", props.taskName],
   queryFn: async () => {
-    const result = await apiGet<Paged<TaskLog>>(
-      `/api/system/scheduled-tasks/logs?task_name=${encodeURIComponent(props.taskName)}&page=1&page_size=50`
-    );
+    const result = await getScheduledTaskLogs(props.taskName);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }

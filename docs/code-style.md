@@ -169,7 +169,7 @@ frontend/
     ├── components/        通用组件 + 按域分组组件（<域>/<名称>Modal.vue 等）
     ├── composables/       组合式函数（useToast/usePagedList/useSubTabs/useModalStack…）
     ├── api/client.ts      API 客户端（契约见 3.3，全站唯一请求出口）
-    ├── api/<域>.ts        域级传输层（logs/visualization…：路径 + 载荷类型集中于此）
+    ├── api/<域>.ts        域级传输层（logs/visualization/system/users/auth…：路径 + 载荷类型集中于此）
     ├── types/api/         载荷类型（generated/ 为 ts-rs 只读产物，contracts.ts 手写契约）
     ├── i18n/              vue-i18n 实例 + 双语词条 locales/{zh,en}.json
     ├── stores/            pinia store（auth）
@@ -233,9 +233,14 @@ frontend/
   Content-Type 优先于 JSON 解析（配置备份等端点以 `application/json` +
   `attachment` 下发）。
 - 域级封装：同一后端子域的 URL 与载荷类型收进 `api/<域>.ts`（参照
-  `api/logs.ts`、`api/visualization.ts`），页面与组件不再拼 `/api/...` 字面量。
+  `api/logs.ts`、`api/system.ts`、`api/auth.ts`、`api/visualization.ts`），页面与
+  组件不再拼 `/api/...` 字面量。
   该模块只做「组装 URL / 请求体 → 返回 `ApiResult`」，不做 toast、不做 i18n；
   存量页面按域渐进迁移，新增与改动代码必须走域模块。
+- 域模块导出名与被调方局部函数重名时，用 `import { x as y } from "../../api/<域>"`
+  别名导入（如 `testSmtpConnection as requestSmtpTest`），不改组件对外暴露的函数名。
+- 按段读写的配置端点（`/api/system/config`）用 `getSystemConfig<T>()` /
+  `updateSystemConfig(payload)` 泛型承载：各卡片只声明自己消费的段类型，不复制整份配置契约。
 
 ### 3.4 i18n
 

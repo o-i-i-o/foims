@@ -7,25 +7,20 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import {
+  getNotificationSettings,
+  getSmtpConfig,
+  testSmtpConnection as requestSmtpTest,
+  updateNotificationSettings,
+  updateSmtpConfig
+} from "../../api/system";
+import { listUsersForPicker } from "../../api/users";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
-import type { Paged } from "../../types/api";
 import type { UpdateSmtpConfigRequest } from "../../types/api/generated/UpdateSmtpConfigRequest";
 import type { NotificationSettings } from "../../types/api/generated/NotificationSettings";
 import type { NotificationMethods } from "../../types/api/generated/NotificationMethods";
 import type { User } from "../../types/api/generated/User";
-
-/** SMTP 配置响应（后端未生成 ts-rs 类型，未配置属正常业务态） */
-interface SmtpConfigResponse {
-  configured?: boolean;
-  host?: string | null;
-  port?: number | null;
-  username?: string | null;
-  from?: string | null;
-  secure?: boolean;
-  has_password?: boolean;
-}
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
@@ -48,7 +43,7 @@ const smtpHasPassword = ref(false);
 const smtpQuery = useQuery({
   queryKey: ["smtp-config"],
   queryFn: async () => {
-    const result = await apiGet<SmtpConfigResponse>("/api/system/smtp/config");
+    const result = await getSmtpConfig();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -99,7 +94,7 @@ async function saveSmtpConfig(): Promise<void> {
       from: smtpFrom.value,
       secure: secureType.value !== "none"
     };
-    const result = await apiPut("/api/system/smtp/config", payload);
+    const result = await updateSmtpConfig(payload);
     if (result.success) {
       showToast(t("smtp.save_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["smtp-config"] });
@@ -119,7 +114,7 @@ async function testSmtpConnection(): Promise<void> {
   }
   testingSmtp.value = true;
   try {
-    const result = await apiPost("/api/system/smtp/test", {});
+    const result = await requestSmtpTest();
     if (result.success) {
       showToast(t("smtp.test_success"), "success");
     } else {
@@ -139,8 +134,7 @@ const selectedIds = ref<Set<string>>(new Set());
 const usersQuery = useQuery({
   queryKey: ["notification-users"],
   queryFn: async () => {
-    // page_size=1000（后端上限）：默认 20/页会漏掉第 21 个及之后的可选收件人
-    const result = await apiGet<Paged<User>>("/api/users?page_size=1000");
+    const result = await listUsersForPicker();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -160,7 +154,7 @@ const notifyUsers = computed<User[]>(() => {
 const settingsQuery = useQuery({
   queryKey: ["notification-settings"],
   queryFn: async () => {
-    const result = await apiGet<NotificationSettings>("/api/system/notification/settings");
+    const result = await getNotificationSettings();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -210,7 +204,7 @@ async function saveNotificationSettings(): Promise<void> {
         agent_alert: agentAlert.value
       }
     };
-    const result = await apiPut("/api/system/notification/settings", payload);
+    const result = await updateNotificationSettings(payload);
     if (result.success) {
       showToast(t("notification.save_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["notification-settings"] });

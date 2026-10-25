@@ -8,13 +8,12 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import { downloadAgentConfigPackage, getEnrollmentToken, regenerateEnrollmentToken } from "../../api/agents";
+import { getSystemConfig, getSystemInfo, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 import { downloadBlobResult } from "../../utils/download";
-import type { EnrollmentTokenResponse } from "../../types/api/generated/EnrollmentTokenResponse";
-import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 
 /** agent 段配置（GET /api/system/config 的 agent 段，后端未生成 ts-rs 类型） */
 interface AgentConfigSection {
@@ -61,7 +60,7 @@ const agentReportOverride = ref("");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<AgentConfigPayload>("/api/system/config");
+    const result = await getSystemConfig<AgentConfigPayload>();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -134,7 +133,7 @@ async function saveAgentConfig(): Promise<void> {
       use_public_url: agentUsePublicUrl.value,
       report_url_override: reportOverride
     };
-    const result = await apiPut<AgentConfigPayload, { agent: AgentConfigSection }>("/api/system/config", { agent });
+    const result = await updateSystemConfig({ agent });
     if (result.success) {
       showToast(t("agent_service.save_success"), "success");
       // 接收器随服务启动，监听地址/开关保存后需重启生效
@@ -169,7 +168,7 @@ function onOsChange(): void {
 const tokenQuery = useQuery({
   queryKey: ["enrollment-token"],
   queryFn: async () => {
-    const result = await apiGet<EnrollmentTokenResponse>("/api/agents/enrollment-token");
+    const result = await getEnrollmentToken();
     if (!result.success) {
       throw new Error(result.message || t("system.agent_token_load_failed"));
     }
@@ -184,7 +183,7 @@ const enrollmentToken = computed(() => tokenQuery.data.value?.enrollment_token |
 const infoQuery = useQuery({
   queryKey: ["system-info"],
   queryFn: async () => {
-    const result = await apiGet<SystemInfo>("/api/system/info");
+    const result = await getSystemInfo();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -202,7 +201,7 @@ async function downloadConfigPackage(): Promise<void> {
   distDownloading.value = true;
   try {
     const format = distFormat.value;
-    const result = await apiGet(`/api/agents/config-package?format=${encodeURIComponent(format)}`);
+    const result = await downloadAgentConfigPackage(format);
     if (!result.success) {
       showToast(`${t("system.agent_config_download_failed")}: ${result.message || ""}`, "error");
       return;
@@ -225,7 +224,7 @@ async function regenerateToken(): Promise<void> {
   }
   regenerating.value = true;
   try {
-    const result = await apiPost<EnrollmentTokenResponse>("/api/agents/enrollment-token", {});
+    const result = await regenerateEnrollmentToken();
     if (result.success && result.data?.enrollment_token) {
       showToast(t("system.agent_token_regenerated"), "success");
       queryClient.invalidateQueries({ queryKey: ["enrollment-token"] });

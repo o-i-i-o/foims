@@ -6,7 +6,7 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiPost } from "../../api/client";
+import { generateCa } from "../../api/system";
 import { showToast } from "../../composables/useToast";
 import type { GenerateCaRequest } from "../../types/api/generated/GenerateCaRequest";
 import CertSubjectFields from "./CertSubjectFields.vue";
@@ -59,7 +59,7 @@ async function handleSubmit(): Promise<void> {
   };
   saving.value = true;
   try {
-    const result = await apiPost("/api/system/certificate/ca/generate", body);
+    const result = await generateCa(body);
     if (result.success) {
       showToast(result.message, "success");
       queryClient.invalidateQueries({ queryKey: ["certificates"] });

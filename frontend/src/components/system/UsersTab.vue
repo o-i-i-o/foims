@@ -7,7 +7,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiDelete } from "../../api/client";
+import { deleteUser, usersUrl } from "../../api/users";
 import { formatDateTime } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
@@ -29,8 +29,7 @@ const list = usePagedList<User>({
   tag: "users",
   defaultPageSize: 20,
   enabled: computed(() => props.active),
-  buildUrl: (page, pageSize, sortBy, sortOrder) =>
-    `/api/users?page=${page}&page_size=${pageSize}&sort_by=${sortBy}&sort_order=${sortOrder}`
+  buildUrl: (page, pageSize, sortBy, sortOrder) => usersUrl(page, pageSize, sortBy, sortOrder)
 });
 
 // 角色显示（三权分立 + 超管）
@@ -82,7 +81,7 @@ async function doDelete(id: string): Promise<void> {
   }
   deleting.value = true;
   try {
-    const result = await apiDelete(`/api/users/${id}`);
+    const result = await deleteUser(id);
     if (result.success) {
       showToast(t("user.delete_user") + t("common.success"), "success");
     } else {

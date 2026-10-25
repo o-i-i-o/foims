@@ -8,14 +8,21 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import {
+  getLdapConfig,
+  getSsoConfig,
+  getSystemConfig,
+  testLdapConnection as requestLdapTest,
+  testSsoConnection as requestSsoTest,
+  updateLdapConfig,
+  updateSsoConfig,
+  updateSystemConfig
+} from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import CertificateCard from "./CertificateCard.vue";
 import ServicesCard from "./ServicesCard.vue";
-import type { LdapConfigResponse } from "../../types/api/generated/LdapConfigResponse";
 import type { UpdateLdapConfigRequest } from "../../types/api/generated/UpdateLdapConfigRequest";
-import type { SsoConfigResponse } from "../../types/api/generated/SsoConfigResponse";
 import type { UpdateSsoConfigRequest } from "../../types/api/generated/UpdateSsoConfigRequest";
 
 /** server 段配置（GET /api/system/config 的 server 段，后端未生成 ts-rs 类型；其余字段原样带回） */
@@ -49,7 +56,7 @@ const publicUrl = ref("");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<ServerConfigPayload>("/api/system/config");
+    const result = await getSystemConfig<ServerConfigPayload>();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -83,7 +90,7 @@ async function saveSystemConfig(): Promise<void> {
       page_timeout: Number.parseInt(pageTimeout.value, 10) || 30,
       public_url: publicUrl.value || ""
     };
-    const result = await apiPut("/api/system/config", { server });
+    const result = await updateSystemConfig({ server });
     if (result.success) {
       showToast(t("system.config_save_success"), "success");
       // 部分配置需重启生效：保存即提示（旧版 sessionStorage 标记机制简化为立即提示）
@@ -111,7 +118,7 @@ const ldapHasPassword = ref(false);
 const ldapQuery = useQuery({
   queryKey: ["ldap-config"],
   queryFn: async () => {
-    const result = await apiGet<LdapConfigResponse>("/api/system/ldap/config");
+    const result = await getLdapConfig();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -155,7 +162,7 @@ async function saveLdapConfig(): Promise<void> {
       user_filter: ldapUserFilter.value,
       default_role: ldapDefaultRole.value || "user"
     };
-    const result = await apiPut("/api/system/ldap/config", config);
+    const result = await updateLdapConfig(config);
     if (result.success) {
       showToast(t("ldap.save_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["ldap-config"] });
@@ -175,7 +182,7 @@ async function testLdapConnection(): Promise<void> {
   }
   testingLdap.value = true;
   try {
-    const result = await apiPost("/api/system/ldap/test", {});
+    const result = await requestLdapTest();
     if (result.success) {
       showToast(t("ldap.test_success"), "success");
     } else {
@@ -199,7 +206,7 @@ const ssoHasSecret = ref(false);
 const ssoQuery = useQuery({
   queryKey: ["sso-config"],
   queryFn: async () => {
-    const result = await apiGet<SsoConfigResponse>("/api/system/sso/config");
+    const result = await getSsoConfig();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -240,7 +247,7 @@ async function saveSsoConfig(): Promise<void> {
       redirect_uri: ssoRedirectUri.value || "",
       default_role: ssoDefaultRole.value || "user"
     };
-    const result = await apiPut("/api/system/sso/config", config);
+    const result = await updateSsoConfig(config);
     if (result.success) {
       showToast(t("sso.save_success"), "success");
       queryClient.invalidateQueries({ queryKey: ["sso-config"] });
@@ -260,7 +267,7 @@ async function testSsoConnection(): Promise<void> {
   }
   testingSso.value = true;
   try {
-    const result = await apiPost("/api/system/sso/test", {});
+    const result = await requestSsoTest();
     if (result.success) {
       showToast(t("sso.test_success"), "success");
     } else {

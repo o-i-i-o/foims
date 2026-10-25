@@ -434,3 +434,14 @@ v0.19.0
 6. 文档：docs/code-style.md §3.1/§3.2/§3.3/§3.4/§3.7/§4 同步（api/<域>.ts 目录位、usePagedList 四参签名与 SortableTable、域级封装与渐进迁移、aria-label 必须走 i18n、手写契约落点与禁同名重复定义）
 7. 联动：仅前端修改，frontend/package.json 0.1.2→0.1.3（y+1 对应 c+1）并同步 package-lock.json；根 Cargo.toml 不动；无数据库结构变更
 8. 验证：npm run typecheck 0 错；npm run build 通过（入口与各页面 chunk 体积不变，无 chunk>500kB 告警）；npm run selfcheck:viz 全过；npx oxlint frontend/src 290 文件 0 warning 0 error。注意：本轮发现审计命令缺口——根仓未安装 @biomejs/biome，`npx biome` 解析到同名旧包 biome@0.3.3（无 check 子命令，静默 exit 0），故此前「biome 0 诊断」结论不可信；本轮未改 CSS，需在补齐 @biomejs/biome devDependency 后重跑全量样式审计
+
+v0.19.1
+2026102511373301
+1. system 域迁移（z，续做域级传输层）：新增 api/system.ts（按段读写的 getSystemConfig<T>/updateSystemConfig + 配置备份恢复 + ldap/sso/password-policy/smtp/notification-settings/fail2ban/证书库存与 CA·证书生成导入应用删除/services/导入导出/系统信息），SystemConfigTab、SecurityTab、SnmpTrapCard、NotificationTab、Fail2banCard、ServicesCard、SystemInfoTab、CertificateCard、CaGenerateModal、CaImportModal、CertGenerateModal、CertImportModal、DataManagementTab、AgentServiceCard 共 17 个文件约 68 处 /api/ 字面量归零；SmtpConfigResponse/ServiceStatusItem/ImportResultRow/ImportCsvResponse/BanActionResponse 五个手写载荷类型上移为模块导出，组件内重复定义删除
+2. 新增 api/users.ts（与 usePagedList buildUrl 同签名的四参 usersUrl、收件人候选 page_size=1000、用户 CRUD、2FA init/enable/disable）与 api/scheduledTasks.ts（列表/详情/增改/启停/立即执行/执行日志）、api/agents.ts（注册令牌查看与重生成、配置包下载）：UsersTab、UserModal、ScheduledTasksTab、ScheduledTaskModal、TaskLogsModal、AgentServiceCard 的 URL 归零，TaskRunResponse/UserFormPayload/TwoFactorInitData 上移；ScheduledTaskModal 的 /api/resources/devices 与 /api/resources/networks 属 resources 域，留待该域迁移
+3. 认证域 api/auth.ts：LoginPage 的 11 处认证 URL 收口（登录页专用的 /api/auth/me 裸 fetch 探测保留原语义并封装为 probeSession，注释说明为何不走统一客户端；SSO 发起与站点 CA 状态/下载一并归位），LoginBody/LdapTwoFactorBody/LoginPayload/AuthMethods/CaptchaResponse 类型上移；模板 CA 下载链接改绑 CA_DOWNLOAD_URL
+4. 同名符号冲突：域模块导出名与组件局部函数重名（testLdapConnection/testSsoConnection/testSmtpConnection/initTwoFactor/banIp/unbanIp）时统一 as 别名导入，不改组件对外函数名；api/system.ts 整库导出改名 downloadDatabaseExport 避免与 DataManagementTab 局部 exportDatabase 冲突
+5. 存量收敛进度：非 api 模块的 /api/ 字面量 247 处/56 文件 → 142 处/35 文件；logs、system、auth 三个域在页面与组件侧已无字面量
+6. 文档：docs/code-style.md §3.1/§3.3 同步（域模块清单、同名符号 as 别名导入、按段配置的泛型读写）
+7. 未做（下一轮）：LoginPage 吉祥物动画内核（597-1021 行，约 425 行命令式 DOM + 定时器）外提为 composables/useLoginMascot.ts 需像素级行为等价与浏览器冒烟，本轮只做认证端点收敛
+8. 验证：npm run typecheck 0 错；npm run build 通过（main 78.38 kB、client 372.34 kB、SystemPage 119.05 kB，无 chunk>500kB）；npm run selfcheck:viz 全过；npx oxlint frontend/src 295 文件 0 warning 0 error；biome 仍不可用（根仓未装 @biomejs/biome，本轮未改 CSS）；仅前端修改，package.json 保持 0.1.3（z 段不联动版本），根 Cargo.toml 不动，无数据库结构变更

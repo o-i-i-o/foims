@@ -7,7 +7,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { apiPost } from "../../api/client";
+import { generateCertificate } from "../../api/system";
 import { showToast } from "../../composables/useToast";
 import type { CaInfo } from "../../types/api/generated/CaInfo";
 import type { GenerateCertRequest } from "../../types/api/generated/GenerateCertRequest";
@@ -100,7 +100,7 @@ async function handleSubmit(): Promise<void> {
   };
   saving.value = true;
   try {
-    const result = await apiPost("/api/system/certificate/generate", body);
+    const result = await generateCertificate(body);
     if (result.success) {
       showToast(result.message, "success");
       queryClient.invalidateQueries({ queryKey: ["certificates"] });

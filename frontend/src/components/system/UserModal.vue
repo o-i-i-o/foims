@@ -8,28 +8,19 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiGet, apiPost, apiPut } from "../../api/client";
+import {
+  createUser,
+  disableTwoFactor,
+  enableTwoFactor,
+  getUser,
+  initTwoFactor as requestTwoFactorInit,
+  updateUser,
+  type UserFormPayload
+} from "../../api/users";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
 import ModalShell from "../ModalShell.vue";
 import type { User } from "../../types/api/generated/User";
-
-/** 表单提交载荷（新增/编辑共用；编辑时 username 后端忽略——用户名不可改，
- * 表单置只读仍随载荷提交；password 走管理员重置语义：置空沿用原密码） */
-interface UserFormPayload {
-  username: string;
-  email: string;
-  role: string;
-  enabled: boolean;
-  password_expiry_days: number;
-  password?: string;
-}
-
-/** 2FA 初始化响应载荷（后端 json! 动态构造，未生成 ts-rs 类型） */
-interface TwoFactorInitData {
-  qr_code_base64?: string;
-  secret?: string;
-}
 
 const props = withDefaults(defineProps<{ user?: User | null }>(), { user: null });
 
@@ -58,7 +49,11 @@ let twoFactorTargetEnabled = false;
 const detailQuery = useQuery({
   queryKey: computed(() => ["users-detail", userId.value]),
   queryFn: async () => {
-    const result = await apiGet<User>(`/api/users/${userId.value}`);
+    const id = userId.value;
+    if (!id) {
+      throw new Error(t("common.load_failed"));
+    }
+    const result = await getUser(id);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -98,7 +93,7 @@ const disableError = ref("");
 
 async function initTwoFactor(targetId: string): Promise<void> {
   enableError.value = "";
-  const result = await apiPost<TwoFactorInitData>("/api/two-factor/init", { user_id: targetId });
+  const result = await requestTwoFactorInit(targetId);
   if (result.success) {
     qrCode.value = result.data?.qr_code_base64
       ? `data:image/png;base64,${result.data.qr_code_base64}`
@@ -150,10 +145,7 @@ async function handleEnable(): Promise<void> {
   }
   enabling.value = true;
   try {
-    const result = await apiPost("/api/two-factor/enable", {
-      code: enableCode.value,
-      user_id: userId.value
-    });
+    const result = await enableTwoFactor(userId.value, enableCode.value);
     if (result.success) {
       showToast(t("two_factor.enable_success"), "success");
       twoFactorTargetEnabled = true;
@@ -191,10 +183,7 @@ async function confirmDisable(): Promise<void> {
   }
   disabling.value = true;
   try {
-    const result = await apiPost("/api/two-factor/disable", {
-      code: disableCode.value,
-      user_id: userId.value
-    });
+    const result = await disableTwoFactor(userId.value, disableCode.value);
     if (result.success) {
       showToast(t("two_factor.disable_success"), "success");
       twoFactorTargetEnabled = false;
@@ -245,9 +234,10 @@ async function handleSave(): Promise<void> {
 
   saving.value = true;
   try {
-    const result = isEdit.value
-      ? await apiPut(`/api/users/${userId.value}`, userData)
-      : await apiPost("/api/users", userData);
+    const id = userId.value;
+    const result = isEdit.value && id
+      ? await updateUser(id, userData)
+      : await createUser(userData);
     if (result.success) {
       showToast(isEdit.value ? t("user.update_success") : t("user.add_success"), "success");
       emit("saved");

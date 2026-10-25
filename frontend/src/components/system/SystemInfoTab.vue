@@ -8,7 +8,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client";
+import { getSystemInfo } from "../../api/system";
 import { formatDateTime, formatUptime } from "../../utils/formatter";
 import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 import OpenSourceModal from "./OpenSourceModal.vue";
@@ -26,7 +26,7 @@ const { t } = useI18n();
 const infoQuery = useQuery({
   queryKey: ["system-info"],
   queryFn: async () => {
-    const result = await apiGet<SystemInfo>("/api/system/info");
+    const result = await getSystemInfo();
     if (!result.success) {
       // apiClient 已将失败归一为 { success:false } 不抛异常，
       // 此处显式抛出让查询进入 error 态

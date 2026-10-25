@@ -6,7 +6,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet, apiPut } from "../../api/client";
+import { getPasswordPolicy, getSystemConfig, updatePasswordPolicy, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import Fail2banCard from "./Fail2banCard.vue";
@@ -39,7 +39,7 @@ const readonly = isSectionReadonly("system");
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
-    const result = await apiGet<RateLimitConfigPayload>("/api/system/config");
+    const result = await getSystemConfig<RateLimitConfigPayload>();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -93,7 +93,7 @@ async function saveRateLimitConfig(): Promise<void> {
         email_window_secs: Number.parseInt(rateEmailWindow.value, 10) || 3600
       }
     };
-    const result = await apiPut("/api/system/config", payload);
+    const result = await updateSystemConfig(payload);
     if (result.success) {
       showToast(t("config.rate_limit_saved"), "success");
     } else {
@@ -109,7 +109,7 @@ async function saveRateLimitConfig(): Promise<void> {
 const policyQuery = useQuery({
   queryKey: ["password-policy"],
   queryFn: async () => {
-    const result = await apiGet<PasswordPolicy>("/api/system/password-policy");
+    const result = await getPasswordPolicy();
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -156,7 +156,7 @@ async function savePasswordPolicy(): Promise<void> {
       require_digit: requireDigit.value,
       require_special: requireSpecial.value
     };
-    const result = await apiPut("/api/system/password-policy", payload);
+    const result = await updatePasswordPolicy(payload);
     // 成功失败均使用后端返回的 message 提示
     showToast(result.message, result.success ? "success" : "error");
   } finally {
