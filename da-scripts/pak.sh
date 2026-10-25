@@ -28,8 +28,9 @@ sudo find /usr/share/foims/web -type d -exec chmod 755 {} +
 sudo find /usr/share/foims/web -type f -exec chmod 644 {} +
 
 echo 更新Nginx配置文件
+sudo rm -f /etc/nginx/conf.d/foims-dev.conf
 sudo rm -f /etc/nginx/conf.d/foims.conf
-sudo cp -f deploy/nginx/foims.conf /etc/nginx/conf.d/foims.conf
+sudo cp -f deploy/nginx/foims-dev.conf /etc/nginx/conf.d/foims-dev.conf
 
 echo 拷贝配置文件到 /etc/foims/config.toml
 sudo mkdir -p /etc/foims
