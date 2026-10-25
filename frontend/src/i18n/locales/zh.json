@@ -521,6 +521,7 @@
     "delete_success": "组织节点删除成功",
     "delete_confirm": "确定要删除「{{name}}」吗？",
     "select_org": "选择组织节点",
+    "filter_label": "组织筛选",
     "parent_org": "所属组织",
     "types": {
       "headquarters": "总部",

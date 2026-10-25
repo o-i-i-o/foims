@@ -17,6 +17,7 @@
  */
 import { i18n } from "../i18n/index";
 import { clearSession } from "../utils/session";
+import { showToast } from "../composables/useToast";
 import type { ApiResult, MessageParams } from "../types/api";
 
 function t(key: string, params: Record<string, string> = {}): string {
@@ -136,10 +137,7 @@ async function handleUnauthorized<T>(
 }
 
 function showToastAuthError(): void {
-  // 延迟导入避免与 toast 组件形成模块循环：错误提示非关键路径
-  import("../composables/useToast").then(({ showToast }) => {
-    showToast(t("api.token_expired"), "error");
-  });
+  showToast(t("api.token_expired"), "error");
 }
 
 /** 解析非 2xx 响应体：JSON 时提取服务端消息，非 JSON 时保留原文片段 */
@@ -227,12 +225,12 @@ async function makeRequest<T>(
       } as unknown as ApiResult<T>;
     }
 
-    // 非 JSON 非 download：尝试按 JSON 解析，失败按错误处理并保留原文
+    // 非 JSON 非 download：先取出原文再按 JSON 解析（body 只读一次），失败按错误处理并保留原文
+    const rawText = await response.text();
     try {
-      return translateServerMessage((await response.json()) as ApiResult<T>);
+      return translateServerMessage(JSON.parse(rawText) as ApiResult<T>);
     } catch {
-      const text = await response.text();
-      return { success: false, message: t("api.parse_failed"), data: text as unknown as T };
+      return { success: false, message: t("api.parse_failed"), data: rawText as unknown as T };
     }
   } catch (error) {
     console.error("API请求错误:", error);

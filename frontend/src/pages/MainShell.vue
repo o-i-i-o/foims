@@ -4,8 +4,8 @@
  * authManager.js 壳层逻辑）：侧边栏（收起/展开、RBAC 菜单隐藏、用户信息、
  * 语言切换、修改密码、退出登录）+ 主内容 RouterView。
  *
- * 分区内容页按迁移计划逐个替换，当前统一为 SectionPlaceholder 占位。
- * 侧边栏视觉与交互样式复用旧版 layouts/sidebar.css（@layer layouts）。
+ * 分区内容页由 RouterView 按路由懒加载渲染，侧边栏视觉与交互样式复用旧版
+ * layouts/sidebar.css（@layer layouts）。
  */
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";

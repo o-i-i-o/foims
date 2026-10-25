@@ -1336,7 +1336,7 @@ onBeforeUnmount(() => {
       <div class="toolbar">
         <select
           class="form-control"
-          :aria-label="t('organization.title')"
+          :aria-label="t('organization.filter_label')"
           :value="workstationOrgId"
           @change="onWorkstationOrgChange"
         >
@@ -1402,7 +1402,7 @@ onBeforeUnmount(() => {
       <div class="toolbar">
         <select
           class="form-control"
-          :aria-label="t('organization.title')"
+          :aria-label="t('organization.filter_label')"
           :value="cabinetOrgId"
           @change="onCabinetOrgChange"
         >
@@ -1464,7 +1464,7 @@ onBeforeUnmount(() => {
       <div class="toolbar">
         <select
           class="form-control"
-          :aria-label="t('organization.title')"
+          :aria-label="t('organization.filter_label')"
           :value="topologyOrgId"
           @change="onTopologyOrgChange"
         >

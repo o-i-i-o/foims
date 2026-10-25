@@ -521,6 +521,7 @@
     "delete_success": "Organization node deleted successfully",
     "delete_confirm": "Are you sure you want to delete \"{{name}}\"?",
     "select_org": "Select Organization Node",
+    "filter_label": "Filter by organization",
     "parent_org": "Organization Node",
     "types": {
       "headquarters": "Headquarters",
