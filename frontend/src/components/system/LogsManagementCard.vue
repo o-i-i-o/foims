@@ -195,7 +195,12 @@ async function testLogForwarding(): Promise<void> {
             <div class="log-stat-value">{{ stats.notifications?.count ?? 0 }}</div>
           </div>
         </div>
-        <h3>{{ t("logs.clear_logs") }}</h3>
+        <div class="section-title-row">
+          <h3>{{ t("logs.clear_logs") }}</h3>
+          <button v-if="!readonly" type="button" class="btn btn-danger btn-sm" :disabled="clearing" @click="requestClearLogs">
+            {{ t("logs.clear") }}
+          </button>
+        </div>
         <div class="clear-logs-form">
           <div class="form-row">
             <div class="form-group">
@@ -212,13 +217,20 @@ async function testLogForwarding(): Promise<void> {
               <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="365" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
             </div>
           </div>
-          <button v-if="!readonly" type="button" class="btn btn-danger" :disabled="clearing" @click="requestClearLogs">
-            {{ t("logs.clear") }}
-          </button>
         </div>
       </section>
       <section class="section">
-        <h3>{{ t("logs.forwarding_title") }}</h3>
+        <div class="section-title-row">
+          <h3>{{ t("logs.forwarding_title") }}</h3>
+          <div v-if="!readonly" class="action-buttons">
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="testingForwarding" @click="testLogForwarding">
+              {{ t("logs.forwarding_test") }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" :disabled="savingForwarding" @click="saveLogForwarding">
+              {{ t("common.save") }}
+            </button>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label for="log-forwarding-enabled">{{ t("logs.forwarding_enabled") }}</label>
@@ -242,14 +254,6 @@ async function testLogForwarding(): Promise<void> {
             <label for="log-forwarding-port">{{ t("logs.forwarding_port") }}</label>
             <input id="log-forwarding-port" v-model="forwardingPort" type="number" min="1" max="65535" placeholder="514" :disabled="readonly" :aria-label="t('logs.forwarding_port')">
           </div>
-        </div>
-        <div v-if="!readonly" class="action-buttons">
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="testingForwarding" @click="testLogForwarding">
-            {{ t("logs.forwarding_test") }}
-          </button>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="savingForwarding" @click="saveLogForwarding">
-            {{ t("common.save") }}
-          </button>
         </div>
       </section>
     </div>

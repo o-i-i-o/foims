@@ -564,3 +564,9 @@ v0.19.17
 2. 标题行包裹层清理：原 .group-label-row（仅此一处使用、无任何 CSS 定义）是个裸包裹层，使 system.css:173 的直接子选择器 `.form-group-block > .group-label`（注释已点名“SNMP v3 用户表”、标题左对齐取齐正文）一直未命中；去掉该包裹层后 group-label 成为 form-group-block 直接子元素，恰好套用既定块标题样式；grep 全库 group-label-row 零残留
 3. 列宽平衡：删除列原按 2 字“删除”设为 10%，现表头放 4 字“添加用户”，为避免 fixed 布局横向溢出（snmp-trap-users-container 注释明确防横滚）将第 6 列 10%→14%，从两个密码列（nth-child(3)/(5)）各让 2%（20%→18%）保持列宽和 100%
 4. 版本：纯前端布局与样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.18
+2026102516284401
+1. 日志管理卡片按钮上移到模块标题行右侧（清单第 3 项）：“日志清理”模块的“清理”按钮与“日志外发设置”模块的“测试/保存”两按钮，从各自表单区下方移到对应 h3 标题行的右侧；新增可复用块标题行范式 .data-management-container .section-title-row（display:flex + justify-content:space-between + align-items:center，分隔线下划到行容器以占满整宽、`> h3` 去除自身 border-bottom/margin-bottom）；清理按钮同时由 btn btn-danger 降为 btn-sm 与标题带高度协调（与项目 config-card-header 右侧动作统一 btn-sm 一致）；外发两按钮复用已有 .action-buttons（flex+gap）作为标题行右侧按钮组
+2. 配套修正：“清理”按钮移出后 .clear-logs-form 内 form-row 变为尾子元素，其 margin-bottom 由 1rem 改为 0（避免卡片底部多余留白）；stats 标题（logs.stats）无按钮保持普通 .section h3 不变，三处分隔线宽度一致
+3. 版本：纯前端布局与样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
