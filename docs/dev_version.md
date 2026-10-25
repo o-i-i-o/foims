@@ -1,4 +1,4 @@
-# 本文件为后端开发用版本号控制规则
+# 本文件为开发用版本号控制规则
 # 开发版本号格式为vxx.yy.zz
 # z 每次修改更新无条件z+1，z>99则y+1，z归零
 # y 每次为模块增加小功能、功能优化 则y+1，z归零
@@ -14,7 +14,8 @@
 # a由开发者根据实际情况手动变更
 # 示例：本文件 v0.0.13→v0.0.14（仅 z+1）时 Cargo.toml 保持 0.21.36 不动；本文件 v0.1.0（y+1）时 Cargo.toml 才 0.21.36→0.21.37
 # 目的：z 段作为高频修改审计计数，避免智能体高频次修改推高 Cargo.toml 版本号
-# crate版本各自递增，某crate版本变更主Cargo.toml的版本都要关联变更（本次修改只涉及crate a则修改crate a 和lib的版本号，crate b版本号不变，若本次修改只涉及前端，则所有crate版本号不变，前端资源按照自己的规则更新版本号，lib更新版本号）
+# crate版本各自递增，某crate版本变更主Cargo.toml的版本都要关联变更（本次修改只涉及crate a则修改crate a 和lib的版本号，crate b版本号不变）
+# 前端自切换 Vue 3 + Vite 工程起由 frontend/package.json 的 version 字段承载版本号，复用本文件同一套 x/y/z 判级与联动机制、与 Cargo.toml 相互独立：仅前端修改联动 package.json（z 段不动 / y 段 c+1 / x 段 b+1 且 c 归零，a 段手动），不再 bump 根 Cargo.toml；仅后端修改照旧只联动 Cargo.toml；前后端混合修改按各自维度分别联动。版本计数自 0.1.0（Vue 3 工程确立）起独立递增；旧 bump_static_version.sh/?v=/MODULE_VERSION 机制已废弃，Vite 内容指纹（assets/ 哈希文件名）仅承担构建产物缓存命名
 
 # v0.0.1
 
@@ -391,3 +392,13 @@ v0.17.0
 7. 验证：cd frontend && npm run typecheck 0 错；npm run build 通过（仅既存 useToast 动态导入与 chunk>500kB 警告）；biome check frontend 0 诊断；oxlint 292 文件 0 warning 0 error；两个可执行自检脚本全过（入口 `cd frontend && npm run selfcheck:viz`，带 ts-resolve-hook 补无扩展名 import 的 .ts 解析；geometry 24 项含推挤/锚点错开/正交折线，viewmodel 11 项含坐标回退与分组筛选）；浏览器冒烟（vite dev + 已运行后端）：工位 10 个节点/网格 19 条/标尺/门、机柜 1 柜 10 个 U 刻度、拓扑 13 设备 9 容器 2 连线且缩放 24%→30% 生效，console 零错误、无 ≥400 请求
 8. 联动：根 Cargo.toml 0.29.4→0.30.0（仅 lib，本次仅前端；子 crate 版本不动）；无数据库结构变更（无需 upgrade SQL 与 foims-init 同步）
 9. 遗留说明：布局为空时选定房间仍会自动排布并落库一次（沿用旧版 showWorkstationRoom 语义，首次进入即出图）；拓扑画布缩放初始为 fit（适应画布）而非固定 100%，与旧版 _fitView 一致
+
+v0.17.1
+2026102509244401
+1. 版本规则收口——前端改用 Vue 3 框架后版本更新复用后端同一套规则（普通修改 z+1，仅文档不动 Cargo.toml）：本文件规则头删除「前端资源按照自己的规则更新版本号」旧条款，明确前端无独立版本号体系、按 x/y/z 判级联动 Cargo.toml，旧 bump_static_version.sh/?v=/MODULE_VERSION 机制随框架切换废弃
+2. 文档同步：AGENTS.md 版本与测试条目改写（前端复用 x/y/z 判级与 Cargo.toml 联动，Vite 内容指纹仅承担静态资源缓存）；docs/code-style.md §1 版本号规则改为指向本文件（消除「每次代码更新 bump yy」与「z 段不动 Cargo.toml」的规则冲突）、§3.1 缓存与版本同步；deploy/nginx/foims.conf main.html 段删除 ?v= 版本号旧机制残留注释
+
+v0.17.2
+2026102509335001
+1. 前端版本承载落点细化（普通修改 z+1，仅文档）：frontend/package.json 的 version 字段确立为前端版本号唯一落点，复用本文件 x/y/z 判级与 Cargo.toml 同机制独立联动（z 段不动 / y 段 c+1 / x 段 b+1 且 c 归零 / a 段手动，沿用 0.1.0 起独立计数）；仅前端修改不再 bump 根 Cargo.toml（联动对象由 lib 改为 package.json），仅后端修改照旧联动 Cargo.toml，混合修改按各自维度分别联动
+2. 文档同步：dev_version.md 规则头改写前端条款（删除「仅前端修改 lib 更新版本号」旧规则）；AGENTS.md 与 docs/code-style.md §1/§3.1 同步，「无独立前端版本号」表述废除

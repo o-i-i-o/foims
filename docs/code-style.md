@@ -13,7 +13,9 @@
 - 禁止 `unwrap()`/`expect()`/`unreachable!()`/`#[allow(...)]`（测试代码除外）；
   禁止用 `_` 前缀忽略参数。**唯一例外**：仅需鉴权副作用的提取器参数
   `_admin: AdminUser` / `_user: CurrentUser`（axum 惯用法，见 routes/mod.rs）。
-- 版本号规则：`0.x.yy`，每次代码更新 bump `yy`（`yy>=99` 时 `x+1, yy=0`）。
+- 版本号规则统一见 `docs/dev_version.md`（x/y/z 判级分别与
+  frontend/package.json、Cargo.toml 联动），前端与后端同一套机制，
+  两个版本号独立计数。
 - 每次改动后：`cargo fmt && cargo clippy --release -- -D warnings`；数据库结构
   变更走“直接执行 SQL + 同步完善 foims-init 的 DDL”，不用迁移框架。
 - 新增功能（rust、js）、新增前端布局、新增样式代码 保障代码健壮性的前提下遵循最少代码实现原则
@@ -178,8 +180,10 @@ frontend/
 - dev：`cd frontend && npm run dev`（5173）；构建：`npm run build`，产物
   `dist/` 部署到 `/usr/share/foims/web`（内容直接铺开，无 `static/` 中间层）。
 - 缓存与版本：Vite 内容指纹（`assets/` 哈希文件名）承担静态资源长缓存，
-  **无需手工 bump `?v=`/MODULE_VERSION**；nginx 对 `/assets/` 长缓存、
-  入口页 `no-cache`（见 `deploy/nginx/foims.conf`）。
+  旧原生前端的 `?v=`/MODULE_VERSION 独立版本号机制已随框架切换废弃；
+  nginx 对 `/assets/` 长缓存、入口页 `no-cache`（见 `deploy/nginx/foims.conf`）。
+  前端版本由 `frontend/package.json` 的 `version` 承载，按 `docs/dev_version.md`
+  的 x/y/z 判级独立联动（与 Cargo.toml 同机制、独立计数）。
 
 ### 3.2 Vue 风格
 

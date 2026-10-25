@@ -34,8 +34,10 @@
 
 - 每次代码更新后按照`docs/dev_version.md`规则更新版本记录；Cargo.toml
   仅当该文件 y/x 段变化时才联动 bump（z 段普通修改不动 Cargo.toml）。
-  前端资源缓存由 Vite 内容指纹（assets/ 哈希文件名）承担，无需手工 bump
-  版本号；入口 HTML 引用变化随构建自动生效。
+  前端改用 Vue 3 工程后版本由 frontend/package.json 的 version 承载，
+  复用同一套 x/y/z 判级机制与 Cargo.toml 独立联动（仅前端修改不再 bump
+  Cargo.toml）；Vite 内容指纹（assets/ 哈希文件名）仅承担静态资源缓存，
+  入口 HTML 引用变化随构建自动生效。
 - 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`；
   前端改动后：`cd frontend && npm run typecheck`（vue-tsc，开发循环可单跑）
   与 `npm run build`；后端载荷类型变更后运行
