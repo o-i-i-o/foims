@@ -570,3 +570,8 @@ v0.19.18
 1. 日志管理卡片按钮上移到模块标题行右侧（清单第 3 项）：“日志清理”模块的“清理”按钮与“日志外发设置”模块的“测试/保存”两按钮，从各自表单区下方移到对应 h3 标题行的右侧；新增可复用块标题行范式 .data-management-container .section-title-row（display:flex + justify-content:space-between + align-items:center，分隔线下划到行容器以占满整宽、`> h3` 去除自身 border-bottom/margin-bottom）；清理按钮同时由 btn btn-danger 降为 btn-sm 与标题带高度协调（与项目 config-card-header 右侧动作统一 btn-sm 一致）；外发两按钮复用已有 .action-buttons（flex+gap）作为标题行右侧按钮组
 2. 配套修正：“清理”按钮移出后 .clear-logs-form 内 form-row 变为尾子元素，其 margin-bottom 由 1rem 改为 0（避免卡片底部多余留白）；stats 标题（logs.stats）无按钮保持普通 .section h3 不变，三处分隔线宽度一致
 3. 版本：纯前端布局与样式修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.19
+2026102516305001
+1. 日志管理卡片“日志外发设置”模块（logs.forwarding_title）内容改为固定两栏（清单第 4 项，与第 1 项同类）：该模块在 .data-management-container（1fr 1fr）的半宽 section 内，内部一个 .form-row 的 4 个字段（启用/协议/主机/端口）因 auto-fit minmax(280px,1fr) 回落单列；直接复用 v0.19.16 新增的工具类 .form-row.form-row-2col（仅挂类，无新增样式），不影响清理模块与其他卡片
+2. 版本：纯前端布局修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规

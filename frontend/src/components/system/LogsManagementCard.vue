@@ -231,7 +231,7 @@ async function testLogForwarding(): Promise<void> {
             </button>
           </div>
         </div>
-        <div class="form-row">
+        <div class="form-row form-row-2col">
           <div class="form-group">
             <label for="log-forwarding-enabled">{{ t("logs.forwarding_enabled") }}</label>
             <select id="log-forwarding-enabled" v-model="forwardingEnabled" :disabled="readonly" :aria-label="t('logs.forwarding_enabled')">
