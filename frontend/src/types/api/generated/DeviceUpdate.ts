@@ -7,7 +7,7 @@ export type DeviceUpdate = { name: string | null,
  */
 hostname: string | null | null, device_type: string | null, brand: string | null, model: string | null, serial_number: string | null, workstation_id: string | null | null, position_id: string | null | null, room_id: string | null, seller: string | null, location: string | null, snmp_version: string | null, 
 /**
- * 双层 Option：null 清空 SNMP 团体字
+ * 双层 Option：null 清空 SNMP 团体名
  */
 snmp_community: string | null | null, 
 /**

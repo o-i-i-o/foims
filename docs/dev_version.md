@@ -575,3 +575,21 @@ v0.19.19
 2026102516305001
 1. 日志管理卡片“日志外发设置”模块（logs.forwarding_title）内容改为固定两栏（清单第 4 项，与第 1 项同类）：该模块在 .data-management-container（1fr 1fr）的半宽 section 内，内部一个 .form-row 的 4 个字段（启用/协议/主机/端口）因 auto-fit minmax(280px,1fr) 回落单列；直接复用 v0.19.16 新增的工具类 .form-row.form-row-2col（仅挂类，无新增样式），不影响清理模块与其他卡片
 2. 版本：纯前端布局修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run typecheck 0 错、npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.20
+2026102516364701
+1. SNMP Trap 卡片字段标签文案修正（用户反馈“v1/v2c Community 白名单”描述不合理）：snmp_trap.communities 标签英文由“v1/v2c Community Whitelist”改为“v1/v2c Community”、中文由“v1/v2c Community 白名单”改为“v1/v2c 团体字”（仅改 i18n en.json/zh.json 两处标签值，不改键名与组件）
+2. 未改动说明：卡片帮助文（guide.snmp_trap）中仍以“v1/v2c Community 白名单/Whitelist”描述该字段的白名单机制（属于概念性解释而非字段标题），本次未改动，如需术语同步可再确认；设备 SNMP 的 snmp_community（“Community字符串/Community String”）为不同上下文，未动
+3. 版本：纯前端文案修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.21
+2026102516395201
+1. SNMP community 术语全局统一（接 v0.19.20，用户要求“全局调整”）：确定单一口径——英文统一为 Community（去掉 String/Whitelist）、中文统一为团体字。改动均为 i18n 展示文案（不改键名）：① 设备 SNMP device.snmp_community 英“Community String”→“Community”、中“Community字符串”→“团体字”；② 校验提示 device.snmp_community_length 英去“string”、中“SNMP团体字符串…”→“SNMP团体字…”；③ SNMP Trap 帮助文 guide.snmp_trap 中英文去掉“Community Whitelist/Community 白名单”的白名单框定，改为“v1/v2c Community/v1/v2c 团体字”并保留“留空拒绝、需至少配置一个”的机制描述（与上轮已改的 snmp_trap.communities 字段标签口径一致）
+2. 同步修正：SnmpTrapCard.vue 顶部文档注释“团体名白名单”→“v1/v2c 团体字”（注释基于当前逻辑）；未动项：src/types/api/generated/ 生成物类型与内部注释、DeviceModal 的 snmpCommunity 等代码标识符（非展示文案，禁手改生成物）；grep 确认 SNMP 语境旧术语（Community String/白名单/Whitelist/团体字符串/Community字符串）零残留
+3. 版本：纯前端文案与注释修订（无后端载荷变更），frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run build 通过、biome check frontend 23 文件 0 违规
+
+v0.19.22
+2026102516482601
+1. SNMP community 术语再校正（用户反馈：英文用标准 “string”、中文经考证用“团体名”更标准）：接 v0.19.21 将口径改为——英文统一为 Community String（补回 String）、中文统一为团体名。覆盖设备与 Trap 两处 i18n 展示文案（不改键名）：① device.snmp_community 英“Community”→“Community String”、中“团体字”→“团体名”；② snmp_community_length 英补回“string”、中“SNMP团体字…”→“SNMP团体名…”；③ snmp_trap.communities 标签英“v1/v2c Community”→“v1/v2c Community String”、中“v1/v2c 团体字”→“v1/v2c 团体名”；④ guide.snmp_trap 英“v1/v2c Community…at least one community…”→“v1/v2c Community String…at least one community string…”、中“团体字”→“团体名”
+2. 注释与生成物同步：DeviceModal.vue/SnmpTrapCard.vue 顶部文档注释“团体字”→“团体名”；因 generated/DeviceUpdate.ts 的“SNMP 团体字”源自后端 #[derive(TS)] 字段文档注释（禁手改生成物），改后端 crates/foims-models/src/models/device.rs:522 snmp_community 的 `/// 双层 Option：null 清空 SNMP 团体字`→“团体名”，再跑 bash da-scripts/gen-ts-types.sh 重生生成物同步；grep 全库（frontend/src + crates + src）团体字 零残留，git diff 仅 7 个预期文件无意外漂移
+3. 版本：后端为文档注释修订（无功能/结构/载荷/DB 变更）、前端文案与注释修订；cargo fmt rc=0、cargo test export_bindings 全 workspace 编译通过；frontend/package.json version 保持 0.1.3（z 段普通修改），根 Cargo.toml 不动，无数据库变更；npm run build 通过、biome check frontend 23 文件 0 违规

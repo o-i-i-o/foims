@@ -519,7 +519,7 @@ pub struct DeviceUpdate {
         message = "server.device.validation.snmp_version_invalid"
     ))]
     pub snmp_version: Option<String>,
-    /// 双层 Option：null 清空 SNMP 团体字
+    /// 双层 Option：null 清空 SNMP 团体名
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
         function = "crate::models::validate_snmp_community_opt",
