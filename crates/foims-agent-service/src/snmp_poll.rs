@@ -2,6 +2,8 @@
 //!
 //! 周期任务：扫描 devices 表中已配置 SNMP 凭据（community/username）且带
 //! 管理 IP 的设备，逐台采集并 upsert 为 `source='snmp'` 的 monitored_hosts 行：
+//! - 每台设备采集前先确保基线行存在（配置即入库）：参数构造/连接/采集
+//!   失败也不静默消失，先以 offline 落位，可达后由采集成功路径翻 active；
 //! - machine_id 合成 `snmp:{device_id}`（与 agent machine_id 命名空间隔离）；
 //! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
 //! - 单台成功即 last_seen=NOW() 并翻转 offline → active；连续失败超过
@@ -148,13 +150,58 @@ async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Er
     .await
 }
 
-/// 采集单台设备并 upsert 对应 monitored_hosts 行 + 追加历史快照：任一步失败仅
-/// 记录日志，由调用方计入失败数（该行 last_seen 不刷新，累积触发离线
-/// 翻转）。
+/// 为已配置 SNMP 且带管理地址的设备确保一条 `source='snmp'` 基线行存在
+/// （设计「配置 SNMP 后自动入库」）：设备一经纳入轮询即在主机监控出现，
+/// 首轮以设备台账名与 offline 落位，可达性由后续采集成功路径翻转为 active、
+/// 失联由离线翻转维护。
+///
+/// 与采集成功路径的 upsert 分工：本函数只保证行存在并跟随刷新 device_id/ip
+/// （设备改配管理地址后同步），不触碰 status/last_seen/hostname——避免把已
+/// active 的可达设备在本轮采集前打回 offline。失败仅记日志，不阻断采集。
+async fn ensure_snmp_host_present(
+    pool: &PgPool,
+    machine_id: &str,
+    device_id: uuid::Uuid,
+    device_name: &str,
+    ip: &str,
+) {
+    let hostname = truncate_to_column_width(device_name, MAX_HOSTNAME_LEN);
+    let result = sqlx::query(
+        r"INSERT INTO monitored_hosts (machine_id, source, device_id, status,
+                                      hostname, ip, first_seen, last_seen)
+          VALUES ($1, 'snmp', $2, 'offline', $3, $4, NOW(), NOW())
+          ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
+              device_id = EXCLUDED.device_id,
+              ip = EXCLUDED.ip",
+    )
+    .bind(machine_id)
+    .bind(device_id)
+    .bind(&hostname)
+    .bind(ip)
+    .execute(pool)
+    .await;
+    if let Err(e) = result {
+        foims_common::log_error!(
+            "log.task.agent_snmp_poll_failed",
+            error = format!("设备 {device_name}（{device_id}）基线入库失败: {e}")
+        );
+    }
+}
+
+/// 采集单台设备并 upsert 对应 monitored_hosts 行 + 追加历史快照：基线行由
+/// [`ensure_snmp_host_present`] 先行保证存在，采集任一步失败仅记录日志并提前
+/// 返回（不标记 active、不刷新 last_seen，由调用方计入失败数，
+/// 行 last_seen 不随失败推进，累积触发离线翻转）。
 async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
     let device_id = row.device.id;
     let device_name = row.device.name.as_str();
     let ip = row.ip.as_str();
+    // machine_id 合成命名空间：'snmp:{device_id}'，与 agent 上报的机器指纹隔离
+    let machine_id = format!("snmp:{device_id}");
+
+    // 先保证基线行存在：即便参数构造/连接/采集失败，已配置 SNMP 的设备也应
+    // 在主机监控可见（offline），而非静默消失（设计「配置后自动入库」）
+    ensure_snmp_host_present(pool, &machine_id, device_id, device_name, ip).await;
 
     // SNMP 参数构造（含密文解密与 v1/v2c/v3 认证装配，复用设备测试路径）
     let params = match row.device.to_snmp_params_async(ip).await {
@@ -176,9 +223,9 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
     // 系统组（一期）：sysName/sysDescr/sysUpTime，缺失容忍
     let info = read_system_info(&client).await;
     // 设备可达性判定：系统组三个 OID 全部无响应说明设备不可达（后续
-    // 指标采集必然同样超时）。此时按采集失败处理（不 upsert、不刷新
-    // last_seen），否则该行会被误标记 active 并永不触发离线翻转，
-    // 仪表盘负载卡片与主机状态展示互相矛盾
+    // 指标采集必然同样超时）。此时按采集失败处理（基线行已由 ensure 保底
+    // 存在，但不标记 active、不刷新 last_seen、不写指标），否则该行会被误
+    // 标记 active 并永不触发离线翻转，仪表盘负载卡片与主机状态展示互相矛盾
     if info.hostname.is_none() && info.os.is_none() && info.uptime_secs.is_none() {
         tracing::debug!("SNMP 采集无任何响应: 设备 {device_name}（{device_id}，{ip}），按失败处理");
         return Err(());
@@ -187,8 +234,6 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
     let hostname = info.hostname.unwrap_or_else(|| device_name.to_string());
     let hostname = truncate_to_column_width(&hostname, MAX_HOSTNAME_LEN);
     let os = info.os.map(|s| truncate_to_column_width(&s, MAX_OS_LEN));
-    // machine_id 合成命名空间：'snmp:{device_id}'，与 agent 上报的机器指纹隔离
-    let machine_id = format!("snmp:{device_id}");
 
     // 性能指标（二期）：差值依赖上一轮 raw_metrics._snmp_state
     let now = Utc::now();
