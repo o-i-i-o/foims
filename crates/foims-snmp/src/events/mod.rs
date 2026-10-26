@@ -14,14 +14,17 @@ use uuid::Uuid;
 use foims_common::{log_error, log_info, log_warn};
 use foims_models::{
     SNMP_EVENT_ARP_CONFLICT, SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP, SNMP_EVENT_POE_OFF,
-    SNMP_EVENT_UNKNOWN_ENDPOINT,
+    SNMP_EVENT_UNKNOWN_DEVICE,
 };
 
 use crate::core::truncate_to_column_width;
 
 // 通知 helper 与 API handler 一并再导出，供 crate 内/外同路径调用
 pub use api::{list_snmp_events, locate_device};
-pub use notify::{create_notification, encode_notification_content, send_mac_change_notification};
+pub use notify::{
+    create_notification, encode_notification_content, send_device_swap_notification,
+    send_ip_change_notification,
+};
 
 /// 观测事件载体：检测/比对纯函数产出，[`record_events`] 落库并按需通知。
 ///
@@ -82,7 +85,7 @@ fn should_notify(event_type: &str) -> bool {
         event_type,
         SNMP_EVENT_LINK_FLIP
             | SNMP_EVENT_DEVICE_REBOOT
-            | SNMP_EVENT_UNKNOWN_ENDPOINT
+            | SNMP_EVENT_UNKNOWN_DEVICE
             | SNMP_EVENT_ARP_CONFLICT
             | SNMP_EVENT_POE_OFF
     )
@@ -93,7 +96,7 @@ fn notification_body_key(event_type: &str) -> Option<&'static str> {
     match event_type {
         SNMP_EVENT_LINK_FLIP => Some("server.notification.snmp_event.body_link_flip"),
         SNMP_EVENT_DEVICE_REBOOT => Some("server.notification.snmp_event.body_reboot"),
-        SNMP_EVENT_UNKNOWN_ENDPOINT => Some("server.notification.snmp_event.body_unknown_endpoint"),
+        SNMP_EVENT_UNKNOWN_DEVICE => Some("server.notification.snmp_event.body_unknown_device"),
         SNMP_EVENT_ARP_CONFLICT => Some("server.notification.snmp_event.body_arp_conflict"),
         SNMP_EVENT_POE_OFF => Some("server.notification.snmp_event.body_poe_off"),
         _ => None,
@@ -109,7 +112,7 @@ const EVENT_INTERFACE_MAX_CHARS: usize = 100;
 /// 键含 interface，避免不同端口的同方向事件被互相抑制）
 const EVENT_SUPPRESSION_WINDOW_MINUTES: i64 = 30;
 
-/// 批量落库观测事件，并对关键事件逐条发站内通知；`unknown_endpoint`
+/// 批量落库观测事件，并对关键事件逐条发站内通知；`unknown_device`
 /// 另按「通知配置」中 snmp_event 邮件开关发邮件。
 ///
 /// 事件表为事实源：落库失败即返回错误（由调用方记日志），通知/邮件失败
@@ -222,7 +225,7 @@ pub async fn record_events(
     Ok(())
 }
 
-/// 对单条关键事件发站内通知（全体管理员各一条），`unknown_endpoint` 另发邮件。
+/// 对单条关键事件发站内通知（全体管理员各一条），`unknown_device` 另发邮件。
 async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids: &[Uuid]) {
     let Some(body_key) = notification_body_key(ev.event_type) else {
         return;
@@ -238,7 +241,7 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
             ("device".to_string(), device_name.to_string()),
             ("downtime".to_string(), ev.str_field("downtime")),
         ],
-        SNMP_EVENT_UNKNOWN_ENDPOINT => vec![
+        SNMP_EVENT_UNKNOWN_DEVICE => vec![
             ("device".to_string(), device_name.to_string()),
             ("interface".to_string(), iface.clone()),
             ("ip".to_string(), ev.str_field("ip")),
@@ -288,8 +291,8 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
         }
     }
 
-    // 邮件仅未知终端场景，且受 snmp_event 方式开关门控
-    if ev.event_type == SNMP_EVENT_UNKNOWN_ENDPOINT
+    // 邮件仅未知设备场景，且受 snmp_event 方式开关门控
+    if ev.event_type == SNMP_EVENT_UNKNOWN_DEVICE
         && foims_auth::smtp::load_notification_methods(pool)
             .await
             .snmp_event
@@ -301,7 +304,7 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
             .map(|v| v as i32);
         let ip = ev.str_field("ip");
         let mac = ev.str_field("mac");
-        if let Err(e) = foims_auth::smtp::send_unknown_endpoint_email(
+        if let Err(e) = foims_auth::smtp::send_unknown_device_email(
             pool,
             device_name,
             &iface,
@@ -311,7 +314,7 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
         )
         .await
         {
-            log_warn!("log.snmp.unknown_endpoint_email_failed", error = e);
+            log_warn!("log.snmp.unknown_device_email_failed", error = e);
         }
     }
 }
@@ -324,7 +327,7 @@ mod tests {
     fn should_notify_covers_key_events() {
         assert!(should_notify(SNMP_EVENT_LINK_FLIP));
         assert!(should_notify(SNMP_EVENT_DEVICE_REBOOT));
-        assert!(should_notify(SNMP_EVENT_UNKNOWN_ENDPOINT));
+        assert!(should_notify(SNMP_EVENT_UNKNOWN_DEVICE));
         assert!(should_notify(SNMP_EVENT_ARP_CONFLICT));
         // 高频/低价值事件只落表不通知
         assert!(!should_notify("arp_added"));
@@ -365,7 +368,7 @@ mod tests {
         assert_eq!(ev.macs_field(), "AA:01, BB:02");
         // 非冲突事件/缺字段返回空串
         let plain = ObsEvent::new(
-            SNMP_EVENT_UNKNOWN_ENDPOINT,
+            SNMP_EVENT_UNKNOWN_DEVICE,
             None,
             "warning",
             serde_json::json!({ "mac": "AA:01" }),

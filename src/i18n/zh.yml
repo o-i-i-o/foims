@@ -210,9 +210,11 @@ log:
   ip:
     batch_record_failed: "批量创建第{{index}}条记录处理失败: {{error}}"
     invalid_cidr: "CIDR格式无效，无法查找可用IP: '{{cidr}}'"
-    mac_change_notification_failed: "MAC地址变更通知发送失败: IP={{ip}}, 错误: {{error}}"
-    mac_change_notification_sent: "MAC地址变更通知发送成功: IP={{ip}}"
-    mac_changed: "检测到MAC地址变更: 网口={{interface}}, IP={{ip}}, 旧MAC={{old_mac}}, 新MAC={{new_mac}}"
+    device_swap: "检测到工位 IP 上设备更换: 网口={{interface}}, IP={{ip}}, 旧MAC={{old_mac}}, 新MAC={{new_mac}}"
+    device_swap_notification_failed: "设备更换通知发送失败: IP={{ip}}, 错误: {{error}}"
+    device_swap_notification_sent: "设备更换通知发送成功: IP={{ip}}"
+    ip_change_notification_failed: "IP变更通知发送失败: MAC={{mac}}, 观测IP={{observed_ip}}, 错误: {{error}}"
+    ip_change_notification_sent: "IP变更通知发送成功: MAC={{mac}}, 观测IP={{observed_ip}}"
     mac_conflict: "MAC冲突: {{mac}} 已被不同设备的 IP {{ip}} 使用，跳过更新"
     mac_observation_conflict: "MAC观测冲突: 网口 {{interface}} 同时出现 {{existing_mac}} 与 {{new_mac}}，跳过 {{ip}}"
     mac_sync_failed: "MAC同步失败: {{error}}"
@@ -224,11 +226,13 @@ log:
     password_expiry_auto_disabled: "用户 {{user_id}} 密码已过有效期，账户已自动禁用"
     success: "用户 {{username}} 登录成功"
     token_refreshed: "用户 {{username}} 令牌刷新成功"
-  mac_change:
-    email_sent: "MAC地址变更邮件通知发送成功: 工位={{workstation}}"
-    email_send_failed: "MAC 地址变更邮件发送失败（工位 {{workstation}}）: {{error}}"
-    email_skipped: "MAC地址变更邮件通知跳过: 工位={{workstation}}, 原因: {{reason}}"
-    notification_created: "MAC地址变更站内通知创建成功: 工位={{workstation}}, IP={{ip}}"
+  ip_change:
+    device_swap_created: "设备更换站内通知创建成功: 工位={{workstation}}, IP={{ip}}"
+    device_swap_email_failed: "设备更换邮件发送失败（工位 {{workstation}}）: {{error}}"
+    device_swap_email_sent: "设备更换邮件通知发送成功: 工位={{workstation}}"
+    email_send_failed: "IP变更邮件发送失败（工位 {{workstation}}）: {{error}}"
+    email_sent: "IP变更邮件通知发送成功: 工位={{workstation}}"
+    notification_created: "IP变更站内通知创建成功: 工位={{workstation}}, 观测IP={{observed_ip}}"
   network:
     check_ips_outside_cidr_failed: "查询 CIDR 外存量 IP 失败: {{error}}"
     check_ipv4_duplicate_failed: "检查IPv4网段重复时数据库查询失败: {{error}}"
@@ -287,7 +291,7 @@ log:
     event_recorded: "SNMP 观测事件已落库: 设备={{device_id}}, 新增={{count}} 条"
     event_record_failed: "SNMP 观测事件写入失败: 设备={{device_id}}, 错误: {{error}}"
     notification_failed: "SNMP 事件通知创建失败: 类型={{event_type}}, 设备={{device_id}}, 错误: {{error}}"
-    unknown_endpoint_email_failed: "未知终端邮件发送失败: {{error}}"
+    unknown_device_email_failed: "未知设备邮件发送失败: {{error}}"
     locate_query: "终端定位查询: mac={{mac}}, ip={{ip}}, 命中={{hits}} 条"
     events_cleanup_completed: "SNMP 事件清理完成: 删除 {{count}} 条过期记录"
   task:

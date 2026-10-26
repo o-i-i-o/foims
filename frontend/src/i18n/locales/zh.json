@@ -408,7 +408,7 @@
       "type_arp_added": "ARP 新增",
       "type_arp_removed": "ARP 移除",
       "type_arp_conflict": "ARP 冲突",
-      "type_unknown_endpoint": "未知终端"
+      "type_unknown_device": "未知设备"
     },
     "locate": {
       "title": "终端定位",
@@ -1003,7 +1003,7 @@
     "col_email": "邮件通知",
     "col_webhook": "Webhook",
     "pending": "待实现",
-    "type_mac_change": "MAC地址变更",
+    "type_ip_change": "IP地址变更",
     "type_agent_alert": "主机告警",
     "email_recipients": "邮件收件人",
     "save_success": "通知设置保存成功",
@@ -2277,7 +2277,7 @@
       "fetched": "IP获取成功",
       "interface_invalid": "指定的网口不存在或不属于该设备",
       "invalid_ip": "IP地址格式无效 '{{ip}}': {{error}}",
-      "mac_sync_completed": "MAC同步完成：更新 {{updated}} 条，无变化 {{unchanged}} 条，冲突跳过 {{skipped}} 条，失活 {{deactivated}} 条",
+      "mac_sync_completed": "MAC同步完成：更新 {{updated}} 条，无变化 {{unchanged}} 条，冲突跳过 {{skipped}} 条，失活 {{deactivated}} 条，IP变更 {{ip_change}} 条",
       "mac_sync_failed": "MAC同步失败",
       "mac_sync_no_change": "MAC地址无变化",
       "network_required": "IP {{ip}} 必须归属子网：请显式指定子网，或先为设备所在房间绑定子网",
@@ -2389,9 +2389,13 @@
     "notification": {
       "all_marked_read": "所有通知已标记为已读",
       "list_retrieved": "通知列表获取成功",
-      "mac_change": {
-        "body": "工位 {{workstation}} {{ip}} 的MAC地址已从 {{old_mac}} 变更为 {{new_mac}}（数据来源设备：{{device}}）",
-        "title": "MAC地址变更"
+      "ip_change": {
+        "body": "工位 {{workstation}} 的设备（MAC {{mac}}）移动到新 IP：登记 {{registered_ip}}，观测 {{observed_ip}}（数据来源设备：{{device}}）",
+        "title": "IP地址变更"
+      },
+      "device_swap": {
+        "body": "工位 {{workstation}} IP {{ip}} 上的设备已更换：MAC 从 {{old_mac}} 变为 {{new_mac}}（数据来源设备：{{device}}）",
+        "title": "工位设备更换"
       },
       "marked_read": "通知已标记为已读",
       "not_found": "通知不存在",
@@ -2414,7 +2418,7 @@
         "title": "SNMP 观测事件",
         "body_link_flip": "设备 {{device}} 端口 {{interface}} 链路状态变为 {{direction}}",
         "body_reboot": "设备 {{device}} 疑似重启，估算停机时长 {{downtime}}",
-        "body_unknown_endpoint": "设备 {{device}} 端口 {{interface}} 发现未登记终端 IP {{ip}} / MAC {{mac}}",
+        "body_unknown_device": "设备 {{device}} 端口 {{interface}} 发现未登记设备 MAC {{mac}}（出现于 IP {{ip}}）",
         "body_arp_conflict": "设备 {{device}} 端口 {{interface}} 检测到 ARP 冲突 IP {{ip}} / MAC {{mac}}（同一 IP 被多个 MAC 声明）",
         "body_poe_off": "设备 {{device}} 端口 {{interface}} PoE 供电中断（类别 {{class}}）"
       }
@@ -2925,8 +2929,8 @@
       "cert": "管理站点根 CA 与 HTTPS 证书：生成/导入 CA 与证书、下载 CA、下载与吊销证书。\n- 证书与私钥仅用于本服务器 HTTPS/nginx，不支持加密私钥，也不提供下载。\n- 生成证书时，系统自动将服务器公共 URL 的主机名加入 SAN。\n- 可随服务器证书一并导入签发 CA（仅用于终端导出信任，不用于签发）。\n- 导入的 CA 存入导入 CA 池（不覆盖站点根 CA），生成证书时可在「签发 CA」下拉框中选择；CA 私钥仅保存在服务器上。\n- 重新生成根 CA 将覆盖现有 CA，旧 CA 签发的证书将不再被新链信任。\n如何让终端信任本站根证书：\n- Windows：管理员运行 certutil -addstore -f Root foims-root-ca.crt，或双击 .crt 导入「受信任的根证书颁发机构」，重启浏览器后 Chrome / Edge / Firefox 均信任。\n- Debian/Ubuntu：sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates。\n- RHEL/Fedora：sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ && sudo update-ca-trust extract（文件须为 PEM 且扩展名 .crt）。\n- Linux 的 Chrome/Chromium 不读取系统信任库，还需执行：certutil -d sql:$HOME/.pki/nssdb -A -t \"C,,\" -n \"FOIMS-RootCA\" -i foims-root-ca.crt（需安装 libnss3-tools / nss-tools）。\n- Linux 的 Firefox 使用自身证书库：设置 → 隐私与安全 → 证书 → 查看证书 中手动导入；或由管理员通过企业策略配置 p11-kit 信任模块读取系统信任库。\n注意：请导入根 CA（而非站点证书）；证书必须包含 SAN（浏览器忽略 CN）。私有 CA 场景下 Chrome 的 HTTP/3（QUIC）不使用本地信任锚，会自动回退 TCP，属正常现象。",
       "ldap": "- LDAP 服务器地址：ldap:// 明文或 ldaps:// 加密，可含端口。\n- Base DN：用户检索的起始目录。\n- 服务账号 DN / 密码：用于检索用户的账号，留空表示匿名绑定检索。\n- 用户搜索过滤器：用 %s 或 {username} 作为用户名占位符。\n- 自动建户默认角色：LDAP 用户首次登录且系统中无此用户时，自动创建账号被赋予的角色。\n「测试连接」验证服务器可达与绑定凭据；启用后登录页出现 LDAP 登录入口。",
       "sso": "- Issuer 地址：OIDC 提供方根地址，系统自动获取 /.well-known/openid-configuration 发现文档。\n- Client ID / Client Secret：在认证平台注册的客户端凭据。\n- 回调地址：留空时按请求 Host 自动推导为 https://<主机>/api/auth/sso/callback；认证平台要求固定回调地址时需填写并在 IdP 注册相同地址。\n- 自动建户默认角色：SSO 用户首次登录且系统中无此用户时，自动创建账号被赋予的角色。\n「测试连接」验证发现文档可达性与客户端凭据；启用后登录页出现 SSO 登录入口。",
-      "smtp": "配置系统外发邮件使用的 SMTP 服务器（用于密码重置、MAC 变更通知等邮件）。\n- SSL 连接类型：无 SSL / SSL（端口 465）/ STARTTLS（端口 587），端口仅作提示，需按实际服务器填写。\n- 发件人邮箱：邮件显示的发件地址。\n「测试连接」向指定邮箱发送测试邮件验证配置。",
-      "notify": "「通知配置」控制各类通知的发送方式开关与邮件收件人。\n- 通知类型：MAC地址变更（设备 MAC 地址变化时通知）与主机告警（Agent 上报的 CPU/内存/磁盘/温度超阈值时通知）。\n- 邮件通知：勾选启用对应类型的邮件发送；收件人为下方勾选的用户，保存后生效。\n- 邮件经「SMTP 服务设置」卡片配置的服务器发送，请先确保 SMTP 可用。\n- Webhook 通知为后续版本预留，暂未实现。",
+      "smtp": "配置系统外发邮件使用的 SMTP 服务器（用于密码重置、IP 变更通知等邮件）。\n- SSL 连接类型：无 SSL / SSL（端口 465）/ STARTTLS（端口 587），端口仅作提示，需按实际服务器填写。\n- 发件人邮箱：邮件显示的发件地址。\n「测试连接」向指定邮箱发送测试邮件验证配置。",
+      "notify": "「通知配置」控制各类通知的发送方式开关与邮件收件人。\n- 通知类型：IP地址变更（设备移动到非登记 IP，或工位 IP 上设备更换时通知）、主机告警（Agent 上报的 CPU/内存/磁盘/温度超阈值时通知）与 SNMP 观测事件（发现未登记设备等链路/ARP 观测）。\n- 邮件通知：勾选启用对应类型的邮件发送；收件人为下方勾选的用户，保存后生效。\n- 邮件经「SMTP 服务设置」卡片配置的服务器发送，请先确保 SMTP 可用。\n- Webhook 通知为后续版本预留，暂未实现。",
       "agent": "服务端数据采集总开关与上报接收配置。\n- Agent 服务：上报接收监听地址与端口（UDP 9100，h3 mTLS 双向认证）；启用后接收主机 Agent 上报。\n- 上报间隔（秒）：10-3600，经上报响应下发给 agent，同时驱动离线判定（超过上报间隔 3 倍未上报判定离线）。\n- 采集间隔（秒）：1-60，agent 本机高频采集节奏，帧先入本地队列、按上报间隔整批发送。\n- 站点 CA：agent mTLS 双向认证使用的站点根 CA。\n- 使用公共URL作为上报地址：开启后配置包内上报地址自动取「公共URL」主机名加监听端口；未配置公共URL时保存会报错。\n- 上报地址覆盖：代理/NAT 后的真实上报地址，host:port 或方括号 IPv6；留空则按监听地址推导。\n- 注册令牌：配置包内置的共享令牌，agent 上报时以 SHA-256 哈希比对；重新生成后旧令牌即刻失效，已部署主机需重新下载配置包覆盖。\n- 配置包：仅含 agent.toml 与证书，解包至 /etc/foims-agent/ 后启动 foims-agent 服务即可；agent 程序安装包（deb/rpm/zip）按操作系统到 Release 页下载。\n- 首次上报自动注册：agent 行初始为活跃状态，标签取主机名，无需人工审核。",
       "snmp_trap": "接收网络设备发送的 SNMP Trap/Inform 通知。\n- 监听地址：IPv4、主机名或方括号 IPv6；监听端口默认 162。\n- 冷却窗口（秒）：同一来源地址在窗口内的后续通知只记服务日志，不重复写站内通知。\n- v1/v2c 团体名：多个以逗号分隔；留空时拒绝处理全部 v1/v2c 通知（防伪造来源注入站内通知），需接收 v1/v2c trap 必须至少配置一个团体名。\n- v3 USM 用户：不配置用户时拒绝全部 v3 通知；隐私协议必须与认证协议成对配置。\n- 收到的 Trap/Inform 写入「日志-通知」。",
       "data_mgmt": "CSV 数据导入：\n- 支持导入包含多个 表名.csv 的 ZIP 包（可只含部分模块），或单个 CSV 文件（按表头自动识别，不比对文件名）。\n- 全量导入按 组织 → 房间 → 网络区域 → 机柜 → 设备 → 线路 → 可视化 的顺序执行。\n- 文件中用业务名称相互引用（如 房间名、设备名、房间/设备名），被引用资源不存在则整批报错回滚。\n- 按业务键匹配：已存在则更新，新纪录由系统生成 UUID；字段首尾空白自动去除。\nCSV 数据导出：可选导出全部模块（ZIP）或单个模块；部分模块导出包含关联子资源（房间含工位与插座、机柜含机位与配线架、设备含端口网卡接口与 IP 等）。",

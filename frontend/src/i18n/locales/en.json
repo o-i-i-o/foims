@@ -408,7 +408,7 @@
       "type_arp_added": "ARP added",
       "type_arp_removed": "ARP removed",
       "type_arp_conflict": "ARP conflict",
-      "type_unknown_endpoint": "Unknown endpoint"
+      "type_unknown_device": "Unknown device"
     },
     "locate": {
       "title": "Endpoint Locate",
@@ -1003,7 +1003,7 @@
     "col_email": "Email",
     "col_webhook": "Webhook",
     "pending": "Coming Soon",
-    "type_mac_change": "MAC Address Change",
+    "type_ip_change": "IP Address Change",
     "type_agent_alert": "Host Alert",
     "email_recipients": "Email Recipients",
     "save_success": "Notification settings saved successfully",
@@ -2277,7 +2277,7 @@
       "fetched": "IPs fetched successfully",
       "interface_invalid": "Specified interface does not exist or does not belong to the device",
       "invalid_ip": "Invalid IP address format '{{ip}}': {{error}}",
-      "mac_sync_completed": "MAC sync completed: {{updated}} updated, {{unchanged}} unchanged, {{skipped}} skipped, {{deactivated}} deactivated",
+      "mac_sync_completed": "MAC sync completed: {{updated}} updated, {{unchanged}} unchanged, {{skipped}} skipped, {{deactivated}} deactivated, {{ip_change}} IP change(s) detected",
       "mac_sync_failed": "MAC sync failed",
       "mac_sync_no_change": "MAC addresses unchanged",
       "network_required": "IP {{ip}} must belong to a subnet: specify one explicitly, or bind a subnet to the device room first",
@@ -2389,9 +2389,13 @@
     "notification": {
       "all_marked_read": "All notifications marked as read",
       "list_retrieved": "Notification list retrieved",
-      "mac_change": {
-        "body": "MAC address of workstation {{workstation}} {{ip}} changed from {{old_mac}} to {{new_mac}} (source device: {{device}})",
-        "title": "MAC address change"
+      "ip_change": {
+        "body": "Device (MAC {{mac}}) of workstation {{workstation}} moved to a new IP: registered {{registered_ip}}, observed {{observed_ip}} (source device: {{device}})",
+        "title": "IP address change"
+      },
+      "device_swap": {
+        "body": "The device on workstation {{workstation}} IP {{ip}} was replaced: MAC changed from {{old_mac}} to {{new_mac}} (source device: {{device}})",
+        "title": "Workstation device swap"
       },
       "marked_read": "Notification marked as read",
       "not_found": "Notification not found",
@@ -2414,7 +2418,7 @@
         "title": "SNMP Observation Event",
         "body_link_flip": "Device {{device}} interface {{interface}} link state changed to {{direction}}",
         "body_reboot": "Device {{device}} appears to have rebooted, estimated downtime {{downtime}}",
-        "body_unknown_endpoint": "Device {{device}} interface {{interface}} found unregistered endpoint IP {{ip}} / MAC {{mac}}",
+        "body_unknown_device": "Device {{device}} interface {{interface}} found unregistered MAC {{mac}} (observed at IP {{ip}})",
         "body_arp_conflict": "Device {{device}} interface {{interface}} detected ARP conflict IP {{ip}} / MACs {{mac}} (one IP claimed by multiple MACs)",
         "body_poe_off": "Device {{device}} interface {{interface}} PoE power lost (class {{class}})"
       }
@@ -2925,8 +2929,8 @@
       "cert": "Manage the site root CA and HTTPS certificates: generate/import CAs and certificates, download the CA, download and revoke certificates.\n- Certificates and keys are used only by this server's HTTPS/nginx; encrypted private keys are not supported and nothing is downloadable.\n- When generating a certificate, the public URL hostname is added to the SAN automatically.\n- An issuing CA can be imported along with a server certificate (only for terminal trust export, not for signing).\n- Imported CAs go into the imported-CA pool (the site root CA is not replaced); choose one in the 'Issuing CA' dropdown when generating certificates. CA private keys stay on the server only.\n- Regenerating the root CA overwrites the existing one; certificates issued by the old CA will no longer chain to the new one.\nHow to make terminals trust the site root CA:\n- Windows: run certutil -addstore -f Root foims-root-ca.crt as administrator, or double-click the .crt to import it into 'Trusted Root Certification Authorities'; Chrome / Edge / Firefox all trust it after a browser restart.\n- Debian/Ubuntu: sudo cp foims-root-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates.\n- RHEL/Fedora: sudo cp foims-root-ca.crt /etc/pki/ca-trust/source/anchors/ && sudo update-ca-trust extract (the file must be PEM with a .crt extension).\n- Chrome/Chromium on Linux does not read the system trust store; also run: certutil -d sql:$HOME/.pki/nssdb -A -t \"C,,\" -n \"FOIMS-RootCA\" -i foims-root-ca.crt (requires libnss3-tools / nss-tools).\n- Firefox on Linux uses its own certificate store: import manually under Settings -> Privacy & Security -> Certificates -> View Certificates; or administrators can configure the p11-kit trust module via enterprise policy.\nNote: import the root CA (not the site certificate); certificates must contain a SAN (browsers ignore the CN). With a private CA, Chrome's HTTP/3 (QUIC) does not use local trust anchors and falls back to TCP automatically, which is normal.",
       "ldap": "- LDAP Server Address: ldap:// in plaintext or ldaps:// encrypted, port optional.\n- Base DN: the starting point for user searches.\n- Service Account DN / Password: the account used to search users; leave empty for anonymous binding.\n- User Search Filter: use %s or {username} as the username placeholder.\n- Default Role for New Users: the role assigned when an LDAP user signs in for the first time and no local account exists.\n'Test Connection' verifies reachability and binding credentials; once enabled, an LDAP sign-in entry appears on the login page.",
       "sso": "- Issuer URL: the OIDC provider's root address; the discovery document is fetched from /.well-known/openid-configuration automatically.\n- Client ID / Client Secret: client credentials registered on the identity provider.\n- Redirect URI: when left empty it is derived from the request Host as https://<host>/api/auth/sso/callback; if the IdP requires a fixed callback, fill it in and register the same URL on the IdP.\n- Default Role for New Users: the role assigned when an SSO user signs in for the first time and no local account exists.\n'Test Connection' verifies discovery-document reachability and client credentials; once enabled, an SSO sign-in entry appears on the login page.",
-      "smtp": "Configure the SMTP server used for outgoing mail (password reset, MAC change notifications, etc.).\n- SSL Connection Type: No SSL / SSL (port 465) / STARTTLS (port 587); the ports are hints only - use the actual server port.\n- Sender Email: the From address shown on outgoing mail.\n'Test Connection' sends a test email to verify the configuration.",
-      "notify": "'Notification Settings' controls the delivery method toggles and email recipients for each notification type.\n- Types: MAC Address Change (sent when a device MAC address changes) and Host Alert (sent when agent-reported CPU/memory/disk/temperature exceeds the threshold).\n- Email: check to enable email delivery for a type; recipients are the users selected below and take effect after saving.\n- Mail is sent via the server configured in the 'SMTP Server Settings' card; make sure SMTP works first.\n- Webhook is a placeholder reserved for future versions and is not implemented yet.",
+      "smtp": "Configure the SMTP server used for outgoing mail (password reset, IP change notifications, etc.).\n- SSL Connection Type: No SSL / SSL (port 465) / STARTTLS (port 587); the ports are hints only - use the actual server port.\n- Sender Email: the From address shown on outgoing mail.\n'Test Connection' sends a test email to verify the configuration.",
+      "notify": "'Notification Settings' controls the delivery method toggles and email recipients for each notification type.\n- Types: IP Address Change (sent when a device moves to an unregistered IP, or the device on a workstation IP is swapped), Host Alert (sent when agent-reported CPU/memory/disk/temperature exceeds the threshold), and SNMP Observation Event (unregistered devices and other link/ARP observations).\n- Email: check to enable email delivery for a type; recipients are the users selected below and take effect after saving.\n- Mail is sent via the server configured in the 'SMTP Server Settings' card; make sure SMTP works first.\n- Webhook is a placeholder reserved for future versions and is not implemented yet.",
       "agent": "Master switch of server-side data collection and the report receiver configuration.\n- Agent Service: the report receiver listen address and port (UDP 9100, h3 mTLS mutual TLS); when enabled the server accepts host agent reports.\n- Report Interval (seconds): 10-3600, delivered to agents via the report response and driving offline detection (a host is offline after 3x the interval without reports).\n- Collect Interval (seconds): 1-60, the agent's local high-frequency collection cadence; frames queue locally and are sent in batches per report interval.\n- Site CA: the site root CA used for agent mTLS mutual authentication.\n- Use public URL as report address: when on, the report address inside the config package is derived from the 'Public URL' hostname plus the listen port; saving fails when no public URL is configured.\n- Report Address Override: the real report address behind proxy/NAT, host:port or bracketed IPv6; leave empty to derive it from the listen address.\n- Enrollment Token: the shared token embedded in config packages, compared as a SHA-256 hash on report; regenerating invalidates old tokens immediately - redeployed hosts need a fresh config package.\n- Config Package: contains agent.toml and certificates only; unpack it into /etc/foims-agent/ and start the foims-agent service. Agent installers (deb/rpm/zip) per OS are downloaded from the Release page.\n- First report auto-registration: the agent row starts as active with the hostname as its label - no manual approval needed.",
       "snmp_trap": "Receive SNMP Trap/Inform notifications sent by network devices.\n- Listen Address: IPv4, hostname or bracketed IPv6; the default port is 162.\n- Cooldown Window (seconds): subsequent notifications from the same source within the window are logged only, without repeating the in-app notification.\n- v1/v2c Community String: comma separated; when empty, all v1/v2c notifications are rejected (to prevent forged sources from injecting in-app notifications), so at least one community string is required to receive v1/v2c traps.\n- v3 USM Users: all v3 notifications are rejected when no user is configured; a privacy protocol must be paired with an auth protocol.\n- Received Trap/Inform messages go to 'Logs - Notifications'.",
       "data_mgmt": "CSV import:\n- Import a ZIP of per-table CSV files (partial modules allowed) or a single CSV identified by its header row (file names are not compared).\n- A full import runs in order: Organization -> Room -> Network Region -> Cabinet -> Device -> Cable Link -> Visualization.\n- Rows reference each other by business names (room name, device name, room/device name); missing referenced resources abort and roll back the whole batch.\n- Rows are matched by business key: existing rows update, new rows are inserted with server-generated UUIDs; leading/trailing whitespace is trimmed automatically.\nCSV export: export all modules (ZIP) or a single module; partial exports include related sub-resources (rooms with workstations and outlets, cabinets with positions and patch panels, devices with ports/NICs/interfaces/IPs, etc.).",

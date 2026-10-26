@@ -15,6 +15,8 @@ use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::{DeviceLocateResult, SnmpEvent, SnmpEventQuery};
 
+use crate::core::normalize_mac;
+
 use foims_common::log_info;
 
 /// GET /api/snmp/events：分页查询观测事件（按 occurred_at 倒序）。
@@ -119,14 +121,6 @@ fn push_event_filters(
 pub struct LocateQuery {
     pub mac: Option<String>,
     pub ip: Option<String>,
-}
-
-/// 归一 MAC：剔除 `:`/`-`/空格并转大写，返回 12 位十六进制串（比较用，分隔符无关）。
-fn normalize_mac(mac: &str) -> String {
-    mac.chars()
-        .filter(|c| !matches!(c, ':' | '-' | ' ' | '.'))
-        .flat_map(|c| c.to_uppercase())
-        .collect()
 }
 
 /// MAC 等值匹配的全部书写形态（C8：此前用 REPLACE(UPPER(col)) 表达式
@@ -260,14 +254,6 @@ pub async fn locate_device<P: DbProvider>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn normalize_mac_strips_separators_and_uppercases() {
-        assert_eq!(normalize_mac("aa:bb:cc:dd:ee:ff"), "AABBCCDDEEFF");
-        assert_eq!(normalize_mac("AA-BB-CC-DD-EE-FF"), "AABBCCDDEEFF");
-        assert_eq!(normalize_mac("aa.bb.cc.dd.ee.ff"), "AABBCCDDEEFF");
-        assert_eq!(normalize_mac("  aabbccddeeFF "), "AABBCCDDEEFF");
-    }
 
     #[test]
     fn mac_match_forms_covers_common_stored_shapes() {

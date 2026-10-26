@@ -280,27 +280,29 @@ fn simplify_ipv6(ip: &str) -> String {
         .unwrap_or_else(|_| ip.to_string())
 }
 
-/// 比对上一轮与本轮 ARP/FDB 条目，产出新增/移除/冲突/未知终端观测事件（纯函数）。
+/// 比对上一轮与本轮 ARP/FDB 条目，产出新增/移除/冲突/未知设备观测事件（纯函数）。
 ///
 /// - `old`：设备现有 snmp_arp_entries 行（`(ip_host, mac)` 列表）；
 /// - `new`：本轮 SNMP 采集条目；
-/// - `registered_ips`：已在 interface_ips 登记的 IP（host 文本）集合；
+/// - `known_macs`：已登记设备网口 MAC（[`crate::core::normalize_mac`] 归一集，
+///   MAC 为物理实体、IP 为虚拟实体：未知与否按 MAC 判定，不看不登记的 IP）；
 /// - `baseline`：设备此前无任何条目（首轮同步）为 true——仅逐条落 `arp_added`
-///   （severity=info），不发未知终端/冲突事件，避免首次全量同步造成通知风暴。
+///   （severity=info），不发未知设备/冲突事件，避免首次全量同步造成通知风暴。
 pub fn diff_arp_entries(
     old: &[(String, String)],
     new: &[ArpEntry],
-    registered_ips: &HashSet<String>,
+    known_macs: &HashSet<String>,
     baseline: bool,
 ) -> Vec<ObsEvent> {
     use foims_models::{
         SNMP_EVENT_ARP_ADDED, SNMP_EVENT_ARP_CONFLICT, SNMP_EVENT_ARP_REMOVED,
-        SNMP_EVENT_UNKNOWN_ENDPOINT, SNMP_SEVERITY_INFO, SNMP_SEVERITY_WARNING,
+        SNMP_EVENT_UNKNOWN_DEVICE, SNMP_SEVERITY_INFO, SNMP_SEVERITY_WARNING,
     };
 
     let mut events = Vec::new();
 
-    // 首轮基线：全部条目按 arp_added(info) 落表，不做未知/冲突判定
+    // 首轮基线：无论 MAC 是否已知，全部按 arp_added(info) 落表，不发未知/冲突事件
+    //（基线语义是建立观测面，而非判定接入合法性）
     if baseline {
         for entry in new {
             events.push(ObsEvent::new(
@@ -316,16 +318,18 @@ pub fn diff_arp_entries(
     let old_ips: HashSet<&str> = old.iter().map(|(ip, _)| ip.as_str()).collect();
     let new_ips: HashSet<&str> = new.iter().map(|e| e.ip_address.as_str()).collect();
 
-    // 新增条目（本轮出现、旧表无该 IP）：登记 IP 落 arp_added，未登记落 unknown_endpoint
-    // 同一新增 IP 多 MAC 时仅按首个条目产出一条事件，避免风暴（冲突另有专门事件）
-    let mut handled_new_ips: HashSet<&str> = HashSet::new();
+    // 新增条目（本轮出现、旧表无该 IP）：MAC 已登记落 arp_added，
+    // 未知 MAC 落 unknown_device（应管尽管：未登记设备接入才告警，
+    // 已登记设备的 DHCP 漂移 IP 不报未知，MAC 移动由拉取侧 IP 变更检测覆盖）
+    // 同一新增 MAC 多 IP 时仅按首个条目产出一条事件，避免风暴（冲突另有专门事件）
+    let mut handled_new_macs: HashSet<&str> = HashSet::new();
     for entry in new {
         if old_ips.contains(entry.ip_address.as_str())
-            || !handled_new_ips.insert(entry.ip_address.as_str())
+            || !handled_new_macs.insert(entry.mac_address.as_str())
         {
             continue;
         }
-        if registered_ips.contains(&entry.ip_address) {
+        if known_macs.contains(&crate::core::normalize_mac(&entry.mac_address)) {
             events.push(ObsEvent::new(
                 SNMP_EVENT_ARP_ADDED,
                 entry.interface.clone(),
@@ -334,7 +338,7 @@ pub fn diff_arp_entries(
             ));
         } else {
             events.push(ObsEvent::new(
-                SNMP_EVENT_UNKNOWN_ENDPOINT,
+                SNMP_EVENT_UNKNOWN_DEVICE,
                 entry.interface.clone(),
                 SNMP_SEVERITY_WARNING,
                 serde_json::json!({
@@ -442,10 +446,10 @@ mod tests {
 
     #[test]
     fn diff_baseline_only_records_added() {
-        // 首轮：无论是否登记，全部落 arp_added，不发未知终端/冲突
+        // 首轮基线：无论 MAC 是否已知，全部落 arp_added，不发未知设备/冲突
         let new = vec![arp_entry("10.0.0.5", "AA:BB:CC:DD:EE:01")];
-        let registered = HashSet::new();
-        let events = diff_arp_entries(&[], &new, &registered, true);
+        let known = HashSet::new();
+        let events = diff_arp_entries(&[], &new, &known, true);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "arp_added");
         assert_eq!(events[0].severity, "info");
@@ -453,25 +457,25 @@ mod tests {
 
     #[test]
     fn diff_added_removed_and_unknown() {
-        // 旧表：10.0.0.1（登记）、10.0.0.9（本轮消失）
+        // 旧表：10.0.0.1（MAC 已知）、10.0.0.9（本轮消失）
         let old = vec![
             ("10.0.0.1".to_string(), "AA:01".to_string()),
             ("10.0.0.9".to_string(), "AA:09".to_string()),
         ];
-        // 本轮：10.0.0.1（未变）、新增登记 10.0.0.2、新增未登记 10.0.0.3
+        // 本轮：10.0.0.1（未变）、新增已知 MAC 10.0.0.2、新增未知 MAC 10.0.0.3
         let new = vec![
             arp_entry("10.0.0.1", "AA:01"),
             arp_entry("10.0.0.2", "AA:02"),
             arp_entry("10.0.0.3", "AA:03"),
         ];
-        let registered: HashSet<String> = ["10.0.0.1", "10.0.0.2"]
+        let known: HashSet<String> = ["AA:01", "AA:02"]
             .iter()
-            .map(|s| s.to_string())
+            .map(|s| crate::core::normalize_mac(s))
             .collect();
-        let events = diff_arp_entries(&old, &new, &registered, false);
+        let events = diff_arp_entries(&old, &new, &known, false);
         let types: Vec<&str> = events.iter().map(|e| e.event_type).collect();
-        assert!(types.contains(&"arp_added"), "应有登记新增");
-        assert!(types.contains(&"unknown_endpoint"), "应有未登记新增");
+        assert!(types.contains(&"arp_added"), "应有已知 MAC 新增");
+        assert!(types.contains(&"unknown_device"), "应有未知 MAC 新增");
         assert!(types.contains(&"arp_removed"), "应有移除");
         // 未变条目不产生事件
         assert_eq!(
@@ -485,15 +489,38 @@ mod tests {
     }
 
     #[test]
+    fn diff_known_mac_at_new_ip_is_not_unknown_device() {
+        // 应管尽管：已登记设备的 DHCP 漂移 IP（同 MAC 出现在新 IP）
+        // 落 arp_added 而非 unknown_device，MAC 移动由拉取侧 IP 变更检测覆盖
+        let old = vec![("10.0.0.1".to_string(), "AA:01".to_string())];
+        let new = vec![
+            arp_entry("10.0.0.1", "AA:01"),
+            arp_entry("10.0.0.2", "AA:01"),
+        ];
+        let known: HashSet<String> = [crate::core::normalize_mac("AA:01")].into_iter().collect();
+        let events = diff_arp_entries(&old, &new, &known, false);
+        assert!(
+            events.iter().all(|e| e.event_type != "unknown_device"),
+            "已知 MAC 不应报未知设备"
+        );
+        // 同一新增 MAC 多 IP 仅产出一条 arp_added（风暴控制按 MAC 维度）
+        let added: Vec<&ObsEvent> = events
+            .iter()
+            .filter(|e| e.event_type == "arp_added")
+            .collect();
+        assert_eq!(added.len(), 1);
+    }
+
+    #[test]
     fn diff_detects_conflict() {
-        // 同一 IP 本轮学到两个不同 MAC → 冲突
+        // 同一 IP 本轮学到两个不同 MAC → 冲突（其中未知 MAC 另报未知设备）
         let old = vec![("10.0.0.1".to_string(), "AA:01".to_string())];
         let new = vec![
             arp_entry("10.0.0.1", "AA:01"),
             arp_entry("10.0.0.1", "BB:02"),
         ];
-        let registered: HashSet<String> = ["10.0.0.1"].iter().map(|s| s.to_string()).collect();
-        let events = diff_arp_entries(&old, &new, &registered, false);
+        let known: HashSet<String> = [crate::core::normalize_mac("AA:01")].into_iter().collect();
+        let events = diff_arp_entries(&old, &new, &known, false);
         assert!(
             events
                 .iter()

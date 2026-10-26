@@ -210,9 +210,11 @@ log:
   ip:
     batch_record_failed: "Batch create: record {{index}} processing failed: {{error}}"
     invalid_cidr: "Invalid CIDR format, cannot find available IPs: '{{cidr}}'"
-    mac_change_notification_failed: "Failed to send MAC change notification: IP={{ip}}, error: {{error}}"
-    mac_change_notification_sent: "MAC change notification sent: IP={{ip}}"
-    mac_changed: "MAC address change detected: interface={{interface}}, IP={{ip}}, old MAC={{old_mac}}, new MAC={{new_mac}}"
+    device_swap: "Device swap on workstation IP detected: interface={{interface}}, IP={{ip}}, old MAC={{old_mac}}, new MAC={{new_mac}}"
+    device_swap_notification_failed: "Failed to send device swap notification: IP={{ip}}, error: {{error}}"
+    device_swap_notification_sent: "Device swap notification sent: IP={{ip}}"
+    ip_change_notification_failed: "Failed to send IP change notification: MAC={{mac}}, observed IP={{observed_ip}}, error: {{error}}"
+    ip_change_notification_sent: "IP change notification sent: MAC={{mac}}, observed IP={{observed_ip}}"
     mac_conflict: "MAC conflict: {{mac}} already used by another device's IP {{ip}}, skipping update"
     mac_observation_conflict: "MAC observation conflict: interface {{interface}} has both {{existing_mac}} and {{new_mac}}, skipping {{ip}}"
     mac_sync_failed: "MAC sync failed: {{error}}"
@@ -224,11 +226,13 @@ log:
     password_expiry_auto_disabled: "User {{user_id}} password expired, account auto-disabled"
     success: "User {{username}} logged in successfully"
     token_refreshed: "User {{username}} token refreshed"
-  mac_change:
-    email_sent: "MAC change email sent: workstation={{workstation}}"
-    email_send_failed: "Failed to send MAC change email (workstation {{workstation}}): {{error}}"
-    email_skipped: "MAC change email skipped: workstation={{workstation}}, reason: {{reason}}"
-    notification_created: "MAC change notification created: workstation={{workstation}}, IP={{ip}}"
+  ip_change:
+    device_swap_created: "Device swap notification created: workstation={{workstation}}, IP={{ip}}"
+    device_swap_email_failed: "Failed to send device swap email (workstation {{workstation}}): {{error}}"
+    device_swap_email_sent: "Device swap email sent: workstation={{workstation}}"
+    email_send_failed: "Failed to send IP change email (workstation {{workstation}}): {{error}}"
+    email_sent: "IP change email sent: workstation={{workstation}}"
+    notification_created: "IP change notification created: workstation={{workstation}}, observed IP={{observed_ip}}"
   network:
     check_ips_outside_cidr_failed: "Failed to query IPs outside CIDR: {{error}}"
     check_ipv4_duplicate_failed: "Database query failed while checking IPv4 network duplication: {{error}}"
@@ -287,7 +291,7 @@ log:
     event_recorded: "SNMP observation events recorded: device={{device_id}}, inserted={{count}}"
     event_record_failed: "Failed to write SNMP observation events: device={{device_id}}, error: {{error}}"
     notification_failed: "Failed to create SNMP event notification: type={{event_type}}, device={{device_id}}, error: {{error}}"
-    unknown_endpoint_email_failed: "Failed to send unknown endpoint email: {{error}}"
+    unknown_device_email_failed: "Failed to send unknown device email: {{error}}"
     locate_query: "Endpoint locate query: mac={{mac}}, ip={{ip}}, hits={{hits}}"
     events_cleanup_completed: "SNMP events cleanup completed: deleted {{count}} expired records"
   task:

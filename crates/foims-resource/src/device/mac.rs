@@ -15,7 +15,7 @@ use foims_common::{AppError, msg};
 use foims_models::SnmpMac;
 
 use foims_snmp::collect::arp::{diff_arp_entries, get_arp_table_via_snmp};
-use foims_snmp::core::{get_device_snmp_config, truncate_to_column_width};
+use foims_snmp::core::{get_device_snmp_config, normalize_mac, truncate_to_column_width};
 use foims_snmp::events::record_events;
 
 /// snmp_arp_entries.interface 列宽（VARCHAR(50)，与建表契约一致）
@@ -38,7 +38,8 @@ pub async fn get_device_mac_table<P: DbProvider>(
         .await
         .map_err(|e| AppError::Snmp(msg("server.device.snmp.arp_fetch_failed").with("error", e)))?;
 
-    // 差值比对：upsert 前读旧行集合 + 登记 IP，产出新增/移除/冲突/未知终端事件
+    // 差值比对：upsert 前读旧行集合 + 已知设备网口 MAC，产出新增/移除/冲突/未知设备事件
+    //（应管尽管：未知与否按物理实体 MAC 判定，MAC 归一后与采集侧同口径）
     let old_rows: Vec<(String, String)> = sqlx::query_as::<_, (String, String)>(
         "SELECT host(ip_address), mac_address FROM snmp_arp_entries WHERE device_id = $1",
     )
@@ -46,13 +47,15 @@ pub async fn get_device_mac_table<P: DbProvider>(
     .fetch_all(&conn)
     .await?;
     let baseline = old_rows.is_empty();
-    let registered_ips: HashSet<String> =
-        sqlx::query_scalar::<_, String>("SELECT DISTINCT host(ip_address) FROM interface_ips")
-            .fetch_all(&conn)
-            .await?
-            .into_iter()
-            .collect();
-    let obs_events = diff_arp_entries(&old_rows, &entries, &registered_ips, baseline);
+    let known_macs: HashSet<String> = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT mac_address FROM device_interfaces WHERE mac_address IS NOT NULL AND mac_address <> ''",
+    )
+    .fetch_all(&conn)
+    .await?
+    .into_iter()
+    .map(|mac| normalize_mac(&mac))
+    .collect();
+    let obs_events = diff_arp_entries(&old_rows, &entries, &known_macs, baseline);
 
     let now = Utc::now();
     let mut upserted_count = 0usize;

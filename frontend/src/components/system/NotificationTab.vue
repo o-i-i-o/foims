@@ -127,7 +127,7 @@ async function testSmtpConnection(): Promise<void> {
 
 // ==================== 通知设置（方式矩阵 + 收件人） ====================
 
-const macChange = ref(true);
+const ipChange = ref(true);
 const agentAlert = ref(true);
 const snmpEvent = ref(true);
 const selectedIds = ref<Set<string>>(new Set());
@@ -173,7 +173,7 @@ watch(
     // 通知方式开关：后端未配置或字段缺失时默认全开（与后端 serde 默认值一致）
     // （边界断言：存量数据 methods 段可能缺省，按部分字段消费）
     const methods = (settings.methods ?? {}) as Partial<NotificationMethods>;
-    macChange.value = methods.mac_change !== false;
+    ipChange.value = methods.ip_change !== false;
     agentAlert.value = methods.agent_alert !== false;
     snmpEvent.value = methods.snmp_event !== false;
     selectedIds.value = new Set(settings.email_recipients || []);
@@ -202,7 +202,7 @@ async function saveNotificationSettings(): Promise<void> {
     const payload: NotificationSettings = {
       email_recipients: [...selectedIds.value],
       methods: {
-        mac_change: macChange.value,
+        ip_change: ipChange.value,
         agent_alert: agentAlert.value,
         snmp_event: snmpEvent.value
       }
@@ -305,8 +305,8 @@ async function saveNotificationSettings(): Promise<void> {
             </thead>
             <tbody>
               <tr>
-                <td>{{ t("notification.type_mac_change") }}</td>
-                <td><input v-model="macChange" type="checkbox" :disabled="readonly"></td>
+                <td>{{ t("notification.type_ip_change") }}</td>
+                <td><input v-model="ipChange" type="checkbox" :disabled="readonly"></td>
                 <td><span class="status-badge status-reserved">{{ t("notification.pending") }}</span></td>
               </tr>
               <tr>

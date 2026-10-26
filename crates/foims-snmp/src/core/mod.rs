@@ -314,6 +314,18 @@ pub fn clean_snmp_text(value: Option<&str>) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
 }
 
+/// 归一 MAC：剔除 `:`/`-`/`.`/空格并转大写，返回十六进制串（比较用，分隔符无关）。
+///
+/// MAC 列在不同写入路径（SNMP 采集大写冒号 / 人工录入小写无分隔）下
+/// 形态不一，所有跨表 MAC 比对（定位、已知集合判定）先经本函数归一。
+#[must_use]
+pub fn normalize_mac(mac: &str) -> String {
+    mac.chars()
+        .filter(|c| !matches!(c, ':' | '-' | ' ' | '.'))
+        .flat_map(|c| c.to_uppercase())
+        .collect()
+}
+
 /// 连通性探测：GET sysDescr，超时取 `params.timeout_secs`（单一超时口径，
 /// 禁止调用侧再传第二超时参数造成双源）
 pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
@@ -613,6 +625,15 @@ mod tests {
             normalize_blank(Some("public".to_string())).as_deref(),
             Some("public")
         );
+    }
+
+    #[test]
+    fn test_normalize_mac_strips_separators_and_uppercases() {
+        // 跨表 MAC 比对统一口径：分隔符无关、大小写无关
+        assert_eq!(normalize_mac("aa:bb:cc:dd:ee:ff"), "AABBCCDDEEFF");
+        assert_eq!(normalize_mac("AA-BB-CC-DD-EE-FF"), "AABBCCDDEEFF");
+        assert_eq!(normalize_mac("aa.bb.cc.dd.ee.ff"), "AABBCCDDEEFF");
+        assert_eq!(normalize_mac("  aabbccddeeFF "), "AABBCCDDEEFF");
     }
 
     #[test]

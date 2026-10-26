@@ -4,13 +4,15 @@
  * 通知方式开关（存储于 system_configs：config_type='notification'，key='methods'）。
  *
  * 按通知类型记录各方式（目前仅邮件）是否启用；前端「通知配置」卡片矩阵
- * 逐格对应。未配置（历史存量）时全部视为启用，保持既有发送行为不变。
+ * 逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用。
  */
 export type NotificationMethods = { 
 /**
- * MAC 地址变更通知的邮件方式开关
+ * IP 地址变更通知（含工位 IP 上设备更换）的邮件方式开关。
+ * 存量键名 mac_change → ip_change 的重命名迁移由 upgrade SQL 负责（见 upgrade/0.32），
+ * 读取路径只认规范键名，不设 alias 兼容旧键。
  */
-mac_change: boolean, 
+ip_change: boolean, 
 /**
  * 主机资源告警通知的邮件方式开关
  */

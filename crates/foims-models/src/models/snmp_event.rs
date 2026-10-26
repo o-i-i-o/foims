@@ -16,10 +16,11 @@ pub const SNMP_EVENT_DEVICE_REBOOT: &str = "device_reboot";
 pub const SNMP_EVENT_ARP_ADDED: &str = "arp_added";
 /// ARP/FDB 移除条目
 pub const SNMP_EVENT_ARP_REMOVED: &str = "arp_removed";
-/// ARP/FDB 冲突（同 IP 对应多 MAC 或反之）
+/// ARP/FDB 冲突（同一 IP 本轮学到多个 MAC）
 pub const SNMP_EVENT_ARP_CONFLICT: &str = "arp_conflict";
-/// 未登记终端（同步 IP 未匹配任何 interface_ips 且为新增）
-pub const SNMP_EVENT_UNKNOWN_ENDPOINT: &str = "unknown_endpoint";
+/// 未知设备（观测 MAC 未登记于任何 device_interfaces，应管尽管按物理实体判定）；
+/// 历史行旧值 unknown_endpoint（按未登记 IP 判定）由 upgrade SQL 迁移为本值，展示/筛选不保留旧值
+pub const SNMP_EVENT_UNKNOWN_DEVICE: &str = "unknown_device";
 /// PoE 端口供电中断（detection_status 由 powering 转为非供电态）
 pub const SNMP_EVENT_POE_OFF: &str = "poe_port_off";
 /// CDP 邻居新增

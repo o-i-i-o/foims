@@ -1,4 +1,4 @@
-//! 站内通知与 MAC 变更告警（自 foims-resource::helpers 下放）。
+//! 站内通知与 IP 变更/设备更换告警（自 foims-resource::helpers 下放）。
 //!
 //! 仅依赖 foims-common（日志）与 foims-auth（SMTP 开关/发送），
 //! 供资源域（ip.rs）、采集服务域（alerts.rs/trap.rs）与 SNMP 事件模块共用。
@@ -39,10 +39,107 @@ pub async fn create_notification(
     Ok(())
 }
 
-/// 工作站 MAC 变更告警：站内通知全部管理员；邮件方式按「通知配置」中
-/// MAC 地址变更的邮件开关决定是否发送（SMTP 未配置时降级）。
-/// `source_device` 为拉取该 MAC 的来源设备名，站内通知与邮件均注明。
-pub async fn send_mac_change_notification(
+/// 解析工位名（站内通知与邮件文案用）；查询失败/缺行降级为 UUID 字符串。
+async fn resolve_workstation_name(pool: &sqlx::PgPool, workstation_id: &Uuid) -> String {
+    match sqlx::query_scalar::<_, String>("SELECT name FROM workstations WHERE id = $1")
+        .bind(workstation_id)
+        .fetch_optional(pool)
+        .await
+    {
+        Ok(Some(name)) => name,
+        Ok(None) => {
+            log_warn!("log.workstation.not_found", id = workstation_id);
+            workstation_id.to_string()
+        }
+        Err(e) => {
+            log_warn!("log.workstation.query_name_failed", error = e);
+            workstation_id.to_string()
+        }
+    }
+}
+
+/// 查启用状态的管理员（admin/secadmin）ID；站内通知按人各发一条，
+/// 已读状态随用户独立。
+async fn active_admin_ids(pool: &sqlx::PgPool) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'secadmin')",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// 工位设备 IP 变更告警（MAC 物理设备从登记 IP 移到了新的观测 IP）：
+/// 站内通知全部管理员；邮件按「通知配置」中 IP 地址变更的开关决定是否
+/// 发送（SMTP 未配置时降级）。`source_device` 为拉取到该观测的来源设备名。
+pub async fn send_ip_change_notification(
+    pool: &sqlx::PgPool,
+    workstation_id: &Uuid,
+    mac_address: &str,
+    registered_ip: &str,
+    observed_ip: &str,
+    source_device: &str,
+) -> Result<(), sqlx::Error> {
+    let workstation_name = resolve_workstation_name(pool, workstation_id).await;
+
+    let content = encode_notification_content(
+        "server.notification.ip_change.body",
+        &[
+            ("workstation", &workstation_name),
+            ("mac", mac_address),
+            ("registered_ip", registered_ip),
+            ("observed_ip", observed_ip),
+            ("device", source_device),
+        ],
+    );
+    let admin_ids = active_admin_ids(pool).await?;
+    for admin_id in &admin_ids {
+        create_notification(
+            pool,
+            "server.notification.ip_change.title",
+            &content,
+            "ip_change",
+            Some(admin_id),
+        )
+        .await?;
+    }
+    log_info!(
+        "log.ip_change.notification_created",
+        workstation = workstation_name,
+        observed_ip = observed_ip,
+        recipients = admin_ids.len()
+    );
+
+    // 邮件方式开关关闭时跳过发送（站内通知不受影响）
+    if foims_auth::smtp::load_notification_methods(pool)
+        .await
+        .ip_change
+    {
+        match foims_auth::smtp::send_ip_change_email(
+            pool,
+            source_device,
+            &workstation_name,
+            mac_address,
+            registered_ip,
+            observed_ip,
+        )
+        .await
+        {
+            Ok(()) => log_info!("log.ip_change.email_sent", workstation = workstation_name),
+            Err(e) => log_error!(
+                "log.ip_change.email_send_failed",
+                workstation = workstation_name,
+                error = e
+            ),
+        }
+    }
+
+    Ok(())
+}
+
+/// 工位 IP 上设备更换告警（登记 IP 不变、学到新 MAC，即旧“MAC 变更”语义）。
+/// 与 IP 变更同属“MAC/IP 对应关系异动”类，邮件同样受 ip_change 开关门控。
+/// `source_device` 为拉取到该观测的来源设备名。
+pub async fn send_device_swap_notification(
     pool: &sqlx::PgPool,
     workstation_id: &Uuid,
     ip_address: &str,
@@ -50,25 +147,10 @@ pub async fn send_mac_change_notification(
     new_mac: &str,
     source_device: &str,
 ) -> Result<(), sqlx::Error> {
-    let workstation_name =
-        match sqlx::query_scalar::<_, String>("SELECT name FROM workstations WHERE id = $1")
-            .bind(workstation_id)
-            .fetch_optional(pool)
-            .await
-        {
-            Ok(Some(name)) => name,
-            Ok(None) => {
-                log_warn!("log.workstation.not_found", id = workstation_id);
-                workstation_id.to_string()
-            }
-            Err(e) => {
-                log_warn!("log.workstation.query_name_failed", error = e);
-                workstation_id.to_string()
-            }
-        };
+    let workstation_name = resolve_workstation_name(pool, workstation_id).await;
 
     let content = encode_notification_content(
-        "server.notification.mac_change.body",
+        "server.notification.device_swap.body",
         &[
             ("workstation", &workstation_name),
             ("ip", ip_address),
@@ -77,38 +159,29 @@ pub async fn send_mac_change_notification(
             ("device", source_device),
         ],
     );
-    // 通知目标：所有启用状态的管理员（admin/secadmin）按人各发一条，
-    // 已读状态随用户独立；此前统一写 user_id = NULL 的行不匹配任何人的
-    // 查询条件（user_id = $1），通知列表对所有用户恒为空
-    let admin_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'secadmin')",
-    )
-    .fetch_all(pool)
-    .await?;
-
+    let admin_ids = active_admin_ids(pool).await?;
     for admin_id in &admin_ids {
         create_notification(
             pool,
-            "server.notification.mac_change.title",
+            "server.notification.device_swap.title",
             &content,
-            "mac_change",
+            "ip_change",
             Some(admin_id),
         )
         .await?;
     }
     log_info!(
-        "log.mac_change.notification_created",
+        "log.ip_change.device_swap_created",
         workstation = workstation_name,
         ip = ip_address,
         recipients = admin_ids.len()
     );
 
-    // 邮件方式开关关闭时跳过发送（站内通知不受影响）
     if foims_auth::smtp::load_notification_methods(pool)
         .await
-        .mac_change
+        .ip_change
     {
-        match foims_auth::smtp::send_mac_change_email(
+        match foims_auth::smtp::send_device_swap_email(
             pool,
             source_device,
             &workstation_name,
@@ -118,16 +191,15 @@ pub async fn send_mac_change_notification(
         )
         .await
         {
-            Ok(()) => {
-                log_info!("log.mac_change.email_sent", workstation = workstation_name)
-            }
-            Err(e) => {
-                log_error!(
-                    "log.mac_change.email_send_failed",
-                    workstation = workstation_name,
-                    error = e
-                );
-            }
+            Ok(()) => log_info!(
+                "log.ip_change.device_swap_email_sent",
+                workstation = workstation_name
+            ),
+            Err(e) => log_error!(
+                "log.ip_change.device_swap_email_failed",
+                workstation = workstation_name,
+                error = e
+            ),
         }
     }
 
@@ -141,14 +213,13 @@ mod tests {
     #[test]
     fn test_encode_notification_content() {
         let content = encode_notification_content(
-            "server.notification.mac_change.body",
-            &[("ip", "10.0.0.1"), ("old_mac", "aa:aa")],
+            "server.notification.ip_change.body",
+            &[("ip", "10.0.0.1")],
         );
         let value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or_else(|e| panic!("应为合法 JSON: {e}"));
-        assert_eq!(value["key"], "server.notification.mac_change.body");
+        assert_eq!(value["key"], "server.notification.ip_change.body");
         assert_eq!(value["params"]["ip"], "10.0.0.1");
-        assert_eq!(value["params"]["old_mac"], "aa:aa");
     }
 
     #[test]

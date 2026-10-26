@@ -78,7 +78,19 @@ mod tests {
     #[test]
     fn 通知方式默认全启用() {
         let m = NotificationMethods::default();
-        assert!(m.mac_change && m.agent_alert && m.snmp_event);
+        assert!(m.ip_change && m.agent_alert && m.snmp_event);
+    }
+
+    #[test]
+    fn 通知方式按规范键名读取() {
+        // 读取路径只认规范键名 ip_change（旧键名 mac_change 的重命名迁移由 upgrade SQL 负责，
+        // 无 serde alias 兼容层）
+        let m: NotificationMethods =
+            serde_json::from_str(r#"{"ip_change":false,"agent_alert":true}"#)
+                .unwrap_or_else(|e| panic!("规范键名应可读: {e}"));
+        assert!(!m.ip_change, "ip_change=false 应读入");
+        assert!(m.agent_alert);
+        assert!(m.snmp_event, "缺省字段按默认全启用");
     }
 }
 
@@ -363,13 +375,15 @@ pub async fn send_email_to_users(
 /// 通知方式开关（存储于 system_configs：config_type='notification'，key='methods'）。
 ///
 /// 按通知类型记录各方式（目前仅邮件）是否启用；前端「通知配置」卡片矩阵
-/// 逐格对应。未配置（历史存量）时全部视为启用，保持既有发送行为不变。
+/// 逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct NotificationMethods {
-    /// MAC 地址变更通知的邮件方式开关
-    #[serde(default = "default_true")]
-    pub mac_change: bool,
+    /// IP 地址变更通知（含工位 IP 上设备更换）的邮件方式开关。
+    /// 存量键名 mac_change → ip_change 的重命名迁移由 upgrade SQL 负责（见 upgrade/0.32），
+    /// 读取路径只认规范键名，不设 alias 兼容旧键。
+    #[serde(rename = "ip_change", default = "default_true")]
+    pub ip_change: bool,
     /// 主机资源告警通知的邮件方式开关
     #[serde(default = "default_true")]
     pub agent_alert: bool,
@@ -385,7 +399,7 @@ fn default_true() -> bool {
 impl Default for NotificationMethods {
     fn default() -> Self {
         Self {
-            mac_change: true,
+            ip_change: true,
             agent_alert: true,
             snmp_event: true,
         }
@@ -485,13 +499,37 @@ async fn send_notification_email(pool: &PgPool, subject: &str, body: &str) -> Re
     send_email_to_users(pool, &user_ids, subject, body).await
 }
 
-/// 发送 MAC 地址变更告警邮件。
+/// 发送 IP 地址变更告警邮件（同一物理设备 MAC 出现在非登记的 IP 上）。
 ///
 /// 收件人列表存于 `system_configs`（config_type='notification'，
 /// key='email_recipients'，JSON 数组），未配置时静默跳过。
-/// `source_device` 为拉取该 MAC 的来源设备名，注明变更由哪台设备的
-/// 观测导致。
-pub async fn send_mac_change_email(
+/// MAC 为物理实体、IP 为虚拟实体：本通知表达“设备（{mac}）从登记 IP
+/// 移动到了新的观测 IP”，`source_device` 为拉取到该观测的来源设备名。
+pub async fn send_ip_change_email(
+    pool: &PgPool,
+    source_device: &str,
+    workstation_name: &str,
+    mac_address: &str,
+    registered_ip: &str,
+    observed_ip: &str,
+) -> Result<(), AppError> {
+    let email_body = format!(
+        "尊敬的管理员：\n\n工位 {workstation_name} 的设备 IP 地址发生变更，详情如下：\n工位名称：{workstation_name}\n设备MAC：{mac_address}\n登记 IP：{registered_ip}\n观测 IP：{observed_ip}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+    );
+
+    send_notification_email(
+        pool,
+        &format!("IP地址变更通知 - 工位: {workstation_name}"),
+        &email_body,
+    )
+    .await
+}
+
+/// 发送工位 IP 上设备更换告警邮件（登记 IP 不变、学到新 MAC）。
+///
+/// 与 IP 变更通知同属“MAC/IP 对应关系异动”类，受 ip_change 开关门控；
+/// `source_device` 为拉取到该观测的来源设备名。
+pub async fn send_device_swap_email(
     pool: &PgPool,
     source_device: &str,
     workstation_name: &str,
@@ -500,12 +538,12 @@ pub async fn send_mac_change_email(
     new_mac: &str,
 ) -> Result<(), AppError> {
     let email_body = format!(
-        "尊敬的管理员：\n\n工位 {workstation_name} 的MAC地址已发生变更，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+        "尊敬的管理员：\n\n工位 {workstation_name} 的 IP {ip_address} 上设备更换，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
     );
 
     send_notification_email(
         pool,
-        &format!("MAC地址变更通知 - 工位: {workstation_name}"),
+        &format!("工位设备更换通知 - 工位: {workstation_name}"),
         &email_body,
     )
     .await
@@ -542,11 +580,12 @@ pub async fn send_host_alert_email(
     .await
 }
 
-/// 发送未知终端接入告警邮件（SNMP ARP/FDB 同步发现未登记终端）。
+/// 发送未知设备接入告警邮件（SNMP ARP/FDB 同步学到未登记的 MAC）。
 ///
-/// 收件人复用 notification_recipients 机制；`ip`/`mac`/`interface`/`device_name`
-/// 为命中条目，注明在哪个设备端口学到。
-pub async fn send_unknown_endpoint_email(
+/// 收件人复用 notification_recipients 机制；MAC 为物理实体，未知判定
+/// 基于 MAC 未登记于任何设备网口；`ip`/`interface`/`device_name` 仅为
+/// 发现位置（在哪个设备端口、哪个 IP 上学到）。
+pub async fn send_unknown_device_email(
     pool: &PgPool,
     device_name: &str,
     interface: &str,
@@ -556,12 +595,12 @@ pub async fn send_unknown_endpoint_email(
 ) -> Result<(), AppError> {
     let vlan_text = vlan_id.map_or_else(|| "-".to_string(), |v| v.to_string());
     let email_body = format!(
-        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的终端，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nIP地址：{ip_address}\nMAC地址：{mac_address}\n\n请确认该终端是否授权接入。\n\n此致，\nFOIMS系统"
+        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的设备，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nMAC地址：{mac_address}\n发现位 IP：{ip_address}\n\n请确认该设备是否授权接入。\n\n此致，\nFOIMS系统"
     );
 
     send_notification_email(
         pool,
-        &format!("未知终端接入通知 - {device_name}/{interface}"),
+        &format!("未知设备接入通知 - {device_name}/{interface}"),
         &email_body,
     )
     .await

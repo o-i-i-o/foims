@@ -117,7 +117,7 @@ const EVENT_TYPES = [
   "arp_added",
   "arp_removed",
   "arp_conflict",
-  "unknown_endpoint"
+  "unknown_device"
 ] as const;
 
 const SEVERITIES = ["info", "warning", "critical"] as const;

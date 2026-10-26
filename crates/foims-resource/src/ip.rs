@@ -433,6 +433,8 @@ struct MacSyncResult {
     skipped_count: usize,
     /// 本次拉取被判失活的 active 地址数（判活范围内未观测到的地址）
     deactivated_count: usize,
+    /// 本次拉取景出的 IP 变更数（已知 MAC 出现在非登记 IP 上）
+    ip_change_count: usize,
     switch_macs_empty: bool,
     total_macs_on_switch: i64,
 }
@@ -464,13 +466,33 @@ struct ObservedMacRow {
     workstation_id: Option<Uuid>,
 }
 
-/// MAC 变更通知上下文（观测设备名随通知注明，便于定位变更由哪台设备导致）。
-struct MacChangeNotice {
+/// 工位 IP 上设备更换通知上下文（登记 IP 不变、学到新 MAC）。
+/// 保留旧“MAC 变更”语义：同一工位网口上的物理设备被替换。
+struct DeviceSwapNotice {
     workstation_id: Uuid,
     ips: String,
     old_mac: String,
     new_mac: String,
     source_device: String,
+}
+
+/// IP 变更通知上下文（已知 MAC 出现在非登记 IP 上）。
+/// 仅当网口对应 devices.workstation_id 存在时产出（与换机通知同口径）。
+struct IpChangeNotice {
+    workstation_id: Uuid,
+    mac: String,
+    registered_ips: String,
+    observed_ip: String,
+    source_device: String,
+}
+
+/// IP 移动检测查询行：某 MAC 的一个观测 IP 及其跨网口登记 IP 并集。
+#[derive(Debug, sqlx::FromRow)]
+struct IpChangeRow {
+    mac: String,
+    workstation_id: Option<Uuid>,
+    observed_ip: String,
+    registered_ips: Vec<String>,
 }
 
 async fn sync_switch_macs(
@@ -571,17 +593,6 @@ async fn sync_switch_macs(
         deactivated_count = usize::try_from(flipped).unwrap_or(usize::MAX);
     }
 
-    if observed.is_empty() {
-        return Ok(MacSyncResult {
-            updated_count: 0,
-            unchanged_count: 0,
-            skipped_count: 0,
-            deactivated_count,
-            switch_macs_empty: true,
-            total_macs_on_switch: total_macs,
-        });
-    }
-
     // 来源设备名随通知注明；设备已删除时降级为 UUID 字符串
     let device_name: String =
         sqlx::query_scalar::<_, Option<String>>("SELECT name FROM devices WHERE id = $1")
@@ -591,13 +602,35 @@ async fn sync_switch_macs(
             .flatten()
             .unwrap_or_else(|| device_id.to_string());
 
+    // IP 移动检测：已知绑定 MAC 在本轮观测中出现于非登记 IP（仅通知、不改登记）。
+    // 独立于下方 observed（与 interface_ips 内连）判活：MAC 移到未登记 IP 时
+    // 内连观测为空，仍须据此产出变更通知，故在空观测早返回之前先行检测。
+    let pending_ip_changes = detect_ip_changes(&mut *tx, device_id, &device_name).await?;
+
+    if observed.is_empty() {
+        // 事务不提交：子网级空观测时判活翻转回滚，避免整段误杀。先显式回滚，
+        // 释放判活翻转所持 interface_ips 行锁与池连接，再在事务外下发通知，
+        // 避免 SMTP 网络 I/O 期间长时间阻塞并发台账写入；只读检测结果不受回滚影响。
+        tx.rollback().await?;
+        let ip_change_count = dispatch_ip_change_notices(pool, pending_ip_changes).await;
+        return Ok(MacSyncResult {
+            updated_count: 0,
+            unchanged_count: 0,
+            skipped_count: 0,
+            deactivated_count,
+            ip_change_count,
+            switch_macs_empty: true,
+            total_macs_on_switch: total_macs,
+        });
+    }
+
     let now = Utc::now();
     let mut updated_count = 0usize;
     let mut unchanged_count = 0usize;
     let mut skipped_count = 0usize;
     let mut interfaces: std::collections::HashMap<Uuid, InterfaceSyncState> =
         std::collections::HashMap::new();
-    let mut pending_notifications: Vec<MacChangeNotice> = Vec::new();
+    let mut pending_notifications: Vec<DeviceSwapNotice> = Vec::new();
 
     for row in observed {
         // ip_subnet_id 仅用于判活范围推导，此处不再使用
@@ -735,13 +768,13 @@ async fn sync_switch_macs(
                     // 多个 IP 以逗号连接作为通知参数值，避免语言相关分隔符
                     let ips = iface.observed_ip_addrs.join(", ");
                     log_info!(
-                        "log.ip.mac_changed",
+                        "log.ip.device_swap",
                         interface = iface_id,
                         ip = ips,
                         old_mac = old,
                         new_mac = iface.new_mac
                     );
-                    pending_notifications.push(MacChangeNotice {
+                    pending_notifications.push(DeviceSwapNotice {
                         workstation_id: ws_id,
                         ips,
                         old_mac: old.to_string(),
@@ -756,7 +789,7 @@ async fn sync_switch_macs(
     tx.commit().await?;
 
     for notice in pending_notifications {
-        match foims_snmp::events::send_mac_change_notification(
+        match foims_snmp::events::send_device_swap_notification(
             pool,
             &notice.workstation_id,
             &notice.ips,
@@ -766,10 +799,10 @@ async fn sync_switch_macs(
         )
         .await
         {
-            Ok(()) => log_info!("log.ip.mac_change_notification_sent", ip = notice.ips),
+            Ok(()) => log_info!("log.ip.device_swap_notification_sent", ip = notice.ips),
             Err(e) => {
                 log_error!(
-                    "log.ip.mac_change_notification_failed",
+                    "log.ip.device_swap_notification_failed",
                     ip = notice.ips,
                     error = e
                 )
@@ -777,14 +810,150 @@ async fn sync_switch_macs(
         }
     }
 
+    let ip_change_count = dispatch_ip_change_notices(pool, pending_ip_changes).await;
+
     Ok(MacSyncResult {
         updated_count,
         unchanged_count,
         skipped_count,
         deactivated_count,
+        ip_change_count,
         switch_macs_empty: false,
         total_macs_on_switch: 0,
     })
+}
+
+/// 检测「已知绑定 MAC 出现在非登记 IP」的移动事件（IP 变更通知用）。
+///
+/// device 作用域：仅依据本轮该来源设备 `snmp_arp_entries` 的观测，与判活
+/// 的 interface_ips 内连解耦——MAC 移到未登记 IP 时内连观测为空，此处仍能
+/// 检出。MAC 比对先归一（剔 `:`/`-`/`.`/空格、转大写，等价 normalize_mac）再比较：
+/// 台账 device_interfaces.mac_address 多由人工录入/CSV 导入（小写、分隔符不一），
+/// 观测 snmp_arp_entries 为采集写入的大写冒号，二者不同源，裸 `=` 永不命中。
+/// 观测 IP 剔除 IPv6 链路本地/组播与 IPv4 链路本地/组播（非登记地址族，避免误报）。
+/// 登记 IP 集合按 MAC 跨网口取并集，观测 IP 命中并集
+/// 视为登记位置、不通知；按 (MAC, 观测 IP) 去重，多设备重复观测同一 IP 只通知一次。
+async fn detect_ip_changes<'e, 'c: 'e, E>(
+    executor: E,
+    device_id: Uuid,
+    device_name: &str,
+) -> Result<Vec<IpChangeNotice>, sqlx::Error>
+where
+    E: 'e + sqlx::Executor<'c, Database = sqlx::Postgres>,
+{
+    let rows: Vec<IpChangeRow> = sqlx::query_as(
+        r"WITH obs AS (
+             SELECT DISTINCT mac_address, host(ip_address) AS observed_ip
+             FROM snmp_arp_entries
+             WHERE device_id = $1 AND mac_address IS NOT NULL AND mac_address <> ''
+               AND NOT (ip_address <<= 'fe80::/10')
+               AND NOT (ip_address <<= 'ff00::/8')
+               AND NOT (ip_address <<= '169.254.0.0/16')
+               AND NOT (ip_address <<= '224.0.0.0/4')
+         )
+         SELECT (ARRAY_AGG(DISTINCT di.mac_address))[1] AS mac,
+                (ARRAY_AGG(DISTINCT dv.workstation_id) FILTER (WHERE dv.workstation_id IS NOT NULL))[1] AS workstation_id,
+                obs.observed_ip AS observed_ip,
+                COALESCE(ARRAY_AGG(DISTINCT host(i.ip_address))
+                    FILTER (WHERE i.ip_address IS NOT NULL), '{}') AS registered_ips
+         FROM device_interfaces di
+         JOIN devices dv ON di.device_id = dv.id AND dv.workstation_id IS NOT NULL
+         JOIN obs ON translate(upper(di.mac_address), ':-. ', '')
+                 = translate(upper(obs.mac_address), ':-. ', '')
+         LEFT JOIN interface_ips i ON i.device_interface_id = di.id
+         GROUP BY translate(upper(di.mac_address), ':-. ', ''), obs.observed_ip",
+    )
+    .bind(device_id)
+    .fetch_all(executor)
+    .await?;
+
+    let mut seen: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    let mut notices = Vec::new();
+    for row in rows {
+        // 观测 IP 已是该 MAC 登记位置：正常在位，非移动
+        if row.registered_ips.contains(&row.observed_ip) {
+            continue;
+        }
+        let Some(workstation_id) = row.workstation_id else {
+            continue;
+        };
+        if !seen.insert((row.mac.clone(), row.observed_ip.clone())) {
+            continue;
+        }
+        notices.push(IpChangeNotice {
+            workstation_id,
+            mac: row.mac,
+            registered_ips: row.registered_ips.join(", "),
+            observed_ip: row.observed_ip,
+            source_device: device_name.to_string(),
+        });
+    }
+    Ok(notices)
+}
+
+/// IP 变更通知抑制窗口（分钟）：同 (MAC, 观测 IP) 在窗口内已下发则跳过。
+/// 检测读持久观测快照且「仅通知、不改登记」，差异状态跨轮持续成立，无窗口
+/// 则每轮 mac_sync 都重发站内通知 + 邮件（通知风暴），与事件层 30 分钟抑制同口径。
+const IP_CHANGE_SUPPRESSION_MINUTES: i32 = 30;
+
+/// 逐条下发 IP 变更通知（站内 + 邮件按 ip_change 开关）；失败仅记日志、不阻断后续。
+/// 同 (MAC, 观测 IP) 在抑制窗口内已通知过则跳过（跨轮去重）。返回实际下发条数，
+/// 供汇总文案反映「新增事件数」而非重复检测数。
+async fn dispatch_ip_change_notices(pool: &sqlx::PgPool, notices: Vec<IpChangeNotice>) -> usize {
+    let mut dispatched = 0usize;
+    for notice in notices {
+        // 抑制窗口内已有同 (MAC, 观测 IP) 的 ip_change 通知则跳过：按内容子串匹配
+        // （params 各键值在 JSON 中连续，键序无关），避免 content::jsonb 遇历史
+        // 纯文本行整体报错
+        let mac_pattern = format!("%\"mac\":\"{}\"%", notice.mac);
+        let ip_pattern = format!("%\"observed_ip\":\"{}\"%", notice.observed_ip);
+        let suppressed: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS(
+                 SELECT 1 FROM notifications
+                 WHERE notification_type = 'ip_change'
+                   AND created_at > NOW() - make_interval(mins => $1)
+                   AND content LIKE '%"key":"server.notification.ip_change.body"%'
+                   AND content LIKE $2
+                   AND content LIKE $3
+               )"#,
+        )
+        .bind(IP_CHANGE_SUPPRESSION_MINUTES)
+        .bind(&mac_pattern)
+        .bind(&ip_pattern)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
+        if suppressed {
+            continue;
+        }
+
+        match foims_snmp::events::send_ip_change_notification(
+            pool,
+            &notice.workstation_id,
+            &notice.mac,
+            &notice.registered_ips,
+            &notice.observed_ip,
+            &notice.source_device,
+        )
+        .await
+        {
+            Ok(()) => {
+                dispatched += 1;
+                log_info!(
+                    "log.ip.ip_change_notification_sent",
+                    mac = notice.mac,
+                    observed_ip = notice.observed_ip
+                );
+            }
+            Err(e) => log_error!(
+                "log.ip.ip_change_notification_failed",
+                mac = notice.mac,
+                observed_ip = notice.observed_ip,
+                error = e
+            ),
+        }
+    }
+    dispatched
 }
 
 /// 按 last_seen 新鲜度同步 IP 状态（供 ip_status_sync 定时任务调用）：
@@ -895,6 +1064,7 @@ pub async fn pull_ip_details<P: DbProvider>(
         unchanged_count: 0,
         skipped_count: 0,
         deactivated_count: 0,
+        ip_change_count: 0,
         switch_macs_empty: true,
         total_macs_on_switch: 0,
     };
@@ -904,6 +1074,7 @@ pub async fn pull_ip_details<P: DbProvider>(
         total.unchanged_count += result.unchanged_count;
         total.skipped_count += result.skipped_count;
         total.deactivated_count += result.deactivated_count;
+        total.ip_change_count += result.ip_change_count;
         total.total_macs_on_switch += result.total_macs_on_switch;
         if !result.switch_macs_empty {
             total.switch_macs_empty = false;
@@ -977,16 +1148,20 @@ pub async fn pull_ip_details<P: DbProvider>(
     };
 
     // 同步结果以 key + 计数参数返回，由前端按语言翻译汇总文案
-    let message =
-        if total.updated_count == 0 && total.unchanged_count == 0 && total.skipped_count == 0 {
-            msg("server.ip.mac_sync_no_change")
-        } else {
-            msg("server.ip.mac_sync_completed")
-                .with("updated", total.updated_count)
-                .with("unchanged", total.unchanged_count)
-                .with("skipped", total.skipped_count)
-                .with("deactivated", total.deactivated_count)
-        };
+    let message = if total.updated_count == 0
+        && total.unchanged_count == 0
+        && total.skipped_count == 0
+        && total.ip_change_count == 0
+    {
+        msg("server.ip.mac_sync_no_change")
+    } else {
+        msg("server.ip.mac_sync_completed")
+            .with("updated", total.updated_count)
+            .with("unchanged", total.unchanged_count)
+            .with("skipped", total.skipped_count)
+            .with("deactivated", total.deactivated_count)
+            .with("ip_change", total.ip_change_count)
+    };
 
     Ok(foims_common::ok_json(results, message))
 }
