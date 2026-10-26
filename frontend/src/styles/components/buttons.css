@@ -125,6 +125,7 @@
     align-items: center;
     justify-content: center;
     height: 30px;
+    width: 30px;
     padding: 0;
     border: none;
     border-radius: var(--radius-sm);
