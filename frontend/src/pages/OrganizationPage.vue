@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
  * 组织管理页：组织树（展开/折叠/搜索过滤）+ 节点 CRUD +
- * 人员管理 + 层级模板管理。数据层为 TanStack Query：树/模板/可用类型三查询
- * （可用类型元数据基本不变，staleTime Infinity 仅首次请求），写操作经 useMutation
- * 后失效缓存。搜索为客户端过滤：命中节点显示并强制展开其祖先链。
+ * 人员管理 + 房间查看 + 层级模板管理。数据层为 TanStack Query：树/模板/可用类型
+ * 三查询（可用类型元数据基本不变，staleTime Infinity 仅首次请求），写操作经
+ * useMutation 后失效缓存。搜索为客户端过滤：命中节点显示并强制展开其祖先链。
  */
 import { computed, provide, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -17,6 +17,7 @@ import type { OrgTemplate } from "../types/api/generated/OrgTemplate";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import EmployeeModal from "../components/org/EmployeeModal.vue";
 import OrgNodeModal from "../components/org/OrgNodeModal.vue";
+import OrgRoomsModal from "../components/org/OrgRoomsModal.vue";
 import OrgTreeNode from "../components/org/OrgTreeNode.vue";
 import TemplateModal from "../components/org/TemplateModal.vue";
 
@@ -159,6 +160,8 @@ const orgModal = reactive<{ open: boolean; mode: string; node: OrganizationTreeN
   parentId: ""
 });
 const employeeModal = reactive({ open: false, orgId: "", orgName: "" });
+// 房间查看弹窗：只读列出节点子树的房间（房间增删改在资源页完成）
+const roomsModal = reactive({ open: false, orgId: "", orgName: "" });
 const templateModalOpen = ref(false);
 const deletingOrg = ref<OrganizationTreeNode | null>(null);
 
@@ -185,6 +188,10 @@ function onAction(node: OrganizationTreeNode, action: string): void {
     employeeModal.orgId = node.id;
     employeeModal.orgName = node.name;
     employeeModal.open = true;
+  } else if (action === "rooms") {
+    roomsModal.orgId = node.id;
+    roomsModal.orgName = node.name;
+    roomsModal.open = true;
   } else if (action === "delete") {
     deletingOrg.value = node;
   }
@@ -278,6 +285,14 @@ function handleOrgSaved() {
       :org-id="employeeModal.orgId"
       :org-name="employeeModal.orgName"
       @close="employeeModal.open = false"
+    />
+
+    <!-- 房间查看（子树口径） -->
+    <OrgRoomsModal
+      :open="roomsModal.open"
+      :org-id="roomsModal.orgId"
+      :org-name="roomsModal.orgName"
+      @close="roomsModal.open = false"
     />
 
     <!-- 层级模板管理 -->

@@ -432,12 +432,9 @@ async function fillDeviceFormForEdit(
     return;
   }
 
-  if (room.org_id) {
-    form.orgId = room.org_id;
-  }
-  if (room.room_type) {
-    form.roomType = room.room_type.toLowerCase();
-  }
+  // 房间组织/房型：均为非空字段，直接对齐筛选条件
+  form.orgId = room.org_id;
+  form.roomType = room.room_type.toLowerCase();
 
   // 房间值先就位（网卡编辑器按 roomId 拉取房间网段），五路并行加载下拉
   form.roomId = device.room_id;

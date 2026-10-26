@@ -12,7 +12,8 @@ use validator::Validate;
 pub struct Employee {
     pub id: Uuid,
     pub org_id: Uuid,
-    pub org_name: Option<String>,
+    /// 员工必属组织（employees.org_id NOT NULL），组织名经联表恒有值
+    pub org_name: String,
     pub name: String,
     pub gender: String,
     pub phone: Option<String>,

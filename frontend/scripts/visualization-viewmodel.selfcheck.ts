@@ -253,28 +253,34 @@ check("groupTopologyNodes 房间与机柜两级分组、保持首次出现顺序
   const nodes = buildTopologyCanvasNodes([
     topologyNode({ id: "n1", device_id: "d1", cabinet_id: "cab-1", cabinet_name: "A柜" }),
     topologyNode({ id: "n2", device_id: "d2" }),
-    topologyNode({ id: "n3", device_id: "d3", room_id: null, room_name: null }),
+    topologyNode({
+      id: "n3",
+      device_id: "d3",
+      room_id: "room-2",
+      room_name: "办公区",
+      org_name: "分部",
+    }),
     topologyNode({ id: "n4", device_id: "d4", cabinet_id: null, cabinet_name: "B柜" }),
   ]);
-  const groups = groupTopologyNodes(nodes, { noRoom: "未分房间", noCabinet: "未分机柜" });
+  const groups = groupTopologyNodes(nodes, { noCabinet: "未分机柜" });
   equal(groups.length, 2);
   equal(groups[0]?.key, "room:room-1");
   equal(groups[0]?.cabinets.length, 2);
   equal(groups[0]?.cabinets[0]?.key, "cab:cab-1");
   equal(groups[0]?.cabinets[1]?.key, "cab:name:B柜");
   equal(groups[0]?.loose.length, 1);
-  equal(groups[1]?.label, "未分房间");
-  equal(groups[1]?.orgLabel, "总部");
+  equal(groups[1]?.label, "办公区");
+  equal(groups[1]?.orgLabel, "分部");
 });
 
 check("filterNodesByOrg 为 null 时全量，否则按组织集合过滤", () => {
   const nodes = buildTopologyCanvasNodes([
     topologyNode({ id: "n1", org_id: "org-1" }),
     topologyNode({ id: "n2", org_id: "org-2" }),
-    topologyNode({ id: "n3", org_id: null }),
+    topologyNode({ id: "n3", org_id: "org-1" }),
   ]);
   equal(filterNodesByOrg(nodes, null).length, 3);
-  equal(filterNodesByOrg(nodes, new Set(["org-1"])).length, 1);
+  equal(filterNodesByOrg(nodes, new Set(["org-1"])).length, 2);
   equal(filterNodesByOrg(nodes, new Set()).length, 0);
 });
 

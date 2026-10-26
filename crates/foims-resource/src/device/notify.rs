@@ -1,23 +1,28 @@
-//! 设备与工位匹配后的邮件通知。
+//! 设备 IP 信息邮件通知。
 //!
-//! 设备创建/编辑完成且匹配了工位时，若工位管理人关联了员工且员工
-//! 配置了邮箱，则把设备当前 IP 信息发送给管理人。通知是尽力而为的
-//! 旁路动作：SMTP 未配置或发送失败仅记录日志，不影响设备操作结果。
+//! 责任人按「工位管理人 → 房间管理人」取首个非空：设备匹配了工位则由
+//! 工位管理人接收，否则（如机房里的网络设备）由房间管理人接收。通知是
+//! 尽力而为的旁路动作：SMTP 未配置或发送失败仅记录日志，不影响设备
+//! 操作结果。
 
 use foims_common::AppError;
 use foims_common::{log_debug, log_warn};
 use sqlx::Row;
 use uuid::Uuid;
 
-/// 设备工位匹配信息（管理人 + 邮箱）
+/// 设备空间归属与责任人信息。
+///
+/// `workstation_name` 有值表示责任人来自工位管理人，无值表示回退到
+/// 房间管理人（设备只有房间归属）。
 struct MatchInfo {
     device_name: String,
-    workstation_name: String,
+    workstation_name: Option<String>,
+    room_name: String,
     manager_email: String,
     manager_name: Option<String>,
 }
 
-/// 异步通知工位管理人（fire-and-forget，不阻塞设备操作）。
+/// 异步通知设备责任人（fire-and-forget，不阻塞设备操作）。
 pub fn spawn_ip_notification(pool: sqlx::PgPool, device_id: Uuid) {
     tokio::spawn(async move {
         if let Err(e) = notify_device_ips(&pool, device_id).await {
@@ -26,15 +31,20 @@ pub fn spawn_ip_notification(pool: sqlx::PgPool, device_id: Uuid) {
     });
 }
 
-/// 查询匹配信息并发送邮件；跳过场景（未匹配工位/无邮箱/无 IP）
+/// 查询责任人与空间信息并发送邮件；跳过场景（责任人无邮箱/无 IP）
 /// 静默返回 Ok(())。
 async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), String> {
+    // room_id 为 NOT NULL 且与 workstation/position 的房间由触发器保持一致，
+    // 故房间恒可联到；责任人取工位管理人优先，其次房间管理人
     let info = sqlx::query(
-        r"SELECT d.name AS device_name, w.name AS workstation_name,
+        r"SELECT d.name AS device_name,
+                  w.name AS workstation_name,
+                  r.name AS room_name,
                   e.email AS manager_email, e.name AS manager_name
          FROM devices d
-         JOIN workstations w ON d.workstation_id = w.id
-         LEFT JOIN employees e ON w.manager_employee_id = e.id
+         JOIN rooms r ON d.room_id = r.id
+         LEFT JOIN workstations w ON d.workstation_id = w.id
+         JOIN employees e ON e.id = COALESCE(w.manager_employee_id, r.manager_employee_id)
          WHERE d.id = $1 AND e.email IS NOT NULL",
     )
     .bind(device_id)
@@ -44,12 +54,13 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
     .map(|row| MatchInfo {
         device_name: row.get("device_name"),
         workstation_name: row.get("workstation_name"),
+        room_name: row.get("room_name"),
         manager_email: row.get("manager_email"),
         manager_name: row.get("manager_name"),
     });
 
     let Some(info) = info else {
-        // 未匹配工位或管理人无邮箱：无需通知
+        // 责任人未配置邮箱：无需通知
         log_debug!(
             "log.smtp.device_notify_skipped",
             device_id = device_id.to_string()
@@ -93,16 +104,21 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
         .map(|name| format!("{name}，您好："))
         .unwrap_or_else(|| "您好：".to_string());
 
+    // 责任来源决定措辞：工位管理人收到「工位」，房间管理人收到「房间」
+    let (space_kind, space_name) = match &info.workstation_name {
+        Some(workstation) => ("工位", workstation),
+        None => ("房间", &info.room_name),
+    };
+
     let body = format!(
-        "{manager_greeting}\n\n设备已匹配到您管理的工位，IP 信息如下：\n设备名称：{}\n所属工位：{}\n{}\n\n此邮件由 FOIMS 系统自动发送，请勿回复。\n",
+        "{manager_greeting}\n\n设备已登记到您负责的{space_kind}，IP 信息如下：\n设备名称：{}\n所属{space_kind}：{space_name}\n{}\n\n此邮件由 FOIMS 系统自动发送，请勿回复。\n",
         info.device_name,
-        info.workstation_name,
         ip_lines.join("\n")
     );
 
     let subject = format!(
-        "设备 IP 通知 - {}（工位: {}）",
-        info.device_name, info.workstation_name
+        "设备 IP 通知 - {}（{space_kind}: {space_name}）",
+        info.device_name
     );
 
     // SMTP 未配置属于业务状态：静默跳过，不产生错误日志刷屏；

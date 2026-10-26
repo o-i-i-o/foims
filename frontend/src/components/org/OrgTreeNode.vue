@@ -107,6 +107,9 @@ function dispatch(action: string): void {
         <button type="button" class="icon-btn btn-employees" :title="t('organization.manage_employees')" :aria-label="t('organization.manage_employees')" @click="dispatch('employees')">
           <NavIcon name="users" />
         </button>
+        <button type="button" class="icon-btn btn-rooms" :title="t('organization.view_rooms')" :aria-label="t('organization.view_rooms')" @click="dispatch('rooms')">
+          <NavIcon name="rooms" />
+        </button>
         <button type="button" class="icon-btn btn-delete" :title="t('common.delete')" :aria-label="t('common.delete')" @click="dispatch('delete')">
           <NavIcon name="trash" />
         </button>

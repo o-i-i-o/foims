@@ -157,10 +157,12 @@ pub struct TopologyNodeWithDevice {
     pub snmp_port: Option<i32>,
     pub location: Option<String>,
     pub workstation_name: Option<String>,
-    pub room_id: Option<Uuid>,
-    pub room_name: Option<String>,
-    pub org_id: Option<Uuid>,
-    pub org_name: Option<String>,
+    /// 设备必须归房间（devices.room_id NOT NULL），房间必须归组织
+    /// （rooms.org_id NOT NULL），故房间与组织四个字段恒有值，不做空值回退
+    pub room_id: Uuid,
+    pub room_name: String,
+    pub org_id: Uuid,
+    pub org_name: String,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
     pub ip_address: Option<String>,
@@ -183,8 +185,8 @@ pub async fn get_topology_nodes(pool: &PgPool) -> Result<Response, Visualization
           FROM topology_nodes tn
           JOIN devices d ON tn.device_id = d.id
           LEFT JOIN workstations w ON d.workstation_id = w.id
-          LEFT JOIN rooms r ON d.room_id = r.id
-          LEFT JOIN organizations o ON r.org_id = o.id
+          JOIN rooms r ON d.room_id = r.id
+          JOIN organizations o ON r.org_id = o.id
           LEFT JOIN positions p ON d.position_id = p.id
           LEFT JOIN cabinets c ON p.cabinet_id = c.id
           ORDER BY tn.created_at",
@@ -1126,10 +1128,10 @@ mod tests {
             snmp_port: None,
             location: None,
             workstation_name: None,
-            room_id: None,
-            room_name: None,
-            org_id: None,
-            org_name: None,
+            room_id: uuid(3),
+            room_name: "机房".to_string(),
+            org_id: uuid(4),
+            org_name: "总部".to_string(),
             cabinet_id: None,
             cabinet_name: None,
             ip_address: None,

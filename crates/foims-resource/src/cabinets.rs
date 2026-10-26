@@ -283,13 +283,10 @@ pub async fn create_cabinet<P: DbProvider>(
     // 重名预检、引用存在性校验与写入放同一事务，避免 TOCTOU 与残缺写入
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    // room_id 引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
-    let room_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
-        .bind(req.room_id)
-        .fetch_one(&mut *tx)
-        .await?;
-    if !room_exists {
-        return Err(AppError::Validation(msg("server.room.not_found")));
+    // 空间归属校验：房间存在且房型允许放机柜（机房/弱电井类，不允许办公区堆机柜）
+    let space = crate::helpers::load_room_space(&mut *tx, req.room_id).await?;
+    if !crate::helpers::room_allows_cabinet(&space.room_type) {
+        return Err(AppError::Validation(msg("server.room.cabinet_not_allowed")));
     }
 
     // 重名预检：同房间内（UNIQUE(room_id, name)）
@@ -466,18 +463,13 @@ pub async fn update_cabinet<P: DbProvider>(
             .await?
             .ok_or_else(|| AppError::NotFound(msg("server.cabinet.not_found")))?;
 
-    // room_id 引用存在性校验（缺省沿用现值）
-    if let Some(room_id) = req.room_id {
-        let room_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
-                .bind(room_id)
-                .fetch_one(&mut *tx)
-                .await?;
-        if !room_exists {
-            return Err(AppError::Validation(msg("server.room.not_found")));
-        }
-    }
+    // 空间归属校验：目标房间（缺省沿用现值）必须存在且房型允许放机柜。
+    // 房型不可被改成与柜不兼容（update_room 拦截），故此处对现值同样复核
     let effective_room_id = req.room_id.unwrap_or(current_room_id);
+    let space = crate::helpers::load_room_space(&mut *tx, effective_room_id).await?;
+    if !crate::helpers::room_allows_cabinet(&space.room_type) {
+        return Err(AppError::Validation(msg("server.room.cabinet_not_allowed")));
+    }
 
     // 重名预检：同房间内（UNIQUE(room_id, name)）名称冲突
     if let Some(name) = &req.name {

@@ -241,7 +241,6 @@ const layoutNodes = computed<TopologyCanvasNode[]>(() =>
 
 const groups = computed(() =>
   groupTopologyNodes(layoutNodes.value, {
-    noRoom: t("viz.group_no_room"),
     noCabinet: t("viz.group_no_cabinet"),
   }),
 );
@@ -687,7 +686,7 @@ function startContainerDrag(event: MouseEvent, kind: ContainerKind, key: string)
     start: point,
     offset: { x: 0, y: 0 },
     moved: false,
-    fixedKey: kind === "room" ? key : (room?.key ?? "room:none"),
+    fixedKey: kind === "room" ? key : (room?.key ?? key),
     fixedGroupKey: kind === "cabinet" ? key : null,
   };
   bindWindowListeners();

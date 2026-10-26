@@ -140,7 +140,9 @@ impl Resolver {
                 .await?
             }
             Target::OrgPath => {
-                return self.resolve_org_path(conn, &value, table, row_no).await;
+                return self
+                    .resolve_org_path(conn, &value, table, row_no, own_col)
+                    .await;
             }
             Target::Cidr => {
                 let region = cells.get("region_name").cloned().unwrap_or_default();
@@ -159,31 +161,39 @@ impl Resolver {
                 )
                 .await?
             }
-            Target::EmployeeName => {
-                // 员工姓名仅同组织内唯一：全库同名时无法从工位行推断组织，
-                // 先计数检测歧义，再按唯一姓名取 id（fetch_optional 对多行
-                // 会静默取首行，必须显式拦截）
-                let matches: i64 =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM employees WHERE name = $1")
-                        .bind(&value)
-                        .fetch_one(&mut *conn)
-                        .await?;
-                if matches > 1 {
+            Target::EmployeeInRoomOrg => {
+                // 员工姓名仅组织内唯一（uq_employees_org_name）：组织取本行
+                // room_name 所指房间的组织（房间名全局唯一，与 room_id 解析同口径）
+                let room = cells.get("room_name").cloned().unwrap_or_default();
+                if room.is_empty() {
+                    return Err(bad(&value));
+                }
+                let room_org = self
+                    .cached_lookup(
+                        conn,
+                        cache_key(&["roomorg", &room]),
+                        "SELECT org_id::text FROM rooms WHERE name = $1".to_string(),
+                        vec![room.clone()],
+                    )
+                    .await?;
+                let Some(org_id) = room_org else {
                     return Err(ref_error(
-                        "server.import_export.ambiguous_ref",
+                        "server.import_export.ref_not_found",
                         table,
                         row_no,
-                        own_col,
-                        &display,
+                        "room_name",
+                        &room,
                     ));
-                }
-                self.cached_lookup(
-                    conn,
-                    cache_key(&["employee", &value]),
-                    "SELECT id::text FROM employees WHERE name = $1".to_string(),
-                    vec![value],
-                )
-                .await?
+                };
+                self.resolve_employee_in_org(conn, &value, &org_id).await?
+            }
+            Target::EmployeeInPathOrg => {
+                // 组织取本行 org_path（与 rooms.org_id 引用同一组织）
+                let path = cells.get("org_path").cloned().unwrap_or_default();
+                let org_id = self
+                    .resolve_org_path(conn, &path, table, row_no, "org_path")
+                    .await?;
+                self.resolve_employee_in_org(conn, &value, &org_id).await?
             }
             Target::RoomScoped { table: ref_table } => {
                 let Some((room, name)) = names::split_room_scoped(&value) else {
@@ -321,19 +331,21 @@ impl Resolver {
     }
 
     /// 组织路径解析：逐段下钻（根段 parent 为 NULL）。
+    /// `column` 仅用于错误定位（各表该列的 CSV 名不同：parent_path/org_path）。
     async fn resolve_org_path(
         &mut self,
         conn: &mut PgConnection,
         path: &str,
         table: &str,
         row_no: usize,
+        column: &str,
     ) -> DataResult<String> {
         let bad = || {
             ref_error(
                 "server.import_export.invalid_ref_format",
                 table,
                 row_no,
-                "parent_path",
+                column,
                 path,
             )
         };
@@ -342,7 +354,7 @@ impl Resolver {
                 "server.import_export.ref_not_found",
                 table,
                 row_no,
-                "parent_path",
+                column,
                 path,
             )
         };
@@ -379,6 +391,23 @@ impl Resolver {
         self.cache
             .insert(cache_key(&["orgpath", path]), result.clone());
         Ok(result)
+    }
+
+    /// 同组织内按姓名解析员工：姓名仅在组织内唯一（uq_employees_org_name），
+    /// 跨组织同名必须靠行内组织上下文消歧，故不做全库姓名匹配。
+    async fn resolve_employee_in_org(
+        &mut self,
+        conn: &mut PgConnection,
+        name: &str,
+        org_id: &str,
+    ) -> DataResult<Option<String>> {
+        self.cached_lookup(
+            conn,
+            cache_key(&["employee_in_org", org_id, name]),
+            "SELECT id::text FROM employees WHERE name = $1 AND org_id = $2".to_string(),
+            vec![name.to_string(), org_id.to_string()],
+        )
+        .await
     }
 
     /// 设备引用 "房间/设备名" → id。

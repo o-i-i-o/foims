@@ -141,8 +141,8 @@ const orgTree = ref<OrganizationTreeNode[]>([]);
 const orgOptions = computed(() => flattenOrgTree(orgTree.value));
 
 /** 拓扑分组标题的本地化文案（视图模型不依赖 i18n，由本页注入） */
-function topologyGroupLabels(): { noRoom: string; noCabinet: string } {
-  return { noRoom: t("viz.group_no_room"), noCabinet: t("viz.group_no_cabinet") };
+function topologyGroupLabels(): { noCabinet: string } {
+  return { noCabinet: t("viz.group_no_cabinet") };
 }
 
 async function loadOrganizationTree(): Promise<void> {

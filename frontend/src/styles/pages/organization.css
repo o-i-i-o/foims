@@ -254,9 +254,11 @@
     background: var(--color-border-light);
   }
 
-  /* ==================== 人员管理弹窗 ==================== */
+  /* ==================== 人员/房间列表弹窗 ==================== */
 
-  .employee-modal-org {
+  /* 弹窗标题后的组织名后缀（人员管理、房间列表共用） */
+  .employee-modal-org,
+  .org-room-modal-org {
     color: var(--color-text-secondary);
     font-weight: 400;
     font-size: 0.9em;
@@ -265,6 +267,11 @@
 
   .employee-table-container {
     max-height: 380px;
+    overflow: auto;
+  }
+
+  .org-room-table-container {
+    max-height: 420px;
     overflow: auto;
   }
 

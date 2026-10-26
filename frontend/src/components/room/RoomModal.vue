@@ -49,6 +49,7 @@ interface RoomFormState {
   name: string;
   roomType: string;
   orgId: string;
+  managerEmployeeId: string;
   totalPower: number | "";
   powerUnit: string;
   description: string;
@@ -59,6 +60,7 @@ const form = reactive<RoomFormState>({
   // 后端按大写存储房型，表单统一用小写
   roomType: (props.room?.room_type || "OFFICE").toLowerCase(),
   orgId: props.room?.org_id ?? "",
+  managerEmployeeId: props.room?.manager_employee_id ?? "",
   totalPower: props.room?.total_power_watts ?? "",
   powerUnit: "W",
   description: props.room?.description ?? ""
@@ -267,6 +269,11 @@ const employeeOptions = computed(() =>
   Array.isArray(employeesQuery.data.value) ? employeesQuery.data.value : []
 );
 
+/** 组织变更：管理人必须在房间所属组织内，候选人随组织切换，已选值清空重选 */
+function onOrgChange(): void {
+  form.managerEmployeeId = "";
+}
+
 // ==================== 提交 ====================
 
 const saving = ref(false);
@@ -320,6 +327,13 @@ const saveMutation = useMutation({
     if (!form.roomType) {
       throw new Error(t("room.type_required"));
     }
+    // 房间与组织、管理人同属服务端不变量（org_id / manager_employee_id 均非空）
+    if (!form.orgId) {
+      throw new Error(t("room.org_required"));
+    }
+    if (!form.managerEmployeeId) {
+      throw new Error(t("room.manager_required"));
+    }
     if (networkConfigs.some((row) => !row.networkId)) {
       throw new Error(t("room.network_all_required"));
     }
@@ -344,7 +358,8 @@ const saveMutation = useMutation({
       name: form.name.trim(),
       // 后端统一按大写存储房型
       room_type: form.roomType.toUpperCase(),
-      org_id: form.orgId || null,
+      org_id: form.orgId,
+      manager_employee_id: form.managerEmployeeId,
       total_power_watts: totalPowerWatts,
       subnet_ids: subnetIds,
       description: form.description.trim() || null
@@ -441,14 +456,35 @@ function submit(): void {
     <form @submit.prevent="submit">
       <div class="form-row">
         <div class="form-group">
-          <label for="room-org-id">{{ t("organization.parent_org") }}</label>
-          <select id="room-org-id" v-model="form.orgId">
-            <option value="">{{ t("organization.select_org") }}</option>
+          <label for="room-org-id">
+            <span>{{ t("organization.parent_org") }}</span><span class="required">*</span>
+          </label>
+          <select id="room-org-id" v-model="form.orgId" required @change="onOrgChange">
+            <option value="" disabled>{{ t("organization.select_org") }}</option>
             <option v-for="org in orgOptions" :key="org.id" :value="org.id">
               {{ "\u00A0".repeat(4 * org.depth) + org.name }} ({{ org.orgType }})
             </option>
           </select>
         </div>
+        <div class="form-group">
+          <label for="room-manager">
+            <span>{{ t("room.manager") }}</span><span class="required">*</span>
+          </label>
+          <select
+            id="room-manager"
+            v-model="form.managerEmployeeId"
+            required
+            :disabled="!form.orgId"
+            autocomplete="off"
+          >
+            <option value="" disabled>{{ t("room.manager_placeholder") }}</option>
+            <option v-for="emp in employeeOptions" :key="emp.id" :value="emp.id">
+              {{ emp.name }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label for="room-type">
             <span>{{ t("room.type") }}</span><span class="required">*</span>
@@ -459,14 +495,14 @@ function submit(): void {
             </option>
           </select>
         </div>
-      </div>
-      <div class="form-row">
         <div class="form-group">
           <label for="room-name">
             <span>{{ t("room.name") }}</span><span class="required">*</span>
           </label>
           <input id="room-name" v-model="form.name" type="text" autocomplete="off" required>
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group power-inline">
           <label for="room-total-power">{{ t("room.total_power") }}</label>
           <div class="power-input-row">

@@ -4,7 +4,15 @@ import type { NetOutletBrief } from "./NetOutletBrief";
 import type { NetworkInfo } from "./NetworkInfo";
 import type { WorkstationBrief } from "./WorkstationBrief";
 
-export type RoomWithNetworks = { id: string, name: string, room_type: string, org_id: string | null, org_name: string | null, 
+export type RoomWithNetworks = { id: string, name: string, room_type: string, org_id: string, 
+/**
+ * 所属组织名称（org_id 非空且 FK RESTRICT，联查必有值）
+ */
+org_name: string, manager_employee_id: string, 
+/**
+ * 房间管理人姓名（联查 employees，NOT NULL + FK 保证存在）
+ */
+manager_name: string, 
 /**
  * 房间总功率上限（瓦，None=不限制）
  */

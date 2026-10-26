@@ -243,16 +243,15 @@ export function buildTopologyCanvasNodes(nodes: TopologyNodeWithDevice[]): Topol
 
 /** 拓扑分组标题的本地化文案（保持本模块无 i18n 依赖，由调用方注入） */
 export interface TopologyGroupLabels {
-  /** 无房间归属的容器标题 */
-  noRoom: string;
   /** 无机柜归属的容器标题 */
   noCabinet: string;
 }
 
 /**
  * 空间分组：房间 → 机柜 两级。
- * 按房间 id 分组（缺失时归入「未分房间」）；房间内有指定机柜的设备时成组，
- * 其余归为散件。保持首次出现顺序，布局推挤以此顺序为初始序列。
+ * 按房间 id 分组（设备必属房间、房间必属组织，故不存在无房间分组）；
+ * 房间内有指定机柜的设备时成组，其余归为散件。保持首次出现顺序，
+ * 布局推挤以此顺序为初始序列。
  */
 export function groupTopologyNodes(
   nodes: TopologyCanvasNode[],
@@ -261,13 +260,13 @@ export function groupTopologyNodes(
   const rooms = new Map<string, TopologyRoomGroup<TopologyCanvasNode>>();
 
   for (const node of nodes) {
-    const roomKey = node.room_id ? `room:${node.room_id}` : "room:none";
+    const roomKey = `room:${node.room_id}`;
     let room = rooms.get(roomKey);
     if (!room) {
       room = {
         key: roomKey,
-        label: node.room_name || labels.noRoom,
-        orgLabel: node.org_name || "",
+        label: node.room_name,
+        orgLabel: node.org_name,
         cabinets: [],
         loose: [],
         nodes: [],
@@ -311,5 +310,5 @@ export function filterNodesByOrg(
   if (!orgFilter) {
     return nodes;
   }
-  return nodes.filter((node) => node.org_id !== null && orgFilter.has(node.org_id));
+  return nodes.filter((node) => orgFilter.has(node.org_id));
 }

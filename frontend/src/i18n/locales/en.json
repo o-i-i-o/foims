@@ -443,6 +443,11 @@
   },
   "room": {
     "name": "Room Name",
+    "org": "Organization",
+    "org_required": "Please select an organization",
+    "manager": "Room Manager",
+    "manager_required": "Please select a room manager",
+    "manager_placeholder": "Select a manager",
     "type": "Room Type",
     "type_office": "Office",
     "type_datacenter": "Data Center",
@@ -691,7 +696,10 @@
       "cabinet": "Cabinet",
       "cabinet_position": "Cabinet Position"
     },
-    "manage_employees": "Employees"
+    "manage_employees": "Employees",
+    "view_rooms": "Rooms",
+    "rooms_title": "Rooms",
+    "room_cabinet_count": "Cabinets"
   },
   "org_template": {
     "management": "Template Management",
@@ -1664,7 +1672,6 @@
     "connection_members": "Member Ports",
     "connection_path": "Cable Path",
     "connection_type_derived": "Physical (Derived from Cables)",
-    "group_no_room": "No Room",
     "group_no_cabinet": "No Cabinet",
     "lag_badge": "LAG",
     "member_ports": "Member ports",
@@ -2528,8 +2535,10 @@
       "u_range_overlap": "Position U range overlaps an existing position"
     },
     "room": {
+      "cabinet_not_allowed": "This room type does not allow cabinets; choose a data center or telecom closet room",
       "children_synced": "Room children synced successfully",
       "created": "Room created successfully",
+      "cross_org_workstations": "{{count}} workstation(s) in this room still have managers outside the target organization; adjust their room or manager first",
       "datacenter_requires_cabinets": "Data center rooms require cabinet data",
       "deleted": "Room deleted successfully",
       "fetched": "Room retrieved successfully",
@@ -2537,17 +2546,21 @@
       "has_net_outlets": "Room has associated net outlets and cannot be deleted",
       "has_workstations": "Room has associated workstations and cannot be deleted",
       "list_retrieved": "Room list retrieved successfully",
+      "manager_org_mismatch": "Room manager must belong to the organization the room belongs to",
       "name_exists": "Room name already exists",
       "net_outlets_synced": "Room net outlets synced successfully",
       "networks_retrieved": "Room subnets retrieved successfully",
       "not_found": "Room not found",
       "office_requires_workstations": "Office rooms require workstation data",
       "power_exceeded": "Update failed: allocated power {{allocated}} W in this room exceeds the total power limit {{total}} W",
+      "type_change_has_cabinets": "This room still has {{count}} cabinet(s); cannot switch to a room type that disallows cabinets",
+      "type_change_has_workstations": "This room still has {{count}} workstation(s); cannot switch to a room type that disallows workstations",
       "updated": "Room updated successfully",
       "validation": {
         "name_length": "Room name must be 1 to 50 characters",
         "type_invalid": "Room type must be one of: office, lobby, reception, data_center, telecom_closet, other"
       },
+      "workstation_not_allowed": "This room type does not allow workstations; choose an office-type room",
       "has_devices": "Room has associated devices and cannot be deleted",
       "subnet_in_use_by_device_ip": "{{count}} device IP(s) in this room belong to subnets being removed; migrate or delete them first"
     },
@@ -2747,6 +2760,7 @@
       "not_found": "Workstation not found",
       "updated": "Workstation updated successfully",
       "manager_employee_not_found": "Manager employee not found",
+      "manager_org_mismatch": "Workstation manager must belong to the organization of the room the workstation is in",
       "validation": {
         "name_length": "Workstation name must be 1 to 50 characters"
       }
@@ -2808,6 +2822,7 @@
       "not_found": "Employee not found",
       "name_exists": "An employee with this name already exists in the organization",
       "in_use_by_workstation": "This employee manages {{count}} workstation(s); reassign them first",
+      "in_use_by_room": "This employee manages {{count}} room(s); reassign them first",
       "validation": {
         "name_length": "Employee name must be 1-50 characters",
         "gender_invalid": "Invalid gender value",
@@ -2835,7 +2850,6 @@
       "no_data_rows": "No data rows to import",
       "no_file_selected": "No file selected",
       "ref_not_found": "Referenced record not found",
-      "ambiguous_ref": "Reference value matches multiple records with the same name",
       "required_field_missing": "Required field missing",
       "spec_missing": "Import specification missing",
       "unknown_endpoint_type": "Unknown endpoint type",

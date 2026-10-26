@@ -351,6 +351,77 @@ pub(crate) async fn ensure_power_limit_covers_allocated(
     Ok(())
 }
 
+// ==================== 空间归属与责任人校验 ====================
+
+/// 房间空间属性：组织归属与房型。
+///
+/// 「组织 → 房间 → 工位/机柜/设备」链上的所有子资源校验都以此为准，
+/// 避免各路径各自查一遍 room_type/org_id 后口径不一致。
+pub(crate) struct RoomSpace {
+    pub(crate) org_id: Uuid,
+    pub(crate) room_type: String,
+}
+
+/// 读取房间空间属性；房间不存在返回校验错误（房间由弹窗同步创建，
+/// 引用不存在的房间属于前端构造错误，不是 404 语义）。
+pub(crate) async fn load_room_space<'e, E>(
+    executor: E,
+    room_id: Uuid,
+) -> Result<RoomSpace, AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT org_id, room_type FROM rooms WHERE id = $1")
+            .bind(room_id)
+            .fetch_optional(executor)
+            .await?;
+    let Some((org_id, room_type)) = row else {
+        return Err(AppError::Validation(msg("server.room.not_found")));
+    };
+    Ok(RoomSpace { org_id, room_type })
+}
+
+/// 该房型是否允许工位（办公类 + 其他）。
+///
+/// 与房间弹窗的子项分区（`showWorkstations`）保持同一判定：
+/// 办公类空间才有人坐，机房/弱电井只放机柜。
+pub(crate) fn room_allows_workstation(room_type: &str) -> bool {
+    matches!(room_type, "OFFICE" | "LOBBY" | "RECEPTION" | "OTHER")
+}
+
+/// 该房型是否允许机柜（机房类 + 其他）。
+pub(crate) fn room_allows_cabinet(room_type: &str) -> bool {
+    matches!(room_type, "DATA_CENTER" | "TELECOM_CLOSET" | "OTHER")
+}
+
+/// 责任人同组织校验：管理人员工必须属于指定组织。
+///
+/// 与触发器 `trg_validate_room_manager_org` / `trg_validate_workstation_manager_org`
+/// 同口径（应用层预检把非法引用从 500 降为 400）。`not_found_key` /
+/// `mismatch_key` 按调用方资源域传入。
+pub(crate) async fn ensure_employee_in_org<'e, E>(
+    executor: E,
+    employee_id: Uuid,
+    org_id: Uuid,
+    not_found_key: &'static str,
+    mismatch_key: &'static str,
+) -> Result<(), AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let employee_org: Option<Uuid> =
+        sqlx::query_scalar("SELECT org_id FROM employees WHERE id = $1")
+            .bind(employee_id)
+            .fetch_optional(executor)
+            .await?;
+    match employee_org {
+        None => Err(AppError::Validation(msg(not_found_key))),
+        Some(actual) if actual != org_id => Err(AppError::Validation(msg(mismatch_key))),
+        Some(_) => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

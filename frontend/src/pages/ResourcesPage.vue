@@ -741,6 +741,9 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable" :class="sortClass(rooms, 'org_name')" @click="onThSort($event, rooms, 'org_name')">
                 {{ t("organization.parent_org") }}
               </th>
+              <th class="sortable" :class="sortClass(rooms, 'manager_name')" @click="onThSort($event, rooms, 'manager_name')">
+                {{ t("room.manager") }}
+              </th>
               <th class="col-center">{{ t("room.workstation_count") }}</th>
               <th class="col-center">{{ t("room.power") }}</th>
               <th class="col-center">{{ t("room.power_supply") }}</th>
@@ -758,17 +761,19 @@ function deviceLocationText(item: DeviceWithDetails): string {
           </thead>
           <tbody>
             <tr v-if="rooms.isError">
-              <td colspan="11" class="text-center">{{ rooms.errorMessage }}</td>
+              <td colspan="12" class="text-center">{{ rooms.errorMessage }}</td>
             </tr>
             <tr v-else-if="rooms.items.length === 0">
-              <td colspan="11" class="text-center">{{ t("common.no_data") }}</td>
+              <td colspan="12" class="text-center">{{ t("common.no_data") }}</td>
             </tr>
             <template v-else>
               <tr v-for="(item, index) in rooms.items" :key="item.id">
                 <td class="index-column">{{ seqIndex(rooms, index) }}</td>
                 <td>{{ item.name }}</td>
                 <td class="col-center">{{ getRoomTypeName(item.room_type) }}</td>
-                <td>{{ item.org_name || "-" }}</td>
+                <!-- 所属组织与管理人：均为非空外键，联查恒有值 -->
+                <td>{{ item.org_name }}</td>
+                <td>{{ item.manager_name }}</td>
                 <td class="col-center">{{ item.workstation_count ?? "0" }}</td>
                 <!-- 当前功率：该房间全部设备功耗之和（固定以瓦显示） -->
                 <td class="col-center">{{ formatPowerValue(item.allocated_power_watts ?? 0, "W") }}</td>

@@ -443,6 +443,11 @@
   },
   "room": {
     "name": "房间名称",
+    "org": "所属组织",
+    "org_required": "请选择所属组织",
+    "manager": "房间管理人",
+    "manager_required": "请选择房间管理人",
+    "manager_placeholder": "请选择管理人",
     "type": "房间类型",
     "type_office": "办公室",
     "type_datacenter": "机房",
@@ -691,7 +696,10 @@
       "cabinet": "机柜",
       "cabinet_position": "机位"
     },
-    "manage_employees": "人员管理"
+    "manage_employees": "人员管理",
+    "view_rooms": "房间列表",
+    "rooms_title": "房间列表",
+    "room_cabinet_count": "机柜数量"
   },
   "org_template": {
     "management": "模板管理",
@@ -1664,7 +1672,6 @@
     "connection_members": "成员端口",
     "connection_path": "途经线路",
     "connection_type_derived": "物理连线（线路派生）",
-    "group_no_room": "未分房间",
     "group_no_cabinet": "未分机柜",
     "lag_badge": "链路聚合",
     "member_ports": "成员端口",
@@ -2528,8 +2535,10 @@
       "u_range_overlap": "机位 U 位范围与既有机位重叠"
     },
     "room": {
+      "cabinet_not_allowed": "该房型不允许放置机柜，请选择机房/弱电井类房间",
       "children_synced": "房间子项同步成功",
       "created": "房间创建成功",
+      "cross_org_workstations": "房间内仍有 {{count}} 个工位的管理人不属于目标组织，请先调整工位所属房间或管理人",
       "datacenter_requires_cabinets": "机房需要机柜数据",
       "deleted": "房间删除成功",
       "fetched": "房间获取成功",
@@ -2537,17 +2546,21 @@
       "has_net_outlets": "该房间已被信息点关联，无法删除",
       "has_workstations": "该房间已被工位关联，无法删除",
       "list_retrieved": "房间获取成功",
+      "manager_org_mismatch": "房间管理人必须属于房间所属组织",
       "name_exists": "房间名称已存在",
       "net_outlets_synced": "房间信息点同步成功",
       "networks_retrieved": "房间子网获取成功",
       "not_found": "房间不存在",
       "office_requires_workstations": "办公室房间需要工位数据",
       "power_exceeded": "设置失败：房间内已分配功率 {{allocated}} 瓦，超过总功率上限 {{total}} 瓦",
+      "type_change_has_cabinets": "房间内仍有 {{count}} 个机柜，不能切换为不允许机柜的房型",
+      "type_change_has_workstations": "房间内仍有 {{count}} 个工位，不能切换为不允许工位的房型",
       "updated": "房间更新成功",
       "validation": {
         "name_length": "房间名称长度必须在1到50个字符之间",
         "type_invalid": "房间类型必须是 office、lobby、reception、data_center、telecom_closet 或 other"
       },
+      "workstation_not_allowed": "该房型不允许放置工位，请选择办公类房间",
       "has_devices": "该房间已被设备关联，无法删除",
       "subnet_in_use_by_device_ip": "该房间内仍有 {{count}} 个设备 IP 属于将被移除的子网，请先迁移或删除"
     },
@@ -2747,6 +2760,7 @@
       "not_found": "工位未找到",
       "updated": "工位更新成功",
       "manager_employee_not_found": "管理人员不存在或已被删除",
+      "manager_org_mismatch": "工位管理人必须属于工位所属房间的组织",
       "validation": {
         "name_length": "工位名称长度必须在1到50个字符之间"
       }
@@ -2808,6 +2822,7 @@
       "not_found": "员工未找到",
       "name_exists": "该组织下已存在同名员工",
       "in_use_by_workstation": "该员工正在管理 {{count}} 个工位，请先变更工位管理人",
+      "in_use_by_room": "该员工是 {{count}} 个房间的管理人，请先变更房间管理人",
       "validation": {
         "name_length": "员工姓名长度须为1-50个字符",
         "gender_invalid": "性别取值无效",
@@ -2835,7 +2850,6 @@
       "no_data_rows": "没有可导入的数据行",
       "no_file_selected": "未选择文件",
       "ref_not_found": "引用的记录不存在",
-      "ambiguous_ref": "引用值存在多个同名目标，无法唯一定位",
       "required_field_missing": "必填字段缺失",
       "spec_missing": "导入规格缺失",
       "unknown_endpoint_type": "未知端点类型",

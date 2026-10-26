@@ -61,7 +61,7 @@ pub async fn get_employees<P: DbProvider>(
     let mut builder = QueryBuilder::<Postgres>::new(format!(
         "SELECT {EMPLOYEE_COLUMNS}
         FROM employees e
-        LEFT JOIN organizations o ON e.org_id = o.id"
+        JOIN organizations o ON e.org_id = o.id"
     ));
 
     let mut first = true;
@@ -104,7 +104,7 @@ pub async fn get_employee<P: DbProvider>(
     let mut qb = QueryBuilder::<Postgres>::new(format!(
         "SELECT {EMPLOYEE_COLUMNS}
         FROM employees e
-        LEFT JOIN organizations o ON e.org_id = o.id
+        JOIN organizations o ON e.org_id = o.id
         WHERE e.id = "
     ));
     qb.push_bind(id);
@@ -295,22 +295,35 @@ pub async fn update_employee<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.employee.updated"))
 }
 
-/// 删除员工（工位管理人引用采用 ON DELETE RESTRICT，删除前预检并给出可读错误）。
+/// 删除员工（工位/房间管理人引用均为 ON DELETE RESTRICT，删除前预检并给出可读错误）。
 pub async fn delete_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
     meta: RequestMeta,
 ) -> Result<Response, AppError> {
-    // 预检工位管理人引用：FK 为 RESTRICT，直接删除会报数据库级错误，
-    // 这里提前计数并映射为带数量的校验错误，提示先变更工位管理人
-    let managed: i64 =
+    // 预检责任人引用：两类 FK 均为 RESTRICT（工位管理人、房间管理人），
+    // 直接删除会报数据库级错误，这里提前逐类计数并映射为带数量的校验错误
+    let managed_workstations: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM workstations WHERE manager_employee_id = $1")
             .bind(id)
             .fetch_one(&state.pool()?.get_conn())
             .await?;
-    if managed > 0 {
+    if managed_workstations > 0 {
         return Err(AppError::Validation(
-            msg("server.employee.in_use_by_workstation").with("count", managed.to_string()),
+            msg("server.employee.in_use_by_workstation")
+                .with("count", managed_workstations.to_string()),
+        ));
+    }
+
+    // 机房/弱电井等无工位空间由房间管理人兜底，同样是删除阻断项
+    let managed_rooms: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE manager_employee_id = $1")
+            .bind(id)
+            .fetch_one(&state.pool()?.get_conn())
+            .await?;
+    if managed_rooms > 0 {
+        return Err(AppError::Validation(
+            msg("server.employee.in_use_by_room").with("count", managed_rooms.to_string()),
         ));
     }
 

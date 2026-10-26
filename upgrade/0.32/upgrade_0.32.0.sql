@@ -23,6 +23,17 @@
 --      - notifications 历史行 notification_type='mac_change' 订正为 'ip_change'，
 --        标题/正文的 i18n key（server.notification.mac_change.*）同步替换为
 --        server.notification.ip_change.*；纯文本旧内容原样保留。
+--   4. 「组织 → 房间 → 工位/设备」责任链收口（房间成为空间归属与责任唯一入口）：
+--      - rooms.org_id 收紧为 NOT NULL（原可空，导致房间可游离于组织之外）；
+--      - rooms 新增 manager_employee_id NOT NULL：机房/弱电井等无工位空间
+--        也有责任人，设备 IP 通知按「工位管理人 → 房间管理人」回退；
+--      - 新增触发器 trg_validate_room_manager_org / trg_validate_workstation_manager_org：
+--        管理人员工必须与房间同属一个组织（员工组织不可变更，只需守被引用侧）；
+--      - 存量回填：无组织房间归入唯一根组织；房间管理人取本组织下按姓名首位的员工；
+--        工位管理人若不在房间组织内，改为该房间管理人。无法唯一定位时显式报错，
+--        不做静默丢弃；
+--      - 房型与子项匹配性检查：已有工位/机柜的房型必须相容，存量不符时
+--        显式报错要求人工调整（应用层已按房型限制子项新增与房型切换）。
 
 BEGIN;
 
@@ -162,5 +173,121 @@ WHERE content LIKE '%body_unknown_endpoint%';
 UPDATE snmp_events
 SET event_type = 'unknown_device'
 WHERE event_type = 'unknown_endpoint';
+
+-- ===== 「组织 → 房间 → 工位/设备」责任链收口 =====
+
+ALTER TABLE rooms
+    ADD COLUMN IF NOT EXISTS manager_employee_id UUID REFERENCES employees(id) ON DELETE RESTRICT;
+
+-- 存量房间缺失组织归属时回填唯一根组织：存在多个根则无法推断，显式报错
+DO $$
+DECLARE
+  root_count BIGINT;
+  orphan_count BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO orphan_count FROM rooms WHERE org_id IS NULL;
+  IF orphan_count > 0 THEN
+    SELECT COUNT(*) INTO root_count FROM organizations WHERE parent_id IS NULL;
+    IF root_count <> 1 THEN
+      RAISE EXCEPTION '有 % 个房间未归属组织，且组织树有 % 个根节点，无法自动回填，请人工指定 rooms.org_id 后重试',
+        orphan_count, root_count;
+    END IF;
+    UPDATE rooms SET org_id = (SELECT id FROM organizations WHERE parent_id IS NULL);
+  END IF;
+END $$;
+
+ALTER TABLE rooms ALTER COLUMN org_id SET NOT NULL;
+
+-- 存量房间管理人回填：取所属组织下按姓名首位的员工（部门内首位责任人）
+UPDATE rooms r
+SET manager_employee_id = (
+    SELECT e.id FROM employees e
+    WHERE e.org_id = r.org_id
+    ORDER BY e.name, e.id
+    LIMIT 1
+)
+WHERE r.manager_employee_id IS NULL;
+
+-- 组织下无员工的房间无法自动确定责任人：要求先补员工，而非静默留空
+DO $$
+DECLARE
+  missing BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO missing FROM rooms WHERE manager_employee_id IS NULL;
+  IF missing > 0 THEN
+    RAISE EXCEPTION '有 % 个房间所属组织下没有员工，无法确定房间管理人，请先补充员工后重试', missing;
+  END IF;
+END $$;
+
+ALTER TABLE rooms ALTER COLUMN manager_employee_id SET NOT NULL;
+
+-- 存量工位管理人若不在房间组织内，统一改挂房间管理人（空间兜底责任人）
+UPDATE workstations w
+SET manager_employee_id = r.manager_employee_id
+FROM rooms r
+WHERE r.id = w.room_id
+  AND NOT EXISTS (
+      SELECT 1 FROM employees e
+      WHERE e.id = w.manager_employee_id AND e.org_id = r.org_id
+  );
+
+CREATE INDEX IF NOT EXISTS idx_rooms_org_id ON rooms(org_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_manager_employee_id ON rooms(manager_employee_id);
+
+-- 房型与子项匹配性检查（与 helpers::room_allows_workstation/cabinet 同口径）：
+-- 办公类房型不放机柜、机房类房型不放工位。存量不符时显式报错而非静默迁移，
+-- 因为“该子项应搬到哪个房间”无法自动推断
+DO $$
+DECLARE
+  bad_workstations BIGINT;
+  bad_cabinets BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO bad_workstations
+  FROM workstations w JOIN rooms r ON r.id = w.room_id
+  WHERE r.room_type NOT IN ('OFFICE', 'LOBBY', 'RECEPTION', 'OTHER');
+  SELECT COUNT(*) INTO bad_cabinets
+  FROM cabinets c JOIN rooms r ON r.id = c.room_id
+  WHERE r.room_type NOT IN ('DATA_CENTER', 'TELECOM_CLOSET', 'OTHER');
+  IF bad_workstations > 0 OR bad_cabinets > 0 THEN
+    RAISE EXCEPTION '有 % 个工位处于不允许工位的房型、% 个机柜处于不允许机柜的房型，请先调整房间房型或迁移子项后重试',
+      bad_workstations, bad_cabinets;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION validate_room_manager_org() RETURNS TRIGGER AS $$
+DECLARE
+  manager_org_id UUID;
+BEGIN
+  SELECT org_id INTO manager_org_id FROM employees WHERE id = NEW.manager_employee_id;
+  IF manager_org_id IS DISTINCT FROM NEW.org_id THEN
+    RAISE EXCEPTION '房间管理人所属组织 (%) 与房间组织 (%) 不一致', manager_org_id, NEW.org_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validate_room_manager_org ON rooms;
+CREATE TRIGGER trg_validate_room_manager_org
+    BEFORE INSERT OR UPDATE OF org_id, manager_employee_id ON rooms
+    FOR EACH ROW EXECUTE FUNCTION validate_room_manager_org();
+
+CREATE OR REPLACE FUNCTION validate_workstation_manager_org() RETURNS TRIGGER AS $$
+DECLARE
+  manager_org_id UUID;
+  room_org_id UUID;
+BEGIN
+  SELECT org_id INTO manager_org_id FROM employees WHERE id = NEW.manager_employee_id;
+  SELECT org_id INTO room_org_id FROM rooms WHERE id = NEW.room_id;
+  IF manager_org_id IS DISTINCT FROM room_org_id THEN
+    RAISE EXCEPTION '工位管理人所属组织 (%) 与房间组织 (%) 不一致', manager_org_id, room_org_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validate_workstation_manager_org ON workstations;
+CREATE TRIGGER trg_validate_workstation_manager_org
+    BEFORE INSERT OR UPDATE OF room_id, manager_employee_id ON workstations
+    FOR EACH ROW EXECUTE FUNCTION validate_workstation_manager_org();
 
 COMMIT;

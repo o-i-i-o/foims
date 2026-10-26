@@ -154,5 +154,66 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 责任人必须与空间同属一个组织：房间管理人与房间组织、工位管理人与
+    // 房间组织。员工的组织不可变更（EmployeeUpdate 不含 org_id），因此
+    // 只需在被引用侧（rooms/workstations）守住建不变量；应用层由
+    // foims-resource::helpers::ensure_employee_in_org 提供同口径预检，
+    // 把非法引用从 500 降为 400。
+    sqlx::query(
+        r"
+        CREATE OR REPLACE FUNCTION validate_room_manager_org() RETURNS TRIGGER AS $$
+        DECLARE
+          manager_org_id UUID;
+        BEGIN
+          SELECT org_id INTO manager_org_id FROM employees WHERE id = NEW.manager_employee_id;
+          IF manager_org_id IS DISTINCT FROM NEW.org_id THEN
+            RAISE EXCEPTION '房间管理人所属组织 (%) 与房间组织 (%) 不一致', manager_org_id, NEW.org_id;
+          END IF;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("DROP TRIGGER IF EXISTS trg_validate_room_manager_org ON rooms")
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        "CREATE TRIGGER trg_validate_room_manager_org BEFORE INSERT OR UPDATE OF org_id, manager_employee_id ON rooms FOR EACH ROW EXECUTE FUNCTION validate_room_manager_org()",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r"
+        CREATE OR REPLACE FUNCTION validate_workstation_manager_org() RETURNS TRIGGER AS $$
+        DECLARE
+          manager_org_id UUID;
+          room_org_id UUID;
+        BEGIN
+          SELECT org_id INTO manager_org_id FROM employees WHERE id = NEW.manager_employee_id;
+          SELECT org_id INTO room_org_id FROM rooms WHERE id = NEW.room_id;
+          IF manager_org_id IS DISTINCT FROM room_org_id THEN
+            RAISE EXCEPTION '工位管理人所属组织 (%) 与房间组织 (%) 不一致', manager_org_id, room_org_id;
+          END IF;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("DROP TRIGGER IF EXISTS trg_validate_workstation_manager_org ON workstations")
+        .execute(pool)
+        .await?;
+    sqlx::query(
+        "CREATE TRIGGER trg_validate_workstation_manager_org BEFORE INSERT OR UPDATE OF room_id, manager_employee_id ON workstations FOR EACH ROW EXECUTE FUNCTION validate_workstation_manager_org()",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

@@ -40,9 +40,13 @@ pub enum Target {
     /// 本列值为网段名，与行内 `region_name` 伴随列组成 (区域, 网段) 业务键
     /// 指向 network_cidrs（该表名称不唯一，须靠区域消歧）。
     Cidr,
-    /// 本列值为员工姓名，指向 employees（姓名仅同组织内唯一，全库同名
-    /// 时无法从工位行推断组织，按歧义错误拒绝）。仅 workstations.manager 使用。
-    EmployeeName,
+    /// 本列值为员工姓名，在同组织内解析（员工姓名仅组织内唯一，
+    /// uq_employees_org_name）；组织取本行 `room_name` 所指房间的组织。
+    /// 用于房间子资源（workstations）的管理人。
+    EmployeeInRoomOrg,
+    /// 本列值为员工姓名，在同组织内解析；组织取本行 `org_path` 解析出的
+    /// 组织。用于 rooms 自身的管理人。
+    EmployeeInPathOrg,
     /// 本列值为 "房间/名称"，指向 workstations 或 cabinets。
     RoomScoped { table: &'static str },
     /// 本列值为 "房间/机柜/机位名"，指向 positions。
@@ -142,6 +146,12 @@ pub const TABLE_SPECS: &[TableSpec] = &[
                 db: "org_id",
                 target: Target::OrgPath,
             },
+            // 房间管理人为必填外键：CSV 写员工姓名，按本行组织路径消歧
+            Col::Ref {
+                csv: "manager",
+                db: "manager_employee_id",
+                target: Target::EmployeeInPathOrg,
+            },
             Col::Plain("total_power_watts"),
             Col::Plain("description"),
         ],
@@ -159,12 +169,12 @@ pub const TABLE_SPECS: &[TableSpec] = &[
                 },
             },
             Col::Plain("name"),
-            // 管理人为必填外键：CSV 写员工姓名，导入按姓名解析（NOT NULL 列
-            // 空值由导入端 required_field_missing 拦截）
+            // 管理人为必填外键：CSV 写员工姓名，按本行房间的组织消歧
+            // （NOT NULL 列空值由导入端 required_field_missing 拦截）
             Col::Ref {
                 csv: "manager",
                 db: "manager_employee_id",
-                target: Target::EmployeeName,
+                target: Target::EmployeeInRoomOrg,
             },
             Col::Plain("description"),
         ],

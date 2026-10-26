@@ -140,14 +140,22 @@ pub async fn create_workstation<P: DbProvider>(
 
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    // room_id 引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
-    let room_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
-        .bind(req.room_id)
-        .fetch_one(&mut *tx)
-        .await?;
-    if !room_exists {
-        return Err(AppError::Validation(msg("server.room.not_found")));
+    // 房间空间属性（组织 + 房型）与管理人员工同组织校验：
+    // 工位只能放在办公类空间，管理人必须属于房间所属组织
+    let space = crate::helpers::load_room_space(&mut *tx, req.room_id).await?;
+    if !crate::helpers::room_allows_workstation(&space.room_type) {
+        return Err(AppError::Validation(msg(
+            "server.room.workstation_not_allowed",
+        )));
     }
+    crate::helpers::ensure_employee_in_org(
+        &mut *tx,
+        req.manager_employee_id,
+        space.org_id,
+        "server.workstation.manager_employee_not_found",
+        "server.workstation.manager_org_mismatch",
+    )
+    .await?;
 
     crate::helpers::ensure_unique_name(
         &mut *tx,
@@ -162,18 +170,6 @@ pub async fn create_workstation<P: DbProvider>(
 
     let id = Uuid::new_v4();
     let now = Utc::now();
-
-    // 管理人员工引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
-    let manager_exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)")
-            .bind(req.manager_employee_id)
-            .fetch_one(&mut *tx)
-            .await?;
-    if !manager_exists {
-        return Err(AppError::Validation(msg(
-            "server.workstation.manager_employee_not_found",
-        )));
-    }
 
     sqlx::query(
         "INSERT INTO workstations (id, name, room_id, manager_employee_id, description, created_at, updated_at)
@@ -323,31 +319,32 @@ pub async fn update_workstation<P: DbProvider>(
         .fetch_one(&mut *tx)
         .await?;
 
-    // room_id 引用存在性校验（缺省沿用现值）
-    if let Some(room_id) = req.room_id {
-        let room_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms WHERE id = $1)")
-                .bind(room_id)
-                .fetch_one(&mut *tx)
-                .await?;
-        if !room_exists {
-            return Err(AppError::Validation(msg("server.room.not_found")));
-        }
+    // 空间属性（缺省沿用现值）与管理人同组织校验：换房间时房型必须
+    // 容纳工位，且管理人必须属于新房间组织（缺省沿用现管理人）
+    let effective_room_id = req.room_id.unwrap_or(old_room_id);
+    let space = crate::helpers::load_room_space(&mut *tx, effective_room_id).await?;
+    if !crate::helpers::room_allows_workstation(&space.room_type) {
+        return Err(AppError::Validation(msg(
+            "server.room.workstation_not_allowed",
+        )));
     }
-
-    // 管理人员工引用存在性校验（非法引用返回校验错误而非 FK 500 兜底）
-    if let Some(manager_employee_id) = req.manager_employee_id {
-        let manager_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)")
-                .bind(manager_employee_id)
+    let effective_manager_id: Uuid = match req.manager_employee_id {
+        Some(manager_employee_id) => manager_employee_id,
+        None => {
+            sqlx::query_scalar("SELECT manager_employee_id FROM workstations WHERE id = $1")
+                .bind(id)
                 .fetch_one(&mut *tx)
-                .await?;
-        if !manager_exists {
-            return Err(AppError::Validation(msg(
-                "server.workstation.manager_employee_not_found",
-            )));
+                .await?
         }
-    }
+    };
+    crate::helpers::ensure_employee_in_org(
+        &mut *tx,
+        effective_manager_id,
+        space.org_id,
+        "server.workstation.manager_employee_not_found",
+        "server.workstation.manager_org_mismatch",
+    )
+    .await?;
 
     // 重名预检：以最终生效房间为口径（UNIQUE(room_id, name)）
     if let Some(name) = &req.name {

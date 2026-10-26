@@ -16,6 +16,10 @@ import type { WorkstationBrief } from "./generated/WorkstationBrief";
  * Room 全部字段 + 各子项 brief 列表，供房间详情弹窗回填使用）。
  */
 export type RoomBrief = Room & {
+  /** 所属组织名称（后端联查 organizations，org_id 非空恒有值） */
+  org_name: string;
+  /** 房间管理人姓名（后端联查 employees，manager_employee_id 非空恒有值） */
+  manager_name: string;
   networks: NetworkInfo[];
   workstations: WorkstationBrief[];
   cabinets: CabinetBrief[];

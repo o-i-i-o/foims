@@ -140,6 +140,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "name",
             "room_type",
             "org_id",
+            "manager_employee_id",
             "total_power_watts",
             "description",
             "created_at",
@@ -932,6 +933,12 @@ pub fn get_required_column_widths() -> Vec<(&'static str, &'static str, i32)> {
 #[must_use]
 pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
     vec![
+        // 房间必须归属组织与责任人：org_id 为空时房间在按组织筛选/盘点中
+        // 不可见，manager_employee_id 为空时机房类空间无设备通知承接人
+        ("rooms", "org_id"),
+        ("rooms", "manager_employee_id"),
+        // 工位必须有管理人：设备匹配工位后的 IP 通知收件人
+        ("workstations", "manager_employee_id"),
         // IP 必须挂载在网口下（网口删除级联删除 IP）
         ("interface_ips", "device_interface_id"),
         // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）

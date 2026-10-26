@@ -81,14 +81,14 @@ const roomsQuery = useQuery({
 
 const roomOptions = computed(() => roomsQuery.data.value?.items ?? []);
 
-// 房间 → 所属组织映射：管理人下拉的唯一数据来源
-const roomOrgMap = computed(() => new Map(roomOptions.value.map((room) => [room.id, room.org_id || ""])));
+// 房间 → 所属组织映射：管理人下拉的唯一数据来源（房间组织为非空外键）
+const roomOrgMap = computed(() => new Map(roomOptions.value.map((room) => [room.id, room.org_id])));
 
 // ==================== 管理人下拉（按房间所属组织取员工） ====================
 
 // 快速切换房间时的过期员工响应由 vue-query 按 orgId 分键
 // 天然隔离，无需序号守卫
-const managerOrgId = computed(() => roomOrgMap.value.get(form.roomId) || "");
+const managerOrgId = computed(() => roomOrgMap.value.get(form.roomId) ?? "");
 
 const employeesQuery = useQuery({
   queryKey: ["options", "org-employees", managerOrgId],

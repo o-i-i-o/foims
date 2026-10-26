@@ -750,9 +750,9 @@ export function cabinetGroupKey(node: {
   return null;
 }
 
-/** 房间分组键（缺失房间归入"未分房间"） */
-export function roomGroupKey(roomId: string | null): string {
-  return roomId ? `room:${roomId}` : "room:none";
+/** 房间分组键（设备必属房间，房间 id 恒有值） */
+export function roomGroupKey(roomId: string): string {
+  return `room:${roomId}`;
 }
 
 /**

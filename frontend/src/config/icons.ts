@@ -75,6 +75,11 @@ export const ICONS: Record<string, IconShape[]> = {
     { tag: "polyline", points: "3.27 6.96 12 12.01 20.73 6.96" },
     { tag: "line", x1: "12", y1: "22.08", x2: "12", y2: "12" }
   ),
+  rooms: icon(
+    { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
+    { tag: "path", d: "M3 12h18" },
+    { tag: "path", d: "M12 3v18" }
+  ),
   ip: icon(
     { tag: "circle", cx: "11", cy: "11", r: "8" },
     { tag: "line", x1: "21", y1: "21", x2: "16.65", y2: "16.65" }

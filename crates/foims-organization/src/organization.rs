@@ -16,7 +16,8 @@ use foims_common::msg;
 use foims_common::org_levels::{MAX_ORG_DEPTH, resolve_type_name};
 use foims_common::pagination::{Pagination, paged_response};
 use foims_models::{
-    OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
+    OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate,
+    RoomSummary,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -992,7 +993,11 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
     Ok(depth)
 }
 
-/// 获取组织节点关联的房间列表
+/// 获取组织节点下（含全部下级组织）的房间摘要列表。
+///
+/// 房间是「组织 → 房间 → 工位/机柜/设备」链上的空间归属点，组织页看的是
+/// 该节点整个子树的房间，故与 resources/rooms 的 org_id 过滤同取子树口径；
+/// 摘要带直属组织名与子项计数，便于在同一列表里区分下级组织的房间。
 pub async fn get_org_rooms<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -1004,9 +1009,25 @@ pub async fn get_org_rooms<P: DbProvider>(
     if existing.is_none() {
         return Err(AppError::NotFound(msg("server.organization.not_found")));
     }
-    let rooms = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, org_id, total_power_watts, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
-         FROM rooms WHERE org_id = $1 ORDER BY created_at ASC",
+    // 工位/机柜计数用 COUNT(DISTINCT ...) 防止两路 LEFT JOIN 互相放大
+    let rooms = sqlx::query_as::<_, RoomSummary>(
+        r"WITH RECURSIVE org_tree AS (
+             SELECT id FROM organizations WHERE id = $1
+             UNION ALL
+             SELECT o.id FROM organizations o JOIN org_tree t ON o.parent_id = t.id
+         )
+         SELECT r.id, r.name, r.room_type,
+                o.name AS org_name, e.name AS manager_name,
+                COUNT(DISTINCT w.id) AS workstation_count,
+                COUNT(DISTINCT c.id) AS cabinet_count
+         FROM rooms r
+         JOIN organizations o ON r.org_id = o.id
+         JOIN employees e ON r.manager_employee_id = e.id
+         LEFT JOIN workstations w ON w.room_id = r.id
+         LEFT JOIN cabinets c ON c.room_id = r.id
+         WHERE r.org_id IN (SELECT id FROM org_tree)
+         GROUP BY r.id, r.name, r.room_type, o.id, o.name, e.name
+         ORDER BY o.name, r.name",
     )
     .bind(id)
     .fetch_all(&state.pool()?.get_conn())
