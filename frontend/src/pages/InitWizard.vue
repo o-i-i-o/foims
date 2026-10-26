@@ -313,6 +313,8 @@ async function waitForBackendRestart() {
   // 递归轮询替代 for+await（no-await-in-loop）：探测间隔 1s，最多 30 次
   const probe = async (attempt: number): Promise<void> => {
     try {
+      // 受控例外：存活探测不走 api/client（其 401 拦截/刷新/报错提示对
+      // 重启窗口内的探测是干扰项），仅判 HTTP 2xx 后静默重试
       const response = await fetch("/api/auth/init-status", {
         headers: { "Content-Type": "application/json" },
         cache: "no-store"

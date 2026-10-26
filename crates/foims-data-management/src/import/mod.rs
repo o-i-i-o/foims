@@ -7,7 +7,6 @@
 //! 不存在则插入且 UUID 由数据库生成）、专项校验（IP 归属房间网段等）。
 //! 任一步失败则整批回滚，避免半成品数据。
 
-pub mod org_validate;
 pub mod resolve;
 pub mod rows;
 
@@ -822,9 +821,9 @@ async fn validate_device_power(conn: &mut PgConnection, row_id: &str) -> DataRes
     Ok(())
 }
 
-/// 组织模板行结构校验：levels 走与 API 端相同的映射校验
-///（根唯一/子级类型已定义/环检测/深度上限），不合格整批回滚。
-/// 错误消息沿用 `server.org_template.validation.*`，与 API 校验提示一致。
+/// 组织模板行结构校验：levels 走 `foims_common::org_levels` 的全仓库
+/// 唯一校验实现（根唯一/子级类型已定义/环检测/深度上限），与 API 端
+/// 天然同源，不合格整批回滚；错误消息沿用 `server.org_template.validation.*`。
 fn validate_template_levels(values: &ResolvedValues, row: &CsvRow) -> DataResult<()> {
     let Some(Some(levels_text)) = values.get("levels") else {
         // 缺省交由数据库 NOT NULL 约束报告
@@ -840,11 +839,15 @@ fn validate_template_levels(values: &ResolvedValues, row: &CsvRow) -> DataResult
                 .with("reason", format!("不是有效的 JSON: {e}")),
         )
     })?;
-    org_validate::validate_levels_mapping(&levels).map_err(DataError::Validation)
+    // 返回值（根类型名）仅供 API 端消费，导入路径只判定合法性
+    foims_common::org_levels::validate_levels_mapping(&levels)
+        .map(|_| ())
+        .map_err(DataError::Validation)
 }
 
 /// 组织行 type_path 校验：在模板表导入完成后（同一事务内可见），
-/// type_path 必须能被某个模板的 levels 解析（根锚点 0 + 逐级索引导航），
+/// type_path 必须能被某个模板的 levels 解析（根锚点 0 + 逐级索引导航，
+/// 与组织 API 端共用 `foims_common::org_levels` 同源规则），
 /// 不可解析拒绝该行，避免存量节点在组织编辑接口持续报错。
 async fn validate_org_type_path(
     conn: &mut PgConnection,
@@ -865,7 +868,7 @@ async fn validate_org_type_path(
     let resolvable = cache.as_ref().is_some_and(|levels| {
         levels
             .iter()
-            .any(|l| org_validate::type_path_resolvable(l, type_path))
+            .any(|l| foims_common::org_levels::resolve_type_name(l, type_path).is_ok())
     });
     if !resolvable {
         return Err(DataError::Validation(

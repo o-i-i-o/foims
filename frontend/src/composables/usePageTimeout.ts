@@ -12,24 +12,27 @@ import type { PageTimeoutConfig } from "../types/api/generated/PageTimeoutConfig
 
 const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keypress", "scroll", "touchstart", "click"];
 
-/** 从服务端读取空闲超时分钟数（读取失败按默认 30 分钟） */
+/** 空闲超时缺省分钟数（服务端配置缺失/读取失败时的唯一兑底口径） */
+const DEFAULT_TIMEOUT_MINUTES = 30;
+
+/** 从服务端读取空闲超时分钟数（读取失败按默认值） */
 async function loadTimeoutMinutes(): Promise<number> {
   try {
     const result = await apiGet<PageTimeoutConfig>("/api/system/page-timeout");
     if (result.success && result.data) {
-      return result.data.page_timeout || 30;
+      return result.data.page_timeout || DEFAULT_TIMEOUT_MINUTES;
     }
   } catch (error) {
     console.error("获取页面超时配置失败:", error);
   }
-  return 30;
+  return DEFAULT_TIMEOUT_MINUTES;
 }
 
 export function usePageTimeout(): void {
   const { t } = useI18n();
 
   let timeoutId: number | null = null;
-  let timeoutMinutes = 30;
+  let timeoutMinutes = DEFAULT_TIMEOUT_MINUTES;
 
   function resetTimeout(): void {
     if (timeoutId) {

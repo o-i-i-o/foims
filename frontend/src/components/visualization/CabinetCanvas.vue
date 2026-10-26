@@ -15,6 +15,7 @@ import CanvasGridLayer from "./CanvasGridLayer.vue";
 import { useCanvasTooltip } from "../../composables/useCanvasTooltip";
 import { useCanvasViewport } from "../../composables/useCanvasViewport";
 import {
+  ALIGNMENT_GUIDE_COLOR,
   buildUMarks,
   clampNonNegative,
   computeAlignmentSegments,
@@ -397,7 +398,7 @@ function onCanvasClick(event: MouseEvent): void {
             :y1="segment.y1"
             :x2="segment.x2"
             :y2="segment.y2"
-            stroke="#3b82f6"
+            :stroke="ALIGNMENT_GUIDE_COLOR"
             stroke-width="1"
             stroke-dasharray="4,4"
             opacity="0.7"

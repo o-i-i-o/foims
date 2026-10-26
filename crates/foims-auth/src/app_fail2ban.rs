@@ -104,10 +104,12 @@ fn app_fail2ban() -> &'static AppFail2ban {
     APP_FAIL2BAN.get_or_init(AppFail2ban::new)
 }
 
-/// 启动后台清理任务：先加载持久化配置，再定期清除过期记录。
+/// 启动 fail2ban 后台维护任务：先加载持久化配置，再定期清除过期记录。
 ///
 /// 主程序启动时以连接池调用（同时承担配置的启动加载职责）。
-pub fn start_cleanup_task(pool: sqlx::PgPool) {
+/// 命名带 `fail2ban` 前缀与本模块域对齐，与 `foims_common::rate_limit` 的
+/// 限流桶清理任务 `start_cleanup_task` 区分（两者职责不同、仅同名易混淆）。
+pub fn start_fail2ban_cleanup_task(pool: sqlx::PgPool) {
     tokio::spawn(async move {
         // 启动加载持久化配置；读库失败沿用内存默认值并告警
         load_config_from_db(&pool).await;

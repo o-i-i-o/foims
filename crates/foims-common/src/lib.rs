@@ -20,6 +20,7 @@ pub mod config;
 pub mod crypto;
 pub mod db;
 pub mod net;
+pub mod org_levels;
 pub mod pagination;
 pub mod pgpass;
 pub mod provider;

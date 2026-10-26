@@ -28,6 +28,9 @@ export const MAJOR_GRID_FACTOR = 5;
 export const MAX_GRID_LINES = 500;
 /** 画布四周内容留白（工位/机柜视图） */
 export const CANVAS_CONTENT_PADDING = 50;
+/** 拖拽对齐辅助线颜色（工位/机柜画布共用；SVG presentation 属性
+ * 不读 CSS 变量，故以共享常量单点承载，禁止各画布组件各写裸 hex） */
+export const ALIGNMENT_GUIDE_COLOR = "#3b82f6";
 /** 画布最小视野（内容较少时不留空白带） */
 export const MIN_VIEW_WIDTH = 1000;
 export const MIN_VIEW_HEIGHT = 800;

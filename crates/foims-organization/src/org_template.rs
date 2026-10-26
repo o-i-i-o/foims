@@ -4,18 +4,13 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 use chrono::Utc;
 use foims_auth::meta::{RequestMeta, log_op_best_effort};
-use foims_common::AppError;
-use foims_common::AppJson;
-use foims_common::DbProvider;
 use foims_common::msg;
+use foims_common::{AppError, AppJson, DbProvider};
 use foims_models::{OrgTemplate, OrgTemplateCreate, OrgTemplateSummary, OrgTemplateUpdate};
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
-
-/// 组织层级最大深度（根为第 1 层），模板校验与组织节点创建共用
-pub const MAX_ORG_DEPTH: usize = 10;
 
 /// 获取所有可用的组织类型配置（从所有模板中提取）
 pub async fn get_available_org_types<P: DbProvider>(
@@ -73,193 +68,8 @@ pub async fn get_available_org_types<P: DbProvider>(
     ))
 }
 
-/// 类型 key 允许的字符：Unicode 字母/数字（含中文）、下划线、连字符。
-/// 拒绝 HTML 元字符，防止类型名注入前端 innerHTML 渲染。
-fn is_valid_type_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_' || c == '-'
-}
-
-/// 校验 levels 映射格式并返回根类型
-/// levels 格式: { "type_a": ["type_b"], "type_b": ["type_c", "type_d"], ... }
-pub fn validate_levels_mapping(levels: &serde_json::Value) -> Result<String, AppError> {
-    let levels_map = levels.as_object().ok_or_else(|| {
-        AppError::Validation(msg("server.org_template.validation.levels_must_be_object"))
-    })?;
-
-    if levels_map.is_empty() {
-        return Err(AppError::Validation(msg(
-            "server.org_template.validation.levels_empty",
-        )));
-    }
-
-    if levels_map.len() > 50 {
-        return Err(AppError::Validation(msg(
-            "server.org_template.validation.levels_too_many_types",
-        )));
-    }
-
-    let mut all_child_types: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-    for (key, value) in levels_map {
-        if key.trim().is_empty() {
-            return Err(AppError::Validation(msg(
-                "server.org_template.validation.type_name_required",
-            )));
-        }
-        if key.len() > 50 {
-            return Err(AppError::Validation(
-                msg("server.org_template.validation.type_name_too_long").with("name", key),
-            ));
-        }
-        if let Some(invalid) = key.chars().find(|c| !is_valid_type_char(*c)) {
-            return Err(AppError::Validation(
-                msg("server.org_template.validation.type_name_invalid")
-                    .with("name", key)
-                    .with("char", invalid),
-            ));
-        }
-
-        let children = value.as_array().ok_or_else(|| {
-            AppError::Validation(
-                msg("server.org_template.validation.children_not_array").with("name", key),
-            )
-        })?;
-
-        let mut seen_in_this_key: std::collections::HashSet<&str> =
-            std::collections::HashSet::new();
-        for (idx, child) in children.iter().enumerate() {
-            let child_str = child.as_str().ok_or_else(|| {
-                AppError::Validation(
-                    msg("server.org_template.validation.child_not_string")
-                        .with("name", key)
-                        .with("index", idx),
-                )
-            })?;
-            if child_str.trim().is_empty() {
-                return Err(AppError::Validation(
-                    msg("server.org_template.validation.child_empty")
-                        .with("name", key)
-                        .with("index", idx),
-                ));
-            }
-            if child_str.len() > 50 {
-                return Err(AppError::Validation(
-                    msg("server.org_template.validation.child_too_long")
-                        .with("name", key)
-                        .with("index", idx),
-                ));
-            }
-            if !seen_in_this_key.insert(child_str) {
-                return Err(AppError::Validation(
-                    msg("server.org_template.validation.child_duplicate")
-                        .with("name", key)
-                        .with("child", child_str),
-                ));
-            }
-            all_child_types.insert(child_str.to_string());
-        }
-    }
-
-    // 所有子类型必须在映射中定义
-    for child_type in &all_child_types {
-        if !levels_map.contains_key(child_type) {
-            return Err(AppError::Validation(
-                msg("server.org_template.validation.child_type_undefined").with("type", child_type),
-            ));
-        }
-    }
-
-    // 必须有且仅有一个根类型
-    let root_types: Vec<&String> = levels_map
-        .keys()
-        .filter(|k| !all_child_types.contains(*k))
-        .collect();
-    let root_type = match root_types.len() {
-        1 => root_types[0].clone(),
-        0 => {
-            return Err(AppError::Validation(msg(
-                "server.org_template.validation.root_type_missing",
-            )));
-        }
-        _ => {
-            let types = root_types
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join("、");
-            return Err(AppError::Validation(
-                msg("server.org_template.validation.root_type_multiple").with("types", types),
-            ));
-        }
-    };
-
-    // 检测循环引用（DFS 染色法）：必须从全部节点出发检测，仅从根出发时
-    // 游离于根可达范围之外的环（非根类型互相引用成环）会漏检通过校验；
-    // 已访问标记跨起点复用（2=已完成），整体仍为 O(节点数 + 边数)
-    let mut visited: std::collections::HashMap<&str, u8> = std::collections::HashMap::new();
-    fn has_cycle<'a>(
-        node: &'a str,
-        levels_map: &'a serde_json::Map<String, serde_json::Value>,
-        visited: &mut std::collections::HashMap<&'a str, u8>,
-    ) -> bool {
-        match visited.get(node) {
-            Some(&2) => return false,
-            Some(&1) => return true,
-            _ => {}
-        }
-        visited.insert(node, 1);
-        if let Some(children) = levels_map.get(node).and_then(|v| v.as_array()) {
-            for child in children {
-                if let Some(child_str) = child.as_str() {
-                    let child_key = levels_map.keys().find(|k| k.as_str() == child_str);
-                    if let Some(child_key) = child_key
-                        && has_cycle(child_key, levels_map, visited)
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-        visited.insert(node, 2);
-        false
-    }
-    for key in levels_map.keys() {
-        if has_cycle(key, levels_map, &mut visited) {
-            return Err(AppError::Validation(msg(
-                "server.org_template.validation.levels_cycle",
-            )));
-        }
-    }
-
-    // 层级深度不得超过组织创建上限（根为第 1 层），否则模板能建、组织节点建不全
-    let mut max_depth = 0usize;
-    fn walk_depth(
-        node: &str,
-        levels_map: &serde_json::Map<String, serde_json::Value>,
-        depth: usize,
-        max_depth: &mut usize,
-    ) {
-        *max_depth = (*max_depth).max(depth);
-        let Some(children) = levels_map.get(node).and_then(|v| v.as_array()) else {
-            return;
-        };
-        for child in children {
-            if let Some(child_str) = child.as_str() {
-                walk_depth(child_str, levels_map, depth + 1, max_depth);
-            }
-        }
-    }
-    walk_depth(&root_type, levels_map, 1, &mut max_depth);
-    if max_depth > MAX_ORG_DEPTH {
-        return Err(AppError::Validation(
-            msg("server.org_template.validation.levels_depth_exceeded")
-                .with("depth", max_depth)
-                .with("max", MAX_ORG_DEPTH),
-        ));
-    }
-
-    Ok(root_type)
-}
+// levels 结构校验与 type_path 解析已收敛至 foims_common::org_levels 单点实现
+//（API 端与 CSV 导入端共用同一业务契约），本文件只做调用与错误包装。
 
 /// 校验 icons 映射格式
 /// icons 格式: { "type_name": "🏢", ... }
@@ -340,8 +150,8 @@ pub fn compute_type_name_mapping(
         return None;
     }
 
-    let old_root = find_root(old_map)?;
-    let new_root = find_root(new_map)?;
+    let old_root = foims_common::org_levels::find_root(old_map)?;
+    let new_root = foims_common::org_levels::find_root(new_map)?;
 
     let mut mapping = std::collections::HashMap::new();
 
@@ -387,22 +197,6 @@ pub fn compute_type_name_mapping(
         return None;
     }
     Some(mapping)
-}
-
-fn find_root(map: &serde_json::Map<String, serde_json::Value>) -> Option<&str> {
-    let mut child_types: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for value in map.values() {
-        if let Some(arr) = value.as_array() {
-            for child in arr {
-                if let Some(s) = child.as_str() {
-                    child_types.insert(s);
-                }
-            }
-        }
-    }
-    map.keys()
-        .find(|key| !child_types.contains(key.as_str()))
-        .map(|v| v.as_str())
 }
 
 /// 从 levels 映射中获取指定类型的允许子级类型
@@ -479,7 +273,7 @@ pub async fn create_org_template<P: DbProvider>(
     req.validate()?;
 
     // 校验 levels 映射格式（返回值仅用于校验，无需保留）
-    validate_levels_mapping(&req.levels)?;
+    foims_common::org_levels::validate_levels_mapping(&req.levels).map_err(AppError::Validation)?;
 
     // 校验 icons 格式
     let icons = req.icons.clone().unwrap_or_else(|| serde_json::json!({}));
@@ -552,7 +346,8 @@ pub async fn update_org_template<P: DbProvider>(
 
     // 如果更新了 levels，需要校验
     if let Some(ref levels_val) = req.levels {
-        validate_levels_mapping(levels_val)?;
+        foims_common::org_levels::validate_levels_mapping(levels_val)
+            .map_err(AppError::Validation)?;
     }
 
     let mut tx = state.pool()?.get_conn().begin().await?;
@@ -612,8 +407,8 @@ pub async fn update_org_template<P: DbProvider>(
                     .fetch_all(&mut *tx)
                     .await?;
             for path in &node_paths {
-                let old_name = super::resolve_type_name(&existing.levels, path)?;
-                let new_name = super::resolve_type_name(new_levels, path);
+                let old_name = foims_common::org_levels::resolve_type_name(&existing.levels, path)?;
+                let new_name = foims_common::org_levels::resolve_type_name(new_levels, path);
                 let broken = match &new_name {
                     Ok(name) => name != &old_name,
                     Err(_) => true,
@@ -756,49 +551,6 @@ pub async fn delete_org_template<P: DbProvider>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// 构造一条深度为 depth 的线性链 levels
-    fn chain_levels(depth: usize) -> serde_json::Value {
-        let mut map = serde_json::Map::new();
-        for i in 0..depth {
-            let key = format!("t{i}");
-            let children = if i + 1 < depth {
-                vec![serde_json::json!(format!("t{}", i + 1))]
-            } else {
-                vec![]
-            };
-            map.insert(key, serde_json::Value::Array(children));
-        }
-        serde_json::Value::Object(map)
-    }
-
-    #[test]
-    fn test_validate_levels_depth_within_limit() {
-        let levels = chain_levels(MAX_ORG_DEPTH);
-        assert!(validate_levels_mapping(&levels).is_ok());
-    }
-
-    #[test]
-    fn test_validate_levels_depth_exceeds_limit() {
-        let levels = chain_levels(MAX_ORG_DEPTH + 1);
-        let err = validate_levels_mapping(&levels).unwrap_err();
-        // 错误消息已 key 化，AppError Display 仅展示 key
-        assert!(err.to_string().contains("levels_depth_exceeded"));
-    }
-
-    /// 游离于根可达范围之外的环（非根类型互相引用成环）必须整体拒绝，
-    /// 仅从根出发的 DFS 会漏检该类环
-    #[test]
-    fn test_validate_levels_detects_detached_cycle() {
-        let levels = serde_json::json!({
-            "公司": ["部门"],
-            "部门": [],
-            "x": ["y"],
-            "y": ["x"]
-        });
-        let err = validate_levels_mapping(&levels).unwrap_err();
-        assert!(err.to_string().contains("levels_cycle"));
-    }
 
     #[test]
     fn test_remap_icons_renames_and_prunes() {

@@ -24,6 +24,8 @@ export interface UsePagedListOptions {
   extraKey?: Ref<Record<string, unknown>>;
   defaultSortBy?: string;
   defaultSortOrder?: "asc" | "desc";
+  /** 自动轮询周期（毫秒）；窗口失焦时 TanStack 默认暂停（主机监控页用） */
+  refetchInterval?: number;
 }
 
 /**
@@ -49,6 +51,8 @@ export interface PagedList<T> extends SortableTable {
   totalPages: number;
   isError: boolean;
   errorMessage: string;
+  /** 手动重拉当前页（刷新按钮；不重置页码/筛选） */
+  refetch: () => void;
 }
 
 /**
@@ -57,8 +61,16 @@ export interface PagedList<T> extends SortableTable {
  * 回退最后一页。
  */
 export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
-  const { tag, defaultPageSize, enabled, buildUrl, extraKey, defaultSortBy = "created_at", defaultSortOrder = "desc" } =
-    options;
+  const {
+    tag,
+    defaultPageSize,
+    enabled,
+    buildUrl,
+    extraKey,
+    defaultSortBy = "created_at",
+    defaultSortOrder = "desc",
+    refetchInterval,
+  } = options;
   const { t } = useI18n();
   const page = ref(1);
   const pageSize = ref(defaultPageSize);
@@ -84,7 +96,8 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
       }
       return result.data;
     },
-    enabled
+    enabled,
+    refetchInterval
   });
 
   watch(
@@ -126,7 +139,10 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
     total: computed(() => query.data.value?.total ?? 0),
     totalPages: computed(() => query.data.value?.total_pages ?? 1),
     isError: computed(() => query.isError.value),
-    errorMessage: computed(() => query.error.value?.message || t("common.load_failed"))
+    errorMessage: computed(() => query.error.value?.message || t("common.load_failed")),
+    refetch: () => {
+      void query.refetch();
+    }
   }) as PagedList<T>;
 }
 

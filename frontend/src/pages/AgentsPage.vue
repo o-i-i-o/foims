@@ -7,13 +7,13 @@
  * 使用率列复用 AgentUsageBar；关键字输入为草稿态（回车/查询按钮提交），
  * 刷新与自动轮询沿用已提交筛选，不覆盖未确认的输入。
  */
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { apiDelete, apiGet, apiPatch } from "../api/client";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
+import { apiDelete, apiPatch } from "../api/client";
+import { usePagedList } from "../composables/usePagedList";
 import { formatTime } from "../utils/formatter";
 import { showToast } from "../composables/useToast";
-import type { Paged } from "../types/api";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
@@ -23,7 +23,7 @@ import AgentUsageBar from "../components/agents/AgentUsageBar.vue";
 
 // 自动刷新周期与每页条数
 const REFRESH_INTERVAL_MS = 30000;
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -54,53 +54,31 @@ interface AgentListItem {
 const status = ref("");
 const keywordDraft = ref("");
 const keyword = ref("");
-const page = ref(1);
 
-const listQuery = useQuery({
-  queryKey: computed(() => ["agents", { page: page.value, status: status.value, keyword: keyword.value }]),
-  queryFn: async (): Promise<Paged<AgentListItem> | null> => {
-    const params = new URLSearchParams({ page: String(page.value), page_size: String(PAGE_SIZE) });
+// 分页/越界回退/轮询统一由 usePagedList 承载；/api/agents 无排序参数，
+// buildUrl 忽略排序入参（queryKey 仍含排序态，不影响正确性）
+const list = usePagedList<AgentListItem>({
+  tag: "agents",
+  defaultPageSize: DEFAULT_PAGE_SIZE,
+  refetchInterval: REFRESH_INTERVAL_MS,
+  extraKey: computed(() => ({ status: status.value, keyword: keyword.value })),
+  buildUrl: (page, pageSize) => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (status.value) {
       params.set("status", status.value);
     }
     if (keyword.value) {
       params.set("keyword", keyword.value);
     }
-    const result = await apiGet<Paged<AgentListItem>>(`/api/agents?${params.toString()}`);
-    if (!result.success) {
-      // apiClient 已将失败归一为 { success:false } 不抛异常，
-      // 此处显式抛出让查询进入 error 态（isError/error.message 可渲染）
-      throw new Error(result.message || t("common.load_failed"));
-    }
-    return result.data;
-  },
-  // 30s 轮询沿用当前页与筛选；窗口失焦时 TanStack 默认暂停轮询
-  refetchInterval: REFRESH_INTERVAL_MS
-});
-
-const items = computed(() => (Array.isArray(listQuery.data.value?.items) ? listQuery.data.value.items : []));
-const total = computed(() => listQuery.data.value?.total ?? 0);
-const totalPages = computed(() => listQuery.data.value?.total_pages ?? 1);
-
-// 空页且页码越界（末页数据删除/筛选变化后）自动回退最后一页
-watch(
-  () => listQuery.data.value,
-  (data) => {
-    if (!data || !Array.isArray(data.items) || data.items.length !== 0 || page.value <= 1) {
-      return;
-    }
-    const pages = data.total_pages || Math.ceil((data.total || 0) / PAGE_SIZE);
-    if (pages > 0 && page.value > pages) {
-      page.value = pages;
-    }
+    return `/api/agents?${params.toString()}`;
   }
-);
+});
 
 /** 提交关键字草稿并回到第 1 页；筛选值未变化时 queryKey 不变，手动重拉 */
 function applyFilters() {
   keyword.value = keywordDraft.value.trim();
-  page.value = 1;
-  listQuery.refetch();
+  list.page = 1;
+  list.refetch();
 }
 
 // ==================== 列表单元格渲染辅助 ====================
@@ -189,7 +167,7 @@ function handleDeleteConfirmed() {
         @keydown.enter="applyFilters"
       >
       <button type="button" class="btn btn-primary btn-sm" @click="applyFilters">{{ t("agents.query") }}</button>
-      <button type="button" class="btn btn-secondary btn-sm" @click="listQuery.refetch()">{{ t("common.refresh") }}</button>
+      <button type="button" class="btn btn-secondary btn-sm" @click="list.refetch()">{{ t("common.refresh") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="showThreshold = true">{{ t("agents.alert_threshold") }}</button>
     </div>
     <div class="table-container">
@@ -211,13 +189,13 @@ function handleDeleteConfirmed() {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="listQuery.isError.value" class="empty-row">
-            <td colspan="12" class="text-center">{{ listQuery.error.value?.message || t("common.load_failed") }}</td>
+          <tr v-if="list.isError" class="empty-row">
+            <td colspan="12" class="text-center">{{ list.errorMessage }}</td>
           </tr>
-          <tr v-else-if="items.length === 0" class="empty-row">
+          <tr v-else-if="list.items.length === 0" class="empty-row">
             <td colspan="12" class="text-center">{{ t("agents.no_data") }}</td>
           </tr>
-          <tr v-for="agent in items" v-else :key="agent.id">
+          <tr v-for="agent in list.items" v-else :key="agent.id">
             <td class="col-center">
               <span class="agent-status-wrap">
                 <span class="agent-status-dot" :class="statusMeta(agent)?.dot" aria-hidden="true"></span>{{ statusText(agent) }}
@@ -284,11 +262,11 @@ function handleDeleteConfirmed() {
       </table>
     </div>
     <Pagination
-      v-if="totalPages > 1"
-      :page="page"
-      :total-pages="totalPages"
-      :total="total"
-      @page-change="(p) => (page = p)"
+      v-if="list.totalPages > 1"
+      :page="list.page"
+      :total-pages="list.totalPages"
+      :total="list.total"
+      @page-change="(p) => (list.page = p)"
     />
 
     <AgentDetailModal v-if="detailId != null" :agent-id="detailId" @close="detailId = null" />

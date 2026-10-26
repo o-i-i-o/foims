@@ -428,7 +428,7 @@ async fn main() -> std::io::Result<()> {
     // 启动应用层 fail2ban 清理任务（新签名需连接池：先加载持久化配置）。
     // 初始化模式无连接池，跳过启动
     if let Some(db_pool) = pool.as_ref() {
-        foims_auth::app_fail2ban::start_cleanup_task(db_pool.get_conn());
+        foims_auth::app_fail2ban::start_fail2ban_cleanup_task(db_pool.get_conn());
     }
     foims_common::log_info!("system.fail2ban_cleanup_started");
 

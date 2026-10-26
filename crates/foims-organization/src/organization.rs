@@ -3,7 +3,7 @@
 //! 由 lib.rs 拆分而来（纯移动）：原 lib.rs 同时承担模块组装与组织域
 //! 全部业务，现业务下沉至本文件，lib.rs 仅保留模块声明与再导出。
 
-use crate::org_template::{MAX_ORG_DEPTH, get_allowed_children};
+use crate::org_template::get_allowed_children;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use chrono::Utc;
@@ -13,6 +13,7 @@ use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::log_warn;
 use foims_common::msg;
+use foims_common::org_levels::{MAX_ORG_DEPTH, resolve_type_name};
 use foims_common::pagination::{Pagination, paged_response};
 use foims_models::{
     OrgTemplate, Organization, OrganizationCreate, OrganizationTreeNode, OrganizationUpdate, Room,
@@ -24,72 +25,8 @@ use uuid::Uuid;
 use validator::Validate;
 
 // ==================== type_path 解析工具 ====================
-
-/// 从模板的 levels JSON 中，根据 type_path 解析出类型名称
-///
-/// type_path 格式为点分隔的索引路径，如 "0"、"0.1"、"0.0.2"
-/// 每个数字表示在该层级的子类型列表中的索引位置
-pub fn resolve_type_name(levels: &serde_json::Value, type_path: &str) -> Result<String, AppError> {
-    let levels_map = levels
-        .as_object()
-        .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
-
-    let indices: Vec<usize> = type_path
-        .split('.')
-        .map(|s| {
-            s.parse::<usize>().map_err(|_| {
-                AppError::Validation(
-                    msg("server.organization.validation.type_path_format").with("path", type_path),
-                )
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    if indices.is_empty() {
-        return Err(AppError::Validation(msg(
-            "server.organization.validation.type_path_required",
-        )));
-    }
-
-    // 首段是根锚点，必须为 0（防止 "9.1" 之类的畸形路径被静默当作 "0.1" 解析）
-    if indices[0] != 0 {
-        return Err(AppError::Validation(
-            msg("server.organization.validation.type_path_root_anchor").with("path", type_path),
-        ));
-    }
-
-    // 找到根节点（不被任何其他节点的子级列表引用的节点）
-    let root = find_root_in_levels(levels_map)?;
-
-    // type_path 语义：
-    //   "0"     → 根节点
-    //   "0.x"   → 根节点的第 x 个子级
-    //   "0.x.y" → 根节点的第 x 个子级的第 y 个子级
-    // 第一个 "0" 是根锚点，后续索引逐级导航子级
-
-    if indices.len() == 1 {
-        return Ok(root.to_string());
-    }
-
-    // 从根的子级开始，跳过第一个锚点索引
-    let mut current_type = root;
-    for &idx in &indices[1..] {
-        let children = levels_map
-            .get(current_type)
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| AppError::Internal(msg("server.org_template.levels_format_invalid")))?;
-
-        current_type = children.get(idx).and_then(|v| v.as_str()).ok_or_else(|| {
-            AppError::Validation(
-                msg("server.organization.validation.type_path_out_of_range")
-                    .with("path", type_path)
-                    .with("index", idx),
-            )
-        })?;
-    }
-
-    Ok(current_type.to_string())
-}
+// resolve_type_name（type_path → 类型名）与根节点查找已收敛至
+// foims_common::org_levels 单点实现，与 CSV 导入端共用同一导航规则。
 
 /// 从 type_path 计算子节点的 type_path
 ///
@@ -120,27 +57,6 @@ pub fn type_path_index(type_path: &str) -> Result<usize, AppError> {
             msg("server.organization.validation.type_path_format").with("path", type_path),
         )
     })
-}
-
-/// 从模板的 levels 中找根节点 key
-fn find_root_in_levels(
-    levels_map: &serde_json::Map<String, serde_json::Value>,
-) -> Result<&str, AppError> {
-    let mut child_types: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for value in levels_map.values() {
-        if let Some(arr) = value.as_array() {
-            for child in arr {
-                if let Some(s) = child.as_str() {
-                    child_types.insert(s);
-                }
-            }
-        }
-    }
-    levels_map
-        .keys()
-        .find(|key| !child_types.contains(key.as_str()))
-        .map(|v| v.as_str())
-        .ok_or_else(|| AppError::Internal(msg("server.org_template.root_not_found")))
 }
 
 /// 根据 type_path 获取允许的子类型列表（带 type_path）
@@ -1177,24 +1093,6 @@ mod tests {
         const {
             assert!(MAX_ORG_DEPTH >= 5);
         }
-    }
-
-    #[test]
-    fn test_resolve_type_name() {
-        let levels = serde_json::json!({
-            "总部": ["a1公司", "b1公司"],
-            "a1公司": [],
-            "b1公司": []
-        });
-
-        // 根节点
-        assert_eq!(resolve_type_name(&levels, "0").unwrap(), "总部");
-        // 子节点
-        assert_eq!(resolve_type_name(&levels, "0.0").unwrap(), "a1公司");
-        assert_eq!(resolve_type_name(&levels, "0.1").unwrap(), "b1公司");
-        // 首段锚点非 0 必须拒绝，不允许被静默当作根路径解析
-        assert!(resolve_type_name(&levels, "1.0").is_err());
-        assert!(resolve_type_name(&levels, "9").is_err());
     }
 
     #[test]
