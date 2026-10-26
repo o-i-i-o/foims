@@ -711,3 +711,10 @@ v0.24.6
 
 # 2026102619393002（第 2 次修改，同版本追加）
 3. fixture 断链修复推送后 CI 仍余 1 失败（watchdog test_collect_matches_fixture，left 1 right 2），排查出第二层根因：git 不跟踪空目录，fixture 中故意留空的「无属性设备」目录 watchdog1 从未入库（上轮「根因唯一」结论不完整）。修复：watchdog1/ 放置 .gitkeep 占位入库；agent watchdog 采集器目录遍历新增点文件过滤（sysfs 真实设备名无点前缀形态，.gitkeep 不会成为假设备样本）；全量扫描确认 fixture 仅此一处空目录。验证：模拟 CI 检出复现失败→修复后 cargo test --release 全量 179 passed；agent 工作空间版本 0.5.0→0.5.1（生产代码改动，z+1，Cargo.lock 同步），记录见 foims-agent/docs/dev_version.md；本仓根 Cargo.toml 0.32.0 不动（改动在 agent 独立 workspace 内）
+
+v0.24.7
+2026102619533801
+1. Agent 工作空间 CI 护栏补齐与测试代码 unwrap 告警清零（z 级）：
+① CI 护栏缺口（.github/workflows/ci.yml agent-build 任务）：该任务此前只跑 cargo test（fmt/clippy 均未覆盖 agent 工作空间），而 agent 自持 [workspace.lints] 护栏（unwrap_used/expect_used/print_stdout 等 warn 级）——护栏无强制执行点即形同虚设，导致 13 处测试内 unwrap 告警长期无人拦截。新增「检查 Agent 代码格式」（cargo fmt --check）与「运行 Agent clippy 检查」（cargo clippy --release --workspace --all-targets -- -D warnings）两个阻断步骤（与主程序 build 任务同口径同顺序：fmt→clippy→test），Rust 工具链补 components: rustfmt, clippy。
+② 13 处告警修复（全部位于 foims-agent crate 的 7 个采集器测试模块：cpu/diskstats/filefd/filesystem/loadavg/netdev/stat，11 处 unwrap_err + 2 处 unwrap）：不走主仓式 crate 根 #![cfg_attr(test, allow(..))] 豁免——实测 agent 单测主流写法已占绝对优势（unwrap_or_else 203 处、matches! 50 处），这 13 处是偏离者；加豁免会引入第二套机制并反向鼓励后续继续写 unwrap（违背全局一致性优先）。改为同源风格改写：错误断言塌缩为既有的 `assert!(matches!(解析调用, Err(...)))` 单式（去掉临时 error 绑定），成功取值改用 `unwrap_or_else(|error| panic!(...))`；断言语义逐处等价。foims-agent/Cargo.toml 护栏注释同步补写「测试不设豁免」的口径说明，与 CI 门互防回归。
+2. 版本：测试重构与 CI 配置（z+1）；根 Cargo.toml 0.32.0 与 frontend/package.json 0.1.8 不动（主仓生产代码零改动）；agent 工作空间 0.5.1→0.5.2（z+1，Cargo.lock 同步，记录见 foims-agent/docs/dev_version.md）；无数据库结构变更、无后端载荷类型变更（未重生 TS）；验证：agent 工作空间 grep 确认 unwrap()/unwrap_err()/expect() 残留 0、cargo fmt --check 通过、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --release 全量 179 passed；ci.yml YAML 语法有效

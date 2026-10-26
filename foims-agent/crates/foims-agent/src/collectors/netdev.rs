@@ -283,22 +283,26 @@ mod tests {
 
     #[test]
     fn test_parse_rejects_malformed_lines() {
-        let error = parse_net_dev("Inter-| Receive | Transmit\n face |cols\nlo: 1 2").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
-        let error =
-            parse_net_dev("Inter-| Receive | Transmit\n face |cols\nlo: 1 2 3").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
-        let error = parse_net_dev(
-            "Inter-| Receive | Transmit\n face |cols\nlo: a b c d e f g h i j k l m n o p",
-        )
-        .unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_net_dev("Inter-| Receive | Transmit\n face |cols\nlo: 1 2"),
+            Err(CollectorError::Parse { .. })
+        ));
+        assert!(matches!(
+            parse_net_dev("Inter-| Receive | Transmit\n face |cols\nlo: 1 2 3"),
+            Err(CollectorError::Parse { .. })
+        ));
+        assert!(matches!(
+            parse_net_dev(
+                "Inter-| Receive | Transmit\n face |cols\nlo: a b c d e f g h i j k l m n o p",
+            ),
+            Err(CollectorError::Parse { .. })
+        ));
     }
 
     #[test]
     fn test_parse_skips_blank_lines() {
         let text = "Inter-|   Receive   |  Transmit\n face |cols\n\n  lo: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16\n";
-        let devices = parse_net_dev(text).unwrap();
+        let devices = parse_net_dev(text).unwrap_or_else(|error| panic!("解析失败: {error}"));
         assert_eq!(devices.len(), 1);
         assert_eq!(devices[0].0, "lo");
         assert_eq!(devices[0].1["receive_bytes"], 1);

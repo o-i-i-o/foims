@@ -372,13 +372,14 @@ mod tests {
 
     #[test]
     fn test_parse_rejects_malformed_line() {
-        let error = parse_mount_table("/dev/sda1 /only-two").unwrap_err();
         assert!(matches!(
-            error,
-            CollectorError::Parse { file: "mounts", .. }
+            parse_mount_table("/dev/sda1 /only-two"),
+            Err(CollectorError::Parse { file: "mounts", .. })
         ));
         // 空行与空白行跳过，不报错
-        assert!(parse_mount_table("\n   \n").unwrap().is_empty());
+        let labels = parse_mount_table("\n   \n")
+            .unwrap_or_else(|error| panic!("空白行应跳过而非报错: {error}"));
+        assert!(labels.is_empty());
     }
 
     #[test]

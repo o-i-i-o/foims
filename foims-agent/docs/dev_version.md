@@ -157,7 +157,7 @@
 1.修复 CI 检出下 watchdog fixture 测试失败（bug 修复级 z+1）：
   - 根因：git 不跟踪空目录，fixture 中故意留空的「无属性设备」目录
     watchdog1 从未入库，CI 检出后仅剩 watchdog0，
-    test_collect_matches_fixture 断言 info 样本数 2==落空（left 1 right 2）；
+    test_collect_matches_fixture 断言 info 样本数 2 落空（left 1 right 2）；
     本机因目录存在而全绿，掩盖断链；
   - 修复：watchdog1/ 放置 .gitkeep 占位使目录可入库（内容为说明文字，
     非属性文件名，不会被属性读取逻辑命中）；watchdog 采集器目录遍历
@@ -166,4 +166,29 @@
   - 另：全量扫描确认 fixture 中仅此一处空目录，无同类隐患。
 2.验证：cargo test --release 全量 179 passed 全绿（含 watchdog fixture 用例）；
   本地模拟 CI 检出（暂移 fixture 复现失败→恢复后全绿）确认根因闭环。
+
+# v0.5.2
+
+# 2026102619533801
+# 2026年10月26日19点53分38秒 第1次修改
+
+1.测试代码 unwrap/expect 告警清零（z+1，纯测试重构）：
+  - 现状：13 处存量告警全在 foims-agent crate 的 7 个采集器测试模块
+    （cpu/diskstats/filefd/filesystem/loadavg/netdev/stat）——11 处
+    unwrap_err() + 2 处 unwrap()，本工作空间 [workspace.lints] 把
+    unwrap_used/expect_used 定为 warn，故 -D warnings 下必红灯；
+  - 修法取舍：不用主仓式 crate 根 #![cfg_attr(test, allow(...))] 豁免。实测本
+    工作空间单测主流写法已占绝对优势（unwrap_or_else 203 处、matches! 50 处），
+    这 13 处才是偏离者；加豁免等于引入第二套机制并反向鼓励后续继续写
+    unwrap，故按同源风格改写：错误断言塌缩为既有的
+    `assert!(matches!(解析调用, Err(CollectorError::Parse { .. })))` 单式
+    （同文件内已存在该形状，并去掉临时 error 绑定），成功取值改用
+    `unwrap_or_else(|error| panic!("...：{error}"))` 写法；断言语义逐处等价
+    （原路径：unwrap_err 遇到 Ok 即 panic / 现路径：matches! 不中即 assert 失败）；
+  - Cargo.toml 护栏注释补写该口径（为何不设测试豁免），配合主仓 CI 新增的
+    agent clippy 门防回归。
+2.验证：grep 确认全工作空间 unwrap()/unwrap_err()/expect() 残留为 0；
+  cargo fmt --check 通过；cargo clippy --release --workspace --all-targets -- -D warnings
+  0 告警（含 windows crate 在 Linux 宿主上的 cfg 外目标）；cargo test --release 全量 179 passed。
+
 

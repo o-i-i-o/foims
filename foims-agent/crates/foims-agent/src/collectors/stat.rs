@@ -165,9 +165,10 @@ mod tests {
     #[test]
     fn test_parse_requires_mandatory_fields() {
         // 缺 procs_blocked → 无效数据
-        let error =
-            parse_kernel_stat("intr 100\nctxt 200\nprocesses 300\nprocs_running 1\n").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_kernel_stat("intr 100\nctxt 200\nprocesses 300\nprocs_running 1\n"),
+            Err(CollectorError::Parse { .. })
+        ));
     }
 
     #[test]

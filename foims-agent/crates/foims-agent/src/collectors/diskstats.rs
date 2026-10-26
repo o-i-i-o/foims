@@ -393,9 +393,13 @@ mod tests {
 
     #[test]
     fn test_parse_rejects_invalid_value() {
-        let error = parse_diskstats("8 0 sda abc").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
-        let error = parse_diskstats("8 0").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_diskstats("8 0 sda abc"),
+            Err(CollectorError::Parse { .. })
+        ));
+        assert!(matches!(
+            parse_diskstats("8 0"),
+            Err(CollectorError::Parse { .. })
+        ));
     }
 }

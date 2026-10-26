@@ -233,11 +233,15 @@ mod tests {
             .unwrap_or_else(|e| panic!("解析失败: {e}"));
         assert!(only_aggregate.is_empty());
         // 字段值非法时报错
-        let error = parse_stat("cpu0 abc def").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_stat("cpu0 abc def"),
+            Err(CollectorError::Parse { .. })
+        ));
         // cpu 编号非法时报错
-        let error = parse_stat("cpuxyz 1 2 3 4 5 6 7 8 9 10").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_stat("cpuxyz 1 2 3 4 5 6 7 8 9 10"),
+            Err(CollectorError::Parse { .. })
+        ));
         // 空输入无逐核数据
         let empty = parse_stat("").unwrap_or_else(|e| panic!("解析失败: {e}"));
         assert!(empty.is_empty());

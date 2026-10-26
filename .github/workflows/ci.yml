@@ -133,6 +133,10 @@ jobs:
   # 上传发布页供用户按需下载；主程序 DEB 不含 agent，服务端 web 页只现场组
   # 配置包。
   #
+  # 检查门（fmt / clippy / 本机单测）与主程序 build 任务同源同级别：agent 工作
+  # 空间自持 [workspace.lints] 护栏（见 foims-agent/Cargo.toml），若不显式跑
+  # clippy 则护栏形同虚设（曾有 13 处测试内 unwrap/unwrap_err 长期无人拦截）。
+  #
   # 交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C 编译器与链接器（ring 等依赖
   # 直接编），替代 musl.cc 工具链下载——该站点多次间歇不可达（v0.6.3/v0.7.2/
   # v0.7.3 三轮修复仍失败），最终弃用。zig 由 mlugg/setup-zig 官方社区
@@ -152,7 +156,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # dpkg-deb 为 ubuntu-latest 自带；rpm 提供 rpmbuild（Agent rpm 组装）。
-      # build-essential/pkg-config 供本机 target 的 cargo test 编译 ring（cc）使用。
+      # build-essential/pkg-config 供本机 target 的 cargo test/clippy 编译 ring（cc）使用。
       - name: 安装系统依赖
         run: |
           sudo apt-get update
@@ -162,12 +166,25 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          components: rustfmt, clippy
 
       # 仅缓存 agent 独立工作空间（foims-agent/ 自持 Cargo.lock 与 target/）
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: foims-agent
+
+      - name: 检查 Agent 代码格式
+        working-directory: foims-agent
+        run: cargo fmt --check
+
+      # --workspace --all-targets 与主程序 build 任务同口径：覆盖各成员 crate 的
+      # lib/bin/tests 全部目标。不同于主仓（各 crate 根以 cfg_attr(test, allow)
+      # 豁免内部测试模块），agent 工作空间无该豁免，生产与测试代码均受
+      # -D warnings 强约束（口径说明见 foims-agent/Cargo.toml 护栏注释）
+      - name: 运行 Agent clippy 检查
+        working-directory: foims-agent
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
 
       # 交叉产物无法在 runner 上执行，先对本机 target（x86_64）跑一遍单测，
       # 让 agent-core/protocol/collectors 的逻辑回归在跨平台构建前就被把关

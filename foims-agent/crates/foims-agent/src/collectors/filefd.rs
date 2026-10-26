@@ -108,8 +108,10 @@ mod tests {
 
     #[test]
     fn test_parse_rejects_short_content() {
-        let error = parse_file_nr("1024\t0").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_file_nr("1024\t0"),
+            Err(CollectorError::Parse { .. })
+        ));
         assert!(matches!(
             parse_file_nr("abc\t0\t1"),
             Err(CollectorError::Parse { .. })

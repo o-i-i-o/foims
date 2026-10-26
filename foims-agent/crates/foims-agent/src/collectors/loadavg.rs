@@ -110,8 +110,10 @@ mod tests {
 
     #[test]
     fn test_parse_rejects_short_content() {
-        let error = parse_loadavg("0.1 0.2").unwrap_err();
-        assert!(matches!(error, CollectorError::Parse { .. }));
+        assert!(matches!(
+            parse_loadavg("0.1 0.2"),
+            Err(CollectorError::Parse { .. })
+        ));
         assert!(matches!(parse_loadavg(""), Err(CollectorError::NoData)));
     }
 }
