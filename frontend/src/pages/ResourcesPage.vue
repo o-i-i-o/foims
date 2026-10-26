@@ -19,8 +19,11 @@ import { getDeviceTypeName } from "../config/deviceOptions";
 import { showToast } from "../composables/useToast";
 import type { CabinetWithNetworks } from "../types/api/generated/CabinetWithNetworks";
 import type { CableLinkWithDetails } from "../types/api/generated/CableLinkWithDetails";
+import type { DeviceInterface } from "../types/api/generated/DeviceInterface";
 import type { DeviceWithDetails } from "../types/api/generated/DeviceWithDetails";
+import type { IpDetail } from "../types/api/generated/IpDetail";
 import type { Network } from "../types/api/generated/Network";
+import type { NetworkCard } from "../types/api/generated/NetworkCard";
 import type { NetworkRegion } from "../types/api/generated/NetworkRegion";
 import type { RoomWithNetworks } from "../types/api/generated/RoomWithNetworks";
 import ConfirmModal from "../components/ConfirmModal.vue";
@@ -203,8 +206,19 @@ const networkModal = reactive<{ open: boolean; network: Network | null }>({ open
 const usageModal = reactive({ open: false, subnetId: "" });
 const roomModal = reactive<{ open: boolean; room: RoomBrief | null }>({ open: false, room: null });
 const cabinetModal = reactive<{ open: boolean; cabinet: CabinetWithNetworks | null }>({ open: false, cabinet: null });
+/** 设备编辑回显载荷：GET /devices/{id} 在 DeviceWithDetails 基础上附加后端脱敏
+ * 层注入的 snmp_configured 计算标记与 cards 网卡树（边界扩展，未入 generated
+ * 模型；网卡→网口→IP 三级结构与 DeviceModal 的 DeviceCard 同构（cards 与
+ * ports/ips 后端恒返回数组，故声明为必填），prop 传递时由 vue-tsc 校验 */
+type DeviceEditCardPort = DeviceInterface & { ips: IpDetail[] };
+type DeviceEditCard = NetworkCard & { ports: DeviceEditCardPort[] };
+type DeviceEditData = DeviceWithDetails & {
+  snmp_configured: boolean;
+  cards?: DeviceEditCard[];
+};
+
 // 设备弹窗：device 为 null = 新增，对象 = 编辑回显（GET /devices/{id} 完整数据）
-const deviceModal = reactive<{ open: boolean; device: DeviceWithDetails | null }>({ open: false, device: null });
+const deviceModal = reactive<{ open: boolean; device: DeviceEditData | null }>({ open: false, device: null });
 // 设备 SNMP 汇聚弹窗：原设备行的端口/MAC表/LLDP/硬件清单/VLAN/CDP/LAG/PoE/
 // 观测事件 9 个 SNMP 入口收敛为单按钮唤起，弹窗内以标签切换（deviceId +
 // deviceName 供标题与各子功能接口调用）
@@ -250,9 +264,9 @@ function openCabinetModal(cabinet: CabinetWithNetworks | null = null): void {
   cabinetModal.open = true;
 }
 
-// 编辑设备：先取完整详情（含 cards），成功后打开弹窗回显
+// 编辑设备：先取完整详情（含 cards 与 snmp_configured），成功后打开弹窗回显
 async function editDevice(id: string): Promise<void> {
-  const result = await apiGet<DeviceWithDetails>(`/api/resources/devices/${id}`);
+  const result = await apiGet<DeviceEditData>(`/api/resources/devices/${id}`);
   if (!result.success || !result.data) {
     showToast(`${t("device.load_failed")}: ${result.message}`, "error");
     return;

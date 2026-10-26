@@ -5,7 +5,8 @@
  *   经销商/位置/功耗（W|kW）/描述；
  * - 位置级联：组织/房型 → 房间 → 工位与机柜（互斥）→ 机位（依赖机柜）；
  * - 网卡配置：NetworkCardEditor 三级嵌套（网卡 → 网口 → IP）；
- * - SNMP 双版本：v2c 团体名 / v3 用户名+认证+加密，密码掩码回显；
+ * - SNMP 双版本：v2c 团体名 / v3 用户名+认证+加密，凭据密文不出 API，
+ *   编辑回显按后端 snmp_configured 计算标记以掩码占位；
  * - 底部：测试 SNMP / 从 SNMP 获取信息 / 保存。
  * 编辑回显：先取房间详情对齐组织/房型筛选，再五路并行加载下拉与房间网段。
  */
@@ -49,8 +50,10 @@ type CardSyncPayload = Omit<NetworkCardSyncItem, "ports"> & { ports: PortSyncPay
 
 const props = withDefaults(
   defineProps<{
-    /** null = 新增；对象 = 编辑回显（GET /devices/{id} 完整数据，含 cards） */
-    device?: (DeviceWithDetails & { cards?: DeviceCard[] }) | null;
+    /** null = 新增；对象 = 编辑回显（GET /devices/{id} 完整数据，含 cards）；
+     * snmp_configured 为后端脱敏层注入的计算标记（凭据密文已置 null，
+     * 前端凭它判定是否已配置凭据） */
+    device?: (DeviceWithDetails & { snmp_configured: boolean; cards?: DeviceCard[] }) | null;
   }>(),
   { device: null }
 );
@@ -85,7 +88,7 @@ function maskToNull(value: string): string | null {
  * SNMP 掩码字段的提交载荷（双层 Option 语义）：掩码=用户未改动（返回
  * undefined，JSON.stringify 省略键，后端按键缺失处理=保留原值）；空串=
  * 主动清空（null，后端 SET NULL）；有值=更新新值。掩码误发 null 会把
- * 已存配置清空（设备 SNMP 信息"无法保存"的根因）。
+ * 已存配置清空（设备 SNMP 凭据编辑保存后被清空的根因）。
  */
 function snmpSecretPayload(value: string): string | null | undefined {
   if (value === PASSWORD_MASK) {
@@ -372,20 +375,28 @@ async function onTemplateChange(): Promise<void> {
 
 // ==================== 编辑回显 ====================
 
-function setSnmpFieldValues(device: DeviceWithDetails): void {
+/**
+ * 编辑回显 SNMP 字段：community/auth_password/priv_password 在 GET 响应中
+ * 已被脱敏为 null，不能据字段值判定是否已配置——凭据存在性一律以
+ * snmp_configured 计算标记判定；误按 null 置空会让用户仅改其他字段就保存
+ * 时把这些列 SET NULL（清空已存凭据）。协议等非敏感列按实际值回显。
+ */
+function setSnmpFieldValues(device: DeviceWithDetails & { snmp_configured: boolean }): void {
   form.snmpVersion = device.snmp_version || "v2c";
   form.snmpPort = device.snmp_port || 161;
-  form.snmpCommunity = device.snmp_community ? PASSWORD_MASK : "";
+  // 凭据存在性后端仅聚合暴露（community 或 username 任一非空）：已配置
+  // 即三处密文列统一掩码占位，未改动时按键缺省提交保留原值
+  form.snmpCommunity = device.snmp_configured ? PASSWORD_MASK : "";
   form.snmpUsername = device.snmp_username || "";
   form.snmpAuthProtocol = device.snmp_auth_protocol || "";
-  form.snmpAuthPassword = device.snmp_auth_password ? PASSWORD_MASK : "";
+  form.snmpAuthPassword = device.snmp_configured ? PASSWORD_MASK : "";
   form.snmpPrivProtocol = device.snmp_priv_protocol || "";
-  form.snmpPrivPassword = device.snmp_priv_password ? PASSWORD_MASK : "";
+  form.snmpPrivPassword = device.snmp_configured ? PASSWORD_MASK : "";
 }
 
 /** 编辑路径回显：基础字段 → 房间上下文（下拉五路并行）→ 网卡数据 */
 async function fillDeviceFormForEdit(
-  device: DeviceWithDetails & { cards?: DeviceCard[] }
+  device: DeviceWithDetails & { snmp_configured: boolean; cards?: DeviceCard[] }
 ): Promise<void> {
   form.name = device.name || "";
   form.hostname = device.hostname || "";
