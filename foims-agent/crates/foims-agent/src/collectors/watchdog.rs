@@ -65,6 +65,14 @@ impl Collector for WatchdogCollector {
         let mut device_dirs: Vec<PathBuf> = match std::fs::read_dir(&watchdog_dir) {
             Ok(entries) => entries
                 .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                // 跳过点文件：sysfs 真实设备名均为 watchdog<N>，无点前缀形态；
+                // fixture 用 .gitkeep 占位保留「空属性设备」目录（git 不跟踪空目录）
+                .filter(|path| {
+                    !path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with('.'))
+                })
                 .filter(|path| path.is_dir())
                 .collect(),
             // 目录缺失（无看门狗设备）→ NoData（对齐 Go）

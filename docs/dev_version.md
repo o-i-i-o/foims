@@ -706,5 +706,8 @@ v0.24.6
 1. CI 越界步骤回退与 Agent 测试中断根因修复（z 级，修正 v0.23.2）：
 ① 门户越界回退：foims-portal 为独立仓库，其单测不应作为本仓 CI 阻断门，移除 build 任务的「运行门户测试（独立 workspace）」步骤；门户测试归其自身仓库验证链路。
 ② Agent 本机测试保留并修复根因：foims-agent 是本仓内工作空间，应受 CI 把关，此前红灯非测试越界——根因为 foims-agent/.gitignore 将 `crates/foims-agent/tests/fixtures/` 整目录忽略，采集器单测（*_fixture 类，node_exporter 同源 ASCII fixture，296 个文件约 1.5M）从未入库，CI 检出无此目录致 26+ 测试必然失败；本机因目录存在而全绿，掩盖了断链。修复：删除该忽略规则（补注释标明勿再排除），fixture 目录提交入库，「运行 Agent 本机测试」步骤与 build-essential/pkg-config 依赖保留不动。
-③ 验证：模拟 CI 检出（暂移 fixture）复现 26 个 fixture 测试全失败、恢复后全量 179 passed 全绿，确认根因唯一且修复闭环；frontend selfcheck:viz（本仓工程自身验证环节）与 api-smoke.sh（本机运行时证据，未接入 CI）均不受影响。
+③ 验证：模拟 CI 检出（暂移 fixture）复现 26 个 fixture 测试全失败、恢复后全量 179 passed 全绿（注：此处「根因唯一」仅指 fixture 断链相对测试越界的定性，fixture 入库后仍暴露空目录不可跟踪的第二层根因，见同版本第 3 条）；frontend selfcheck:viz（本仓工程自身验证环节）与 api-smoke.sh（本机运行时证据，未接入 CI）均不受影响。
 2. 版本：仅 CI 配置、.gitignore 与测试物料入库变更（z+1），生产代码零改动，根 Cargo.toml 0.32.0、frontend/package.json 0.1.8 与 agent workspace Cargo.toml 均不动；无数据库结构变更、无后端载荷类型变更（未重生 TS）
+
+# 2026102619393002（第 2 次修改，同版本追加）
+3. fixture 断链修复推送后 CI 仍余 1 失败（watchdog test_collect_matches_fixture，left 1 right 2），排查出第二层根因：git 不跟踪空目录，fixture 中故意留空的「无属性设备」目录 watchdog1 从未入库（上轮「根因唯一」结论不完整）。修复：watchdog1/ 放置 .gitkeep 占位入库；agent watchdog 采集器目录遍历新增点文件过滤（sysfs 真实设备名无点前缀形态，.gitkeep 不会成为假设备样本）；全量扫描确认 fixture 仅此一处空目录。验证：模拟 CI 检出复现失败→修复后 cargo test --release 全量 179 passed；agent 工作空间版本 0.5.0→0.5.1（生产代码改动，z+1，Cargo.lock 同步），记录见 foims-agent/docs/dev_version.md；本仓根 Cargo.toml 0.32.0 不动（改动在 agent 独立 workspace 内）

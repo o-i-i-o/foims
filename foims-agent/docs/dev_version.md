@@ -148,3 +148,22 @@
   - console 模式（--once/--format/--listen）保留不变，调试用。
 2.验证：cargo test --workspace 全绿（Linux 宿主 parse_cli 用例）、
   x86_64-pc-windows-gnu 交叉编译 + 组包实测（zip 形态 + SHA256SUMS）。
+
+# v0.5.1
+
+# 2026102619350001
+# 2026年10月26日19点35分00秒 第1次修改
+
+1.修复 CI 检出下 watchdog fixture 测试失败（bug 修复级 z+1）：
+  - 根因：git 不跟踪空目录，fixture 中故意留空的「无属性设备」目录
+    watchdog1 从未入库，CI 检出后仅剩 watchdog0，
+    test_collect_matches_fixture 断言 info 样本数 2==落空（left 1 right 2）；
+    本机因目录存在而全绿，掩盖断链；
+  - 修复：watchdog1/ 放置 .gitkeep 占位使目录可入库（内容为说明文字，
+    非属性文件名，不会被属性读取逻辑命中）；watchdog 采集器目录遍历
+    新增点文件过滤（sysfs 真实设备名均为 watchdog<N>，无点前缀形态，
+    .gitkeep 不会成为假设备样本）；.gitkeep 注释标明勿在此放置属性文件；
+  - 另：全量扫描确认 fixture 中仅此一处空目录，无同类隐患。
+2.验证：cargo test --release 全量 179 passed 全绿（含 watchdog fixture 用例）；
+  本地模拟 CI 检出（暂移 fixture 复现失败→恢复后全绿）确认根因闭环。
+
