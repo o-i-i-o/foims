@@ -74,11 +74,25 @@ const list = usePagedList<AgentListItem>({
   }
 });
 
-/** 提交关键字草稿并回到第 1 页；筛选值未变化时 queryKey 不变，手动重拉 */
+/**
+ * 已提交的查询签名（状态/关键字/页码）。用于判定 applyFilters 是否改变了 queryKey：
+ * 改变时 TanStack 随 queryKey 自动重取，未变时（重复提交同一筛选）手动重拉，
+ * 避免同一提交既触发 queryKey 变更又触发 refetch 的双拉。
+ */
+function querySignature(): string {
+  return `${status.value}\u0000${keyword.value}\u0000${list.page}`;
+}
+let committedSignature = querySignature();
+
+/** 提交关键字草稿并回到第 1 页；queryKey 未变时手动重拉，变化时交由自动重取 */
 function applyFilters() {
   keyword.value = keywordDraft.value.trim();
   list.page = 1;
-  list.refetch();
+  const signature = querySignature();
+  if (signature === committedSignature) {
+    list.refetch();
+  }
+  committedSignature = signature;
 }
 
 // ==================== 列表单元格渲染辅助 ====================
