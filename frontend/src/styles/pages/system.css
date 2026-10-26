@@ -80,7 +80,8 @@
   }
 
   /* 字段行已换用页面表单家族 form-row/form-group（label 定宽居中、控件同行撑满，
-   同行表单变体规则见 forms.css），此处仅保留只读 dl 字段与整行分组块的差异 */
+   同行表单变体规则见 forms.css；卡片直落字段行固定 4 列、内嵌 section 字段行
+   固定 2 列见下方声明），此处仅保留只读 dl 字段与整行分组块的差异 */
 
   /* 只读字段 dl：dt 与家族行 label 同款定宽居中，dd 值框 flex:1 撑满剩余空间 */
   dl.config-field,
@@ -537,6 +538,12 @@
     border-bottom: none;
   }
 
+  /* 内嵌半宽 section 的直落字段行固定 2 列（与卡片直落行 4 列合成每卡片
+   等效 4 列口径，forms.css 同特异度声明靠前让位）；窄屏回落单列 */
+  .data-management-container .section > .form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .import-actions,
   .export-actions {
     display: flex;
@@ -713,7 +720,8 @@
     min-width: 0;
   }
 
-  .clear-logs-form .form-row {
+  /* 堆叠式清日志表单：控件纵向占满列宽，不受同行变体横向限宽规则影响 */
+  .data-management-container .clear-logs-form .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
@@ -735,7 +743,12 @@
   }
 
   @media (width <= 576px) {
-    .clear-logs-form .form-row {
+    .data-management-container .clear-logs-form .form-row {
+      grid-template-columns: 1fr;
+    }
+
+    /* 窄屏：内嵌 section 字段行回落单列（与既有 576 清日志/统计卡断点同阶梯） */
+    .data-management-container .section > .form-row {
       grid-template-columns: 1fr;
     }
 

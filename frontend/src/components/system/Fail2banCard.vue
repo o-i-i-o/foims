@@ -242,7 +242,8 @@ function unbanIp(): void {
     <!-- 手动封禁/解封 -->
     <template v-if="!readonly">
       <h4 class="mt-md">{{ t("security.manual_ban") }}</h4>
-      <div class="form-group-inline">
+      <!-- 复用 form-group 家族：命中 .config-card 同行表单变体，label 左、输入框同行撑满、按钮右置 -->
+      <div class="form-group">
         <label for="app-fail2ban-ip-input" class="inline-field-label">{{ t("system.app_fail2ban_ip") }}</label>
         <input id="app-fail2ban-ip-input" v-model="manualIp" type="text" placeholder="192.168.1.100" autocomplete="off">
         <button type="button" class="btn btn-danger btn-sm" @click="banIp">

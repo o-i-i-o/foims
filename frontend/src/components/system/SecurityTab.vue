@@ -175,9 +175,11 @@ async function savePasswordPolicy(): Promise<void> {
             <span class="icon">🚦</span>
             <span>{{ t("config.rate_limit_settings") }}</span>
           </div>
-          <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="savingRateLimit" @click="saveRateLimitConfig">
-            {{ t("common.save") }}
-          </button>
+          <div class="card-header-actions">
+            <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="savingRateLimit" @click="saveRateLimitConfig">
+              {{ t("common.save") }}
+            </button>
+          </div>
         </header>
         <div class="form-row">
           <div class="form-group">
@@ -221,9 +223,11 @@ async function savePasswordPolicy(): Promise<void> {
             <span class="icon">🔑</span>
             <span>{{ t("config.password_policy") }}</span>
           </div>
-          <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="savingPolicy" @click="savePasswordPolicy">
-            {{ t("common.save") }}
-          </button>
+          <div class="card-header-actions">
+            <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="savingPolicy" @click="savePasswordPolicy">
+              {{ t("common.save") }}
+            </button>
+          </div>
         </header>
         <!-- 输入字段 -->
         <div class="form-row">

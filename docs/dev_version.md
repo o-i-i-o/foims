@@ -672,3 +672,19 @@ v0.24.1
 2026102613173101
 1. 修复已配置 SNMP 设备未自动入库主机监控（功能 bug，z 级，接 v0.24.0）：snmp_poll 的 poll_and_upsert 将 source='snmp' 的 monitored_hosts upsert 置于三重 early-return 之后（参数构造失败 / connect_snmp 失败 / 系统组三 OID 全无响应），导致已配置 SNMP 凭据但当前不可达或配置有误的设备永远不产生行——设备在主机监控页静默消失（与“配置 SNMP 后应自动入库”设计相违）。本机实测：办公台式机B/办公电脑/移动笔记本均已有 community+管理 IP 但 monitored_hosts 无任何 snmp 行。修复：新增 ensure_snmp_host_present 在采集前先保证基线行存在（machine_id='snmp:{device_id}'、hostname=设备台账名、status='offline'、first_seen/last_seen=NOW），ON CONFLICT (machine_id) 仅刷新 device_id/ip（设备改配管理地址后同步）不触碰 status/last_seen/hostname，避免把已 active 设备在本轮采集前打回 offline；成功采集路径沿用原 upsert 翻 active + 写指标/历史。失败不静默消失、仅记 log.task.agent_snmp_poll_failed；同步修正模块头注释与 poll_and_upsert 注释「配置即入库」口径
 2. 版本：bug 修复级（z+1），根 Cargo.toml 0.32.0 与 frontend/package.json 0.1.7 不动（对齐 v0.22.1/v0.23.1 先例：bug 修复不动根版本仅 bump 受影响 crate）；foims-agent-service 0.1.17→0.1.18（cargo update -p --offline 同步 Cargo.lock）；无数据库结构变更（仅写入时序调整）、无后端载荷类型变更（未重生 TS）；验证 cargo fmt、cargo check/clippy -p foims-agent-service --all-targets 0 告警；回滚事务实测 ensure INSERT SQL 对已配设备可正常入库且无 machine_id/device_id 双部分唯一索引冲突
+
+v0.24.2
+2026102615021701
+1. 系统-安全页卡片布局对齐资源管理同行表单范式核查与完善（UI 一致性，z 级，纯前端）：核查限流设置/等保密码策略/Fail2ban 三卡片，表单主体均已套用 .form-row + .form-group（命中 forms.css `.config-card .form-group` 同行表单变体：label 定宽在左、控件 flex:1 同行撑满），checkbox 行经 `label:not(.checkbox-label)` 正确排除，无 nc-fields 遗留结构；修复两处偏差——① SecurityTab 限流/密码策略两卡片头部保存按钮裸放，补 .card-header-actions 按钮组包裹（对齐 Fail2ban/证书/服务/通知卡片头部范式）；② Fail2banCard 手动封禁行误用全项目无 CSS 定义的 .form-group-inline（致该行落在 .form-group 基样式上纵向堆叠、输入框整行拉满，与同卡片配置字段布局割裂），改用 .form-group 复用同行变体（label 左、IP 输入框同行撑满、封禁/解禁 btn-sm 右置）
+2. 版本：纯前端布局一致性修订（z 级），根 Cargo.toml 0.32.0 与 frontend/package.json 0.1.7 不动（对齐既有 z 段不联动版本规则）；无后端改动、无数据库结构变更、无载荷类型变更（未重生 TS）；验证 npm run typecheck 0 错、npm run build 通过
+
+v0.24.3
+2026102615513401
+1. 系统模块子页卡片字段控件横向限宽（视觉优化，z 级，纯前端 CSS）：config-card 铺满页面宽度，同行表单变体下控件 flex:1 无上限致输入框/下拉框拉伸过宽。variables.css 新增 --control-max-width: 360px token；forms.css 同行表单变体处新增 `.config-card .form-group` 控件 `max-width: min(var(--control-max-width), 100%)`——统一作用于系统模块全部 11 张卡片（含日志管理 clear-logs 堆叠变体），窄容器（半宽 section/响应式单列）经 min() 仍可收缩贴合列宽，整行块 .form-group-block 由后继同特异度 width:100% 规则覆盖不受影响（收件人清单/SNMP v3 用户表）；模态框（.modal）不在选择器内，资源管理等弹窗既有满宽布局零改动
+2. 版本：纯前端样式修订（z 级），根 Cargo.toml 0.32.0 与 frontend/package.json 0.1.7 不动；无后端改动、无数据库结构变更、无载荷类型变更（未重生 TS）；验证 npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、npm run build 通过
+
+v0.24.4
+2026102616413901
+1. 系统页各卡片字段行固定每行 4 项（布局，y 级替代方案，纯前端 CSS，接 v0.24.3）：卡片直落字段行由 auto-fit 自适应列数改为固定 4 列——forms.css 新增 `.config-card > .form-row { grid-template-columns: repeat(4, minmax(0, 1fr)) }`（直接子选择器：全部卡片字段行均为 config-card 直落子元素，嵌于卡片区内的弹窗行包在 .modal-overlay 深层、不被命中，模态框 auto-fit 行为零改动），视口回落阶梯 ≤1400 3 列 / ≤1100 2 列 / ≤760 单列；块级项 `.config-card > .form-row > .form-group.form-group-block` 跨整行（grid-column: 1/-1，声明置于 form-group-block 家族之后避免 biome noDescendingSpecificity 降序告警）。数据管理等卡片内嵌半宽 section（.data-management-container 两列容器）字段行固定 2 列，与卡片 4 列合成等效每卡 4 列口径：system.css 新增 `.data-management-container .section > .form-row` 2 列（≤576 回落单列，既有断点阶梯内）；既有 .form-row-2col（agent 服务参数/日志转发，均在 section 内）行为不变；clear-logs 堆叠规则选择器抬升为 `.data-management-container .clear-logs-form .form-row`（0,3,0）保住被新规则覆盖
+2. 回退 v0.24.3 限宽补丁（被 4 列方案替代）：固定列宽本身即收窄控件，无需另设上限；删除 forms.css `.config-card .form-group` 控件 max-width 规则与 variables.css --control-max-width token（用户试调 360→200 后固定列方案使其失去意义），同时消除该规则对卡片区内弹窗（CaImportModal 等 config-card 后代的误伤）
+3. 版本：布局修订（y 级：视觉结构重做——卡片字段行列数行为全局改变），frontend/package.json 0.1.7→0.1.8（package-lock.json 顶层与 packages[""] 同步）；根 Cargo.toml 0.32.0 不动（纯前端）；无后端改动、无数据库结构变更、无载荷类型变更（未重生 TS）；验证 npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规 0 告警、npm run build 通过

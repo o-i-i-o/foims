@@ -197,6 +197,31 @@
    右缘贴齐第二列尾；左缘以 --space-sm 小幅缩进，与第一列 80px 定宽
    居中标题的文字起始位置在视觉上取齐。控件须取消 flex:1，
    否则 flex-basis:0 会压掉 field-sizing:content 的自适应高度 */
+  /* 卡片直落字段行固定 4 列（块级项跨整行声明见下方 form-group-block 家族之后，
+   避免与同家族低特异度规则组成降序对）；列数按视口回落阶梯：
+   ≤1400 3 列 / ≤1100 2 列 / ≤760 单列 */
+  .config-card > .form-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  @media (width <= 1400px) {
+    .config-card > .form-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (width <= 1100px) {
+    .config-card > .form-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (width <= 760px) {
+    .config-card > .form-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .modal .form-group.form-group-block,
   .config-card .form-group.form-group-block {
     flex-direction: column;
@@ -213,6 +238,11 @@
     flex: none;
     width: 100%;
     align-self: stretch;
+  }
+
+  /* 卡片直落行的块级项跨整行，列数随上方回落阶梯自动适配 */
+  .config-card > .form-row > .form-group.form-group-block {
+    grid-column: 1 / -1;
   }
 
   .hint-text {
