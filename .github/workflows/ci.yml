@@ -95,11 +95,6 @@ jobs:
       - name: 运行测试
         run: cargo test --release --workspace
 
-      # foims-portal 为独立 workspace（不并入主 workspace），其单测须单独触发，
-      # 否则门户逻辑（临时账号/验证码/存储）回归无 CI 兜底
-      - name: 运行门户测试（独立 workspace）
-        run: cargo test --release --manifest-path foims-portal/Cargo.toml
-
       # ts-rs 类型生成物漂移校验：export_bindings 测试重跑后，
       # frontend/src/types/api/generated/ 不得产生与入库版本（git add -N
       # 使新增未跟踪文件也纳入 diff）不一致的差异

@@ -660,7 +660,7 @@ v0.23.2
 ② foims-snmp/collect：lldp.rs 覆盖 is_mac_address/format_mac_address/format_lldp_id 子类型分派/is_printable_string/get_local_port_name 优先级回退；entity.rs 覆盖 ent_class_name 已知与未知 class<N> 回退与 truth_to_bool 仅识别 1/2；ports.rs 覆盖 derive_port_status 管理态优先、format_speed 整千进吉比特否则兆比特、derive_port_speed 优先 ifHighSpeed 回退 ifSpeed、port_list_members 高位在前位图解析。
 ③ foims-agent-service/tasks.rs 覆盖 config_u64（正值采纳与缺失/0/负/非数字回落默认）；foims-resource/helpers.rs 覆盖 validated_identifier（合法标识符原样返回与空串/引号/空白/分号/连字符注入载荷拒绝）。
 2. 测试模块定位与 clippy 合规：上述新增 mod tests 一律置于各文件 EOF，满足 clippy::items_after_test_module；sso redirect_uri 用例改结构体更新语法规避 field_reassign_with_default；测试函数命名去除大写英文片段防 non_snake_case。均为 #[cfg(test)] 追加与注释位置调整，生产代码零改动。
-3. CI 测试盲区补齐（.github/workflows/ci.yml）：build 任务新增 foims-portal 独立 workspace 的 cargo test --manifest-path（此前 portal 13 测试写了从不运行）；agent-build 任务系统依赖补 build-essential/pkg-config 并新增本机 target 的 cargo test --release（此前 agent 179 测试随编译受 clippy 约束却从不运行，交叉产物不可执行故仅测本机 x86_64）；frontend 任务新增 npm run selfcheck:viz（可视化 geometry/viewmodel 纯函数自检此前 CI 不跑）；clippy 步骤对 tests/ 集成测试的注释由断言其存在改为前瞻性表述，消除与现状（无 tests/ 目录）的文档漂移。
+3. CI 测试盲区补齐（.github/workflows/ci.yml）：build 任务新增 foims-portal 独立 workspace 的 cargo test --manifest-path（此前 portal 13 测试写了从不运行）；agent-build 任务系统依赖补 build-essential/pkg-config 并新增本机 target 的 cargo test --release（此前 agent 179 测试随编译受 clippy 约束却从不运行，交叉产物不可执行故仅测本机 x86_64）；frontend 任务新增 npm run selfcheck:viz（可视化 geometry/viewmodel 纯函数自检此前 CI 不跑）；clippy 步骤对 tests/ 集成测试的注释由断言其存在改为前瞻性表述，消除与现状（无 tests/ 目录）的文档漂移。〔后记：其中门户测试属越界引入——foims-portal 为独立仓库不应纳入本仓 CI 门，已于 v0.24.6 移除；Agent 本机测试与 selfcheck:viz 属本仓验证环节保留，CI 红灯根因为 fixture 断链，同由 v0.24.6 修复〕
 4. 版本：均为测试新增与 CI 配置变更（z+1），根 Cargo.toml 0.32.0 与各 crate 版本不动（无生产行为改动）；无数据库结构变更、无后端载荷类型变更（未重生 TS）；验证 cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --release --workspace 全绿 951 passed（较原 919 增 32）、foims-agent 独立 workspace 179 passed、foims-portal 13 passed、cd frontend && npm run selfcheck:viz 全通过
 
 v0.24.0
@@ -700,3 +700,11 @@ v0.24.5
    ⑥ F3（低）页面超时兑底值单点化——usePageTimeout 内 30 分钟双写收敛为 DEFAULT_TIMEOUT_MINUTES 常量；InitWizard 鉴权前裸 fetch 补受控例外注释（登录/初始化链路在鉴权建立前无法经统一 API 层）。
 2. 版本：审计整改级（z+1）——纯一致性/可维护性重构，无新增业务功能、无数据库结构变更、无后端载荷类型变更（未重生 TS）；根 Cargo.toml 0.32.0 与 frontend/package.json 0.1.8 均不动（z 段不联动，对齐 v0.24.1 先例）；按 crate 各自递增规则 bump 受影响 crate：foims-common 0.3.13→0.3.14（新增 org_levels 模块+双副本同步测试）、foims-organization 0.1.2→0.1.3、foims-data-management 0.2.6→0.2.7、foims-auth 0.1.6→0.1.7（cargo update --offline 同步 Cargo.lock）；前端改动服务于既有页面刷新/轮询与色值/兜底单点化，非新增用户功能故 package.json 不联动。
 3. 验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --workspace 全绿；foims-agent 独立 workspace cargo test -p foims-protocol 通过；cd frontend && npm run typecheck 0 错、npm run build 通过、npm run selfcheck:viz（可视化纯函数）全通过、npx @biomejs/biome@2.6.3 check frontend 0 违规、oxlint 316 文件 0 告警
+
+v0.24.6
+2026102619195501
+1. CI 越界步骤回退与 Agent 测试中断根因修复（z 级，修正 v0.23.2）：
+① 门户越界回退：foims-portal 为独立仓库，其单测不应作为本仓 CI 阻断门，移除 build 任务的「运行门户测试（独立 workspace）」步骤；门户测试归其自身仓库验证链路。
+② Agent 本机测试保留并修复根因：foims-agent 是本仓内工作空间，应受 CI 把关，此前红灯非测试越界——根因为 foims-agent/.gitignore 将 `crates/foims-agent/tests/fixtures/` 整目录忽略，采集器单测（*_fixture 类，node_exporter 同源 ASCII fixture，296 个文件约 1.5M）从未入库，CI 检出无此目录致 26+ 测试必然失败；本机因目录存在而全绿，掩盖了断链。修复：删除该忽略规则（补注释标明勿再排除），fixture 目录提交入库，「运行 Agent 本机测试」步骤与 build-essential/pkg-config 依赖保留不动。
+③ 验证：模拟 CI 检出（暂移 fixture）复现 26 个 fixture 测试全失败、恢复后全量 179 passed 全绿，确认根因唯一且修复闭环；frontend selfcheck:viz（本仓工程自身验证环节）与 api-smoke.sh（本机运行时证据，未接入 CI）均不受影响。
+2. 版本：仅 CI 配置、.gitignore 与测试物料入库变更（z+1），生产代码零改动，根 Cargo.toml 0.32.0、frontend/package.json 0.1.8 与 agent workspace Cargo.toml 均不动；无数据库结构变更、无后端载荷类型变更（未重生 TS）

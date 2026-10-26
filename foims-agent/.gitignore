@@ -1,3 +1,5 @@
 /target
 dist/
-crates/foims-agent/tests/fixtures/
+# 注：tests/fixtures/ 为采集器单测的 node_exporter 同源 ASCII fixture，
+# 必须入库——曾被忽略导致 CI 检出无此目录、全部 *_fixture 测试失败（本机因
+# 目录存在而全绿，掩盖了断链），勿再排除。
