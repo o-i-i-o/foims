@@ -1619,6 +1619,7 @@
     "select_room_first": "请先选择房间",
     "no_workstation_data": "该房间下暂无工位数据",
     "no_cabinet_data": "该房间下暂无机柜数据",
+    "no_rooms_found": "当前筛选条件下暂无房间，请调整组织或房间类型",
     "auto_draw_workstation_failed": "自动绘制工位失败，请重试",
     "data_load_failed": "数据加载失败，请稍后重试",
     "draw_positions_failed": "绘制机位图失败",

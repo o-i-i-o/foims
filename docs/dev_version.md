@@ -896,3 +896,10 @@ v0.31.2
 3. 版本：纯前端布局 bug 修复判 z（v0.31.1→v0.31.2）；z 段不联动 frontend/package.json（保持 0.1.14）、根 Cargo.toml 不动，无后端/载荷/数据库变更。
 4. 验证：zh/en 语言包 JSON 解析通过；1600px 静态 harness 实测：密码策略两输入框 320/314px（修复前 320/141px）、SNMP 首行 4 列 4 项（修复前 3+1）；cd frontend && npm run typecheck 0 错、npm run build 通过（CSS 产物哈希未变——本轮零 CSS 改动）、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警。
 
+v0.32.0
+2026102722514701
+1. 工位可视化打开空白修复（功能 bug 修复，y+1）：排查确认组件/后端 API/部署产物均无回归（构建哈希一致、curl 各接口正常、选中房间后工位卡片渲染正常），根因是工位页签旧版遗留的「默认组织=第一个根组织的最后一个下级」启发式——本次测试数据重建后房间挂在新建的「测试组织」下，启发式命中无房间的 A1公司，房间列表空导致画布静默空白且无任何提示。机柜页签自旧版起即无此启发式（默认不筛组织），两页签行为不一致且该启发式注释宣称的「最常用末级组织」与实际语义（第一个根的最后下级）不符。
+2. 修法：删除 applyDefaultWorkstationOrg 启发式（workstationOrgId 默认空串=不筛组织，与机柜页签对齐，打开页面即全量显示办公类房间并自动选中第一个房间出图）；refreshWorkstationRooms/refreshCabinetRooms 空结果路径补 showToast(t("viz.no_rooms_found"))（zh「当前筛选条件下暂无房间，请调整组织或房间类型」/en 对应），消除「筛选无结果静默空白」这一类困惑。
+3. 版本：功能 bug 修复判 y+1（v0.31.2→v0.32.0，z 归零）；仅前端改动，frontend/package.json 0.1.14→0.1.15，根 Cargo.toml 不动，无载荷/数据库变更。
+4. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过；浏览器实测——全新加载后组织下拉为占位符、房间下拉含全部办公类房间并自动选中「住宅卧室」（画布渲染门元素）、选「信息科」后工位卡片正常渲染（tooltip 含「管理人: 暂不指定」空值兜底）；MutationObserver 捕获切换到无房间组织时 toast「当前筛选条件下暂无房间…」正常弹出。
+

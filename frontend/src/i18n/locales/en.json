@@ -1619,6 +1619,7 @@
     "select_room_first": "Please select a room first",
     "no_workstation_data": "No workstation data for this room",
     "no_cabinet_data": "No cabinet data for this room",
+    "no_rooms_found": "No rooms match the current filter, adjust the organization or room type",
     "auto_draw_workstation_failed": "Failed to auto-draw workstations, please retry",
     "data_load_failed": "Failed to load data, please retry later",
     "draw_positions_failed": "Failed to draw cabinet positions",

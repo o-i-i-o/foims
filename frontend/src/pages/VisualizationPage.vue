@@ -155,20 +155,6 @@ async function loadOrganizationTree(): Promise<void> {
   orgTree.value = resultArray(result);
 }
 
-/**
- * 工位视图默认组织：取第一个组织节点的最后一个下级，无下级时取该节点本身
- * （刷新后组织下拉停在最常用的末级组织）。
- */
-function applyDefaultWorkstationOrg(): void {
-  const firstRoot = orgTree.value[0];
-  if (!firstRoot) {
-    return;
-  }
-  const children = firstRoot.children;
-  const target = children.length > 0 ? children[children.length - 1] : firstRoot;
-  workstationOrgId.value = target?.id ?? "";
-}
-
 // ==================== 工位画布 ====================
 
 const workstationOrgId = ref("");
@@ -317,6 +303,7 @@ async function refreshWorkstationRooms(): Promise<void> {
   workstationRooms.value = result.data?.items ?? [];
   const first = workstationRooms.value[0];
   if (!first) {
+    showToast(t("viz.no_rooms_found"), "info");
     clearWorkstationCanvas();
     return;
   }
@@ -594,6 +581,7 @@ async function refreshCabinetRooms(): Promise<void> {
   cabinetRooms.value = result.data?.items ?? [];
   const first = cabinetRooms.value[0];
   if (!first) {
+    showToast(t("viz.no_rooms_found"), "info");
     clearCabinetCanvas();
     return;
   }
@@ -1255,7 +1243,6 @@ async function initPage(): Promise<void> {
   }
   initialized = true;
   await loadOrganizationTree();
-  applyDefaultWorkstationOrg();
   await Promise.all([refreshWorkstationRooms(), refreshCabinetRooms()]);
   if (activeTab.value === "global-visualization") {
     await loadTopology();
