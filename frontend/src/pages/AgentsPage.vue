@@ -282,6 +282,7 @@ function handleDeleteConfirmed() {
       :total-pages="list.totalPages"
       :total="list.total"
       @page-change="(p) => (list.page = p)"
+      @hover-page="list.prefetch"
     />
 
     <AgentDetailModal v-if="detailId != null" :agent-id="detailId" @close="detailId = null" />

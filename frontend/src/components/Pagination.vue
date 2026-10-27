@@ -6,6 +6,8 @@
  * （布局层 sticky 页脚规则依赖该相邻结构）。
  * 传入 pageSize（>0）时在总数信息后渲染每页条数选择器
  * （每页条数切换后由调用方重置页码重拉）。
+ * 悬停翻页按钮/页码时 emit("hover-page") 上抛目标页，
+ * 调用方接 usePagedList.prefetch 实现预取（不接则无预取行为）。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -25,6 +27,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   "page-change": [target: number];
   "page-size-change": [size: number];
+  /** 悬停预取：上抛悬停的目标页（调用方接 usePagedList.prefetch） */
+  "hover-page": [target: number];
 }>();
 
 const { t } = useI18n();
@@ -70,6 +74,13 @@ function go(target: number) {
   }
 }
 
+/** 悬停预取：hover 翻页按钮/页码时上抛目标页（当前页与越界目标不触发） */
+function hoverPrefetch(target: number) {
+  if (target >= 1 && target <= props.totalPages && target !== props.page) {
+    emit("hover-page", target);
+  }
+}
+
 function doJump() {
   const target = Number.parseInt(String(jumpPage.value), 10);
   if (Number.isFinite(target)) {
@@ -104,6 +115,7 @@ const infoText = computed(() =>
             class="pagination-btn pagination-prev"
             :disabled="page <= 1"
             @click="go(page - 1)"
+            @mouseenter="hoverPrefetch(page - 1)"
           >
             {{ t("common.prev_page") }}
           </button>
@@ -116,6 +128,7 @@ const infoText = computed(() =>
                 class="pagination-page"
                 :class="{ active: item === page }"
                 @click="go(item)"
+                @mouseenter="hoverPrefetch(item)"
               >
                 {{ item }}
               </button>
@@ -126,6 +139,7 @@ const infoText = computed(() =>
             class="pagination-btn pagination-next"
             :disabled="page >= totalPages"
             @click="go(page + 1)"
+            @mouseenter="hoverPrefetch(page + 1)"
           >
             {{ t("common.next_page") }}
           </button>

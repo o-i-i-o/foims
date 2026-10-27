@@ -197,7 +197,8 @@ function clearWorkstationCanvas(): void {
  *
  * `stale`（已被更新的加载取代）与 `error`（布局请求失败）都不允许触发自动
  * 排布落库——一次瞬时故障若被当成「无布局」，整表 upsert 会覆盖该房间已保存
- * 的布局。
+ * 的布局。`empty`（无已保存布局）只呈现空白网格画布，门与工位的创建一律由
+ * 工具栏「自动绘制」显式触发。
  */
 async function loadWorkstationRoom(roomId: string): Promise<LayoutLoadState> {
   workstationRoomId.value = roomId;
@@ -229,34 +230,28 @@ async function loadWorkstationRoom(roomId: string): Promise<LayoutLoadState> {
   }
 
   const layout = resultArray(layoutResult);
+  if (layout.length === 0) {
+    // 无已保存布局：只显示空白网格画布（画布与门解耦，不自动排布、不落库）
+    workstationFitKey.value += 1;
+    return "empty";
+  }
   const canvas = buildWorkstationCanvas({ workstations, layout, ipDetails });
   workstationDoor.value = canvas.door;
-  // 无已保存布局时只落门元素：工位由随后的自动排布生成（列数按数量自适应）
-  workstationNodes.value = layout.length > 0 ? canvas.nodes : [];
+  workstationNodes.value = canvas.nodes;
   workstationFitKey.value += 1;
-  return layout.length > 0 ? "saved" : "empty";
-}
-
-/** 选择房间即出图：有布局直接渲染，确认无布局时自动排布并落库一次 */
-async function showWorkstationRoom(roomId: string): Promise<void> {
-  const state = await loadWorkstationRoom(roomId);
-  if (state !== "empty") {
-    return;
-  }
-  await autoDrawWorkstations(roomId, { skipReload: true });
-  await saveWorkstationLayout();
+  return "saved";
 }
 
 /**
- * 按网格自动排布工位。
- * @param options.skipReload 调用方已确认无已保存布局时跳过二次布局加载
+ * 按网格自动排布工位并生成门元素（房间必须有门）。
+ *
+ * 仅供工具栏「自动绘制」显式调用：已保存布局的房间直接返回（先删除布局再排），
+ * 避免整表 upsert 覆盖手工调整过的坐标。
  */
-async function autoDrawWorkstations(roomId: string, options: { skipReload?: boolean } = {}): Promise<void> {
-  if (!options.skipReload) {
-    const state = await loadWorkstationRoom(roomId);
-    if (state === "stale" || state === "error" || state === "saved") {
-      return;
-    }
+async function autoDrawWorkstations(roomId: string): Promise<void> {
+  const state = await loadWorkstationRoom(roomId);
+  if (state === "stale" || state === "error" || state === "saved") {
+    return;
   }
 
   const token = ++workstationToken;
@@ -272,8 +267,11 @@ async function autoDrawWorkstations(roomId: string, options: { skipReload?: bool
   if (token !== workstationToken) {
     return;
   }
+  // 房间必须有门：自动绘制先落门元素，再按数量自适应排布工位
+  workstationDoor.value = buildDoorNode([]);
   if (workstations.length === 0) {
     showToast(t("viz.no_workstation_data"), "info");
+    workstationFitKey.value += 1;
     return;
   }
 
@@ -288,7 +286,6 @@ async function autoDrawWorkstations(roomId: string, options: { skipReload?: bool
     });
   }
   workstationNodes.value = nodes;
-  workstationDoor.value = buildDoorNode([]);
   workstationFitKey.value += 1;
 }
 
@@ -307,7 +304,7 @@ async function refreshWorkstationRooms(): Promise<void> {
     clearWorkstationCanvas();
     return;
   }
-  await showWorkstationRoom(first.id);
+  await loadWorkstationRoom(first.id);
 }
 
 function onWorkstationRoomChange(event: Event): void {
@@ -315,7 +312,7 @@ function onWorkstationRoomChange(event: Event): void {
   if (!roomId || roomId === workstationRoomId.value) {
     return;
   }
-  void showWorkstationRoom(roomId);
+  void loadWorkstationRoom(roomId);
 }
 
 function onWorkstationOrgChange(event: Event): void {
@@ -359,15 +356,15 @@ function scheduleWorkstationAutoSave(): void {
 }
 
 async function saveWorkstationLayout(options: { silent?: boolean } = {}): Promise<void> {
-  const door = workstationDoor.value;
-  if (!door || !workstationRoomId.value) {
+  if (!workstationRoomId.value) {
     if (!options.silent) {
       showToast(t("viz.select_room_first"), "warning");
     }
     return;
   }
+  const door = workstationDoor.value;
   const entities: LayoutEntity[] = [
-    { id: door.id, elementType: "door", rect: door.rect },
+    ...(door ? [{ id: door.id, elementType: "door", rect: door.rect }] : []),
     ...workstationNodes.value.map((node) => ({ id: node.id, elementType: "workstation", rect: node.rect })),
   ];
   const layout = buildLayoutItems(entities);
@@ -1343,8 +1340,8 @@ onBeforeUnmount(() => {
           {{ t('visualization.delete_layout') }}
         </button>
       </div>
+      <!-- 画布始终挂载：背景网格与门无关，无布局时呈空白网格；door 可空由组件内部守卫 -->
       <WorkstationCanvas
-        v-if="workstationDoor"
         :nodes="workstationNodes"
         :door="workstationDoor"
         :fit-key="workstationFitKey"
@@ -1352,7 +1349,6 @@ onBeforeUnmount(() => {
         @node-commit="onWorkstationNodeCommit"
         @door-commit="onDoorCommit"
       />
-      <div v-else class="visualization-canvas visualization-canvas-scroll" />
     </div>
 
     <!-- 机柜：机位由柜体 + U 区间推导，拖动柜体会员自动跟随 -->

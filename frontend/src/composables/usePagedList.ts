@@ -1,15 +1,19 @@
 /**
  * 分页列表与表头排序公共工具（自 ResourcesPage 抽出，供多分区页面复用）：
- * usePagedList 工厂（排序 + 越界回退 + 可变页大小）、跨页连续序号、
+ * usePagedList 工厂（排序 + 越界回退 + 可变页大小 + 翻页占位/过期请求取消）、跨页连续序号、
  * 表头三态类与点击排序守卫（点击落在输入控件内时不触发排序）。
  */
 import { computed, reactive, ref, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useQuery } from "@tanstack/vue-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet } from "../api/client";
 import type { Paged } from "../types/api";
 
 export const PAGE_SIZE_OPTIONS: number[] = [10, 20, 50, 100];
+
+/** 预取幂等窗口：窗口内重复 hover 同一页命中缓存不重发预取请求（注：点击翻页后
+ * 本体查询按自身新鲜度策略判定刷新，该值不参与其判定——observer 侧读自身 staleTime） */
+const PREFETCH_STALE_TIME = 30_000;
 
 /** usePagedList 工厂选项 */
 export interface UsePagedListOptions {
@@ -56,6 +60,8 @@ export interface PagedList<T> extends SortableTable {
   errorMessage: string;
   /** 手动重拉当前页（刷新按钮；不重置页码/筛选） */
   refetch: () => void;
+  /** 悬停预取目标页（Pagination hover 事件接线；越界/当前页静默忽略） */
+  prefetch: (target: number) => void;
 }
 
 /**
@@ -75,35 +81,55 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
     refetchInterval,
   } = options;
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   // 前缀展开一次：tag 不随渲染变化，无需响应式
   const tagParts: string[] = typeof tag === "string" ? [tag] : [...tag];
   const page = ref(1);
   const pageSize = ref(defaultPageSize);
   const sort = reactive({ by: defaultSortBy, order: defaultSortOrder });
 
+  /** 查询键组装：useQuery 与 prefetch 共用同一形态，避免 key 分裂导致失效/预取打不中 */
+  const buildKey = (targetPage: number): unknown[] => [
+    ...tagParts,
+    {
+      page: targetPage,
+      pageSize: pageSize.value,
+      sortBy: sort.by,
+      sortOrder: sort.order,
+      ...extraKey?.value
+    }
+  ];
+
+  /** 查询体：useQuery 与 prefetch 共用（signal 透传与取消归一） */
+  const fetchPage = async (targetPage: number, signal?: AbortSignal): Promise<Paged<T>> => {
+    // 透传 TanStack 取消信号：key 变化（快速翻页/切筛选）时中止过期请求
+    const result = await apiGet<Paged<T>>(
+      buildUrl(targetPage, pageSize.value, sort.by, sort.order),
+      signal ? { signal } : {}
+    );
+    if (result.errorType === "request_cancelled") {
+      // 过期请求已被新查询取消：按 AbortError 抛出静默丢弃，不计入列表错误态
+      throw new DOMException("aborted", "AbortError");
+    }
+    if (!result.success || !result.data) {
+      // apiClient 已将失败归一为 { success:false } 不抛异常，
+      // 此处显式抛出让查询进入 error 态（isError/error.message 可渲染）
+      throw new Error(result.message || t("common.load_failed"));
+    }
+    return result.data;
+  };
+
   const query = useQuery({
-    queryKey: computed(() => [
-      ...tagParts,
-      {
-        page: page.value,
-        pageSize: pageSize.value,
-        sortBy: sort.by,
-        sortOrder: sort.order,
-        ...extraKey?.value
-      }
-    ]),
-    queryFn: async (): Promise<Paged<T>> => {
-      const result = await apiGet<Paged<T>>(buildUrl(page.value, pageSize.value, sort.by, sort.order));
-      if (!result.success || !result.data) {
-        // apiClient 已将失败归一为 { success:false } 不抛异常，
-        // 此处显式抛出让查询进入 error 态（isError/error.message 可渲染）
-        throw new Error(result.message || t("common.load_failed"));
-      }
-      return result.data;
-    },
+    queryKey: computed(() => buildKey(page.value)),
+    queryFn: ({ signal }) => fetchPage(page.value, signal),
+    // 翻页/排序/筛选期间保留旧页数据渲染，避免整表闪空（isPlaceholderData 可判占位态）
+    placeholderData: keepPreviousData,
     enabled,
     refetchInterval
   });
+
+  /** 末页号：越界回退 watch 与 prefetch 守卫共用 */
+  const totalPages = computed(() => query.data.value?.total_pages ?? 1);
 
   watch(
     () => query.data.value,
@@ -111,9 +137,9 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
       if (!data || !Array.isArray(data.items) || data.items.length !== 0 || page.value <= 1) {
         return;
       }
-      const totalPages = data.total_pages || Math.ceil((data.total || 0) / pageSize.value);
-      if (totalPages > 0 && page.value > totalPages) {
-        page.value = totalPages;
+      const lastPage = data.total_pages || Math.ceil((data.total || 0) / pageSize.value);
+      if (lastPage > 0 && page.value > lastPage) {
+        page.value = lastPage;
       }
     }
   );
@@ -142,11 +168,23 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
     pageSizeOptions: PAGE_SIZE_OPTIONS,
     items: computed(() => (Array.isArray(query.data.value?.items) ? query.data.value.items : [])),
     total: computed(() => query.data.value?.total ?? 0),
-    totalPages: computed(() => query.data.value?.total_pages ?? 1),
+    totalPages,
     isError: computed(() => query.isError.value),
     errorMessage: computed(() => query.error.value?.message || t("common.load_failed")),
     refetch: () => {
       void query.refetch();
+    },
+    prefetch: (target: number) => {
+      if (target < 1 || target === page.value || target > totalPages.value) {
+        return;
+      }
+      // 提前发起请求：点击翻页时数据已在缓存直出（配合 keepPreviousData 无闪空）；
+      // staleTime 仅保证窗口内重复 hover 幂等防重发，点击后本体查询仍会校验刷新
+      void queryClient.prefetchQuery({
+        queryKey: buildKey(target),
+        queryFn: ({ signal }) => fetchPage(target, signal),
+        staleTime: PREFETCH_STALE_TIME
+      });
     }
   }) as PagedList<T>;
 }

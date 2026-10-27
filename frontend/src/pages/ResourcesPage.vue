@@ -8,7 +8,7 @@
  * 服务端过滤；行内操作（使用情况/子项列表/信息点/机位/编辑/删除）
  * 与各弹窗、删除确认。
  */
-import { computed, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiGet } from "../api/client";
@@ -31,20 +31,46 @@ import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
 import ThSearch from "../components/ThSearch.vue";
 import SimpleListModal from "../components/SimpleListModal.vue";
-import CabinetModal from "../components/cabinet/CabinetModal.vue";
 import NetworkModal from "../components/network/NetworkModal.vue";
 import NetworkRegionModal from "../components/network/NetworkRegionModal.vue";
-import RoomModal from "../components/room/RoomModal.vue";
-import SubnetUsageModal from "../components/network/SubnetUsageModal.vue";
-import DeviceModal from "../components/device/DeviceModal.vue";
 import DeviceSnmpModal from "../components/device/DeviceSnmpModal.vue";
 import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
 import LocateModal from "../components/device/LocateModal.vue";
-import CableLinkModal from "../components/cable/CableLinkModal.vue";
 import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
 import CablePrintArea from "../components/cable/CablePrintArea.vue";
 import type { RoomBrief } from "../types/api/contracts";
 import { invalidateDeviceWrite, queryKeys } from "../utils/queryKeys";
+
+// 重弹窗（编辑器级，源码 ≥15KB）拆独立 chunk：defineAsyncComponent + 模板既有
+// v-if 条件挂载 = 打开弹窗时才下载执行，进资源页首渲染无需解析全部弹窗代码；
+// 异步包装仅改装载时机，props/事件透传与静态引入完全一致，模板零改动。
+// 小弹窗（<15KB）保持静态引入，避免 chunk 碎片化与打开时的额外请求。
+// onError 必须显式上抛反馈：部署更新（旧 hash chunk 404）或网络故障时，
+// 生产环境 defineAsyncComponent 默认静默渲染空节点，用户无从感知原因。
+function onAsyncChunkError(error: unknown): void {
+  console.error("弹窗组件 chunk 加载失败:", error);
+  showToast(t("common.chunk_load_failed"), "error");
+}
+const DeviceModal = defineAsyncComponent({
+  loader: () => import("../components/device/DeviceModal.vue"),
+  onError: onAsyncChunkError
+});
+const SubnetUsageModal = defineAsyncComponent({
+  loader: () => import("../components/network/SubnetUsageModal.vue"),
+  onError: onAsyncChunkError
+});
+const RoomModal = defineAsyncComponent({
+  loader: () => import("../components/room/RoomModal.vue"),
+  onError: onAsyncChunkError
+});
+const CabinetModal = defineAsyncComponent({
+  loader: () => import("../components/cabinet/CabinetModal.vue"),
+  onError: onAsyncChunkError
+});
+const CableLinkModal = defineAsyncComponent({
+  loader: () => import("../components/cable/CableLinkModal.vue"),
+  onError: onAsyncChunkError
+});
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -635,6 +661,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
         :page-size-options="regions.pageSizeOptions"
         @page-change="(p) => (regions.page = p)"
         @page-size-change="regions.changePageSize"
+        @hover-page="regions.prefetch"
       />
     </div>
 
@@ -724,6 +751,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
         :page-size-options="networks.pageSizeOptions"
         @page-change="(p) => (networks.page = p)"
         @page-size-change="networks.changePageSize"
+        @hover-page="networks.prefetch"
       />
     </div>
 
@@ -838,6 +866,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
         :page-size-options="rooms.pageSizeOptions"
         @page-change="(p) => (rooms.page = p)"
         @page-size-change="rooms.changePageSize"
+        @hover-page="rooms.prefetch"
       />
     </div>
 
@@ -933,6 +962,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
         :page-size-options="cabinets.pageSizeOptions"
         @page-change="(p) => (cabinets.page = p)"
         @page-size-change="cabinets.changePageSize"
+        @hover-page="cabinets.prefetch"
       />
     </div>
 
@@ -1036,6 +1066,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
         :page-size-options="devices.pageSizeOptions"
         @page-change="(p) => (devices.page = p)"
         @page-size-change="devices.changePageSize"
+        @hover-page="devices.prefetch"
       />
     </div>
 
@@ -1134,6 +1165,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
         :page-size-options="cableLinks.pageSizeOptions"
         @page-change="(p) => (cableLinks.page = p)"
         @page-size-change="cableLinks.changePageSize"
+        @hover-page="cableLinks.prefetch"
       />
     </div>
 

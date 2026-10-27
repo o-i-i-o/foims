@@ -241,6 +241,7 @@ const detailsLog = ref<OperationLog | null>(null);
         :total-pages="operation.totalPages"
         :total="operation.total"
         @page-change="(p) => (operation.page = p)"
+        @hover-page="operation.prefetch"
       />
     </div>
 
@@ -307,6 +308,7 @@ const detailsLog = ref<OperationLog | null>(null);
         :total-pages="login.totalPages"
         :total="login.total"
         @page-change="(p) => (login.page = p)"
+        @hover-page="login.prefetch"
       />
     </div>
 
@@ -386,6 +388,7 @@ const detailsLog = ref<OperationLog | null>(null);
         :total-pages="notifications.totalPages"
         :total="notifications.total"
         @page-change="(p) => (notifications.page = p)"
+        @hover-page="notifications.prefetch"
       />
     </div>
 

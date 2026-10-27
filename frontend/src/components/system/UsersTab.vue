@@ -168,6 +168,7 @@ async function doDelete(id: string): Promise<void> {
       :total="list.total"
       @page-change="(p) => (list.page = p)"
       @page-size-change="(s) => list.changePageSize(s)"
+      @hover-page="list.prefetch"
     />
 
     <UserModal v-if="showUserModal" :user="modalUser" @close="showUserModal = false" @saved="handleModalSaved" />

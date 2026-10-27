@@ -903,3 +903,34 @@ v0.32.0
 3. 版本：功能 bug 修复判 y+1（v0.31.2→v0.32.0，z 归零）；仅前端改动，frontend/package.json 0.1.14→0.1.15，根 Cargo.toml 不动，无载荷/数据库变更。
 4. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过；浏览器实测——全新加载后组织下拉为占位符、房间下拉含全部办公类房间并自动选中「住宅卧室」（画布渲染门元素）、选「信息科」后工位卡片正常渲染（tooltip 含「管理人: 暂不指定」空值兜底）；MutationObserver 捕获切换到无房间组织时 toast「当前筛选条件下暂无房间…」正常弹出。
 
+v0.33.0
+2026102800065201
+1. 工位画布与门解耦 + 无布局空白画布规范化（行为变更，y+1）：用户确认规格——背景画布与门无关；打开工位可视化自动加载布局（如有）；无布局只显示空白网格画布；「自动绘制」时自动增加门（房间必须有门）。旧实现存在两条偏差：①模板 `<WorkstationCanvas v-if="workstationDoor">` 在 door 为空时把整个画布卸载成空 div（真空白路径）；②选中无布局房间时自动排布并把仅含门的布局静默落库，产生 door-only 残留数据。
+2. 修法：WorkstationCanvas 的 door prop 改为可空（renderDoor/applyFit/模板 v-if 全链路守卫，视野计算对空内容安全），VisualizationPage 画布容器始终挂载；loadWorkstationRoom 无布局分支只重置视野返回 "empty"，不再构建门节点；删除 showWorkstationRoom（选中房间不再自动排布落库）；autoDrawWorkstations 收敛为仅供「自动绘制」按钮调用并先落门元素（无工位时仍 toast 提示且门随保存落库，符合「房间必须有门」）；saveWorkstationLayout 守卫放宽为仅要求已选房间，door 按存在与否条件拼装 entities。
+3. 版本：行为变更判 y+1（v0.32.0→v0.33.0，z 归零）；仅前端改动，frontend/package.json 0.1.15→0.1.16，根 Cargo.toml 不动，无载荷/数据库变更。
+4. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、oxlint 0 告警、biome check 0 违规、npm run selfcheck:viz 全过；浏览器实测——删除布局后画布呈纯空白网格（door=false、grid 40 线在）、点「自动绘制」后门元素自动出现且 element_layouts 落库 door 行、「信息科」已有布局正常渲染（door+工位卡片 tooltip 完整）、控制台无 JS 异常。
+
+v0.34.0
+2026102800155701
+1. 分页列表翻页体验优化（功能优化，y+1）：usePagedList 查询启用 placeholderData: keepPreviousData——翻页/排序/筛选期间保留旧页数据渲染，消除整表闪空与布局跳动（isPlaceholderData 可供后续占位态弱化样式，本轮未加 UI）；queryFn 透传 TanStack 取消信号（signal→apiGet 的 RequestOptions），key 变化（快速翻页/切筛选）即中止过期请求省带宽与后端开销，client 已归一的 request_cancelled 结果按 DOMException("AbortError") 重抛静默丢弃，不计入列表错误态。改动集中于 composables/usePagedList.ts 单文件（含头注释同步），api/client.ts 与各调用方零改动；越界回退 watch 与占位数据兼容（仅 items 为空时触发，占位非空不误判）。
+2. 版本：功能优化判 y+1（v0.33.0→v0.34.0，z 归零）；仅前端改动，frontend/package.json 0.1.16→0.1.17，根 Cargo.toml 不动，无载荷/数据库变更。
+3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警。快速翻页的请求取消与占位渲染建议部署后在资源页实测（快速连点排序/翻页观察 Network 面板旧请求 canceled、表格不闪空）。
+
+v0.35.0
+2026102800214001
+1. 资源页重弹窗 chunk 拆分（功能优化，y+1）：ResourcesPage 原静态引入 17 个组件（弹窗占多数）全部打进页面 chunk（177.52KB/gzip 38.37KB），进资源页首渲染需解析全部弹窗代码。按「编辑器级弹窗源码 ≥15KB」阈值将 5 个重弹窗改为 defineAsyncComponent(() => import(...))：DeviceModal(37KB)/SubnetUsageModal(30KB)/RoomModal(25KB)/CableLinkModal(22KB)/CabinetModal(16KB)；与模板既有 v-if 条件挂载组合即「打开弹窗才下载执行」，props/事件透传与静态引入一致，模板零改动。小弹窗（<15KB，如 NetworkModal 8.9KB/SnmpEventsModal 9.4KB/ConfirmModal 等）保持静态引入，避免 chunk 碎片化与打开时额外请求。效果：ResourcesPage chunk 177.52→101.77KB（gzip 38.37→21.43KB，-44%），5 弹窗各自独立 chunk 且共享的 ModalShell/useModalStack 由 Vite 自动拆出共享块。
+2. 版本：功能优化判 y+1（v0.34.0→v0.35.0，z 归零）；仅前端改动，frontend/package.json 0.1.17→0.1.18，根 Cargo.toml 不动，无载荷/数据库变更。
+3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警；构建产物确认 5 个弹窗 chunk 独立生成。弹窗打开时的 chunk 按需加载建议部署后实测（首次打开各重弹窗确认无感知延迟、内容完整）。
+
+v0.36.0
+2026102800254901
+1. 分页悬停预取（功能优化，y+1）：usePagedList 新增 prefetch(target)——查询键组装（buildKey）与查询体（fetchPage）从 useQuery 内联定义抽出共用，预取与现查同一 key 形态避免分裂失效打不中；staleTime 30s（PREFETCH_STALE_TIME）内 hover→点击翻页直接命中缓存零请求直出，重复 hover 命中同一缓存幂等；越界/当前页静默忽略，末页号与越界回退 watch 共用同一 totalPages computed（watch 内估算变量改名 lastPage 消除遮蔽）。Pagination 组件翻页按钮/页码 mouseenter 时 emit("hover-page", target)（当前页与越界目标不触发），13 处使用方全部接线 @hover-page（ResourcesPage×6/LogsPage×3/IpPage/AgentsPage/UsersTab/SnmpEventsModal）。与 v0.34.0 keepPreviousData 组合：预取命中→点击即切换零请求；未命中→旧页数据占位后台补拉，两态均无闪空。
+2. 版本：功能优化判 y+1（v0.35.0→v0.36.0，z 归零）；仅前端改动，frontend/package.json 0.1.18→0.1.19，根 Cargo.toml 不动，无载荷/数据库变更。
+3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警。悬停预取建议部署后实测：Network 面板 hover 下一页触发列表请求、点击后无新请求（30s 内）且表格直接切换。
+
+v0.36.1
+2026102800361101
+1. 独立审计修复（错误修复，z+1）：双子代理独立验证本轮三项优化改动，2/2 共识确认两处 minor 问题——①悬停预取断言失实：prefetchQuery 的 staleTime(30s) 仅作用于预取动作幂等（防重复 hover 重发），点击翻页时 useQuery observer 按**自身** staleTime 判新鲜度（全局未设=0，queryObserver.js shouldFetchOnMount 用 observer options），预取值不参与判定，故"30s 内点击零请求直出"不成立（实际行为：预取数据已入缓存配合 keepPreviousData 直出无闪空 + 后台按本体策略校验刷新，体验收益成立）。修正 usePagedList.ts 两处注释为准确表述，保留 staleTime 参数（幂等作用非无效配置）。②异步弹窗 chunk 加载失败静默：pak.sh 部署 rm -rf 旧产物后，存量会话点开 5 个重弹窗动态 import 旧 hash chunk 必 404，生产环境 defineAsyncComponent 默认渲染空节点无任何反馈。ResourcesPage 补 onError 共用处理器（console.error + showToast error 提示刷新页面），新增 common.chunk_load_failed 文案（zh/en）。审计排除项（误报）：prefetch 未检查 enabled——LogsPage 三 tab 为 v-show 且未加载过的 tab 无数据时 Pagination 不渲染，无实际触发路径。
+2. 版本：错误修复判 z+1（v0.36.0→v0.36.1）；仅前端改动，frontend/package.json 0.1.19→0.1.20，根 Cargo.toml 不动，无载荷/数据库变更。
+3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、biome 23 文件 0 违规、oxlint 316 文件 0 告警。审计方法：TRAE-code-review 流程 + 2 个独立验证子代理共识定性（候选 3 项，确认 2 项、排除 1 项）。
+

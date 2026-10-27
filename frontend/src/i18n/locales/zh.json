@@ -55,6 +55,7 @@
     "load_failed_retry": "加载失败，请刷新页面重试",
     "confirm_delete": "确定要删除此{{name}}吗？",
     "operation_failed": "操作失败",
+    "chunk_load_failed": "组件加载失败，页面可能已更新，请刷新后重试",
     "status": "状态",
     "all": "全部",
     "saving": "保存中...",

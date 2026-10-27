@@ -27,7 +27,8 @@ import type { CanvasRect, DoorCanvasNode, WorkstationCanvasNode } from "../../ty
 
 const props = defineProps<{
   nodes: WorkstationCanvasNode[];
-  door: DoorCanvasNode;
+  /** 门元素：无已保存布局时为 null，画布只呈现背景网格（背景与门解耦） */
+  door: DoorCanvasNode | null;
   /** 递增即重新适配视野（布局加载完成 / 自动排布后由父组件触发） */
   fitKey: number;
 }>();
@@ -132,10 +133,19 @@ const renderNodes = computed(() =>
   }),
 );
 
-const renderDoor = computed(() => ({
-  rect: effectiveRect(props.door.rect, props.door.id),
-  tooltip: t("viz.room_entrance_ref"),
-}));
+const renderDoor = computed(() => {
+  if (!props.door) {
+    return null;
+  }
+  return {
+    id: props.door.id,
+    /** 模型坐标：拖动落定回传父组件用 */
+    rect: props.door.rect,
+    /** 预览坐标：拖动中随指针移动 */
+    previewRect: effectiveRect(props.door.rect, props.door.id),
+    tooltip: t("viz.room_entrance_ref"),
+  };
+});
 
 /** 对齐参考线：拖动中的节点与其他节点的中心/缘线在阈值内对齐时给出虚线 */
 const alignment = computed<AlignmentSegment[]>(() => {
@@ -226,7 +236,9 @@ function onDragEnd(): void {
 // ==================== 视野适配 ====================
 
 function applyFit(): void {
-  const rects = [props.door.rect, ...props.nodes.map((node) => node.rect)];
+  const rects = props.door
+    ? [props.door.rect, ...props.nodes.map((node) => node.rect)]
+    : props.nodes.map((node) => node.rect);
   setViewBox(contentViewBox(rects, containerSize.value));
 }
 
@@ -318,26 +330,27 @@ function onCanvasClick(event: MouseEvent): void {
         </g>
 
         <g
+          v-if="renderDoor"
           class="door-element"
-          :class="{ selected: selectedId === door.id }"
-          :transform="`translate(${renderDoor.rect.x}, ${renderDoor.rect.y})`"
-          :data-id="door.id"
+          :class="{ selected: selectedId === renderDoor.id }"
+          :transform="`translate(${renderDoor.previewRect.x}, ${renderDoor.previewRect.y})`"
+          :data-id="renderDoor.id"
           :data-tooltip="renderDoor.tooltip"
-          @mousedown="startDrag($event, door.id, 'door', door.rect)"
+          @mousedown="startDrag($event, renderDoor.id, 'door', renderDoor.rect)"
         >
           <rect
-            :width="renderDoor.rect.width"
-            :height="renderDoor.rect.height"
+            :width="renderDoor.previewRect.width"
+            :height="renderDoor.previewRect.height"
             :style="{ fill: 'var(--color-bg-secondary)', stroke: 'var(--color-text-secondary)' }"
             stroke-width="2"
           />
           <circle
-            :cx="renderDoor.rect.width - 10"
-            :cy="renderDoor.rect.height / 2"
+            :cx="renderDoor.previewRect.width - 10"
+            :cy="renderDoor.previewRect.height / 2"
             r="3"
             :style="{ fill: 'var(--color-text-secondary)' }"
           />
-          <text :x="renderDoor.rect.width / 2" y="-10">{{ t("viz.door") }}</text>
+          <text :x="renderDoor.previewRect.width / 2" y="-10">{{ t("viz.door") }}</text>
         </g>
       </g>
 

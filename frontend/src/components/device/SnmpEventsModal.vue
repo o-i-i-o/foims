@@ -256,6 +256,7 @@ onMounted(() => {
         :page-size-options="list.pageSizeOptions"
         @page-change="(p) => (list.page = p)"
         @page-size-change="(s) => list.changePageSize(s)"
+        @hover-page="list.prefetch"
       />
     </div>
   </ModalShell>

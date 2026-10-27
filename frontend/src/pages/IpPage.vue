@@ -196,6 +196,7 @@ function onStatusSaved() {
       :page-size-options="ipList.pageSizeOptions"
       @page-change="ipList.page = $event"
       @page-size-change="ipList.changePageSize"
+      @hover-page="ipList.prefetch"
     />
     <PullMacModal
       v-if="pullMacOpen"

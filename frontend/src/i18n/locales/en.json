@@ -55,6 +55,7 @@
     "load_failed_retry": "Load failed, please refresh and try again",
     "confirm_delete": "Are you sure you want to delete this {{name}}?",
     "operation_failed": "Operation failed",
+    "chunk_load_failed": "Failed to load component. The page may be outdated, please refresh and retry",
     "status": "Status",
     "all": "All",
     "saving": "Saving...",
