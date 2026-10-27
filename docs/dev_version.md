@@ -872,3 +872,11 @@ v0.30.0
 1. 设备模态框网卡容器自动分配 IP 重复修复（功能 bug 修复，y+1）：`/api/resources/ip/available/{subnet}` 的已占用集合只查 `interface_ips`（已入库地址），同一表单内多张网卡/多个网口在保存前分配出的地址互不可见，连点「自动分配」都会拿到列表首个地址。NetworkCardEditor 新增 `formUsedIpKeys(subnetId, except)`：扫描全部网卡→网口→IP 行，收集同网段已填写地址（排除本次要改写的行）作为表单内占用集合；候选改为在响应返回后再与集合比对取首个未占用地址，先返回的分配结果已写入表单，故并发点击不同 IP 行也不会落到同一地址。utils/network 新增 `ipKey` 去重键（IPv6 按 128 位数值归一，`2001:0db8::1` 与 `2001:db8::1` 同键），只承担比较、不承担格式校验。
 2. 版本：功能 bug 修复判 y+1（v0.29.1→v0.30.0，z 归零）；本次仅前端改动，frontend/package.json 0.1.13→0.1.14，根 Cargo.toml 不动，子 crate 不 bump。
 3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 0 违规、oxlint 320 文件 0 告警；node 直接引用 utils/network.ts 校对 `ipKey`（v6 缩写同键、v4 相邻地址不同键）与候选跳过逻辑（已填 192.168.1.10 时首选 192.168.1.11）。浏览器双 IP 行实测未做（需运行中的后端与开发库），建议部署后按「新增设备→两张网卡各一个网口→分别点自动分配」复核两行地址不同。
+
+v0.31.0
+2026102713451201
+1. IP 列表新增 device_id 精确过滤（后端小功能，y+1）：`GET /api/resources/ip` 的 `IpListFilters` 增加 `device_id: Option<Uuid>`，`push_ip_filters` 追加 `device_id = ` 等值绑定（与 subnet_id 同形），`get_ip_details` 从 query 解析（非法 UUID 回落 None 不过滤）。视图 `ip_with_details` 已 SELECT `dv.id AS device_id`，无需改建表/check.rs。用途：设备详情下钻按 id 取单机 IP 明细，规避 device_name ILIKE 模糊匹配的同名/子串误命中；纯增量，不影响现有 device_name 等过滤与 IP 页现有查询。
+2. 孤儿接口核查（不删除）：`get_device_ips`（GET /devices/{id}/ips）、`create_device_ip`（POST 同路径）、`auto_assign_ip`（POST /ip/auto-assign）、`auto_assign_device_ip` 四处理器虽 Vue 前端零调用，但被运行时证据 `.runtime-evidence/api-smoke.sh` 第 146/187 行主动冒烟覆盖，且 create_device_ip/auto_assign_ip 各有操作日志 i18n 键（zh/en）与 log_op 类别绑定，删除牵动路由×4、冒烟×2、i18n 双语×2、操作日志类别，非「前端零引用」可径行清理，本轮仅记录待评估、保持现状。
+3. 版本：功能优化判 y+1（v0.30.0→v0.31.0，z 归零）；后端改动联动根 Cargo.toml 0.32.4→0.32.5、foims-resource 0.1.17→0.1.18（Cargo.lock 同步）；无前端改动，frontend/package.json 不动；device_id 为查询参数非载荷类型，无 gen-ts-types 变更。
+4. 验证：cargo check -p foims-resource --release 通过、cargo fmt 干净；本机 clippy 1.99 对 create_device_ip/auto_assign_ip/batch 中既有的 `&mut *tx` 报 explicit_auto_deref（非本次改动行，属工具链版本差异，项目基线 clippy 不判），本次新增过滤块无新告警。设备级下钻 UI 尚未接入该参数，实机联调留待设备详情页合入时进行。
+

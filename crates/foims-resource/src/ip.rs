@@ -29,6 +29,9 @@ struct IpListFilters {
     network: Option<String>,
     ip_address: Option<String>,
     subnet_id: Option<Uuid>,
+    /// 设备精确过滤（设备视角 IP 明细）：设备详情下钻按 id 取单机地址，
+    /// 不承担 device_name ILIKE 模糊匹配的同名/子串误命中风险。
+    device_id: Option<Uuid>,
     /// 机位 ID 批量过滤（机柜可视化分批拉取机位 IP）。
     position_ids: Vec<Uuid>,
 }
@@ -104,6 +107,10 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
         next(builder, &mut first);
         builder.push("subnet_id = ").push_bind(subnet_id).push(")");
     }
+    if let Some(device_id) = filters.device_id {
+        next(builder, &mut first);
+        builder.push("device_id = ").push_bind(device_id).push(")");
+    }
     if !filters.position_ids.is_empty() {
         next(builder, &mut first);
         builder
@@ -140,6 +147,9 @@ pub async fn get_ip_details<P: DbProvider>(
         ip_address: (!ip_address.is_empty()).then(|| foims_common::net::escape_like(ip_address)),
         subnet_id: query
             .get("subnet_id")
+            .and_then(|s| uuid::Uuid::parse_str(s).ok()),
+        device_id: query
+            .get("device_id")
             .and_then(|s| uuid::Uuid::parse_str(s).ok()),
         // 逗号分隔的机位 ID 列表，非法片段直接忽略
         position_ids: query
