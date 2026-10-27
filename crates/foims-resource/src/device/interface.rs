@@ -541,6 +541,10 @@ pub async fn delete_device_interface<P: DbProvider>(
     .execute(&mut *tx)
     .await?;
 
+    // 被删网口上的地址可能正是设备的管理地址：同事务刷新主机监控
+    // （SNMP 来源）行的 ip
+    super::host_monitor::sync_snmp_host_ip(&mut *tx, device_id).await?;
+
     tx.commit().await?;
 
     let details = serde_json::json!({

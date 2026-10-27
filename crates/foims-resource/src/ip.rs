@@ -381,6 +381,9 @@ pub async fn create_device_ip<P: DbProvider>(
         AppError::from(e)
     })?;
 
+    // 新地址可能是设备的管理地址：同事务刷新主机监控（SNMP 来源）行的 ip
+    crate::device::host_monitor::sync_snmp_host_ip(&mut *tx, id).await?;
+
     tx.commit().await?;
 
     let (network_name, network_region, network_region_id): (Option<String>, Option<String>, Option<Uuid>) = sqlx::query_as(
@@ -1468,6 +1471,9 @@ pub async fn auto_assign_ip<P: DbProvider>(
         }
     }
 
+    // 新地址可能是设备的管理地址：同事务刷新主机监控（SNMP 来源）行的 ip
+    crate::device::host_monitor::sync_snmp_host_ip(&mut *tx, device_id).await?;
+
     tx.commit().await?;
 
     let mapping = IpDetail {
@@ -1593,6 +1599,8 @@ pub async fn batch_create_ip_details<P: DbProvider>(
 
     let mut created_ips = Vec::new();
     let mut duplicate_errors: Vec<AppMessage> = Vec::new();
+    // 写入成功的设备集合：新地址可能成为其管理地址，提交前统一刷新主机监控行
+    let mut touched_devices: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
 
     for (index, ip_req, id, ip_version_num) in &valid_requests {
         let existing: Option<Uuid> = match sqlx::query_scalar(
@@ -1757,6 +1765,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             continue;
         }
 
+        touched_devices.insert(device_id);
         created_ips.push(IpDetail {
             id: *id,
             device_interface_id: interface_id,
@@ -1782,6 +1791,12 @@ pub async fn batch_create_ip_details<P: DbProvider>(
             created_at: now,
             updated_at: now,
         });
+    }
+
+    // 新地址可能是设备的管理地址（此前无 IP 的设备）：逐个刷新主机监控
+    // （SNMP 来源）行的 ip
+    for device_id in touched_devices {
+        crate::device::host_monitor::sync_snmp_host_ip(&mut *tx, device_id).await?;
     }
 
     tx.commit().await?;

@@ -531,6 +531,10 @@ pub async fn apply_network_config(
         }
     }
 
+    // 管理地址可能随本次差量同步改变：同事务刷新设备在主机监控（SNMP
+    // 来源）中的 ip，轮询侧不再回写该字段
+    super::host_monitor::sync_snmp_host_ip(tx, device_id).await?;
+
     Ok(())
 }
 

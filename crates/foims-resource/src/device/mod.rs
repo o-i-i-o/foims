@@ -4,6 +4,7 @@
 pub mod cdp;
 pub mod crud;
 pub mod entity;
+pub mod host_monitor;
 pub mod interface;
 pub mod lag;
 pub mod lldp;
@@ -17,6 +18,7 @@ pub mod vlan;
 pub use cdp::*;
 pub use crud::*;
 pub use entity::*;
+pub use host_monitor::sync_snmp_host_ip;
 pub use interface::*;
 pub use lag::*;
 pub use lldp::*;

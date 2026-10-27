@@ -4,6 +4,8 @@
 //! 管理 IP 的设备，逐台采集并 upsert 为 `source='snmp'` 的 monitored_hosts 行：
 //! - 每台设备采集前先确保基线行存在（配置即入库）：参数构造/连接/采集
 //!   失败也不静默消失，先以 offline 落位，可达后由采集成功路径翻 active；
+//! - 管理地址（`ip`）由设备台账唯一提供：设备侧改变 IP 的写入路径即时
+//!   刷新主机行，轮询只在建行时落一次初值、不对已有行回写该字段；
 //! - machine_id 合成 `snmp:{device_id}`（与 agent machine_id 命名空间隔离）；
 //! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
 //! - 单台成功即 last_seen=NOW() 并翻转 offline → active；连续失败超过
@@ -155,9 +157,10 @@ async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Er
 /// 首轮以设备台账名与 offline 落位，可达性由后续采集成功路径翻转为 active、
 /// 失联由离线翻转维护。
 ///
-/// 与采集成功路径的 upsert 分工：本函数只保证行存在并跟随刷新 device_id/ip
-/// （设备改配管理地址后同步），不触碰 status/last_seen/hostname——避免把已
-/// active 的可达设备在本轮采集前打回 offline。失败仅记日志，不阻断采集。
+/// 仅在行缺失时创建，冲突时不更新任何列：管理地址由设备台账唯一提供
+/// （设备侧 IP 写入路径即时刷新），轮询不承担 `ip`/device_id 的维护，也不
+/// 触碰 status/last_seen/hostname——避免把已 active 的可达设备在本轮采集前
+/// 打回 offline。失败仅记日志，不阻断采集。
 async fn ensure_snmp_host_present(
     pool: &PgPool,
     machine_id: &str,
@@ -170,9 +173,7 @@ async fn ensure_snmp_host_present(
         r"INSERT INTO monitored_hosts (machine_id, source, device_id, status,
                                       hostname, ip, first_seen, last_seen)
           VALUES ($1, 'snmp', $2, 'offline', $3, $4, NOW(), NOW())
-          ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
-              device_id = EXCLUDED.device_id,
-              ip = EXCLUDED.ip",
+          ON CONFLICT DO NOTHING",
     )
     .bind(machine_id)
     .bind(device_id)
@@ -285,7 +286,6 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
           ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
               status = CASE WHEN monitored_hosts.status = 'offline' THEN 'active' ELSE monitored_hosts.status END,
               hostname = EXCLUDED.hostname,
-              ip = EXCLUDED.ip,
               os = EXCLUDED.os,
               uptime_secs = EXCLUDED.uptime_secs,
               cpu_usage = COALESCE(EXCLUDED.cpu_usage, monitored_hosts.cpu_usage),

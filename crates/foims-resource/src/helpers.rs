@@ -647,6 +647,12 @@ pub(crate) async fn sync_devices_room(
     .execute(&mut *conn)
     .await?;
 
+    // 房间网段变化后原管理地址可能被清理：逐个刷新设备在主机监控
+    // （SNMP 来源）中的 ip
+    for device_id in &device_ids {
+        crate::device::host_monitor::sync_snmp_host_ip(conn, *device_id).await?;
+    }
+
     Ok(())
 }
 
