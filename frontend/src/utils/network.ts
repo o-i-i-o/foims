@@ -159,6 +159,22 @@ function ipv6CidrToRange(cidr: string): { start: bigint; end: bigint } | null {
   return { start: network, end: broadcast };
 }
 
+/**
+ * IP 去重键：IPv6 按 128 位数值归一（"2001:0db8::1" 与 "2001:db8::1" 同键），
+ * IPv4 按修剪后的文本归一。仅用于同一表单内的地址去重，不承担格式校验：
+ * 非法输入原样参与比较，最终由校验链拒绝。
+ */
+export function ipKey(ip: string): string {
+  const text = ip.trim();
+  if (isIPv6(text)) {
+    const value = ipv6ToInt(text);
+    if (value !== null) {
+      return `v6:${value.toString(16)}`;
+    }
+  }
+  return `v4:${text}`;
+}
+
 /** 判断 IP 是否落在 CIDR 网段内（按地址族自动选择 v4/v6）。 */
 export function isIpInCidr(ipAddress: string, cidr: string | null | undefined): boolean {
   if (!cidr) {

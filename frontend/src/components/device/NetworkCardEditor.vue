@@ -6,7 +6,8 @@
  *   由 collectData 与后端校验共同拦截；
  * - 校验链：卡名/端口名必填、VLAN 1-4094、网段必选且属于房间、IP 合法且
  *   落在网段 CIDR 内、每网口至少一条有效 IP、每网卡至少一个网口；
- * - 自动分配：从所选网段取第一个未使用 IP 填入地址框。
+ * - 自动分配：从所选网段的可用列表取第一个既未入库、也未在表单其他 IP 行
+ *   填写的地址；候选在响应返回后再与表单比对，并发点击不会落到同一地址。
  * collectData / loadExisting / resetForAdd 经 defineExpose 供父组件调用。
  */
 import { computed, reactive, ref, watch } from "vue";
@@ -14,7 +15,7 @@ import { useI18n } from "vue-i18n";
 import { apiGet } from "../../api/client";
 import { showToast } from "../../composables/useToast";
 import { CARD_TYPES, INTERFACE_ROLES, PHYSICAL_TYPES } from "../../config/deviceOptions";
-import { isIPv6, isIpInCidr, isValidIP } from "../../utils/network";
+import { ipKey, isIPv6, isIpInCidr, isValidIP } from "../../utils/network";
 import NavIcon from "../NavIcon.vue";
 import type { DeviceInterface } from "../../types/api/generated/DeviceInterface";
 import type { IpDetail } from "../../types/api/generated/IpDetail";
@@ -542,6 +543,26 @@ function collectData(): { cards: CardSyncPayload[]; errors: string[] } {
 
 // ==================== 自动分配 IP ====================
 
+/**
+ * 表单内已填写的地址键（限同网段，排除本次要改写的行）。
+ * 分配结果在保存前不入库，后端可用列表只排除已入库地址，
+ * 因此同一容器内的多个网卡/网口必须在此补齐去重。
+ */
+function formUsedIpKeys(subnetId: string, except: IpRowState): Set<string> {
+  const used = new Set<string>();
+  for (const card of cards) {
+    for (const port of card.ports) {
+      for (const row of port.ips) {
+        const address = row.ipAddress.trim();
+        if (row !== except && row.subnetId === subnetId && address) {
+          used.add(ipKey(address));
+        }
+      }
+    }
+  }
+  return used;
+}
+
 async function autoAssignIp(ipRow: IpRowState): Promise<void> {
   if (!ipRow.subnetId) {
     showToast(t("device.auto_assign_select_network"), "warning");
@@ -555,7 +576,12 @@ async function autoAssignIp(ipRow: IpRowState): Promise<void> {
     const result = await apiGet<{ available_ips?: string[] }>(
       `/api/resources/ip/available/${encodeURIComponent(ipRow.subnetId)}`
     );
-    const first = result.success ? (result.data?.available_ips || [])[0] : null;
+    // 响应返回后再取表单占用集合：并发点击不同 IP 行时，先返回的分配结果
+    // 已写入表单，后返回者据此跳过，避免两行落到同一地址
+    const used = formUsedIpKeys(ipRow.subnetId, ipRow);
+    const first = result.success
+      ? ((result.data?.available_ips || []).find((ip) => !used.has(ipKey(ip))) ?? null)
+      : null;
     if (first) {
       ipRow.ipAddress = first;
       showToast(t("device.auto_assign_success", { ip: first }), "success");

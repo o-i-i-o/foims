@@ -866,3 +866,9 @@ v0.29.1
    注：库升级已完成，但本机部署实例（/usr/bin/foims）仍是旧二进制，系统任务播种（is_system=true）需重新部署并重启服务后生效。
 3. 版本：z+1（v0.29.0→v0.29.1）；本轮只改升级脚本，无 crate 与前端源码变更 → 根 Cargo.toml 0.32.4、frontend/package.json 0.1.13 均不动（z 段不联动）。
 4. 验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --workspace 全绿；cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome check frontend 0 违规、oxlint 320 文件 0 告警；gen-ts-types 重生无新增漂移（Room*/Workstation*/IpDetailUpdate/ScheduledTask 变更均为 v0.27.0/v0.28.0 已记录内容）。
+
+v0.30.0
+2026102713023701
+1. 设备模态框网卡容器自动分配 IP 重复修复（功能 bug 修复，y+1）：`/api/resources/ip/available/{subnet}` 的已占用集合只查 `interface_ips`（已入库地址），同一表单内多张网卡/多个网口在保存前分配出的地址互不可见，连点「自动分配」都会拿到列表首个地址。NetworkCardEditor 新增 `formUsedIpKeys(subnetId, except)`：扫描全部网卡→网口→IP 行，收集同网段已填写地址（排除本次要改写的行）作为表单内占用集合；候选改为在响应返回后再与集合比对取首个未占用地址，先返回的分配结果已写入表单，故并发点击不同 IP 行也不会落到同一地址。utils/network 新增 `ipKey` 去重键（IPv6 按 128 位数值归一，`2001:0db8::1` 与 `2001:db8::1` 同键），只承担比较、不承担格式校验。
+2. 版本：功能 bug 修复判 y+1（v0.29.1→v0.30.0，z 归零）；本次仅前端改动，frontend/package.json 0.1.13→0.1.14，根 Cargo.toml 不动，子 crate 不 bump。
+3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 0 违规、oxlint 320 文件 0 告警；node 直接引用 utils/network.ts 校对 `ipKey`（v6 缩写同键、v4 相邻地址不同键）与候选跳过逻辑（已填 192.168.1.10 时首选 192.168.1.11）。浏览器双 IP 行实测未做（需运行中的后端与开发库），建议部署后按「新增设备→两张网卡各一个网口→分别点自动分配」复核两行地址不同。
