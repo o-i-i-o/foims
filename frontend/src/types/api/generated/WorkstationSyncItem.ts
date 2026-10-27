@@ -2,6 +2,6 @@
 
 export type WorkstationSyncItem = { id: string | null, name: string, 
 /**
- * 管理人（必填，从组织人员中选择）
+ * 管理人（可空，从房间所属组织人员中选择）
  */
-manager_employee_id: string, };
+manager_employee_id: string | null, };

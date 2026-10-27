@@ -15,6 +15,7 @@ import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
+import { invalidateDeviceWrite, queryKeys } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import PortConflictModal from "./PortConflictModal.vue";
 import PortDetailModal from "./PortDetailModal.vue";
@@ -47,7 +48,7 @@ const queryClient = useQueryClient();
 // ==================== 端口数据 ====================
 
 const nicsQuery = useQuery({
-  queryKey: computed(() => ["device-nics", props.deviceId]),
+  queryKey: computed(() => queryKeys.deviceNics(props.deviceId)),
   queryFn: async (): Promise<NicCard[]> => {
     const result = await apiGet<{ cards?: NicCard[] }>(
       `/api/resources/devices/${props.deviceId}/nics`
@@ -161,7 +162,8 @@ function openPortDetail(iface: NicPort | null): void {
 /** 详情弹窗保存/删除成功：关闭详情并刷新分组视图 */
 function onPortSaved(): void {
   portDetail.value = null;
-  queryClient.invalidateQueries({ queryKey: ["device-nics", props.deviceId] });
+  // 网口增删改会连带改写 IP 归属与连线，按设备写操作统一失效
+  invalidateDeviceWrite(queryClient, props.deviceId);
 }
 
 // ==================== SNMP 同步 ====================
@@ -369,7 +371,7 @@ async function applySnmpResults(
   }
   showToast(`${t("device.sync_result")}: ${parts.join(", ")}`, failed > 0 ? "warning" : "success");
 
-  queryClient.invalidateQueries({ queryKey: ["device-nics", props.deviceId] });
+  invalidateDeviceWrite(queryClient, props.deviceId);
 }
 </script>
 

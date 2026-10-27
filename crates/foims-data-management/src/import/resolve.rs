@@ -187,14 +187,6 @@ impl Resolver {
                 };
                 self.resolve_employee_in_org(conn, &value, &org_id).await?
             }
-            Target::EmployeeInPathOrg => {
-                // 组织取本行 org_path（与 rooms.org_id 引用同一组织）
-                let path = cells.get("org_path").cloned().unwrap_or_default();
-                let org_id = self
-                    .resolve_org_path(conn, &path, table, row_no, "org_path")
-                    .await?;
-                self.resolve_employee_in_org(conn, &value, &org_id).await?
-            }
             Target::RoomScoped { table: ref_table } => {
                 let Some((room, name)) = names::split_room_scoped(&value) else {
                     return Err(bad(&value));

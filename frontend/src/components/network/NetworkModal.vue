@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
 import { isIpInCidr, isValidIPv4, isValidIPv6 } from "../../utils/network";
+import { queryKeys } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import type { Paged } from "../../types/api";
 import type { Network } from "../../types/api/generated/Network";
@@ -164,7 +165,7 @@ async function submit() {
     showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     return;
   }
-  queryClient.invalidateQueries({ queryKey: ["networks"] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.networks });
   showToast(t("network.save_success"), "success");
   emit("saved");
   emit("close");

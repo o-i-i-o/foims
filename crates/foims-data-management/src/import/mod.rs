@@ -225,6 +225,7 @@ pub async fn import_csv<P: DataProvider>(
                     "organizations" => {
                         validate_org_type_path(&mut tx, &mut template_levels, &values, row).await?
                     }
+                    "devices" => validate_device_location(&mut tx, &values, row).await?,
                     _ => {}
                 }
                 if !seen_keys.insert(key_tuple(spec, &values)) {
@@ -553,6 +554,54 @@ async fn resolve_row<P: DataProvider>(
         values.insert("ip_version".to_string(), Some(version.to_string()));
     }
 
+    // MAC 归一：CSV 里的 MAC 与 API/SNMP 同口径落规范形态，并做全局
+    // 唯一预检（导入键为 device_id+name，同行自更新不算冲突）
+    if spec.table == "device_interfaces"
+        && let Some(Some(mac)) = values.get("mac_address").cloned()
+    {
+        let trimmed = mac.trim();
+        if trimmed.is_empty() {
+            values.insert("mac_address".to_string(), None);
+        } else {
+            if !foims_common::net::valid_mac(trimmed) {
+                return Err(DataError::Validation(
+                    msg("server.device.validation.mac_format")
+                        .with("table", spec.table)
+                        .with("row", row.row_no),
+                ));
+            }
+            let canonical = foims_common::net::canonical_mac(trimmed);
+            let conflict: Option<String> = sqlx::query_scalar(
+                r"SELECT di.id::text FROM device_interfaces di
+                   WHERE di.mac_address IS NOT NULL
+                     AND translate(upper(di.mac_address), ':-. ', '') = $1
+                     AND NOT (di.device_id = $2::uuid AND di.name = $3)
+                   LIMIT 1",
+            )
+            .bind(foims_common::net::normalize_mac(&canonical))
+            .bind(
+                values
+                    .get("device_id")
+                    .cloned()
+                    .flatten()
+                    .unwrap_or_default(),
+            )
+            .bind(values.get("name").cloned().flatten().unwrap_or_default())
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(DataError::from)?;
+            if conflict.is_some() {
+                return Err(DataError::Validation(
+                    msg("server.device.interface.mac_exists")
+                        .with("table", spec.table)
+                        .with("row", row.row_no)
+                        .with("mac", &canonical),
+                ));
+            }
+            values.insert("mac_address".to_string(), Some(canonical));
+        }
+    }
+
     // 设备凭据列明文 → 本实例密文
     if spec.table == "devices" {
         for col in DEVICE_SECRET_COLUMNS {
@@ -616,6 +665,37 @@ async fn validate_ip_in_room(
         ));
     };
 
+    // IP 必须落在其子网的同族 CIDR 内（不变量 I4）：CSV 可能把地址与
+    // 网段配错（甚至跨族），落库后 IP 与其子网自相矛盾
+    let subnet_id = values
+        .get("subnet_id")
+        .cloned()
+        .flatten()
+        .unwrap_or_default();
+    if !subnet_id.is_empty() {
+        let contained: bool = sqlx::query_scalar(
+            r"SELECT EXISTS(
+                SELECT 1 FROM network_cidrs
+                WHERE id = $1::uuid
+                  AND ((ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= ipv4_cidr::inet)
+                    OR (ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= ipv6_cidr::inet))
+            )",
+        )
+        .bind(&subnet_id)
+        .bind(&ip_str)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(DataError::from)?;
+        if !contained {
+            return Err(DataError::Validation(
+                msg("server.ip.not_in_subnet")
+                    .with("table", "interface_ips")
+                    .with("row", row.row_no)
+                    .with("ip", &ip_str),
+            ));
+        }
+    }
+
     let Some((_, room_id)) = resolve::interface_owner(conn, &interface_id).await? else {
         return Err(DataError::Validation(
             msg("server.import_export.ref_not_found")
@@ -658,6 +738,78 @@ async fn validate_ip_in_room(
         ));
     }
     Ok(())
+}
+
+/// 专项校验：设备的空间挂载点（不变量 I1/I5）。
+///
+/// - `workstation_id` 与 `position_id` 互斥（同时设置则 room_id 无法
+///   同时满足两个父级房间，入库必因触发器失败）；
+/// - 工位/机位所属房间必须等于 `room_id`，避免导入绕过应用层联动
+///   写出不一致的去规范化副本。
+///
+/// 缺省列（CSV 未提供）不做约束，由库侧触发器/CHECK 兜底。
+async fn validate_device_location(
+    conn: &mut PgConnection,
+    values: &ResolvedValues,
+    row: &CsvRow,
+) -> DataResult<()> {
+    let read = |key: &str| values.get(key).cloned().flatten().unwrap_or_default();
+    let workstation_id = read("workstation_id");
+    let position_id = read("position_id");
+    let room_id = read("room_id");
+
+    if !workstation_id.is_empty() && !position_id.is_empty() {
+        return Err(DataError::Validation(
+            msg("server.import_export.field_invalid")
+                .with("table", "devices")
+                .with("row", row.row_no)
+                .with("column", "position")
+                .with("reason", "工位与机位互斥，不能同时指定"),
+        ));
+    }
+
+    if room_id.is_empty() {
+        return Ok(());
+    }
+
+    // 父级房间与 room_id 不一致视为病态数据（应用层写入会联动更新，
+    // 导入无联动能力，只能拒绝）
+    let mismatch = if !workstation_id.is_empty() {
+        sqlx::query_scalar::<_, bool>(
+            "SELECT room_id IS DISTINCT FROM $2::uuid FROM workstations WHERE id = $1::uuid",
+        )
+        .bind(&workstation_id)
+        .bind(&room_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(DataError::from)?
+    } else if !position_id.is_empty() {
+        sqlx::query_scalar::<_, bool>(
+            r"SELECT c.room_id IS DISTINCT FROM $2::uuid
+               FROM positions p JOIN cabinets c ON p.cabinet_id = c.id
+               WHERE p.id = $1::uuid",
+        )
+        .bind(&position_id)
+        .bind(&room_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(DataError::from)?
+    } else {
+        None
+    };
+
+    match mismatch {
+        // 引用不存在时留给外键报错（与其它 Ref 列的语义一致）
+        None => Ok(()),
+        Some(true) => Err(DataError::Validation(
+            msg("server.import_export.field_invalid")
+                .with("table", "devices")
+                .with("row", row.row_no)
+                .with("column", "room_name")
+                .with("reason", "工位/机位所属房间与 room_name 不一致"),
+        )),
+        Some(false) => Ok(()),
+    }
 }
 
 /// 专项校验：房间总功率上限不得低于已分配功耗合计（upsert 落库后
@@ -878,6 +1030,44 @@ async fn validate_org_type_path(
                 .with("column", "type_path")
                 .with("value", type_path)
                 .with("reason", "无法被任何组织模板解析"),
+        ));
+    }
+
+    // 子路径必须是父路径的直属子级（type_path 形如 "0.1.2"）：
+    // parent_path 指向的节点 type_path 必须恰好是它去掉末段的前缀。
+    // 否则组织树父子关系与类型路径指向不同分支，后续树接口/类型解析混乱
+    let parent_id = values
+        .get("parent_id")
+        .cloned()
+        .flatten()
+        .unwrap_or_default();
+    let parent_type_path: Option<String> = if parent_id.is_empty() {
+        None
+    } else {
+        sqlx::query_scalar("SELECT type_path FROM organizations WHERE id = $1::uuid")
+            .bind(&parent_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(DataError::from)?
+    };
+    let is_direct_child = match parent_type_path.as_deref() {
+        // 根节点：type_path 不能带分隔符
+        None if parent_id.is_empty() => !type_path.contains('.'),
+        // parent_path 指向的组织在本批之前不存在（外键将报错），不在此重复报
+        None => true,
+        Some(prefix) => type_path
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.strip_prefix('.'))
+            .is_some_and(|rest| !rest.is_empty() && !rest.contains('.')),
+    };
+    if !is_direct_child {
+        return Err(DataError::Validation(
+            msg("server.data-management.field_invalid")
+                .with("table", "organizations")
+                .with("row", row.row_no)
+                .with("column", "type_path")
+                .with("value", type_path)
+                .with("reason", "type_path 不是 parent_path 的直属子路径"),
         ));
     }
     Ok(())

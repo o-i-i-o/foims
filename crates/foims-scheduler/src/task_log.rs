@@ -49,10 +49,13 @@ pub async fn log_task_execution(
 }
 
 /// 从数据库同步用户定时任务的 next_run_at
+///
+/// 系统任务（is_system = true）由进程启动时按代码/配置注册为固定 cron job，
+/// 其 next_run_at 不参与调度判定，同步或派发都会造成同一任务双跑，故排除。
 pub async fn sync_user_tasks_from_db(pool: &sqlx::PgPool) -> SchedulerResult<()> {
     let tasks: Vec<ScheduledTask> = sqlx::query_as(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at
-         FROM scheduled_tasks WHERE enabled = true",
+        "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at
+         FROM scheduled_tasks WHERE enabled = true AND NOT is_system",
     )
     .fetch_all(pool)
     .await

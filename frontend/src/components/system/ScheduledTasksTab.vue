@@ -215,7 +215,12 @@ function openCreate(): void {
           </tr>
           <tr v-for="(task, index) in tasks" v-else :key="task.id">
             <td class="index-column">{{ index + 1 }}</td>
-            <td>{{ task.name }}</td>
+            <td>
+              {{ task.name }}
+              <span v-if="task.is_system" class="task-system-badge" :title="t('scheduled_tasks.system_readonly_tip')">
+                {{ t("scheduled_tasks.system_badge") }}
+              </span>
+            </td>
             <td class="col-center">{{ typeLabel(task.task_type) }}</td>
             <td><code>{{ task.cron_expression }}</code></td>
             <td class="col-center">
@@ -239,8 +244,12 @@ function openCreate(): void {
               <button
                 type="button"
                 class="icon-btn btn-warning"
-                :disabled="togglingId === task.id"
-                :data-tooltip="t(task.enabled ? 'scheduled_tasks.disable' : 'scheduled_tasks.enable')"
+                :disabled="togglingId === task.id || task.is_system"
+                :data-tooltip="
+                  task.is_system
+                    ? t('scheduled_tasks.system_readonly_tip')
+                    : t(task.enabled ? 'scheduled_tasks.disable' : 'scheduled_tasks.enable')
+                "
                 :aria-label="t(task.enabled ? 'scheduled_tasks.disable' : 'scheduled_tasks.enable')"
                 @click="doToggle(task)"
               >
@@ -249,7 +258,8 @@ function openCreate(): void {
               <button
                 type="button"
                 class="icon-btn btn-secondary"
-                :data-tooltip="t('common.edit')"
+                :disabled="task.is_system"
+                :data-tooltip="task.is_system ? t('scheduled_tasks.system_readonly_tip') : t('common.edit')"
                 :aria-label="t('common.edit')"
                 @click="openEdit(task)"
               >
@@ -267,8 +277,8 @@ function openCreate(): void {
               <button
                 type="button"
                 class="icon-btn btn-danger"
-                :disabled="deletingId === task.id"
-                :data-tooltip="t('common.delete')"
+                :disabled="deletingId === task.id || task.is_system"
+                :data-tooltip="task.is_system ? t('scheduled_tasks.system_readonly_tip') : t('common.delete')"
                 :aria-label="t('common.delete')"
                 @click="confirmAction = { type: 'delete', task }"
               >

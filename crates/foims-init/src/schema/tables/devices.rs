@@ -36,7 +36,12 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             CONSTRAINT chk_device_type CHECK (device_type IN (
                 'desktop', 'laptop', 'printer', 'server', 'network_device', 'switch',
                 'camera', 'phone', 'other'
-            ))
+            )),
+            -- 一设备一个空间挂载点：工位与机位互斥（同时挂两边时 room_id
+            -- 无法同时满足两个父级房间，触发器会随机报错，必须结构上排掉）
+            CONSTRAINT chk_devices_single_location CHECK (
+                workstation_id IS NULL OR position_id IS NULL
+            )
         )",
     )
     .execute(pool)

@@ -20,6 +20,7 @@ import OrgNodeModal from "../components/org/OrgNodeModal.vue";
 import OrgRoomsModal from "../components/org/OrgRoomsModal.vue";
 import OrgTreeNode from "../components/org/OrgTreeNode.vue";
 import TemplateModal from "../components/org/TemplateModal.vue";
+import { queryKeys } from "../utils/queryKeys";
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -27,7 +28,7 @@ const queryClient = useQueryClient();
 // ==================== 数据查询 ====================
 
 const treeQuery = useQuery({
-  queryKey: ["organizations-tree"],
+  queryKey: queryKeys.organizationsTree,
   queryFn: async (): Promise<OrganizationTreeNode[]> => {
     const result = await apiGet<OrganizationTreeNode[]>("/api/resources/organizations/tree");
     if (!result.success) {
@@ -204,7 +205,7 @@ const deleteOrgMutation = useMutation({
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("organization.delete_success"), "success");
-      queryClient.invalidateQueries({ queryKey: ["organizations-tree"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.organizationsTree });
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
@@ -220,7 +221,7 @@ function handleDeleteOrgConfirmed() {
 }
 
 function invalidateTree() {
-  queryClient.invalidateQueries({ queryKey: ["organizations-tree"] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.organizationsTree });
 }
 
 // 组织节点保存后可用类型可能变化（新根类型），同步失效可用类型缓存

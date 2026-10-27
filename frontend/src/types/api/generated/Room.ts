@@ -6,11 +6,6 @@ export type Room = { id: string, name: string, room_type: string,
  */
 org_id: string, 
 /**
- * 房间管理人（NOT NULL 且必须属于 org_id 对应组织）：
- * 无工位的空间（机房/弱电井）由房间管理人兜底承接设备通知
- */
-manager_employee_id: string, 
-/**
  * 房间总功率上限（瓦，None=不限制）
  */
 total_power_watts: number | null, description: string | null, created_at: string, updated_at: string, };

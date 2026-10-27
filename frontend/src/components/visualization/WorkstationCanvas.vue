@@ -106,6 +106,8 @@ const renderNodes = computed(() =>
     const network = ip && (ip.network_name || ip.network_region)
       ? [ip.network_region, ip.network_name].filter(Boolean).join(" / ")
       : "";
+    // 工位管理人可空：未指定时显示「暂不指定」，避免卡片出现 "null" 或空白
+    const managerName = node.manager_name || t("workstation.manager_unset");
     const tooltipLines = [
       `${t("viz.workstation_label")}: ${node.name}`,
       `IP: ${ipAddress}`,
@@ -114,7 +116,7 @@ const renderNodes = computed(() =>
       tooltipLines.push(`${t("viz.network_label")}: ${network}`);
     }
     tooltipLines.push(`${t("viz.port_label")}: ${portInfo}`);
-    tooltipLines.push(`${t("viz.manager_label")}: ${node.manager_name}`);
+    tooltipLines.push(`${t("viz.manager_label")}: ${managerName}`);
     return {
       node,
       rect: effectiveRect(node.rect, node.id),
@@ -124,7 +126,7 @@ const renderNodes = computed(() =>
         { y: 30, label: `${t("viz.workstation_label")}: `, value: node.name, valueClass: "workstation-name" },
         { y: 55, label: "IP: ", value: ipAddress, valueClass: "workstation-ip" },
         { y: 80, label: `${t("viz.port_label")}: `, value: portInfo, valueClass: "" },
-        { y: 105, label: `${t("viz.manager_label")}: `, value: node.manager_name, valueClass: "workstation-manager" },
+        { y: 105, label: `${t("viz.manager_label")}: `, value: managerName, valueClass: "workstation-manager" },
       ],
     };
   }),

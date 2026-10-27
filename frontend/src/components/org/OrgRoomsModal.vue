@@ -60,17 +60,16 @@ const rooms = computed(() =>
             <th>{{ t("room.name") }}</th>
             <th>{{ t("room.type") }}</th>
             <th>{{ t("room.org") }}</th>
-            <th>{{ t("room.manager") }}</th>
             <th class="col-center">{{ t("room.workstation_count") }}</th>
             <th class="col-center">{{ t("organization.room_cabinet_count") }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="roomsQuery.isError.value">
-            <td colspan="7" class="text-center">{{ roomsQuery.error.value?.message }}</td>
+            <td colspan="6" class="text-center">{{ roomsQuery.error.value?.message }}</td>
           </tr>
           <tr v-else-if="rooms.length === 0">
-            <td colspan="7" class="text-center">{{ t("common.no_data") }}</td>
+            <td colspan="6" class="text-center">{{ t("common.no_data") }}</td>
           </tr>
           <template v-else>
             <tr v-for="(room, index) in rooms" :key="room.id">
@@ -78,7 +77,6 @@ const rooms = computed(() =>
               <td>{{ room.name }}</td>
               <td>{{ getRoomTypeName(room.room_type) }}</td>
               <td>{{ room.org_name }}</td>
-              <td>{{ room.manager_name }}</td>
               <td class="col-center">{{ room.workstation_count }}</td>
               <td class="col-center">{{ room.cabinet_count }}</td>
             </tr>

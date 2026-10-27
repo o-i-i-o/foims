@@ -94,7 +94,7 @@ pub async fn get_or_create_auto_nic(
         .map_err(AppError::from)
 }
 
-/// 同步设备的网卡配置（网卡 → 网口 → IP），整体替换
+/// 同步设备的网卡配置（网卡 → 网口 → IP），按 id 差量同步
 pub async fn sync_device_network_config<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -141,15 +141,17 @@ pub async fn sync_device_network_config<P: DbProvider>(
     Ok(foims_common::ok_json(cards, "server.device.nic.synced"))
 }
 
-/// 应用网卡配置：整体替换设备模态框托管的网口（device_managed=TRUE），
+/// 应用网卡配置：差量同步设备模态框托管的网口（device_managed=TRUE），
 /// 保留端口模态框/SNMP 生成的端口（device_managed=FALSE）及其网卡；
 /// 清理不再被任何网口引用的网卡。cards 为空属于非法请求，直接拒绝，
 /// 由调用方提交真实的网卡配置，不提供硬编码默认网卡/网口。
 /// 提交的网口名与幸存非托管网口重名
 /// （或请求内网卡间重名）时返回冲突错误。
 ///
-/// 物理布线（cable_links）仅对本次被移除的托管网口清理：请求中保留
-/// port.id 的网口上的布线记录原样保留，避免未改动网口的布线被误删。
+/// 差量口径：请求携带 `id` 的网卡/网口原地更新（id、created_at 与
+/// 二层运行属性保持不变，IP 的 status/last_seen 也不因保存而重置），
+/// 未出现的托管网口删除；被删网口上的物理布线（cable_links）随之清理。
+/// MAC 统一归一为 `AA:BB:CC:DD:EE:FF` 后落库，并做全局唯一校验。
 pub async fn apply_network_config(
     tx: &mut PgConnection,
     device_id: Uuid,
@@ -184,48 +186,43 @@ pub async fn apply_network_config(
     }
 
     // 快照托管网口的二层运行属性（端口类型/状态/速率/Native VLAN，由端口
-    // 模态框或 SNMP 维护）：设备表单整体替换网口后按 id 回填，避免被默认值重置
-    let runtime_attrs: HashMap<Uuid, (String, String, Option<String>, Option<i32>)> =
-        sqlx::query_as::<_, (Uuid, String, String, Option<String>, Option<i32>)>(
-            "SELECT id, port_type, status, speed, native_vlan_id FROM device_interfaces WHERE device_id = $1 AND device_managed",
-        )
-        .bind(device_id)
-        .fetch_all(&mut *tx)
-        .await?
-        .into_iter()
-        .map(|(id, port_type, status, speed, native_vlan_id)| {
-            (id, (port_type, status, speed, native_vlan_id))
-        })
-        .collect();
+    // 模态框或 SNMP 维护）：保留网口原地更新、不再重建，因此无需回填；
+    // 新增网口没有存量可继承，用默认值。
 
-    // 删除托管网口的关联数据（顺序：IP → cable_links → 网口）；
-    // 非托管网口（SNMP/端口模态框来源）不受设备表单同步影响
-    sqlx::query(
-        "DELETE FROM interface_ips WHERE device_interface_id IN (
-            SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed)",
-    )
-    .bind(device_id)
-    .execute(&mut *tx)
-    .await?;
-    // 线缆记录仅对被移除的托管网口清理：先取现存托管网口 id 与请求中
-    // 保留的 port.id 求差集，避免幸存网口上的布线被无条件删除
+    // 现存托管网口 id 与请求保留的 port.id 求差集，只删除真正被移除的网口：
+    // 删除网口会级联清空其 interface_ips，重建时必须把 IP 的 status/
+    // last_seen/created_at/id 全部重置（生命周期语义丢失），故保留网口原地
+    // 更新，IP 另按地址做差量同步。
     let managed_ids: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM device_interfaces WHERE device_id = $1 AND device_managed",
     )
     .bind(device_id)
     .fetch_all(&mut *tx)
     .await?;
-    let kept_ids: HashSet<Uuid> = cards
-        .iter()
-        .flat_map(|card| card.ports.iter())
-        .filter_map(|port| port.id)
-        .collect();
+    let mut kept_ids: HashSet<Uuid> = HashSet::new();
+    for port in cards.iter().flat_map(|card| card.ports.iter()) {
+        // 同一 port.id 重复提交会让后一段的 IP 差量基准为空、重复插入，直接拒绝
+        if let Some(id) = port.id
+            && !kept_ids.insert(id)
+        {
+            return Err(AppError::Validation(
+                msg("server.common.invalid_param").with("param", "port_id"),
+            ));
+        }
+    }
+    // 保留的 port.id 必须属于本设备的托管网口（防跨设备改挂）
+    if let Some(foreign) = kept_ids.iter().find(|id| !managed_ids.contains(id)) {
+        return Err(AppError::Validation(
+            msg("server.device.nic.port_not_owned").with("port_id", foreign),
+        ));
+    }
     let removed_ids: Vec<Uuid> = managed_ids
         .iter()
         .filter(|id| !kept_ids.contains(id))
         .copied()
         .collect();
     if !removed_ids.is_empty() {
+        // cable_links 无外键、由防删触发器守护：先清引用再删网口
         sqlx::query(
             r"DELETE FROM cable_links
              WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id = ANY($1))
@@ -234,11 +231,12 @@ pub async fn apply_network_config(
         .bind(&removed_ids)
         .execute(&mut *tx)
         .await?;
+        // 网口删除后其 IP 由外键级联清理（被移除网口不再有 IP 宿主）
+        sqlx::query("DELETE FROM device_interfaces WHERE id = ANY($1)")
+            .bind(&removed_ids)
+            .execute(&mut *tx)
+            .await?;
     }
-    sqlx::query("DELETE FROM device_interfaces WHERE device_id = $1 AND device_managed")
-        .bind(device_id)
-        .execute(&mut *tx)
-        .await?;
     // 仅删除不再被任何网口引用的网卡（自动板卡仍被非托管端口引用则保留）
     sqlx::query(
         "DELETE FROM device_nics WHERE device_id = $1 AND id NOT IN (
@@ -248,15 +246,60 @@ pub async fn apply_network_config(
     .execute(&mut *tx)
     .await?;
 
+    // 保留网口的现有 IP 快照（按网口分组）：差量同步以地址为键，命中者
+    // 仅更新子网归属，status/last_seen/created_at/id 保持原值。
+    let kept_ids_vec: Vec<Uuid> = kept_ids.iter().copied().collect();
+    let existing_ip_rows: Vec<(Uuid, Uuid, String, Uuid)> = sqlx::query_as(
+        "SELECT id, device_interface_id, host(ip_address), subnet_id FROM interface_ips
+         WHERE device_interface_id = ANY($1)",
+    )
+    .bind(&kept_ids_vec)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut existing_ips: HashMap<Uuid, Vec<(Uuid, String, Uuid)>> = HashMap::new();
+    for (ip_id, port_id, ip_addr, subnet_id) in existing_ip_rows {
+        existing_ips
+            .entry(port_id)
+            .or_default()
+            .push((ip_id, ip_addr, subnet_id));
+    }
+
+    // 请求内 MAC 去重（归一后比对）：同一物理 MAC 不得在一次提交中占两个网口，
+    // 与库内唯一索引同口径前置拦截
+    let mut seen_macs: HashSet<String> = HashSet::new();
+
     for (card_idx, card) in cards.iter().enumerate() {
         card.validate()?;
         let card_id = card.id.unwrap_or_else(Uuid::new_v4);
         let card_type = card.card_type.as_deref().unwrap_or("pcie");
         validate_card_type(card_type)?;
 
+        // 保留的网卡仍被网口引用，不能删后重建，改为原地 upsert；
+        // 提交的 card.id 必须属于本设备（防跨设备改挂）
+        if card.id.is_some() {
+            let owned: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM device_nics WHERE id = $1 AND device_id = $2)",
+            )
+            .bind(card_id)
+            .bind(device_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            if !owned {
+                return Err(AppError::Validation(
+                    msg("server.device.nic.card_not_owned").with("card_id", card_id),
+                ));
+            }
+        }
+
         sqlx::query(
             r"INSERT INTO device_nics (id, device_id, name, card_type, description, sort_order, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (id) DO UPDATE SET
+                 name = EXCLUDED.name,
+                 card_type = EXCLUDED.card_type,
+                 description = EXCLUDED.description,
+                 sort_order = EXCLUDED.sort_order,
+                 updated_at = EXCLUDED.updated_at",
         )
         .bind(card_id)
         .bind(device_id)
@@ -294,90 +337,161 @@ pub async fn apply_network_config(
             validate_physical_type(physical_type)?;
             let interface_role = port.interface_role.as_deref().unwrap_or("business");
             validate_interface_role(interface_role)?;
-            // 设备表单不含二层属性：存量端口恢复快照值，新端口用默认值
-            let (port_type, status, speed, native_vlan_id) = match runtime_attrs.get(&port_id) {
-                Some((pt, st, sp, vid)) => (pt.clone(), st.clone(), sp.clone(), *vid),
-                None => ("access".to_string(), "up".to_string(), None, None),
-            };
-
-            sqlx::query(
-                r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, native_vlan_id, device_managed, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, TRUE, $15, $16)",
-            )
-            .bind(port_id)
-            .bind(device_id)
-            .bind(card_id)
-            .bind(&port.name)
-            .bind(physical_type)
-            .bind(interface_role)
-            .bind(&port.mac_address)
-            .bind(port.vlan_id)
-            .bind(&port.description)
-            .bind(port_idx as i32)
-            .bind(&port_type)
-            .bind(&status)
-            .bind(&speed)
-            .bind(native_vlan_id)
-            .bind(now)
-            .bind(now)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| {
-                // UNIQUE(device_id, name) / 主键冲突映射为 409
-                if let sqlx::Error::Database(ref db_err) = e
-                    && db_err.is_unique_violation()
-                {
-                    return AppError::Conflict(msg("server.device.interface.name_exists"));
+            // MAC 落库前统一为规范形态（AA:BB:CC:DD:EE:FF），并做请求内
+            // 去重与全局唯一预检
+            let mac_address = crate::helpers::normalize_mac_input(port.mac_address.as_deref())?;
+            if let Some(mac) = mac_address.as_deref() {
+                if !seen_macs.insert(foims_common::net::normalize_mac(mac)) {
+                    return Err(AppError::Conflict(
+                        msg("server.device.interface.mac_exists").with("mac", mac),
+                    ));
                 }
-                AppError::from(e)
-            })?;
+                crate::helpers::ensure_mac_available(&mut *tx, mac, Some(port_id)).await?;
+            }
+
+            if kept_ids.contains(&port_id) {
+                // 保留网口原地更新：id/created_at 与二层运行属性（port_type、
+                // status、speed、native_vlan_id）由端口模态框与 SNMP 维护，不在此覆盖
+                sqlx::query(
+                    r"UPDATE device_interfaces SET
+                         nic_id = $1, name = $2, physical_type = $3, interface_role = $4,
+                         mac_address = $5, vlan_id = $6, description = $7, sort_order = $8,
+                         device_managed = TRUE, updated_at = $9
+                       WHERE id = $10",
+                )
+                .bind(card_id)
+                .bind(&port.name)
+                .bind(physical_type)
+                .bind(interface_role)
+                .bind(&mac_address)
+                .bind(port.vlan_id)
+                .bind(&port.description)
+                .bind(port_idx as i32)
+                .bind(now)
+                .bind(port_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    // 表达式唯一索引撞车说明 MAC 已被占用；其余唯一冲突为同设备重名
+                    if let sqlx::Error::Database(ref db_err) = e
+                        && db_err.is_unique_violation()
+                    {
+                        if db_err.constraint() == Some(crate::helpers::MAC_UNIQUE_INDEX) {
+                            return AppError::Conflict(
+                                msg("server.device.interface.mac_exists")
+                                    .with("mac", mac_address.clone().unwrap_or_default()),
+                            );
+                        }
+                        return AppError::Conflict(msg("server.device.interface.name_exists"));
+                    }
+                    AppError::from(e)
+                })?;
+            } else {
+                // 新网口：二层属性无存量可继承，用默认值
+                sqlx::query(
+                    r"INSERT INTO device_interfaces (id, device_id, nic_id, name, physical_type, interface_role, mac_address, vlan_id, description, sort_order, port_type, status, speed, native_vlan_id, device_managed, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'access', 'up', NULL, NULL, TRUE, $11, $12)",
+                )
+                .bind(port_id)
+                .bind(device_id)
+                .bind(card_id)
+                .bind(&port.name)
+                .bind(physical_type)
+                .bind(interface_role)
+                .bind(&mac_address)
+                .bind(port.vlan_id)
+                .bind(&port.description)
+                .bind(port_idx as i32)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    if let sqlx::Error::Database(ref db_err) = e
+                        && db_err.is_unique_violation()
+                    {
+                        if db_err.constraint() == Some(crate::helpers::MAC_UNIQUE_INDEX) {
+                            return AppError::Conflict(
+                                msg("server.device.interface.mac_exists")
+                                    .with("mac", mac_address.clone().unwrap_or_default()),
+                            );
+                        }
+                        return AppError::Conflict(msg("server.device.interface.name_exists"));
+                    }
+                    AppError::from(e)
+                })?;
+            }
+
+            // 本网口的存量 IP 基准（按地址差量）：命中者沿用原行（保留
+            // status/last_seen/created_at/id），未命中者删除，新地址插入
+            let mut port_existing: Vec<(Uuid, String, Uuid)> =
+                existing_ips.remove(&port_id).unwrap_or_default();
+            let mut seen_ips: HashSet<String> = HashSet::new();
 
             for ip in &port.ips {
                 ip.validate()?;
-
-                let existing_ip: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)",
-                )
-                .bind(&ip.ip_address)
-                .fetch_optional(&mut *tx)
-                .await?;
-                if existing_ip.is_some() {
+                let ip_text = ip.ip_address.trim().to_string();
+                let ip_key = foims_common::net::parse_inet(&ip_text)
+                    .map(|addr| addr.to_string())
+                    .unwrap_or_else(|| ip_text.clone());
+                if !seen_ips.insert(ip_key) {
                     return Err(AppError::Conflict(
-                        msg("server.ip.already_exists").with("ip", &ip.ip_address),
+                        msg("server.ip.already_exists").with("ip", &ip_text),
                     ));
                 }
 
-                let subnet_id: Uuid = if let Some(nid) = ip.subnet_id {
-                    // 显式指定子网时校验其必须属于设备所在房间，确保数据一致性
-                    crate::helpers::validate_network_in_room(&mut *tx, room_id, Some(nid)).await?;
-                    nid
-                } else {
-                    // 未显式指定时按房间绑定子网探测；IP 必须归属子网
+                let subnet_id: Uuid = match ip.subnet_id {
+                    Some(nid) => {
+                        // 显式指定：子网必须绑定在设备所在房间，且地址必须落在
+                        // 该子网同族 CIDR 内（否则 IP 与子网自相矛盾）
+                        crate::helpers::validate_network_in_room(&mut *tx, room_id, Some(nid))
+                            .await?;
+                        crate::helpers::validate_ip_in_subnet(&mut *tx, nid, &ip_text).await?;
+                        nid
+                    }
+                    // 未指定时按房间绑定网段探测；IP 必须归属子网
                     //（interface_ips.subnet_id NOT NULL），探测不中直接报错回滚
-                    sqlx::query_scalar(
-                        r"SELECT nc.id
-                            FROM room_networks rn
-                            JOIN network_cidrs nc ON rn.subnet_id = nc.id
-                            WHERE rn.room_id = $1
-                            AND (
-                                (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
-                                OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+                    None => crate::helpers::auto_subnet_in_room(&mut *tx, room_id, &ip_text)
+                        .await?
+                        .ok_or_else(|| {
+                            AppError::Validation(
+                                msg("server.ip.network_required").with("ip", &ip_text),
                             )
-                            LIMIT 1",
-                    )
-                    .bind(room_id)
-                    .bind(&ip.ip_address)
-                    .fetch_optional(&mut *tx)
-                    .await?
-                    .ok_or_else(|| {
-                        AppError::Validation(
-                            msg("server.ip.network_required").with("ip", &ip.ip_address),
-                        )
-                    })?
+                        })?,
                 };
 
-                let ip_version = detect_ip_version(&ip.ip_address)?;
+                if let Some(idx) = port_existing
+                    .iter()
+                    .position(|(_, addr, _)| crate::helpers::same_ip(addr, &ip_text))
+                {
+                    let (ip_id, _, current_subnet) = port_existing.remove(idx);
+                    if current_subnet != subnet_id {
+                        sqlx::query(
+                            "UPDATE interface_ips SET subnet_id = $1, updated_at = $2 WHERE id = $3",
+                        )
+                        .bind(subnet_id)
+                        .bind(now)
+                        .bind(ip_id)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                    continue;
+                }
 
+                // 新地址：全局唯一预检（并发窗口由 ip_address 唯一索引兜底）
+                let occupied: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT id FROM interface_ips WHERE ip_address = CAST($1 AS INET)",
+                )
+                .bind(&ip_text)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if occupied.is_some() {
+                    return Err(AppError::Conflict(
+                        msg("server.ip.already_exists").with("ip", &ip_text),
+                    ));
+                }
+
+                let ip_version = detect_ip_version(&ip_text)?;
                 sqlx::query(
                     "INSERT INTO interface_ips (id, device_interface_id, subnet_id, ip_address, ip_version, status, last_seen, created_at, updated_at)
                      VALUES ($1, $2, $3, CAST($4 AS INET), $5, $6, $7, $8, $9)",
@@ -385,7 +499,7 @@ pub async fn apply_network_config(
                 .bind(Uuid::new_v4())
                 .bind(port_id)
                 .bind(subnet_id)
-                .bind(&ip.ip_address)
+                .bind(&ip_text)
                 .bind(ip_version)
                 .bind("active")
                 .bind(now)
@@ -400,11 +514,19 @@ pub async fn apply_network_config(
                         && db_err.is_unique_violation()
                     {
                         return AppError::Conflict(
-                            msg("server.ip.already_exists").with("ip", &ip.ip_address),
+                            msg("server.ip.already_exists").with("ip", &ip_text),
                         );
                     }
                     AppError::from(e)
                 })?;
+            }
+
+            // 表单中已移除的地址：直接删除（不做跨网口保留）
+            for (ip_id, _, _) in port_existing {
+                sqlx::query("DELETE FROM interface_ips WHERE id = $1")
+                    .bind(ip_id)
+                    .execute(&mut *tx)
+                    .await?;
             }
         }
     }

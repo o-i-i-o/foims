@@ -90,7 +90,7 @@ const updateMutation = useMutation({
     emit("changed");
   },
   onError: (error) => {
-    showToast(error.message || t("common.operation_failed"), "error");
+    showToast(`${t("common.operation_failed")}: ${error.message}`, "error");
   }
 });
 
@@ -113,7 +113,7 @@ const deleteMutation = useMutation({
     emit("changed");
   },
   onError: (error) => {
-    showToast(error.message || t("common.operation_failed"), "error");
+    showToast(`${t("common.delete_failed")}: ${error.message}`, "error");
   }
 });
 </script>

@@ -24,9 +24,10 @@ interface AgentConfigSection {
   collect_interval_secs: number;
   use_public_url: boolean;
   report_url_override: string | null;
-  /** 以下三项保存时原样带回（仅在配置加载后才有值） */
+  /** 以下四项保存时原样带回（仅在配置加载后才有值） */
   max_report_bytes?: number;
   history_retention_days?: number;
+  snmp_event_retention_days?: number;
   offline_factor?: number;
 }
 
@@ -46,7 +47,10 @@ const readonly = isSectionReadonly("system");
 
 // 最近一次加载的 agent 段基础参数（与监听无关的字段）：PUT 整体替换，
 // 保存时原样带回避免丢配置（未加载时为空对象，展开结果与 null 等价）
-let agentBase: Pick<AgentConfigSection, "max_report_bytes" | "history_retention_days" | "offline_factor"> = {};
+let agentBase: Pick<
+  AgentConfigSection,
+  "max_report_bytes" | "history_retention_days" | "snmp_event_retention_days" | "offline_factor"
+> = {};
 
 const agentEnabled = ref(false);
 const agentBindHost = ref("[::]");
@@ -78,6 +82,7 @@ watch(
     agentBase = {
       max_report_bytes: agent.max_report_bytes,
       history_retention_days: agent.history_retention_days,
+      snmp_event_retention_days: agent.snmp_event_retention_days,
       offline_factor: agent.offline_factor
     };
     agentEnabled.value = Boolean(agent.enabled);

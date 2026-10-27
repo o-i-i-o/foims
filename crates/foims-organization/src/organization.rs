@@ -1017,16 +1017,15 @@ pub async fn get_org_rooms<P: DbProvider>(
              SELECT o.id FROM organizations o JOIN org_tree t ON o.parent_id = t.id
          )
          SELECT r.id, r.name, r.room_type,
-                o.name AS org_name, e.name AS manager_name,
+                o.name AS org_name,
                 COUNT(DISTINCT w.id) AS workstation_count,
                 COUNT(DISTINCT c.id) AS cabinet_count
          FROM rooms r
          JOIN organizations o ON r.org_id = o.id
-         JOIN employees e ON r.manager_employee_id = e.id
          LEFT JOIN workstations w ON w.room_id = r.id
          LEFT JOIN cabinets c ON c.room_id = r.id
          WHERE r.org_id IN (SELECT id FROM org_tree)
-         GROUP BY r.id, r.name, r.room_type, o.id, o.name, e.name
+         GROUP BY r.id, r.name, r.room_type, o.id, o.name
          ORDER BY o.name, r.name",
     )
     .bind(id)

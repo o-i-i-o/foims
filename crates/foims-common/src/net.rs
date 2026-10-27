@@ -335,6 +335,50 @@ pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     }
 }
 
+// ==================== MAC 地址归一 ====================
+
+/// 归一 MAC：剔除 `:`/`-`/`.`/空格并转大写，返回 `AABBCCDDEEFF` 形态。
+///
+/// 台账侧（人工录入 / CSV 导入）与 SNMP 观测侧书写形态不一，所有落库与
+/// 跨表比对必须经本函数，否则同一物理 MAC 会因大小写/分隔符差异被当作
+/// 两个不同值，唯一性约束与冲突检测随之失效。
+#[must_use]
+pub fn normalize_mac(mac: &str) -> String {
+    mac.chars()
+        .filter(|c| !matches!(c, ':' | '-' | '.' | ' '))
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+/// MAC 是否合法：归一后恰为 12 位十六进制（分隔符无关）。
+///
+/// 接受 `aa:bb:cc:dd:ee:ff`、`AA-BB-CC-DD-EE-FF`、`aabb.ccdd.eeff`、
+/// `aabbccddeeff` 四种常见书写。
+#[must_use]
+pub fn valid_mac(mac: &str) -> bool {
+    let normalized = normalize_mac(mac);
+    normalized.len() == 12 && normalized.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// MAC 的规范存储形态 `AA:BB:CC:DD:EE:FF`（大写、冒号分隔、17 字符）。
+///
+/// 落库统一写规范形态（列宽 VARCHAR(20)），使前端/报表/导出不必再判断
+/// 分隔符风格；比对仍以 [`normalize_mac`] 为口径，二者不可互相替代。
+/// 长度非法时原样返回归一结果，不做二次猜测。
+#[must_use]
+pub fn canonical_mac(mac: &str) -> String {
+    let normalized = normalize_mac(mac);
+    if normalized.len() != 12 {
+        return normalized;
+    }
+    normalized
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| String::from_utf8_lossy(pair).into_owned())
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 /// Host 值是否指向本机：仅接受 `localhost`、`127.0.0.1`、`::1`
 /// （域名不区分大小写；容忍带端口 `127.0.0.1:443`、方括号 IPv6
 /// `[::1]:443` 与裸 IPv6 `::1` 三种形态）。
@@ -835,6 +879,62 @@ mod tests {
         assert!(!is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
             0x2001, 0xdb8, 0, 0, 0, 0, 0, 1
         ))));
+    }
+
+    // ---------- MAC 归一 ----------
+
+    #[test]
+    fn test_normalize_mac_strips_separators_and_uppercases() {
+        for raw in [
+            "aa:bb:cc:dd:ee:ff",
+            "AA-BB-CC-DD-EE-FF",
+            "aabb.ccdd.eeff",
+            "  aabbccddeeFF  ",
+            "AABBCCDDEEFF",
+        ] {
+            assert_eq!(normalize_mac(raw), "AABBCCDDEEFF", "{raw} 应归一为同一值");
+        }
+        assert_eq!(normalize_mac(""), "");
+    }
+
+    #[test]
+    fn test_canonical_mac_formats_colon_separated() {
+        for raw in ["aa:bb:cc:dd:ee:ff", "AA-BB-CC-DD-EE-FF", "aabb.ccdd.eeff"] {
+            assert_eq!(
+                canonical_mac(raw),
+                "AA:BB:CC:DD:EE:FF",
+                "{raw} 应规范为冒号大写形态"
+            );
+        }
+        // 长度非法时原样返回归一结果，不做二次猜测
+        assert_eq!(canonical_mac("abcd"), "ABCD");
+    }
+
+    #[test]
+    fn test_valid_mac_accepts_common_forms() {
+        for ok in [
+            "aa:bb:cc:dd:ee:ff",
+            "AA-BB-CC-DD-EE-FF",
+            "aabb.ccdd.eeff",
+            "aabbccddeeff",
+        ] {
+            assert!(valid_mac(ok), "{ok} 应判定为合法 MAC");
+        }
+    }
+
+    #[test]
+    fn test_valid_mac_rejects_invalid() {
+        for bad in [
+            "",
+            "aa:bb:cc:dd:ee",
+            "aa:bb:cc:dd:ee:ff:00",
+            "gg:bb:cc:dd:ee:ff",
+            "not-a-mac",
+            // 单字符分组简写不属四种规范形态，归一后不足 12 位十六进制
+            "a:b:c:d:e:f",
+        ] {
+            assert!(!valid_mac(bad), "{bad} 应判定为非法 MAC");
+        }
     }
 
     // ---------- Host 校验（防 DNS rebinding） ----------

@@ -12,6 +12,7 @@ import { formatDateTime } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import { onThSort, seqIndex, sortClass, usePagedList } from "../../composables/usePagedList";
+import { queryKeys } from "../../utils/queryKeys";
 import ConfirmModal from "../ConfirmModal.vue";
 import NavIcon from "../NavIcon.vue";
 import Pagination from "../Pagination.vue";
@@ -26,7 +27,7 @@ const queryClient = useQueryClient();
 const readonly = isSectionReadonly("system");
 
 const list = usePagedList<User>({
-  tag: "users",
+  tag: queryKeys.users,
   defaultPageSize: 20,
   enabled: computed(() => props.active),
   buildUrl: (page, pageSize, sortBy, sortOrder) => usersUrl(page, pageSize, sortBy, sortOrder)
@@ -59,7 +60,7 @@ function openEdit(user: User): void {
 }
 
 function handleModalSaved(): void {
-  queryClient.invalidateQueries({ queryKey: ["users"] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.users });
 }
 
 // ==================== 删除（二次确认） ====================
@@ -90,7 +91,7 @@ async function doDelete(id: string): Promise<void> {
   } finally {
     deleting.value = false;
   }
-  queryClient.invalidateQueries({ queryKey: ["users"] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.users });
 }
 </script>
 

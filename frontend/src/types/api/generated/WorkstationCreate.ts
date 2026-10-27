@@ -2,6 +2,6 @@
 
 export type WorkstationCreate = { name: string, room_id: string, 
 /**
- * 管理人（必填，从组织人员中选择；存在性在 handler 内校验）
+ * 管理人（可空；有值时必须是房间所属组织内员工，存在性与同组织在 handler 内校验）
  */
-manager_employee_id: string, description: string | null, };
+manager_employee_id: string | null, description: string | null, };

@@ -4,4 +4,8 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * scheduled_tasks 表行模型（真身定义，foims-scheduler 经 re-export 复用）
  */
-export type ScheduledTask = { id: string, name: string, task_type: string, cron_expression: string, enabled: boolean, config: JsonValue, last_run_at: string | null, next_run_at: string | null, last_result: string | null, created_at: string, updated_at: string, };
+export type ScheduledTask = { id: string, name: string, task_type: string, cron_expression: string, enabled: boolean, 
+/**
+ * 系统内置任务（启动播种写入，前端只读，禁止修改/删除）
+ */
+is_system: boolean, config: JsonValue, last_run_at: string | null, next_run_at: string | null, last_result: string | null, created_at: string, updated_at: string, };

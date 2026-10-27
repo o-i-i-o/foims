@@ -2,9 +2,9 @@
 
 export type WorkstationUpdate = { name: string | null, room_id: string | null, 
 /**
- * 管理人员工引用（缺省不修改；必填字段不支持清空）
+ * 双层 Option：字段缺失不修改、JSON null 清空管理人、值则换人（缺省保留原值）
  */
-manager_employee_id: string | null, 
+manager_employee_id: string | null | null, 
 /**
  * 双层 Option：null 清空描述
  */

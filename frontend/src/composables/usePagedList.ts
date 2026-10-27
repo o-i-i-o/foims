@@ -13,8 +13,11 @@ export const PAGE_SIZE_OPTIONS: number[] = [10, 20, 50, 100];
 
 /** usePagedList 工厂选项 */
 export interface UsePagedListOptions {
-  /** 查询键标签（分区标识） */
-  tag: string;
+  /**
+   * 查询键前缀（分区标识）：传 utils/queryKeys 中的常量数组，
+   * 与失效方共用同一引用，避免 key 分裂；单处私用的标签可继续传字符串
+   */
+  tag: string | readonly string[];
   defaultPageSize: number;
   /** 查询启用条件（页面切换懒加载） */
   enabled?: Ref<boolean> | boolean;
@@ -72,13 +75,15 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
     refetchInterval,
   } = options;
   const { t } = useI18n();
+  // 前缀展开一次：tag 不随渲染变化，无需响应式
+  const tagParts: string[] = typeof tag === "string" ? [tag] : [...tag];
   const page = ref(1);
   const pageSize = ref(defaultPageSize);
   const sort = reactive({ by: defaultSortBy, order: defaultSortOrder });
 
   const query = useQuery({
     queryKey: computed(() => [
-      tag,
+      ...tagParts,
       {
         page: page.value,
         pageSize: pageSize.value,

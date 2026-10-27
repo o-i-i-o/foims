@@ -10,7 +10,10 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_positions_cabinet_id ON positions(cabinet_id)",
         "CREATE INDEX IF NOT EXISTS idx_workstations_room_id ON workstations(room_id)",
         "CREATE INDEX IF NOT EXISTS idx_device_interfaces_device_id ON device_interfaces(device_id)",
-        "CREATE INDEX IF NOT EXISTS idx_device_interfaces_mac ON device_interfaces(mac_address) WHERE mac_address IS NOT NULL",
+        // MAC 唯一：一物理网卡只允许一个网口。按归一表达式建唯一索引，
+        // 消除大小写/分隔符差异（与 foims_common::net::normalize_mac 同口径），
+        // 空白 MAC 不参与唯一性（未录入不等于已占用）
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_device_interfaces_mac_key ON device_interfaces(translate(upper(mac_address), ':-. ', '')) WHERE mac_address IS NOT NULL AND translate(upper(mac_address), ':-. ', '') <> ''",
         "CREATE INDEX IF NOT EXISTS idx_device_interfaces_nic_id ON device_interfaces(nic_id) WHERE nic_id IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_device_interfaces_device_managed ON device_interfaces(device_managed) WHERE device_managed",
         "CREATE INDEX IF NOT EXISTS idx_device_nics_device_id ON device_nics(device_id)",

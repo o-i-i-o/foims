@@ -35,6 +35,8 @@ pub struct ScheduledTask {
     pub task_type: String,
     pub cron_expression: String,
     pub enabled: bool,
+    /// 系统内置任务（启动播种写入，前端只读，禁止修改/删除）
+    pub is_system: bool,
     pub config: serde_json::Value,
     pub last_run_at: Option<DateTime<Utc>>,
     pub next_run_at: Option<DateTime<Utc>>,

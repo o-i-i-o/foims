@@ -397,12 +397,13 @@ pub(crate) fn room_allows_cabinet(room_type: &str) -> bool {
 
 /// 责任人同组织校验：管理人员工必须属于指定组织。
 ///
-/// 与触发器 `trg_validate_room_manager_org` / `trg_validate_workstation_manager_org`
-/// 同口径（应用层预检把非法引用从 500 降为 400）。`not_found_key` /
-/// `mismatch_key` 按调用方资源域传入。
+/// 与触发器 `trg_validate_workstation_manager_org` 同口径（应用层预检把非法
+/// 引用从 500 降为 400）。`not_found_key` / `mismatch_key` 按调用方资源域传入。
+///
+/// 管理人可空：`None` 表示未指定责任人（工位允许不配管理人），不参与校验。
 pub(crate) async fn ensure_employee_in_org<'e, E>(
     executor: E,
-    employee_id: Uuid,
+    employee_id: Option<Uuid>,
     org_id: Uuid,
     not_found_key: &'static str,
     mismatch_key: &'static str,
@@ -410,6 +411,9 @@ pub(crate) async fn ensure_employee_in_org<'e, E>(
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
+    let Some(employee_id) = employee_id else {
+        return Ok(());
+    };
     let employee_org: Option<Uuid> =
         sqlx::query_scalar("SELECT org_id FROM employees WHERE id = $1")
             .bind(employee_id)
@@ -420,6 +424,230 @@ where
         Some(actual) if actual != org_id => Err(AppError::Validation(msg(mismatch_key))),
         Some(_) => Ok(()),
     }
+}
+
+// ==================== MAC 唯一性 ====================
+
+/// 归一 MAC 的 SQL 表达式（与 [`foims_common::net::normalize_mac`] 同口径）。
+///
+/// 库中存量 MAC 大小写与分隔符不统一，比对必须两侧同经归一，
+/// 否则同一物理网卡可被写成两个“不同”值绕过唯一性。
+const MAC_KEY_SQL: &str = "translate(upper(mac_address), ':-. ', '')";
+
+/// `device_interfaces` 的 MAC 表达式唯一索引名（与 [`MAC_KEY_SQL`] 同表达式，
+/// 定义见 foims-init 的表索引清单），用于把并发撞约束映射为精确错误。
+pub(crate) const MAC_UNIQUE_INDEX: &str = "uq_device_interfaces_mac_key";
+
+/// 校验并归一 MAC 录入值：空白视同未填写；格式非法拒绝；合法转规范形态。
+///
+/// 所有人工录入入口（设备保存、网口新建/修改）都经此函数，
+/// 保证落库形态唯一、可比对。
+pub(crate) fn normalize_mac_input(raw: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(raw) = raw.map(str::trim).filter(|m| !m.is_empty()) else {
+        return Ok(None);
+    };
+    if !foims_common::net::valid_mac(raw) {
+        return Err(AppError::Validation(msg(
+            "server.device.validation.mac_format",
+        )));
+    }
+    Ok(Some(foims_common::net::canonical_mac(raw)))
+}
+
+/// MAC 全局唯一预检：一物理网卡只允许出现一个网口。
+///
+/// `exclude_port_id` 供更新路径排除网口自身。调用方负责把 MAC 归一为
+/// 规范形态再落库（见 [`foims_common::net::canonical_mac`]），
+/// 本函数只做冲突判定。
+///
+/// 注：表达式内插的是 crate 内静态字面量，无拼接注入面。
+pub(crate) async fn ensure_mac_available<'e, E>(
+    executor: E,
+    mac: &str,
+    exclude_port_id: Option<Uuid>,
+) -> Result<(), AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT id FROM device_interfaces WHERE mac_address IS NOT NULL AND ",
+    );
+    builder.push(MAC_KEY_SQL);
+    builder.push(" = ");
+    builder.push_bind(foims_common::net::normalize_mac(mac));
+    builder.push(" AND (");
+    builder.push_bind(exclude_port_id);
+    builder.push("::uuid IS NULL OR id != ");
+    builder.push_bind(exclude_port_id);
+    builder.push(") LIMIT 1");
+
+    let occupied: Option<Uuid> = builder
+        .build_query_scalar()
+        .persistent(false)
+        .fetch_optional(executor)
+        .await?;
+    if occupied.is_some() {
+        return Err(AppError::Conflict(
+            msg("server.device.interface.mac_exists")
+                .with("mac", foims_common::net::canonical_mac(mac)),
+        ));
+    }
+    Ok(())
+}
+
+// ==================== 子网探测与 IP 比对 ====================
+
+/// 按房间已绑定网段探测 IP 所属子网；探测不中返回 None。
+///
+/// 与设备保存/自动分配同一口径（`room_networks` 绑定 + 同族 CIDR `<<=`），
+/// 避免各路径各自拼一遍包含判断。
+pub(crate) async fn auto_subnet_in_room<'e, E>(
+    executor: E,
+    room_id: Uuid,
+    ip_address: &str,
+) -> Result<Option<Uuid>, AppError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query_scalar(
+        r"SELECT nc.id
+          FROM room_networks rn
+          JOIN network_cidrs nc ON rn.subnet_id = nc.id
+          WHERE rn.room_id = $1
+            AND (
+                (nc.ipv4_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv4_cidr::inet)
+                OR (nc.ipv6_cidr IS NOT NULL AND CAST($2 AS INET) <<= nc.ipv6_cidr::inet)
+            )
+          LIMIT 1",
+    )
+    .bind(room_id)
+    .bind(ip_address)
+    .fetch_optional(executor)
+    .await
+    .map_err(AppError::from)
+}
+
+/// 两个 IP 文本是否指向同一地址（忽略 PG INET 文本可能带的掩码后缀）。
+pub(crate) fn same_ip(left: &str, right: &str) -> bool {
+    use foims_common::net::parse_inet;
+    match (parse_inet(left), parse_inet(right)) {
+        (Some(a), Some(b)) => a == b,
+        _ => left == right,
+    }
+}
+
+// ==================== 空间归属联动 ====================
+
+/// 设备的空间挂载点：父侧房间变更时据此定位需要跟随迁移的设备。
+pub(crate) enum DeviceScope {
+    /// 工位下的设备（`devices.workstation_id`）
+    Workstation(Uuid),
+    /// 机柜下全部机位上的设备（`devices.position_id` → `positions.cabinet_id`）
+    Cabinet(Uuid),
+    /// 单个机位上的设备（`devices.position_id`）
+    Position(Uuid),
+}
+
+/// 父侧空间换房后同步设备 `room_id`，并清理不再合法的 IP。
+///
+/// 必须由调用方**在父侧 UPDATE 之后**调用：设备行的 BEFORE 触发器
+/// `trg_validate_device_room_consistency` 会回查父侧房间，先改设备会
+/// 撞旧房间。提交时的兜底由延迟约束触发器
+/// `trg_cabinets_devices_room` / `trg_workstations_devices_room` /
+/// `trg_positions_devices_room`（函数 `check_devices_follow_parent_room`）完成。
+///
+/// 房间绑定网段集合变了，原 IP 可能已不属于新房间：按本项目
+/// 「IP 必须属于设备所在房间已绑定网段」的不变量，直接删除这些 IP
+/// （不做跨房间改挂），由设备保存/自动分配路径重新分配。
+/// 搬入设备的功耗同时计入目标房间上限校验。
+pub(crate) async fn sync_devices_room(
+    conn: &mut sqlx::PgConnection,
+    scope: DeviceScope,
+    target_room_id: Uuid,
+) -> Result<(), AppError> {
+    let device_ids: Vec<Uuid> = {
+        let mut builder =
+            sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT id FROM devices WHERE ");
+        match scope {
+            DeviceScope::Workstation(id) => {
+                builder.push("workstation_id = ").push_bind(id);
+            }
+            DeviceScope::Cabinet(id) => {
+                builder.push("position_id IN (SELECT id FROM positions WHERE cabinet_id = ");
+                builder.push_bind(id);
+                builder.push(")");
+            }
+            DeviceScope::Position(id) => {
+                builder.push("position_id = ").push_bind(id);
+            }
+        }
+        builder
+            .build_query_scalar::<Uuid>()
+            .persistent(false)
+            .fetch_all(&mut *conn)
+            .await?
+    };
+    if device_ids.is_empty() {
+        return Ok(());
+    }
+
+    // 目标房间功率上限（锁序与设备写入路径一致：先房间行 FOR UPDATE）
+    let room_limit: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
+        "SELECT total_power_watts FROM rooms WHERE id = $1 FOR UPDATE",
+    )
+    .bind(target_room_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    if let Some(total) = room_limit {
+        let moving: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(power_watts), 0) FROM devices WHERE id = ANY($1)",
+        )
+        .bind(&device_ids)
+        .fetch_one(&mut *conn)
+        .await?;
+        let allocated: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(power_watts), 0) FROM devices \
+             WHERE room_id = $1 AND NOT (id = ANY($2))",
+        )
+        .bind(target_room_id)
+        .bind(&device_ids)
+        .fetch_one(&mut *conn)
+        .await?;
+        if allocated + moving > i64::from(total) {
+            return Err(AppError::Validation(
+                msg("server.device.room_power_exceeded")
+                    .with("allocated", allocated)
+                    .with("power", moving)
+                    .with("total", total),
+            ));
+        }
+    }
+
+    sqlx::query(
+        "UPDATE devices SET room_id = $1, updated_at = NOW() \
+         WHERE id = ANY($2) AND room_id IS DISTINCT FROM $1",
+    )
+    .bind(target_room_id)
+    .bind(&device_ids)
+    .execute(&mut *conn)
+    .await?;
+
+    // 清除不落在新房间已绑定网段上的 IP（IP 归属不变量 I4）
+    sqlx::query(
+        "DELETE FROM interface_ips m \
+         USING device_interfaces di \
+         WHERE m.device_interface_id = di.id \
+           AND di.device_id = ANY($1) \
+           AND NOT EXISTS (\
+               SELECT 1 FROM room_networks rn \
+               WHERE rn.room_id = $2 AND rn.subnet_id = m.subnet_id)",
+    )
+    .bind(&device_ids)
+    .bind(target_room_id)
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]

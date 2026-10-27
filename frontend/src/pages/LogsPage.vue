@@ -18,6 +18,7 @@ import {
 import { showToast } from "../composables/useToast";
 import { usePagedList } from "../composables/usePagedList";
 import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
+import { queryKeys } from "../utils/queryKeys";
 import type { LoginLog } from "../types/api/generated/LoginLog";
 import type { Notification } from "../types/api/generated/Notification";
 import type { OperationLog } from "../types/api/generated/OperationLog";
@@ -54,7 +55,7 @@ const NOTIFICATION_PAGE_SIZE = 20;
 const operationSearch = ref("");
 
 const operation = usePagedList<OperationLog>({
-  tag: "logs-operation",
+  tag: queryKeys.logsOperation,
   defaultPageSize: OPERATION_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "operation"),
   extraKey: computed(() => ({ search: operationSearch.value })),
@@ -76,14 +77,14 @@ watch(searchInput, (value) => {
 // ==================== 登录日志 / 通知 ====================
 
 const login = usePagedList<LoginLog>({
-  tag: "logs-login",
+  tag: queryKeys.logsLogin,
   defaultPageSize: LOGIN_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "login"),
   buildUrl: (page, pageSize, sortBy, sortOrder) => loginLogsUrl({ page, pageSize, sortBy, sortOrder })
 });
 
 const notifications = usePagedList<Notification>({
-  tag: "notifications",
+  tag: queryKeys.notifications,
   defaultPageSize: NOTIFICATION_PAGE_SIZE,
   enabled: computed(() => activeTab.value === "notifications"),
   buildUrl: (page, pageSize, sortBy, sortOrder) => notificationsUrl({ page, pageSize, sortBy, sortOrder })
@@ -95,7 +96,7 @@ const markReadMutation = useMutation({
   mutationFn: (id: string) => markNotificationRead(id),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
     }
@@ -108,7 +109,7 @@ const markAllMutation = useMutation({
   mutationFn: () => markAllNotificationsRead(),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
       showToast(t("notifications.marked_all_read"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");

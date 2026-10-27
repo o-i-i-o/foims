@@ -18,9 +18,6 @@ pub struct Room {
     pub room_type: String,
     /// 房间所属组织（NOT NULL：房间必须挂在唯一组织节点下）
     pub org_id: Uuid,
-    /// 房间管理人（NOT NULL 且必须属于 org_id 对应组织）：
-    /// 无工位的空间（机房/弱电井）由房间管理人兜底承接设备通知
-    pub manager_employee_id: Uuid,
     /// 房间总功率上限（瓦，None=不限制）
     pub total_power_watts: Option<i32>,
     pub description: Option<String>,
@@ -37,9 +34,6 @@ pub struct RoomWithNetworks {
     pub org_id: Uuid,
     /// 所属组织名称（org_id 非空且 FK RESTRICT，联查必有值）
     pub org_name: String,
-    pub manager_employee_id: Uuid,
-    /// 房间管理人姓名（联查 employees，NOT NULL + FK 保证存在）
-    pub manager_name: String,
     /// 房间总功率上限（瓦，None=不限制）
     pub total_power_watts: Option<i32>,
     /// 房内设备功耗之和（瓦）
@@ -66,7 +60,6 @@ pub struct RoomSummary {
     pub room_type: String,
     /// 房间直属组织名称（子树口径下用于区分不同下级组织的房间）
     pub org_name: String,
-    pub manager_name: String,
     pub workstation_count: i64,
     pub cabinet_count: i64,
 }
@@ -76,9 +69,9 @@ pub struct RoomSummary {
 pub struct WorkstationBrief {
     pub id: Uuid,
     pub name: String,
-    /// 管理人姓名（联查 employees，manager_employee_id NOT NULL + FK 保证存在）
-    pub manager_name: String,
-    pub manager_employee_id: Uuid,
+    /// 管理人姓名（未配管理人的工位为空）
+    pub manager_name: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
@@ -111,8 +104,6 @@ pub struct RoomCreate {
     pub room_type: String,
     /// 所属组织（必填：房间必须归属组织节点）
     pub org_id: Uuid,
-    /// 房间管理人（必填：必须属于 org_id 对应组织，后端与触发器双重校验）
-    pub manager_employee_id: Uuid,
     pub subnet_ids: Vec<Uuid>,
     /// 房间总功率上限（瓦，0..=10_000_000；缺省/null=不限制）
     #[validate(custom(
@@ -136,8 +127,6 @@ pub struct RoomUpdate {
     pub room_type: Option<String>,
     /// 缺省/null 均表示不修改（org_id 非空，不支持解绑组织）
     pub org_id: Option<Uuid>,
-    /// 缺省/null 均表示不修改（manager_employee_id 非空，不支持清空）
-    pub manager_employee_id: Option<Uuid>,
     pub subnet_ids: Option<Vec<Uuid>>,
     /// 双层 Option：字段缺失不修改、JSON null 清空上限（不限制）、值设置新值；
     /// 设置新值时房内设备功耗之和不得超过该值
@@ -164,7 +153,6 @@ mod tests {
             "name": "301 会议室",
             "room_type": "office",
             "org_id": Uuid::new_v4(),
-            "manager_employee_id": Uuid::new_v4(),
             "subnet_ids": [Uuid::new_v4()],
             "description": "三楼办公区"
         }))?;
@@ -180,7 +168,6 @@ mod tests {
             "name": "机房",
             "room_type": "Data_Center",
             "org_id": Uuid::new_v4(),
-            "manager_employee_id": Uuid::new_v4(),
             "subnet_ids": []
         }))?;
         assert!(req.validate().is_ok());
@@ -194,7 +181,6 @@ mod tests {
             "name": "杂物间",
             "room_type": "storage",
             "org_id": Uuid::new_v4(),
-            "manager_employee_id": Uuid::new_v4(),
             "subnet_ids": []
         }))?;
         let Err(errors) = req.validate() else {
@@ -210,7 +196,6 @@ mod tests {
             "name": "R".repeat(51),
             "room_type": "office",
             "org_id": Uuid::new_v4(),
-            "manager_employee_id": Uuid::new_v4(),
             "subnet_ids": []
         }))?;
         let Err(errors) = req.validate() else {
@@ -222,13 +207,12 @@ mod tests {
 
     #[test]
     fn test_room_create_required_fields() {
-        // org_id / manager_employee_id / subnet_ids 均为必填：缺失即反序列化失败
-        for missing in ["org_id", "manager_employee_id", "subnet_ids"] {
+        // org_id / subnet_ids 为必填：缺失即反序列化失败
+        for missing in ["org_id", "subnet_ids"] {
             let mut value = serde_json::json!({
                 "name": "301",
                 "room_type": "office",
                 "org_id": Uuid::new_v4(),
-                "manager_employee_id": Uuid::new_v4(),
                 "subnet_ids": []
             });
             value
@@ -271,26 +255,21 @@ mod tests {
 
     #[test]
     fn test_room_update_org_id_optional() -> Result<(), serde_json::Error> {
-        // org_id / manager_employee_id 为单层 Option：缺失与 null 均表示不修改，
+        // org_id 为单层 Option：缺失与 null 均表示不修改，
         // 提供值则切换（非空列不支持解绑，故不存在三态）
         let missing: RoomUpdate = serde_json::from_value(serde_json::json!({}))?;
         assert_eq!(missing.org_id, None);
-        assert_eq!(missing.manager_employee_id, None);
 
         let null_org: RoomUpdate = serde_json::from_value(serde_json::json!({
-            "org_id": null,
-            "manager_employee_id": null
+            "org_id": null
         }))?;
         assert_eq!(null_org.org_id, None);
-        assert_eq!(null_org.manager_employee_id, None);
 
         let expected = Uuid::new_v4();
         let set_org: RoomUpdate = serde_json::from_value(serde_json::json!({
-            "org_id": expected,
-            "manager_employee_id": expected
+            "org_id": expected
         }))?;
         assert_eq!(set_org.org_id, Some(expected));
-        assert_eq!(set_org.manager_employee_id, Some(expected));
         Ok(())
     }
 
@@ -303,8 +282,6 @@ mod tests {
             room_type: "office".to_string(),
             org_id: Uuid::new_v4(),
             org_name: "研发部".to_string(),
-            manager_employee_id: Uuid::new_v4(),
-            manager_name: "张三".to_string(),
             total_power_watts: Some(50_000),
             allocated_power_watts: 12_500,
             description: None,
@@ -330,8 +307,8 @@ mod tests {
             workstations: Some(vec![WorkstationBrief {
                 id: Uuid::new_v4(),
                 name: "工位 1".to_string(),
-                manager_name: "张三".to_string(),
-                manager_employee_id: Uuid::new_v4(),
+                manager_name: Some("张三".to_string()),
+                manager_employee_id: Some(Uuid::new_v4()),
             }]),
             cabinets: Some(vec![CabinetBrief {
                 id: Uuid::new_v4(),
@@ -363,8 +340,6 @@ mod tests {
             "room_type": "office",
             "org_id": Uuid::new_v4(),
             "org_name": "研发部",
-            "manager_employee_id": Uuid::new_v4(),
-            "manager_name": "张三",
             "total_power_watts": null,
             "allocated_power_watts": 0,
             "description": null,
@@ -387,7 +362,6 @@ mod tests {
             name: "301".to_string(),
             room_type: "office".to_string(),
             org_id: Uuid::new_v4(),
-            manager_employee_id: Uuid::new_v4(),
             total_power_watts: Some(50_000),
             description: Some("三楼".to_string()),
             created_at: Utc::now(),

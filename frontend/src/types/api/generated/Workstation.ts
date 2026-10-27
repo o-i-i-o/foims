@@ -2,6 +2,6 @@
 
 export type Workstation = { id: string, name: string, room_id: string, room_name: string | null, 
 /**
- * 管理人员工引用（必填，管理人姓名经员工表联查展示）
+ * 管理人员工引用（可空：工位未必已指定责任人）
  */
-manager_employee_id: string, description: string | null, created_at: string, updated_at: string, };
+manager_employee_id: string | null, description: string | null, created_at: string, updated_at: string, };

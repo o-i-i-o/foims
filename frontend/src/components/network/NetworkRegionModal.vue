@@ -9,6 +9,7 @@ import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
+import { queryKeys } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import type { NetworkRegion } from "../../types/api/generated/NetworkRegion";
 import type { NetworkRegionCreate } from "../../types/api/generated/NetworkRegionCreate";
@@ -82,7 +83,7 @@ const saveMutation = useMutation({
       return;
     }
     // 区域列表与网段弹窗的区域下拉共享该缓存，前缀失效一并刷新
-    queryClient.invalidateQueries({ queryKey: ["network-regions"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.networkRegions });
     showToast(t("network.region_save_success"), "success");
     emit("saved");
     emit("close");

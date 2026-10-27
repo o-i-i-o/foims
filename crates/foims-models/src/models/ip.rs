@@ -168,31 +168,21 @@ pub struct PullIpDetailsRequest {
     pub subnet_id: Option<Uuid>,
 }
 
+/// PATCH /api/resources/ip/{id} 的人工维护载荷。
+///
+/// 地址、网口归属与子网迁移由设备网卡同步维护（IpSyncItem.subnet_id 路径），
+/// 此处只保留人工治理必需的状态位：置为 reserved 后判活与陈旧同步均不再
+/// 改写该地址，是保留地址的唯一人工入口。
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct IpDetailUpdate {
-    // 挂 deserialize_some 后 JSON null → Some(None)：可通过 null 解绑接口
-    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
-    pub device_interface_id: Option<Option<Uuid>>,
-    /// 有值才校验：与 IpDetailCreate 同口径拒绝带掩码/非法地址
+    /// 取值白名单：active / inactive / reserved（与前端展示口径一致；
+    /// DB 侧 chk_interface_ips_status 兜底，应用层前置拦截非法值）
     #[validate(custom(
-        function = "crate::models::validate_ip_address_option",
-        message = "server.ip.validation.ip_address_invalid"
-    ))]
-    pub ip_address: Option<String>,
-    /// 取值白名单：active / inactive / reserved（与前端 formatter 展示口径一致；
-    /// DB 侧有 CHECK 约束兜底，应用层前置拦截非法值）
-    #[validate(custom(
-        function = "crate::models::validate_ip_status_option",
+        function = "crate::models::validate_ip_status_string",
         message = "server.ip.validation.status_invalid"
     ))]
-    pub status: Option<String>,
-    /// 有值才校验：仅允许 4 / 6
-    #[validate(custom(
-        function = "crate::models::validate_ip_version_option",
-        message = "server.ip.validation.ip_version_invalid"
-    ))]
-    pub ip_version: Option<i16>,
+    pub status: String,
 }
 
 // ==================== 单元测试 ====================
@@ -384,37 +374,10 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_detail_update_semantics() -> Result<(), serde_json::Error> {
-        use serde::de::Error as _;
-        // device_interface_id 带 serde(default) 且已挂 deserialize_some（null 清除语义可达）：
-        // 缺失与 null 均为 None；值则包一层 Some
-        let missing: IpDetailUpdate = serde_json::from_value(serde_json::json!({}))?;
-        assert_eq!(missing.device_interface_id, None);
-
-        let null_id: IpDetailUpdate =
-            serde_json::from_value(serde_json::json!({ "device_interface_id": null }))?;
-        assert_eq!(null_id.device_interface_id, Some(None));
-
-        let set_id: IpDetailUpdate = serde_json::from_value(serde_json::json!({
-            "device_interface_id": "550e8400-e29b-41d4-a716-446655440000"
-        }))?;
-        let expected = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")
-            .map_err(serde_json::Error::custom)?;
-        assert_eq!(set_id.device_interface_id, Some(Some(expected)));
-        assert!(set_id.validate().is_ok());
-        Ok(())
-    }
-
-    #[test]
-    fn test_ip_detail_update_status_too_long() -> Result<(), serde_json::Error> {
-        let req: IpDetailUpdate = serde_json::from_value(serde_json::json!({
-            "status": "S".repeat(21)
-        }))?;
-        let Err(errors) = req.validate() else {
-            panic!("超长状态应被拒绝");
-        };
-        assert!(errors.errors().contains_key("status"));
-        Ok(())
+    fn test_ip_detail_update_status_required() {
+        // status 必填：PATCH 仅承担状态迁移，缺失字段即载荷非法
+        let result: Result<IpDetailUpdate, _> = serde_json::from_value(serde_json::json!({}));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -431,47 +394,6 @@ mod tests {
             panic!("白名单外状态应被拒绝");
         };
         assert!(errors.errors().contains_key("status"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_ip_detail_update_ip_address_validation() -> Result<(), serde_json::Error> {
-        // 更新路径与创建路径同口径：带掩码 / 非法地址拒绝；合法地址通过
-        let bad: IpDetailUpdate = serde_json::from_value(serde_json::json!({
-            "ip_address": "10.0.0.1/24"
-        }))?;
-        let Err(errors) = bad.validate() else {
-            panic!("带掩码地址应被拒绝");
-        };
-        assert!(errors.errors().contains_key("ip_address"));
-
-        let ok: IpDetailUpdate = serde_json::from_value(serde_json::json!({
-            "ip_address": "10.0.0.1"
-        }))?;
-        assert!(ok.validate().is_ok());
-
-        // 缺省（None）跳过校验
-        let missing: IpDetailUpdate = serde_json::from_value(serde_json::json!({}))?;
-        assert!(missing.validate().is_ok());
-        Ok(())
-    }
-
-    #[test]
-    fn test_ip_detail_update_ip_version_validation() -> Result<(), serde_json::Error> {
-        // ip_version 仅允许 4 / 6（有值才校验）
-        for bad_version in [0i16, 5, -1, 7] {
-            let req: IpDetailUpdate =
-                serde_json::from_value(serde_json::json!({ "ip_version": bad_version }))?;
-            let Err(errors) = req.validate() else {
-                panic!("ip_version={bad_version} 应被拒绝");
-            };
-            assert!(errors.errors().contains_key("ip_version"));
-        }
-        for ok_version in [4i16, 6] {
-            let req: IpDetailUpdate =
-                serde_json::from_value(serde_json::json!({ "ip_version": ok_version }))?;
-            assert!(req.validate().is_ok(), "ip_version={ok_version} 应合法");
-        }
         Ok(())
     }
 

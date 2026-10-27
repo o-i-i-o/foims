@@ -16,8 +16,8 @@ pub struct Workstation {
     pub name: String,
     pub room_id: Uuid,
     pub room_name: Option<String>,
-    /// 管理人员工引用（必填，管理人姓名经员工表联查展示）
-    pub manager_employee_id: Uuid,
+    /// 管理人员工引用（可空：工位未必已指定责任人）
+    pub manager_employee_id: Option<Uuid>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -30,9 +30,9 @@ pub struct WorkstationWithDetails {
     pub name: String,
     pub room_id: Uuid,
     pub room_name: Option<String>,
-    /// 管理人姓名（联查 employees，manager_employee_id NOT NULL + FK 保证存在）
-    pub manager_name: String,
-    pub manager_employee_id: Uuid,
+    /// 管理人姓名（联查 employees；未配管理人的工位为空）
+    pub manager_name: Option<String>,
+    pub manager_employee_id: Option<Uuid>,
     /// IP 明细不从 SQL 映射（列表不携带、详情单独查询后手动填充）
     #[sqlx(skip)]
     pub ips: Vec<IpDetail>,
@@ -51,8 +51,8 @@ pub struct WorkstationCreate {
     ))]
     pub name: String,
     pub room_id: Uuid,
-    /// 管理人（必填，从组织人员中选择；存在性在 handler 内校验）
-    pub manager_employee_id: Uuid,
+    /// 管理人（可空；有值时必须是房间所属组织内员工，存在性与同组织在 handler 内校验）
+    pub manager_employee_id: Option<Uuid>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
@@ -67,8 +67,9 @@ pub struct WorkstationUpdate {
     ))]
     pub name: Option<String>,
     pub room_id: Option<Uuid>,
-    /// 管理人员工引用（缺省不修改；必填字段不支持清空）
-    pub manager_employee_id: Option<Uuid>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空管理人、值则换人（缺省保留原值）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    pub manager_employee_id: Option<Option<Uuid>>,
     /// 双层 Option：null 清空描述
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
@@ -90,8 +91,8 @@ pub struct WorkstationSyncItem {
         message = "server.workstation.validation.name_length"
     ))]
     pub name: String,
-    /// 管理人（必填，从组织人员中选择）
-    pub manager_employee_id: Uuid,
+    /// 管理人（可空，从房间所属组织人员中选择）
+    pub manager_employee_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
@@ -237,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_workstation_create_invalid() -> Result<(), serde_json::Error> {
-        // 空名称 / 超长描述同时拒绝；manager_employee_id 缺失时反序列化直接失败
+        // 空名称 / 超长描述同时拒绝
         let req: WorkstationCreate = serde_json::from_value(serde_json::json!({
             "name": "",
             "room_id": Uuid::new_v4(),
@@ -250,12 +251,13 @@ mod tests {
         assert!(errors.errors().contains_key("name"));
         assert!(errors.errors().contains_key("description"));
 
-        let missing_manager: Result<WorkstationCreate, _> =
-            serde_json::from_value(serde_json::json!({
-                "name": "研发-01",
-                "room_id": Uuid::new_v4()
-            }));
-        assert!(missing_manager.is_err(), "管理人必填，缺失应被拒绝");
+        // 管理人可空：缺省即 None，反序列化与校验都应通过
+        let no_manager: WorkstationCreate = serde_json::from_value(serde_json::json!({
+            "name": "研发-01",
+            "room_id": Uuid::new_v4()
+        }))?;
+        assert_eq!(no_manager.manager_employee_id, None);
+        assert!(no_manager.validate().is_ok());
         Ok(())
     }
 
@@ -444,7 +446,7 @@ mod tests {
             name: "研发-01".to_string(),
             room_id: Uuid::new_v4(),
             room_name: Some("301".to_string()),
-            manager_employee_id: Uuid::new_v4(),
+            manager_employee_id: Some(Uuid::new_v4()),
             description: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -463,8 +465,8 @@ mod tests {
             name: "研发-01".to_string(),
             room_id: Uuid::new_v4(),
             room_name: None,
-            manager_name: "张三".to_string(),
-            manager_employee_id: Uuid::new_v4(),
+            manager_name: Some("张三".to_string()),
+            manager_employee_id: Some(Uuid::new_v4()),
             // ips 为 sqlx(skip) 字段，serde 往返仍保留
             ips: Vec::new(),
             description: None,

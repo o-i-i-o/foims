@@ -4,11 +4,7 @@ export type RoomCreate = { name: string, room_type: string,
 /**
  * 所属组织（必填：房间必须归属组织节点）
  */
-org_id: string, 
-/**
- * 房间管理人（必填：必须属于 org_id 对应组织，后端与触发器双重校验）
- */
-manager_employee_id: string, subnet_ids: Array<string>, 
+org_id: string, subnet_ids: Array<string>, 
 /**
  * 房间总功率上限（瓦，0..=10_000_000；缺省/null=不限制）
  */

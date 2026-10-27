@@ -316,14 +316,11 @@ pub fn clean_snmp_text(value: Option<&str>) -> Option<String> {
 
 /// 归一 MAC：剔除 `:`/`-`/`.`/空格并转大写，返回十六进制串（比较用，分隔符无关）。
 ///
-/// MAC 列在不同写入路径（SNMP 采集大写冒号 / 人工录入小写无分隔）下
-/// 形态不一，所有跨表 MAC 比对（定位、已知集合判定）先经本函数归一。
+/// 权威实现在 `foims_common::net::normalize_mac`（台账写入侧同源使用），
+/// 本函数仅保留历史调用点别名。
 #[must_use]
 pub fn normalize_mac(mac: &str) -> String {
-    mac.chars()
-        .filter(|c| !matches!(c, ':' | '-' | ' ' | '.'))
-        .flat_map(|c| c.to_uppercase())
-        .collect()
+    foims_common::net::normalize_mac(mac)
 }
 
 /// 连通性探测：GET sysDescr，超时取 `params.timeout_secs`（单一超时口径，

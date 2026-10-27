@@ -44,6 +44,7 @@ import CableLinkModal from "../components/cable/CableLinkModal.vue";
 import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
 import CablePrintArea from "../components/cable/CablePrintArea.vue";
 import type { RoomBrief } from "../types/api/contracts";
+import { invalidateDeviceWrite, queryKeys } from "../utils/queryKeys";
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -70,7 +71,7 @@ const { activeTab, switchTab } = useSubTabs({
 // ==================== 网络区域页签 ====================
 
 const regions = usePagedList<NetworkRegion>({
-  tag: "network-regions",
+  tag: queryKeys.networkRegions,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "network-regions"),
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -90,7 +91,7 @@ const networkFilters = reactive({ name: "", region: "", ipv4: "", ipv6: "" });
 const networkFilterParams = reactive({ name: "", region: "", ipv4: "", ipv6: "" });
 
 const networks = usePagedList<Network>({
-  tag: "networks",
+  tag: queryKeys.networks,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "networks"),
   extraKey: computed(() => ({ ...networkFilterParams })),
@@ -132,7 +133,7 @@ watch(networkFilters, () => {
 // ==================== 房间页签 ====================
 
 const rooms = usePagedList<RoomWithNetworks>({
-  tag: "rooms",
+  tag: queryKeys.rooms,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "rooms"),
   // 房间列表默认按名称升序
@@ -150,7 +151,7 @@ const rooms = usePagedList<RoomWithNetworks>({
 // ==================== 机柜页签 ====================
 
 const cabinets = usePagedList<CabinetWithNetworks>({
-  tag: "cabinets",
+  tag: queryKeys.cabinets,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cabinets"),
   // 机柜列表默认按名称升序
@@ -168,7 +169,7 @@ const cabinets = usePagedList<CabinetWithNetworks>({
 // ==================== 设备页签 ====================
 
 const devices = usePagedList<DeviceWithDetails>({
-  tag: "devices",
+  tag: queryKeys.devices,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "devices"),
   // 设备列表默认按名称升序
@@ -186,7 +187,7 @@ const devices = usePagedList<DeviceWithDetails>({
 // ==================== 线路页签 ====================
 
 const cableLinks = usePagedList<CableLinkWithDetails>({
-  tag: "cable-links",
+  tag: queryKeys.cableLinks,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cable-links"),
   // 线路列表不指定排序参数，沿用 usePagedList 默认（created_at 倒序）
@@ -391,7 +392,7 @@ const deleteRegionMutation = useMutation({
   mutationFn: (id: string) => apiDelete(`/api/resources/network-regions/${id}`),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["network-regions"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networkRegions });
       showToast(t("network.region_delete_success"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -404,7 +405,7 @@ const deleteNetworkMutation = useMutation({
   mutationFn: (id: string) => apiDelete(`/api/resources/networks/${id}`),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["networks"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networks });
       showToast(t("network.delete_success"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -417,7 +418,7 @@ const deleteRoomMutation = useMutation({
   mutationFn: (id: string) => apiDelete(`/api/resources/rooms/${id}`),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rooms });
       showToast(t("room.delete_success"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -430,7 +431,7 @@ const deleteCabinetMutation = useMutation({
   mutationFn: (id: string) => apiDelete(`/api/resources/cabinets/${id}`),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["cabinets"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cabinets });
       showToast(t("cabinet.delete_success"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -443,7 +444,8 @@ const deleteDeviceMutation = useMutation({
   mutationFn: (id: string) => apiDelete(`/api/resources/devices/${id}`),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["devices"] });
+      // 删设备会连带删除其网口/IP 与相关连线，并且改变房间与机柜已分配功率
+      invalidateDeviceWrite(queryClient);
       showToast(t("device.delete_success"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -456,7 +458,7 @@ const deleteCableLinkMutation = useMutation({
   mutationFn: (id: string) => apiDelete(`/api/resources/cable-links/${id}`),
   onSuccess: (result) => {
     if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["cable-links"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cableLinks });
       showToast(t("cable_link.delete_success"), "success");
     } else {
       showToast(`${t("common.operation_failed")}: ${result.message}`, "error");
@@ -741,9 +743,6 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable" :class="sortClass(rooms, 'org_name')" @click="onThSort($event, rooms, 'org_name')">
                 {{ t("organization.parent_org") }}
               </th>
-              <th class="sortable" :class="sortClass(rooms, 'manager_name')" @click="onThSort($event, rooms, 'manager_name')">
-                {{ t("room.manager") }}
-              </th>
               <th class="col-center">{{ t("room.workstation_count") }}</th>
               <th class="col-center">{{ t("room.power") }}</th>
               <th class="col-center">{{ t("room.power_supply") }}</th>
@@ -761,19 +760,18 @@ function deviceLocationText(item: DeviceWithDetails): string {
           </thead>
           <tbody>
             <tr v-if="rooms.isError">
-              <td colspan="12" class="text-center">{{ rooms.errorMessage }}</td>
+              <td colspan="11" class="text-center">{{ rooms.errorMessage }}</td>
             </tr>
             <tr v-else-if="rooms.items.length === 0">
-              <td colspan="12" class="text-center">{{ t("common.no_data") }}</td>
+              <td colspan="11" class="text-center">{{ t("common.no_data") }}</td>
             </tr>
             <template v-else>
               <tr v-for="(item, index) in rooms.items" :key="item.id">
                 <td class="index-column">{{ seqIndex(rooms, index) }}</td>
                 <td>{{ item.name }}</td>
                 <td class="col-center">{{ getRoomTypeName(item.room_type) }}</td>
-                <!-- 所属组织与管理人：均为非空外键，联查恒有值 -->
+                <!-- 所属组织：非空外键，联查恒有值 -->
                 <td>{{ item.org_name }}</td>
-                <td>{{ item.manager_name }}</td>
                 <td class="col-center">{{ item.workstation_count ?? "0" }}</td>
                 <!-- 当前功率：该房间全部设备功耗之和（固定以瓦显示） -->
                 <td class="col-center">{{ formatPowerValue(item.allocated_power_watts ?? 0, "W") }}</td>
@@ -1202,12 +1200,13 @@ function deviceLocationText(item: DeviceWithDetails): string {
     />
 
     <!-- 设备编辑弹窗：保存成功后弹窗内先 emit("saved") 再 emit("close")，
-         失效放在 saved 上，仅取消关闭时不触发无谓重查 -->
+         失效放在 saved 上，仅取消关闭时不触发无谓重查。
+         设备写会连带改写网口/IP/连线与房间机柜功率，统一失效整片台账 -->
     <DeviceModal
       v-if="deviceModal.open"
       :device="deviceModal.device"
       @close="deviceModal.open = false"
-      @saved="queryClient.invalidateQueries({ queryKey: ['devices'] })"
+      @saved="invalidateDeviceWrite(queryClient)"
     />
     <DeviceSnmpModal
       v-if="snmpHub.open"
@@ -1231,8 +1230,8 @@ function deviceLocationText(item: DeviceWithDetails): string {
       @close="cableLinkModal.open = false"
       @saved="
         cableLinkModal.open = false;
-        queryClient.invalidateQueries({ queryKey: ['cable-links'] });
-        queryClient.invalidateQueries({ queryKey: ['devices'] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.cableLinks });
+        queryClient.invalidateQueries({ queryKey: queryKeys.devices });
       "
     />
     <CableLabelPrintModal

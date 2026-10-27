@@ -294,9 +294,10 @@ async fn dispatch_due_user_tasks(
 ) {
     let due: Vec<crate::models::ScheduledTask> =
         match sqlx::query_as(
-            "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at
+            "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at
              FROM scheduled_tasks
-             WHERE enabled = true AND next_run_at IS NOT NULL AND next_run_at <= NOW()
+             WHERE enabled = true AND NOT is_system
+               AND next_run_at IS NOT NULL AND next_run_at <= NOW()
              ORDER BY next_run_at ASC",
         )
         .fetch_all(&pool)

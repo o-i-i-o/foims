@@ -387,6 +387,9 @@ pub struct AgentConfig {
     /// host_metrics_history 保留天数（清理任务按此删除旧行）。
     #[serde(default = "default_agent_history_retention_days")]
     pub history_retention_days: u32,
+    /// snmp_events 保留天数（同一清理任务按此删除旧事件）。
+    #[serde(default = "default_agent_history_retention_days")]
+    pub snmp_event_retention_days: u32,
     /// 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline。
     #[serde(default = "default_agent_offline_factor")]
     pub offline_factor: u32,
@@ -445,6 +448,7 @@ impl Default for AgentConfig {
             collect_interval_secs: default_agent_collect_interval(),
             max_report_bytes: default_agent_max_report_bytes(),
             history_retention_days: default_agent_history_retention_days(),
+            snmp_event_retention_days: default_agent_history_retention_days(),
             offline_factor: default_agent_offline_factor(),
             use_public_url: false,
             report_url_override: String::new(),

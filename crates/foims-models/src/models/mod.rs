@@ -110,30 +110,12 @@ pub fn validate_ip_address(ip: &str) -> Result<(), ValidationError> {
     Ok(())
 }
 
-/// Option 字段版 IP 地址校验（有值才校验，None 跳过）
-pub fn validate_ip_address_option(ip: &&String) -> Result<(), ValidationError> {
-    validate_ip_address(ip)
-}
-
-/// IP 版本仅允许 4 或 6（INET 写入侧与 ip_version 语义对齐）。
-/// 数值字段（含 Option/双 Option 包裹）由 validator derive 按值传入
-pub fn validate_ip_version_option(version: i16) -> Result<(), ValidationError> {
-    if version == 4 || version == 6 {
-        Ok(())
-    } else {
-        Err(ValidationError::new("invalid_ip_version"))
-    }
-}
-
-/// MAC 地址格式校验：冒号/横线分隔的 6 组十六进制（如 aa:bb:cc:dd:ee:ff）
+/// MAC 地址格式校验：分隔符无关，归一后必须恰为 12 位十六进制。
+///
+/// 接受 `aa:bb:cc:dd:ee:ff` / `AA-BB-CC-DD-EE-FF` / `aabb.ccdd.eeff` /
+/// `aabbccddeeff`；与写入侧归一（`foims_common::net::normalize_mac`）同口径。
 pub fn validate_mac_address_string(value: &str) -> Result<(), ValidationError> {
-    let normalized = value.replace('-', ":");
-    let parts: Vec<&str> = normalized.split(':').collect();
-    let valid = parts.len() == 6
-        && parts
-            .iter()
-            .all(|p| !p.is_empty() && p.len() <= 2 && p.bytes().all(|b| b.is_ascii_hexdigit()));
-    if valid {
+    if foims_common::net::valid_mac(value) {
         Ok(())
     } else {
         Err(ValidationError::new("server.device.validation.mac_format"))
@@ -248,11 +230,6 @@ pub fn validate_ip_status_string(status: &str) -> Result<(), ValidationError> {
         "active" | "inactive" | "reserved" => Ok(()),
         _ => Err(ValidationError::new("server.ip.validation.status_invalid")),
     }
-}
-
-/// Option 字段版 IP 状态白名单（有值才校验，None 跳过）
-pub fn validate_ip_status_option(status: &&String) -> Result<(), ValidationError> {
-    validate_ip_status_string(status)
 }
 
 /// DeviceUpdate.hostname（VARCHAR(100)）
@@ -637,30 +614,6 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_ip_version_option() {
-        // 仅 4 / 6 合法（数值字段按值传入）
-        assert!(validate_ip_version_option(4i16).is_ok());
-        assert!(validate_ip_version_option(6i16).is_ok());
-        for bad in [0i16, 5, -1, 7] {
-            assert!(
-                validate_ip_version_option(bad).is_err(),
-                "版本 {bad} 应被拒绝"
-            );
-        }
-    }
-
-    #[test]
-    fn test_validate_ip_address_option_delegates() {
-        let ok_value = String::from("192.168.1.1");
-        let ok_ref: &String = &ok_value;
-        assert!(validate_ip_address_option(&ok_ref).is_ok());
-
-        let bad_value = String::from("10.0.0.1/24");
-        let bad_ref: &String = &bad_value;
-        assert!(validate_ip_address_option(&bad_ref).is_err());
-    }
-
-    #[test]
     fn test_validate_password_max_bytes() {
         // 恰 72 字节合法（bcrypt 输入上限），73 字节拒绝
         assert!(validate_password_max_bytes(&"a".repeat(72)).is_ok());
@@ -697,17 +650,17 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_ip_status_option_whitelist() {
+    fn test_validate_ip_status_string_whitelist() {
         // 白名单：active / inactive / reserved
         for ok_status in ["active", "inactive", "reserved"] {
             assert!(
-                validate_ip_status_option(&&ok_status.to_string()).is_ok(),
+                validate_ip_status_string(ok_status).is_ok(),
                 "状态 {ok_status} 应合法"
             );
         }
         for bad_status in ["", "enabled", "ACTIVE"] {
             assert!(
-                validate_ip_status_option(&&bad_status.to_string()).is_err(),
+                validate_ip_status_string(bad_status).is_err(),
                 "状态 {bad_status} 应被拒绝"
             );
         }

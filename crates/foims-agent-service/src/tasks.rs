@@ -132,9 +132,15 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
             count = result.rows_affected()
         );
 
-        // 同任务内追加清理 snmp_events：保留天数读 system_configs
-        // （config_type='agent', key='snmp_event_retention_days'，缺省 30，范围 1-3650）
-        let snmp_days = load_snmp_event_retention_days(&ctx.pool).await;
+        // 同任务内追加清理 snmp_events：保留天数与 host_metrics_history 同源，
+        // 均取任务 config（注册侧由 agent 配置段注入，缺省 30，范围 1-3650），
+        // 不再另读 system_configs，避免同一业务参数两处定义
+        let snmp_days = ctx
+            .config
+            .get("snmp_event_retention_days")
+            .and_then(Value::as_i64)
+            .filter(|d| (1..=MAX_RETENTION_DAYS).contains(d))
+            .unwrap_or(DEFAULT_RETENTION_DAYS);
         let snmp_result = sqlx::query(
             r"DELETE FROM snmp_events
                WHERE occurred_at < NOW() - make_interval(days => $1)",
@@ -153,28 +159,6 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
         );
 
         Ok("server.task.agent_history_cleanup_completed".to_string())
-    }
-}
-
-/// 读取 SNMP 事件保留天数（system_configs）：缺失/非法/越界回落缺省 30。
-/// 配置存在但解析失败或越界时记一条告警（不静默伪装成合法值）。
-async fn load_snmp_event_retention_days(pool: &sqlx::PgPool) -> i64 {
-    let raw: Option<String> = sqlx::query_scalar(
-        "SELECT value FROM system_configs WHERE config_type = 'agent' AND key = 'snmp_event_retention_days'",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
-    match raw {
-        Some(value) => match value.parse::<i64>() {
-            Ok(days) if (1..=MAX_RETENTION_DAYS).contains(&days) => days,
-            _ => {
-                foims_common::log_warn!("server.task.snmp_event_retention_invalid", value = value);
-                DEFAULT_RETENTION_DAYS
-            }
-        },
-        None => DEFAULT_RETENTION_DAYS,
     }
 }
 

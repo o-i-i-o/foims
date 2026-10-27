@@ -1,4 +1,8 @@
 //! 工位（workstations）表结构创建。
+//!
+//! 工位是「组织 → 房间 → 工位 → 设备」链上的责任人载体：管理人可空（新建工位
+//! 时未必已指定），一旦指定则必须与房间同属一个组织（触发器
+//! `trg_validate_workstation_manager_org`）。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -6,7 +10,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             name VARCHAR(50) NOT NULL,
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
-            manager_employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+            manager_employee_id UUID REFERENCES employees(id) ON DELETE RESTRICT,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

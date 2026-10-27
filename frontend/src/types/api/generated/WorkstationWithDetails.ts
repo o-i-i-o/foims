@@ -3,9 +3,9 @@ import type { IpDetail } from "./IpDetail";
 
 export type WorkstationWithDetails = { id: string, name: string, room_id: string, room_name: string | null, 
 /**
- * 管理人姓名（联查 employees，manager_employee_id NOT NULL + FK 保证存在）
+ * 管理人姓名（联查 employees；未配管理人的工位为空）
  */
-manager_name: string, manager_employee_id: string, 
+manager_name: string | null, manager_employee_id: string | null, 
 /**
  * IP 明细不从 SQL 映射（列表不携带、详情单独查询后手动填充）
  */

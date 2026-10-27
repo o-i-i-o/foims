@@ -1,26 +1,40 @@
 <script setup lang="ts">
 /**
- * IP 详情页：只读列表展示各设备网口的 IP 观测数据，11 列（位置/设备/类型/子网/IP/MAC/端口主机名/
- * 状态/最后在线/创建时间），4 列表头搜索弹层（防抖 300ms 服务端过滤），
- * MAC 列头「拉取」按钮打开拉取 MAC 弹窗。默认按 updated_at 倒序、每页
- * 100 条，页大小可选 10/20/50/100。
+ * IP 详情页：展示各设备网口的 IP 观测数据，11 列（位置/设备/类型/子网/IP/MAC/
+ * 端口主机名/状态/最后在线/创建时间）+ 写角色可见的操作列（人工设置状态，
+ * reserved 保留位）。4 列表头搜索弹层（防抖 300ms 服务端过滤），MAC 列头
+ * 「拉取」按钮打开拉取 MAC 弹窗。默认按 updated_at 倒序、每页 100 条，
+ * 页大小可选 10/20/50/100。
  */
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
-import { formatDateTime } from "../utils/formatter";
+import { formatDateTime, getStatusText } from "../utils/formatter";
 import { getDeviceTypeName } from "../config/deviceOptions";
+import { isSectionReadonly } from "../utils/roleCapabilities";
 import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList";
+import { queryKeys } from "../utils/queryKeys";
 import type { IpDetailWithNames } from "../types/api/generated/IpDetailWithNames";
 import Pagination from "../components/Pagination.vue";
 import ThSearch from "../components/ThSearch.vue";
 import PullMacModal from "../components/ip/PullMacModal.vue";
+import IpStatusModal from "../components/ip/IpStatusModal.vue";
 
 // 列表行类型：generated IpDetailWithNames（/api/resources/ip 行形状）
 type IpRow = IpDetailWithNames;
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
+
+/** 状态人工维护仅 admin/user 可写（sysadmin/secadmin/auditor 只读） */
+const readonly = isSectionReadonly("ip");
+/** 表格列数：操作列对只读角色整列不渲染，colspan 跟随 */
+const columnCount = readonly ? 11 : 12;
+
+/** 状态配色：reserved 单独一档，避免与停用同色 */
+function statusClass(status: string): string {
+  return status === "active" || status === "reserved" ? `status-${status}` : "status-inactive";
+}
 
 // 位置列取址优先级：工位 > 机柜 > 观测设备
 function locationText(row: IpRow): string {
@@ -38,7 +52,7 @@ const ipFilters = reactive({ device_name: "", device_type: "", network: "", ip_a
 const ipFilterParams = reactive({ device_name: "", device_type: "", network: "", ip_address: "" });
 
 const ipList = usePagedList<IpRow>({
-  tag: "ip",
+  tag: queryKeys.ip,
   defaultPageSize: 100,
   // 列表默认按最后在线时间倒序
   defaultSortBy: "updated_at",
@@ -83,7 +97,17 @@ watch(ipFilters, () => {
 const pullMacOpen = ref(false);
 
 function onPullSaved() {
-  queryClient.invalidateQueries({ queryKey: ["ip"] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.ip });
+}
+
+// ==================== 状态维护弹窗 ====================
+
+/** 当前正在维护状态的行；null 表示弹窗关闭 */
+const statusEditing = ref<IpRow | null>(null);
+
+function onStatusSaved() {
+  // 状态参与排序与筛选，直接失效重取而非就地改写行数据
+  queryClient.invalidateQueries({ queryKey: queryKeys.ip });
 }
 </script>
 
@@ -129,14 +153,15 @@ function onPullSaved() {
             <th class="sortable col-center" :class="sortClass(ipList, 'created_at')" @click="onThSort($event, ipList, 'created_at')">
               {{ t("common.created_at") }}
             </th>
+            <th v-if="!readonly" class="col-center">{{ t("common.actions") }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="ipList.isError">
-            <td colspan="11" class="text-center">{{ ipList.errorMessage }}</td>
+            <td :colspan="columnCount" class="text-center">{{ ipList.errorMessage }}</td>
           </tr>
           <tr v-else-if="ipList.items.length === 0">
-            <td colspan="11" class="text-center">{{ t("ip.no_ip_data") }}</td>
+            <td :colspan="columnCount" class="text-center">{{ t("ip.no_ip_data") }}</td>
           </tr>
           <template v-else>
             <tr v-for="(row, index) in ipList.items" :key="row.id">
@@ -149,10 +174,15 @@ function onPullSaved() {
               <td>{{ row.mac_address || "-" }}</td>
               <td>{{ row.hostname || "-" }}</td>
               <td class="col-center">
-                <span class="status-badge" :class="row.status === 'active' ? 'status-active' : 'status-inactive'">{{ row.status }}</span>
+                <span class="status-badge" :class="statusClass(row.status)">{{ getStatusText(row.status) }}</span>
               </td>
               <td class="col-center">{{ formatDateTime(row.last_seen) }}</td>
               <td class="col-center">{{ formatDateTime(row.created_at) }}</td>
+              <td v-if="!readonly" class="col-center">
+                <button type="button" class="btn btn-secondary btn-sm" @click="statusEditing = row">
+                  {{ t("ip.status_edit") }}
+                </button>
+              </td>
             </tr>
           </template>
         </tbody>
@@ -171,6 +201,14 @@ function onPullSaved() {
       v-if="pullMacOpen"
       @close="pullMacOpen = false"
       @saved="onPullSaved"
+    />
+    <IpStatusModal
+      v-if="statusEditing"
+      :ip-id="statusEditing.id"
+      :ip-address="statusEditing.ip_address"
+      :status="statusEditing.status"
+      @close="statusEditing = null"
+      @saved="onStatusSaved"
     />
   </section>
 </template>

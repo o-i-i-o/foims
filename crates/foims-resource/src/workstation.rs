@@ -80,8 +80,9 @@ pub async fn get_workstations<P: DbProvider>(
         ("name", "desc") => "ORDER BY w.name DESC",
         ("room_name", "desc") => "ORDER BY room_name DESC, w.name ASC",
         ("room_name", _) => "ORDER BY room_name ASC, w.name ASC",
-        ("manager_name", "desc") => "ORDER BY manager_name DESC, w.name ASC",
-        ("manager_name", _) => "ORDER BY manager_name ASC, w.name ASC",
+        // 管理人可空：未指定的工位无论升降序都排在末尾
+        ("manager_name", "desc") => "ORDER BY manager_name DESC NULLS LAST, w.name ASC",
+        ("manager_name", _) => "ORDER BY manager_name ASC NULLS LAST, w.name ASC",
         ("created_at", "desc") => "ORDER BY w.created_at DESC",
         ("created_at", _) => "ORDER BY w.created_at ASC",
         _ => "ORDER BY w.name ASC",
@@ -89,13 +90,13 @@ pub async fn get_workstations<P: DbProvider>(
 
     let mut count_builder = QueryBuilder::<Postgres>::new(
         "SELECT COUNT(*) FROM workstations w
-        JOIN employees e ON w.manager_employee_id = e.id",
+        LEFT JOIN employees e ON w.manager_employee_id = e.id",
     );
     let mut data_builder = QueryBuilder::<Postgres>::new(format!(
         "SELECT {WORKSTATION_COLUMNS}
         FROM workstations w
         JOIN rooms r ON w.room_id = r.id
-        JOIN employees e ON w.manager_employee_id = e.id"
+        LEFT JOIN employees e ON w.manager_employee_id = e.id"
     ));
 
     push_workstation_filters(
@@ -141,7 +142,8 @@ pub async fn create_workstation<P: DbProvider>(
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     // 房间空间属性（组织 + 房型）与管理人员工同组织校验：
-    // 工位只能放在办公类空间，管理人必须属于房间所属组织
+    // 工位只能放在办公类空间；管理人可空（未指定责任人的工位不参与校验），
+    // 一旦指定则必须属于房间所属组织
     let space = crate::helpers::load_room_space(&mut *tx, req.room_id).await?;
     if !crate::helpers::room_allows_workstation(&space.room_type) {
         return Err(AppError::Validation(msg(
@@ -239,7 +241,7 @@ async fn fetch_workstation_base(
         "SELECT {WORKSTATION_COLUMNS}
         FROM workstations w
         JOIN rooms r ON w.room_id = r.id
-        JOIN employees e ON w.manager_employee_id = e.id
+        LEFT JOIN employees e ON w.manager_employee_id = e.id
         WHERE w.id = "
     ));
     qb.push_bind(id);
@@ -292,7 +294,7 @@ pub async fn get_workstation<P: DbProvider>(
     ))
 }
 
-/// 更新工位（名称/房间/管理人缺省保留旧值，管理人从组织人员中选择；
+/// 更新工位（名称/房间/管理人缺省保留旧值，管理人可显式清空；
 /// 房间变更时同事务清理工位布局，布局坐标随房间失效）。
 pub async fn update_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
@@ -320,7 +322,8 @@ pub async fn update_workstation<P: DbProvider>(
         .await?;
 
     // 空间属性（缺省沿用现值）与管理人同组织校验：换房间时房型必须
-    // 容纳工位，且管理人必须属于新房间组织（缺省沿用现管理人）
+    // 容纳工位；管理人三态（缺省沿用现值 / null 清空 / 值换人）中的有效值
+    // 必须属于最终生效房间的组织
     let effective_room_id = req.room_id.unwrap_or(old_room_id);
     let space = crate::helpers::load_room_space(&mut *tx, effective_room_id).await?;
     if !crate::helpers::room_allows_workstation(&space.room_type) {
@@ -328,7 +331,7 @@ pub async fn update_workstation<P: DbProvider>(
             "server.room.workstation_not_allowed",
         )));
     }
-    let effective_manager_id: Uuid = match req.manager_employee_id {
+    let effective_manager_id: Option<Uuid> = match req.manager_employee_id {
         Some(manager_employee_id) => manager_employee_id,
         None => {
             sqlx::query_scalar("SELECT manager_employee_id FROM workstations WHERE id = $1")
@@ -362,8 +365,9 @@ pub async fn update_workstation<P: DbProvider>(
     }
 
     // 三态更新（QueryBuilder 动态拼接，None 不进 SET）：
-    // - name/room_id/manager_employee_id：单层 Option，缺省保留旧值
-    //   （manager_employee_id 为必填字段，不支持清空）
+    // - name/room_id：单层 Option，缺省保留旧值
+    // - manager_employee_id：双层 Option，Some(None) SET NULL（清空管理人）、
+    //   Some(Some(id)) 换人、缺省保留旧值
     // - description：双层 Option，Some(None) SET NULL、Some(Some(v)) SET v
     let mut builder = QueryBuilder::new("UPDATE workstations SET updated_at = ");
     builder.push_bind(Utc::now());
@@ -398,12 +402,20 @@ pub async fn update_workstation<P: DbProvider>(
             AppError::from(e)
         })?;
 
-    // 房间变更时布局坐标随房间失效：同一事务内清理工位布局
+    // 房间变更时布局坐标随房间失效：同一事务内清理工位布局；
+    // 工位上的设备跟随换房（设备位置不变量 I1）：父侧 workstations 已落库，
+    // 设备行的 BEFORE 触发器回查的就是新房间；同时清理不再归属新房间的 IP
     if req.room_id.is_some_and(|room_id| room_id != old_room_id) {
         sqlx::query("DELETE FROM workstation_layouts WHERE workstation_id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await?;
+        crate::helpers::sync_devices_room(
+            &mut tx,
+            crate::helpers::DeviceScope::Workstation(id),
+            effective_room_id,
+        )
+        .await?;
     }
 
     let mut result = fetch_workstation_base(&mut *tx, id)

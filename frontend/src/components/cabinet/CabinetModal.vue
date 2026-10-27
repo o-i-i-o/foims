@@ -20,6 +20,7 @@ import type { Paged } from "../../types/api";
 import { apiGet, apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
 import { readPowerWattsInput } from "../../utils/power";
+import { queryKeys } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 
@@ -222,7 +223,11 @@ const saveMutation = useMutation({
     return cabinetId;
   },
   onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["cabinets"] });
+    // 机柜换房会连带同步柜内设备的 room_id（后端同一事务完成），
+    // 故设备列表与房间的已分配功率同样需要重取
+    queryClient.invalidateQueries({ queryKey: queryKeys.cabinets });
+    queryClient.invalidateQueries({ queryKey: queryKeys.devices });
+    queryClient.invalidateQueries({ queryKey: queryKeys.rooms });
     showToast(t("cabinet.save_success"), "success");
     emit("saved");
     emit("close");

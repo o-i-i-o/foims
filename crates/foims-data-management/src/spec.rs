@@ -42,11 +42,8 @@ pub enum Target {
     Cidr,
     /// 本列值为员工姓名，在同组织内解析（员工姓名仅组织内唯一，
     /// uq_employees_org_name）；组织取本行 `room_name` 所指房间的组织。
-    /// 用于房间子资源（workstations）的管理人。
+    /// 用于房间子资源（workstations）的管理人（可为空：空单元落 NULL）。
     EmployeeInRoomOrg,
-    /// 本列值为员工姓名，在同组织内解析；组织取本行 `org_path` 解析出的
-    /// 组织。用于 rooms 自身的管理人。
-    EmployeeInPathOrg,
     /// 本列值为 "房间/名称"，指向 workstations 或 cabinets。
     RoomScoped { table: &'static str },
     /// 本列值为 "房间/机柜/机位名"，指向 positions。
@@ -146,12 +143,6 @@ pub const TABLE_SPECS: &[TableSpec] = &[
                 db: "org_id",
                 target: Target::OrgPath,
             },
-            // 房间管理人为必填外键：CSV 写员工姓名，按本行组织路径消歧
-            Col::Ref {
-                csv: "manager",
-                db: "manager_employee_id",
-                target: Target::EmployeeInPathOrg,
-            },
             Col::Plain("total_power_watts"),
             Col::Plain("description"),
         ],
@@ -169,8 +160,8 @@ pub const TABLE_SPECS: &[TableSpec] = &[
                 },
             },
             Col::Plain("name"),
-            // 管理人为必填外键：CSV 写员工姓名，按本行房间的组织消歧
-            // （NOT NULL 列空值由导入端 required_field_missing 拦截）
+            // 管理人为可空外键：CSV 写员工姓名，按本行房间的组织消歧；
+            // 空单元落 NULL（未指定责任人的工位），非空时必须是本组织员工
             Col::Ref {
                 csv: "manager",
                 db: "manager_employee_id",

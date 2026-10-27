@@ -11,6 +11,7 @@ import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../../api/client";
 import { usePagedList, seqIndex } from "../../composables/usePagedList";
+import { queryKeys } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import Pagination from "../Pagination.vue";
 import type { SnmpEvent } from "../../types/api/generated/SnmpEvent";
@@ -55,7 +56,7 @@ const extraKey = computed(() => ({
 }));
 
 const list = usePagedList<SnmpEvent>({
-  tag: "snmp-events",
+  tag: queryKeys.snmpEvents,
   defaultPageSize: 20,
   defaultSortBy: "occurred_at",
   defaultSortOrder: "desc",
@@ -86,7 +87,7 @@ const list = usePagedList<SnmpEvent>({
 // ==================== 设备下拉与名称映射 ====================
 
 const devicesQuery = useQuery({
-  queryKey: ["snmp-events-devices"],
+  queryKey: queryKeys.snmpEventDevices,
   queryFn: async () => {
     const result = await apiGet<Paged<DeviceWithDetails>>(
       `/api/resources/devices?${new URLSearchParams({ page: "1", page_size: "500", sort_by: "name", sort_order: "asc" })}`

@@ -17,6 +17,7 @@ import { apiGet, apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
 import { DEVICE_TYPE_OPTIONS } from "../../config/deviceOptions";
 import { readPowerWattsInput } from "../../utils/power";
+import { invalidateDeviceWrite } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import NetworkCardEditor from "./NetworkCardEditor.vue";
@@ -635,7 +636,8 @@ const saveMutation = useMutation({
     return result.data;
   },
   onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["devices"] });
+    // 保存差异同步会改写网口/IP/连线并可能调整房间与机柜功率，相关列表一并失效
+    invalidateDeviceWrite(queryClient);
     showToast(t("device.save_success"), "success");
     emit("saved");
     emit("close");

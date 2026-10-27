@@ -6,14 +6,14 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 
 use crate::helpers::{validate_ip_in_subnet, validate_network_in_room};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use foims_auth::meta::{RequestMeta, log_op_best_effort};
 use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppMessage, log_error, log_info, log_warn, msg};
-use foims_models::{IpDetail, IpDetailCreate, IpDetailWithNames};
+use foims_models::{IpDetail, IpDetailCreate, IpDetailUpdate, IpDetailWithNames};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -427,6 +427,48 @@ pub async fn create_device_ip<P: DbProvider>(
     Ok(foims_common::ok_json(mapping, "server.ip.created"))
 }
 
+/// 人工维护 IP 状态（PATCH /api/resources/ip/{id}）。
+///
+/// 地址、网口归属与子网迁移由设备网卡同步维护（`IpSyncItem.subnet_id` 路径），
+/// 此处只承担人工治理：自动判活只翻转 active/inactive，人工置为 reserved
+/// 后判活与陈旧同步都会跳过该地址，因此这是「保留地址」的唯一人工入口。
+pub async fn update_ip_detail<P: DbProvider>(
+    State(state): State<Arc<P>>,
+    Path(id): Path<Uuid>,
+    meta: RequestMeta,
+    AppJson(req): AppJson<IpDetailUpdate>,
+) -> Result<Response, AppError> {
+    req.validate()?;
+
+    // updated_at 由 trg_interface_ips_updated_at 触发器维护，不在此显式赋值
+    let updated: Option<(String, DateTime<Utc>)> = sqlx::query_as(
+        "UPDATE interface_ips SET status = $2 WHERE id = $1 RETURNING status, updated_at",
+    )
+    .bind(id)
+    .bind(&req.status)
+    .fetch_optional(&state.pool()?.get_conn())
+    .await?;
+
+    let (status, updated_at) =
+        updated.ok_or_else(|| AppError::NotFound(msg("server.ip.not_found").with("id", id)))?;
+
+    let details = serde_json::json!({ "status": status });
+    log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "update_ip_status",
+        "ip",
+        Some(&id),
+        &details,
+    )
+    .await;
+
+    Ok(foims_common::ok_json(
+        serde_json::json!({ "id": id, "status": status, "updated_at": updated_at }),
+        "server.ip.updated",
+    ))
+}
+
 struct MacSyncResult {
     updated_count: usize,
     unchanged_count: usize,
@@ -673,16 +715,22 @@ async fn sync_switch_macs(
     }
 
     for (iface_id, iface) in &interfaces {
+        // MAC 比对与落库统一归一：观测侧与台账侧书写形态（大小写/分隔符）
+        // 不一致时，裸字符串比对会把同一物理 MAC 当成新值写入并误报冲突
+        let mac_key = foims_common::net::normalize_mac(&iface.new_mac);
+        let mac_store = foims_common::net::canonical_mac(&iface.new_mac);
+
         // MAC 冲突检测：同一 MAC 已被其他设备的网口使用则跳过
         let mac_conflict: Option<String> = sqlx::query_scalar(
             r"SELECT host(i.ip_address) FROM interface_ips i
                JOIN device_interfaces di ON i.device_interface_id = di.id
-               WHERE di.mac_address = $1
-               AND di.device_id != $2
-               AND di.id != $3
+               WHERE di.mac_address IS NOT NULL
+                 AND translate(upper(di.mac_address), ':-. ', '') = $1
+                 AND di.device_id != $2
+                 AND di.id != $3
                LIMIT 1",
         )
-        .bind(&iface.new_mac)
+        .bind(&mac_key)
         .bind(iface.device_id)
         .bind(iface_id)
         .fetch_optional(&mut *tx)
@@ -715,29 +763,27 @@ async fn sync_switch_macs(
                        WHERE id = $2
                          AND NOT EXISTS (
                             SELECT 1 FROM device_interfaces di2
-                            WHERE di2.mac_address = $1
+                            WHERE di2.mac_address IS NOT NULL
+                              AND translate(upper(di2.mac_address), ':-. ', '') = $4
                               AND di2.device_id != $3
                               AND di2.id != $2
                          )",
                 )
-                .bind(&iface.new_mac)
+                .bind(&mac_store)
                 .bind(iface_id)
                 .bind(iface.device_id)
+                .bind(&mac_key)
                 .execute(&mut *tx)
                 .await?;
                 if written.rows_affected() == 0 {
-                    log_warn!("log.ip.mac_conflict", mac = iface.new_mac, ip = "");
+                    log_warn!("log.ip.mac_conflict", mac = mac_store, ip = "");
                     skipped_count += iface.observed_ip_ids.len();
                     continue;
                 }
                 updated_count += iface.observed_ip_ids.len();
-                log_info!(
-                    "log.ip.mac_written",
-                    interface = iface_id,
-                    mac = iface.new_mac
-                );
+                log_info!("log.ip.mac_written", interface = iface_id, mac = mac_store);
             }
-            Some(old) if old == iface.new_mac => {
+            Some(old) if foims_common::net::normalize_mac(old) == mac_key => {
                 unchanged_count += iface.observed_ip_ids.len();
             }
             Some(old) => {
@@ -747,18 +793,20 @@ async fn sync_switch_macs(
                        WHERE id = $2
                          AND NOT EXISTS (
                             SELECT 1 FROM device_interfaces di2
-                            WHERE di2.mac_address = $1
+                            WHERE di2.mac_address IS NOT NULL
+                              AND translate(upper(di2.mac_address), ':-. ', '') = $4
                               AND di2.device_id != $3
                               AND di2.id != $2
                          )",
                 )
-                .bind(&iface.new_mac)
+                .bind(&mac_store)
                 .bind(iface_id)
                 .bind(iface.device_id)
+                .bind(&mac_key)
                 .execute(&mut *tx)
                 .await?;
                 if written.rows_affected() == 0 {
-                    log_warn!("log.ip.mac_conflict", mac = iface.new_mac, ip = "");
+                    log_warn!("log.ip.mac_conflict", mac = mac_store, ip = "");
                     skipped_count += iface.observed_ip_ids.len();
                     continue;
                 }

@@ -124,6 +124,13 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
                 .with("param", "agent.history_retention_days (at least 1)"),
         ));
     }
+    // SNMP 事件保留期与清理任务上限同口径（1-3650）：0 会删光全部事件
+    if agent.snmp_event_retention_days == 0 || agent.snmp_event_retention_days > 3650 {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param")
+                .with("param", "agent.snmp_event_retention_days (1-3650)"),
+        ));
+    }
     if agent.offline_factor < 2 {
         return Err(AppError::Validation(
             msg("server.common.invalid_param").with("param", "agent.offline_factor (at least 2)"),

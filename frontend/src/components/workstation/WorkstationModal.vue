@@ -128,11 +128,6 @@ function submit(): void {
     showToast(t("workstation.room_required"), "warning");
     return;
   }
-  // 管理人必填：从组织人员中选择
-  if (!form.managerId) {
-    showToast(t("workstation.manager_placeholder"), "warning");
-    return;
-  }
 
   saving.value = true;
 
@@ -140,10 +135,11 @@ function submit(): void {
 }
 
 async function submitSave(): Promise<void> {
+  // 管理人可空：空串落库为 NULL（更新时即为“清空管理人”）
   const workstationData: WorkstationCreate = {
     name: form.name.trim(),
     room_id: form.roomId,
-    manager_employee_id: form.managerId,
+    manager_employee_id: form.managerId || null,
     description: form.description.trim() || null
   };
 
@@ -209,7 +205,7 @@ async function submitSave(): Promise<void> {
         <div class="form-group">
           <label for="workstation-manager">{{ t("workstation.manager") }}</label>
           <select id="workstation-manager" v-model="form.managerId" autocomplete="off">
-            <option value="" disabled>{{ t("workstation.manager_placeholder") }}</option>
+            <option value="">{{ t("workstation.manager_unset") }}</option>
             <option v-for="emp in employeeOptions" :key="emp.id" :value="emp.id">
               {{ emp.name }}
             </option>

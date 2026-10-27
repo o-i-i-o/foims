@@ -2,6 +2,6 @@
 
 export type WorkstationBrief = { id: string, name: string, 
 /**
- * 管理人姓名（联查 employees，manager_employee_id NOT NULL + FK 保证存在）
+ * 管理人姓名（未配管理人的工位为空）
  */
-manager_name: string, manager_employee_id: string, };
+manager_name: string | null, manager_employee_id: string | null, };

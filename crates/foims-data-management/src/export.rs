@@ -299,11 +299,9 @@ fn ref_to_csv(ctx: &NameContext, target: &Target, row: &Value, db_col: &str) -> 
         Target::Cidr => ctx.cidrs.get(id).map(|(_, n)| n.clone()).ok_or_else(|| {
             DataError::Internal(msg("server.import_export.name_resolve_failed").with("id", id))
         })?,
-        Target::EmployeeInRoomOrg | Target::EmployeeInPathOrg => {
-            ctx.employees.get(id).cloned().ok_or_else(|| {
-                DataError::Internal(msg("server.import_export.name_resolve_failed").with("id", id))
-            })?
-        }
+        Target::EmployeeInRoomOrg => ctx.employees.get(id).cloned().ok_or_else(|| {
+            DataError::Internal(msg("server.import_export.name_resolve_failed").with("id", id))
+        })?,
         Target::RoomScoped { table } => ctx
             .room_scoped
             .get(*table)

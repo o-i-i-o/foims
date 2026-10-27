@@ -228,6 +228,12 @@ pub async fn create_device_interface<P: DbProvider>(
 
     let nic_id = resolve_nic_id(&mut tx, device_id, &req.name, req.nic_id).await?;
 
+    // MAC 归一为规范形态并做全局唯一预检：同一物理网卡只允许一个网口
+    let mac_address = crate::helpers::normalize_mac_input(req.mac_address.as_deref())?;
+    if let Some(mac) = mac_address.as_deref() {
+        crate::helpers::ensure_mac_available(&mut *tx, mac, None).await?;
+    }
+
     let id = Uuid::new_v4();
     let now = Utc::now();
 
@@ -244,7 +250,7 @@ pub async fn create_device_interface<P: DbProvider>(
     .bind(&req.name)
     .bind(physical_type)
     .bind(interface_role)
-    .bind(&req.mac_address)
+    .bind(&mac_address)
     .bind(req.vlan_id)
     .bind(&req.description)
     .bind(port_type)
@@ -255,7 +261,22 @@ pub async fn create_device_interface<P: DbProvider>(
     .bind(now)
     .bind(now)
     .execute(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| {
+        // 唯一约束撞车：MAC 表达式索引说明 MAC 已占用，其余为同设备重名
+        if let sqlx::Error::Database(ref db_err) = e
+            && db_err.is_unique_violation()
+        {
+            if db_err.constraint() == Some(crate::helpers::MAC_UNIQUE_INDEX) {
+                return AppError::Conflict(
+                    msg("server.device.interface.mac_exists")
+                        .with("mac", mac_address.clone().unwrap_or_default()),
+                );
+            }
+            return AppError::Conflict(msg("server.device.interface.name_exists"));
+        }
+        AppError::from(e)
+    })?;
 
     let data =
         sqlx::query_as::<_, DeviceInterface>("SELECT * FROM device_interfaces WHERE id = $1")
@@ -341,6 +362,18 @@ pub async fn update_device_interface<P: DbProvider>(
         validate_port_status(status)?;
     }
 
+    let mut tx = state.pool()?.get_conn().begin().await?;
+
+    // MAC 三态：缺省不修改；Some(None) 显式置空；Some(Some(v)) 归一后落库。
+    // 归一与唯一预检放同一事务，避开预检-写入窗口的形态差异误报
+    let mac_update: Option<Option<String>> = match &req.mac_address {
+        Some(raw) => Some(crate::helpers::normalize_mac_input(raw.as_deref())?),
+        None => None,
+    };
+    if let Some(Some(mac)) = &mac_update {
+        crate::helpers::ensure_mac_available(&mut *tx, mac, Some(interface_id)).await?;
+    }
+
     let mut builder = QueryBuilder::<Postgres>::new("UPDATE device_interfaces SET ");
     {
         // separated 会在非首个 push 前自动插入分隔符，因此列名片段用 push、
@@ -360,7 +393,7 @@ pub async fn update_device_interface<P: DbProvider>(
             sep.push("interface_role = ")
                 .push_bind_unseparated(interface_role);
         }
-        if let Some(mac_address) = &req.mac_address {
+        if let Some(mac_address) = &mac_update {
             sep.push("mac_address = ")
                 .push_bind_unseparated(mac_address);
         }
@@ -395,13 +428,19 @@ pub async fn update_device_interface<P: DbProvider>(
     let result = builder
         .build()
         .persistent(false)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await
         .map_err(|e| {
-            // 并发重名兜底：device_interfaces UNIQUE(device_id, name) 冲突映射为 409
+            // 并发撞唯一约束：MAC 表达式索引说明 MAC 已占用，其余为同设备重名
             if let sqlx::Error::Database(ref db_err) = e
                 && db_err.is_unique_violation()
             {
+                if db_err.constraint() == Some(crate::helpers::MAC_UNIQUE_INDEX) {
+                    return AppError::Conflict(
+                        msg("server.device.interface.mac_exists")
+                            .with("mac", mac_update.clone().flatten().unwrap_or_default()),
+                    );
+                }
                 return AppError::Conflict(msg("server.device.interface.name_exists"));
             }
             AppError::from(e)
@@ -413,8 +452,10 @@ pub async fn update_device_interface<P: DbProvider>(
     let data =
         sqlx::query_as::<_, DeviceInterface>("SELECT * FROM device_interfaces WHERE id = $1")
             .bind(interface_id)
-            .fetch_one(&state.pool()?.get_conn())
+            .fetch_one(&mut *tx)
             .await?;
+
+    tx.commit().await?;
 
     let details = serde_json::json!({
         "device_id": data.device_id,

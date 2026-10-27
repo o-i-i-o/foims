@@ -529,6 +529,17 @@ pub async fn update_cabinet<P: DbProvider>(
         AppError::from(e)
     })?;
 
+    // 换房时柜内机位上的设备必须跟随房间（设备位置不变量 I1）：父侧
+    // cabinets 先落库，再改 devices.room_id——设备行的 BEFORE 触发器会回查
+    // 父侧房间，顺序颠倒会拿旧房间报错；同时按新房间绑定网段清理失效 IP、
+    // 校验新房间功耗上限
+    crate::helpers::sync_devices_room(
+        &mut tx,
+        crate::helpers::DeviceScope::Cabinet(id),
+        effective_room_id,
+    )
+    .await?;
+
     tx.commit().await?;
 
     let cabinet = sqlx::query_as::<_, Cabinet>(

@@ -247,6 +247,50 @@ fn lookup_group_gid(group: &str) -> std::io::Result<Option<u32>> {
     Ok(None)
 }
 
+/// 系统任务定义：名称、执行器类型、cron、任务配置（由主程序按代码与配置算出）。
+type SystemTaskSeed<'a> = (&'a str, &'a str, &'a str, serde_json::Value);
+
+/// 播种系统任务（is_system = true）并回读注册所需的调度三元组。
+///
+/// 播种写入是单向投影：已存在则覆盖 task_type/cron/config/enabled 并
+/// 保留 last_run_at 等运行痕迹，使任务管理页展示的定义与实际调度同源；
+/// 播种失败时调用方不注册任何系统任务（宁可暴露启动错误，也不让展示与
+/// 调度各说各话）。
+async fn seed_system_tasks(
+    pool: &sqlx::PgPool,
+    seeds: &[SystemTaskSeed<'_>],
+) -> Result<Vec<(String, String, String, serde_json::Value)>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for (name, task_type, cron, config) in seeds {
+        sqlx::query(
+            r"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, is_system)
+               VALUES ($1, $2, $3, TRUE, $4, TRUE)
+               ON CONFLICT (name) DO UPDATE SET
+                 task_type = EXCLUDED.task_type,
+                 cron_expression = EXCLUDED.cron_expression,
+                 enabled = TRUE,
+                 config = EXCLUDED.config,
+                 is_system = TRUE,
+                 updated_at = NOW()",
+        )
+        .bind(name)
+        .bind(task_type)
+        .bind(cron)
+        .bind(config)
+        .execute(&mut *tx)
+        .await?;
+    }
+    // 回读而非直接用内存中的 seeds：注册口径以 DB 当前行为准，
+    // 手工插入的其他 is_system 行也能被承载
+    let rows = sqlx::query_as::<_, (String, String, String, serde_json::Value)>(
+        "SELECT name, task_type, cron_expression, config FROM scheduled_tasks WHERE is_system ORDER BY name",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(rows)
+}
+
 fn configure_app_services(
     app_state: Arc<AppState>,
     init_enabled: bool,
@@ -477,107 +521,87 @@ async fn main() -> std::io::Result<()> {
         .await
         {
             Ok(mut state) => {
-                if let Err(e) = state
-                    .add_system_job(
+                // 系统任务统一「启动播种 + 按库注册」：scheduled_tasks 中的
+                // is_system 行是当前代码与配置的投影（任务管理页只读展示），
+                // cron/config 每次启动重算回写，避免代码与 DB 两份定义漂移
+                let seeds: [SystemTaskSeed<'_>; 7] = [
+                    (
                         "system_backup",
-                        "0 0 0 * * *",
                         "backup",
+                        "0 0 0 * * *",
                         serde_json::json!({}),
-                    )
-                    .await
-                {
-                    foims_common::log_error!("system.register_backup_job_failed", error = e);
-                }
-                if let Err(e) = state
-                    .add_system_job(
+                    ),
+                    (
                         "system_token_cleanup",
-                        "0 0 * * * *",
                         "token_cleanup",
+                        "0 0 * * * *",
                         serde_json::json!({}),
-                    )
-                    .await
-                {
-                    foims_common::log_error!("system.register_token_cleanup_job_failed", error = e);
-                }
-                // IP 状态按 last_seen 新鲜度自动翻转（默认判停阈值 30 天），支撑仪表盘活性分布
-                if let Err(e) = state
-                    .add_system_job(
+                    ),
+                    // IP 状态按 last_seen 新鲜度自动翻转（默认判停阈值 30 天），支撑仪表盘活性分布
+                    (
                         "system_ip_status_sync",
-                        "0 30 3 * * *",
                         "ip_status_sync",
+                        "0 30 3 * * *",
                         serde_json::json!({ "days": 30 }),
-                    )
-                    .await
-                {
-                    foims_common::log_error!(
-                        "system.register_ip_status_sync_job_failed",
-                        error = e
-                    );
-                }
-
-                // 密码有效期到期账户自动禁用（每小时 20 分扫描，认证路径另有即时触发兜底）
-                if let Err(e) = state
-                    .add_system_job(
+                    ),
+                    // 密码有效期到期账户自动禁用（每小时 20 分扫描，认证路径另有即时触发兜底）
+                    (
                         "system_password_expiry_sync",
-                        "0 20 * * * *",
                         "password_expiry_sync",
+                        "0 20 * * * *",
                         serde_json::json!({}),
-                    )
-                    .await
-                {
-                    foims_common::log_error!(
-                        "system.register_password_expiry_sync_job_failed",
-                        error = e
-                    );
-                }
-
-                // Agent 离线判定（每分钟）：last_seen 超过上报间隔 × 倍数置 offline
-                if let Err(e) = state
-                    .add_system_job(
+                    ),
+                    // Agent 离线判定（每分钟）：last_seen 超过上报间隔 × 倍数置 offline
+                    (
                         "system_agent_offline",
-                        "0 * * * * *",
                         "agent_offline",
+                        "0 * * * * *",
                         serde_json::json!({
                             "interval_secs": config.agent.report_interval_secs,
                             "factor": config.agent.offline_factor
                         }),
-                    )
-                    .await
-                {
-                    foims_common::log_error!("system.register_agent_offline_job_failed", error = e);
-                }
-
-                // Agent 历史指标清理（每日 03:40，删除超保留期的 host_metrics_history 行）
-                if let Err(e) = state
-                    .add_system_job(
+                    ),
+                    // Agent 历史指标与 SNMP 事件清理（每日 03:40）：两项保留期同属
+                    // 本任务配置，清理量均随运行时长增长，故合并在同一轮执行
+                    (
                         "system_agent_history_cleanup",
-                        "0 40 3 * * *",
                         "agent_history_cleanup",
-                        serde_json::json!({ "retention_days": config.agent.history_retention_days }),
-                    )
-                    .await
-                {
-                    foims_common::log_error!(
-                        "system.register_agent_history_cleanup_job_failed",
-                        error = e
-                    );
-                }
-
-                // SNMP 设备轮询（每 5 分钟）：已配置 SNMP 的设备以 source='snmp'
-                // 呈现于主机监控页，连续两轮失败置 offline（snmp_poll 自行判定）
-                if let Err(e) = state
-                    .add_system_job(
+                        "0 40 3 * * *",
+                        serde_json::json!({
+                            "retention_days": config.agent.history_retention_days,
+                            "snmp_event_retention_days": config.agent.snmp_event_retention_days
+                        }),
+                    ),
+                    // SNMP 设备轮询（每 5 分钟）：已配置 SNMP 的设备以 source='snmp'
+                    // 呈现于主机监控页，连续两轮失败置 offline（snmp_poll 自行判定）
+                    (
                         "system_agent_snmp_poll",
-                        "0 */5 * * * *",
                         "agent_snmp_poll",
+                        "0 */5 * * * *",
                         serde_json::json!({ "interval_secs": 300 }),
-                    )
-                    .await
-                {
-                    foims_common::log_error!(
-                        "system.register_agent_snmp_poll_job_failed",
-                        error = e
-                    );
+                    ),
+                ];
+
+                // 播种失败则不注册：任务定义在 DB 中不可见即视为启动异常，
+                // 不能退回硬编码调度（那正是双轨不一致的源头）
+                match seed_system_tasks(&db_pool.get_conn(), &seeds).await {
+                    Ok(rows) => {
+                        for (name, task_type, cron, task_config) in rows {
+                            if let Err(e) = state
+                                .add_system_job(&name, &cron, &task_type, task_config)
+                                .await
+                            {
+                                foims_common::log_error!(
+                                    "system.register_system_job_failed",
+                                    name = name,
+                                    error = e
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        foims_common::log_error!("system.seed_system_tasks_failed", error = e);
+                    }
                 }
 
                 match state.start().await {

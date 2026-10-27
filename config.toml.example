@@ -133,6 +133,8 @@ report_interval_secs = 60
 max_report_bytes = 262144
 # agent_metrics_history 保留天数（清理任务按此删除旧行）
 history_retention_days = 30
+# snmp_events 保留天数（同一清理任务按此删除旧事件，1-3650）
+snmp_event_retention_days = 30
 # 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline
 offline_factor = 3
 # 上报地址开关：开启后下载包内上报地址取 server.public_url 的主机名 + 监听端口

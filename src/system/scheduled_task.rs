@@ -66,6 +66,24 @@ fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<
     Ok(())
 }
 
+/// 拒绝修改/删除系统内置任务（启动播种写入，与代码/配置同源）。
+///
+/// 系统任务的 cron 与 config 由进程启动时按代码/配置重新播种，
+/// 允许手工改会在下一次重启时静默回滚，形成“看起来改了实际没改”的
+/// 双轨假象，故在写入入口直接拒绝。
+async fn ensure_not_system_task(conn: &mut sqlx::PgConnection, id: Uuid) -> Result<(), AppError> {
+    let is_system: Option<bool> =
+        sqlx::query_scalar("SELECT is_system FROM scheduled_tasks WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *conn)
+            .await?;
+    match is_system {
+        None => Err(AppError::NotFound(msg("server.task.not_found"))),
+        Some(true) => Err(AppError::Validation(msg("server.task.system_readonly"))),
+        Some(false) => Ok(()),
+    }
+}
+
 pub async fn get_scheduled_tasks(
     State(state): State<Arc<AppState>>,
     _user: AuthUser,
@@ -91,7 +109,7 @@ pub async fn get_scheduled_tasks(
     };
 
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks",
+        "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks",
     );
     // 排序段为白名单常量，经 push 拼接，不拼接任何用户输入原文
     qb.push(" ").push(order_clause);
@@ -110,7 +128,7 @@ pub async fn get_scheduled_task(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let task: Option<ScheduledTask> = sqlx::query_as(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+        "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
     .fetch_optional(&state.pool()?.get_conn())
@@ -154,7 +172,7 @@ pub async fn create_scheduled_task(
     let task: ScheduledTask = sqlx::query_as(
         r"INSERT INTO scheduled_tasks (name, task_type, cron_expression, enabled, config, next_run_at)
            VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at"
+           RETURNING id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at"
     )
     .bind(&req.name)
     .bind(&req.task_type)
@@ -200,6 +218,9 @@ pub async fn update_scheduled_task(
     let now = Utc::now();
     let conn = state.pool()?.get_conn();
     let mut tx = conn.begin().await?;
+
+    // 系统任务定义由启动播种重新生成，手工修改会在下次重启被静默回滚，直接拒绝
+    ensure_not_system_task(&mut tx, id).await?;
 
     // 校验 cron 表达式，失败时拒绝写入
     let next_run_at = if let Some(ref cron_expr) = req.cron_expression {
@@ -248,7 +269,7 @@ pub async fn update_scheduled_task(
     }
 
     let task: ScheduledTask = sqlx::query_as(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+        "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
     .fetch_one(&mut *tx)
@@ -264,16 +285,19 @@ pub async fn delete_scheduled_task(
     _sysadmin: SysAdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let result = sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
+    let conn = state.pool()?.get_conn();
+    let mut tx = conn.begin().await?;
+
+    ensure_not_system_task(&mut tx, id).await?;
+
+    sqlx::query("DELETE FROM scheduled_tasks WHERE id = $1")
         .bind(id)
-        .execute(&state.pool()?.get_conn())
+        .execute(&mut *tx)
         .await?;
 
-    if result.rows_affected() > 0 {
-        Ok(foims_common::ok_json((), "server.task.deleted"))
-    } else {
-        Err(AppError::NotFound(msg("server.task.not_found")))
-    }
+    tx.commit().await?;
+
+    Ok(foims_common::ok_json((), "server.task.deleted"))
 }
 
 pub async fn toggle_scheduled_task(
@@ -282,27 +306,27 @@ pub async fn toggle_scheduled_task(
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
+    let mut tx = conn.begin().await?;
 
-    let result = sqlx::query(
-        "UPDATE scheduled_tasks SET enabled = NOT enabled, updated_at = $1 WHERE id = $2",
-    )
-    .bind(Utc::now())
-    .bind(id)
-    .execute(&conn)
-    .await?;
+    // 启停同样属于系统任务定义，重启后会被配置重新覆盖，故一并拒绝
+    ensure_not_system_task(&mut tx, id).await?;
 
-    if result.rows_affected() > 0 {
-        let task: ScheduledTask = sqlx::query_as(
-            "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
-        )
+    sqlx::query("UPDATE scheduled_tasks SET enabled = NOT enabled, updated_at = $1 WHERE id = $2")
+        .bind(Utc::now())
         .bind(id)
-        .fetch_one(&conn)
+        .execute(&mut *tx)
         .await?;
 
-        Ok(foims_common::ok_json(task, "server.task.toggled"))
-    } else {
-        Err(AppError::NotFound(msg("server.task.not_found")))
-    }
+    let task: ScheduledTask = sqlx::query_as(
+        "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(foims_common::ok_json(task, "server.task.toggled"))
 }
 
 pub async fn run_scheduled_task_now(
@@ -333,7 +357,7 @@ pub async fn run_scheduled_task_now(
     let conn = pool.get_conn();
 
     let task: Option<ScheduledTask> = sqlx::query_as(
-        "SELECT id, name, task_type, cron_expression, enabled, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
+        "SELECT id, name, task_type, cron_expression, enabled, is_system, config, last_run_at, next_run_at, last_result, created_at, updated_at FROM scheduled_tasks WHERE id = $1"
     )
     .bind(id)
     .fetch_optional(&conn)

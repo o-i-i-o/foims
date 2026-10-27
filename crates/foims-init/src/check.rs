@@ -140,7 +140,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "name",
             "room_type",
             "org_id",
-            "manager_employee_id",
             "total_power_watts",
             "description",
             "created_at",
@@ -593,6 +592,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "task_type",
             "cron_expression",
             "enabled",
+            "is_system",
             "config",
             "last_run_at",
             "next_run_at",
@@ -933,12 +933,8 @@ pub fn get_required_column_widths() -> Vec<(&'static str, &'static str, i32)> {
 #[must_use]
 pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
     vec![
-        // 房间必须归属组织与责任人：org_id 为空时房间在按组织筛选/盘点中
-        // 不可见，manager_employee_id 为空时机房类空间无设备通知承接人
+        // 房间必须归属组织：org_id 为空时房间在按组织筛选/盘点中不可见
         ("rooms", "org_id"),
-        ("rooms", "manager_employee_id"),
-        // 工位必须有管理人：设备匹配工位后的 IP 通知收件人
-        ("workstations", "manager_employee_id"),
         // IP 必须挂载在网口下（网口删除级联删除 IP）
         ("interface_ips", "device_interface_id"),
         // IP 必须归属子网（写入路径按房间绑定子网探测/显式指定，不允许 NULL）
@@ -983,6 +979,9 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         // IP 地址全域唯一（ips.rs 建表约束 UNIQUE(ip_address)）：
         // 单条创建与批量导入的并发去重均依赖该唯一索引兜底
         ("uq_interface_ips_ip_address", "interface_ips"),
+        // 网口 MAC 归一后全域唯一（indexes.rs 表达式部分索引）：
+        // 设备网卡同步/ARP 拉取/导入的 MAC 判重均依赖该唯一索引兜底
+        ("uq_device_interfaces_mac_key", "device_interfaces"),
         // 同房间设备名唯一（devices.rs 建表后补建）：
         // 兜底创建/更新/导入路径的并发判重窗口
         ("uq_devices_room_name", "devices"),

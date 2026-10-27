@@ -7,4 +7,4 @@ export type RoomSummary = { id: string, name: string, room_type: string,
 /**
  * 房间直属组织名称（子树口径下用于区分不同下级组织的房间）
  */
-org_name: string, manager_name: string, workstation_count: number, cabinet_count: number, };
+org_name: string, workstation_count: number, cabinet_count: number, };

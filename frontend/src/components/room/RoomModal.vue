@@ -2,9 +2,11 @@
 /**
  * 房间新增/编辑弹窗：
  * - 基础字段：组织（树形缩进下拉）/ 房型 / 名称 / 电源功率（W|kW 单位换算）/ 描述；
+ *   房间自身不设责任人（责任人下沉到工位）；
  * - 网段配置行：区域 + 网段级联下拉，行间去重，至少保留一行；
  * - 子项动态行按房型分区：办公类（办公室/大厅/前台）仅工位、
  *   机房类（机房/弱电井）仅机柜、"其他"两类均可，切换房型清空列表；
+ *   工位管理人可为空（未指定责任人的工位合法）；
  * - 信息点动态行：所有房型通用，本地校验非空 + 弹窗内不重复
  *   （跨房间重名由后端兜底）。
  * 提交链：POST/PUT rooms → PUT rooms/{id}/children → PUT rooms/{id}/net-outlets，
@@ -16,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
 import { readPowerWattsInput } from "../../utils/power";
+import { queryKeys } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import NetworkConfigRow from "./NetworkConfigRow.vue";
@@ -49,7 +52,6 @@ interface RoomFormState {
   name: string;
   roomType: string;
   orgId: string;
-  managerEmployeeId: string;
   totalPower: number | "";
   powerUnit: string;
   description: string;
@@ -60,7 +62,6 @@ const form = reactive<RoomFormState>({
   // 后端按大写存储房型，表单统一用小写
   roomType: (props.room?.room_type || "OFFICE").toLowerCase(),
   orgId: props.room?.org_id ?? "",
-  managerEmployeeId: props.room?.manager_employee_id ?? "",
   totalPower: props.room?.total_power_watts ?? "",
   powerUnit: "W",
   description: props.room?.description ?? ""
@@ -228,7 +229,7 @@ interface OrgOptionRow {
 }
 
 const orgsQuery = useQuery({
-  queryKey: ["organizations", "tree"],
+  queryKey: queryKeys.organizationsTree,
   queryFn: async (): Promise<OrganizationTreeNode[] | null> => {
     const result = await apiGet<OrganizationTreeNode[]>("/api/resources/organizations/tree");
     if (!result.success) {
@@ -252,7 +253,7 @@ const orgOptions = computed<OrgOptionRow[]>(() => {
   return flat;
 });
 
-// 管理人候选：当前房间所属组织下的员工（组织为空时不发请求）
+// 工位管理人候选：当前房间所属组织下的员工（组织为空时不发请求）
 const employeesQuery = useQuery({
   queryKey: computed(() => ["room-employees", form.orgId]),
   enabled: computed(() => Boolean(form.orgId)),
@@ -269,9 +270,11 @@ const employeeOptions = computed(() =>
   Array.isArray(employeesQuery.data.value) ? employeesQuery.data.value : []
 );
 
-/** 组织变更：管理人必须在房间所属组织内，候选人随组织切换，已选值清空重选 */
+/** 组织变更：工位管理人必须属于房间所属组织，候选人随组织切换，已选值清空重选 */
 function onOrgChange(): void {
-  form.managerEmployeeId = "";
+  for (const ws of workstations) {
+    ws.managerEmployeeId = "";
+  }
 }
 
 // ==================== 提交 ====================
@@ -293,15 +296,12 @@ function validateNetOutletsLocal(): string | null {
   return null;
 }
 
-/** 子项校验：按房型检查工位（名称+管理人）与机柜（名称+容量 1-48） */
+/** 子项校验：按房型检查工位（名称，管理人可空）与机柜（名称+容量 1-48） */
 function validateChildren(): string | null {
   if (showWorkstations.value) {
     for (const ws of workstations) {
       if (!ws.name.trim()) {
         return t("room.child_name_required");
-      }
-      if (!ws.managerEmployeeId) {
-        return t("workstation.manager_placeholder");
       }
     }
   }
@@ -327,12 +327,9 @@ const saveMutation = useMutation({
     if (!form.roomType) {
       throw new Error(t("room.type_required"));
     }
-    // 房间与组织、管理人同属服务端不变量（org_id / manager_employee_id 均非空）
+    // 房间必须归属组织（服务端不变量 org_id NOT NULL）
     if (!form.orgId) {
       throw new Error(t("room.org_required"));
-    }
-    if (!form.managerEmployeeId) {
-      throw new Error(t("room.manager_required"));
     }
     if (networkConfigs.some((row) => !row.networkId)) {
       throw new Error(t("room.network_all_required"));
@@ -359,7 +356,6 @@ const saveMutation = useMutation({
       // 后端统一按大写存储房型
       room_type: form.roomType.toUpperCase(),
       org_id: form.orgId,
-      manager_employee_id: form.managerEmployeeId,
       total_power_watts: totalPowerWatts,
       subnet_ids: subnetIds,
       description: form.description.trim() || null
@@ -386,7 +382,7 @@ const saveMutation = useMutation({
     const workstationItems: WorkstationSyncItem[] = workstations.map((ws) => ({
       id: ws.id,
       name: ws.name.trim(),
-      manager_employee_id: ws.managerEmployeeId
+      manager_employee_id: ws.managerEmployeeId || null
     }));
     const cabinetItems: CabinetSyncItem[] = childCabinets.map((cab) => ({
       id: cab.id,
@@ -429,7 +425,11 @@ const saveMutation = useMutation({
     return roomId;
   },
   onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    // 房间保存会连带同步子项（机柜/工位）与网段绑定，被移除的子项还会影响
+    // 设备归属，故一并失效房间/机柜/设备三个列表
+    queryClient.invalidateQueries({ queryKey: queryKeys.rooms });
+    queryClient.invalidateQueries({ queryKey: queryKeys.cabinets });
+    queryClient.invalidateQueries({ queryKey: queryKeys.devices });
     showToast(t("room.save_success"), "success");
     emit("saved");
     emit("close");
@@ -467,25 +467,6 @@ function submit(): void {
           </select>
         </div>
         <div class="form-group">
-          <label for="room-manager">
-            <span>{{ t("room.manager") }}</span><span class="required">*</span>
-          </label>
-          <select
-            id="room-manager"
-            v-model="form.managerEmployeeId"
-            required
-            :disabled="!form.orgId"
-            autocomplete="off"
-          >
-            <option value="" disabled>{{ t("room.manager_placeholder") }}</option>
-            <option v-for="emp in employeeOptions" :key="emp.id" :value="emp.id">
-              {{ emp.name }}
-            </option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
           <label for="room-type">
             <span>{{ t("room.type") }}</span><span class="required">*</span>
           </label>
@@ -495,14 +476,14 @@ function submit(): void {
             </option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label for="room-name">
             <span>{{ t("room.name") }}</span><span class="required">*</span>
           </label>
           <input id="room-name" v-model="form.name" type="text" autocomplete="off" required>
         </div>
-      </div>
-      <div class="form-row">
         <div class="form-group power-inline">
           <label for="room-total-power">{{ t("room.total_power") }}</label>
           <div class="power-input-row">
@@ -589,7 +570,7 @@ function submit(): void {
                 </div>
                 <div class="form-group">
                   <select v-model="ws.managerEmployeeId" autocomplete="off">
-                    <option value="" disabled>{{ t("workstation.manager_placeholder") }}</option>
+                    <option value="">{{ t("workstation.manager_unset") }}</option>
                     <option v-for="emp in employeeOptions" :key="emp.id" :value="emp.id">
                       {{ emp.name }}
                     </option>

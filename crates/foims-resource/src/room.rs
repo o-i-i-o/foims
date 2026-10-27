@@ -18,33 +18,29 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-/// 房间读模型：`Room` 实体 + 联查的组织名与房间管理人姓名。
+/// 房间读模型：`Room` 实体 + 联查的组织名。
 ///
-/// 房间的组织与责任人均为非空外键（RESTRICT），故联表用 INNER JOIN，
-/// 查询结果恒有组织名与管理人姓名，不存在缺值回退分支。
+/// 房间组织为非空外键（RESTRICT），故联表用 INNER JOIN，查询结果恒有组织名。
 #[derive(sqlx::FromRow)]
 struct RoomRecord {
     id: Uuid,
     name: String,
     room_type: String,
     org_id: Uuid,
-    manager_employee_id: Uuid,
     total_power_watts: Option<i32>,
     description: Option<String>,
     org_name: String,
-    manager_name: String,
     created_at: chrono::DateTime<Utc>,
     updated_at: chrono::DateTime<Utc>,
 }
 
-/// 房间读模型查询（列表与单条共用）：实体列 + 组织名 + 管理人姓名。
+/// 房间读模型查询（列表与单条共用）：实体列 + 组织名。
 const ROOM_RECORD_SELECT: &str = "SELECT r.id, r.name, r.room_type, r.org_id, \
-     r.manager_employee_id, r.total_power_watts, r.description, \
+     r.total_power_watts, r.description, \
      r.created_at::TIMESTAMPTZ, r.updated_at::TIMESTAMPTZ, \
-     o.name AS org_name, e.name AS manager_name \
+     o.name AS org_name \
      FROM rooms r \
-     JOIN organizations o ON r.org_id = o.id \
-     JOIN employees e ON r.manager_employee_id = e.id";
+     JOIN organizations o ON r.org_id = o.id";
 
 /// 按 id 取单个房间读模型（id 经 QueryBuilder 绑定，不拼接到 SQL 文本）。
 fn room_by_id_query(room_id: Uuid) -> sqlx::QueryBuilder<sqlx::Postgres> {
@@ -81,8 +77,6 @@ pub async fn get_rooms<P: DbProvider>(
         ("room_type", _) => " ORDER BY r.room_type ASC, r.name ASC",
         ("org_name", "desc") => " ORDER BY org_name DESC, r.name ASC",
         ("org_name", _) => " ORDER BY org_name ASC, r.name ASC",
-        ("manager_name", "desc") => " ORDER BY manager_name DESC, r.name ASC",
-        ("manager_name", _) => " ORDER BY manager_name ASC, r.name ASC",
         _ => " ORDER BY r.name ASC",
     };
 
@@ -233,8 +227,6 @@ pub async fn get_rooms<P: DbProvider>(
             room_type: room.room_type,
             org_id: room.org_id,
             org_name: room.org_name,
-            manager_employee_id: room.manager_employee_id,
-            manager_name: room.manager_name,
             total_power_watts: room.total_power_watts,
             allocated_power_watts: allocated_power_map.get(&room.id).copied().unwrap_or(0),
             description: room.description,
@@ -278,9 +270,8 @@ pub async fn create_room<P: DbProvider>(
         return Err(AppError::Conflict(msg("server.room.name_exists")));
     }
 
-    // 引用存在性校验：organizations / employees / network_cidrs 非法引用
-    // 返回校验错误，而非依赖 FK 约束的 500 兜底；房间管理人必须属于
-    // 房间所属组织（与触发器 trg_validate_room_manager_org 同口径）
+    // 引用存在性校验：organizations / network_cidrs 非法引用返回校验错误，
+    // 而非依赖 FK 约束的 500 兜底
     let org_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM organizations WHERE id = $1)")
             .bind(req.org_id)
@@ -289,14 +280,6 @@ pub async fn create_room<P: DbProvider>(
     if !org_exists {
         return Err(AppError::Validation(msg("server.organization.not_found")));
     }
-    crate::helpers::ensure_employee_in_org(
-        &mut *tx,
-        req.manager_employee_id,
-        req.org_id,
-        "server.employee.not_found",
-        "server.room.manager_org_mismatch",
-    )
-    .await?;
     for subnet_id in &req.subnet_ids {
         let network_exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM network_cidrs WHERE id = $1)")
@@ -312,14 +295,13 @@ pub async fn create_room<P: DbProvider>(
     let room_type_upper = req.room_type.to_uppercase();
 
     sqlx::query(
-        "INSERT INTO rooms (id, name, room_type, org_id, manager_employee_id, total_power_watts, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        "INSERT INTO rooms (id, name, room_type, org_id, total_power_watts, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(&req.name)
     .bind(&room_type_upper)
     .bind(req.org_id)
-    .bind(req.manager_employee_id)
     .bind(req.total_power_watts)
     .bind(&req.description)
     .bind(now)
@@ -357,7 +339,6 @@ pub async fn create_room<P: DbProvider>(
         name: req.name.clone(),
         room_type: room_type_upper,
         org_id: req.org_id,
-        manager_employee_id: req.manager_employee_id,
         total_power_watts: req.total_power_watts,
         description: req.description.clone(),
         created_at: now,
@@ -368,7 +349,6 @@ pub async fn create_room<P: DbProvider>(
         "name": room.name,
         "room_type": room.room_type,
         "org_id": room.org_id.to_string(),
-        "manager_employee_id": room.manager_employee_id.to_string(),
         "total_power_watts": room.total_power_watts,
         "description": room.description,
         "network_count": req.subnet_ids.len()
@@ -413,9 +393,13 @@ pub async fn get_room_brief<P: DbProvider>(
         .bind(id)
         .fetch_all(&conn),
         // 工位/机柜/信息点按房型由前端过滤展示，这里统一取全量保证"其他"房型两类子项齐全
-        sqlx::query("SELECT w.id, w.name, e.name AS manager_name, w.manager_employee_id FROM workstations w JOIN employees e ON w.manager_employee_id = e.id WHERE w.room_id = $1 ORDER BY w.name")
-            .bind(id)
-            .fetch_all(&conn),
+        sqlx::query(
+            "SELECT w.id, w.name, e.name AS manager_name, w.manager_employee_id FROM workstations w \
+             LEFT JOIN employees e ON w.manager_employee_id = e.id \
+             WHERE w.room_id = $1 ORDER BY w.name",
+        )
+        .bind(id)
+        .fetch_all(&conn),
         sqlx::query("SELECT id, name, capacity FROM cabinets WHERE room_id = $1 ORDER BY name")
             .bind(id)
             .fetch_all(&conn),
@@ -459,8 +443,6 @@ pub async fn get_room_brief<P: DbProvider>(
             "room_type": room.room_type,
             "org_id": room.org_id,
             "org_name": room.org_name,
-            "manager_employee_id": room.manager_employee_id,
-            "manager_name": room.manager_name,
             "total_power_watts": room.total_power_watts,
             "description": room.description,
             "networks": room_networks,
@@ -507,7 +489,7 @@ pub async fn get_room<P: DbProvider>(
             async {
                 if is_office {
                     sqlx::query(
-                        "SELECT w.id, w.name, e.name AS manager_name, w.manager_employee_id FROM workstations w JOIN employees e ON w.manager_employee_id = e.id WHERE w.room_id = $1 ORDER BY w.name",
+                        "SELECT w.id, w.name, e.name AS manager_name, w.manager_employee_id FROM workstations w LEFT JOIN employees e ON w.manager_employee_id = e.id WHERE w.room_id = $1 ORDER BY w.name",
                     )
                     .bind(room.id)
                     .fetch_all(&conn)
@@ -587,8 +569,6 @@ pub async fn get_room<P: DbProvider>(
         room_type: room.room_type,
         org_id: room.org_id,
         org_name: room.org_name,
-        manager_employee_id: room.manager_employee_id,
-        manager_name: room.manager_name,
         total_power_watts: room.total_power_watts,
         allocated_power_watts: allocated_power,
         description: room.description,
@@ -620,7 +600,7 @@ pub async fn update_room<P: DbProvider>(
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     // 存在性检查即 FOR UPDATE 锁行：同时取出当前组织与房型，用于计算
-    // org_id / 管理人的生效值（换组织/换房型需校验房内既有子项）
+    // 换组织/换房型需校验房内既有子项
     let current: Option<(Uuid, String)> =
         sqlx::query_as("SELECT org_id, room_type FROM rooms WHERE id = $1 FOR UPDATE")
             .bind(id)
@@ -629,7 +609,6 @@ pub async fn update_room<P: DbProvider>(
     let Some((current_org_id, current_room_type)) = current else {
         return Err(AppError::NotFound(msg("server.room.not_found")));
     };
-    let effective_org_id = req.org_id.unwrap_or(current_org_id);
 
     // 重名预检：房间名全局唯一（uq_rooms_name）
     if let Some(name) = &req.name {
@@ -685,23 +664,6 @@ pub async fn update_room<P: DbProvider>(
         }
     }
 
-    // 房间管理人必须属于生效组织；换组织而不同时改管理人时，原管理人
-    // 必然跨组织，直接给出可读错误（非回退处理，而是不变量拦截）
-    if let Some(manager_employee_id) = req.manager_employee_id {
-        crate::helpers::ensure_employee_in_org(
-            &mut *tx,
-            manager_employee_id,
-            effective_org_id,
-            "server.employee.not_found",
-            "server.room.manager_org_mismatch",
-        )
-        .await?;
-    } else if effective_org_id != current_org_id {
-        return Err(AppError::Validation(msg(
-            "server.room.manager_org_mismatch",
-        )));
-    }
-
     // 换房型：新类型必须容纳房内存量子项（办公类只能有工位、机房类只能有机柜），
     // 与 helpers::room_allows_workstation / room_allows_cabinet 同一判定
     if let Some(new_type) = req.room_type.as_ref().map(|t| t.to_uppercase())
@@ -747,16 +709,14 @@ pub async fn update_room<P: DbProvider>(
          name = COALESCE($1, name),
          room_type = COALESCE($2, room_type),
          org_id = COALESCE($3, org_id),
-         manager_employee_id = COALESCE($4, manager_employee_id),
-         total_power_watts = CASE WHEN $5::boolean THEN $6 ELSE total_power_watts END,
-         description = COALESCE($7, description),
-         updated_at = $8
-         WHERE id = $9",
+         total_power_watts = CASE WHEN $4::boolean THEN $5 ELSE total_power_watts END,
+         description = COALESCE($6, description),
+         updated_at = $7
+         WHERE id = $8",
     )
     .bind(&req.name)
     .bind(req.room_type.as_ref().map(|t| t.to_uppercase()))
     .bind(req.org_id)
-    .bind(req.manager_employee_id)
     .bind(req.total_power_watts.is_some())
     .bind(req.total_power_watts.flatten())
     .bind(&req.description)
@@ -818,7 +778,7 @@ pub async fn update_room<P: DbProvider>(
     tx.commit().await?;
 
     let room = sqlx::query_as::<_, Room>(
-        "SELECT id, name, room_type, org_id, manager_employee_id, total_power_watts, \
+        "SELECT id, name, room_type, org_id, total_power_watts, \
          description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM rooms WHERE id = $1",
     )
     .bind(id)
@@ -829,7 +789,6 @@ pub async fn update_room<P: DbProvider>(
         "name": room.name,
         "room_type": room.room_type,
         "org_id": room.org_id.to_string(),
-        "manager_employee_id": room.manager_employee_id.to_string(),
         "total_power_watts": room.total_power_watts,
         "description": room.description
     });
@@ -1167,8 +1126,8 @@ async fn sync_workstation_children(
 
     for item in items {
         validate_workstation_name(tx, &item.name, room_id, item.id).await?;
-        // 管理人必须属于房间组织：非法引用/跨组织引用以 400 返回，
-        // 而不是等触发器抛出自定义异常映射成 500
+        // 管理人（可空：未指定的不校验）必须属于房间组织：非法引用/跨组织
+        // 引用以 400 返回，而不是等触发器抛出自定义异常映射成 500
         crate::helpers::ensure_employee_in_org(
             &mut *tx,
             item.manager_employee_id,

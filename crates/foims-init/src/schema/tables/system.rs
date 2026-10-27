@@ -22,6 +22,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             task_type VARCHAR(50) NOT NULL,
             cron_expression VARCHAR(100) NOT NULL,
             enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            -- 系统内置任务：由启动播种写入（与代码/配置同源），前端只读展示，
+            -- 禁止通过任务管理接口修改/删除，避免代码与 DB 定义双轨不一致
+            is_system BOOLEAN NOT NULL DEFAULT FALSE,
             config JSONB NOT NULL DEFAULT '{}',
             last_run_at TIMESTAMP WITH TIME ZONE,
             next_run_at TIMESTAMP WITH TIME ZONE,

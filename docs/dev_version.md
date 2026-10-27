@@ -752,3 +752,113 @@ v0.26.0
    ⑧ 无效空值回退清理（同一割裂的尾巴）：employees.org_id 与 devices.room_id 本就 NOT NULL，但 Employee.org_name、拓扑节点 room_id/room_name/org_id/org_name 仍声明为 Option 并以 LEFT JOIN 联表，前端随之带一串 `|| "-"` / `=== null` 死判定。现改为非空字段 + JOIN 联表；前端删除拓扑「未分房间」分组（roomGroupKey 收为 string、TopologyGroupLabels 去 noRoom、filterNodesByOrg 去 null 判定及 i18n 键 viz.group_no_room），拖动容器时房间查找失败的回退改回退到被拖容器键本身（不再是虚构的 room:none 分组键）。
 2. 版本：功能补齐判 y+1（v0.25.1→v0.26.0，z 归零）→ 根 Cargo.toml 0.32.1→0.32.2；crate 各自 patch+1：foims-models 0.2.15→0.2.16（Room/RoomCreate/RoomUpdate/RoomWithNetworks 收紧 + RoomSummary；Employee.org_name 非空）、foims-resource 0.1.14→0.1.15、foims-organization 0.1.3→0.1.4、foims-data-management 0.2.7→0.2.8、foims-visualization 0.2.6→0.2.7（拓扑节点房间/组织字段非空）、foims-init 0.1.12→0.1.13（Cargo.lock 同步）；前后端混合修改，frontend/package.json 0.1.9→0.1.10。
 3. 验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --workspace 全绿（15 组用例合计全通过）；gen-ts-types 重生无漂移（新增 RoomSummary.ts，Room/RoomCreate/RoomUpdate/RoomWithNetworks/Employee/TopologyNodeWithDevice 字段收紧）；cd frontend && npm run typecheck 0 错、npm run build 通过、npm run selfcheck:viz 全通过（分组用例改为两房间分组与 org 命中计数）、npx @biomejs/biome check frontend 0 违规、oxlint 318 文件 0 告警；对真实 PG（开发库）整段升级脚本回滚事务演练：建表/回填/NOT NULL 收紧/索引/触发器均执行成功，两触发器跨组织写入均被拦截（房间、工位各一例），事务回滚后库结构无残留；房型-子项检查在开发库按预期 RAISE（dev 存量 40 工位处于机房类房型、5 机柜处于办公类房型，属测试数据随意摆放，需人工调整房间房型或迁移子项后重跑）。
+
+v0.27.0
+2026102701205701
+1. 全局数据一致性审计整改（功能 bug 修复集合，y+1）：针对「组织-房间-空间-设备-网口-IP」
+链路的一致性问题逐项收口，原则是「同一事实只有一个写入方、同一约束只有一个判定源、
+存量数据无法满足新约束时直接删除（不做静默猜测合并）」。
+   ① P1-1 空间换房不联动设备——机柜/工位/机位换房后只改自身 room_id，挂在其下的设备仍
+指向旧房间（trg_validate_device_room_consistency 只拦新写入，存量长期漂移）。
+foims-resource/helpers.rs 新增 DeviceScope + sync_devices_room 单点搬迁（先改父侧再改设备，
+满足既有 BEFORE 触发器次序；同时校验目标房间功率上限、删除不落在新房间已绑网段的 IP），
+cabinets.rs/workstation.rs/position.rs 换房分支统一调用。
+   ② P1-2 设备保存网口/IP 全删重建——nic.rs 原实现每次保存先 DELETE 全部 device_nics/
+interface_ips 再整批插入，网口主键漂移（连线、SNMP 观测、通知引用的网口身份全量失效）。
+改为按网口名/排序与 IP 地址求差量：保留并更新命中行、仅插入新增行、仅删除真正摘除的行
+（连带清理悬挂 cable_links），IP 子网归属随 IpSyncItem.subnet_id 迁移。
+   ③ P2-1 显式子网缺 IP 归属校验——IP 携带 subnet_id 时未校验该地址是否落在子网 CIDR 内，
+可把 10.0.0.5 挂到 192.168.1.0/24。helpers.rs 新增房间网段归属查询，网口/IP 同步与导入
+两条写入路径统一校验（<<= 判定，IPv4/IPv6 同口径），越界返回可读校验错误。
+   ④ P2-2 MAC 归一与唯一缺失——MAC 存量形态混杂（冒号/短横线/点分/裸 12 位），判重全用
+裸字符串比较，同一块物理网卡可重复登记，且 ARP 拉取、设备同步、CSV 导入各写一套归一。
+foims-common::net 新增 canonical_mac/valid_mac 作为唯一归一与校验源（SNMP、models、
+resource 全部改调用），helpers.rs 新增 normalize_mac_input/ensure_mac_available；DB 侧以
+表达式部分唯一索引 uq_device_interfaces_mac_key
+（translate(upper(mac_address),':-. ','')，空白 MAC 不参与唯一）兜底，并发撞约束映射为
+精确冲突错误。
+   ⑤ P2-3 导入校验缺口——CSV 导入此前可写入「IP 不属于其子网」「设备同时挂工位与机位」
+「org_path 非本节点子路径」的脏行。import/mod.rs 补齐三段校验（IP 子网包含性、位置互斥、
+组织子路径），报错定位到具体行号与列名。
+   ⑥ P2-4 系统任务不可见 + 保留天数死配置——内建任务只存在于代码里，界面看不到、日志不
+入库、无法停用；snmp_event_retention_days 无消费者。scheduled_tasks 新增 is_system，系统
+任务启动时按 name UPSERT 播种（is_system=true）并从 DB 回读注册，调度派发与 next_run_at
+同步均加 NOT is_system 避免双跑；管理接口对该类任务的增删改与启停一律拒绝、前端置灰。
+SNMP 事件保留天数改由 agent 配置段注入任务 config（与 history_retention_days 同源，
+1-3650 校验、示例文件与系统配置保存校验同步），删除原 system_configs 旁路读取。
+   ⑦ P3-1 前端缓存 key 分裂——同一资源在不同组件手写 "devices" / ["devices"] 字面量，写
+操作后失效面不足（保存设备后网口/IP/SNMP 观测仍显示旧值）。新增
+frontend/src/utils/queryKeys.ts 集中 key 工厂与 invalidateDeviceWrite（设备写操作统一失效
+设备、网口、IP、连线等下游查询），usePagedList 的 tag 支持 string | readonly string[]，
+11 处调用点迁移至工厂；仅单文件独占的 key 保持原样不迁移。
+   ⑧ P3-2 IpDetailUpdate 孤儿契约 + 保留地址无人工入口——原结构体含 device_interface_id
+（Option<Option<Uuid>>，但 interface_ips.device_interface_id NOT NULL，「解绑」语义不可
+达）、ip_address、ip_version 三组无消费者字段且无任何路由。收窄为 { status }（必填 + 白
+名单校验），新增 PATCH /api/resources/ip/{id} 与前端 IpStatusModal（只读矩阵沿用
+isSectionReadonly("ip")，reserved 仅此处可人工设置，自动判活/陈旧同步会跳过），地址与网
+口归属仍只由设备网卡同步维护。
+2. 数据库与升级（同属 0.32 中版本，随 upgrade/0.32/upgrade_0.32.0.sql 唯一一份下发，
+foims-init 建表与 check.rs 校验清单同轮同步）：5.1 新增 chk_devices_single_location CHECK
+（工位与机位互斥），存量位置双挂设备直接删除、room_id 按父侧房间回填、不落在设备房间已
+绑网段上的 IP 直接删除；5.2 新增 check_devices_follow_parent_room() 与
+trg_{cabinets,workstations,positions}_devices_room 三个 AS DEFERRABLE INITIALLY DEFERRED
+约束触发器（应用层负责搬迁，触发器只在提交时防腐）；5.3 MAC 归一去重后删旧普通索引
+idx_device_interfaces_mac、建表达式部分唯一索引 uq_device_interfaces_mac_key；5.4
+scheduled_tasks 新增 is_system BOOLEAN NOT NULL DEFAULT FALSE。check.rs 补 is_system 列与
+uq_device_interfaces_mac_key 索引清单。
+3. 版本：功能 bug 修复集合判 y+1（v0.26.0→v0.27.0，z 归零）→ 根 Cargo.toml 0.32.2→
+0.32.3；crate 各自 patch+1：foims-common 0.3.14→0.3.15、foims-models 0.2.16→0.2.17、
+foims-resource 0.1.15→0.1.16、foims-init 0.1.13→0.1.14、foims-scheduler 0.1.2→0.1.3、
+foims-agent-service 0.1.18→0.1.19（Cargo.lock 同步）；前后端混合修改，
+frontend/package.json 0.1.10→0.1.11。
+4. 验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、
+cargo test --workspace 全绿（含修正 MAC 用例：「a:b:c:d:e:f」属单字符分组简写、归一后不
+足 12 位十六进制，从合法列表移入非法列表）；gen-ts-types 重生 IpDetailUpdate.ts（status）
+与 ScheduledTask.ts（is_system）；cd frontend && npm run typecheck 0 错、npm run build 通
+过、npx @biomejs/biome check frontend 0 违规、oxlint 320 文件 0 告警、npm run
+selfcheck:viz 全通过；对真实 PG（开发库）演练：0.32 脚本第 5 节整段在事务内执行成功且回
+滚无残留（CHECK/唯一索引/三个延迟触发器/函数均可用），负向用例「机柜换房不搬设备」在
+SET CONSTRAINTS ALL IMMEDIATE 处被拒（2 行不一致）、正向用例「先改机柜再按新房间改设
+备」通过，跨形态重复 MAC 插入被 uq_device_interfaces_mac_key 拒绝；开发库至 0.26 的存
+量缺口（11 个组织无员工致房间管理人无法回填、机房/办公房型与子项不匹配）仍在，整段脚
+本需人工补齐员工与调整房型后重跑。
+
+v0.28.0
+2026102708360601
+1. 房间责任人模型纠正（功能 bug 修复，y+1）：v0.26.0 把责任人放在房间（rooms.manager_employee_id NOT NULL）与业务事实不符——房间只是空间归属，责任落在房内每个工位，且工位允许暂不指定管理人。
+   ① 删除房间责任人：rooms 建表/check.rs 列清单/升级脚本去掉 manager_employee_id 列、idx_rooms_manager_employee_id 索引、validate_room_manager_org() 函数与 trg_validate_room_manager_org 触发器；Room/RoomCreate/RoomUpdate/RoomWithNetworks/RoomSummary 载荷、resource/room.rs 的 CRUD 与读模型（含 update 返回行的 SELECT 字段）、details 日志字段、rooms 排序白名单全部去掉管理人；organization.get_org_rooms 不再联表 employees（RoomSummary 去 manager_name）；employee 删除预检删去「管理房间」阻断项（server.employee.in_use_by_room 键同步移除）；CSV rooms 规格删 manager 列与 Target::EmployeeInPathOrg 枚举及 import/export 两处分支（不再存在按 org_path 解析房间管理人的路径）。
+   ② 工位管理人放开为可空：workstations.manager_employee_id 建表去掉 NOT NULL，触发器 validate_workstation_manager_org 首行改为 NULL 直接放行（不变量只在非空时成立）；resource/helpers.rs 的 ensure_employee_in_org 签名改 Option<Uuid>（None 直接 Ok），工位新建/更新与房间子项同步三个调用点共用同一跳过逻辑，不再各写 if let。
+   ③ 三态更新与读模型口径：WorkstationUpdate.manager_employee_id 保持 Option<Option<Uuid>>（缺失保留原值、JSON null 清空、值则换人）；工位列表/计数/详情与房间详情/子项同步的工位查询全部改 LEFT JOIN employees，未配管理人的工位不再从列表消失，按管理人排序加 NULLS LAST 让未指定固定排在末尾。
+   ④ 通知口径收敛：device/notify.rs 删除 COALESCE(w.manager_employee_id, r.manager_employee_id) 的房间级兜底，改为 JOIN workstations w ON d.workstation_id = w.id + JOIN employees e ON e.id = w.manager_employee_id，邮件措辞固定为「工位」。后果：机房内未挂工位的设备、以及未配管理人的工位上的设备不再产生 IP 变更通知（无收件人即不发），这是新责任模型的直接推论，不再保留隐式兜底。
+   ⑤ 前端：RoomModal 删除房间管理人表单项/校验/payload（首行改「组织|房型」），换组织时清空房内工位已选管理人；WorkstationModal 与 RoomModal 的工位管理人下拉去掉必填拦截并新增「暂不指定」（workstation.manager_unset），空串提交转 null；资源页房间表与组织房间弹窗 OrgRoomsModal 删除管理人列（colspan 各 -1）；WorkstationCanvas 对空管理人显示「暂不指定」而非 null 字面量；contracts.RoomBrief 去 manager_name；zh/en 删除 room.manager/manager_required/manager_placeholder、server.room.manager_org_mismatch、server.employee.in_use_by_room。
+2. 数据库与升级（0.32 中版本唯一脚本 upgrade/0.32/upgrade_0.32.0.sql 第 4 节重写）：删除 rooms.manager_employee_id 的 ADD COLUMN / 回填 / NOT NULL / 索引 / 房间触发器建置段；改为 workstations.manager_employee_id DROP NOT NULL，并把违反新不变量的存量（工位管理人不在房间所属组织内）清空为未指定（GET DIAGNOSTICS 计数 + RAISE NOTICE 提示重新指定，不静默处理）；房间归属仍回填唯一根组织并收紧 org_id NOT NULL，房型-子项匹配性检查保留；触发器改为 NULL 放行、非空时校验同组织。
+3. 版本：功能 bug 修复判 y+1（v0.27.0→v0.28.0，z 归零）→ 根 Cargo.toml 0.32.3→0.32.4；crate 各自 patch+1：foims-models 0.2.17→0.2.18、foims-resource 0.1.16→0.1.17、foims-organization 0.1.4→0.1.5、foims-data-management 0.2.8→0.2.9、foims-init 0.1.14→0.1.15（Cargo.lock 同步）；前后端混合修改，frontend/package.json 0.1.11→0.1.12。
+4. 验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --workspace 全绿（工位模型用例改写为「缺省管理人反序列化为 None 且校验通过」）；gen-ts-types 重生 Room/RoomCreate/RoomSummary/RoomUpdate/RoomWithNetworks/Workstation* 等无手改漂移；cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 0 违规、oxlint 320 文件 0 告警、npm run selfcheck:viz 全通过；对真实 PG（开发库）把第 4 节拆两段做回滚事务演练：org_id 收紧、manager DROP NOT NULL、跨组织工位管理人清空（NOTICE 报 90 条）均执行成功，事务内插入未指定管理人的工位通过、跨组织管理人被 trg_validate_workstation_manager_org 拒绝，ROLLBACK 后库结构无残留；房型-子项检查在开发库仍按预期 RAISE（存量 40 工位/5 机柜摆放与房型不符，属测试数据，需人工调整后重跑整段脚本）。
+
+v0.29.0
+2026102709371101
+1. 前端通知文案梳理（功能优化，y+1）：删除/移除被关联数据阻断时，通知只描述当前状态，失败语义交给统一前缀（「操作失败：」「删除失败：」「删除用户失败：」），去掉冗余的「无法删除」「不允许删除」与「已被…关联」机械被动描述。zh/en 同步改动：
+   - server.cabinet：has_positions/in_use_by_positions →「机柜下存在机位」；patch_panel_linked →「机柜内存在被线路引用的配线架」；position_in_use →「机位已分配设备」。
+   - server.room：has_cabinets/has_workstations/has_net_outlets/has_devices →「房间下存在机柜/工位/信息点/设备」。
+   - server.network：in_use_by_ip →「子网下存在 IP 地址」；in_use_by_room →「子网已绑定房间」；region_in_use →「网络区域下存在子网」。
+   - server.net_outlet.in_use/linked_by_cable 与 server.patch_panel.in_use →「信息点被线路引用」「配线架被线路引用」。
+   - server.workstation.in_use_by_device、server.position.occupied_by_device →「工位已分配设备」「机位已分配设备」。
+   - server.device_template.in_use →「有 {{count}} 台设备使用此模板」；server.org_template.in_use_delete_forbidden →「有 {{count}} 个组织节点使用此模板」；server.organization.has_children/has_rooms →「该节点下存在 {{count}} 个子节点/机房」；has_employees →「该节点及其下级节点有 {{count}} 名员工」；server.employee.in_use_by_workstation →「该员工管理 {{count}} 个工位」。
+   - server.user.cannot_delete_self/last_admin_protected →「这是当前登录的账户」「这是最后一个管理员账户」；server.db.fk_violation →「关联数据不存在或仍被引用」。
+   - 保留 server.org_template.in_use_path_broken/in_use_swap_forbidden 原文：二者由模板更新触发，需同时说明删除、重命名、调整层级三种被拒操作，不属于删除场景的冗余表述。
+2. DeviceTemplateModal 保存/删除失败通知补齐前缀（「操作失败：」「删除失败：」），与其它模块一致，避免只显示「有 {{count}} 台设备使用此模板」而看不出操作失败。
+3. 版本：功能优化判 y+1（v0.28.0→v0.29.0，z 归零）；本次仅前端改动，frontend/package.json 0.1.12→0.1.13，根 Cargo.toml 不动。
+4. 验证：zh/en 语言包 JSON 解析通过、键集合逐一对应（2675 键，无单边缺失）；cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome check frontend 0 违规。
+
+v0.29.1
+2026102712224401
+1. 房间责任模型撤回的升级脚本缺口修复（bug 修复，z 级）：v0.28.0 已把责任人从房间下沉到工位，但升级脚本只删掉了 rooms.manager_employee_id 的建置段，未处理「已按 0.26 旧口径升级过的库」——这类库上该列仍是 NOT NULL 且无默认值、还残留 trg_validate_room_manager_org，新代码 INSERT rooms 不写该列会直接失败，残留触发器也会引用已不存在的列。
+   upgrade/0.32/upgrade_0.32.0.sql 第 4 节补幂等撤回段（顺序不可互换）：DROP TRIGGER IF EXISTS trg_validate_room_manager_org ON rooms → DROP FUNCTION IF EXISTS validate_room_manager_org() → ALTER TABLE rooms DROP COLUMN IF EXISTS manager_employee_id（索引随删列自动移除，不再单独 DROP，避免同一对象两处定义）。
+2. 开发库落地（错误的房间-机柜/工位关联数据清理后）：确认 rooms/workstations/cabinets/positions/devices 均已清空，升级前 pg_dump 备份（/tmp/foims-pre-0.32-20261027121255.dump）后整段执行 0.32 脚本并 COMMIT——v0.26.0/v0.27.0/v0.28.0 三次记录里只能回滚演练或按预期 RAISE 的阻塞（房间管理人无法回填、房型与子项不匹配）随之消除。
+   ① 结构断言：rooms.org_id NOT NULL、rooms 无 manager_employee_id 列、workstations.manager_employee_id 可空、scheduled_tasks.is_system NOT NULL、uq_device_interfaces_mac_key 为唯一索引、chk_devices_single_location 存在、五个触发器（workstation 管理人/设备房间一致性/三个延迟约束）齐全、6 张 SNMP 台账表齐全。
+   ② check.rs 清单全量核对：45 必需表、414 必需列、8 必需唯一索引、5 必需视图、11 非空契约列、4 列宽契约列逐一命中，无缺失无不符——启动自检不会再触发补建或报结构落后。
+   ③ 幂等：整段脚本在当前库上以事务重跑（ROLLBACK）无错误、回滚后无残留对象；另用「旧口径模拟库」验证撤回段：事务内先造 rooms.manager_employee_id + idx_rooms_manager_employee_id + validate_room_manager_org() + trg_validate_room_manager_org，再跑整段脚本，列/索引/触发器/函数全部清空、workstations.manager_employee_id 放开为可空、无错误无残留。
+   ④ 审计整改回归：机柜换房不搬设备在 SET CONSTRAINTS ALL IMMEDIATE 处被拒（2 行不一致），先改机柜再按新房间改设备通过；跨形态重复 MAC（冒号与短横线写法）插入被 uq_device_interfaces_mac_key 拒绝。
+   注：库升级已完成，但本机部署实例（/usr/bin/foims）仍是旧二进制，系统任务播种（is_system=true）需重新部署并重启服务后生效。
+3. 版本：z+1（v0.29.0→v0.29.1）；本轮只改升级脚本，无 crate 与前端源码变更 → 根 Cargo.toml 0.32.4、frontend/package.json 0.1.13 均不动（z 段不联动）。
+4. 验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 0 告警、cargo test --workspace 全绿；cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome check frontend 0 违规、oxlint 320 文件 0 告警；gen-ts-types 重生无新增漂移（Room*/Workstation*/IpDetailUpdate/ScheduledTask 变更均为 v0.27.0/v0.28.0 已记录内容）。

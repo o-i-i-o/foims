@@ -516,6 +516,29 @@ pub async fn update_cabinet_position<P: DbProvider>(
         AppError::from(e)
     })?;
 
+    // 换柜后机位上的设备跟随新机柜房间（设备位置不变量 I1）：positions 已
+    // 落库，设备行的 BEFORE 触发器回查的就是新房间；未归属机柜时无房间
+    // 约束，不做联动
+    let final_cabinet_id: Option<Uuid> = if req.cabinet_id.is_some() {
+        req.cabinet_id.flatten()
+    } else {
+        cur_cabinet_id
+    };
+    if let Some(target_cabinet_id) = final_cabinet_id
+        && cur_cabinet_id != final_cabinet_id
+    {
+        let target_room_id: Uuid = sqlx::query_scalar("SELECT room_id FROM cabinets WHERE id = $1")
+            .bind(target_cabinet_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        crate::helpers::sync_devices_room(
+            &mut tx,
+            crate::helpers::DeviceScope::Position(id),
+            target_room_id,
+        )
+        .await?;
+    }
+
     let mut result = fetch_position_base(&mut *tx, id)
         .await?
         .ok_or_else(|| AppError::Internal(msg("server.position.detail_query_failed")))?;

@@ -14,6 +14,7 @@ import { apiDelete, apiPatch } from "../api/client";
 import { usePagedList } from "../composables/usePagedList";
 import { formatTime } from "../utils/formatter";
 import { showToast } from "../composables/useToast";
+import { queryKeys } from "../utils/queryKeys";
 import ConfirmModal from "../components/ConfirmModal.vue";
 import NavIcon from "../components/NavIcon.vue";
 import Pagination from "../components/Pagination.vue";
@@ -58,7 +59,7 @@ const keyword = ref("");
 // 分页/越界回退/轮询统一由 usePagedList 承载；/api/agents 无排序参数，
 // buildUrl 忽略排序入参（queryKey 仍含排序态，不影响正确性）
 const list = usePagedList<AgentListItem>({
-  tag: "agents",
+  tag: queryKeys.agents,
   defaultPageSize: DEFAULT_PAGE_SIZE,
   refetchInterval: REFRESH_INTERVAL_MS,
   extraKey: computed(() => ({ status: status.value, keyword: keyword.value })),
@@ -135,7 +136,7 @@ const statusMutation = useMutation({
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("agents.status_updated"), "success");
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents });
       return;
     }
     showToast(result.message || t("common.operation_failed"), "error");
@@ -147,7 +148,7 @@ const deleteMutation = useMutation({
   onSuccess: (result) => {
     if (result.success) {
       showToast(t("common.delete_success"), "success");
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents });
       return;
     }
     showToast(result.message || t("common.delete_failed"), "error");
