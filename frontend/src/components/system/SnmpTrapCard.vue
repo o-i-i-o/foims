@@ -301,8 +301,6 @@ async function saveSnmpTrapConfig(): Promise<void> {
         <label for="snmp-trap-cooldown">{{ t("snmp_trap.cooldown_secs") }}</label>
         <input id="snmp-trap-cooldown" v-model="cooldown" type="number" min="0" max="86400" placeholder="30">
       </div>
-    </div>
-    <div class="form-row">
       <div class="form-group">
         <label for="snmp-trap-communities">{{ t("snmp_trap.communities") }}</label>
         <input id="snmp-trap-communities" v-model="communities" type="text" :placeholder="t('snmp_trap.communities_placeholder')" autocomplete="off">

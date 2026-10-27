@@ -887,3 +887,12 @@ v0.31.1
 3. 版本：纯前端布局 bug 修复判 z（v0.31.0→v0.31.1）；z 段不联动 frontend/package.json（保持 0.1.14）、根 Cargo.toml 不动，无后端/载荷/数据库变更。
 4. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警；forms.css 本轮零改动（无冗余样式）。
 
+v0.31.2
+2026102721540801
+1. 密码策略历史输入框异常 + SNMP Trap 一行只 3 项（普通布局 bug，z）：经浏览器实测（1600px 下 getBoundingClientRect）定位两个成因：
+   - 密码策略：`.config-card > .form-row` 四列中“历史重复检查”行的 label 带长括注「（最近 N 次，0 为不启用）」，label `flex-shrink:0` 不换行，实测占 259px，把同行 `type=number` 输入框挤到 141px（同列“最小长度”输入框 320px）——输入框宽度异常。该括注与卡片帮助文本（help.card.password_policy 已逐条说明“历史检查：禁止与最近 N 次…，0 表示不检查”）完全冗余。
+   - SNMP Trap：监听地址/端口/冷却窗口 3 字段为一个 `.form-row`，团体名单独一个 `.form-row`（拆行冗余），四列栅格下行一缺 1 列、行二空 3 列，视觉上“一行只 3 项”。
+2. 修法（无新增样式）：去掉 zh/en `config.password_history` 标签中与帮助文本冗余的括注（保留 help 与 min/max/aria 不丢信息），标签回到 86px、输入框恢复 314px（与同列 320px 对齐）；SnmpTrapCard 将监听地址/监听端口/冷却窗口/团体名 4 字段合并入单一 `.form-row`，由通用四列栅格自然成一行 4 项（v3 USM 用户表 form-group-block 跨整行不变）。
+3. 版本：纯前端布局 bug 修复判 z（v0.31.1→v0.31.2）；z 段不联动 frontend/package.json（保持 0.1.14）、根 Cargo.toml 不动，无后端/载荷/数据库变更。
+4. 验证：zh/en 语言包 JSON 解析通过；1600px 静态 harness 实测：密码策略两输入框 320/314px（修复前 320/141px）、SNMP 首行 4 列 4 项（修复前 3+1）；cd frontend && npm run typecheck 0 错、npm run build 通过（CSS 产物哈希未变——本轮零 CSS 改动）、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警。
+
