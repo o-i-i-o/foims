@@ -248,8 +248,6 @@ async function saveNotificationSettings(): Promise<void> {
             <label for="smtp-port">{{ t("smtp.port") }}</label>
             <input id="smtp-port" v-model="smtpPort" type="number" placeholder="587" :aria-label="t('smtp.port')">
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="smtp-username">{{ t("smtp.username") }}</label>
             <input id="smtp-username" v-model="smtpUsername" type="text" :placeholder="t('smtp.username_placeholder')" :aria-label="t('smtp.username')" autocomplete="off">
@@ -265,8 +263,6 @@ async function saveNotificationSettings(): Promise<void> {
               :aria-label="t('smtp.password')"
             >
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="smtp-from">{{ t("smtp.from") }}</label>
             <input id="smtp-from" v-model="smtpFrom" type="email" :placeholder="t('smtp.from_placeholder')" :aria-label="t('smtp.from')" autocomplete="off">

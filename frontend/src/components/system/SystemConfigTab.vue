@@ -337,8 +337,6 @@ async function testSsoConnection(): Promise<void> {
             <label for="ldap-base-dn">{{ t("ldap.base_dn") }}</label>
             <input id="ldap-base-dn" v-model="ldapBaseDn" type="text" :placeholder="t('ldap.base_dn_placeholder')" :aria-label="t('ldap.base_dn')">
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="ldap-bind-dn">{{ t("ldap.bind_dn") }}</label>
             <input id="ldap-bind-dn" v-model="ldapBindDn" type="text" :placeholder="t('ldap.bind_dn_placeholder')" :aria-label="t('ldap.bind_dn')">
@@ -354,8 +352,6 @@ async function testSsoConnection(): Promise<void> {
               :aria-label="t('ldap.bind_password')"
             >
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="ldap-user-filter">{{ t("ldap.user_filter") }}</label>
             <input id="ldap-user-filter" v-model="ldapUserFilter" type="text" :placeholder="t('ldap.user_filter_placeholder')" :aria-label="t('ldap.user_filter')">
@@ -399,8 +395,6 @@ async function testSsoConnection(): Promise<void> {
             <label for="sso-client-id">{{ t("sso.client_id") }}</label>
             <input id="sso-client-id" v-model="ssoClientId" type="text" :placeholder="t('sso.client_id_placeholder')" :aria-label="t('sso.client_id')">
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="sso-client-secret">{{ t("sso.client_secret") }}</label>
             <input
@@ -416,8 +410,6 @@ async function testSsoConnection(): Promise<void> {
             <label for="sso-redirect-uri">{{ t("sso.redirect_uri") }}</label>
             <input id="sso-redirect-uri" v-model="ssoRedirectUri" type="url" :placeholder="t('sso.redirect_uri_placeholder')" :aria-label="t('sso.redirect_uri')">
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="sso-default-role">{{ t("sso.default_role") }}</label>
             <select id="sso-default-role" v-model="ssoDefaultRole" :aria-label="t('sso.default_role')">

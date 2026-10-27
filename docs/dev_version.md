@@ -880,3 +880,10 @@ v0.31.0
 3. 版本：功能优化判 y+1（v0.30.0→v0.31.0，z 归零）；后端改动联动根 Cargo.toml 0.32.4→0.32.5、foims-resource 0.1.17→0.1.18（Cargo.lock 同步）；无前端改动，frontend/package.json 不动；device_id 为查询参数非载荷类型，无 gen-ts-types 变更。
 4. 验证：cargo check -p foims-resource --release 通过、cargo fmt 干净；本机 clippy 1.99 对 create_device_ip/auto_assign_ip/batch 中既有的 `&mut *tx` 报 explicit_auto_deref（非本次改动行，属工具链版本差异，项目基线 clippy 不判），本次新增过滤块无新告警。设备级下钻 UI 尚未接入该参数，实机联调留待设备详情页合入时进行。
 
+v0.31.1
+2026102721394001
+1. 系统配置卡片字段行归一为「单 form-row + 通用四列流式」（普通布局 bug，z）：v0.30 系提交「卡片字段行改为固定四列」将 `.config-card > .form-row` 固定为 4 列后，会话/密码策略/限流/Fail2ban 等「单 form-row」卡片正常按 4 列铺开，但 LDAP/SSO/SMTP 三张卡片仍沿用旧原生前端的「多行×每行 2 字段」结构（各自 3 个 `.form-row`），套 4 列后每行只占左两列、右半留空，与其余卡片不统一。
+2. 修法：不新增任何卡片专属样式（上一轮 `.form-row-2col` 高特异度回退方案已全量撤回），而是把三张卡片的字段合并进单一 `.form-row`，由通用 `.config-card > .form-row` 四列栅格自然流式排布：LDAP 6 字段（4+2）、SSO 5 字段（4+1）、SMTP 6 字段（4+2），阅读顺序不变；会话设置（2 字段）本就为单 form-row，属于通用样式，合并后与其他卡片口径一致。
+3. 版本：纯前端布局 bug 修复判 z（v0.31.0→v0.31.1）；z 段不联动 frontend/package.json（保持 0.1.14）、根 Cargo.toml 不动，无后端/载荷/数据库变更。
+4. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、npx @biomejs/biome@2.6.3 check frontend 23 文件 0 违规、oxlint 316 文件 0 告警；forms.css 本轮零改动（无冗余样式）。
+
