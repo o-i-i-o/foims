@@ -392,7 +392,7 @@ pub async fn create_device_ip<P: DbProvider>(
     })?;
 
     // 新地址可能是设备的管理地址：同事务刷新主机监控（SNMP 来源）行的 ip
-    crate::device::host_monitor::sync_snmp_host_ip(&mut *tx, id).await?;
+    crate::device::host_monitor::sync_snmp_host_ip(tx.as_mut(), id).await?;
 
     tx.commit().await?;
 
@@ -1482,7 +1482,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
     }
 
     // 新地址可能是设备的管理地址：同事务刷新主机监控（SNMP 来源）行的 ip
-    crate::device::host_monitor::sync_snmp_host_ip(&mut *tx, device_id).await?;
+    crate::device::host_monitor::sync_snmp_host_ip(tx.as_mut(), device_id).await?;
 
     tx.commit().await?;
 
@@ -1806,7 +1806,7 @@ pub async fn batch_create_ip_details<P: DbProvider>(
     // 新地址可能是设备的管理地址（此前无 IP 的设备）：逐个刷新主机监控
     // （SNMP 来源）行的 ip
     for device_id in touched_devices {
-        crate::device::host_monitor::sync_snmp_host_ip(&mut *tx, device_id).await?;
+        crate::device::host_monitor::sync_snmp_host_ip(tx.as_mut(), device_id).await?;
     }
 
     tx.commit().await?;

@@ -934,3 +934,18 @@ v0.36.1
 2. 版本：错误修复判 z+1（v0.36.0→v0.36.1）；仅前端改动，frontend/package.json 0.1.19→0.1.20，根 Cargo.toml 不动，无载荷/数据库变更。
 3. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过、biome 23 文件 0 违规、oxlint 316 文件 0 告警。审计方法：TRAE-code-review 流程 + 2 个独立验证子代理共识定性（候选 3 项，确认 2 项、排除 1 项）。
 
+v0.36.2
+2026102814560101
+1. 后端 clippy 告警修复（普通修改，z+1）：`cargo clippy --release --workspace 
+--all-targets -- -D warnings` 在 foims-resource 报 4 处 clippy::explicit_auto_dere
+f——`sync_snmp_host_ip` 形参为具体 `&mut PgConnection`，传入 `&mut *tx`（tx 为 
+Transaction）时显式解引用多余，自动解引用即可达同一类型。涉及 device/interface.
+rs 删除网口后同步主机监控 1 处、ip.rs 新建地址/批量分配后同步 3 处，统一改为 
+`tx.as_mut()`（与本文件同源已有写法一致，显式表达“取事务底层连接”）。仅改调用
+形态，事务边界、SQL 与业务行为零变更，未新增 #[allow]，未触碰其它 `&mut *tx` 
+写法的执行器调用（泛型 Executor 位置不触发该 lint）。
+2. 版本：普通错误修复判 z+1（v0.36.1→v0.36.2），仅后端调用形态调整，根 Cargo.to
+ml 与 foims-resource crate 版本不动，无载荷/数据库变更，前端无改动。
+3. 验证：cargo clippy --release --workspace --all-targets -- -D warnings 0 告警、
+cargo fmt --all -- --check 通过。
+

@@ -543,7 +543,7 @@ pub async fn delete_device_interface<P: DbProvider>(
 
     // 被删网口上的地址可能正是设备的管理地址：同事务刷新主机监控
     // （SNMP 来源）行的 ip
-    super::host_monitor::sync_snmp_host_ip(&mut *tx, device_id).await?;
+    super::host_monitor::sync_snmp_host_ip(tx.as_mut(), device_id).await?;
 
     tx.commit().await?;
 
