@@ -34,6 +34,9 @@
 --        不做静默丢弃；
 --      - 房型与子项匹配性检查：已有工位/机柜的房型必须相容，存量不符时
 --        显式报错要求人工调整（应用层已按房型限制子项新增与房型切换）。
+--   6. IP 状态全面自动化：下线人工设置状态入口（PATCH /api/resources/ip/{id}），
+--      interface_ips.status 值域由 active/inactive/reserved 收窄为
+--      active/inactive；存量 reserved 归为 active，交由判活与陈旧停用任务接管。
 
 BEGIN;
 
@@ -411,5 +414,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_device_interfaces_mac_key
 
 -- 5.4 系统任务标记
 ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS is_system BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ===== 6. IP 状态全面自动化：下线人工设置状态（reserved） =====
+-- 人工状态入口已下线，reserved 不再产生。存量保留地址先归为 active，由
+-- 自动判活（ARP 命中刷新并恢复 active）与 ip_status_sync 陈旧停用任务按
+-- last_seen 统一收敛，不再保留「人工豁免自动化」的语义。
+UPDATE interface_ips SET status = 'active' WHERE status = 'reserved';
+
+-- 状态值域收窄：与 foims-init 建表 CHECK 保持一致
+ALTER TABLE interface_ips DROP CONSTRAINT IF EXISTS chk_interface_ips_status;
+ALTER TABLE interface_ips ADD CONSTRAINT chk_interface_ips_status
+    CHECK (status IN ('active', 'inactive'));
 
 COMMIT;

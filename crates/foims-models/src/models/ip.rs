@@ -6,7 +6,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== IP 详情模型 ====================
+// ==================== 设备详情模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -166,23 +166,6 @@ pub struct PullIpDetailsRequest {
     pub device_ids: Vec<Uuid>,
     /// None 表示全部子网：同步时不限定 interface_ips.subnet_id（前端“全部子网”选项）
     pub subnet_id: Option<Uuid>,
-}
-
-/// PATCH /api/resources/ip/{id} 的人工维护载荷。
-///
-/// 地址、网口归属与子网迁移由设备网卡同步维护（IpSyncItem.subnet_id 路径），
-/// 此处只保留人工治理必需的状态位：置为 reserved 后判活与陈旧同步均不再
-/// 改写该地址，是保留地址的唯一人工入口。
-#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
-#[ts(export)]
-pub struct IpDetailUpdate {
-    /// 取值白名单：active / inactive / reserved（与前端展示口径一致；
-    /// DB 侧 chk_interface_ips_status 兜底，应用层前置拦截非法值）
-    #[validate(custom(
-        function = "crate::models::validate_ip_status_string",
-        message = "server.ip.validation.status_invalid"
-    ))]
-    pub status: String,
 }
 
 // ==================== 单元测试 ====================
@@ -371,30 +354,6 @@ mod tests {
         let result: Result<PullIpDetailsRequest, _> =
             serde_json::from_value(serde_json::json!({ "subnet_id": Uuid::new_v4() }));
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ip_detail_update_status_required() {
-        // status 必填：PATCH 仅承担状态迁移，缺失字段即载荷非法
-        let result: Result<IpDetailUpdate, _> = serde_json::from_value(serde_json::json!({}));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ip_detail_update_status_whitelist() -> Result<(), serde_json::Error> {
-        // 白名单：active / inactive / reserved 合法，其余拒绝
-        for ok_status in ["active", "inactive", "reserved"] {
-            let req: IpDetailUpdate =
-                serde_json::from_value(serde_json::json!({ "status": ok_status }))?;
-            assert!(req.validate().is_ok(), "状态 {ok_status} 应合法");
-        }
-        let bad: IpDetailUpdate =
-            serde_json::from_value(serde_json::json!({ "status": "enabled" }))?;
-        let Err(errors) = bad.validate() else {
-            panic!("白名单外状态应被拒绝");
-        };
-        assert!(errors.errors().contains_key("status"));
-        Ok(())
     }
 
     #[test]

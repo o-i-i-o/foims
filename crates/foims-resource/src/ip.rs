@@ -6,14 +6,14 @@ use axum::extract::{Path, Query, State};
 use axum::response::Response;
 
 use crate::helpers::{validate_ip_in_subnet, validate_network_in_room};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use foims_auth::meta::{RequestMeta, log_op_best_effort};
 use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppMessage, log_error, log_info, log_warn, msg};
-use foims_models::{IpDetail, IpDetailCreate, IpDetailUpdate, IpDetailWithNames};
+use foims_models::{IpDetail, IpDetailCreate, IpDetailWithNames};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -181,6 +181,8 @@ pub async fn get_ip_details<P: DbProvider>(
         ("mac_address", _) => "ORDER BY mac_address ASC NULLS LAST, updated_at DESC",
         ("hostname", "desc") => "ORDER BY hostname DESC NULLS LAST, updated_at DESC",
         ("hostname", _) => "ORDER BY hostname ASC NULLS LAST, updated_at DESC",
+        ("interface_name", "desc") => "ORDER BY interface_name DESC NULLS LAST, updated_at DESC",
+        ("interface_name", _) => "ORDER BY interface_name ASC NULLS LAST, updated_at DESC",
         ("status", "desc") => "ORDER BY status DESC, updated_at DESC",
         ("status", _) => "ORDER BY status ASC, updated_at DESC",
         ("last_seen", "desc") => "ORDER BY last_seen DESC NULLS LAST",
@@ -440,48 +442,6 @@ pub async fn create_device_ip<P: DbProvider>(
     Ok(foims_common::ok_json(mapping, "server.ip.created"))
 }
 
-/// 人工维护 IP 状态（PATCH /api/resources/ip/{id}）。
-///
-/// 地址、网口归属与子网迁移由设备网卡同步维护（`IpSyncItem.subnet_id` 路径），
-/// 此处只承担人工治理：自动判活只翻转 active/inactive，人工置为 reserved
-/// 后判活与陈旧同步都会跳过该地址，因此这是「保留地址」的唯一人工入口。
-pub async fn update_ip_detail<P: DbProvider>(
-    State(state): State<Arc<P>>,
-    Path(id): Path<Uuid>,
-    meta: RequestMeta,
-    AppJson(req): AppJson<IpDetailUpdate>,
-) -> Result<Response, AppError> {
-    req.validate()?;
-
-    // updated_at 由 trg_interface_ips_updated_at 触发器维护，不在此显式赋值
-    let updated: Option<(String, DateTime<Utc>)> = sqlx::query_as(
-        "UPDATE interface_ips SET status = $2 WHERE id = $1 RETURNING status, updated_at",
-    )
-    .bind(id)
-    .bind(&req.status)
-    .fetch_optional(&state.pool()?.get_conn())
-    .await?;
-
-    let (status, updated_at) =
-        updated.ok_or_else(|| AppError::NotFound(msg("server.ip.not_found").with("id", id)))?;
-
-    let details = serde_json::json!({ "status": status });
-    log_op_best_effort(
-        &state.pool()?.get_conn(),
-        &meta,
-        "update_ip_status",
-        "ip",
-        Some(&id),
-        &details,
-    )
-    .await;
-
-    Ok(foims_common::ok_json(
-        serde_json::json!({ "id": id, "status": status, "updated_at": updated_at }),
-        "server.ip.updated",
-    ))
-}
-
 struct MacSyncResult {
     updated_count: usize,
     unchanged_count: usize,
@@ -618,8 +578,8 @@ async fn sync_switch_macs(
     // ============ IP 判活 ============
     // 判活范围：指定子网取该子网；全部子网模式仅取本次观测触达的子网
     //（设备 ARP 表未覆盖的网段不参与判活，避免误杀无关网段地址）。
-    // 范围内未被本次观测命中的 active 地址判为失活；reserved 为人工保留
-    // 语义不参与自动化，未命中行不刷新 last_seen（保留真实最后在线时间）。
+    // 范围内未被本次观测命中的 active 地址判为失活；未命中行不刷新
+    // last_seen（保留真实最后在线时间）。
     let observed_ip_ids: Vec<Uuid> = observed.iter().map(|r| r.ip_row_id).collect();
     let flip_scope: Vec<Uuid> = match subnet_id {
         Some(subnet_id) => vec![subnet_id],
@@ -756,11 +716,10 @@ async fn sync_switch_macs(
             continue;
         }
 
-        // 观测到的 IP 行刷新 last_seen，并即时把先前判为停用的地址恢复活跃
-        // （reserved 为人工保留语义，自动化不触碰；updated_at 由触发器维护）
+        // 观测到的 IP 行刷新 last_seen 并恢复活跃：状态只有 active/inactive 两态，
+        // 判活是唯一的「置活跃」入口（updated_at 由触发器维护）
         sqlx::query(
-            "UPDATE interface_ips SET last_seen = $1, status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END
-             WHERE id = ANY($2)",
+            "UPDATE interface_ips SET last_seen = $1, status = 'active' WHERE id = ANY($2)",
         )
         .bind(now)
         .bind(&iface.observed_ip_ids)
@@ -1018,8 +977,7 @@ async fn dispatch_ip_change_notices(pool: &sqlx::PgPool, notices: Vec<IpChangeNo
 }
 
 /// 按 last_seen 新鲜度同步 IP 状态（供 ip_status_sync 定时任务调用）：
-/// 超过 stale_days 未观测到的 active 地址翻转为 inactive。
-/// reserved 为人工保留语义，自动化不触碰。返回转停用数。
+/// 超过 stale_days 未观测到的 active 地址翻转为 inactive。返回转停用数。
 ///
 /// 不设反向恢复：MAC 拉取判活（sync_switch_macs）已按观测即时恢复活跃
 /// 地址，旧的「inactive 且 last_seen 在阈值内则恢复」兜底会把拉取判活的

@@ -221,17 +221,6 @@ pub fn validate_power_watts(value: i32) -> Result<(), ValidationError> {
     }
 }
 
-/// IP 状态取值白名单：active（使用中）/ inactive（停用）/ reserved（保留）。
-/// interface_ips.status 为 VARCHAR(20) 且 DB 侧有 chk_interface_ips_status CHECK 约束兜底，
-/// 应用层前置拦截非法值；
-/// 合法值集合与前端 formatter 的状态文案键保持一致。
-pub fn validate_ip_status_string(status: &str) -> Result<(), ValidationError> {
-    match status {
-        "active" | "inactive" | "reserved" => Ok(()),
-        _ => Err(ValidationError::new("server.ip.validation.status_invalid")),
-    }
-}
-
 /// DeviceUpdate.hostname（VARCHAR(100)）
 pub fn validate_hostname_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 100, "server.device.validation.hostname_length")
@@ -647,23 +636,6 @@ mod tests {
         // Some(Some(v)) 解包后按引用传入：合法与非法邮箱各一
         assert!(validate_email_opt(&&"a@b.com".to_string()).is_ok());
         assert!(validate_email_opt(&&"not-an-email".to_string()).is_err());
-    }
-
-    #[test]
-    fn test_validate_ip_status_string_whitelist() {
-        // 白名单：active / inactive / reserved
-        for ok_status in ["active", "inactive", "reserved"] {
-            assert!(
-                validate_ip_status_string(ok_status).is_ok(),
-                "状态 {ok_status} 应合法"
-            );
-        }
-        for bad_status in ["", "enabled", "ACTIVE"] {
-            assert!(
-                validate_ip_status_string(bad_status).is_err(),
-                "状态 {bad_status} 应被拒绝"
-            );
-        }
     }
 
     // ---------- deserialize_some 三态语义 ----------

@@ -256,7 +256,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
           <div class="stat-value">{{ statValues.regions }}</div>
         </div>
       </article>
-      <!-- ip 区无页签结构，点击直接跳转 IP 详情页 -->
+      <!-- ip 区无页签结构，点击直接跳转设备详情页 -->
       <article class="stat-card clickable" @click="openSection($event, 'ip')">
         <div class="stat-icon">🔗</div>
         <div class="stat-content">

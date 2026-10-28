@@ -7,7 +7,7 @@
   "nav": {
     "dashboard": "仪表盘",
     "resources": "资源管理",
-    "ip_detail": "IP详情",
+    "ip_detail": "设备详情",
     "visualization": "可视化",
     "agents": "主机监控",
     "logs": "日志",
@@ -97,7 +97,6 @@
   "status": {
     "active": "活跃",
     "inactive": "不活跃",
-    "reserved": "保留",
     "unknown": "未知"
   },
   "device": {
@@ -1234,8 +1233,8 @@
       "network": "子网",
       "workstation": "工位",
       "ip": "IP地址",
-      "ip_manager": "IP详情",
-      "ip_detail": "IP详情",
+      "ip_manager": "设备详情",
+      "ip_detail": "设备详情",
       "region": "区域",
       "network_region": "网络区域",
       "room": "房间",
@@ -1289,10 +1288,13 @@
   "ip": {
     "ip_address": "IP地址",
     "mac_address": "MAC地址",
-    "hostname": "设备端口",
+    "hostname": "主机名",
+    "device_port": "设备端口",
     "status": "状态",
     "network": "子网",
     "location": "位置",
+    "location_with_workstation": "{{room}}（{{workstation}}）",
+    "location_with_position": "{{room}}（{{position}}）",
     "last_seen": "最后在线",
     "pull_mac": "拉取MAC",
     "add_ip": "添加IP",
@@ -1311,13 +1313,7 @@
     "server_connection_failed": "服务器连接失败，请检查网络或联系管理员",
     "load_failed_short": "加载失败",
     "delete_ip": "删除此IP",
-    "pull_short": "拉取",
-    "status_edit": "设置状态",
-    "status_edit_title": "设置 IP 状态",
-    "status_edit_hint": "地址 {{ip}} 的人工状态，保存后立即生效。",
-    "status_active_tip": "使用中：判活会持续刷新最后在线时间。",
-    "status_inactive_tip": "停用：地址仍归属该网口，判活命中会自动恢复为使用中。",
-    "status_reserved_tip": "保留：人工占位地址，自动判活与陈旧停用都不会改写它。"
+    "pull_short": "拉取"
   },
   "visualization": {
     "workstation": "工位可视化",
@@ -2306,11 +2302,9 @@
       "no_physical_interface": "设备没有可用的物理接口，请先创建接口或指定 device_interface_id",
       "not_found": "IP 记录不存在",
       "pull_defaults_retrieved": "获取默认拉取配置成功",
-      "updated": "IP 状态更新成功",
       "validation": {
         "device_ids_range": "拉取设备数量必须在1到100之间",
-        "ip_address_invalid": "请输入有效的IP地址",
-        "status_invalid": "IP 状态非法"
+        "ip_address_invalid": "请输入有效的IP地址"
       }
     },
     "login_log": {

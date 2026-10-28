@@ -13,7 +13,7 @@ use axum::extract::{Multipart, Query, State};
 use axum::middleware;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::routing::{delete, get, patch, post, put};
+use axum::routing::{delete, get, post, put};
 
 use crate::app_state::AppState;
 use crate::log::notification::{
@@ -447,15 +447,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_cabinet_position::<AppState>)
                 .delete(foims_resource::delete_cabinet_position::<AppState>),
         )
-        // IP详情
+        // 设备详情
         .route(
             "/api/resources/ip",
             get(foims_resource::get_ip_details::<AppState>),
-        )
-        // 人工维护 IP 状态（保留/停用），地址与网口归属仍由设备网卡同步维护
-        .route(
-            "/api/resources/ip/{id}",
-            patch(foims_resource::update_ip_detail::<AppState>),
         )
         .route(
             "/api/resources/ip/pull",

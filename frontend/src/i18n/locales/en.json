@@ -7,7 +7,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "resources": "Resources",
-    "ip_detail": "IP Details",
+    "ip_detail": "Device Details",
     "visualization": "Visualization",
     "agents": "Host Monitoring",
     "logs": "Logs",
@@ -97,7 +97,6 @@
   "status": {
     "active": "Active",
     "inactive": "Inactive",
-    "reserved": "Reserved",
     "unknown": "Unknown"
   },
   "device": {
@@ -1234,8 +1233,8 @@
       "network": "Subnet",
       "workstation": "Workstation",
       "ip": "IP Address",
-      "ip_manager": "IP Details",
-      "ip_detail": "IP Details",
+      "ip_manager": "Device Details",
+      "ip_detail": "Device Details",
       "region": "Region",
       "network_region": "Network Region",
       "room": "Room",
@@ -1289,10 +1288,13 @@
   "ip": {
     "ip_address": "IP Address",
     "mac_address": "MAC Address",
-    "hostname": "Device Port",
+    "hostname": "Hostname",
+    "device_port": "Device Port",
     "status": "Status",
     "network": "Subnet",
     "location": "Location",
+    "location_with_workstation": "{{room}} ({{workstation}})",
+    "location_with_position": "{{room}} ({{position}})",
     "last_seen": "Last Seen",
     "pull_mac": "Pull MAC",
     "add_ip": "Add IP",
@@ -1311,13 +1313,7 @@
     "server_connection_failed": "Server connection failed. Please check your network or contact the administrator.",
     "load_failed_short": "Load failed",
     "delete_ip": "Remove this IP",
-    "pull_short": "Pull",
-    "status_edit": "Set status",
-    "status_edit_title": "Set IP status",
-    "status_edit_hint": "Manual status of {{ip}}; effective immediately after saving.",
-    "status_active_tip": "Active: liveness checks keep refreshing the last-seen time.",
-    "status_inactive_tip": "Inactive: the address still belongs to this port and is restored to active once observed again.",
-    "status_reserved_tip": "Reserved: a manual placeholder that neither liveness checks nor stale deactivation will touch."
+    "pull_short": "Pull"
   },
   "visualization": {
     "workstation": "Workstation Visualization",
@@ -2306,11 +2302,9 @@
       "no_physical_interface": "Device has no available physical interface; create one first or specify device_interface_id",
       "not_found": "IP record not found",
       "pull_defaults_retrieved": "Default pull config retrieved",
-      "updated": "IP status updated",
       "validation": {
         "device_ids_range": "Number of pull devices must be between 1 and 100",
-        "ip_address_invalid": "Please enter a valid IP address",
-        "status_invalid": "Invalid IP status"
+        "ip_address_invalid": "Please enter a valid IP address"
       }
     },
     "login_log": {

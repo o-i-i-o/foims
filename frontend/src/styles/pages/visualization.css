@@ -146,17 +146,12 @@
     stroke-width: 1.5;
   }
 
-  /* SVGRenderer.js 会输出 status-${ip.status}（值域见 ips.rs：active/inactive/reserved）
-   与 status-unknown：active 显式声明与基础态相同（同时屏蔽 badges.css 全局
-   .status-active 组合类对 SVG <g> 的误命中），reserved 为警示黄 */
+  /* IP 状态类由 WorkstationCanvas 输出 status-${ip.status}（值域 active/inactive，
+   无 IP 时为 status-unknown）：active 显式声明与基础态相同（同时屏蔽 badges.css
+   全局 .status-active 组合类对 SVG <g> 的误命中） */
   .workstation-element.status-active rect {
     fill: var(--chart-blue-bg);
     stroke: var(--chart-blue-border);
-  }
-
-  .workstation-element.status-reserved rect {
-    fill: var(--chart-yellow-bg);
-    stroke: var(--color-warning);
   }
 
   .workstation-element text {

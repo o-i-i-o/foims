@@ -949,3 +949,18 @@ ml 与 foims-resource crate 版本不动，无载荷/数据库变更，前端无
 3. 验证：cargo clippy --release --workspace --all-targets -- -D warnings 0 告警、
 cargo fmt --all -- --check 通过。
 
+v0.37.0
+2026102815300001
+1. 设备详情页（原「IP详情」）展示重构（功能优化，y+1）：全局文案「IP详情」改为「设备详情」——nav.ip_detail 与日志目标 ip_manager/ip_detail 中英 i18n 同步，路由/model 注释与仪表盘跳转注释同步；表格列序调为「序号/设备/位置/类型/子网/IP/MAC/设备端口/状态/最后在线」，删除创建时间列，把宽度让给组合位置列。
+2. 位置列由「工位 > 机柜 > 设备名」单值改为「房间（工位）」「房间（机柜-机位）」完整定位（设备未绑定工位/机位时只显示房间；机柜缺失时只显示机位名），取 ip_with_details 既有 room_name/workstation_name/cabinet_name/cabinet_position_name；「设备端口」列此前误渲染设备级 hostname，改为渲染 IP 所属网口 interface_name，列排序键由 hostname 改为 interface_name，后端 ORDER BY 白名单补 interface_name 升/降序分支；i18n 键随之正名——ip.hostname 值由误用的「设备端口」回归「主机名」，新增 ip.device_port 承载设备端口文案（网段使用情况弹窗表头保持 ip.hostname，与其 hostname 数据对齐）。
+3. 版本：功能优化判 y+1（v0.36.2→v0.37.0，z 归零）；仅前端联动 frontend/package.json 0.1.20→0.1.21；后端仅排序白名单普通修改（z 级），根 Cargo.toml 0.32.5 与 foims-resource 0.1.18 不动，无载荷/数据库变更。
+4. 验证：cd frontend && npm run typecheck 0 错、npm run build 通过（IpPage chunk 11.41KB/gzip 3.94KB）；cargo fmt --all -- --check 通过、cargo clippy --release -p foims-resource --all-targets -- -D warnings 0 告警；页面效果建议部署后实测位置列与设备端口列。
+
+v0.38.0
+2026102817000001
+1. IP 状态全面自动化（功能删除/行为变更，y+1）：下线人工设置状态链路——删除 PATCH /api/resources/ip/{id} 路由与 foims-resource 的 update_ip_detail（含 update_ip_status 审计日志）、foims-models 的 IpDetailUpdate 载荷与生成物 IpDetailUpdate.ts；interface_ips.status 值域由 active/inactive/reserved 收窄为 active/inactive（foims-init 建表 CHECK、foims-data-management 导入枚举白名单同步），ARP 判活与 ip_status_sync 陈旧停用任务成为唯一状态来源。
+2. 数据迁移：upgrade/0.32/upgrade_0.32.0.sql 第 6 段先把存量 reserved 归为 active，再 DROP/ADD chk_interface_ips_status；sync_switch_macs 判活 UPDATE 因 reserved 语义消失，由 CASE 表达式简化为直接置 active，同步删除残留注释。
+3. 前端：删除 IpStatusModal.vue 与 IpPage 操作列（状态编辑入口）；i18n 删除 status.reserved、ip.status_edit* 六键、server.ip.updated、server.ip.validation.status_invalid（zh/en 同步）；formatter.getStatusText 收敛为 active/inactive；visualization.css 删除 .workstation-element.status-reserved（badges.css 的 .status-reserved 仍被通知/PoE/VLAN 等复用，保留）。
+4. 版本：功能删除判 y+1（v0.37.0→v0.38.0，z 归零）→ 根 Cargo.toml 0.32.5→0.32.6；crate 各自 patch+1：foims-models 0.2.18→0.2.19、foims-resource 0.1.18→0.1.19、foims-init 0.1.15→0.1.16、foims-data-management 0.2.9→0.2.10（cargo update --workspace --offline 同步 Cargo.lock）；前后端混合修改，frontend/package.json 0.1.21→0.1.22。
+5. 验证：cargo fmt --all 通过、cargo clippy --release --workspace --all-targets -- -D warnings 0 告警（首个报错为 src/routes/mod.rs 残留的 patch 导入，已删除）、cargo test --workspace 全绿、bash da-scripts/gen-ts-types.sh 无新增漂移（仅 IpDetailUpdate.ts 已删）；cd frontend && npm run typecheck 0 错、npm run build 通过（IpPage chunk 9.21KB/gzip 3.29KB）、biome check frontend 23 文件 0 违规、oxlint 318 文件 0 告警；升级后核对 interface_ips 无 reserved 行且 CHECK 生效。
+

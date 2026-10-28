@@ -12,7 +12,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             ip_address INET NOT NULL,
             ip_version SMALLINT NOT NULL DEFAULT 4,
             status VARCHAR(20) NOT NULL DEFAULT 'active'
-                CONSTRAINT chk_interface_ips_status CHECK (status IN ('active', 'inactive', 'reserved')),
+                CONSTRAINT chk_interface_ips_status CHECK (status IN ('active', 'inactive')),
             last_seen TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

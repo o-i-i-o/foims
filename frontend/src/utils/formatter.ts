@@ -115,8 +115,7 @@ export function translateNotificationContent(content: unknown): string {
 export function getStatusText(status: string | null | undefined): string {
   const statusMap: Record<string, string> = {
     active: i18n.global.t("status.active"),
-    inactive: i18n.global.t("status.inactive"),
-    reserved: i18n.global.t("status.reserved")
+    inactive: i18n.global.t("status.inactive")
   };
   const mapped = typeof status === "string" ? statusMap[status] : undefined;
   return mapped || status || i18n.global.t("status.unknown");
