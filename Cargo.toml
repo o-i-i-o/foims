@@ -131,7 +131,7 @@ uuid = { version = "1.29.0", features = ["v4", "serde"] }
 
 # Validation
 validator = { version = "0.21.0", features = ["derive"] }
-zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
 
 # x509 证书解析（foims-common 证书剩余寿命辅助：agent 续期链路共用）
 x509-parser = "0.18.1"
