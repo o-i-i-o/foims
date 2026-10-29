@@ -144,12 +144,8 @@ watch(treeQuery.data, () => {
   renderEpoch.value += 1;
 });
 
-function expandAll() {
-  allExpanded.value = true;
-}
-
-function collapseAll() {
-  allExpanded.value = false;
+function toggleAll() {
+  allExpanded.value = !allExpanded.value;
 }
 
 // ==================== 树节点操作（注入给递归节点） ====================
@@ -235,11 +231,8 @@ function handleOrgSaved() {
   <section id="organization" class="content-section active" :aria-label="t('nav.organization')">
     <div class="org-toolbar">
       <div class="org-actions">
-        <button type="button" class="btn btn-secondary btn-sm" @click="expandAll">
-          {{ t("organization.expand_all") }}
-        </button>
-        <button type="button" class="btn btn-secondary btn-sm" @click="collapseAll">
-          {{ t("organization.collapse_all") }}
+        <button type="button" class="btn btn-secondary btn-sm" @click="toggleAll">
+          {{ t(allExpanded ? "organization.collapse_all" : "organization.expand_all") }}
         </button>
         <input
           v-model="searchInput"
