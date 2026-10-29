@@ -106,7 +106,7 @@ impl From<AppError> for SnmpError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnmpParamsLegacy {
     pub ip: String,
     pub port: i32,

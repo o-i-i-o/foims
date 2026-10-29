@@ -360,6 +360,11 @@ pub async fn update_system_config(
         // 防止脱敏掩码覆写真实密码：掩码密码按用户名还原为磁盘值
         let mut snmp_config = snmp;
         restore_snmp_trap_secrets(&mut snmp_config.trap.users, &new_config.snmp.trap.users);
+        // 实时采集配置暂未在系统设置页暴露：请求未携带时沿用磁盘值，
+        // 避免保存其他 SNMP 设置时被重置为默认值
+        if snmp_config.live.is_none() {
+            snmp_config.live = new_config.snmp.live.clone();
+        }
         new_config.snmp = snmp_config;
     }
 
@@ -530,6 +535,10 @@ pub async fn restore_config(
         &mut new_config.snmp.trap.users,
         &current_config.snmp.trap.users,
     );
+    // 旧版备份文件不含实时采集段：沿用当前磁盘配置，避免恢复后静默回到默认值
+    if new_config.snmp.live.is_none() {
+        new_config.snmp.live = current_config.snmp.live.clone();
+    }
 
     // 落盘前校验（与 update_system_config 同口径）：备份文件可能缺校验字段
     // 或被篡改，直接写入会导致重启后服务永久无法启动

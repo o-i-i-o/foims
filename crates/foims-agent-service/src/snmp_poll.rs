@@ -37,8 +37,6 @@ use foims_snmp::core::{
 };
 use foims_snmp::events::record_events;
 
-use crate::alerts::{self, MetricValues};
-
 /// 单轮轮询的最大并发设备数：避免大量离线设备同时超时拖垮运行时
 const POLL_CONCURRENCY: usize = 8;
 /// hostname/os 入库截断宽度（与 ingest 文本校验上限对齐）
@@ -47,11 +45,13 @@ const MAX_OS_LEN: usize = 128;
 
 /// SNMP 采集设备行：SNMP 配置（复用 foims-resource 的 DeviceForSnmp）+ 管理地址。
 #[derive(Debug, sqlx::FromRow)]
-struct SnmpDeviceRow {
+pub(crate) struct SnmpDeviceRow {
     #[sqlx(flatten)]
-    device: DeviceForSnmp,
+    pub(crate) device: DeviceForSnmp,
     /// 设备首个网口 IP（host() 文本形式，IPv6 不含方括号）
-    ip: String,
+    pub(crate) ip: String,
+    /// 对应 `monitored_hosts` 行 id（告警 episode 主体；基线行缺失时为 None）
+    pub(crate) host_id: Option<uuid::Uuid>,
 }
 
 /// 单台设备本轮 SNMP 采集结果（MIB-II 系统组）。
@@ -129,13 +129,16 @@ pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
 ///
 /// 配置判定与设备列表 snmp_configured 字段同口径：community 或 username
 /// 任一非空（snmp_version 列有 DEFAULT 'v2c'，不能作依据）；管理地址取
-/// 设备首个网口的首个 IP（与设备 SNMP 测试路径同源）。
-async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Error> {
+/// 设备首个网口的首个 IP（与设备 SNMP 测试路径同源）；`host_id` 经
+/// `machine_id = 'snmp:{device_id}'` 关联出对应监控主机行，供实时路径
+/// 直接落告警 episode（基线行由 [`ensure_snmp_host_present`] 补建）。
+pub(crate) async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Error> {
     sqlx::query_as::<_, SnmpDeviceRow>(
         r"SELECT d.id, d.name, d.snmp_version, d.snmp_community,
                   d.snmp_username, d.snmp_auth_protocol, d.snmp_auth_password,
                   d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
-                  first_ip.ip AS ip
+                  first_ip.ip AS ip,
+                  mh.id AS host_id
              FROM devices d
              LEFT JOIN LATERAL (
                  SELECT host(i.ip_address) AS ip
@@ -145,11 +148,38 @@ async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Er
                   ORDER BY i.created_at
                   LIMIT 1
              ) first_ip ON true
+             LEFT JOIN monitored_hosts mh
+                        ON mh.machine_id = 'snmp:' || d.id::text
             WHERE (d.snmp_community IS NOT NULL OR d.snmp_username IS NOT NULL)
               AND first_ip.ip IS NOT NULL",
     )
     .fetch_all(pool)
     .await
+}
+
+/// SNMP 行的 machine_id 命名空间：`snmp:{device_id}`，与 agent 上报的机器指纹隔离。
+pub(crate) fn snmp_machine_id(device_id: uuid::Uuid) -> String {
+    format!("snmp:{device_id}")
+}
+
+/// 取设备对应的 `source='snmp'` 监控主机行 id（实时路径在基线行刚补建后回填）。
+pub(crate) async fn load_snmp_host_id(pool: &PgPool, device_id: uuid::Uuid) -> Option<uuid::Uuid> {
+    let result =
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM monitored_hosts WHERE machine_id = $1")
+            .bind(snmp_machine_id(device_id))
+            .fetch_optional(pool)
+            .await;
+    match result {
+        Ok(id) => id,
+        Err(e) => {
+            foims_common::log_error!(
+                "system.snmp_live_host_id_failed",
+                device_id = device_id,
+                error = e
+            );
+            None
+        }
+    }
 }
 
 /// 为已配置 SNMP 且带管理地址的设备确保一条 `source='snmp'` 基线行存在
@@ -161,7 +191,7 @@ async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow>, sqlx::Er
 /// （设备侧 IP 写入路径即时刷新），轮询不承担 `ip`/device_id 的维护，也不
 /// 触碰 status/last_seen/hostname——避免把已 active 的可达设备在本轮采集前
 /// 打回 offline。失败仅记日志，不阻断采集。
-async fn ensure_snmp_host_present(
+pub(crate) async fn ensure_snmp_host_present(
     pool: &PgPool,
     machine_id: &str,
     device_id: uuid::Uuid,
@@ -197,8 +227,8 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
     let device_id = row.device.id;
     let device_name = row.device.name.as_str();
     let ip = row.ip.as_str();
-    // machine_id 合成命名空间：'snmp:{device_id}'，与 agent 上报的机器指纹隔离
-    let machine_id = format!("snmp:{device_id}");
+    // machine_id 合成命名空间：与实时路径、离线翻转同源
+    let machine_id = snmp_machine_id(device_id);
 
     // 先保证基线行存在：即便参数构造/连接/采集失败，已配置 SNMP 的设备也应
     // 在主机监控可见（offline），而非静默消失（设计「配置后自动入库」）
@@ -332,19 +362,8 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
         );
     }
 
-    // 阈值告警：把 source='snmp' 主机接入既有 evaluate_report 流程；失败仅记日志
-    let metric_values = MetricValues {
-        cpu_pct: cpu_usage,
-        mem_pct,
-        disk_pct,
-        temp_c: max_temp,
-    };
-    if let Err(e) = alerts::evaluate_report(pool, agent_id, &hostname, ip, metric_values).await {
-        foims_common::log_error!(
-            "log.task.agent_snmp_poll_failed",
-            error = format!("设备 {device_name}（{device_id}）告警评估失败: {e}")
-        );
-    }
+    // 阈值告警评估不在本轮询路径：快照列刚写入，告警由 episode 运行时统一评估
+    // （实时采集开启时走秒级 live 路径，否则由常驻兜底扫描读同一批快照列）
 
     // 历史曲线快照：cpu/mem/disk/temp + 流量合计（与 agent 上报路径
     // ingest 的快照键保持一致）；冲突（同秒重复轮询）幂等跳过

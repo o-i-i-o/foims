@@ -15,7 +15,10 @@ import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiGet, apiPost, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
+import { useLiveDevicePorts } from "../../composables/useLiveAgents";
+import { formatBps } from "../../utils/formatter";
 import { invalidateDeviceWrite, queryKeys } from "../../utils/queryKeys";
+import { useAuthStore } from "../../stores/auth";
 import ModalShell from "../ModalShell.vue";
 import PortConflictModal from "./PortConflictModal.vue";
 import PortDetailModal from "./PortDetailModal.vue";
@@ -23,6 +26,7 @@ import type { DeviceInterface } from "../../types/api/generated/DeviceInterface"
 import type { DeviceInterfaceCreate } from "../../types/api/generated/DeviceInterfaceCreate";
 import type { DeviceInterfaceUpdate } from "../../types/api/generated/DeviceInterfaceUpdate";
 import type { IpDetail } from "../../types/api/generated/IpDetail";
+import type { LivePort } from "../../types/api/generated/LivePort";
 import type { NetworkCard } from "../../types/api/generated/NetworkCard";
 import type { SnmpPort } from "../../types/api/generated/SnmpPort";
 
@@ -44,6 +48,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
+const auth = useAuthStore();
 
 // ==================== 端口数据 ====================
 
@@ -61,6 +66,38 @@ const nicsQuery = useQuery({
 });
 
 const cards = computed(() => nicsQuery.data.value ?? []);
+
+// ==================== 实时端口状态（SSE） ====================
+
+// 按端口名（忽略大小写）匹配实时快照（与 SNMP 同步同口径）：
+// 仅覆盖运行状态与收/发速率，缺失实时数据时回退库内值
+const { detail: liveDetail } = useLiveDevicePorts(
+  props.deviceId,
+  !auth.hiddenSections.includes("agents")
+);
+const livePortsByName = computed(() => {
+  const map = new Map<string, LivePort>();
+  for (const port of liveDetail.value?.ports ?? []) {
+    map.set(port.name.toLowerCase(), port);
+  }
+  return map;
+});
+
+function livePort(iface: NicPort): LivePort | undefined {
+  return livePortsByName.value.get(String(iface.name).toLowerCase());
+}
+
+/** 端口展示状态：实时 oper 优先，缺测回退库内 status */
+function portStatus(iface: NicPort): string {
+  const port = livePort(iface);
+  if (port?.oper_up === true) {
+    return "up";
+  }
+  if (port?.oper_up === false) {
+    return "down";
+  }
+  return iface.status || "up";
+}
 
 /** 展示端口名中的末尾数字段；不含数字显示全名，空名显示 ? */
 function extractPortLastNumber(portName: string): string {
@@ -115,6 +152,14 @@ function portTooltip(iface: NicPort): string {
   }
   if (iface.speed) {
     parts.push(`${t("device.speed")}: ${iface.speed}`);
+  }
+  const live = livePort(iface);
+  if (live) {
+    const state = live.oper_up === false ? t("device.port_status_down") : t("device.port_status_up");
+    parts.push(`${t("device.live_status")}: ${state}`);
+    if (live.rx_bps != null || live.tx_bps != null) {
+      parts.push(`↓ ${formatBps(live.rx_bps)} ↑ ${formatBps(live.tx_bps)}`);
+    }
   }
   return parts.join(" | ");
 }
@@ -392,7 +437,7 @@ async function applySnmpResults(
               v-for="iface in sortedPorts(card)"
               :key="iface.id"
               class="port-item"
-              :class="[iface.device_managed ? 'nic-interface' : '', `status-${iface.status || 'up'}`]"
+              :class="[iface.device_managed ? 'nic-interface' : '', `status-${portStatus(iface)}`]"
               @click="openPortDetail(iface)"
             >
               {{ extractPortLastNumber(iface.name) || (iface.name || "?").slice(0, 3) }}

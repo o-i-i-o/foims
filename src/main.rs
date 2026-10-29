@@ -489,6 +489,42 @@ async fn main() -> std::io::Result<()> {
         );
     }
 
+    // SNMP 实时采集：秒级定向 GET 维持内存快照（不落库），供实时展示与
+    // Top 榜；趋势仍由 5 分钟全量轮询落库。注册表由 AppState 共享给
+    // 实时列表与 SSE 端点，初始化模式无连接池时不启动（注册表为空）
+    let live_registry = Arc::new(foims_agent_service::LiveRegistry::new());
+    let live_config = config.snmp.live.clone().filter(|live| live.enabled);
+
+    // 告警 episode 运行时：实时采集、agent 上报、常驻兜底扫描三条路径共用的
+    // 单实例（阈值缓存 + 状态机 + 落库与通知）。初始化模式无连接池时为 None，
+    // 告警评估缺席；实时采集开启时 SNMP 主机的秒级读数归实时路径，兜底扫描
+    // 只兜底 agent 上报主机，避免 5 分钟前的快照把刚恢复的告警拖回待决。
+    let alert_runtime = pool.as_ref().map(|db_pool| {
+        Arc::new(foims_agent_service::AlertRuntime::new(
+            db_pool.get_conn(),
+            live_config.is_some(),
+        ))
+    });
+    if let Some(runtime) = alert_runtime.as_ref() {
+        // 重启恢复既有 episode：内存清空会把仍在进行的告警重开一次
+        runtime.hydrate().await;
+        // 常驻调度（计数刷盘 + 兜底扫描）：句柄丢弃，随关闭信号自行退出
+        Arc::clone(runtime).start_sweeper(shutdown.subscribe());
+    }
+
+    if let Some(live) = live_config
+        && let Some(db_pool) = pool.as_ref()
+        && let Some(runtime) = alert_runtime.clone()
+    {
+        foims_agent_service::start_live_poller(
+            db_pool.get_conn(),
+            live,
+            live_registry.clone(),
+            runtime,
+            shutdown.subscribe(),
+        );
+    }
+
     let mut running_scheduler: Option<RunningScheduler> = None;
 
     let task_registry = Arc::new({
@@ -678,6 +714,8 @@ async fn main() -> std::io::Result<()> {
             config.clone(),
             pool.clone(),
             task_registry.clone(),
+            live_registry,
+            alert_runtime.clone(),
             shutdown.clone(),
             rate_limiter.clone(),
         )
@@ -690,11 +728,15 @@ async fn main() -> std::io::Result<()> {
 
     // Agent 监控上报服务（QUIC mTLS，UDP 9100）：数据库可用且配置启用时后台启动；
     // 证书签发或端口绑定失败仅在任务内记录日志，不阻塞主服务进程。
-    // 传共享配置槽：注册令牌/上报间隔每请求读取，配置页修改即时生效
-    if let Some(db_pool) = pool.as_ref() {
+    // 传共享配置槽：注册令牌/上报间隔每请求读取，配置页修改即时生效。
+    // 报告路径的告警评估经同一个 episode 运行时（与实时采集、兜底扫描共享状态）
+    if let Some(db_pool) = pool.as_ref()
+        && let Some(runtime) = alert_runtime.clone()
+    {
         foims_agent_service::report_server::spawn_report_server_task(
             db_pool.get_conn(),
             app_state.config.clone(),
+            runtime,
             env!("CARGO_PKG_VERSION"),
         );
     }

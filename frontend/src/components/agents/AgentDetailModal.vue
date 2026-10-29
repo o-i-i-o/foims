@@ -8,7 +8,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../../api/client";
-import { formatDateTime } from "../../utils/formatter";
+import { formatBps, formatDateTime } from "../../utils/formatter";
 import ModalShell from "../ModalShell.vue";
 import AgentSparkline from "./AgentSparkline.vue";
 import AgentUsageBar from "./AgentUsageBar.vue";
@@ -169,24 +169,6 @@ function formatBytes(bytes: unknown): string {
     unitIndex += 1;
   }
   return `${unitIndex === 0 ? size : size.toFixed(1)} ${units[unitIndex]}`;
-}
-
-/** 网络速率：bps → bps/Kbps/Mbps/Gbps */
-function formatBps(bps: unknown): string {
-  const value = Number(bps);
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-  if (value >= 1e9) {
-    return `${(value / 1e9).toFixed(2)} Gbps`;
-  }
-  if (value >= 1e6) {
-    return `${(value / 1e6).toFixed(2)} Mbps`;
-  }
-  if (value >= 1e3) {
-    return `${(value / 1e3).toFixed(1)} Kbps`;
-  }
-  return `${Math.round(value)} bps`;
 }
 
 /** 端口链路状态徽标类：up=绿、down=红、其余中性 */

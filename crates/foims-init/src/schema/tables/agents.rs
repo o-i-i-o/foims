@@ -79,14 +79,27 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 告警状态表：记录每台主机各指标当前的告警态（状态翻转检测的持久依据），
-    // 超阈值边沿 false→true 时发站内通知；主机删除级联清理
+    // 告警 episode 表：一台主机一个指标的一次「持续超标」过程（pending/active/
+    // resolved）落库一行，是告警状态的事实源（内存态为工作副本，重启据此恢复）；
+    // 累计次数与通知行 ID 供静默窗口内就地刷新文案，主机删除级联清理
     sqlx::query(
-        r"CREATE TABLE IF NOT EXISTS host_alert_states (
-            agent_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
-            metric TEXT NOT NULL,
-            alerting BOOLEAN NOT NULL DEFAULT FALSE,
-            PRIMARY KEY (agent_id, metric)
+        r"CREATE TABLE IF NOT EXISTS host_alert_episodes (
+            host_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
+            metric TEXT NOT NULL
+                CONSTRAINT chk_host_alert_episodes_metric CHECK (metric IN ('cpu', 'mem', 'disk', 'temp')),
+            status TEXT NOT NULL
+                CONSTRAINT chk_host_alert_episodes_status CHECK (status IN ('pending', 'active', 'resolved')),
+            started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+            opened_at TIMESTAMP WITH TIME ZONE,
+            resolved_at TIMESTAMP WITH TIME ZONE,
+            last_exceed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+            last_notified_at TIMESTAMP WITH TIME ZONE,
+            last_value DOUBLE PRECISION,
+            threshold SMALLINT NOT NULL,
+            exceed_count BIGINT NOT NULL DEFAULT 0,
+            notify_ids TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (host_id, metric)
         )",
     )
     .execute(pool)

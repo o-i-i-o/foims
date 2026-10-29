@@ -458,24 +458,20 @@ pub async fn ingest(
         );
     }
 
-    // 8. 告警评估：入库成功后按全局阈值评估最后一帧快照（超阈值边沿发站内
-    // 通知）；评估失败仅记日志，不影响已成功的上报响应
+    // 8. 告警评估：入库成功后按全局阈值评估最后一帧快照，交由 episode 运行时
+    // 判定开告警/窗口内累计/复位；内部失败自行记日志，不影响已成功的上报响应
     let values = crate::alerts::MetricValues {
         cpu_pct: Some(last_report.cpu.usage_pct),
         mem_pct,
         disk_pct,
         temp_c: temp,
     };
-    if let Err(e) =
-        crate::alerts::evaluate_report(&ctx.pool, agent_id, &last_trimmed.hostname, &ip, values)
-            .await
-    {
-        foims_common::log_error!(
-            "log.agent.alert_evaluate_failed",
-            agent_id = agent_id,
-            error = e
-        );
-    }
+    let host = crate::alert_episode::HostRef {
+        id: agent_id,
+        hostname: last_trimmed.hostname.clone(),
+        ip,
+    };
+    ctx.alerts.evaluate_host(&host, values).await;
 
     // 9. 响应控制面：下发上报间隔（不低于下限）与最新版本通告
     (

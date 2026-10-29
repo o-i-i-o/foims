@@ -551,7 +551,7 @@ pub async fn send_device_swap_email(
 
 /// 发送主机资源告警邮件（CPU/内存/磁盘/温度阈值超标）。
 ///
-/// `metric` 为 host_alert_states 的指标名（cpu/mem/disk/temp），
+/// `metric` 为 host_alert_episodes 的指标名（cpu/mem/disk/temp），
 /// 值与阈值单位随指标变化（温度 ℃，其余 %）。
 pub async fn send_host_alert_email(
     pool: &PgPool,

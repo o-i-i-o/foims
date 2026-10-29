@@ -37,6 +37,11 @@
 --   6. IP 状态全面自动化：下线人工设置状态入口（PATCH /api/resources/ip/{id}），
 --      interface_ips.status 值域由 active/inactive/reserved 收窄为
 --      active/inactive；存量 reserved 归为 active，交由判活与陈旧停用任务接管。
+--   7. 主机资源告警 episode 化（实时路径接入告警）：新建 host_alert_episodes
+--      承载「一次持续超标」的过程态（状态 + 计时 + 累计次数 + 通知行 ID），
+--      DROP 旧 host_alert_states（只有 alerting 布尔，无法承载计时；告警态
+--      可丢，重评即重建）。阈值配置的窗口字段由代码 serde 默认补齐，存量
+--      JSON 无需订正。
 
 BEGIN;
 
@@ -425,5 +430,32 @@ UPDATE interface_ips SET status = 'active' WHERE status = 'reserved';
 ALTER TABLE interface_ips DROP CONSTRAINT IF EXISTS chk_interface_ips_status;
 ALTER TABLE interface_ips ADD CONSTRAINT chk_interface_ips_status
     CHECK (status IN ('active', 'inactive'));
+
+-- ===== 7. 主机资源告警 episode 化 =====
+-- 告警由「布尔翻转态」升级为「过程态」：一台主机一个指标的一次持续超标落一行
+-- episode，pending/active/resolved 三段生命周期 + 持续计时 + 静默窗口内的累计
+-- 次数与通知行引用（notify_ids 逗号串，供就地刷新通知文案）。旧表
+-- host_alert_states 只有 alerting 布尔，无法承载上述状态，直接重建：告警态是
+-- 可由读数重算的事实，删除后下一轮评估自然重建，最坏结果是一次重复通知。
+CREATE TABLE IF NOT EXISTS host_alert_episodes (
+    host_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
+    metric TEXT NOT NULL CONSTRAINT chk_host_alert_episodes_metric
+        CHECK (metric IN ('cpu', 'mem', 'disk', 'temp')),
+    status TEXT NOT NULL CONSTRAINT chk_host_alert_episodes_status
+        CHECK (status IN ('pending', 'active', 'resolved')),
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    opened_at TIMESTAMP WITH TIME ZONE,
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    last_exceed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    last_notified_at TIMESTAMP WITH TIME ZONE,
+    last_value DOUBLE PRECISION,
+    threshold SMALLINT NOT NULL,
+    exceed_count BIGINT NOT NULL DEFAULT 0,
+    notify_ids TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (host_id, metric)
+);
+
+DROP TABLE IF EXISTS host_alert_states;
 
 COMMIT;

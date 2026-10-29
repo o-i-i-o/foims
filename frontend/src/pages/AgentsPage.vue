@@ -21,6 +21,9 @@ import Pagination from "../components/Pagination.vue";
 import AgentDetailModal from "../components/agents/AgentDetailModal.vue";
 import AgentThresholdModal from "../components/agents/AgentThresholdModal.vue";
 import AgentUsageBar from "../components/agents/AgentUsageBar.vue";
+import { useLiveAgents } from "../composables/useLiveAgents";
+import { useAuthStore } from "../stores/auth";
+import type { LiveSummaryRow } from "../types/api/generated/LiveSummaryRow";
 
 // 自动刷新周期与每页条数
 const REFRESH_INTERVAL_MS = 30000;
@@ -28,6 +31,7 @@ const DEFAULT_PAGE_SIZE = 20;
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
+const auth = useAuthStore();
 
 // ==================== 列表查询（筛选 + 分页 + 轮询） ====================
 
@@ -36,6 +40,8 @@ const queryClient = useQueryClient();
 // 温度可能缺报）
 interface AgentListItem {
   id: number | string;
+  /** SNMP 采集行关联的设备 ID（实时快照按此匹配；Agent 行为空） */
+  device_id?: string | null;
   status: string;
   hostname: string | null;
   source?: string | null;
@@ -122,6 +128,43 @@ function formatTemp(temp: number | string | null): string {
   return `${Number(temp).toFixed(1)}℃`;
 }
 
+// ==================== 实时快照覆盖（SNMP 行） ====================
+
+// SSE 推送的全部 SNMP 设备快照：仅覆盖当前页中 source='snmp' 的行，
+// 列表结构（分页/状态/关键字）仍由 30s 轮询维护
+const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
+  !auth.hiddenSections.includes("agents")
+);
+const liveByDevice = computed(() => {
+  const map = new Map<string, LiveSummaryRow>();
+  for (const row of liveDevices.value) {
+    map.set(row.device_id, row);
+  }
+  return map;
+});
+
+function liveRow(agent: AgentListItem): LiveSummaryRow | undefined {
+  return agent.device_id ? liveByDevice.value.get(agent.device_id) : undefined;
+}
+
+// 实时值缺失（部分采集失败）时回退列表快照值，避免列闪空
+function liveCpu(agent: AgentListItem): number | string | null {
+  return liveRow(agent)?.cpu_usage_pct ?? agent.cpu_usage;
+}
+
+function liveMem(agent: AgentListItem): number | string | null {
+  return liveRow(agent)?.mem_usage_pct ?? agent.mem_usage_pct;
+}
+
+function liveTempValue(agent: AgentListItem): number | string | null {
+  return liveRow(agent)?.temperature_c ?? agent.max_temp;
+}
+
+/** 最近采集时间：有实时快照时取快照时间（秒级刷新），否则回退落库时间 */
+function liveLastSeen(agent: AgentListItem): string | null {
+  return liveRow(agent)?.collected_at ?? agent.last_seen;
+}
+
 // ==================== 行内管理操作 ====================
 
 // 行内操作语义：detail 打开详情弹窗，disable/enable 经 PATCH 切换状态
@@ -184,6 +227,10 @@ function handleDeleteConfirmed() {
       <button type="button" class="btn btn-primary btn-sm" @click="applyFilters">{{ t("agents.query") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="list.refetch()">{{ t("common.refresh") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="showThreshold = true">{{ t("agents.alert_threshold") }}</button>
+      <span class="agent-live-state" :class="liveConnected ? 'is-on' : 'is-off'">
+        <span class="agent-live-dot" aria-hidden="true"></span>
+        {{ liveConnected ? t("agents.live_connected") : t("agents.live_disconnected") }}
+      </span>
     </div>
     <div class="table-container">
       <table id="agents-table" class="data-table" :aria-label="t('nav.agents')">
@@ -220,17 +267,21 @@ function handleDeleteConfirmed() {
               {{ agent.hostname || "-" }}<span
                 v-if="agent.source === 'snmp'"
                 class="agent-source-badge"
-              >{{ t("agents.source_snmp") }}</span><span v-if="agent.label" class="agent-host-label">{{ agent.label }}</span>
+              >{{ t("agents.source_snmp") }}</span><span
+                v-if="liveRow(agent)"
+                class="agent-live-badge"
+                :title="t('agents.live_realtime')"
+              >{{ t("agents.live_realtime") }}</span><span v-if="agent.label" class="agent-host-label">{{ agent.label }}</span>
             </td>
             <td>{{ agent.ip || "-" }}</td>
             <td>{{ agent.os || "-" }}</td>
             <td class="col-center">{{ agent.arch || "-" }}</td>
-            <td><AgentUsageBar :value="agent.cpu_usage" /></td>
-            <td><AgentUsageBar :value="agent.mem_usage_pct" /></td>
+            <td><AgentUsageBar :value="liveCpu(agent)" /></td>
+            <td><AgentUsageBar :value="liveMem(agent)" /></td>
             <td><AgentUsageBar :value="agent.disk_usage_pct" /></td>
-            <td class="col-center">{{ formatTemp(agent.max_temp) }}</td>
+            <td class="col-center">{{ formatTemp(liveTempValue(agent)) }}</td>
             <td>{{ agent.agent_version || "-" }}</td>
-            <td>{{ agent.last_seen ? formatTime(agent.last_seen) : "-" }}</td>
+            <td>{{ liveLastSeen(agent) ? formatTime(liveLastSeen(agent)) : "-" }}</td>
             <td class="col-center">
               <button
                 type="button"

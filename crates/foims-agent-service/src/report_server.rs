@@ -33,7 +33,7 @@ const BATCH_BODY_LIMIT_BYTES: usize = 9 * 1024 * 1024;
 /// h3 请求流类型（h3 0.0.x API 变动以本别名隔离）
 type AgentStream = h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
 
-/// 接收服务上下文：连接池、共享配置槽与服务版本。
+/// 接收服务上下文：连接池、共享配置槽、告警运行时与服务版本。
 #[derive(Clone)]
 pub struct ReportContext {
     /// 应用数据库连接池
@@ -41,6 +41,8 @@ pub struct ReportContext {
     /// 共享配置槽：注册令牌/上报间隔/payload 上限每请求读取，
     /// 配置页修改与令牌重新生成后即时生效，无需重启
     pub config: foims_common::config::SharedConfig,
+    /// 告警 episode 运行时（与实时采集、兜底扫描共用同一实例）
+    pub alerts: Arc<crate::alert_episode::AlertRuntime>,
     /// 服务端版本（响应 latest_version 通告）
     pub server_version: String,
 }
@@ -62,6 +64,7 @@ impl ReportContext {
 pub fn spawn_report_server_task(
     pool: sqlx::PgPool,
     config: foims_common::config::SharedConfig,
+    alerts: Arc<crate::alert_episode::AlertRuntime>,
     server_version: &'static str,
 ) {
     let agent_enabled = config.load().agent.enabled;
@@ -75,6 +78,7 @@ pub fn spawn_report_server_task(
         let ctx = ReportContext {
             pool,
             config,
+            alerts,
             server_version: server_version.to_string(),
         };
         // 证书物料缺失时拒绝启动监听（mTLS 无法建立），不 panic

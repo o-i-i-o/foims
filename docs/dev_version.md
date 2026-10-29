@@ -964,3 +964,42 @@ v0.38.0
 4. 版本：功能删除判 y+1（v0.37.0→v0.38.0，z 归零）→ 根 Cargo.toml 0.32.5→0.32.6；crate 各自 patch+1：foims-models 0.2.18→0.2.19、foims-resource 0.1.18→0.1.19、foims-init 0.1.15→0.1.16、foims-data-management 0.2.9→0.2.10（cargo update --workspace --offline 同步 Cargo.lock）；前后端混合修改，frontend/package.json 0.1.21→0.1.22。
 5. 验证：cargo fmt --all 通过、cargo clippy --release --workspace --all-targets -- -D warnings 0 告警（首个报错为 src/routes/mod.rs 残留的 patch 导入，已删除）、cargo test --workspace 全绿、bash da-scripts/gen-ts-types.sh 无新增漂移（仅 IpDetailUpdate.ts 已删）；cd frontend && npm run typecheck 0 错、npm run build 通过（IpPage chunk 9.21KB/gzip 3.29KB）、biome check frontend 23 文件 0 违规、oxlint 318 文件 0 告警；升级后核对 interface_ips 无 reserved 行且 CHECK 生效。
 
+v0.39.0
+2026102914222901
+1. SNMP 实时采集一期（功能优化，y+1）：新增秒级实时路径，与 5 分钟全量轮询解耦——接口状态/流量、CPU/内存/温度只走定向 OID GET，结果驻留内存快照（不写库、不写趋势），供后续 SSE/Top 榜；趋势与告警仍由既有全量轮询落库。
+   - 配置：SnmpConfig 新增 live 段（Option<SnmpLiveConfig>，缺省按默认启动）——enabled/interval_secs=5/resource_interval_secs=15/timeout_secs=2/max_concurrency=64/inventory_refresh_secs=1800/max_backoff_secs=60；暂未在系统设置页暴露，PUT /api/system/config 与备份恢复在请求/备份缺该段时沿用磁盘值，避免保存其他 SNMP 设置时被重置。
+   - foims-snmp::live::profile：一次性探测定厂商（Cisco/华为/华三/通用，sysObjectID 企业号优先、sysDescr 兜底）、端口清单（ethernetCsmacd/fastEthernet/gigabitEthernet/ieee8023adLag，ifHighSpeed 优先，上限 128 口）、CPU 来源（CISCO-PROCESS-MIB cpmCPUTotal1min/5min、HUAWEI-ENTITY-EXTENT-MIB .5、HH3C-ENTITY-EXT-MIB .6、hrProcessorLoad 回退）、内存方案（Cisco memory pool used+free、华为/华三实体表 usage%+size 缓存、hrStorage Ram 行、UCD 标量回退）、温度回退链（厂商 ENVMON/华为 .11/华三 .12 → ENTITY-SENSOR-MIB（修正 scale 换算为 3×(scale−9)）→ LM-SENSORS 毫摄氏度）。
+   - foims-snmp::live::collector：按缓存索引定向 GET，状态/流量每轮 4×端口数 + 1 个 uptime，资源组按更低频率；单请求分块 ≤20 OID（v3 authPriv 头后留 IPv6 1232B 安全载荷）；64 位 HC 计数器失败时回落 32 位；计数器差值复用 iface_rate_bps（回绕与限速）；资源轮次沿用缓存值，非资源轮次不闪断；全部分块无有效值时 responded=false，不覆盖上一轮成功数据。
+   - foims-agent-service::live_poll：每设备常驻 worker + 会话复用（v3 只做一次引擎发现），supervisor 每 60s 重载设备清单按差异增删/重启（凭据/地址变更经参数比对生效），启动按设备序号在采样间隔内错峰，全局 Semaphore 限制在途设备数；无响应即丢弃会话并指数退避（上限 max_backoff_secs），恢复回正常间隔；端口状态全缺或每 30 分钟重建 profile；LiveRegistry（DashMap）只存最近成功快照，消费方以 collected_at 判新鲜度（age_secs）。
+   - 启动接线：src/main.rs 在 Trap 接收之后按 live.enabled 启动（初始化模式无连接池跳过）；新增中英日志键 system.snmp_live_started/devices_load_failed/stopped；snmp_poll 的设备清单加载与行结构改为 crate 内可见以复用查询。
+2. 版本：功能优化判 y+1（v0.38.0→v0.39.0，z 归零）；后端联动根 Cargo.toml 0.32.6→0.32.7、foims-snmp 0.1.2→0.1.3、foims-agent-service 0.1.19→0.1.20、foims-common 0.3.15→0.3.16（Cargo.lock 同步）；无前端改动，frontend/package.json 保持 0.1.22；无数据库结构/载荷类型变更，gen-ts-types 无需运行。
+3. 验证：cargo fmt --all 通过、cargo clippy --release --workspace --all-targets -- -D warnings 0 告警、cargo test --workspace --lib 全绿（foims-snmp 73 项含新增实体内存聚合/传感器换算用例，foims-agent-service 55 项含新增错峰与注册表用例）；实体内存聚合/温度换算单测在开发中实际拦下 ENTITY-SENSOR-MIB scale 误算。真实交换机联调与 500 台 v3/IPv6 容量压测待部署后执行（阶段一验收项）；SSE/HTTP 查询接口与前端接入为后续阶段。
+
+v0.40.0
+2026102920300001
+1. SNMP 实时展示二期（功能优化，y+1）：内存快照经 SSE 推送前端，实时值不落库。
+   - LiveRegistry 增加写入代数 revision（upsert/remove 自增），SSE 端按代数变化推送，无写入时零流量；src/main.rs 提前构造 Arc<LiveRegistry> 同时交给实时采集与 AppState，新增 LiveProvider 能力 trait（agent-service 定义、AppState 实现），避免子 crate 反向依赖主程序。
+   - 配置加载期归一：`Config::load` 在反序列化后把缺失的 `snmp.live` 补为默认（enabled=true，零配置即启用），反序列化阶段仍保持 `None`，使系统设置保存与备份恢复在请求/备份未携带该段时继续沿用磁盘值。
+   - 新增 foims-agent-service::live_api：GET /api/agents/live 全量摘要（首次加载与 SSE 不可用兜底）；GET /api/agents/live/stream SSE——`summary` 事件为全部设备轻量摘要（2s 节拍、按 revision 去重），带 `?device_id=` 时另推 `device` 事件（端口 admin/oper 状态与收/发速率）；15s KeepAlive 心跳，响应头 Cache-Control: no-cache + X-Accel-Buffering: no；订阅服务关闭信号，退出时一个节拍内结束流，避免长连接阻塞优雅关闭。挂载于既有 /api/agents nest，沿用 agent_admin_guard（admin/secadmin），浏览器同源 EventSource 自动携带 HttpOnly Cookie。新增载荷类型 LiveSummaryRow/LivePort/LiveDeviceDetail（ts-rs 导出）。
+   - /api/agents 列表补 device_id 字段（前端按设备 ID 匹配实时快照）；npm 依赖新增 tokio-stream（IntervalStream）与 futures-util（scan）直引。
+   - nginx（生产/开发配置）新增 /api/agents/live/stream 专用 location：proxy_buffering off、proxy_cache off、读写超时 1h，避免 SSE 事件被攒批或空闲断连。
+   - 前端：新增 composables/useLiveAgents.ts（EventSource 同源 Cookie 鉴权、断线自动重连、卸载关闭）与 useLiveDevicePorts；主机监控页当前页 SNMP 行以实时快照覆盖 CPU/内存/温度/最近采集时间并标注「实时」，工具栏显示 SSE 连接状态；仪表盘新增「SNMP 实时负载」卡片（CPU/内存/温度/流量页签，全设备按值降序取前 5，复用全局告警阈值标红 + 「仅异常」筛选，流量页签无阈值；快照超 30s 降透明度标记数据陈旧）；设备端口弹窗按端口名匹配实时 oper 状态与收/发速率并写入 tooltip；formatBps 收敛到 utils/formatter 复用（AgentDetailModal 去重）。
+2. 版本：功能优化判 y+1（v0.39.0→v0.40.0，z 归零）；根 Cargo.toml 0.32.7→0.32.8、foims-agent-service 0.1.20→0.1.21（Cargo.lock 同步）；frontend/package.json 0.1.22→0.1.23；无数据库结构变更，新增载荷类型已由 gen-ts-types 导出。
+3. 验证：cargo fmt 通过、cargo clippy --release --workspace --all-targets -- -D warnings 0 告警、cargo test --workspace --lib 全绿（live_api 新增摘要排序/端口统计/明细用例）；cd frontend && npm run typecheck 0 错、npm run build 通过、biome check frontend 0 违规、oxlint 0 告警。
+4. 部署实测（./da-scripts/pak.sh，本机 2 台 SNMP 设备）：配置文件不含 `[snmp.live]` 时按默认启用（日志「SNMP 实时采集已启动: 设备 2 台, 采样间隔 5s」）；GET /api/agents/live 返回摘要且第二轮起 rx/tx 速率非空；SSE 经 nginx 以 5s 节拍推 summary，带 `?device_id=` 时同推 device 事件（8 口 ifName/admin/oper/速率，wlan 口 oper_up=true 与 ports_up=1 相符）；不可达设备按 5s→10s 指数退避。前端：仪表盘实时卡片与主机监控「实时推送已连接」「实时」标记生效，实时 CPU 值随 5s 刷新（与 5 分钟入库值明显不同）；「仅异常」在无超阈值设备时显示空态文案；流量页签正确隐藏阈值筛选；`systemctl restart foims` 时 SSE 在一个节拍内（约 1s）结束、优雅关闭未被长连接阻塞，浏览器 EventSource 自动重连恢复。端口弹窗订阅已连通（network 可见 device_id 流 200），但本机库中端口为手工名（与 SNMP ifName 不一致）故未命中实时覆盖——按名匹配需真实交换机数据复验；超阈值标红与 500 台容量压测仍待真实交换机环境执行（阶段一/二验收项）。
+
+
+v0.41.0
+2026102917055601
+1. 告警 episode 模型三期（功能优化，y+1）：同设备同指标的告警从「每次超标发一条」改为有生命周期的 episode（Pending→Active→Resolved），实时秒级路径、Agent 上报路径、5 分钟兜底扫描三条路径统一进同一运行时，解决同告警刷屏并把累计次数写进通知本身。
+   - 新增 foims-agent-service::alert_episode：纯函数 `Episode::step()` 产出状态迁移与副作用位（开告警/累计/恢复/落盘），运行时用 DashMap 做工作副本、host_alert_episodes 做真值；`AlertProvider` 能力 trait 由 AppState 实现（沿用 LiveProvider 口径，避免子 crate 反向依赖）。抖动参数全局一套：`for_secs` 持续超标时长、`quiet_window_secs` 静默窗口、`cooldown_secs` 恢复冷却、`hysteresis_pct` 回落迟滞带（复位线 = 阈值 ×(1−带宽)，读数落在复位线与阈值之间既不算超标也不复位，缺失读数只保持状态绝不误判恢复）。
+   - 通知语义「开启发一条、窗口内就地累计、窗口外另发一条、恢复发恢复通知」：episode 只记住最新一条通知 ID（notify_ids），静默窗口内的累计通过 UPDATE content 就地刷新该行（数值与次数变化、历史行不再被改写），恢复按指标发 resolved_* 文案。`foims_snmp::events::create_notification` 改为返回新行 ID 供就地刷新。
+   - 常驻调度：每 60s 刷一次 dirty 计数、每 5 个节拍做一轮兜底扫描（`live_covers_snmp` 为真时扫描只取 source='agent'，SNMP 交给秒级路径，防止 5 分钟旧快照把刚恢复的告警拖回 Pending），启动 hydrate 既有 episode（重启不重复告警、不丢计数），过期 resolved 按 1h 回收。
+   - 三路径接线：live_poll worker 在每轮 upsert 后按 host_id 评估 cpu/mem/temp（disk 实时无读数置 None 保持状态）；ingest 走同一 evaluate_host；snmp_poll 的 5 分钟轮询不再自带告警评估。`SnmpDeviceRow` 暴露 host_id（LEFT JOIN monitored_hosts on machine_id='snmp:{device_id}'），实时 supervisor 在 reconcile 期为新建/缺行的 SNMP 设备补基线主机行并取回 host_id，同轮即开始评估，配置新设备不再有显示与告警空窗。
+   - 数据库：host_alert_states 由 host_alert_episodes 取代（PK (host_id, metric)，FK ON DELETE CASCADE，status/metric CHECK，started_at/opened_at/resolved_at/last_exceed_at/last_notified_at/last_value/threshold/exceed_count/notify_ids/updated_at），foims-init 建表与 check.rs 清单同步，upgrade/0.32/upgrade_0.32.0.sql 第 7 段建表并 DROP 旧表（本机已执行核对：PK、双 CHECK、级联删除均在位）。
+   - i18n 与前端：通知正文按指标成对提供 body_*/resolved_*（含 {{count}} 累计次数），恢复文案不泄漏英文指标名；站内通知渲染沿用通用 key+params 路径无需改动。阈值弹窗新增「抖动抑制」四项（含每项说明与取值校验，非法值提示 agents.alert_invalid_window），载荷类型 AlertThresholds 由 ts-rs 重新导出。
+2. 版本：功能优化判 y+1（v0.40.0→v0.41.0，z 归零）；根 Cargo.toml 0.32.8→0.32.9，foims-agent-service 0.1.21→0.1.22、foims-snmp 0.1.3→0.1.4、foims-init 0.1.16→0.1.17、foims-auth 0.1.8→0.1.9（Cargo.lock 同步）；前后端混合修改，frontend/package.json 0.1.23→0.1.24。
+3. 验证：cargo fmt --all、cargo clippy --release --workspace --all-targets -- -D warnings 0 告警、cargo test --workspace --lib 全绿（foims-agent-service 77 项含 episode 状态机 14 项：待决/升级、迟滞带复位、冷却压制重开、静默窗口就地累计与窗口外重发、阈值变化即时改写落盘、通知行 ID 解析与文案参数）；bash da-scripts/gen-ts-types.sh 仅 AlertThresholds.ts 按预期新增四个窗口字段；cd frontend && npm run typecheck 0 错、npm run build 通过、biome check frontend 0 违规、oxlint 0 告警。
+4. 部署实测（./da-scripts/pak.sh，本机 1 台可达 SNMP 设备）：临时把阈值压到读数以下（cpu 30/mem 90/temp 40，for=5s、静默 60s、冷却 10s）后——开告警只发一条并在静默窗口内就地累计（同一行 count 3→13，数值随实时读数刷新），窗口到期另发一条（count 17，episode 只保留最新行 ID，历史行不再被改写）；抬高温阈值到读数以上触发 resolved_temp→resolved_* 恢复通知与 status='resolved' 落库；exceed_count 按 5s 观测节拍累加（≈12/分钟），与实时采样间隔一致。
+5. 实测暴露并修复一处缺陷：兜底扫描在实时路径接管 SNMP 时结果集只含 agent 主机，而 `cleanup_missing` 直接把这个子集当作全量活动主机，导致 SNMP 设备的 episode 在每轮扫描（含 PUT 阈值触发的即时补扫）被当「主机已不在」静默删除——表现为告警计数被重置、重复发开告警且恢复通知丢失。修正为按 monitored_hosts status='active' 全量口径判定（新增 ACTIVE_HOST_SQL 常量与 log.agent.episode_active_hosts_load_failed 日志键，查询失败时跳过清理不误删）。修复后复测：PUT 阈值触发补扫，cpu episode 计数 20→25 连续增长无重置，resolved 行保留至回收窗口；恢复原阈值（cpu 90、其余留空）后静默无新通知。
+6. 遗留验收项（需真实交换机环境）：超阈值标红与「仅异常」联动、ifName 匹配的端口实时覆盖、500 台 v3/IPv6 容量压测。

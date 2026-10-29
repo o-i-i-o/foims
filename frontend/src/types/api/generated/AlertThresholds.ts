@@ -2,9 +2,29 @@
 
 /**
  * 全局告警阈值配置（None/留空 = 不监控该指标；温度单位 ℃，其余为百分比）。
+ *
+ * 窗口参数（`for_secs`/`quiet_window_secs`/`cooldown_secs`/`hysteresis_pct`）
+ * 全局一套，作用于「设备 + 指标」维度的告警 episode，见 [`crate::alert_episode`]。
  */
 export type AlertThresholds = { 
 /**
  * 总开关：关闭时不评估任何指标（既有告警状态保留，重开后不重复通知）
  */
-enabled: boolean, cpu_pct: number | null, mem_pct: number | null, disk_pct: number | null, temp_c: number | null, };
+enabled: boolean, cpu_pct: number | null, mem_pct: number | null, disk_pct: number | null, temp_c: number | null, 
+/**
+ * 持续超标多久才开告警（秒，0 = 首次超标即开）
+ */
+for_secs: number, 
+/**
+ * 静默窗口（秒，窗口内同设备同指标只累计次数、不重复发通知）
+ */
+quiet_window_secs: number, 
+/**
+ * 恢复冷却（秒，恢复后再次开告警的最短通知间隔）
+ */
+cooldown_secs: number, 
+/**
+ * 回落迟滞带（占阈值的百分比，读数落在「阈值减迟滞带」到「阈值」之间时
+ * 既不算超标也不复位，避免在阈值线上抖动反复开合告警）
+ */
+hysteresis_pct: number, };

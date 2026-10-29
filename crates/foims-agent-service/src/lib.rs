@@ -8,11 +8,15 @@
 //!   同时承载 [`renew`] 续期端点的路由分发）；
 //! - [`renew`]：客户端证书续期处理（POST /agent/v1/renew，mTLS 鉴权）；
 //! - [`ingest`]：上报鉴权、校验与入库（monitored_hosts + host_metrics_history）；
-//! - [`alerts`]：主机资源告警（全局阈值 + 状态翻转评估 + 站内通知）；
+//! - [`alerts`]：主机资源告警配置面（全局阈值 + 抖动抑制窗口参数读写校验）；
+//! - [`alert_episode`]：告警 episode 运行时（持续超标状态机 + 落库 + 站内通知）；
 //! - [`agents_api`]：Agent 列表/详情/历史/管理的 Web API；
 //! - [`snmp_poll`]：SNMP 设备轮询采集（纳入主机监控页，source='snmp'）；
 //!   性能指标采集（CPU/内存/磁盘/温度/流量/负载与差值计算，二期）
 //!   已随域拆分迁至 foims-snmp::collect::metrics；
+//! - [`live_poll`]：SNMP 实时采集（秒级定向 GET + 内存快照注册表，不落库，
+//!   供实时展示与 Top 榜；趋势仍由 snmp_poll 落库）；
+//! - [`live_api`]：实时快照 Web API（全量列表 + SSE 变更推送）；
 //! - [`trap`]：SNMP Trap/Inform 接收（自资源管理模块迁入，采集服务）；
 //! - [`tasks`]：离线判定、SNMP 轮询与历史清理调度任务执行器。
 
@@ -26,10 +30,13 @@ pub const SITE_CA_PATH: &str = "/etc/ssl/foims-ca/ca.pem";
 pub const SITE_CA_KEY_PATH: &str = "/etc/ssl/foims-ca/ca.key";
 
 pub mod agents_api;
+pub mod alert_episode;
 pub mod alerts;
 pub mod api;
 pub mod cert;
 pub mod ingest;
+pub mod live_api;
+pub mod live_poll;
 pub mod packaging;
 pub mod renew;
 pub mod report_server;
@@ -37,4 +44,7 @@ pub mod snmp_poll;
 pub mod tasks;
 pub mod trap;
 
+pub use alert_episode::{AlertProvider, AlertRuntime, HostRef};
+pub use live_api::LiveProvider;
+pub use live_poll::{LiveDeviceSnapshot, LiveRegistry, start_live_poller};
 pub use trap::start_trap_receiver;

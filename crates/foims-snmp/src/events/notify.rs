@@ -17,17 +17,19 @@ pub fn encode_notification_content(key: &str, params: &[(&str, &str)]) -> String
     serde_json::json!({ "key": key, "params": params }).to_string()
 }
 
-/// 写入一条站内通知（user_id 为 None 时为广播占位历史行）。
+/// 写入一条站内通知（user_id 为 None 时为广播占位历史行），返回新行 ID
+/// （告警 episode 需要按 ID 就地刷新同一条通知的文案）。
 pub async fn create_notification(
     pool: &sqlx::PgPool,
     title: &str,
     content: &str,
     notification_type: &str,
     user_id: Option<&Uuid>,
-) -> Result<(), sqlx::Error> {
+) -> Result<Uuid, sqlx::Error> {
+    let id = Uuid::new_v4();
     sqlx::query(r"INSERT INTO notifications (id, user_id, title, content, notification_type, read, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7)")
-        .bind(Uuid::new_v4())
+        .bind(id)
         .bind(user_id)
         .bind(title)
         .bind(content)
@@ -36,7 +38,7 @@ pub async fn create_notification(
         .bind(chrono::Utc::now())
         .execute(pool)
         .await?;
-    Ok(())
+    Ok(id)
 }
 
 /// 解析工位名（站内通知与邮件文案用）；查询失败/缺行降级为 UUID 字符串。

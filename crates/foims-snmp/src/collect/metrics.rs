@@ -916,7 +916,10 @@ async fn collect_load(client: &Client<UdpHandle>) -> (Option<f64>, Option<f64>, 
 
 /// bulk walk 全量收集（单条 walk 错误即中断，保留已收条目；
 /// 流建立失败返回空，由调用方按"该类缺失"处理）
-async fn walk_all(client: &Client<UdpHandle>, base: async_snmp::Oid) -> Vec<async_snmp::VarBind> {
+pub(crate) async fn walk_all(
+    client: &Client<UdpHandle>,
+    base: async_snmp::Oid,
+) -> Vec<async_snmp::VarBind> {
     let mut stream = match client.bulk_walk(base, WALK_MAX_REPETITIONS) {
         Ok(s) => s,
         Err(e) => {

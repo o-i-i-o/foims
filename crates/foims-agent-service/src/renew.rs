@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
-    /// 空上下文（renew 处理不读池/配置，仅占位满足签名）；
+    /// 空上下文（renew 处理不读池/配置/告警运行时，仅占位满足签名）；
     /// Config 以最小合法 JSON 反序列化（未列字段均带 serde default）
     fn test_context() -> ReportContext {
         let config: foims_common::Config = serde_json::from_value(serde_json::json!({
@@ -173,9 +173,14 @@ mod tests {
             "init": { "enabled": false }
         }))
         .unwrap_or_else(|e| panic!("最小配置反序列化失败: {e}"));
+        let pool = sqlx::PgPool::connect_lazy("postgres://invalid:invalid@127.0.0.1:1/none")
+            .unwrap_or_else(|e| panic!("构造懒连接池失败: {e}"));
         ReportContext {
-            pool: sqlx::PgPool::connect_lazy("postgres://invalid:invalid@127.0.0.1:1/none")
-                .unwrap_or_else(|e| panic!("构造懒连接池失败: {e}")),
+            alerts: std::sync::Arc::new(crate::alert_episode::AlertRuntime::new(
+                pool.clone(),
+                false,
+            )),
+            pool,
             config: std::sync::Arc::new(foims_common::config::ArcSwap::from_pointee(config)),
             server_version: "0.0.0".to_string(),
         }

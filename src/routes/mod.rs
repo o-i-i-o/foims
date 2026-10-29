@@ -935,6 +935,14 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                     get(foims_agent_service::agents_api::get_top_metrics::<AppState>),
                 )
                 .route(
+                    "/live",
+                    get(foims_agent_service::live_api::list_live::<AppState>),
+                )
+                .route(
+                    "/live/stream",
+                    get(foims_agent_service::live_api::live_stream::<AppState>),
+                )
+                .route(
                     "/{id}",
                     get(foims_agent_service::agents_api::get_agent_detail::<AppState>)
                         .patch(foims_agent_service::agents_api::patch_agent::<AppState>)

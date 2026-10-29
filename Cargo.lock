@@ -1455,7 +1455,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.32.6"
+version = "0.32.9"
 dependencies = [
  "async-trait",
  "axum",
@@ -1494,7 +1494,7 @@ dependencies = [
 
 [[package]]
 name = "foims-agent-service"
-version = "0.1.19"
+version = "0.1.22"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -1507,6 +1507,7 @@ dependencies = [
  "foims-common",
  "foims-scheduler",
  "foims-snmp",
+ "futures-util",
  "h3",
  "h3-quinn",
  "http",
@@ -1524,6 +1525,7 @@ dependencies = [
  "tar",
  "time",
  "tokio",
+ "tokio-stream",
  "tracing",
  "ts-rs",
  "uuid",
@@ -1532,7 +1534,7 @@ dependencies = [
 
 [[package]]
 name = "foims-auth"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "axum",
  "axum-extra",
@@ -1562,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "foims-common"
-version = "0.3.15"
+version = "0.3.16"
 dependencies = [
  "aes-gcm",
  "arc-swap",
@@ -1610,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "foims-init"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "axum",
  "bcrypt",
@@ -1711,7 +1713,7 @@ dependencies = [
 
 [[package]]
 name = "foims-snmp"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "async-snmp",
  "axum",

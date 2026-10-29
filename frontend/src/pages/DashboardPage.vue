@@ -18,8 +18,12 @@ import {
   getRoomTypeName,
   getResourceTypeText,
   getStatusText,
+  formatBps,
   formatTime
 } from "../utils/formatter";
+import { useLiveAgents } from "../composables/useLiveAgents";
+import type { AlertThresholds } from "../types/api/generated/AlertThresholds";
+import type { LiveSummaryRow } from "../types/api/generated/LiveSummaryRow";
 import type { Paged } from "../types/api";
 import type { CabinetWithNetworks } from "../types/api/generated/CabinetWithNetworks";
 import type { DashboardStats } from "../types/api/generated/DashboardStats";
@@ -222,6 +226,114 @@ function tempText(value: number | string | null): string {
   return Number.isFinite(num) ? `${num.toFixed(1)}℃` : "-";
 }
 
+// ==================== SNMP 实时 Top（SSE） ====================
+
+// 与 DB 榜单互补：实时卡片覆盖全部 SNMP 设备内存快照（秒级推送），
+// 排序取前 N；超告警阈值标红，可只看异常
+const LIVE_METRIC_KEYS = ["cpu", "memory", "temperature", "traffic"] as const;
+type LiveMetricKey = (typeof LIVE_METRIC_KEYS)[number];
+const LIVE_TOP_LIMIT = 5;
+/** 快照超过该秒数视为陈旧（采样 5s + 推送节拍 2s 的 3 倍余量） */
+const LIVE_STALE_SECS = 30;
+
+const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
+  !auth.hiddenSections.includes("agents")
+);
+const liveMetricActive = ref<LiveMetricKey>("cpu");
+const liveOnlyAbnormal = ref(false);
+
+// 阈值复用主机告警配置（CPU/内存/温度；流量无阈值）
+const thresholdsQuery = useQuery({
+  queryKey: ["agent-alert-thresholds"],
+  queryFn: async (): Promise<AlertThresholds | null> => {
+    const result = await apiGet<AlertThresholds>("/api/agents/alert-thresholds");
+    if (!result.success) {
+      throw new Error(result.message || t("common.load_failed"));
+    }
+    return result.data;
+  },
+  enabled: computed(() => !auth.hiddenSections.includes("agents")),
+  staleTime: CACHE_TTL
+});
+
+function liveMetricValue(row: LiveSummaryRow, metric: LiveMetricKey): number | null {
+  switch (metric) {
+    case "cpu":
+      return row.cpu_usage_pct;
+    case "memory":
+      return row.mem_usage_pct;
+    case "temperature":
+      return row.temperature_c;
+    case "traffic":
+      return row.rx_bps == null && row.tx_bps == null
+        ? null
+        : (row.rx_bps ?? 0) + (row.tx_bps ?? 0);
+  }
+}
+
+function liveThreshold(metric: LiveMetricKey): number | null {
+  const thresholds = thresholdsQuery.data.value;
+  if (!thresholds?.enabled) {
+    return null;
+  }
+  switch (metric) {
+    case "cpu":
+      return thresholds.cpu_pct;
+    case "memory":
+      return thresholds.mem_pct;
+    case "temperature":
+      return thresholds.temp_c;
+    case "traffic":
+      return null;
+  }
+}
+
+const liveHasThreshold = computed(() => liveThreshold(liveMetricActive.value) != null);
+
+interface LiveTopItem {
+  row: LiveSummaryRow;
+  value: number;
+  abnormal: boolean;
+  stale: boolean;
+}
+
+const liveTopItems = computed<LiveTopItem[]>(() => {
+  const metric = liveMetricActive.value;
+  const threshold = liveThreshold(metric);
+  const now = Date.now();
+  const items: LiveTopItem[] = [];
+  for (const row of liveDevices.value) {
+    const value = liveMetricValue(row, metric);
+    if (value == null) {
+      continue;
+    }
+    const collected = Date.parse(row.collected_at);
+    const stale = !Number.isFinite(collected) || now - collected > LIVE_STALE_SECS * 1000;
+    const abnormal = threshold != null && value >= threshold;
+    if (liveOnlyAbnormal.value && !abnormal) {
+      continue;
+    }
+    items.push({ row, value, abnormal, stale });
+  }
+  items.sort((a, b) => b.value - a.value);
+  return items.slice(0, LIVE_TOP_LIMIT);
+});
+
+const liveEmptyKey = computed(() => {
+  if (!liveConnected.value && liveDevices.value.length === 0) {
+    return "dashboard.live_waiting";
+  }
+  return liveOnlyAbnormal.value ? "dashboard.no_live_abnormal" : "dashboard.no_live_data";
+});
+
+function selectLiveMetric(metric: LiveMetricKey): void {
+  liveMetricActive.value = metric;
+  // 流量无阈值配置：切走时关闭「仅异常」避免筛出空列表
+  if (liveThreshold(metric) == null) {
+    liveOnlyAbnormal.value = false;
+  }
+}
+
 // ==================== 卡片跳转 ====================
 
 /**
@@ -281,6 +393,75 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
     </div>
 
     <div class="dashboard-grid">
+      <!-- SNMP 实时负载：SSE 秒级推送全部设备内存快照，排序取前 N，
+           超告警阈值标红，可只看异常（流量无阈值） -->
+      <article
+        v-if="!auth.hiddenSections.includes('agents')"
+        class="dashboard-card"
+        @click="openSection($event, 'agents')"
+      >
+        <header class="dashboard-card-header">
+          <h3><span class="card-icon">⚡</span><span>{{ t("dashboard.snmp_live_top") }}</span></h3>
+          <span class="live-stream-state" :class="{ on: liveConnected }">
+            {{ liveConnected ? t("dashboard.live_on") : t("dashboard.live_off") }}
+          </span>
+        </header>
+        <div class="dashboard-card-body">
+          <div class="host-metrics-tabs" role="tablist" :aria-label="t('dashboard.snmp_live_top')">
+            <button
+              v-for="metric in LIVE_METRIC_KEYS"
+              :key="metric"
+              type="button"
+              class="host-metrics-tab"
+              :class="{ active: liveMetricActive === metric }"
+              role="tab"
+              :aria-selected="liveMetricActive === metric ? 'true' : 'false'"
+              @click="selectLiveMetric(metric)"
+            >
+              {{ t(`dashboard.metric_${metric}`) }}
+            </button>
+            <label v-if="liveHasThreshold" class="live-abnormal-toggle" @click.stop>
+              <input v-model="liveOnlyAbnormal" type="checkbox">
+              {{ t("dashboard.only_abnormal") }}
+            </label>
+          </div>
+          <ul class="top-list">
+            <li v-if="liveTopItems.length === 0" class="empty-list-item">{{ t(liveEmptyKey) }}</li>
+            <template v-else>
+              <li
+                v-for="(item, index) in liveTopItems"
+                :key="item.row.device_id"
+                :class="{ 'live-stale': item.stale }"
+              >
+                <div class="item-name">
+                  <span class="item-icon">{{ index + 1 }}</span>
+                  <div>
+                    <div>{{ item.row.device_name || item.row.ip || "-" }}</div>
+                    <div class="item-meta">
+                      {{ item.row.ip }} · {{ item.row.vendor }}<template v-if="item.stale"> · {{ t("dashboard.live_stale") }}</template>
+                    </div>
+                  </div>
+                </div>
+                <span v-if="liveMetricActive === 'traffic'" class="item-value live-traffic">
+                  ↓ {{ formatBps(item.row.rx_bps) }} ↑ {{ formatBps(item.row.tx_bps) }}
+                </span>
+                <span
+                  v-else-if="liveMetricActive === 'temperature'"
+                  class="item-value"
+                  :class="{ 'live-abnormal': item.abnormal }"
+                >{{ tempText(item.value) }}</span>
+                <span v-else class="agent-usage" :class="{ 'live-abnormal': item.abnormal }">
+                  <span class="agent-usage-bar">
+                    <span class="agent-usage-fill" :class="`agent-usage-${usageLevel(item.value)}`" :style="{ width: usageWidth(item.value) }"></span>
+                  </span>
+                  <span class="agent-usage-num">{{ usageNum(item.value) }}%</span>
+                </span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </article>
+
       <!-- 主机负载：CPU/内存/温度 三页签轮播（无权限角色不渲染卡片） -->
       <article
         v-if="!auth.hiddenSections.includes('agents')"
@@ -635,6 +816,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
 .host-metrics-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
 }
@@ -664,6 +846,62 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
+}
+
+/* SNMP 实时负载卡片：SSE 连接状态 / 仅异常开关 / 超阈值与陈旧样式 */
+
+.live-stream-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.live-stream-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.live-stream-state.on {
+  color: var(--color-success-text);
+}
+
+.live-stream-state.on::before {
+  background: var(--color-success);
+}
+
+.live-abnormal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.live-abnormal {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* 超阈值时进度条同步标红（阈值可能低于通用 85% 分档） */
+.live-abnormal .agent-usage-fill {
+  background: var(--color-danger);
+}
+
+/* 快照超过 30s 未更新：降低不透明度提示数据陈旧 */
+.live-stale {
+  opacity: 0.55;
+}
+
+.live-traffic {
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 /* 使用率迷你进度条（>85% 红、>60% 橙） */

@@ -189,3 +189,21 @@ export function formatTime(timestamp: string | number | null | undefined): strin
   }
   return date.toLocaleDateString(locale());
 }
+
+/** 网络速率：bps → bps/Kbps/Mbps/Gbps（缺测显示 "-"） */
+export function formatBps(bps: number | string | null | undefined): string {
+  const value = Number(bps);
+  if (bps == null || !Number.isFinite(value)) {
+    return "-";
+  }
+  if (value >= 1e9) {
+    return `${(value / 1e9).toFixed(2)} Gbps`;
+  }
+  if (value >= 1e6) {
+    return `${(value / 1e6).toFixed(2)} Mbps`;
+  }
+  if (value >= 1e3) {
+    return `${(value / 1e3).toFixed(1)} Kbps`;
+  }
+  return `${Math.round(value)} bps`;
+}

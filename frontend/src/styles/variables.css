@@ -78,7 +78,7 @@
     --space-md: 1rem;
     --space-lg: 1.5rem;
     --space-xl: 2rem;
-    --sidebar-width: 240px;
+    --sidebar-width: 200px;
     --sidebar-width-collapsed: 64px;
 
     /* 侧边栏收起/展开动画：宽度、外边距、内边距等共用同一时序保证同步 */

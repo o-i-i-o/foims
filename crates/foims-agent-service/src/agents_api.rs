@@ -83,7 +83,7 @@ fn sample_series(points: Vec<Value>, max_points: usize) -> Vec<Value> {
 }
 
 /// Timestamp → RFC 3339 字符串（秒精度，Z 后缀）。
-fn rfc3339(t: DateTime<Utc>) -> String {
+pub(crate) fn rfc3339(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
@@ -135,7 +135,7 @@ pub async fn list_agents<S: ConfigProvider>(
 
     // 列表行（NUMERIC 统一 cast float8 读取；不取 raw_metrics）
     let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        r#"SELECT id, status, source, hostname, label, ip, os, arch, agent_version,
+        r#"SELECT id, device_id, status, source, hostname, label, ip, os, arch, agent_version,
                   cpu_usage::float8 AS cpu_usage,
                   mem_usage_pct::float8 AS mem_usage_pct,
                   disk_usage_pct::float8 AS disk_usage_pct,
@@ -164,6 +164,7 @@ pub async fn list_agents<S: ConfigProvider>(
         .map(|row| {
             json!({
                 "id": row.get::<Uuid, _>("id"),
+                "device_id": row.get::<Option<Uuid>, _>("device_id"),
                 "status": row.get::<String, _>("status"),
                 "source": row.get::<String, _>("source"),
                 "hostname": row.get::<Option<String>, _>("hostname"),

@@ -64,7 +64,7 @@ pub fn get_required_tables() -> Vec<&'static str> {
         // 主机采集 Agent
         "monitored_hosts",
         "host_metrics_history",
-        "host_alert_states",
+        "host_alert_episodes",
     ]
 }
 
@@ -675,7 +675,24 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
         "host_metrics_history",
         vec!["id", "agent_id", "collected_at", "metrics"],
     );
-    columns.insert("host_alert_states", vec!["agent_id", "metric", "alerting"]);
+    columns.insert(
+        "host_alert_episodes",
+        vec![
+            "host_id",
+            "metric",
+            "status",
+            "started_at",
+            "opened_at",
+            "resolved_at",
+            "last_exceed_at",
+            "last_notified_at",
+            "last_value",
+            "threshold",
+            "exceed_count",
+            "notify_ids",
+            "updated_at",
+        ],
+    );
 
     columns
 }
@@ -947,10 +964,16 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         ("host_metrics_history", "agent_id"),
         ("host_metrics_history", "collected_at"),
         ("host_metrics_history", "metrics"),
-        // 告警状态必须归属 agent 且带指标名与告警态（状态翻转检测依据）
-        ("host_alert_states", "agent_id"),
-        ("host_alert_states", "metric"),
-        ("host_alert_states", "alerting"),
+        // 告警 episode 必须归属主机并带指标名/生命周期状态/起止计时与阈值，
+        // 静默窗口内的累计次数与通知行 ID 是就地刷新文案的依据
+        ("host_alert_episodes", "host_id"),
+        ("host_alert_episodes", "metric"),
+        ("host_alert_episodes", "status"),
+        ("host_alert_episodes", "started_at"),
+        ("host_alert_episodes", "last_exceed_at"),
+        ("host_alert_episodes", "threshold"),
+        ("host_alert_episodes", "exceed_count"),
+        ("host_alert_episodes", "notify_ids"),
     ]
 }
 

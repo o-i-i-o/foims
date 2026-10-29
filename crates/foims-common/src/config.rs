@@ -312,6 +312,86 @@ pub struct SnmpConfig {
     /// Trap/Inform 接收配置（缺省关闭）
     #[serde(default)]
     pub trap: SnmpTrapConfig,
+    /// 实时采集配置（秒级定向 GET，供 SSE 推送与 Top 榜；不写库）。
+    ///
+    /// 暂未在系统设置页暴露：PUT /api/system/config 的 snmp 段不带该字段时
+    /// 反序列化为 `None`，由调用方沿用磁盘值；[`Config::load`] 在读取配置
+    /// 文件后把 `None` 归一为 [`SnmpLiveConfig::default`]（`enabled = true`，
+    /// 零配置即可获得实时展示）。
+    #[serde(default)]
+    pub live: Option<SnmpLiveConfig>,
+}
+
+/// SNMP 实时采集配置。
+///
+/// 与 5 分钟全量轮询解耦：仅按厂商 profile 定向 GET 状态/流量/资源组，
+/// 结果只进内存快照（趋势与告警仍由全量轮询落库）。开关关闭时完全不
+/// 启动采集任务。
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct SnmpLiveConfig {
+    /// 总开关（缺省开启；500 台以内建议保持开启）
+    #[serde(default = "default_live_enabled")]
+    pub enabled: bool,
+    /// 状态/流量组采样间隔（秒，下限 2）
+    #[serde(default = "default_live_interval")]
+    pub interval_secs: u64,
+    /// 资源组（CPU/内存/温度）采样间隔（秒，通常高于状态组以降低负载）
+    #[serde(default = "default_live_resource_interval")]
+    pub resource_interval_secs: u64,
+    /// 单次请求超时（秒，实时路径需短于全量轮询的 5s）
+    #[serde(default = "default_live_timeout")]
+    pub timeout_secs: u64,
+    /// 单轮采样最大并发设备数
+    #[serde(default = "default_live_concurrency")]
+    pub max_concurrency: usize,
+    /// 设备清单与厂商 profile 的刷新间隔（秒）
+    #[serde(default = "default_live_inventory_refresh")]
+    pub inventory_refresh_secs: u64,
+    /// 连续失败后的最大退避（秒）
+    #[serde(default = "default_live_max_backoff")]
+    pub max_backoff_secs: u64,
+}
+
+const fn default_live_enabled() -> bool {
+    true
+}
+
+const fn default_live_interval() -> u64 {
+    5
+}
+
+const fn default_live_resource_interval() -> u64 {
+    15
+}
+
+const fn default_live_timeout() -> u64 {
+    2
+}
+
+const fn default_live_concurrency() -> usize {
+    64
+}
+
+const fn default_live_inventory_refresh() -> u64 {
+    1800
+}
+
+const fn default_live_max_backoff() -> u64 {
+    60
+}
+
+impl Default for SnmpLiveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_live_enabled(),
+            interval_secs: default_live_interval(),
+            resource_interval_secs: default_live_resource_interval(),
+            timeout_secs: default_live_timeout(),
+            max_concurrency: default_live_concurrency(),
+            inventory_refresh_secs: default_live_inventory_refresh(),
+            max_backoff_secs: default_live_max_backoff(),
+        }
+    }
 }
 
 const fn default_snmp_timeout() -> u64 {
@@ -338,6 +418,7 @@ impl Default for SnmpConfig {
             lldp_timeout_secs: default_lldp_timeout(),
             mac_scan_timeout_secs: default_mac_scan_timeout(),
             trap: SnmpTrapConfig::default(),
+            live: None,
         }
     }
 }
@@ -495,6 +576,13 @@ impl Config {
 
         // 尝试反序列化
         let mut config: Self = config.try_deserialize()?;
+
+        // 配置文件缺 [snmp.live]：归一为默认开启实时采集。
+        // 反序列化阶段保持 None（PUT/备份恢复据此判断"未携带"并沿用磁盘值），
+        // 只在真正加载配置时补默认值。
+        if config.snmp.live.is_none() {
+            config.snmp.live = Some(SnmpLiveConfig::default());
+        }
 
         // 环境变量覆盖敏感信息
         if let Ok(db_password) = std::env::var("FOIMS_DATABASE_PASSWORD")

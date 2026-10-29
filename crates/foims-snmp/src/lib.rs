@@ -9,7 +9,9 @@
 //!   BRIDGE/Q-BRIDGE）、LLDP 邻居、ARP/FDB 表、性能指标（CPU/内存/磁盘/
 //!   温度/流量/负载与差值计算）；
 //! - [`handlers`]：SNMP 探测与信息采集 Axum handler（test-snmp / snmp-info）；
-//! - [`events`]：观测事件（snmp_events 落库、站内通知与查询）。
+//! - [`events`]：观测事件（snmp_events 落库、站内通知与查询）；
+//! - [`live`]：实时采集——厂商 profile 探测 + 定向 OID GET，输出内存快照
+//!   （供 SSE 推送与 Top 榜，不落库）。
 //!
 //! 依赖方向约束：仅依赖 foims-common / foims-models / foims-auth，
 //! 不得依赖 foims-resource 与 foims-agent-service（二者反向依赖本 crate）。
@@ -22,6 +24,7 @@ pub mod collect;
 pub mod core;
 pub mod events;
 pub mod handlers;
+pub mod live;
 
 pub use core::config::{SwitchConfigError, get_device_ip_address, get_device_snmp_config};
 pub use core::{

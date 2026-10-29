@@ -31,6 +31,12 @@ pub struct AppState {
     pub pool: Option<DbPool>,
     pub jwt_utils: JwtUtils,
     pub task_registry: Arc<TaskRegistry>,
+    /// SNMP 实时快照注册表（只驻内存；实时列表与 SSE 端点读取，
+    /// 写入方为 agent-service 的实时采集 worker）。
+    pub live_registry: Arc<foims_agent_service::LiveRegistry>,
+    /// 告警 episode 运行时（阈值缓存 + 状态机 + 落库通知）：初始化模式无
+    /// 连接池时为 None，告警评估与配置补扫随之缺席。
+    pub alerts: Option<Arc<foims_agent_service::AlertRuntime>>,
     /// 优雅关闭信号：serve 失败等进程内业务路径可请求本进程优雅退出，
     /// 与 OS 信号共用同一关闭流程。
     pub shutdown: ShutdownSignal,
@@ -49,6 +55,8 @@ impl AppState {
         config: Config,
         pool: Option<DbPool>,
         task_registry: Arc<TaskRegistry>,
+        live_registry: Arc<foims_agent_service::LiveRegistry>,
+        alerts: Option<Arc<foims_agent_service::AlertRuntime>>,
         shutdown: ShutdownSignal,
         rate_limiter: RateLimiter,
     ) -> Result<Self, String> {
@@ -59,6 +67,8 @@ impl AppState {
             pool,
             jwt_utils,
             task_registry,
+            live_registry,
+            alerts,
             shutdown,
             rate_limiter,
             config_write_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -87,6 +97,22 @@ impl DbProvider for AppState {
 impl foims_common::ConfigProvider for AppState {
     fn config(&self) -> Arc<Config> {
         self.config_snapshot()
+    }
+}
+
+impl foims_agent_service::AlertProvider for AppState {
+    fn alert_runtime(&self) -> Option<Arc<foims_agent_service::AlertRuntime>> {
+        self.alerts.clone()
+    }
+}
+
+impl foims_agent_service::LiveProvider for AppState {
+    fn live_registry(&self) -> Arc<foims_agent_service::LiveRegistry> {
+        self.live_registry.clone()
+    }
+
+    fn live_shutdown(&self) -> tokio::sync::broadcast::Receiver<()> {
+        self.shutdown.subscribe()
     }
 }
 

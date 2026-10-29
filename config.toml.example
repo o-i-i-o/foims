@@ -115,6 +115,24 @@ cooldown_secs = 30
 # priv_protocol = "aes128"
 # priv_password = "privpass123"
 
+# SNMP 实时采集（秒级定向 GET，结果只进内存快照供实时展示/Top 榜，不落库；
+# 趋势与告警仍由默认 5 分钟全量轮询承担）。整段缺省即按下列默认值启动
+[snmp.live]
+# 总开关（关闭时不启动任何实时采集任务）
+enabled = true
+# 接口状态/流量采样间隔（秒）
+interval_secs = 5
+# CPU/内存/温度采样间隔（秒，通常高于状态组以降低负载）
+resource_interval_secs = 15
+# 单次请求超时（秒，实时路径需短于全量轮询的 5s）
+timeout_secs = 2
+# 同时在途的设备数上限（离线设备会占满超时窗口，按主机性能与设备量调整）
+max_concurrency = 64
+# 设备清单与厂商 profile 重建间隔（秒；ifIndex 变化时也会自动重建）
+inventory_refresh_secs = 1800
+# 连续失败的最大退避（秒）
+max_backoff_secs = 60
+
 # 主机采集 Agent 接收：agent 安装包由发布页（Release）按需下载，
 # 服务端 web 页仅按所选操作系统现场打包配置包（agent.toml + mTLS 证书）
 [agent]
