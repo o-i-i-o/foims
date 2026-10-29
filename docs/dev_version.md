@@ -1003,3 +1003,10 @@ v0.41.0
 4. 部署实测（./da-scripts/pak.sh，本机 1 台可达 SNMP 设备）：临时把阈值压到读数以下（cpu 30/mem 90/temp 40，for=5s、静默 60s、冷却 10s）后——开告警只发一条并在静默窗口内就地累计（同一行 count 3→13，数值随实时读数刷新），窗口到期另发一条（count 17，episode 只保留最新行 ID，历史行不再被改写）；抬高温阈值到读数以上触发 resolved_temp→resolved_* 恢复通知与 status='resolved' 落库；exceed_count 按 5s 观测节拍累加（≈12/分钟），与实时采样间隔一致。
 5. 实测暴露并修复一处缺陷：兜底扫描在实时路径接管 SNMP 时结果集只含 agent 主机，而 `cleanup_missing` 直接把这个子集当作全量活动主机，导致 SNMP 设备的 episode 在每轮扫描（含 PUT 阈值触发的即时补扫）被当「主机已不在」静默删除——表现为告警计数被重置、重复发开告警且恢复通知丢失。修正为按 monitored_hosts status='active' 全量口径判定（新增 ACTIVE_HOST_SQL 常量与 log.agent.episode_active_hosts_load_failed 日志键，查询失败时跳过清理不误删）。修复后复测：PUT 阈值触发补扫，cpu episode 计数 20→25 连续增长无重置，resolved 行保留至回收窗口；恢复原阈值（cpu 90、其余留空）后静默无新通知。
 6. 遗留验收项（需真实交换机环境）：超阈值标红与「仅异常」联动、ifName 匹配的端口实时覆盖、500 台 v3/IPv6 容量压测。
+
+v0.41.1
+2026102922085501
+1. 全局注释审计阶段一（仅注释，零行为变更）：在 docs/code-style.md 新增「1.1 注释口径（全仓审计判据）」，明确注释三类保留判据（为什么/公共 API 用途与错误情形/命名无法表达的口径）、必须删除的复述型与标识符翻译型注释、分区横幅仅在 >600 行多职责文件保留极简标签、pub fn 文档注释只补签名不自明者。
+2. 主程序 src/ 按口径完成审计：注释行 641→577（净 −64），装饰性 `// ====` 横幅在本目录清零（158→0 全仓基数中 src/ 部分）；重复注解收敛为单点说明（配置写盘「读-改-写锁 + 磁盘基底 + 刷新槽」纪律合并写在 update_system_config 一处、初始化模式无连接池改为在 pool 绑定点统一声明、services.rs 响应通道机理由模块头单点承载）；路由注册文件的逐组翻译型标签（子网管理/房间管理/2FA管理路由等）删除；为 main.rs 的 setup_panic_handler/security_headers_middleware/build_cors_layer/configure_app_services 与 config.rs、services.rs、log 模块的 handler 补齐用途/路由/错误情形文档注释。
+3. 版本：仅 z+1（v0.41.0→v0.41.1），按规则不触碰 Cargo.toml 与 frontend/package.json。
+4. 验证：`git diff -U0 -- src` 过滤后无任何非注释变更行（证明零行为改动）；`cargo fmt --all` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 0 告警。

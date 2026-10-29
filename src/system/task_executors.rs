@@ -43,7 +43,6 @@ fn parse_days_config(config: &serde_json::Value) -> Result<i32, SchedulerError> 
     })
 }
 
-/// 数据库备份任务执行器
 pub struct BackupTaskExecutor;
 
 #[async_trait]
@@ -83,7 +82,6 @@ impl TaskExecutor for BackupTaskExecutor {
     }
 }
 
-/// 过期 Token 清理任务执行器
 pub struct TokenCleanupTaskExecutor;
 
 #[async_trait]
@@ -108,7 +106,6 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
     }
 }
 
-/// 日志清理任务执行器
 pub struct LogCleanupTaskExecutor;
 
 #[async_trait]
@@ -133,7 +130,6 @@ impl TaskExecutor for LogCleanupTaskExecutor {
     }
 }
 
-/// MAC 同步任务执行器
 pub struct MacSyncTaskExecutor;
 
 #[async_trait]
@@ -178,7 +174,7 @@ impl TaskExecutor for MacSyncTaskExecutor {
 }
 
 /// IP 状态同步任务执行器：按 last_seen 新鲜度自动翻转 active/inactive，
-/// 使仪表盘 IP 状态分布反映地址观测活性。days 为判停阈值（1..=3650，默认 30）。
+/// 使仪表盘 IP 状态分布反映地址观测活性。days 为判停阈值（口径见 parse_days_config）。
 pub struct IpStatusSyncTaskExecutor;
 
 #[async_trait]

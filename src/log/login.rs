@@ -11,6 +11,9 @@ use crate::utils::pagination::{Pagination, paged_response};
 use foims_common::AppError;
 use foims_models::LoginLog;
 
+/// 分页查询登录日志 —— GET /api/logs/login。
+///
+/// `search` 为 ILIKE 搜索词，匹配用户名、IP 与 UA。
 pub async fn get_login_logs(
     State(state): State<Arc<AppState>>,
     // 与 admin_guard_middleware 的 /api/logs/** 角色矩阵一致：admin 或 auditor
@@ -75,7 +78,6 @@ pub async fn get_login_logs(
             .push_bind(&search_pattern)
             .push(" OR user_agent ILIKE ")
             .push_bind(&search_pattern);
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);

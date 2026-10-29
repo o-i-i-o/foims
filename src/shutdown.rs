@@ -24,6 +24,7 @@ impl ShutdownSignal {
         self.sender.subscribe()
     }
 
+    /// 请求优雅退出：CAS 去重，仅首次调用实际广播，后续调用静默跳过。
     pub fn request_shutdown(&self) {
         if self
             .shutdown_requested
@@ -42,6 +43,9 @@ impl Default for ShutdownSignal {
     }
 }
 
+/// 阻塞等待退出事件：SIGINT/SIGTERM 或进程内 request_shutdown 广播返回；
+/// SIGHUP 仅告警忽略。信号处理器注册失败时记录错误并直接返回，
+/// 调用方不得将其误当作退出信号。
 pub async fn wait_for_shutdown_signal(shutdown: &ShutdownSignal) {
     let mut sigint = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
     {

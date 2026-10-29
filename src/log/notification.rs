@@ -13,6 +13,9 @@ use foims_auth::extractor::AuthUser;
 use foims_common::{AppError, msg};
 use foims_models::Notification;
 
+/// 分页查询当前登录用户的通知 —— GET /api/notifications。
+///
+/// `status` 仅 `unread`/`read` 两个值参与过滤，其余（含缺省 `all`）不过滤。
 pub async fn get_notifications(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
@@ -43,7 +46,7 @@ pub async fn get_notifications(
 
     let conn = state.pool()?.get_conn();
 
-    // read 状态为白名单映射：仅追加常量条件，user_id 经 push_bind 传参
+    // 拼接来源：仅上面 match 白名单产出的常量条件，用户输入一律 push_bind
     let read_clause = match status.as_str() {
         "unread" => " AND read = false",
         "read" => " AND read = true",
@@ -82,6 +85,9 @@ pub async fn get_notifications(
     ))
 }
 
+/// 标记单条通知为已读 —— PUT /api/notifications/{id}/read。
+///
+/// 仅当前用户的通知可标记：id 不存在或归属他人均返回 NotFound。
 pub async fn mark_notification_read(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
@@ -112,6 +118,9 @@ pub async fn mark_notification_read(
     Ok(foims_common::ok_json((), "server.notification.marked_read"))
 }
 
+/// 标记当前用户全部通知为已读 —— PUT /api/notifications/mark-all-read。
+///
+/// 不做存在性校验：无匹配行也返回成功。
 pub async fn mark_all_notifications_read(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,

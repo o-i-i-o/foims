@@ -238,6 +238,7 @@ pub struct SystemInfo {
     pub pool_metrics: foims_common::db::PoolMetricsSnapshot,
 }
 
+/// GET /api/system/info：系统名称/版本/数据库连通性/运行时长与连接池指标。
 pub async fn get_system_info(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
@@ -276,11 +277,13 @@ pub async fn get_system_info(
     ))
 }
 
+/// GET /api/system/config：返回共享槽最新配置快照（写盘端点成功后已刷新，
+/// 而非进程启动时快照）；数据库密码、JWT 密钥、注册令牌与 USM 密码一律
+/// 掩码回传。
 pub async fn get_system_config(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
-    // 读共享槽最新快照（写盘端点成功后已刷新），而非进程启动时快照
     let mut config = (*state.config_snapshot()).clone();
     config.database.password = "***".to_string();
     config.jwt.secret = "***".to_string();
@@ -292,6 +295,8 @@ pub async fn get_system_config(
     ))
 }
 
+/// PUT /api/system/config：按段合并进磁盘最新配置并落盘；掩码字段以磁盘值
+/// 还原，任一校验不过整体拒绝写入（防持久化自伤）；响应为脱敏后的新配置。
 pub async fn update_system_config(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
@@ -299,12 +304,12 @@ pub async fn update_system_config(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // 配置写锁：与语言/会话超时/页面超时/恢复配置等「读-改-写盘」端点互斥，
-    // 防止并发写盘互相覆盖
+    // 「读-改-写盘」端点的统一纪律（本文件其余写盘端点不再逐处重复说明）：
+    // 持配置写锁与语言/会话超时/页面超时/恢复配置等端点互斥防并发覆盖、
+    // 以磁盘最新配置为基底（旧内存快照整写回盘会丢失其他端点的更新）、
+    // 落盘成功后刷新共享配置槽让后续读取立即生效
     let _write_guard = state.config_write_lock.lock().await;
 
-    // 以磁盘最新配置为基底（而非进程启动时的内存快照）：
-    // 先改语言/超时等子配置再改本端点时，避免旧快照整写回盘造成丢失更新
     let mut new_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| {
@@ -316,7 +321,6 @@ pub async fn update_system_config(
 
     // req 各分支互斥且按值取出，避免逐子结构克隆
     if let Some(database) = req.database {
-        // 防止脱敏值覆写真实密码
         let mut db_config = database;
         if db_config.password == "***" {
             db_config.password = new_config.database.password.clone();
@@ -332,7 +336,6 @@ pub async fn update_system_config(
     let jwt_updated = req.jwt.is_some();
 
     if let Some(jwt) = req.jwt {
-        // 防止脱敏值覆写真实密钥
         let mut jwt_config = jwt;
         if jwt_config.secret == "***" {
             jwt_config.secret = new_config.jwt.secret.clone();
@@ -349,7 +352,6 @@ pub async fn update_system_config(
         new_config.init = init;
     }
 
-    // 限流配置变更后需重启生效（rate_limit 在下方被 move，先记录标志）
     let rate_limit_updated = req.rate_limit.is_some();
 
     if let Some(rate_limit) = req.rate_limit {
@@ -357,7 +359,6 @@ pub async fn update_system_config(
     }
 
     if let Some(snmp) = req.snmp {
-        // 防止脱敏掩码覆写真实密码：掩码密码按用户名还原为磁盘值
         let mut snmp_config = snmp;
         restore_snmp_trap_secrets(&mut snmp_config.trap.users, &new_config.snmp.trap.users);
         // 实时采集配置暂未在系统设置页暴露：请求未携带时沿用磁盘值，
@@ -369,16 +370,15 @@ pub async fn update_system_config(
     }
 
     if let Some(mut agent) = req.agent {
-        // 防止脱敏掩码/空值覆写真实令牌：掩码按磁盘值还原；空值视同「未携带」
-        // （升级窗口期旧版前端缓存提交的 agent 段不含该字段，serde 缺省为空串，
-        // 若直接落盘会使所有 agent 上报鉴权失效）
+        // 空令牌视同「未携带」而非清空：升级窗口期旧版前端缓存提交的
+        // agent 段不含该字段，serde 缺省为空串，直接落盘会使所有 agent
+        // 上报鉴权失效（掩码还原口径同上数据库密码分支）
         if agent.enrollment_token == "***" || agent.enrollment_token.is_empty() {
             agent.enrollment_token = new_config.agent.enrollment_token.clone();
         }
         new_config.agent = agent;
     }
 
-    // 落盘前校验：拒绝写入启动校验无法通过的配置（防持久化自伤）
     validate_config_for_save(&new_config)?;
 
     let config_path = foims_common::config::get_config_file_path();
@@ -389,7 +389,6 @@ pub async fn update_system_config(
     })?;
     log_info!("log.config.saved", path = config_path);
 
-    // 落盘成功后刷新共享配置槽，让本进程内后续读取立即生效
     state.config.store(Arc::new(new_config.clone()));
 
     // JwtUtils/RateLimiter 在启动时构造一次，密钥轮换与限流调整需重启生效
@@ -411,19 +410,13 @@ pub async fn update_system_config(
     ))
 }
 
-// foims 服务重启（含独立进程模式回退）与服务管理接口已迁移至
-// system/services.rs：本模块仅保留配置读写与系统信息查询
-
+/// POST /api/system/disable-init：关闭初始化模式并落盘，成功后触发服务重启。
 pub async fn disable_init_mode(
     State(state): State<Arc<AppState>>,
     _admin: foims_auth::extractor::AdminUser,
 ) -> Result<Response, AppError> {
     log_info!("log.system.disable_init_requested");
 
-    // 与其他「读-改-写盘」端点对齐：持配置写锁 + 以磁盘最新配置为基底 +
-    // 落盘前校验。若以启动内存快照为基底整写回盘，启动后的其他写盘变更
-    // （数据库密码、JWT 密钥、限流参数）会被旧快照覆写；与其他写盘端点
-    // 并发时也存在丢失更新竞态
     let _write_guard = state.config_write_lock.lock().await;
 
     let mut new_config = tokio::task::spawn_blocking(Config::load)
@@ -437,8 +430,6 @@ pub async fn disable_init_mode(
 
     new_config.init.enabled = false;
 
-    // 落盘前校验（与 update_system_config 同口径），拒绝写入启动校验
-    // 无法通过的配置
     validate_config_for_save(&new_config)?;
 
     let config_path = foims_common::config::get_config_file_path();
@@ -452,7 +443,6 @@ pub async fn disable_init_mode(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(new_config));
 
     log_info!("log.system.init_disabled_restarting");
@@ -493,12 +483,13 @@ pub async fn backup_config(
         .into_response())
 }
 
+/// POST /api/system/config/restore：以备份 JSON 全量替换配置并落盘；
+/// 备份中的掩码/空值凭据一律以磁盘最新配置还原，init.enabled=true 拒绝。
 pub async fn restore_config(
     State(state): State<Arc<AppState>>,
     _admin: foims_auth::extractor::AdminUser,
     AppJson(payload): AppJson<Config>,
 ) -> Result<Response, AppError> {
-    // 与其他「读-改-写盘」配置端点互斥，避免并发写盘互相覆盖
     let _write_guard = state.config_write_lock.lock().await;
 
     let mut new_config = payload;
@@ -509,8 +500,7 @@ pub async fn restore_config(
         )));
     }
 
-    // 防止脱敏值覆写真实密钥：以磁盘最新配置为脱敏值替换来源，
-    // 避免把进程启动时的旧密钥写回
+    // 掩码还原的来源是磁盘最新配置而非内存快照，避免写回进程启动时的旧密钥
     let current_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| {
@@ -525,12 +515,9 @@ pub async fn restore_config(
     if new_config.jwt.secret == "***" {
         new_config.jwt.secret = current_config.jwt.secret.clone();
     }
-    // 备份文件中的注册令牌同为掩码（旧版备份则缺字段为空串）：
-    // 掩码/空值一律还原为磁盘真实令牌
     if new_config.agent.enrollment_token == "***" || new_config.agent.enrollment_token.is_empty() {
         new_config.agent.enrollment_token = current_config.agent.enrollment_token.clone();
     }
-    // 备份文件中的 USM 密码同为掩码：还原为磁盘真实密码
     restore_snmp_trap_secrets(
         &mut new_config.snmp.trap.users,
         &current_config.snmp.trap.users,
@@ -540,8 +527,7 @@ pub async fn restore_config(
         new_config.snmp.live = current_config.snmp.live.clone();
     }
 
-    // 落盘前校验（与 update_system_config 同口径）：备份文件可能缺校验字段
-    // 或被篡改，直接写入会导致重启后服务永久无法启动
+    // 备份文件来源不可控（可能缺校验字段或被篡改），必须过落盘校验
     validate_config_for_save(&new_config)?;
 
     let config_path = foims_common::config::get_config_file_path();
@@ -555,7 +541,6 @@ pub async fn restore_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(new_config));
 
     Ok(foims_common::ok_json((), "server.system.config_restored"))
@@ -596,10 +581,8 @@ pub async fn regenerate_enrollment_token(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AdminOrSecAdminUser,
 ) -> Result<Response, AppError> {
-    // 配置写锁：与其他「读-改-写盘」端点互斥
     let _write_guard = state.config_write_lock.lock().await;
 
-    // 以磁盘最新配置为基底（同 restore_config，防旧快照丢更新）
     let mut new_config = tokio::task::spawn_blocking(Config::load)
         .await
         .map_err(|e| {
@@ -611,14 +594,12 @@ pub async fn regenerate_enrollment_token(
 
     new_config.agent.enrollment_token = foims_common::net::generate_enrollment_token();
 
-    // 落盘前校验（与其他写盘端点同口径）
     validate_config_for_save(&new_config)?;
 
     save_config_to_file(&new_config).await.map_err(|e| {
         AppError::Internal(msg("server.system.config_save_failed").with("error", e))
     })?;
 
-    // 落盘成功后刷新共享配置槽：上报鉴权即刻启用新令牌
     state.config.store(Arc::new(new_config.clone()));
 
     log_info!("log.system.enrollment_token_regenerated");
@@ -657,10 +638,10 @@ pub struct SessionTimeoutConfig {
     pub session_timeout: Option<u64>,
 }
 
+/// GET /api/system/session-timeout：读取会话超时配置。
 pub async fn get_session_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    // 读共享槽最新快照（写盘端点成功后已刷新）
     let config = state.config_snapshot();
     Ok(foims_common::ok_json(
         SessionTimeoutConfig {
@@ -670,12 +651,12 @@ pub async fn get_session_timeout_config(
     ))
 }
 
+/// PUT /api/system/session-timeout：更新会话超时并落盘（null 为清除配置）。
 pub async fn update_session_timeout_config(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateSessionTimeoutRequest>,
 ) -> Result<Response, AppError> {
-    // 配置写锁：与其他「读-改-写盘」端点互斥
     let _write_guard = state.config_write_lock.lock().await;
 
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -700,7 +681,6 @@ pub async fn update_session_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(current_config));
 
     Ok(foims_common::ok_json(
@@ -718,6 +698,7 @@ pub struct SupportedLanguage {
     pub native_name: String,
 }
 
+/// GET /api/system/languages：内置支持语言列表（en/zh）。
 pub async fn get_supported_languages() -> Result<Response, AppError> {
     let supported_languages = vec![
         SupportedLanguage {
@@ -738,6 +719,7 @@ pub async fn get_supported_languages() -> Result<Response, AppError> {
     ))
 }
 
+/// PUT /api/system/language：设置日志语言（仅 en/zh，其余值返回校验错误）。
 pub async fn update_language_setting(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
@@ -752,7 +734,6 @@ pub async fn update_language_setting(
         )));
     }
 
-    // 配置写锁：与其他「读-改-写盘」端点互斥
     let _write_guard = state.config_write_lock.lock().await;
 
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -764,9 +745,8 @@ pub async fn update_language_setting(
             AppError::Internal(msg("server.system.config_load_failed").with("error", e))
         })?;
 
-    // 该端点设置的是日志语言：在已加载配置基础上仅更新 log_language 字段，
-    // 保留 supported_languages / logfiles_i18n_out 等其余 i18n 设置；
-    // 配置中尚无 [i18n] 段时新建并带默认支持语言列表。
+    // 在已加载配置基础上仅更新 log_language 字段，保留 supported_languages /
+    // logfiles_i18n_out 等其余 i18n 设置；配置中尚无 [i18n] 段时新建并带默认支持语言列表
     let mut i18n = current_config.i18n.clone().unwrap_or_else(|| I18nConfig {
         log_language: String::new(),
         supported_languages: vec!["zh".to_string(), "en".to_string()],
@@ -786,7 +766,6 @@ pub async fn update_language_setting(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(current_config));
 
     Ok(foims_common::ok_json((), "server.system.language_updated"))
@@ -799,10 +778,10 @@ pub struct PageTimeoutConfig {
     pub page_timeout: Option<u64>,
 }
 
+/// GET /api/system/page-timeout：读取页面超时配置。
 pub async fn get_page_timeout_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    // 读共享槽最新快照（写盘端点成功后已刷新）
     let config = state.config_snapshot();
     Ok(foims_common::ok_json(
         PageTimeoutConfig {
@@ -812,12 +791,12 @@ pub async fn get_page_timeout_config(
     ))
 }
 
+/// PUT /api/system/page-timeout：更新页面超时并落盘（null 为清除配置）。
 pub async fn update_page_timeout_config(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdatePageTimeoutRequest>,
 ) -> Result<Response, AppError> {
-    // 配置写锁：与其他「读-改-写盘」端点互斥
     let _write_guard = state.config_write_lock.lock().await;
 
     let mut current_config = tokio::task::spawn_blocking(Config::load)
@@ -842,7 +821,6 @@ pub async fn update_page_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    // 落盘成功后刷新共享配置槽
     state.config.store(Arc::new(current_config));
 
     Ok(foims_common::ok_json(
@@ -859,6 +837,7 @@ pub struct NotificationSettings {
     pub methods: foims_auth::smtp::NotificationMethods,
 }
 
+/// GET /api/system/notification/settings：读取邮件收件人与通知方式矩阵。
 pub async fn get_notification_settings(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
@@ -877,8 +856,8 @@ pub async fn get_notification_settings(
                     msg("server.notification.recipients_parse_failed").with("error", e),
                 )
             })?,
-            // 查询失败必须向上传播：吞成空列表会把 DB 故障伪装成「无收件人」
             Ok(None) => Vec::new(),
+            // 查询失败必须向上传播：吞成空列表会把 DB 故障伪装成「无收件人」
             Err(e) => {
                 return Err(AppError::Database(
                     msg("server.db.operation_failed").with("error", e),
@@ -896,6 +875,7 @@ pub async fn get_notification_settings(
     ))
 }
 
+/// PUT /api/system/notification/settings：保存收件人与通知方式矩阵。
 pub async fn update_notification_settings(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
@@ -923,7 +903,6 @@ pub async fn update_notification_settings(
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SmtpConfigResponse {
-    /// 业务状态：未配置是正常状态（HTTP 200），而非错误
     pub configured: bool,
     pub host: String,
     pub port: u16,
@@ -933,11 +912,13 @@ pub struct SmtpConfigResponse {
     pub has_password: bool,
 }
 
+/// GET /api/system/smtp/config：读取 SMTP 配置；未配置时返回 200 +
+/// configured=false（业务状态而非错误，避免浏览器控制台出现 404），
+/// 密码不回传（仅 has_password 标志）。
 pub async fn get_smtp_config(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
-    // 未配置属于业务状态而非错误：返回 200 + configured=false，避免浏览器控制台出现 404
     let resp = match get_smtp_config_from_db(&state.pool()?.get_conn()).await {
         Some(config) => SmtpConfigResponse {
             configured: true,
@@ -977,6 +958,8 @@ pub struct UpdateSmtpConfigRequest {
     pub secure: bool,
 }
 
+/// PUT /api/system/smtp/config：保存 SMTP 配置；password 为空表示保留已存密码，
+/// 尚未配置过密码时返回校验错误。
 pub async fn update_smtp_config(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
@@ -1041,6 +1024,7 @@ pub struct SendSystemEmailRequest {
     pub body: String,
 }
 
+/// POST /api/system/smtp/send：按用户列表发送系统邮件（依赖已保存的 SMTP 配置）。
 pub async fn send_system_email(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
@@ -1059,9 +1043,10 @@ pub async fn send_system_email(
     Ok(foims_common::ok_json((), "server.smtp.email_sent"))
 }
 
-// ==================== 等保密码策略配置 ====================
+// 等保密码策略
 
-/// 读取密码策略（未配置时返回等保三级默认值；策略非机密，登录即可读）
+/// GET /api/system/password-policy：读取密码策略（未配置时返回等保三级默认值；
+/// 策略非机密，登录即可读）。
 pub async fn get_password_policy(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let policy = foims_auth::password_policy::load(&state.pool()?.get_conn()).await;
     Ok(foims_common::ok_json(
@@ -1070,7 +1055,7 @@ pub async fn get_password_policy(State(state): State<Arc<AppState>>) -> Result<R
     ))
 }
 
-/// 保存密码策略（长度下限 8、各数值范围由模块内钳制）
+/// PUT /api/system/password-policy：保存密码策略（长度下限 8、各数值范围由模块内钳制）。
 pub async fn update_password_policy(
     State(state): State<Arc<AppState>>,
     _secadmin: foims_auth::extractor::SecAdminUser,
@@ -1083,8 +1068,7 @@ pub async fn update_password_policy(
     ))
 }
 
-// ==================== 服务管理 ====================
-// foims / nginx 的状态查询与管理操作见 system/services.rs
+// 服务管理：foims / nginx 的状态查询与管理操作见 system/services.rs
 // （GET /api/system/services、POST /api/system/services/{service}/{op}）
 
 /// 仪表盘统计响应载荷（GET /api/system/dashboard-stats），按业务域分组计数
@@ -1153,6 +1137,7 @@ pub struct DashboardActivityStats {
     pub logins_24h: i64,
 }
 
+/// GET /api/system/dashboard-stats：各表 COUNT 聚合 + 24 小时活动量。
 pub async fn get_dashboard_stats(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
@@ -1176,7 +1161,6 @@ pub async fn get_dashboard_stats(
             .fetch_one(&conn)
             .await?;
 
-    // IP 状态分布（status 为自由字符串，按实际取值分组返回）
     let ip_status_rows =
         sqlx::query("SELECT status, COUNT(*) AS cnt FROM interface_ips GROUP BY status")
             .fetch_all(&conn)
@@ -1190,7 +1174,7 @@ pub async fn get_dashboard_stats(
         })
         .collect();
 
-    // 设备类型分布（设备分布图表数据源）
+    // 设备分布图表数据源
     let device_type_rows =
         sqlx::query("SELECT device_type, COUNT(*) AS cnt FROM devices GROUP BY device_type")
             .fetch_all(&conn)

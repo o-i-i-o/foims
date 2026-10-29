@@ -30,6 +30,7 @@ use foims_auth::extractor::SysAdminUser;
 use foims_common::AppError;
 use foims_common::AppJson;
 
+/// 证书清单（GET /api/system/certificate/list）。
 pub async fn list(_user: foims_auth::extractor::AuthUser) -> Result<Response, AppError> {
     let inventory = list_certificates().await?;
     Ok(foims_common::ok_json(
@@ -38,18 +39,17 @@ pub async fn list(_user: foims_auth::extractor::AuthUser) -> Result<Response, Ap
     ))
 }
 
+/// 生成证书（POST /api/system/certificate/generate）：public_url 主机名自动并入 SAN。
 pub async fn generate(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
     _sysadmin: SysAdminUser,
     AppJson(req): AppJson<GenerateCertRequest>,
 ) -> Result<Response, AppError> {
-    // public_url 主机名自动加入 SAN
     let mut extra_sans = Vec::new();
     let config = state.config_snapshot();
     let public_url = config.server.public_url.trim();
     if !public_url.is_empty() {
-        // 取 URL 的 host 段（scheme 之后、路径之前）
         let host_part = public_url
             .trim_start_matches("https://")
             .trim_start_matches("http://")
@@ -101,7 +101,8 @@ pub async fn generate(
     Ok(foims_common::ok_json((), message_key))
 }
 
-/// 生成站点根 CA（覆盖既有 CA；由 CA 签发的旧证书将不再被新链信任）
+/// 生成站点根 CA（POST /api/system/certificate/ca/generate，覆盖既有 CA；
+/// 由 CA 签发的旧证书将不再被新链信任）
 pub async fn ca_generate(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
@@ -127,7 +128,8 @@ pub async fn ca_generate(
     ))
 }
 
-/// 导入已有 CA（证书 + 私钥，multipart 字段 cert/key），用于签发本站证书
+/// 导入已有 CA（POST /api/system/certificate/ca/import，multipart 字段 cert/key），
+/// 用于签发本站证书
 pub async fn ca_import(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
@@ -184,7 +186,7 @@ async fn read_multipart_cert_pair(
     Ok((cert_data, key_data))
 }
 
-/// 公开的 CA 状态查询：登录页据此显示/隐藏根证书下载入口
+/// 公开的 CA 状态查询（GET /api/certificate/ca/info）：登录页据此显示/隐藏根证书下载入口
 pub async fn ca_info() -> Result<Response, AppError> {
     let status: CaStatus = ca_status().await;
     Ok(foims_common::ok_json(
@@ -193,9 +195,7 @@ pub async fn ca_info() -> Result<Response, AppError> {
     ))
 }
 
-/// 公开的 CA 证书下载：仅 PEM 格式（站点根 CA）。
-///
-/// CA 证书是公开数据；私钥不存在任何下载通道。
+/// 下载站点根 CA 证书（公开端点 GET /api/certificate/ca/download，仅 PEM）。
 pub async fn ca_download() -> Result<Response, AppError> {
     let content = read_ca_cert_pem().await?;
     serve_file(content, "foims-root-ca.crt", "application/x-pem-file")
@@ -216,6 +216,7 @@ fn serve_file(content: Vec<u8>, filename: &str, content_type: &str) -> Result<Re
         .into_response())
 }
 
+/// 导入证书对（POST /api/system/certificate/import，multipart 字段 cert/key/ca）。
 pub async fn import(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
@@ -272,10 +273,7 @@ pub async fn import(
     ))
 }
 
-/// 删除证书对（{stem}.pem 与 {stem}.key）
-///
-/// 证书仅用于程序运行，不提供证书下载端点；需要取用文件时由部署侧
-/// 在服务器文件系统上直接操作。
+/// 删除证书对（{stem}.pem 与 {stem}.key，DELETE /api/system/certificate/{kind}/{file_stem}）。
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
@@ -304,8 +302,9 @@ pub async fn delete(
     ))
 }
 
-/// 应用证书到 nginx 配置：把该证书的证书/私钥路径整体替换进
-/// nginx 的 foims.conf（不自动重启服务，由前端提示用户重启生效）
+/// 应用证书到 nginx 配置（POST /api/system/certificate/{kind}/{file_stem}/apply）：
+/// 把该证书的证书/私钥路径整体替换进 nginx 的 foims.conf
+/// （不自动重启服务，由前端提示用户重启生效）
 pub async fn apply(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,

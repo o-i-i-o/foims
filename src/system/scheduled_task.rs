@@ -30,7 +30,6 @@ const ALLOWED_TASK_TYPES: &[&str] = &[
     "ip_status_sync",
 ];
 
-/// 校验任务类型是否在白名单内
 fn validate_task_type(task_type: &str) -> Result<(), AppError> {
     if ALLOWED_TASK_TYPES.contains(&task_type) {
         Ok(())
@@ -46,12 +45,12 @@ fn validate_task_type(task_type: &str) -> Result<(), AppError> {
 /// 需要校验 days 配置的任务（与 task_executors.rs 执行期校验口径一致）
 const DAYS_CONFIG_TASK_TYPES: &[&str] = &["log_cleanup", "ip_status_sync"];
 
-/// 天数类任务 days 合法区间（1..=3650）：越界值在执行器处会被拒绝，
-/// 创建/更新时同步校验，避免落库后任务每次执行都失败
+/// 天数类任务 days 合法区间（1..=3650）
 const DAYS_CONFIG_RANGE: std::ops::RangeInclusive<i64> = 1..=3650;
 
-/// 校验天数类任务（log_cleanup / ip_status_sync）的 days 配置：
-/// days < 1 会清空全部审计日志（或立即判停全部地址），超大值会被执行器按截断拒绝
+/// 创建/更新入口同步校验天数类任务（log_cleanup / ip_status_sync）的 days：
+/// days < 1 会清空全部审计日志（或立即判停全部地址），越界值落库后每次
+/// 执行都会被执行器拒绝，故在写入口直接拦下
 fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<(), AppError> {
     if !DAYS_CONFIG_TASK_TYPES.contains(&task_type) {
         return Ok(());
@@ -66,7 +65,7 @@ fn validate_cleanup_days(task_type: &str, config: &serde_json::Value) -> Result<
     Ok(())
 }
 
-/// 拒绝修改/删除系统内置任务（启动播种写入，与代码/配置同源）。
+/// 拒绝修改（含启停）/删除系统内置任务（启动播种写入，与代码/配置同源）。
 ///
 /// 系统任务的 cron 与 config 由进程启动时按代码/配置重新播种，
 /// 允许手工改会在下一次重启时静默回滚，形成“看起来改了实际没改”的
@@ -84,6 +83,7 @@ async fn ensure_not_system_task(conn: &mut sqlx::PgConnection, id: Uuid) -> Resu
     }
 }
 
+/// GET /api/system/scheduled-tasks：全量任务列表（无分页）。
 pub async fn get_scheduled_tasks(
     State(state): State<Arc<AppState>>,
     _user: AuthUser,
@@ -92,7 +92,7 @@ pub async fn get_scheduled_tasks(
     let sort_by = query.get("sort_by").cloned().unwrap_or_default();
     let sort_order = query.get("sort_order").cloned().unwrap_or_default();
 
-    // ORDER BY 白名单，未匹配时回落默认序，避免注入
+    // ORDER BY 白名单，未匹配时回落默认序
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY name DESC",
         ("name", _) => "ORDER BY name ASC",
@@ -122,6 +122,7 @@ pub async fn get_scheduled_tasks(
     Ok(foims_common::ok_json(tasks, "server.task.list_retrieved"))
 }
 
+/// GET /api/system/scheduled-tasks/{id}：任务详情，不存在返回 404。
 pub async fn get_scheduled_task(
     State(state): State<Arc<AppState>>,
     _user: AuthUser,
@@ -140,6 +141,8 @@ pub async fn get_scheduled_task(
     }
 }
 
+/// POST /api/system/scheduled-tasks：创建任务；类型白名单、cron 合法、
+/// days 在区间内才落库，返回 201。
 pub async fn create_scheduled_task(
     State(state): State<Arc<AppState>>,
     _sysadmin: SysAdminUser,
@@ -190,6 +193,8 @@ pub async fn create_scheduled_task(
         .into_response())
 }
 
+/// PUT /api/system/scheduled-tasks/{id}：更新任务（COALESCE 增量覆盖），
+/// 校验口径与创建一致；系统内置任务拒绝，不存在返回 404。
 pub async fn update_scheduled_task(
     State(state): State<Arc<AppState>>,
     _sysadmin: SysAdminUser,
@@ -219,10 +224,8 @@ pub async fn update_scheduled_task(
     let conn = state.pool()?.get_conn();
     let mut tx = conn.begin().await?;
 
-    // 系统任务定义由启动播种重新生成，手工修改会在下次重启被静默回滚，直接拒绝
     ensure_not_system_task(&mut tx, id).await?;
 
-    // 校验 cron 表达式，失败时拒绝写入
     let next_run_at = if let Some(ref cron_expr) = req.cron_expression {
         let cron_expr_clone = cron_expr.clone();
         match tokio::task::spawn_blocking(move || calculate_next_run(&cron_expr_clone)).await {
@@ -280,6 +283,8 @@ pub async fn update_scheduled_task(
     Ok(foims_common::ok_json(task, "server.task.updated"))
 }
 
+/// DELETE /api/system/scheduled-tasks/{id}：删除任务；系统内置任务拒绝，
+/// 不存在返回 404。
 pub async fn delete_scheduled_task(
     State(state): State<Arc<AppState>>,
     _sysadmin: SysAdminUser,
@@ -300,6 +305,7 @@ pub async fn delete_scheduled_task(
     Ok(foims_common::ok_json((), "server.task.deleted"))
 }
 
+/// POST /api/system/scheduled-tasks/{id}/toggle：启用/禁用任务；系统内置任务拒绝。
 pub async fn toggle_scheduled_task(
     State(state): State<Arc<AppState>>,
     _sysadmin: SysAdminUser,
@@ -308,7 +314,6 @@ pub async fn toggle_scheduled_task(
     let conn = state.pool()?.get_conn();
     let mut tx = conn.begin().await?;
 
-    // 启停同样属于系统任务定义，重启后会被配置重新覆盖，故一并拒绝
     ensure_not_system_task(&mut tx, id).await?;
 
     sqlx::query("UPDATE scheduled_tasks SET enabled = NOT enabled, updated_at = $1 WHERE id = $2")
@@ -329,6 +334,8 @@ pub async fn toggle_scheduled_task(
     Ok(foims_common::ok_json(task, "server.task.toggled"))
 }
 
+/// POST /api/system/scheduled-tasks/{id}/run：立即执行任务；同一任务并发
+/// 执行经事务级 advisory lock 去重，冲突返回 409。
 pub async fn run_scheduled_task_now(
     State(state): State<Arc<AppState>>,
     _sysadmin: SysAdminUser,
@@ -475,14 +482,13 @@ pub async fn run_scheduled_task_now(
     ))
 }
 
+/// GET /api/system/scheduled-tasks/logs：任务执行日志，分页响应，可按 task_name 过滤。
 pub async fn get_task_logs(
     State(state): State<Arc<AppState>>,
     _viewer: foims_auth::extractor::AdminOrAuditorUser,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let task_name = query.get("task_name").cloned();
-    // 与其它列表端点同口径：page/page_size 钳制（1..=1000），
-    // 响应为固定五键 items/total/page/page_size/total_pages
     let pagination = Pagination::from_query(&query);
     let page_size = pagination.page_size;
     let offset = pagination.offset;

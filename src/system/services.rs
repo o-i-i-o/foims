@@ -29,7 +29,6 @@ pub struct ServiceStatusItem {
     pub unit: &'static str,
     /// 单元文件是否已在标准 systemd 目录注册
     pub registered: bool,
-    /// 是否处于 active 状态
     pub active: bool,
     /// ActiveState 原值（active / inactive / failed …）
     pub active_state: String,
@@ -48,7 +47,7 @@ pub struct ServiceStatusItem {
     pub uptime_seconds: Option<u64>,
 }
 
-/// 查询全部受管服务状态（探测语义：单服务查询失败降级为默认字段并告警）。
+/// 查询全部受管服务状态（GET /api/system/services）。
 pub async fn get_services_status(
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
@@ -63,7 +62,8 @@ pub async fn get_services_status(
     ))
 }
 
-/// 执行服务管理操作（service / op 均来自路径参数，严格白名单校验）。
+/// 执行服务管理操作（POST /api/system/services/{service}/{op}，
+/// 路径参数严格白名单校验；stop / restart 的响应通道问题见模块头）。
 pub async fn service_operation(
     _sysadmin: foims_auth::extractor::SysAdminUser,
     Path((service, op)): Path<(String, String)>,
@@ -74,14 +74,11 @@ pub async fn service_operation(
     let op = ServiceOp::parse(&op)
         .ok_or_else(|| AppError::Validation(msg("server.services.unknown_op").with("op", op)))?;
 
-    // foims 重启走自重启流程：成功重启会杀死本进程，若直接 await 响应不可达，
-    // 由 trigger_service_restart 先返回响应再后台延迟执行
+    // foims 重启走自重启特例入口，其余 stop / restart 走通用延迟执行入口
     if svc == ManagedService::Foims && op == ServiceOp::Restart {
         return trigger_service_restart().await;
     }
 
-    // 其余 stop / restart 同样会切断响应通道（foims 停止即进程退出；
-    // nginx 重启/停止会断开正经过其代理的本请求连接），先返回响应再后台执行
     if matches!(op, ServiceOp::Stop | ServiceOp::Restart) {
         return trigger_deferred_service_op(svc, op).await;
     }
@@ -120,7 +117,6 @@ async fn build_status_item(svc: ManagedService) -> ServiceStatusItem {
         None
     };
 
-    // 非 foims 服务的运行时长：按 systemd 上次进入 active 的时刻计算
     let now_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -155,10 +151,8 @@ async fn build_status_item(svc: ManagedService) -> ServiceStatusItem {
         };
 
     let is_foims = svc == ManagedService::Foims;
-    // 运行时长（秒）：
-    // - foims：systemd 单元 active 时按本进程启动时间计算——单元未运行说明
-    //   本进程并非由该单元托管，此时不展示运行时长；
-    // - 其他服务（nginx）：采用上方 systemd 计算的时长
+    // foims 的运行时长仅在单元 active 时展示：单元未运行说明本进程并非
+    // 由该单元托管；其他服务采用上方 systemd 计算的时长
     let uptime_seconds = if is_foims {
         (active && start_time() > 0).then(|| now_secs.saturating_sub(start_time()))
     } else {
@@ -180,14 +174,9 @@ async fn build_status_item(svc: ManagedService) -> ServiceStatusItem {
     }
 }
 
-/// 重启 foims 服务（systemctl restart，后台延迟执行的自重启特例）。
-///
-/// 先校验单元已注册（未注册直接报「未注册服务」，无回退），再由后台
-/// 延迟执行 `systemctl restart --no-block foims`。响应先行返回，避免重启
-/// 导致响应不可达。
+/// 重启 foims 服务（自重启特例）：预检注册状态后由后台任务延迟执行
+/// `systemctl restart --no-block foims`，响应先行返回。
 pub async fn trigger_service_restart() -> Result<Response, AppError> {
-    // 预检服务注册状态：未注册直接向调用方报「未注册服务」，
-    // 不做独立进程重启等回退
     ManagedService::Foims.require_unit_file().await?;
 
     log_info!("log.system.restart_triggered");
@@ -200,16 +189,12 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
     ))
 }
 
-/// 延迟执行 foims / nginx 的 stop 与 restart（先返回响应，后台执行）。
-///
-/// 同步执行时操作会切断当前请求的响应通道：foims 停止即本进程退出；
-/// nginx 重启/停止会断开正经过其代理的本请求连接。此处先预检注册状态，
-/// 再交由后台任务延迟执行，响应立即返回「命令已发送」。
+/// 延迟执行 foims / nginx 的 stop 与 restart：预检注册状态后交由后台任务，
+/// 响应立即返回「命令已发送」（响应通道为何会被切断见模块头）。
 async fn trigger_deferred_service_op(
     svc: ManagedService,
     op: ServiceOp,
 ) -> Result<Response, AppError> {
-    // 预检服务注册状态：未注册直接向调用方报「未注册服务」，不做回退
     svc.require_unit_file().await?;
 
     log_info!(

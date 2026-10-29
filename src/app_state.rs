@@ -75,12 +75,12 @@ impl AppState {
         })
     }
 
-    /// 读取共享槽最新配置快照（写盘端点刷新后即为最新）。
     #[must_use]
     pub fn config_snapshot(&self) -> Arc<Config> {
         self.config.load_full()
     }
 
+    /// 借用连接池；仅初始化模式不建池（见 main.rs），此时转为统一错误。
     pub fn pool(&self) -> Result<&DbPool, AppError> {
         self.pool
             .as_ref()

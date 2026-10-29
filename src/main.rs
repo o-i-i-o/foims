@@ -35,6 +35,8 @@ use foims_common::db::DbPool;
 use foims_init::InitContext;
 use foims_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
 
+/// 安装全局 panic 钩子：位置 + 消息 + 堆栈一次性写入 error 日志，
+/// 避免 tokio 任务 panic 后只剩一条无上下文的 abort 记录
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
         let backtrace = std::backtrace::Backtrace::capture();
@@ -61,6 +63,7 @@ fn setup_panic_handler() {
     }));
 }
 
+/// 全局安全响应头：点击劫持（CSP + X-Frame-Options）、MIME 嗅探、引用来源
 async fn security_headers_middleware(req: Request, next: Next) -> Response {
     let mut res = next.run(req).await;
 
@@ -71,7 +74,6 @@ async fn security_headers_middleware(req: Request, next: Next) -> Response {
     );
     res.headers_mut()
         .insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
-    // 禁止浏览器对响应体做 MIME 嗅探（配合各端点正确的 Content-Type）
     res.headers_mut().insert(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
@@ -103,11 +105,11 @@ async fn db_pool_metrics_middleware(
     // begin_request 返回守卫：handler panic 展开时经 Drop 兜底回退等待计数
     let guard = db_pool.metrics.begin_request();
     let res = next.run(req).await;
-    // 按响应状态码判定成败：5xx 计入失败请求
     guard.finish(!res.status().is_server_error());
     res
 }
 
+/// CORS 白名单：配置项 cors_allowed_origins + 由 public_url 推导的同源地址
 fn build_cors_layer(config: &Config) -> CorsLayer {
     let mut allowed_origins = config.server.cors_allowed_origins.clone();
 
@@ -190,12 +192,10 @@ enum UdsBindError {
 fn create_uds_listener(path: &str, group: &str) -> Result<tokio::net::UnixListener, UdsBindError> {
     let socket_path = Path::new(path);
 
-    // 确保父目录存在
     if let Some(parent) = socket_path.parent() {
         std::fs::create_dir_all(parent).map_err(UdsBindError::Io)?;
     }
 
-    // 直接 bind：socket 文件已存在（含陈旧残留）时返回 AddrInUse
     let listener = match tokio::net::UnixListener::bind(path) {
         Ok(l) => l,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
@@ -205,7 +205,6 @@ fn create_uds_listener(path: &str, group: &str) -> Result<tokio::net::UnixListen
     };
 
     use std::os::unix::fs::PermissionsExt;
-    // 尝试将属组设为反代进程组（需 root）；失败不阻断启动（保持仅属主可用）
     #[cfg(unix)]
     {
         match lookup_group_gid(group) {
@@ -291,6 +290,8 @@ async fn seed_system_tasks(
     Ok(rows)
 }
 
+/// 组装 Router：初始化模式只挂 `/api/init*`（限本机），正常模式挂全量 API；
+/// 两种模式共用限流、CORS、指标与安全头等中间件链
 fn configure_app_services(
     app_state: Arc<AppState>,
     init_enabled: bool,
@@ -300,7 +301,6 @@ fn configure_app_services(
     let cors_layer = build_cors_layer(&config);
 
     let router = if init_enabled {
-        // 创建 InitContext 用于初始化模块
         let init_context = Arc::new(InitContext::new(
             config.database.clone(),
             foims_common::config::get_config_file_path(),
@@ -371,8 +371,7 @@ fn configure_app_services(
         Router::new().merge(api_router)
     };
 
-    // 始终注册的公开路由（初始化模式与正常模式都可用）
-    // 让前端登录页能查询初始化开关，决定是否跳转到 /init_index.html
+    // 登录页需据此判断是否跳转初始化向导，故初始化模式也必须可用
     let always_on_routes = Router::new()
         .route("/api/auth/init-status", get(get_init_status))
         .with_state(app_state.clone());
@@ -447,6 +446,8 @@ async fn main() -> std::io::Result<()> {
 
     let shutdown = ShutdownSignal::new();
 
+    // 初始化模式不建池：此后所有 `pool.as_ref()` 分支（fail2ban、Trap、实时采集、
+    // episode 运行时、调度器）在初始化模式下统一跳过，不再逐处说明
     let pool = if config.init.enabled {
         foims_common::log_info!("system.init_mode_enabled");
         None
@@ -469,16 +470,14 @@ async fn main() -> std::io::Result<()> {
         foims::log::forwarding::spawn_forward(pool, message);
     });
 
-    // 启动应用层 fail2ban 清理任务（新签名需连接池：先加载持久化配置）。
-    // 初始化模式无连接池，跳过启动
+    // 启动应用层 fail2ban 清理任务（先加载持久化配置）
     if let Some(db_pool) = pool.as_ref() {
         foims_auth::app_fail2ban::start_fail2ban_cleanup_task(db_pool.get_conn());
     }
     foims_common::log_info!("system.fail2ban_cleanup_started");
 
     // SNMP Trap/Inform 接收：常驻 UDP 监听，收到的消息写入站内通知
-    // （日志-通知页面展示）。采集服务职责（foims-agent-service），初始化模式
-    // 无连接池，跳过启动
+    // （日志-通知页面展示），职责归采集服务 foims-agent-service
     if config.snmp.trap.enabled
         && let Some(db_pool) = pool.as_ref()
     {
@@ -491,14 +490,14 @@ async fn main() -> std::io::Result<()> {
 
     // SNMP 实时采集：秒级定向 GET 维持内存快照（不落库），供实时展示与
     // Top 榜；趋势仍由 5 分钟全量轮询落库。注册表由 AppState 共享给
-    // 实时列表与 SSE 端点，初始化模式无连接池时不启动（注册表为空）
+    // 实时列表与 SSE 端点
     let live_registry = Arc::new(foims_agent_service::LiveRegistry::new());
     let live_config = config.snmp.live.clone().filter(|live| live.enabled);
 
     // 告警 episode 运行时：实时采集、agent 上报、常驻兜底扫描三条路径共用的
-    // 单实例（阈值缓存 + 状态机 + 落库与通知）。初始化模式无连接池时为 None，
-    // 告警评估缺席；实时采集开启时 SNMP 主机的秒级读数归实时路径，兜底扫描
-    // 只兜底 agent 上报主机，避免 5 分钟前的快照把刚恢复的告警拖回待决。
+    // 单实例（阈值缓存 + 状态机 + 落库与通知）。实时采集开启时 SNMP 主机的
+    // 秒级读数归实时路径，兜底扫描只兜底 agent 上报主机，避免 5 分钟前的
+    // 快照把刚恢复的告警拖回待决。
     let alert_runtime = pool.as_ref().map(|db_pool| {
         Arc::new(foims_agent_service::AlertRuntime::new(
             db_pool.get_conn(),
@@ -747,8 +746,6 @@ async fn main() -> std::io::Result<()> {
     // 1) 先直接 bind，成功即内核级独占；
     // 2) AddrInUse 时 connect 探测：连得上 → 有活跃实例，拒绝启动退出；
     //    连不上 → 陈旧 socket 残留（上次异常退出），删除后重 bind 一次。
-    // 同步文件操作（/etc/group 读取、目录创建、chmod 等）经 block_in_place
-    // 移出 async 上下文，避免阻塞运行时工作线程
     let uds_group = app_state.config_snapshot().server.listen.uds_group.clone();
     let uds_listener = match tokio::task::block_in_place(|| {
         create_uds_listener(&uds_path, &uds_group)
@@ -783,13 +780,11 @@ async fn main() -> std::io::Result<()> {
         Err(UdsBindError::Io(e)) => return Err(e),
     };
 
-    // 构建应用
     let app = configure_app_services(app_state.clone(), init_enabled, rate_limit_state);
 
     foims_common::log_info!("system.uds_server_started", path = uds_path);
     foims_common::log_info!("system.ready");
 
-    // 启动服务器（使用 oneshot 通道在收到第一次信号时通知主任务）
     let (signal_tx, signal_rx) = tokio::sync::oneshot::channel::<()>();
     let shutdown_for_signal = shutdown.clone();
     let graceful_shutdown = async move {
@@ -810,10 +805,9 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-    // 等待第一次关闭信号（通过 oneshot 通道）
     let _ = signal_rx.await;
 
-    // 注册强制退出信号处理（第二次 Ctrl-C）
+    // 第二次 Ctrl-C 直接终止进程，不再等待优雅关闭
     let force_shutdown_handle = tokio::spawn(async {
         if let Err(e) = tokio::signal::ctrl_c().await {
             foims_common::log_warn!("system.force_exit_register_failed", error = e);
@@ -822,7 +816,6 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(1);
     });
 
-    // 1. 停止接收新连接并等待请求完成（graceful_shutdown 已触发，等待服务器结束）
     foims_common::log_info!("system.shutdown_step_connections");
     let server_stop_timeout = tokio::time::Duration::from_secs(10);
     if let Err(e) = tokio::time::timeout(server_stop_timeout, server_task).await {
@@ -830,17 +823,14 @@ async fn main() -> std::io::Result<()> {
     }
     foims_common::log_info!("system.shutdown_connections_closed");
 
-    // 2. 服务器任务已结束
     foims_common::log_info!("system.shutdown_step_server");
     foims_common::log_info!("system.shutdown_server_done");
 
-    // 3. 关闭后台任务
     foims_common::log_info!("system.shutdown_step_background");
     shutdown.request_shutdown();
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     foims_common::log_info!("system.shutdown_background_signaled");
 
-    // 4. 关闭调度器
     foims_common::log_info!("system.shutdown_step_scheduler");
     if let Some(scheduler) = running_scheduler
         && let Err(e) =
@@ -849,7 +839,6 @@ async fn main() -> std::io::Result<()> {
         foims_common::log_warn!("system.scheduler_shutdown_timeout", error = e);
     }
 
-    // 5. 关闭数据库连接池
     foims_common::log_info!("system.shutdown_step_db");
     if let Some(db_pool) = pool
         && let Err(e) =

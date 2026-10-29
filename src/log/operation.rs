@@ -12,6 +12,10 @@ use crate::utils::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::OperationLog;
 
+/// 分页查询操作审计日志 —— GET /api/logs/operation。
+///
+/// 过滤参数 `resource_type`/`resource_id`/`user_id` 为等值匹配；`action`
+/// 作为 ILIKE 搜索词，同时匹配动作、用户名、IP、资源类型与资源 id。
 pub async fn get_operation_logs(
     State(state): State<Arc<AppState>>,
     // 与 admin_guard_middleware 的 /api/logs/** 角色矩阵一致：admin 或 auditor
@@ -141,7 +145,6 @@ pub async fn get_operation_logs(
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             "SELECT ol.id, ol.user_id, u.username, ol.action, ol.resource_type, ol.resource_id, ol.details, ol.success, ol.ip_address, ol.created_at::TIMESTAMPTZ FROM operation_logs ol LEFT JOIN users u ON ol.user_id = u.id",
         );
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);

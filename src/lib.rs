@@ -29,11 +29,10 @@
 // workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
-// 国际化支持
 #[macro_use]
 extern crate rust_i18n;
 
-// 初始化国际化支持（日志文案；缺失语言回退英文）
+// 注册 i18n 词条目录：当前仅日志文案走 i18n（缺失语言回退英文）
 i18n!("src/i18n", fallback = "en");
 
 pub mod app_state;

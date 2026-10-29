@@ -60,7 +60,6 @@ pub fn resolve_log_i18n_config(i18n: Option<&I18nConfig>) -> LogI18nConfig {
     };
 
     let Some(cfg) = i18n else {
-        // 整个 [i18n] 段缺失：默认英文控制台 + 英文日志文件
         return fallback();
     };
 
@@ -102,7 +101,6 @@ pub fn resolve_log_i18n_config(i18n: Option<&I18nConfig>) -> LogI18nConfig {
         ));
     }
 
-    // 去重并归一为小写，保持配置顺序
     let mut file_langs: Vec<String> = Vec::new();
     for lang in requested {
         let lang = lang.trim().to_lowercase();
@@ -127,7 +125,6 @@ fn build_timer() -> (LocalTime<Vec<BorrowedFormatItem<'static>>>, Vec<String>) {
             Err(e) => errors.push(format!("时间格式 {fmt} 解析失败: {e}")),
         }
     }
-    // 全部候选失败：退化为最简拼接格式，保证日志仍可输出
     let parsed =
         time::format_description::parse_borrowed::<2>("[hour][minute][second]").unwrap_or_default();
     errors.push(String::from("所有时间格式候选均解析失败，已退化为最简格式"));
@@ -137,7 +134,6 @@ fn build_timer() -> (LocalTime<Vec<BorrowedFormatItem<'static>>>, Vec<String>) {
 /// 依次尝试主日志文件与当前目录降级文件，返回 (文件句柄, 路径, 降级原因)
 fn open_log_file(log_dir: &str, lang: &str) -> (Option<fs::File>, String, Vec<String>) {
     let today = chrono::Local::now().format("%Y-%m-%d-%H-%M");
-    // 每个语言一个文件，文件内只含该语言的日志
     let primary = format!("{log_dir}/{today}.{lang}.log");
     let mut errors = Vec::new();
 
@@ -218,7 +214,6 @@ fn resolve_i18n_log_level() -> (LevelFilter, Option<String>) {
 pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
     let log_cfg = resolve_log_i18n_config(i18n);
 
-    // 激活语言 = 控制台语言 ∪ 文件语言（去重）
     let mut active: Vec<String> = Vec::new();
     for lang in std::iter::once(&log_cfg.console_lang).chain(log_cfg.file_langs.iter()) {
         if !active.contains(lang) {
@@ -287,7 +282,6 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
     }
 
     if let Some(reason) = &log_cfg.config_error {
-        // 配置非法：按约定回退为仅输出英文日志，并明确提示原因
         log_error!("log.i18n_config_error", reason = reason);
     }
 

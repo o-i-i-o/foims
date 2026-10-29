@@ -24,7 +24,7 @@ const SYSLOG_PRI_INFO: u32 = 16 * 8 + 6;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogForwardingConfig {
     pub enabled: bool,
-    /// udp 或 tcp（仅接受小写值，落盘时统一小写；空/非法值一律校验拒绝）
+    /// udp 或 tcp（落盘时统一小写）
     pub protocol: String,
     pub host: String,
     pub port: u16,
@@ -90,7 +90,7 @@ fn validate(config: &LogForwardingConfig) -> Result<(), AppError> {
 }
 
 /// 配置短 TTL 缓存：外发是高频旁路动作，逐条查库会在日志风暴下放大 DB 压力。
-/// 缓存 (配置, 加载时刻)，TTL 内直接复用；`save` 时主动失效。
+/// 缓存 (配置, 加载时刻)，TTL 内直接复用。
 static CONFIG_CACHE: OnceLock<std::sync::Mutex<Option<(LogForwardingConfig, std::time::Instant)>>> =
     OnceLock::new();
 /// 缓存有效期：外发配置极低频变更，30s 内的滞后可接受
@@ -107,7 +107,7 @@ fn send_limit() -> &'static tokio::sync::Semaphore {
     SEND_LIMIT.get_or_init(|| tokio::sync::Semaphore::new(MAX_CONCURRENT_SENDS))
 }
 
-/// 先读缓存，未命中或过期时从 DB 加载并回填（DB 错误不缓存，下次重试）。
+/// `load` 的缓存版：DB 错误不回填缓存，下次调用即重试。
 async fn load_cached(pool: &PgPool) -> Result<LogForwardingConfig, AppError> {
     if let Some((config, at)) = config_cache().lock().ok().and_then(|g| g.clone())
         && at.elapsed() < CONFIG_CACHE_TTL
@@ -121,7 +121,7 @@ async fn load_cached(pool: &PgPool) -> Result<LogForwardingConfig, AppError> {
     Ok(config)
 }
 
-/// 保存外发配置
+/// 校验并落盘外发配置：字段非法即返回 Validation 错误，落库成功后失效配置缓存。
 pub async fn save(pool: &PgPool, config: &LogForwardingConfig) -> Result<(), AppError> {
     validate(config)?;
 
@@ -146,7 +146,7 @@ pub async fn save(pool: &PgPool, config: &LogForwardingConfig) -> Result<(), App
     }
     tx.commit().await?;
 
-    // 配置已变更：失效缓存，保证后续外发立即使用新配置
+    // 不等 TTL 自然过期：配置变更后必须立即反映到后续外发
     if let Ok(mut guard) = config_cache().lock() {
         *guard = None;
     }
@@ -247,13 +247,11 @@ async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String>
     Ok(())
 }
 
-// ==================== HTTP 端点（安全管理员管辖） ====================
-
+/// 读取外发配置 —— GET /api/system/logs/forwarding。
 pub async fn get_forwarding(
     State(state): State<Arc<AppState>>,
     _secadmin: foims_auth::extractor::SecAdminUser,
 ) -> Result<Response, AppError> {
-    // DB 错误透传，不再静默回退「关闭」默认配置
     let config = load(&state.pool()?.get_conn()).await?;
     Ok(foims_common::ok_json(
         config,
@@ -261,6 +259,7 @@ pub async fn get_forwarding(
     ))
 }
 
+/// 更新外发配置 —— PUT /api/system/logs/forwarding（校验与缓存失效见 `save`）。
 pub async fn update_forwarding(
     State(state): State<Arc<AppState>>,
     _secadmin: foims_auth::extractor::SecAdminUser,
@@ -270,7 +269,9 @@ pub async fn update_forwarding(
     Ok(foims_common::ok_json((), "server.logs.forwarding_updated"))
 }
 
-/// 发送一条测试报文验证连通性
+/// 发送固定测试报文验证链路连通性 —— POST /api/system/logs/forwarding/test。
+///
+/// 外发未启用时返回 Validation 错误，不静默成功。
 pub async fn test_forwarding(
     State(state): State<Arc<AppState>>,
     _secadmin: foims_auth::extractor::SecAdminUser,

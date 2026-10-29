@@ -214,10 +214,9 @@ async fn charge_user_rate_limit_middleware(
     next.run(req).await
 }
 
-// 初始化相关路由将根据配置动态添加（在 main.rs 中）
-// 这里只定义基础路由
+/// 组装应用基础路由表（认证/健康/资源/系统等全量 API 与守卫链）；
+/// 初始化模式相关路由由 main.rs 按配置动态挂载，不含在本函数内。
 pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
-    // 公开认证路由（不需要认证）
     let public_auth_routes = Router::new()
         .route(
             "/api/auth/login",
@@ -286,7 +285,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(crate::system::certificate::ca_download),
         );
 
-    // /me 路由（单独应用认证中间件）
     let me_routes = Router::new()
         .route(
             "/api/auth/me",
@@ -296,8 +294,8 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/auth/change-password",
             post(foims_auth::login::change_password::<AppState>),
         )
-        // 注册顺序即执行顺序的反序：auth_middleware 先行校验并注入 claims，
-        // 随后 admin_guard/限流补记依次运行
+        // 注册顺序即执行顺序的反序：auth_middleware 后注册居最外层，
+        // 先行校验并注入 claims，随后限流补记在 claims 就绪后计数
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             charge_user_rate_limit_middleware,
@@ -307,12 +305,9 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             foims_auth::login::auth_middleware::<AppState>,
         ));
 
-    // 健康检查（不需要认证）
     let health_routes = Router::new().route("/health", get(health_check));
 
-    // 需要认证的 API 路由
     let protected_api_routes = Router::new()
-        // 用户管理路由
         .route(
             "/api/users",
             get(foims_auth::user::get_users::<AppState>)
@@ -324,7 +319,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_auth::user::update_user::<AppState>)
                 .delete(foims_auth::user::delete_user::<AppState>),
         )
-        // 2FA管理路由
         .route(
             "/api/two-factor/init",
             post(foims_auth::login::init_two_factor::<AppState>),
@@ -343,7 +337,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/options/{resource}",
             get(foims_resource::options::get_resource_options::<AppState>),
         )
-        // 子网管理
         .route(
             "/api/resources/networks",
             get(foims_resource::get_networks::<AppState>)
@@ -355,7 +348,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_network::<AppState>)
                 .delete(foims_resource::delete_network::<AppState>),
         )
-        // 网络区域管理
         .route(
             "/api/resources/network-regions",
             get(foims_resource::get_network_regions::<AppState>)
@@ -371,7 +363,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/network-regions/{id}/cabinets",
             get(foims_resource::get_cabinets_by_network_region::<AppState>),
         )
-        // 房间管理
         .route(
             "/api/resources/rooms",
             get(foims_resource::get_rooms::<AppState>)
@@ -399,7 +390,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/rooms/{id}/net-outlets",
             put(foims_resource::sync_room_net_outlets::<AppState>),
         )
-        // 机柜管理
         .route(
             "/api/resources/cabinets",
             get(foims_resource::get_cabinets::<AppState>)
@@ -423,7 +413,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/cabinets/{id}/patch-panels",
             put(foims_resource::sync_cabinet_patch_panels::<AppState>),
         )
-        // 工位管理
         .route(
             "/api/resources/workstations",
             get(foims_resource::get_workstations::<AppState>)
@@ -435,7 +424,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_workstation::<AppState>)
                 .delete(foims_resource::delete_workstation::<AppState>),
         )
-        // 机位管理
         .route(
             "/api/resources/positions",
             get(foims_resource::get_positions::<AppState>)
@@ -447,7 +435,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_cabinet_position::<AppState>)
                 .delete(foims_resource::delete_cabinet_position::<AppState>),
         )
-        // 设备详情
         .route(
             "/api/resources/ip",
             get(foims_resource::get_ip_details::<AppState>),
@@ -472,7 +459,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/ip/batch",
             post(foims_resource::batch_create_ip_details::<AppState>),
         )
-        // 布局管理
         .route(
             "/api/resources/layouts",
             post(foims_visualization::http::save_layout::<AppState>),
@@ -491,7 +477,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/layouts/room-cabinets/{room_id}",
             get(foims_visualization::http::get_room_cabinets_with_positions::<AppState>),
         )
-        // 拓扑可视化
         .route(
             "/api/resources/topology/nodes",
             get(foims_visualization::http::get_topology_nodes::<AppState>)
@@ -514,7 +499,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/topology/auto-discover",
             post(foims_visualization::http::trigger_auto_discover::<AppState>),
         )
-        // 组织管理
         .route(
             "/api/resources/organizations",
             get(foims_organization::get_organizations::<AppState>)
@@ -554,7 +538,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_organization::employee::update_employee::<AppState>)
                 .delete(foims_organization::employee::delete_employee::<AppState>),
         )
-        // 组织模板管理
         .route(
             "/api/resources/org-templates",
             get(foims_organization::get_org_templates::<AppState>)
@@ -570,7 +553,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_organization::update_org_template::<AppState>)
                 .delete(foims_organization::delete_org_template::<AppState>),
         )
-        // 信息点管理
         .route(
             "/api/resources/net-outlets",
             get(foims_resource::get_net_outlets::<AppState>)
@@ -587,7 +569,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/patch-panels",
             get(foims_resource::get_patch_panels::<AppState>),
         )
-        // 物理链路管理
         .route(
             "/api/resources/cable-links",
             get(foims_resource::get_cable_links::<AppState>)
@@ -603,7 +584,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_cable_link::<AppState>)
                 .delete(foims_resource::delete_cable_link::<AppState>),
         )
-        // 设备模板管理
         .route(
             "/api/resources/device-templates",
             get(foims_resource::get_device_templates::<AppState>),
@@ -670,7 +650,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/resources/devices/{id}/lldp/sync",
             post(foims_resource::sync_lldp_from_snmp::<AppState>),
         )
-        // ===== SNMP 第二层：网络侧清单/台账（读库 GET 非守卫，sync POST 归 admin）=====
+        // SNMP 第二层：网络侧清单/台账（读库 GET 非守卫，sync POST 归 admin）
         .route(
             "/api/resources/devices/{id}/entities",
             get(foims_resource::get_device_entities::<AppState>),
@@ -750,10 +730,8 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(foims_resource::update_device_interface::<AppState>)
                 .delete(foims_resource::delete_device_interface::<AppState>),
         )
-        // 日志管理路由
         .route("/api/logs/operation", get(get_operation_logs))
         .route("/api/logs/login", get(get_login_logs))
-        // 通知管理路由
         .route("/api/notifications", get(get_notifications))
         .route("/api/notifications/{id}/read", put(mark_notification_read))
         .route(
@@ -761,7 +739,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             put(mark_all_notifications_read),
         )
         // 系统管理路由
-        // 系统信息
         .route("/api/system/info", get(get_system_info))
         // 服务管理（foims / nginx 共同管理；服务注册由部署方完成，
         // 程序不做注册，未注册服务操作直接报错）
@@ -770,18 +747,14 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/services/{service}/{op}",
             post(service_operation),
         )
-        // 仪表盘统计
         .route("/api/system/dashboard-stats", get(get_dashboard_stats))
-        // 关闭初始化模式
         .route("/api/system/disable-init", post(disable_init_mode))
-        // SMTP配置
         .route(
             "/api/system/smtp/config",
             get(get_smtp_config).put(update_smtp_config),
         )
         .route("/api/system/smtp/test", post(test_smtp))
         .route("/api/system/smtp/send", post(send_system_email))
-        // LDAP 配置
         .route(
             "/api/system/ldap/config",
             get(foims_auth::ldap::get_ldap_config::<AppState>)
@@ -791,7 +764,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/ldap/test",
             post(foims_auth::ldap::test_ldap_connection::<AppState>),
         )
-        // SSO（OIDC）配置
         .route(
             "/api/system/sso/config",
             get(foims_auth::sso::get_sso_config::<AppState>)
@@ -801,7 +773,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/sso/test",
             post(foims_auth::sso::test_sso_connection::<AppState>),
         )
-        // 配置管理
         .route(
             "/api/system/config",
             get(get_system_config).put(update_system_config),
@@ -833,20 +804,16 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/certificate/{kind}/{file_stem}/apply",
             post(certificate::apply),
         )
-        // 语言设置
         .route("/api/system/languages", get(get_supported_languages))
         .route("/api/system/language", put(update_language_setting))
-        // 页面超时配置
         .route(
             "/api/system/page-timeout",
             get(get_page_timeout_config).put(update_page_timeout_config),
         )
-        // 会话超时配置
         .route(
             "/api/system/session-timeout",
             get(get_session_timeout_config).put(update_session_timeout_config),
         )
-        // 通知设置
         .route(
             "/api/system/notification/settings",
             get(get_notification_settings).put(update_notification_settings),
@@ -856,7 +823,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/password-policy",
             get(get_password_policy).put(update_password_policy),
         )
-        // 导入导出功能
         .route(
             "/api/system/import-export/import/csv",
             post(data_import_csv).layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)),
@@ -870,7 +836,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/import-export/template",
             get(data_download_template),
         )
-        // 日志清理功能
         .route("/api/system/logs/stats", get(data_get_logs_stats))
         .route("/api/system/logs/clear", post(data_clear_logs))
         // 日志外发（syslog，安全管理员管辖）
@@ -883,7 +848,6 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/system/logs/forwarding/test",
             post(crate::log::forwarding::test_forwarding),
         )
-        // 定时任务管理
         .route(
             "/api/system/scheduled-tasks",
             get(get_scheduled_tasks).post(create_scheduled_task),
