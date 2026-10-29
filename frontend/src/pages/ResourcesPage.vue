@@ -691,7 +691,11 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable col-center" :class="sortClass(networks, 'created_at')" @click="onThSort($event, networks, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
-              <th>{{ t("common.actions") }}</th>
+              <th>
+                <button type="button" class="btn btn-primary btn-sm" @click="openNetworkModal()">
+                  {{ t("network.add_network") }}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
