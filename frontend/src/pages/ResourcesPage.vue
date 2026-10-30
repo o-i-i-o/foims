@@ -34,8 +34,6 @@ import SimpleListModal from "../components/SimpleListModal.vue";
 import NetworkModal from "../components/network/NetworkModal.vue";
 import NetworkRegionModal from "../components/network/NetworkRegionModal.vue";
 import DeviceSnmpModal from "../components/device/DeviceSnmpModal.vue";
-import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
-import LocateModal from "../components/device/LocateModal.vue";
 import CableLabelPrintModal from "../components/cable/CableLabelPrintModal.vue";
 import CablePrintArea from "../components/cable/CablePrintArea.vue";
 import type { RoomBrief } from "../types/api/contracts";
@@ -250,9 +248,6 @@ const deviceModal = reactive<{ open: boolean; device: DeviceEditData | null }>({
 // 观测事件 9 个 SNMP 入口收敛为单按钮唤起，弹窗内以标签切换（deviceId +
 // deviceName 供标题与各子功能接口调用）
 const snmpHub = reactive({ open: false, deviceId: "", deviceName: "" });
-// SNMP 事件（全局工具栏，不限设备）与终端定位弹窗
-const eventsModal = reactive({ open: false, deviceId: "" });
-const locateModal = reactive({ open: false });
 // 线路弹窗：linkId 为 "" = 新增，非空 = 编辑（弹窗内取详情回填）
 const cableLinkModal = reactive({ open: false, linkId: "" });
 // 标签打印弹窗：items 取当前页列表数据（行内单行打印直接经 CablePrintArea）
@@ -997,12 +992,6 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th>{{ t("common.description") }}</th>
               <th>
                 <div class="device-toolbar-actions">
-                  <button type="button" class="btn btn-secondary btn-sm" @click="eventsModal.deviceId = ''; eventsModal.open = true">
-                    {{ t("device.snmp_events.title") }}
-                  </button>
-                  <button type="button" class="btn btn-secondary btn-sm" @click="locateModal.open = true">
-                    {{ t("device.locate.title") }}
-                  </button>
                   <button type="button" class="btn btn-primary btn-sm" @click="deviceModal.device = null; deviceModal.open = true">
                     {{ t("device.add") }}
                   </button>
@@ -1249,15 +1238,6 @@ function deviceLocationText(item: DeviceWithDetails): string {
       :device-id="snmpHub.deviceId"
       :device-name="snmpHub.deviceName"
       @close="snmpHub.open = false"
-    />
-    <SnmpEventsModal
-      v-if="eventsModal.open"
-      :device-id="eventsModal.deviceId"
-      @close="eventsModal.open = false"
-    />
-    <LocateModal
-      v-if="locateModal.open"
-      @close="locateModal.open = false"
     />
     <!-- 线路编辑弹窗：保存后仅 emit("saved")，需在此关闭并失效列表 -->
     <CableLinkModal

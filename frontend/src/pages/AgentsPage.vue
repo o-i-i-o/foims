@@ -2,12 +2,13 @@
 /**
  * 主机监控页：状态/关键字筛选 + 分页列表 + 30s 自动刷新（窗口失焦自动暂停，
  * TanStack refetchInterval 默认语义）+ 行内管理
- * 操作（详情/禁用/启用/删除）+ 告警阈值配置弹窗。
+ * 操作（详情/禁用/启用/删除）+ 告警阈值配置弹窗 + SNMP 观测事件/终端定位
+ * 两个全局弹窗（均不限单台主机，与 SNMP 采集源同属本页职责）。
  *
  * 使用率列复用 AgentUsageBar；关键字输入为草稿态（回车/查询按钮提交），
  * 刷新与自动轮询沿用已提交筛选，不覆盖未确认的输入。
  */
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiPatch } from "../api/client";
@@ -21,6 +22,8 @@ import Pagination from "../components/Pagination.vue";
 import AgentDetailModal from "../components/agents/AgentDetailModal.vue";
 import AgentThresholdModal from "../components/agents/AgentThresholdModal.vue";
 import AgentUsageBar from "../components/agents/AgentUsageBar.vue";
+import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
+import LocateModal from "../components/device/LocateModal.vue";
 import { useLiveAgents } from "../composables/useLiveAgents";
 import { useAuthStore } from "../stores/auth";
 import type { LiveSummaryRow } from "../types/api/generated/LiveSummaryRow";
@@ -205,6 +208,13 @@ function handleDeleteConfirmed() {
     deleteMutation.mutate(id);
   }
 }
+
+// ==================== 顶栏全局工具弹窗 ====================
+
+// SNMP 观测事件（不预填设备）与终端定位：均不依赖具体设备行，后端两接口
+// 为库内只读查询，与 SNMP 采集源同属本页职责，故由本页顶栏承载
+const eventsModal = reactive({ open: false });
+const locateModal = reactive({ open: false });
 </script>
 
 <template>
@@ -227,6 +237,8 @@ function handleDeleteConfirmed() {
       <button type="button" class="btn btn-primary btn-sm" @click="applyFilters">{{ t("agents.query") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="list.refetch()">{{ t("common.refresh") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="showThreshold = true">{{ t("agents.alert_threshold") }}</button>
+      <button type="button" class="btn btn-secondary btn-sm" @click="eventsModal.open = true">{{ t("device.snmp_events.title") }}</button>
+      <button type="button" class="btn btn-secondary btn-sm" @click="locateModal.open = true">{{ t("device.locate.title") }}</button>
       <span class="agent-live-state" :class="liveConnected ? 'is-on' : 'is-off'">
         <span class="agent-live-dot" aria-hidden="true"></span>
         {{ liveConnected ? t("agents.live_connected") : t("agents.live_disconnected") }}
@@ -338,6 +350,8 @@ function handleDeleteConfirmed() {
 
     <AgentDetailModal v-if="detailId != null" :agent-id="detailId" @close="detailId = null" />
     <AgentThresholdModal v-if="showThreshold" @close="showThreshold = false" />
+    <SnmpEventsModal v-if="eventsModal.open" @close="eventsModal.open = false" />
+    <LocateModal v-if="locateModal.open" @close="locateModal.open = false" />
     <ConfirmModal
       v-if="deleteTarget"
       :message="t('agents.confirm_delete')"
