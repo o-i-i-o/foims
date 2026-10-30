@@ -11,7 +11,6 @@
 import { shallowRef, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-/** 单个页签元数据 */
 export interface SubTabMeta<Id extends string = string> {
   /** 页签 id（同时是 query 的 tab 值与 localStorage 记忆值） */
   id: Id;

@@ -26,7 +26,6 @@ export function notifyLoadFailure(showToast: ShowToastFn, error: unknown, what: 
 export interface FetchAllPagesDeps<T> {
   /** API GET 封装（`api/client` 的同名导出） */
   apiGet: (url: string) => Promise<ApiResult<Paged<T>>>;
-  /** 通知函数 */
   showToast: ShowToastFn;
   /** 不含分页参数的接口路径 */
   path: string;

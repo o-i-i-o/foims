@@ -24,7 +24,6 @@ export interface CanvasRect {
 /** 锚点方向（拓扑连线出入口） */
 export type AnchorDirection = "top" | "right" | "bottom" | "left";
 
-/** 带方向的锚点坐标 */
 export interface AnchorPoint {
   x: number;
   y: number;

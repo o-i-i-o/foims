@@ -61,7 +61,7 @@ impl Drop for DispatchRunningGuard {
 }
 
 impl SchedulerState {
-    /// 创建调度器，注册任务执行器
+    /// 创建调度器并保存执行器注册表
     pub async fn new(
         pool: sqlx::PgPool,
         db_config: DatabaseConfig,
@@ -200,7 +200,7 @@ impl SchedulerState {
         Ok(())
     }
 
-    /// 启动调度器，内部自动注册用户任务同步 job
+    /// 启动调度器，内部自动注册用户任务同步与到期派发 job
     pub async fn start(self) -> SchedulerResult<RunningScheduler> {
         // 添加用户任务同步 job（每5分钟；带重叠保护）
         let sync_pool = self.pool.clone();

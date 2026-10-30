@@ -19,6 +19,9 @@ use foims_models::{ForgotPasswordRequest, ResetPasswordRequest};
 
 use super::email_code::enforce_email_send_limit;
 
+/// POST /api/auth/forgot-password：发起密码找回（公开端点；每 IP 与目标邮箱
+/// 每小时限 3 次，超限转 400；无论邮箱是否存在均返回统一成功响应防枚举；
+/// 重置令牌 SHA-256 哈希落库，邮件链接 1 小时有效）。
 pub async fn forgot_password<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -86,6 +89,9 @@ pub async fn forgot_password<P: AuthProvider>(
     ))
 }
 
+/// POST /api/auth/reset-password：凭邮件令牌重置密码（令牌按哈希比对并校验
+/// 1 小时有效期，无效或过期转 400；新密码过等保复杂度与历史重复检查；
+/// 密码写入与历史记录同事务，成功后吊销全部令牌）。
 pub async fn reset_password<P: AuthProvider>(
     State(state): State<Arc<P>>,
     AppJson(req): AppJson<ResetPasswordRequest>,
@@ -152,6 +158,9 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+/// POST /api/auth/change-password：自助修改密码（需登录，未认证 401；旧密码
+/// 错误转 400 并按登录失败计入 fail2ban；用户不存在转 404；新密码过复杂度与
+/// 历史检查，成功后吊销全部令牌强制重新登录）。
 pub async fn change_password<P: AuthProvider>(
     State(state): State<Arc<P>>,
     auth: crate::extractor::AuthUser,
@@ -171,7 +180,6 @@ pub async fn change_password<P: AuthProvider>(
             .await?
             .ok_or_else(|| AppError::NotFound(msg("server.user.not_found")))?;
 
-    // 旧密码校验
     let old_for_verify = req.old_password.clone();
     let hash_for_verify = password_hash;
     let valid = tokio::task::spawn_blocking(move || verify(&old_for_verify, &hash_for_verify))

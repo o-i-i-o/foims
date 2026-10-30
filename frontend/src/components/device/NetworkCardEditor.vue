@@ -730,7 +730,7 @@ defineExpose({ collectData, loadExisting, resetForAdd });
             </select>
           </div>
           <div class="nc-field">
-            <label :for="`nc-port-vlan-${port.key}`">{{ t("device.vlan_id") }}</label>
+            <label :for="`nc-port-vlan-${port.key}`">VLAN ID</label>
             <input
               :id="`nc-port-vlan-${port.key}`"
               v-model="port.vlanId"

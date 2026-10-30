@@ -155,6 +155,9 @@ const ENUM_WHITELISTS: &[(&str, &str, bool, &[&str])] = &[
     ),
 ];
 
+/// POST /api/system/import-export/import/csv：上传 ZIP（多个 `表名.csv`）
+/// 或单个 CSV 导入（≤50MB，按真实类型与表头识别；整批单事务，任一行
+/// 字段/引用/业务键校验失败即全部回滚并返回 400）。
 pub async fn import_csv<P: DataProvider>(
     provider: P,
     mut payload: Multipart,

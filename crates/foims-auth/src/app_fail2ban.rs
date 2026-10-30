@@ -34,7 +34,6 @@ fn sanitize_identifier(raw: &str) -> String {
         .collect()
 }
 
-/// 应用层 Fail2ban 配置
 #[derive(Debug, Clone)]
 pub struct Fail2banConfig {
     /// 检测时间窗口（秒），默认 600
@@ -58,12 +57,10 @@ impl Default for Fail2banConfig {
     }
 }
 
-/// 单个 IP 的失败记录
+/// 单个记录键（IP 或用户名）的失败记录
 #[derive(Debug, Clone)]
 struct FailRecord {
-    /// 失败时间戳列表
     failures: Vec<Instant>,
-    /// 封禁到期时间（若存在）
     banned_until: Option<Instant>,
 }
 
@@ -84,7 +81,6 @@ impl FailRecord {
 pub struct AppFail2ban {
     /// 记录键（"ip:<addr>" / "user:<name>"）→ 失败记录
     records: Mutex<HashMap<String, FailRecord>>,
-    /// 配置
     config: Mutex<Fail2banConfig>,
 }
 
@@ -97,7 +93,6 @@ impl AppFail2ban {
     }
 }
 
-/// 获取全局实例
 static APP_FAIL2BAN: std::sync::OnceLock<AppFail2ban> = std::sync::OnceLock::new();
 
 fn app_fail2ban() -> &'static AppFail2ban {
@@ -124,7 +119,6 @@ pub fn start_fail2ban_cleanup_task(pool: sqlx::PgPool) {
     });
 }
 
-/// 清理过期的失败记录和封禁记录
 fn cleanup_expired_records() {
     let store = app_fail2ban();
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
@@ -133,23 +127,19 @@ fn cleanup_expired_records() {
 
     if let Ok(mut records) = store.records.lock() {
         records.retain(|_, record| {
-            // 清除过期的失败记录
             record
                 .failures
                 .retain(|&t| now.duration_since(t) < findtime_dur);
-            // 清除已到期的封禁
             if let Some(until) = record.banned_until
                 && now >= until
             {
                 record.banned_until = None;
             }
-            // 保留还有失败记录或仍在封禁中的 IP
             !record.failures.is_empty() || record.banned_until.is_some()
         });
     }
 }
 
-/// 检查记录键是否被封禁
 fn is_key_banned(store: &AppFail2ban, key: &str) -> bool {
     let config = store.config.lock().map(|c| c.clone()).unwrap_or_default();
     if !config.enabled {
@@ -165,12 +155,11 @@ fn is_key_banned(store: &AppFail2ban, key: &str) -> bool {
     false
 }
 
-/// 检查 IP 是否被封禁
 pub fn is_ip_banned(ip: &str) -> bool {
     is_key_banned(app_fail2ban(), &ip_key(ip))
 }
 
-/// 检查用户名是否被封禁（按用户名维度的爆破防护）
+/// 按用户名维度检查封禁（分布式来源对同一账户的爆破）。
 pub fn is_user_banned(username: &str) -> bool {
     is_key_banned(app_fail2ban(), &user_key(username))
 }
@@ -258,11 +247,9 @@ fn write_auth_log(success: bool, ip: &str, username: &str, reason: Option<&str>)
     let line = log_line.clone();
     tokio::spawn(async move {
         use tokio::io::AsyncWriteExt;
-        // 确保日志目录存在
         if let Some(parent) = std::path::Path::new(AUTH_LOG_PATH).parent() {
             let _ = tokio::fs::create_dir_all(parent).await;
         }
-        // 以追加模式打开文件，失败则记录 warning
         match tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -303,14 +290,11 @@ pub fn record_login_failure(ip: &str, username: &str, reason: &str) -> bool {
     if let Ok(mut records) = store.records.lock() {
         for key in [ip_key(ip), user_key(username)] {
             let record = records.entry(key.clone()).or_insert_with(FailRecord::new);
-            // 清除过期的失败记录
             record
                 .failures
                 .retain(|&t| now.duration_since(t) < findtime_dur);
-            // 记录本次失败
             record.failures.push(now);
 
-            // 检查是否达到封禁阈值
             if record.failures.len() as u64 >= config.max_retry {
                 record.banned_until = Some(now + Duration::from_secs(config.bantime));
                 log_warn!(
@@ -502,7 +486,9 @@ pub async fn save_config_to_db(
 
 // API Handler
 
-/// 获取应用层 fail2ban 状态（登录即可读，管理操作见下方安全管理员端点）
+/// GET /api/system/fail2ban/app/status：读取应用层 fail2ban 状态
+/// （登录即可读；返回配置、封禁中的 IP/用户名与失败计数，按剩余时间或次数
+/// 排序）。
 pub async fn get_app_fail2ban_status<P: AuthProvider>(
     _user: crate::extractor::AuthUser,
 ) -> Result<Response, AppError> {
@@ -572,7 +558,9 @@ pub async fn get_app_fail2ban_status<P: AuthProvider>(
     ))
 }
 
-/// 更新应用层 fail2ban 配置（仅管理员；变更持久化到 system_configs）
+/// PUT /api/system/fail2ban/app/config：更新应用层 fail2ban 配置
+/// （安全管理员 admin/secadmin，否则 403；字段范围校验失败 400；先持久化
+/// 后更新内存，落库失败时内存配置保持不变）。
 pub async fn update_app_fail2ban_config<P: AuthProvider>(
     state: State<Arc<P>>,
     _secadmin: crate::extractor::SecAdminUser,
@@ -615,7 +603,8 @@ pub async fn update_app_fail2ban_config<P: AuthProvider>(
     ))
 }
 
-/// 手动解封 IP（仅管理员）
+/// POST /api/system/fail2ban/app/unban：手动解封 IP（安全管理员；IP 非法
+/// 400；解除封禁并清空该 IP 的失败计数，未封禁时同样返回成功）。
 pub async fn app_unban_ip<P: AuthProvider>(
     _secadmin: crate::extractor::SecAdminUser,
     AppJson(req): AppJson<UnbanIpRequest>,
@@ -643,7 +632,8 @@ pub async fn app_unban_ip<P: AuthProvider>(
     ))
 }
 
-/// 手动封禁 IP（仅管理员）
+/// POST /api/system/fail2ban/app/ban：手动封禁 IP（安全管理员；IP 非法或
+/// fail2ban 已停用转 400；封禁时长为当前配置的 bantime）。
 pub async fn app_ban_ip<P: AuthProvider>(
     _secadmin: crate::extractor::SecAdminUser,
     AppJson(req): AppJson<BanIpRequest>,

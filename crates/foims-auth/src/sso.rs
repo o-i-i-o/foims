@@ -40,9 +40,7 @@ use openidconnect::{
     EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
 };
 
-/// 未完成授权的会话状态有效期
 const SSO_STATE_TTL: Duration = Duration::from_secs(600);
-/// 发现文档缓存有效期
 const SSO_METADATA_TTL: Duration = Duration::from_secs(3600);
 
 struct SsoPendingAuth {
@@ -324,7 +322,9 @@ async fn build_oidc_client(
 
 // 登录 / 回调
 
-/// 发起 OIDC 授权码流程：302 跳转 IdP 授权端点。
+/// GET /api/auth/sso/login：发起 OIDC 授权码流程（重定向到 IdP 授权端点；
+/// 未配置、停用、回调地址缺失等业务错误不返回错误状态码，统一重定向登录页
+/// 并携带 sso_error，由前端翻译展示）。
 pub async fn sso_login<P: AuthProvider>(State(state): State<Arc<P>>) -> Response {
     match sso_login_inner(state).await {
         Ok(response) => response,
@@ -394,11 +394,10 @@ pub struct SsoCallbackPostBody {
     pub totp_code: Option<String>,
 }
 
-/// OIDC 回调（GET）：IdP 重定向浏览器回到本端点，换令牌、验 ID Token、
-/// 建户/登录、写 Cookie 后跳转前端。
-///
-/// 动态码仅接受 [`sso_callback_post`] 的请求体传输：query 会落入反向
-/// 代理访问日志、浏览器历史与 Referer，本入口对其显式拒绝。
+/// GET /api/auth/sso/callback：OIDC 回调（IdP 重定向回跳；换码、验 ID Token、
+/// 建户后写 Cookie 并跳转 /main.html；本入口拒绝 query 中的 totp_code，
+/// 动态码只收 POST 请求体——query 会落入反代日志、浏览器历史与 Referer；
+/// 业务失败统一重定向登录页并携带 sso_error）。
 pub async fn sso_callback<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -417,10 +416,9 @@ pub async fn sso_callback<P: AuthProvider>(
     }
 }
 
-/// OIDC 回调（POST）：动态码经 JSON 请求体传输。
-///
-/// 与 GET 回调共用同一路径的其余参数（code/state/error 仍取 query；
-/// IdP 的 302 重定向固定为 GET，POST 路径供前端携带动态码重试时使用）。
+/// POST /api/auth/sso/callback：OIDC 回调（动态码经 JSON 请求体传输，不落入
+/// URL query；code/state/error 仍取 query——IdP 的重定向固定为 GET，
+/// 本入口供前端携带动态码重试；业务失败同样重定向登录页并携带 sso_error）。
 pub async fn sso_callback_post<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -580,7 +578,6 @@ async fn sso_callback_inner<P: AuthProvider>(
         }
     }
 
-    // 签发令牌并写入 Cookie，随后跳转前端首页
     let login_tokens =
         issue_external_login_tokens(&state, &meta, &external, true, totp_verified).await?;
     let mut redirect = Redirect::to("/main.html").into_response();
@@ -610,10 +607,9 @@ fn sso_error_redirect(error_key: &str) -> Response {
 
 // 认证方式查询
 
-/// 公开的认证方式开关：登录页据此显示/隐藏 LDAP 与 SSO 标签。
-///
-/// 邮箱登录依赖 SMTP：未配置时该入口静默隐藏（模块视为未运行），
-/// 避免用户触发必然失败的发码请求。
+/// GET /api/auth/methods：公开认证方式开关（登录页据此显示/隐藏 LDAP 与 SSO
+/// 标签；邮箱登录依赖 SMTP，未完整配置时入口静默隐藏，避免触发必然失败的
+/// 发码请求）。
 pub async fn get_auth_methods<P: AuthProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
@@ -661,6 +657,8 @@ pub struct SsoConfigResponse {
     pub has_secret: bool,
 }
 
+/// GET /api/system/sso/config：读取 SSO 配置（登录即可读；client_secret
+/// 不回传，仅以 has_secret 表示是否已配置）。
 pub async fn get_sso_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
     _user: crate::extractor::AuthUser,
@@ -710,6 +708,9 @@ pub struct UpdateSsoConfigRequest {
     pub default_role: String,
 }
 
+/// PUT /api/system/sso/config：更新 SSO 配置（系统管理员可用；issuer 非回环
+/// http 转 400；client_secret 留空表示沿用旧值，无旧配置时 404；保存后清空
+/// 发现文档缓存）。
 pub async fn update_sso_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
     _sysadmin: crate::extractor::SysAdminUser,
@@ -746,7 +747,8 @@ pub async fn update_sso_config<P: AuthProvider>(
     Ok(foims_common::ok_json((), "server.sso.config_updated"))
 }
 
-/// 测试已保存的 SSO 配置：执行 OIDC 发现文档获取。
+/// POST /api/system/sso/test：测试已保存的 SSO 配置（系统管理员可用；未配置
+/// 404；issuer 非法 400；执行 OIDC 发现文档获取，失败即返回错误）。
 pub async fn test_sso_connection<P: AuthProvider>(
     State(state): State<Arc<P>>,
     _sysadmin: crate::extractor::SysAdminUser,

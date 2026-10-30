@@ -522,9 +522,9 @@ async fn redact_device_secrets(row: &mut Value) {
     }
 }
 
-/// 按模块导出业务数据为 CSV（ZIP 打包）。
-///
-/// `type` 缺省为 `all`（全部模块）；传入模块名时仅导出该模块的表。
+/// GET /api/system/import-export/export/csv：按模块导出业务数据为 CSV 并
+/// 打包 ZIP（`type` 缺省 all，未知模块名 400；REPEATABLE READ 只读快照，
+/// 设备 SNMP 凭据列脱敏置空）。
 pub async fn export_csv<P: DataProvider>(
     provider: P,
     type_param: Query<HashMap<String, String>>,
@@ -578,8 +578,8 @@ pub async fn export_csv<P: DataProvider>(
     ))
 }
 
-/// 下载导入模板：所选模块各表仅含表头的空 CSV，打包为 ZIP。
-/// 不访问数据库，与导出结构完全一致，便于手工构造或对照修改。
+/// GET /api/system/import-export/template：下载所选模块的空 CSV 模板 ZIP
+/// （`type` 缺省 all，未知模块名 400；不访问数据库，表头与导出一致）。
 pub async fn download_template(type_param: Query<HashMap<String, String>>) -> DataResult<Response> {
     let export_type = type_param
         .get("type")

@@ -124,6 +124,9 @@ async fn recreate_database_with_tables(ctx: &InitContext) -> Result<PgPool, Init
     Ok(pool)
 }
 
+/// POST /api/init/db/create（与 POST /api/init/db/import 为同一处理函数）：
+/// 备份现有库后重建并建表（仅 init 模式开放，关闭时 403；验证码失败
+/// 400；备份、删库或建表失败 500；响应回传备份文件名，不含目录）。
 pub async fn create_database_api(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<CreateDatabaseRequest>,
@@ -166,6 +169,10 @@ impl Drop for TempSqlFile {
     }
 }
 
+/// POST /api/init/db/import-file：上传 SQL 文件恢复数据库（multipart 含
+/// verification 与 sql_file；仅 init 模式开放，关闭时 403；缺字段、超
+/// 50MB 上限或验证码失败 400；备份/删库/psql 导入失败 500，导入后必需
+/// 列校验不符同样 400）。
 pub async fn import_database_from_file(
     State(ctx): State<Arc<InitContext>>,
     mut payload: Multipart,
@@ -331,6 +338,9 @@ pub async fn import_database_from_file(
     ))
 }
 
+/// POST /api/init/db/clear：清空库内全部表（仅 init 模式开放，关闭时
+/// 403；请求体 verification 字段缺失或校验失败 400；有数据时先自动
+/// 备份，备份或删表失败 500）。
 pub async fn clear_database(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<serde_json::Value>,

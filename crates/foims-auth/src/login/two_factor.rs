@@ -137,6 +137,9 @@ fn release_totp_code(user_id: Uuid, code: &str) {
     }
 }
 
+/// POST /api/auth/login/two-factor：密码 + TOTP 两步登录（连续失败后需图形
+/// 验证码，未携带转 400；TOTP 已用码重放拒绝转 401；账户未启用 2FA 转 400；
+/// IP 或账户封禁转 403；密码过期转 401）。
 pub async fn login_with_two_factor<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -467,6 +470,9 @@ pub async fn login_with_two_factor<P: AuthProvider>(
     build_login_response(user, login_tokens, meta.is_secure)
 }
 
+/// POST /api/auth/login/send-2fa-code：发送 2FA 动态码（公开端点，必须校验
+/// 密码；用户不存在或密码错误仍返回成功防枚举，错误密码计入 fail2ban；
+/// 每 IP 与目标用户每小时限 3 次，超限 400；封禁 403）。
 pub async fn send_two_factor_code<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -564,6 +570,9 @@ pub async fn send_two_factor_code<P: AuthProvider>(
     Ok(foims_common::ok_json((), "server.auth.code_sent"))
 }
 
+/// POST /api/two-factor/init：初始化 TOTP（需登录；为他人初始化仅超管可用，
+/// 否则 403；目标不存在 404；已启用 2FA 转 409；返回 otpauth_url、二维码与
+/// Base32 密钥，密钥加密落库，此时尚未启用）。
 pub async fn init_two_factor<P: AuthProvider>(
     State(state): State<Arc<P>>,
     auth: crate::extractor::AuthUser,
@@ -658,6 +667,9 @@ pub async fn init_two_factor<P: AuthProvider>(
     ))
 }
 
+/// POST /api/two-factor/enable：启用 TOTP（需登录；为他人启用仅超管，否则
+/// 403；未初始化或密钥格式无效 400；动态码错误或重放 400；校验通过后置
+/// two_factor_enabled）。
 pub async fn enable_two_factor<P: AuthProvider>(
     State(state): State<Arc<P>>,
     auth: crate::extractor::AuthUser,
@@ -754,6 +766,8 @@ pub async fn enable_two_factor<P: AuthProvider>(
     Ok(foims_common::ok_json((), "server.auth.2fa_enabled"))
 }
 
+/// POST /api/two-factor/disable：停用 TOTP（需登录；为他人停用仅超管，否则
+/// 403；未启用、动态码错误或重放 400；停用后清除密钥）。
 pub async fn disable_two_factor<P: AuthProvider>(
     State(state): State<Arc<P>>,
     auth: crate::extractor::AuthUser,

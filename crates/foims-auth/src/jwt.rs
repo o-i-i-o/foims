@@ -17,7 +17,6 @@ static GLOBAL_TOKEN_CACHE: LazyLock<Arc<DashMap<String, TokenCacheValue>>> =
 
 type TokenCacheValue = (JwtClaims, chrono::DateTime<Utc>);
 
-// 增强的 JWT 声明结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtClaims {
     pub sub: String,                        // 用户 ID
@@ -38,7 +37,6 @@ pub struct JwtClaims {
     pub remember_me: Option<bool>,
 }
 
-// JWT 配置结构体
 #[derive(Debug, Clone)]
 pub struct JwtConfig {
     pub secret: String,
@@ -50,7 +48,6 @@ pub struct JwtConfig {
     pub leeway: u64, // 时间误差容忍（秒）
 }
 
-// JWT 工具结构体
 #[derive(Debug, Clone)]
 pub struct JwtUtils {
     config: JwtConfig,
@@ -96,7 +93,6 @@ impl JwtUtils {
     // 从环境变量或配置文件获取JWT密钥；两者均缺失时返回错误使启动失败，
     // 绝不生成临时密钥继续运行（临时密钥会导致重启后全部会话静默失效）
     fn get_jwt_secret(config_secret: &str) -> Result<String, String> {
-        // 优先从环境变量读取
         if let Ok(env_secret) = std::env::var("FOIMS_JWT_SECRET")
             && !env_secret.is_empty()
         {
@@ -104,7 +100,6 @@ impl JwtUtils {
             return Ok(env_secret);
         }
 
-        // 如果环境变量未设置，使用配置文件中的密钥；未配置则拒绝启动
         if config_secret.is_empty() {
             Err("JWT 密钥未配置：请设置环境变量 FOIMS_JWT_SECRET，或在配置文件 jwt.secret 中提供长度不少于 32 字符的密钥".to_string())
         } else {
@@ -112,7 +107,6 @@ impl JwtUtils {
         }
     }
 
-    // 验证密钥强度
     fn validate_secret_strength(secret: &str) -> Result<(), String> {
         if secret.len() < 32 {
             return Err(format!(
@@ -133,7 +127,6 @@ impl JwtUtils {
         Ok(())
     }
 
-    // 生成安全的随机密钥（用于HMAC算法）
     #[must_use]
     pub fn generate_secure_secret() -> String {
         let mut bytes = [0u8; 64]; // 64字节 = 512位
@@ -142,7 +135,6 @@ impl JwtUtils {
         STANDARD.encode(bytes)
     }
 
-    // 生成访问令牌
     pub fn generate_access_token(
         &self,
         user_id: &Uuid,
@@ -180,7 +172,6 @@ impl JwtUtils {
         )
     }
 
-    // 生成刷新令牌
     pub fn generate_refresh_token(
         &self,
         user_id: &Uuid,
@@ -227,7 +218,6 @@ impl JwtUtils {
         )
     }
 
-    // 生成设备指纹
     #[must_use]
     pub fn generate_device_fingerprint(user_agent: &str, ip_address: &str) -> String {
         use sha2::{Digest, Sha256};
@@ -308,7 +298,6 @@ impl JwtUtils {
 // 从 axum 请求 parts 中提取令牌（优先从 Cookie，其次从 Authorization 头）
 #[must_use]
 pub fn extract_token_from_parts(parts: &axum::http::request::Parts) -> Option<String> {
-    // 优先从 Cookie 中获取 access_token
     if let Some(token) = extract_cookie_from_parts(parts, "access_token")
         && !token.is_empty()
     {
@@ -334,7 +323,6 @@ pub fn extract_token_from_parts(parts: &axum::http::request::Parts) -> Option<St
         })
 }
 
-/// 从 axum 请求 parts 中按名称提取 Cookie 值
 #[must_use]
 pub fn extract_cookie_from_parts(parts: &axum::http::request::Parts, name: &str) -> Option<String> {
     let cookie_header = parts.headers.get(axum::http::header::COOKIE)?;
@@ -352,7 +340,6 @@ pub fn extract_cookie_from_parts(parts: &axum::http::request::Parts, name: &str)
     None
 }
 
-// 从 axum 请求 parts 中获取客户端信息（IP、User-Agent）
 pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String, String) {
     let ip_address = foims_common::net::get_real_ip_from_parts(parts);
     let user_agent = foims_common::net::get_user_agent_from_parts(parts);

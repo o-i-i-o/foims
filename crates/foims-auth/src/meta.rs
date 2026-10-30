@@ -49,7 +49,6 @@ pub struct RequestMeta {
 }
 
 impl RequestMeta {
-    /// 从 JWT claims 解析用户 ID
     #[must_use]
     pub fn user_id(&self) -> Option<Uuid> {
         self.claims

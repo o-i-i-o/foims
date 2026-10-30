@@ -21,6 +21,9 @@ use crate::verification::verify_code;
 /// 初始化建户专用 advisory lock key（"FOIMS" 魔数 + 序号 1）
 const INIT_ADMIN_LOCK_KEY: i64 = 0x464F_494D_5300_0001;
 
+/// POST /api/init：完成初始化并创建首个管理员（仅 init 模式开放，关闭时
+/// 403；验证码失败、入参校验失败或库中已有用户数据均 400；建库建表、
+/// 建户与回写配置失败 500；成功即翻转 init 开关并武装一次性重启许可）。
 pub async fn init_system(
     State(ctx): State<Arc<InitContext>>,
     Json(req): Json<InitRequest>,
@@ -141,6 +144,8 @@ pub async fn init_system(
     Ok(ok_json((), "server.init.completed"))
 }
 
+/// POST /api/init/db：只建库建表、不建管理员（仅 init 模式开放，关闭时
+/// 403；请求体无需验证码；建库或建表失败 500，必需表已存在时幂等跳过）。
 pub async fn init_db(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 建表同样是危险操作：与其他 init 接口一致校验开关
     //（验证码经 init_system 消费后不可复用，此处不重复校验）

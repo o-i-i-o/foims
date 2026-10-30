@@ -305,7 +305,7 @@ pub async fn drop_database(config: &DatabaseConfig) -> Result<(), AppMessage> {
 /// - 已存在时幂等跳过（`AlreadyExists`）；
 /// - 连接 postgres 系统库失败按 [`classify_pg_connect_error`] 分类，
 ///   CREATE DATABASE 失败按 [`classify_create_db_error`] 分类，
-///   配页页据此给出精确反馈。
+///   配置页据此给出精确反馈。
 pub async fn create_database(config: &DatabaseConfig) -> Result<CreateOutcome, AppMessage> {
     validate_identifier(&config.database)?;
 

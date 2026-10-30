@@ -108,7 +108,8 @@ pub async fn clear_logs_core(pool: &PgPool, days: i32, log_type: &str) -> DataRe
     }
 }
 
-/// API 端点：清理日志
+/// POST /api/system/logs/clear：按 `log_type`（operation/login/notification/
+/// all）清理早于 `days` 天的日志（0 表示全部，缺省或负数 400）。
 pub async fn clear_logs<P: DataProvider>(
     provider: P,
     req: ClearLogsRequest,
@@ -128,6 +129,8 @@ pub async fn clear_logs<P: DataProvider>(
     ))
 }
 
+/// GET /api/system/logs/stats：统计操作日志、登录日志与通知的总数及
+/// 最早一条的时间。
 pub async fn get_logs_stats<P: DataProvider>(provider: P) -> DataResult<Response> {
     let pool = provider.pool()?;
 

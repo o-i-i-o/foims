@@ -37,7 +37,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 触发器：确保level_index一致性
     sqlx::query(
         r"
         CREATE OR REPLACE FUNCTION trg_organizations_level_index()

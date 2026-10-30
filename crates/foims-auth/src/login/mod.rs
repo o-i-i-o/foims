@@ -46,6 +46,9 @@ use foims_common::AppJson;
 use foims_common::msg;
 use foims_models::{User, UserLogin};
 
+/// POST /api/auth/login：密码登录（用户名或邮箱，连续失败后需图形验证码；
+/// 未携带/错误 400；IP 或账户封禁 403；凭据错误与禁用统一 401 防枚举，
+/// 密码过期亦 401；启用 2FA 的账户返回 requires_two_factor）。
 pub async fn login<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,

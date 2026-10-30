@@ -4,10 +4,8 @@
  */
 import { reactive } from "vue";
 
-/** 通知类型 */
 export type ToastType = "info" | "success" | "error" | "warning";
 
-/** 单条通知 */
 export interface ToastItem {
   id: number;
   message: string;

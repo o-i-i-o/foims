@@ -17,6 +17,9 @@ fn json_ok(value: serde_json::Value) -> Response {
     (StatusCode::OK, Json(value)).into_response()
 }
 
+/// GET /api/init/db-status：探测数据库连通性与结构（只读无副作用；连接
+/// 失败不报错，返回 connected=false 与错误 key；目标库存在时再查
+/// schema 与数据，has_data 查询失败 500）。
 pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 纯只读探测：GET 状态端点不携带建库/建 schema 副作用（与
     // check_init_status 口径一致）。先连 postgres 库判断目标库是否存在，
@@ -123,6 +126,8 @@ pub async fn check_db_status(State(ctx): State<Arc<InitContext>>) -> Result<Resp
     })))
 }
 
+/// GET /api/init/status：初始化状态探测（只读无副作用；initialized 以库
+/// 里是否存在数据判定，init_in_progress 为初始化开关的实时值）。
 pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 只读探测：GET 状态端点不得携带建库/建 schema 的副作用，
     // 因此不再调用 ensure_database_and_schema
@@ -148,6 +153,9 @@ pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Re
     })))
 }
 
+/// POST /api/init/restart：重启程序以切入正常模式（仅 init 刚完成后的
+/// 一次性许可有效，其余情形 403；下发失败 500 并恢复许可；未注册
+/// systemd 单元时返回 manual，由前端引导手动重启）。
 pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 重启端点仅在「初始化刚完成」后放行一次：init 模式开启期间与关闭后
     // 均拒绝，避免被滥用为任意重启入口
@@ -182,6 +190,9 @@ pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Resp
     })))
 }
 
+/// GET /api/init/check-pgsql：探测 PostgreSQL 客户端与服务状态（仅查
+/// psql 是否安装与 pg_isready 是否监听，不做凭据连接；结果经 installed/
+/// running 字段与错误 key 返回）。
 pub async fn check_pgsql(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 第一步仅探测「客户端已安装 + 服务已监听」：凭据级连接测试属于
     // 第二步「数据库配置」的连接测试（db_config::test_db_connection），

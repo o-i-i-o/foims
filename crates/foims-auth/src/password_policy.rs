@@ -111,7 +111,6 @@ pub async fn save(pool: &PgPool, policy: &PasswordPolicy) -> Result<(), AppError
     Ok(())
 }
 
-/// 按策略校验密码复杂度
 pub fn check_complexity(policy: &PasswordPolicy, password: &str) -> Result<(), AppError> {
     if (password.len() as i32) < policy.min_length {
         return Err(AppError::Validation(

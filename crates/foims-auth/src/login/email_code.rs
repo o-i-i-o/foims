@@ -113,6 +113,9 @@ pub struct EmailCodeLoginRequest {
     pub captcha_text: Option<String>,
 }
 
+/// POST /api/auth/login/email：邮箱验证码登录（验证码一次性消费，错误或过期
+/// 转 401；连续失败后要求图形验证码，未携带转 400；IP 或账户封禁转 403；
+/// 外部认证账户不走本通道，统一转 401）。
 pub async fn login_with_email_code<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -370,6 +373,9 @@ pub async fn login_with_email_code<P: AuthProvider>(
     build_login_response(user, login_tokens, meta.is_secure)
 }
 
+/// POST /api/auth/login/send-code：发送邮箱验证码（公开端点；5 分钟有效，
+/// 每 IP 与目标邮箱每小时限 3 次，超限转 400；用户不存在或已禁用仍返回成功
+/// 以防枚举；SMTP 未配置转 400）。
 pub async fn send_login_code<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,

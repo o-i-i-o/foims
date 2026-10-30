@@ -21,13 +21,15 @@ use foims_common::AppError;
 use foims_common::msg;
 use foims_models::User;
 
+/// POST /api/auth/logout：登出（撤销 access/refresh 令牌并清除 Cookie；
+/// 重复登出幂等；refresh 撤销或 Cookie 写入失败时登出失败，确保客户端
+/// 感知会话未收尾）。
 pub async fn logout<P: AuthProvider>(
     State(state): State<Arc<P>>,
     AccessToken(access_token): AccessToken,
     RefreshToken(refresh_token): RefreshToken,
     SecureFlag(secure): SecureFlag,
 ) -> Result<Response, AppError> {
-    // 撤销 access_token
     if let Some(access_token) = access_token
         && let Ok(claims) = state.jwt_utils().validate_token(&access_token)
     {
@@ -81,6 +83,9 @@ pub async fn logout<P: AuthProvider>(
     Ok(response)
 }
 
+/// POST /api/auth/refresh：刷新令牌（旋转 refresh，校验设备指纹、账户状态与
+/// 密码有效期；令牌缺失、过期、已撤销、重放或设备不符均转 401，重放会作废
+/// 该用户全部会话）。
 pub async fn refresh_token<P: AuthProvider>(
     State(state): State<Arc<P>>,
     RefreshToken(token): RefreshToken,
@@ -250,6 +255,8 @@ pub async fn refresh_token<P: AuthProvider>(
     Ok(response)
 }
 
+/// GET /api/auth/me：当前登录用户（由鉴权中间件注入 claims；未认证转 401，
+/// 仅返回 id/username/role）。
 pub async fn get_current_user<P: AuthProvider>(
     auth: crate::extractor::AuthUser,
 ) -> Result<Response, AppError> {

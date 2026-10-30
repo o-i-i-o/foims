@@ -183,7 +183,8 @@ pub fn cleanup_old_backup_files(backup_dir: &str, keep_days: u64) -> DataResult<
     Ok(())
 }
 
-/// 导出数据库为 HTTP 响应（API 端点使用）
+/// GET /api/system/import-export/export/database：pg_dump 导出全库 SQL
+/// 附件（pg_dump 缺失、执行失败或输出为空均 500）。
 pub async fn export_database<P: DataProvider>(provider: P) -> DataResult<Response> {
     let db_config = provider.database_config();
 

@@ -15,7 +15,6 @@ export const PAGE_SIZE_OPTIONS: number[] = [10, 20, 50, 100];
  * 本体查询按自身新鲜度策略判定刷新，该值不参与其判定——observer 侧读自身 staleTime） */
 const PREFETCH_STALE_TIME = 30_000;
 
-/** usePagedList 工厂选项 */
 export interface UsePagedListOptions {
   /**
    * 查询键前缀（分区标识）：传 utils/queryKeys 中的常量数组，

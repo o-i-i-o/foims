@@ -84,6 +84,9 @@ pub fn verify_code(provided_code: &str) -> Result<(), AppMessage> {
     Ok(())
 }
 
+/// GET /api/init/verification-code：生成 16 位控制台验证码并打印到日志
+/// （仅 init 模式开放，关闭时 403；验证码存储锁中毒 500；新码立即覆盖
+/// 旧码，旧码随之失效）。
 pub async fn get_verification_code(
     State(ctx): State<Arc<InitContext>>,
 ) -> Result<Response, InitError> {

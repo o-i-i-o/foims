@@ -23,8 +23,9 @@ use foims_models::{User, UserCreate, UserUpdate};
 /// 仅作为串行化标记，与其他锁键不冲突即可）
 const ADMIN_DELETE_ADVISORY_LOCK_KEY: i64 = 0x464F_494D_5300_0002;
 
-/// 用户列表（登录即可读：只读系统模块的普通用户/审计员需展示账户信息；
-/// 增删改由下方账户管理员端点约束）
+/// GET /api/users：用户列表（登录即可读：只读系统模块的普通用户/审计员需
+/// 展示账户信息；增删改由账户管理员端点约束；search 模糊匹配用户名/邮箱，
+/// sort_by/sort_order 走白名单，未知列回落 created_at DESC）。
 pub async fn get_users<P: AuthProvider>(
     _user: crate::extractor::AuthUser,
     State(state): State<Arc<P>>,
@@ -109,6 +110,9 @@ pub async fn get_users<P: AuthProvider>(
     ))
 }
 
+/// POST /api/users：创建用户（账户管理员 admin/sysadmin/secadmin 可用，否则
+/// 403；用户名或邮箱重复转 409，并发撞唯一约束同样 409；仅超管可授予 admin
+/// 角色，否则 403；密码过等保复杂度校验，用户写入与密码历史同事务）。
 pub async fn create_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -223,6 +227,7 @@ pub async fn create_user<P: AuthProvider>(
     Ok(foims_common::ok_json(user, "server.user.created"))
 }
 
+/// GET /api/users/{id}：用户详情（登录即可读；不存在转 404）。
 pub async fn get_user<P: AuthProvider>(
     _user: crate::extractor::AuthUser,
     State(state): State<Arc<P>>,
@@ -241,6 +246,9 @@ pub async fn get_user<P: AuthProvider>(
     Ok(foims_common::ok_json(user, "server.user.retrieved"))
 }
 
+/// PUT /api/users/{id}：更新用户（账户管理员；目标不存在 404；目标为超管
+/// 而操作者非超管、或非超管授予 admin 角色转 403；自改角色、重新启用已过期
+/// 账户转 409；邮箱撞唯一约束转 409；角色、禁用或重置密码会吊销历史令牌）。
 pub async fn update_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -386,6 +394,9 @@ pub async fn update_user<P: AuthProvider>(
     Ok(foims_common::ok_json(user, "server.user.updated"))
 }
 
+/// DELETE /api/users/{id}：删除用户（账户管理员可用；自删转 409；目标不存在
+/// 404；超管账户仅超管可删，否则 403；admin/secadmin 末位保护，删除后管理员
+/// 归零转 409；咨询锁串行化「检查+删除」防并发双删）。
 pub async fn delete_user<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,

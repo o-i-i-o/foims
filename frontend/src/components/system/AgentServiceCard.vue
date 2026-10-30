@@ -294,12 +294,6 @@ async function regenerateToken(): Promise<void> {
         </div>
         <div class="form-row">
           <dl class="config-field">
-            <dt>{{ t("system.agent_dist_version") }}</dt>
-            <dd class="field-value">{{ infoQuery.data.value?.version || "-" }}</dd>
-          </dl>
-        </div>
-        <div class="form-row">
-          <dl class="config-field">
             <dt>{{ t("system.agent_enrollment_token") }}</dt>
             <!-- 加载失败显式提示（渲染为字段文案，避免查询重试风暴） -->
             <dd class="field-value">{{ tokenQuery.isError.value ? t("system.agent_token_load_failed") : enrollmentToken || t("system.agent_token_missing") }}</dd>
@@ -324,9 +318,15 @@ async function regenerateToken(): Promise<void> {
               <option v-for="format in formats" :key="format" :value="format">{{ format.toUpperCase() }}</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-row">
+          <dl class="config-field">
+            <dt>{{ t("system.agent_dist_version") }}</dt>
+            <dd class="field-value">{{ infoQuery.data.value?.version || "-" }}</dd>
+          </dl>
+          </div>
+          <div class="from-group">
             <button type="button" class="btn btn-primary" :disabled="!formats.length || distDownloading" @click="downloadConfigPackage">
-              {{ t("system.agent_download_config") }}
+               {{ t("system.agent_download_config") }}
             </button>
           </div>
         </div>

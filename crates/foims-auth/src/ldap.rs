@@ -277,7 +277,9 @@ pub struct LdapLoginRequestExt {
     pub code: Option<String>,
 }
 
-/// LDAP 登录入口（公开路由）。
+/// POST /api/auth/login/ldap：LDAP 登录（公开端点；未配置 404、停用 403；
+/// 认证失败转 401 并计入 fail2ban，连接/检索故障不计入；同名账户归属其他
+/// 认证方式转 409；启用 2FA 的账户需携带 code，缺失时返回 requires_two_factor）。
 pub async fn login_with_ldap<P: AuthProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -473,6 +475,8 @@ pub struct LdapConfigResponse {
     pub has_password: bool,
 }
 
+/// GET /api/system/ldap/config：读取 LDAP 配置（登录即可读；bind_password
+/// 不回传，仅以 has_password 表示是否已配置）。
 pub async fn get_ldap_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
     _user: crate::extractor::AuthUser,
@@ -522,6 +526,9 @@ pub struct UpdateLdapConfigRequest {
     pub default_role: String,
 }
 
+/// PUT /api/system/ldap/config：更新 LDAP 配置（系统管理员 admin/sysadmin，
+/// 否则 403；过滤器必须含 %s 或 {username} 占位符，否则 400；bind_password
+/// 留空表示沿用旧值，无旧配置时 404；密码加密落库，ldap:// 明文记告警）。
 pub async fn update_ldap_config<P: AuthProvider>(
     State(state): State<Arc<P>>,
     _sysadmin: crate::extractor::SysAdminUser,
@@ -567,7 +574,8 @@ pub async fn update_ldap_config<P: AuthProvider>(
     Ok(foims_common::ok_json((), "server.ldap.config_updated"))
 }
 
-/// 测试已保存的 LDAP 配置：连通性 + 服务账号绑定 + 基础检索。
+/// POST /api/system/ldap/test：测试已保存的 LDAP 配置（系统管理员；未配置
+/// 404；依次验证连通性、服务账号绑定与 base_dn 基础检索，任一环节失败即返回错误）。
 pub async fn test_ldap_connection<P: AuthProvider>(
     State(state): State<Arc<P>>,
     _sysadmin: crate::extractor::SysAdminUser,

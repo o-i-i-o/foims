@@ -121,7 +121,9 @@ async fn verify_operate_privilege(config: &DatabaseConfig) -> Result<(), InitErr
     Ok(())
 }
 
-/// 连接测试（充当下一步按钮）：
+/// POST /api/init/db/test-connection：连接测试（充当下一步按钮；仅 init
+/// 模式开放，关闭时 403；请求体校验失败或连接/权限探测不通过 400；
+/// 权限查询异常或回写配置文件失败 500）。
 ///
 /// 1. 连接 postgres 系统库——验证服务器可达与凭据，失败时区分
 ///    「服务器不可达」（检查地址/端口/防火墙）与「认证被拒」

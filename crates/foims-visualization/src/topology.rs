@@ -886,7 +886,8 @@ pub async fn auto_discover_all_topology(
     })
 }
 
-/// HTTP 处理函数：触发批量自动发现
+/// 批量自动发现：按线路数据补建缺失节点并清理历史自动发现连线，
+/// 返回新增节点数与派生连线数。
 pub async fn trigger_auto_discover(pool: &PgPool) -> Result<Response, VisualizationError> {
     let result = auto_discover_all_topology(pool).await?;
     Ok(ok_json(

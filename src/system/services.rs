@@ -47,7 +47,8 @@ pub struct ServiceStatusItem {
     pub uptime_seconds: Option<u64>,
 }
 
-/// 查询全部受管服务状态（GET /api/system/services）。
+/// GET /api/system/services：查询全部受管服务状态（登录即可读；未注册单元
+/// 仅 registered=false，其余字段为默认值）。
 pub async fn get_services_status(
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
@@ -62,8 +63,9 @@ pub async fn get_services_status(
     ))
 }
 
-/// 执行服务管理操作（POST /api/system/services/{service}/{op}，
-/// 路径参数严格白名单校验；stop / restart 的响应通道问题见模块头）。
+/// POST /api/system/services/{service}/{op}：执行服务管理操作（系统管理员；
+/// service 与 op 按白名单校验，非法 400；stop/restart 由后台延迟下发、
+/// 响应先行返回，响应通道问题见模块头）。
 pub async fn service_operation(
     _sysadmin: foims_auth::extractor::SysAdminUser,
     Path((service, op)): Path<(String, String)>,

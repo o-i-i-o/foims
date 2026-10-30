@@ -72,7 +72,6 @@ export function buildDoorNode(layout: LayoutItem[]): DoorCanvasNode {
   return { id: doorItem?.id ?? generateDomId(), rect };
 }
 
-/** 工位画布输入 */
 export interface WorkstationCanvasInput {
   workstations: WorkstationWithDetails[];
   /** 已保存布局项（空数组表示无已保存布局，调用方自行决定是否自动排布） */
@@ -81,7 +80,6 @@ export interface WorkstationCanvasInput {
   ipDetails: IpDetailWithNames[];
 }
 
-/** 工位画布视图模型 */
 export interface WorkstationCanvas {
   nodes: WorkstationCanvasNode[];
   door: DoorCanvasNode;
@@ -151,7 +149,6 @@ export function contentViewBox(rects: CanvasRect[], container: { width: number; 
   };
 }
 
-/** 机柜画布输入 */
 export interface CabinetCanvasInput {
   cabinets: RoomCabinet[];
   layout: LayoutItem[];
@@ -159,7 +156,6 @@ export interface CabinetCanvasInput {
   containerHeight: number;
 }
 
-/** 机柜画布视图模型 */
 export interface CabinetCanvas {
   nodes: CabinetCanvasNode[];
   /** 内容总宽（区域宽度、横向滚动占位宽度） */

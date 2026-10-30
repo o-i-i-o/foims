@@ -18,6 +18,9 @@ use validator::Validate;
 
 use crate::topology::{TopologyConnectionRequest, TopologyNodesRequest};
 
+/// POST /api/resources/layouts：保存机房布局（`type` 仅 workstation/cabinet；
+/// 工位布局校验元素类型白名单与工位归属，请求即全量期望状态，未提交的
+/// 既有布局行删除；类型非法或归属不符 400）。
 pub async fn save_layout<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -48,6 +51,8 @@ pub async fn save_layout<P: DbProvider>(
     Ok(result)
 }
 
+/// DELETE /api/resources/layouts/workstation/{room_id}：清空房间的工位与
+/// 门元素布局（两张表同事务删除，部分失败不落库）。
 pub async fn delete_layout<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
@@ -73,6 +78,7 @@ pub async fn delete_layout<P: DbProvider>(
     Ok(result)
 }
 
+/// DELETE /api/resources/layouts/positions/{room_id}：清空房间的机柜布局。
 pub async fn delete_positions_layout<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
@@ -98,6 +104,8 @@ pub async fn delete_positions_layout<P: DbProvider>(
     Ok(result)
 }
 
+/// GET /api/resources/layouts/workstation/{room_id}：读取房间的工位与门
+/// 元素布局（无布局时返回空列表，不报 404）。
 pub async fn get_layout<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
@@ -107,6 +115,8 @@ pub async fn get_layout<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// GET /api/resources/layouts/positions/{room_id}：读取房间的机柜布局
+/// （无布局时返回空列表，不报 404）。
 pub async fn get_positions_layout<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
@@ -116,6 +126,8 @@ pub async fn get_positions_layout<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// GET /api/resources/layouts/room-cabinets/{room_id}：读取房间内机柜及其
+/// 机位与布局（三表批量查询后内存分组，避免逐柜查询）。
 pub async fn get_room_cabinets_with_positions<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(room_id): Path<Uuid>,
@@ -125,6 +137,8 @@ pub async fn get_room_cabinets_with_positions<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// GET /api/resources/topology/nodes：读取拓扑节点（联表回填设备、工位、
+/// 房间、组织、机柜及最近一次 ARP 学习到的 IP）。
 pub async fn get_topology_nodes<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
@@ -133,6 +147,9 @@ pub async fn get_topology_nodes<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// POST /api/resources/topology/nodes：保存拓扑节点坐标（`nodes` 非空、
+/// 坐标/尺寸在 models 校验范围、device_id 去重后须全部存在，否则 400；
+/// 按 device_id UPSERT，不删除未提交节点）。
 pub async fn save_topology_nodes<P: DbProvider>(
     State(state): State<Arc<P>>,
     AppJson(req): AppJson<TopologyNodesRequest>,
@@ -145,6 +162,8 @@ pub async fn save_topology_nodes<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// DELETE /api/resources/topology/nodes/{device_id}：删除设备的拓扑节点
+/// （无该节点 404）。
 pub async fn delete_topology_node<P: DbProvider>(
     State(state): State<Arc<P>>,
     device_id: Path<Uuid>,
@@ -154,6 +173,8 @@ pub async fn delete_topology_node<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// GET /api/resources/topology/connections：读取连线（线路数据实时派生的
+/// 物理连线 + 手动物理连线 + 逻辑连线）。
 pub async fn get_topology_connections<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
@@ -162,6 +183,9 @@ pub async fn get_topology_connections<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// POST /api/resources/topology/connections：创建连线（类型仅 physical/
+/// logical；两端须为不同且存在的设备、label ≤100 字符、端口须归属对应
+/// 设备，否则 400；成员端口已被聚合、同设备对逻辑/物理连线重复 409）。
 pub async fn create_topology_connection<P: DbProvider>(
     State(state): State<Arc<P>>,
     AppJson(req): AppJson<TopologyConnectionRequest>,
@@ -171,6 +195,7 @@ pub async fn create_topology_connection<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// DELETE /api/resources/topology/connections/{id}：删除连线（不存在 404）。
 pub async fn delete_topology_connection<P: DbProvider>(
     State(state): State<Arc<P>>,
     id: Path<Uuid>,
@@ -180,6 +205,8 @@ pub async fn delete_topology_connection<P: DbProvider>(
         .map_err(AppError::from)
 }
 
+/// POST /api/resources/topology/auto-discover：按线路数据批量补建缺失的
+/// 拓扑节点并清理历史自动发现连线，返回新增节点数与派生连线数。
 pub async fn trigger_auto_discover<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {

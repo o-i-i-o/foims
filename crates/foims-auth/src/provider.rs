@@ -13,6 +13,5 @@ pub trait AuthProvider: DbProvider {
     /// JWT 签发与校验工具。
     fn jwt_utils(&self) -> &JwtUtils;
 
-    /// 应用配置。
     fn config(&self) -> &Config;
 }

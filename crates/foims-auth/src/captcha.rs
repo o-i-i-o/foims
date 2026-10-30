@@ -11,11 +11,8 @@ use dashmap::DashMap;
 use rand::RngExt;
 use uuid::Uuid;
 
-/// 验证码有效期
 const CAPTCHA_TTL: Duration = Duration::from_secs(300);
-/// 验证码字符数
 const CAPTCHA_LENGTH: usize = 5;
-/// 连续失败多少次后要求验证码
 const CAPTCHA_THRESHOLD: usize = 3;
 /// 去混淆字符集（无 0/O/1/I）
 const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -96,7 +93,6 @@ pub fn enforce(
     }
 }
 
-/// 清理过期验证码
 fn prune_expired() {
     let now = Instant::now();
     CAPTCHAS.retain(|_, entry| now <= entry.expires);

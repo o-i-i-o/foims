@@ -27,7 +27,8 @@ pub use extractor::AdminOrAuditorUser;
 pub use extractor::AdminOrSecAdminUser;
 pub use extractor::SysAdminUser;
 
-/// 获取图形验证码（公开端点，登录页按需加载）
+/// GET /api/auth/captcha：公开的图形验证码（返回 captcha_id 与内联 SVG；
+/// 5 分钟有效、一次性使用；连续登录失败达阈值后登录端点才要求携带）。
 pub async fn get_captcha() -> Result<axum::response::Response, foims_common::AppError> {
     let challenge = captcha::generate();
     Ok(foims_common::ok_json(
