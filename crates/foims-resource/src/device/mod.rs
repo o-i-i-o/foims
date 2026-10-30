@@ -53,3 +53,13 @@ fn validate_device_type(device_type: &str) -> Result<(), AppError> {
         ))
     }
 }
+
+/// 将 u32 列表构造为 JSONB 数组值（ifIndex/成员端口，无需 Result 路径）。
+fn u32_array_json(values: &[u32]) -> serde_json::Value {
+    serde_json::Value::Array(
+        values
+            .iter()
+            .map(|v| serde_json::Value::from(u64::from(*v)))
+            .collect(),
+    )
+}

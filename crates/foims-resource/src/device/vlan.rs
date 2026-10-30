@@ -18,16 +18,6 @@ use foims_snmp::core::{get_device_snmp_config, truncate_to_column_width};
 /// device_vlans.name 列宽（VARCHAR(64)，与建表契约一致）
 const VLAN_NAME_MAX_CHARS: usize = 64;
 
-/// 将 u32 列表构造为 JSONB 数组值（ifIndex 成员端口，无需 Result 路径）。
-fn u32_array_json(values: &[u32]) -> serde_json::Value {
-    serde_json::Value::Array(
-        values
-            .iter()
-            .map(|v| serde_json::Value::from(u64::from(*v)))
-            .collect(),
-    )
-}
-
 /// GET /api/resources/devices/{id}/vlans：读库返回设备已落库的 VLAN 台账，
 /// 设备不存在 404。
 pub async fn get_device_vlans<P: DbProvider>(
@@ -89,8 +79,8 @@ pub async fn sync_vlans_from_snmp<P: DbProvider>(
             .name
             .as_deref()
             .map(|n| truncate_to_column_width(n, VLAN_NAME_MAX_CHARS));
-        let member_ports = u32_array_json(&r.member_ports);
-        let untagged_ports = u32_array_json(&r.untagged_ports);
+        let member_ports = super::u32_array_json(&r.member_ports);
+        let untagged_ports = super::u32_array_json(&r.untagged_ports);
         let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
         let result = sqlx::query(
             r"INSERT INTO device_vlans (id, device_id, vlan_id, name, member_ports, untagged_ports, created_at, updated_at)

@@ -19,16 +19,6 @@ use foims_snmp::core::{get_device_snmp_config, truncate_to_column_width};
 /// device_lags.agg_name 列宽（VARCHAR(100)，与建表契约一致）
 const AGG_NAME_MAX_CHARS: usize = 100;
 
-/// 将 u32 列表构造为 JSONB 数组值。
-fn u32_array_json(values: &[u32]) -> serde_json::Value {
-    serde_json::Value::Array(
-        values
-            .iter()
-            .map(|v| serde_json::Value::from(u64::from(*v)))
-            .collect(),
-    )
-}
-
 /// 将字符串列表构造为 JSONB 数组值。
 fn str_array_json(values: &[String]) -> serde_json::Value {
     serde_json::Value::Array(
@@ -100,7 +90,7 @@ pub async fn sync_lags_from_snmp<P: DbProvider>(
             .agg_name
             .as_deref()
             .map(|n| truncate_to_column_width(n, AGG_NAME_MAX_CHARS));
-        let member_ifindexes = u32_array_json(&r.member_ifindexes);
+        let member_ifindexes = super::u32_array_json(&r.member_ifindexes);
         let member_names = str_array_json(&r.member_names);
         let mut sp = sqlx::Acquire::begin(&mut *tx).await?;
         let result = sqlx::query(

@@ -304,8 +304,6 @@ async function submitPasswordLogin(usernameValue: string, passwordValue: string,
       showError(formatErrorMessage(result.message));
       handleCaptchaOnFailure("password", result.message_key);
     }
-  } catch (error) {
-    handleNetworkError(error);
   } finally {
     submitting.value = false;
   }
@@ -336,8 +334,6 @@ async function submitEmailLogin(mail: string, code: string, remember: boolean) {
     } else {
       showError(formatErrorMessage(result.message));
     }
-  } catch (error) {
-    handleNetworkError(error);
   } finally {
     submitting.value = false;
   }
@@ -376,8 +372,6 @@ async function submitLdapLogin(usernameValue: string, passwordValue: string, rem
       showError(formatErrorMessage(result.message));
       handleCaptchaOnFailure("ldap", result.message_key);
     }
-  } catch (error) {
-    handleNetworkError(error);
   } finally {
     submitting.value = false;
   }
@@ -435,8 +429,6 @@ async function handleTwoFactorSubmit() {
         twoFactorCodeInput.value?.focus();
       }
     }
-  } catch (error) {
-    handleNetworkError(error);
   } finally {
     submitting.value = false;
   }
@@ -453,18 +445,6 @@ function resetToInitState(): void {
   activeView.value = "login";
   twoFactorCode.value = "";
   clearError();
-}
-
-function handleNetworkError(error: unknown): void {
-  let message = t("login.network_error");
-  // 抛出值不一定是 Error 实例（与 client 层同款防御），非 Error 时按默认文案
-  const raw = error instanceof Error ? error.message : "";
-  if (raw.includes("Network")) {
-    message = t("login.network_failed");
-  } else if (raw.includes("timeout")) {
-    message = t("login.timeout");
-  }
-  showError(message);
 }
 
 function formatErrorMessage(message: string): string {
@@ -556,8 +536,6 @@ async function handleSendLoginCode() {
     } else {
       showError(result.message || t("login.send_failed"));
     }
-  } catch (error) {
-    handleNetworkError(error);
   } finally {
     sendingCode.value = false;
   }

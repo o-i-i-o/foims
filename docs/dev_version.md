@@ -1094,3 +1094,21 @@ v0.42.5
    - foims-agent 子工作区：ffi.rs 6 处、collectors/mod.rs 1 处三行式 `// ----` + 标题 + `// ----` 分隔块收敛为单行裸分区标签；两个 platform.rs 共 8 处内联 `// ----` 装饰线改为裸标签，注释文字保留。
 2. 版本：本次无前端改动，frontend/package.json 维持 0.1.29；根 Cargo.toml 不联动（z 段修改）；foims-agent 子工作区版本不联动（仅注释/格式）。
 3. 验证：根工作区 `cargo fmt --all -- --check`、`cargo clippy --release --workspace --all-targets -- -D warnings`、`cargo test --release -p foims-snmp`（73 项）通过；foims-agent `cargo fmt --all -- --check`、`cargo clippy --release --workspace --all-targets -- -D warnings`、`cargo test --release --workspace` 通过；`--include='*.rs'` 检索 `// ----`/`// -` 残留为 0。
+
+v0.42.6
+2026103013520301
+1. 去除 AI 味收尾（后端，零行为变更）：`u32_array_json` 在 device/vlan.rs 与 device/lag.rs 各有一份逐字副本，上移为 device/mod.rs 唯一私有实现，vlan/lag 经 `super::` 调用；JSONB 数值仍由 `u64::from(u32)` 构造，序列化结果不变；`str_array_json` 仅 lag 使用，保留原位。
+2. 版本：仅 dev_version.md z+1（v0.42.5→v0.42.6），根 Cargo.toml 与前端 package.json 不联动（无载荷/前端改动）。
+3. 验证：`cargo fmt --all -- --check` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 通过；`cargo test --release --workspace` 978 项全部通过；`git diff --check` 通过。
+
+v0.42.7
+2026103014052001
+1. 去除 AI 味第二批（仅前端，零行为变更）：pagedFetch 删除 client 永不 reject 契约下不可达的 try/catch（失败态仍由 `!result.success` 分支提示）；LoginPage 删除登录/邮箱/LDAP/2FA/发码 5 处同构死 catch 及仅服务这些路径的 handleNetworkError，保留 refreshCaptcha 保护 DOMParser/DOM 注入的真实兜底，以及 finally 的 submitting/sendingCode 复位。
+2. 版本：仅前端联动，frontend/package.json 0.1.29→0.1.30（z+1），根 Cargo.toml 不联动。
+3. 验证：`npm run typecheck`、`npm run build` 通过；`git diff --check` 通过。遗留：login.network_error/network_failed/timeout 三个 i18n 键随 handleNetworkError 失去引用，未在本批删除，待确认是否清理。
+
+v0.42.8
+2026103014085201
+1. 清理废弃 i18n 键（仅前端，零行为变更）：`login.network_error`/`login.network_failed`/`login.timeout` 随 v0.42.7 删除 handleNetworkError 后失去引用，zh/en locale 对称删除；`api.network_error`/`api.network_failed`/`api.timeout` 仍由 client.ts 使用，未动。
+2. 版本：仅前端联动，frontend/package.json 0.1.30→0.1.31（z+1），根 Cargo.toml 不联动。
+3. 验证：zh/en JSON 解析通过；`npm run typecheck`、`npm run build` 通过；`git diff --check` 通过。

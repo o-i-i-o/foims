@@ -45,14 +45,7 @@ export async function fetchAllPages<T>({ apiGet, showToast, path, what }: FetchA
   // 递归逐页拉取：失败与到达末页需短路终止（保留顺序拉取语义），
   // 以递归替代 for+await；页数上限 5，递归深度有界
   const fetchFrom = async (page: number, items: T[]): Promise<T[]> => {
-    let result: ApiResult<Paged<T>>;
-    try {
-      // client 层归一化永不 reject，catch 仅作防御
-      result = await apiGet(`${path}${sep}page=${page}&page_size=${PAGE_SIZE}`);
-    } catch (error) {
-      notifyLoadFailure(showToast, error, what);
-      return items;
-    }
+    const result = await apiGet(`${path}${sep}page=${page}&page_size=${PAGE_SIZE}`);
     const pageItems = result.data?.items;
     if (!result.success || !Array.isArray(pageItems)) {
       if (!result.success) {
