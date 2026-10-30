@@ -3,4 +3,8 @@
 /**
  * SNMP 观测表 snmp_arp_entries 行模型：设备 ARP/FDB 学到的 IP ↔ MAC 条目
  */
-export type SnmpMac = { id: string, device_id: string, ip_address: string, mac_address: string, interface: string | null, vlan_id: number | null, created_at: string, updated_at: string, };
+export type SnmpMac = { id: string, device_id: string, ip_address: string, mac_address: string, 
+/**
+ * 观测端口名（如 G1/0/1）
+ */
+interface: string | null, vlan_id: number | null, created_at: string, updated_at: string, };

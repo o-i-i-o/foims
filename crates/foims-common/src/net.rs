@@ -12,6 +12,8 @@ use hex::encode;
 
 use crate::{AppError, msg};
 
+/// IPv4 映射地址（`::ffff:a.b.c.d`）剥离前缀返回纯 IPv4 文本，其余原样返回；
+/// 用于 IP 记录与展示的统一口径。
 #[must_use]
 pub fn normalize_ipv4_address(ip: &str) -> String {
     if ip.starts_with("::ffff:") {
@@ -34,7 +36,7 @@ pub fn escape_like(search: &str) -> String {
     format!("%{escaped}%")
 }
 
-// ==================== CIDR 验证 ====================
+// CIDR 验证
 
 /// 验证 CIDR 格式是否合法（与 PostgreSQL CIDR 类型语义一致）
 /// ipnetwork 解析时原样保留地址与掩码、不校验也不改写主机位，
@@ -48,6 +50,7 @@ pub fn validate_cidr(cidr: &str) -> bool {
     }
 }
 
+/// CIDR 的地址族标识（"ipv4"/"ipv6"，与网关校验 family 参数同口径）；非法输入返回 None。
 #[must_use]
 pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     match ipnetwork::IpNetwork::from_str(cidr) {
@@ -57,8 +60,8 @@ pub fn get_cidr_type(cidr: &str) -> Option<&'static str> {
     }
 }
 
-/// 检查子网 CIDR 是否属于父网 CIDR（使用 PostgreSQL 的 << 操作符逻辑）
-/// subnet << supernet 表示 subnet 是 supernet 的子网
+/// 检查子网 CIDR 是否属于父网 CIDR（对齐 PostgreSQL `subnet << supernet`：
+/// 严格包含——子网前缀更长且网络地址落在父网内，相同前缀不构成包含）。
 #[must_use]
 pub fn cidr_contains_subnet(subnet: &str, supernet: &str) -> bool {
     let subnet_net = ipnetwork::IpNetwork::from_str(subnet);
@@ -66,10 +69,8 @@ pub fn cidr_contains_subnet(subnet: &str, supernet: &str) -> bool {
 
     match (subnet_net, supernet_net) {
         (Ok(subnet), Ok(supernet)) => {
-            // 检查类型是否一致（IPv4 vs IPv6）
             match (subnet, supernet) {
                 (ipnetwork::IpNetwork::V4(sub), ipnetwork::IpNetwork::V4(super_net)) => {
-                    // 子网的 prefixlen 必须大于父网，且子网的网络地址在父网范围内
                     sub.prefix() > super_net.prefix() && super_net.contains(sub.network())
                 }
                 (ipnetwork::IpNetwork::V6(sub), ipnetwork::IpNetwork::V6(super_net)) => {
@@ -82,7 +83,7 @@ pub fn cidr_contains_subnet(subnet: &str, supernet: &str) -> bool {
     }
 }
 
-/// 检查网段 CIDR 是否属于区域 CIDR 列表中的任一 CIDR
+/// 检查网段 CIDR 是否属于区域 CIDR 列表中的任一 CIDR；区域未配置 CIDR 时视为不限制。
 #[must_use]
 pub fn cidr_belongs_to_region(cidr: &str, region_cidrs: &[String]) -> bool {
     if region_cidrs.is_empty() {
@@ -143,8 +144,9 @@ pub fn validate_gateway_in_cidr(
     Ok(())
 }
 
-// ==================== Token 哈希 ====================
+// Token 哈希
 
+/// 令牌的 SHA-256 摘要（64 位小写十六进制）：注册/上报令牌落库只存哈希不存明文。
 #[must_use]
 pub fn generate_token_hash(token: &str) -> String {
     use sha2::{Digest, Sha256};
@@ -170,7 +172,7 @@ pub fn valid_enrollment_token(token: &str) -> bool {
     token.len() == 64 && token.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-// ==================== HTTP 请求处理 ====================
+// HTTP 请求处理
 
 /// 从 axum 请求 parts 中获取真实客户端 IP
 ///
@@ -185,7 +187,6 @@ pub fn valid_enrollment_token(token: &str) -> bool {
 /// 绕过限流与 fail2ban（见 security-review I-1/A-1）。
 #[must_use]
 pub fn get_real_ip_from_parts(parts: &Parts) -> String {
-    // 从 extensions 获取 ConnectInfo（TCP 监听时可用）
     let peer_info: Option<std::net::IpAddr> = parts
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
@@ -209,7 +210,7 @@ pub fn get_real_ip_from_parts(parts: &Parts) -> String {
     normalize_ipv4_address(&ip)
 }
 
-/// 从 axum 请求 parts 中检测用户语言
+/// 从 Accept-Language 取首个语言标签的主子标签（zh-CN→zh）；仅支持 zh/en，其余（含头缺失）回退 zh。
 #[must_use]
 pub fn detect_user_language_from_parts(parts: &Parts) -> String {
     if let Some(accept_language) = parts.headers.get("Accept-Language")
@@ -266,7 +267,7 @@ fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
     ip.is_loopback()
 }
 
-// ==================== IP/CIDR 纯函数工具 ====================
+// IP/CIDR 纯函数工具
 //
 // 供 foims-resource（IP 资源域）与 foims-data-management（导入导出校验）
 // 共用，避免各 crate 手写掩码比较与地址族推导。
@@ -335,7 +336,7 @@ pub fn detect_ip_version(ip: &str) -> Result<i16, AppError> {
     }
 }
 
-// ==================== MAC 地址归一 ====================
+// MAC 地址归一
 
 /// 归一 MAC：剔除 `:`/`-`/`.`/空格并转大写，返回 `AABBCCDDEEFF` 形态。
 ///
@@ -384,7 +385,6 @@ pub fn canonical_mac(mac: &str) -> String {
 /// `[::1]:443` 与裸 IPv6 `::1` 三种形态）。
 #[must_use]
 fn is_localhost_host_value(raw: &str) -> bool {
-    // 去端口与方括号，归一化出主机部分
     let host = if let Some(rest) = raw.strip_prefix('[') {
         // [::1]:443 → ::1
         match rest.split_once(']') {
@@ -444,7 +444,6 @@ pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
         // 回环对端：本机直连或经本机 nginx 转发，按 X-Real-IP 判定真实来源
         //（无头时视为本机直连放行）
         Some(true) => header_ip.is_none_or(|ip| ip.is_loopback()),
-        // 非回环对端：真实来源即对端，请求头不可信，直接拒绝
         Some(false) => false,
         // UDS：无对端信息，仅能依赖本机反代写入的 X-Real-IP 判定
         None => header_ip.is_some_and(|ip| ip.is_loopback()),
@@ -453,8 +452,6 @@ pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
         return false;
     }
 
-    // Host 校验：Host 头优先；h2c 链路无 Host 头（:authority 伪头进入
-    // 请求 URI），按 uri.host() 兜底；两者皆缺时 fail-close 拒绝
     let host = parts
         .headers
         .get(axum::http::header::HOST)
@@ -465,18 +462,15 @@ pub fn is_localhost_request_from_parts(parts: &Parts) -> bool {
     host.is_some_and(is_localhost_host_value)
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-    // ---------- IP 归一化 ----------
+    // IP 归一化
 
     #[test]
     fn test_normalize_ipv4_address_strips_v4_mapped_prefix() {
-        // IPv4 映射的 IPv6 地址去除 ::ffff: 前缀
         assert_eq!(normalize_ipv4_address("::ffff:192.168.1.1"), "192.168.1.1");
         assert_eq!(normalize_ipv4_address("::ffff:8.8.8.8"), "8.8.8.8");
     }
@@ -490,18 +484,16 @@ mod tests {
         assert_eq!(normalize_ipv4_address(""), "");
     }
 
-    // ---------- ILIKE 转义 ----------
+    // ILIKE 转义
 
     #[test]
     fn test_escape_like_plain_text() {
-        // 普通文本仅包裹 % 通配符
         assert_eq!(escape_like("交换机"), "%交换机%");
         assert_eq!(escape_like(""), "%%");
     }
 
     #[test]
     fn test_escape_like_special_characters() {
-        // 反斜杠 / % / _ 依次转义，防止被当作通配符
         assert_eq!(escape_like(r"a\b"), r"%a\\b%");
         assert_eq!(escape_like("50%"), r"%50\%%");
         assert_eq!(escape_like("ip_v6"), r"%ip\_v6%");
@@ -511,15 +503,13 @@ mod tests {
 
     #[test]
     fn test_escape_like_backslash_before_percent() {
-        // 转义顺序：\ 先被转义为 \\，% 再被转义为 \%
         assert_eq!(escape_like(r"\%"), r"%\\\%%");
     }
 
-    // ---------- CIDR 工具 ----------
+    // CIDR 工具
 
     #[test]
     fn test_validate_cidr_valid() {
-        // 主机位全为 0 的网络地址合法
         assert!(validate_cidr("192.168.1.0/24"));
         assert!(validate_cidr("10.0.0.0/8"));
         assert!(validate_cidr("0.0.0.0/0"));
@@ -529,7 +519,6 @@ mod tests {
 
     #[test]
     fn test_validate_cidr_host_bits_rejected() {
-        // 主机位非 0（PostgreSQL CIDR 语义不允许）拒绝
         assert!(!validate_cidr("192.168.1.1/24"));
         assert!(!validate_cidr("2001:db8::1/32"));
     }
@@ -559,7 +548,6 @@ mod tests {
 
     #[test]
     fn test_cidr_contains_subnet_valid() {
-        // 子网前缀更长且网络地址落在父网内 → 包含
         assert!(cidr_contains_subnet("192.168.1.0/26", "192.168.1.0/24"));
         assert!(cidr_contains_subnet("10.1.2.0/28", "10.0.0.0/8"));
         assert!(cidr_contains_subnet("2001:db8:1::/48", "2001:db8::/32"));
@@ -567,15 +555,10 @@ mod tests {
 
     #[test]
     fn test_cidr_contains_subnet_invalid() {
-        // 相同前缀不构成包含关系
         assert!(!cidr_contains_subnet("192.168.1.0/24", "192.168.1.0/24"));
-        // 前缀更短（超网）不包含
         assert!(!cidr_contains_subnet("192.168.0.0/16", "192.168.1.0/24"));
-        // 网络地址不在父网内
         assert!(!cidr_contains_subnet("10.2.0.0/16", "192.168.0.0/16"));
-        // IPv4 与 IPv6 互不包含
         assert!(!cidr_contains_subnet("10.0.0.0/8", "::/0"));
-        // 非法输入
         assert!(!cidr_contains_subnet("bad", "10.0.0.0/8"));
         assert!(!cidr_contains_subnet("10.0.0.0/8", "bad"));
     }
@@ -586,11 +569,10 @@ mod tests {
         assert!(cidr_belongs_to_region("10.1.0.0/16", &region));
         assert!(cidr_belongs_to_region("172.16.5.0/24", &region));
         assert!(!cidr_belongs_to_region("192.168.1.0/24", &region));
-        // 区域无 CIDR 时不做限制
         assert!(cidr_belongs_to_region("192.168.1.0/24", &[]));
     }
 
-    // ---------- 网关校验 ----------
+    // 网关校验
 
     /// 从 AppError::Validation 中取出消息 key，便于断言
     fn validation_key(result: Result<(), AppError>) -> String {
@@ -603,7 +585,6 @@ mod tests {
 
     #[test]
     fn test_validate_gateway_in_cidr_none_gateway_passes() {
-        // 网关缺失 / 空白直接通过
         assert!(validate_gateway_in_cidr(None, None, "ipv4").is_ok());
         assert!(validate_gateway_in_cidr(Some("  "), Some("10.0.0.0/8"), "ipv4").is_ok());
     }
@@ -611,11 +592,9 @@ mod tests {
     #[test]
     fn test_validate_gateway_in_cidr_valid() {
         assert!(validate_gateway_in_cidr(Some("10.1.0.254"), Some("10.1.0.0/24"), "ipv4").is_ok());
-        // PostgreSQL INET 文本自带的 /32 后缀被容忍
         assert!(
             validate_gateway_in_cidr(Some("10.1.0.254/32"), Some("10.1.0.0/24"), "ipv4").is_ok()
         );
-        // IPv6 网关落在 IPv6 网段内
         assert!(
             validate_gateway_in_cidr(Some("2001:db8::1"), Some("2001:db8::/32"), "ipv6").is_ok()
         );
@@ -623,12 +602,10 @@ mod tests {
 
     #[test]
     fn test_validate_gateway_in_cidr_format_and_family_errors() {
-        // 网关格式非法
         assert_eq!(
             validation_key(validate_gateway_in_cidr(Some("bad-ip"), None, "ipv4")),
             "server.network.ipv4_gateway_invalid"
         );
-        // 地址族不匹配：IPv4 网关配 ipv6 家族
         assert_eq!(
             validation_key(validate_gateway_in_cidr(
                 Some("10.0.0.1"),
@@ -637,7 +614,6 @@ mod tests {
             )),
             "server.network.ipv6_gateway_invalid"
         );
-        // IPv6 网关配 ipv4 家族
         assert_eq!(
             validation_key(validate_gateway_in_cidr(
                 Some("2001:db8::1"),
@@ -650,7 +626,6 @@ mod tests {
 
     #[test]
     fn test_validate_gateway_in_cidr_requires_cidr() {
-        // 提供了网关但未提供 CIDR → 报需要 CIDR
         assert_eq!(
             validation_key(validate_gateway_in_cidr(Some("10.0.0.1"), None, "ipv4")),
             "server.network.ipv4_gateway_requires_cidr"
@@ -668,7 +643,6 @@ mod tests {
 
     #[test]
     fn test_validate_gateway_in_cidr_not_in_cidr() {
-        // 网关不在网段内 / CIDR 非法
         assert_eq!(
             validation_key(validate_gateway_in_cidr(
                 Some("192.168.1.1"),
@@ -687,7 +661,7 @@ mod tests {
         );
     }
 
-    // ---------- Token 哈希 ----------
+    // Token 哈希
 
     #[test]
     fn test_generate_token_hash_known_vector() {
@@ -712,7 +686,7 @@ mod tests {
         );
     }
 
-    // ---------- 请求元信息（Parts 级纯函数） ----------
+    // 请求元信息（Parts 级纯函数）
 
     /// 构造带请求头的 Parts（无 extensions）
     fn parts_with_headers(headers: &[(&str, &str)]) -> Parts {
@@ -738,7 +712,6 @@ mod tests {
 
     #[test]
     fn test_get_real_ip_prefers_x_real_ip_without_peer() {
-        // 无 peer 信息（UDS 场景默认可信代理）：优先 X-Real-IP
         let parts = parts_with_headers(&[("X-Real-IP", "1.2.3.4")]);
         assert_eq!(get_real_ip_from_parts(&parts), "1.2.3.4");
     }
@@ -748,29 +721,24 @@ mod tests {
         // X-Forwarded-For 不再作为回退来源（首段可伪造，见 I-1/A-1）
         let parts = parts_with_headers(&[("X-Forwarded-For", "5.6.7.8, 10.0.0.1")]);
         assert_eq!(get_real_ip_from_parts(&parts), "unknown");
-
-        // 存在 X-Real-IP 时优先采用，忽略 X-Forwarded-For
         let both = parts_with_headers(&[("X-Real-IP", "1.2.3.4"), ("X-Forwarded-For", "5.6.7.8")]);
         assert_eq!(get_real_ip_from_parts(&both), "1.2.3.4");
     }
 
     #[test]
     fn test_get_real_ip_unknown_without_any_source() {
-        // 无任何来源时返回 "unknown"
         let parts = parts_with_headers(&[]);
         assert_eq!(get_real_ip_from_parts(&parts), "unknown");
     }
 
     #[test]
     fn test_get_real_ip_normalizes_v4_mapped_header() {
-        // 头中的 IPv4 映射地址同样被归一化
         let parts = parts_with_headers(&[("X-Real-IP", "::ffff:9.9.9.9")]);
         assert_eq!(get_real_ip_from_parts(&parts), "9.9.9.9");
     }
 
     #[test]
     fn test_get_real_ip_untrusted_peer_ignores_headers() {
-        // 公网直连（不可信 peer）时忽略转发头，直接使用 peer IP
         let parts = parts_with_peer(
             IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
             &[("X-Real-IP", "1.2.3.4"), ("X-Forwarded-For", "5.6.7.8")],
@@ -780,7 +748,6 @@ mod tests {
 
     #[test]
     fn test_get_real_ip_trusted_peer_uses_x_real_ip() {
-        // 回环 peer 视为可信代理，优先 X-Real-IP
         let loopback = parts_with_peer(
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             &[("X-Real-IP", "1.2.3.4")],
@@ -797,7 +764,6 @@ mod tests {
 
     #[test]
     fn test_detect_user_language() {
-        // 取首语言的主子标签；仅支持 zh / en，其余回退 zh
         let zh = parts_with_headers(&[("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")]);
         assert_eq!(detect_user_language_from_parts(&zh), "zh");
 
@@ -832,13 +798,10 @@ mod tests {
 
     #[test]
     fn test_get_user_agent_truncated_to_column_limit() {
-        // 超长 UA 按字符截断到 255（对齐 VARCHAR(255) 列宽）
         let long_ua = "U".repeat(300);
         let parts = parts_with_headers(&[("User-Agent", long_ua.as_str())]);
         let ua = get_user_agent_from_parts(&parts);
         assert_eq!(ua.chars().count(), 255);
-
-        // 未超长时原样保留
         let short = parts_with_headers(&[("User-Agent", "curl/8.0")]);
         assert_eq!(get_user_agent_from_parts(&short), "curl/8.0");
     }
@@ -858,14 +821,12 @@ mod tests {
         assert!(!is_secure_from_parts(&parts_with_headers(&[])));
     }
 
-    // ---------- 可信代理判定（私有辅助函数） ----------
+    // 可信代理判定
 
     #[test]
     fn test_is_trusted_proxy() {
-        // 仅回环可信（同机反代经回环/UDS 通信）
         assert!(is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
         assert!(is_trusted_proxy(&IpAddr::V6(Ipv6Addr::LOCALHOST)));
-        // RFC1918 私网与 IPv6 ULA 不再视为可信（内网客户端可直连伪造头）
         assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))));
         assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(172, 16, 0, 1))));
         assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(
@@ -874,14 +835,13 @@ mod tests {
         assert!(!is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
             0xfd00, 0, 0, 0, 0, 0, 0, 1
         ))));
-        // 公网地址不可信
         assert!(!is_trusted_proxy(&IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
         assert!(!is_trusted_proxy(&IpAddr::V6(Ipv6Addr::new(
             0x2001, 0xdb8, 0, 0, 0, 0, 0, 1
         ))));
     }
 
-    // ---------- MAC 归一 ----------
+    // MAC 归一
 
     #[test]
     fn test_normalize_mac_strips_separators_and_uppercases() {
@@ -906,7 +866,6 @@ mod tests {
                 "{raw} 应规范为冒号大写形态"
             );
         }
-        // 长度非法时原样返回归一结果，不做二次猜测
         assert_eq!(canonical_mac("abcd"), "ABCD");
     }
 
@@ -937,11 +896,10 @@ mod tests {
         }
     }
 
-    // ---------- Host 校验（防 DNS rebinding） ----------
+    // Host 校验（防 DNS rebinding）
 
     #[test]
     fn test_is_localhost_host_value() {
-        // 合法形态：localhost / IPv4 / IPv6（裸、方括号、带端口）
         for good in [
             "localhost",
             "LOCALHOST",
@@ -953,7 +911,6 @@ mod tests {
         ] {
             assert!(is_localhost_host_value(good), "{good} 应指向本机");
         }
-        // 非法：攻击域名（rebinding 场景）、其他 IP、残缺方括号、空串
         for bad in [
             "evil.com",
             "EVIL.com",

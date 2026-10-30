@@ -7,4 +7,12 @@ export type SnmpPort = {
 /**
  * 端口标识（如 xg1/0/0/1、GigabitEthernet1/0/1）
  */
-name: string, port_type: string | null, vlan_id: number | null, status: string | null, speed: string | null, description: string | null, };
+name: string, port_type: string | null, vlan_id: number | null, 
+/**
+ * 端口状态（up/down/admin-down）
+ */
+status: string | null, 
+/**
+ * 端口速率文本（如 1Gbps/2500Mbps）
+ */
+speed: string | null, description: string | null, };

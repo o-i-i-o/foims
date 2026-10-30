@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 房间领域模型：房间行模型、创建/更新请求、列表摘要，及工位/机柜/机位
+//! 简要结构（供跨域内联引用）。
 
 use super::network::NetworkInfo;
 use super::workstation::NetOutletBrief;
@@ -8,13 +9,12 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== 房间模型 ====================
-
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
 pub struct Room {
     pub id: Uuid,
     pub name: String,
+    /// 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
     pub room_type: String,
     /// 房间所属组织（NOT NULL：房间必须挂在唯一组织节点下）
     pub org_id: Uuid,
@@ -30,6 +30,7 @@ pub struct Room {
 pub struct RoomWithNetworks {
     pub id: Uuid,
     pub name: String,
+    /// 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
     pub room_type: String,
     pub org_id: Uuid,
     /// 所属组织名称（org_id 非空且 FK RESTRICT，联查必有值）
@@ -57,6 +58,7 @@ pub struct RoomWithNetworks {
 pub struct RoomSummary {
     pub id: Uuid,
     pub name: String,
+    /// 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
     pub room_type: String,
     /// 房间直属组织名称（子树口径下用于区分不同下级组织的房间）
     pub org_name: String,
@@ -97,6 +99,7 @@ pub struct PositionBrief {
 pub struct RoomCreate {
     #[validate(length(min = 1, max = 50, message = "server.room.validation.name_length"))]
     pub name: String,
+    /// 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
     #[validate(custom(
         function = "crate::models::validate_room_type_string",
         message = "server.room.validation.type_invalid"
@@ -120,6 +123,7 @@ pub struct RoomCreate {
 pub struct RoomUpdate {
     #[validate(length(min = 1, max = 50, message = "server.room.validation.name_length"))]
     pub name: Option<String>,
+    /// 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
     #[validate(custom(
         function = "crate::models::validate_room_type_option",
         message = "server.room.validation.type_invalid"
@@ -128,7 +132,7 @@ pub struct RoomUpdate {
     /// 缺省/null 均表示不修改（org_id 非空，不支持解绑组织）
     pub org_id: Option<Uuid>,
     pub subnet_ids: Option<Vec<Uuid>>,
-    /// 双层 Option：字段缺失不修改、JSON null 清空上限（不限制）、值设置新值；
+    /// 双层 Option：字段缺失不修改、JSON null 清空（即不设上限）、值设置新值；
     /// 设置新值时房内设备功耗之和不得超过该值
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
@@ -139,8 +143,6 @@ pub struct RoomUpdate {
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

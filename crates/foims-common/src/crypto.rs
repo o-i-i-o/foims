@@ -13,6 +13,8 @@ use std::sync::OnceLock;
 use crate::{AppError, msg};
 use crate::{log_error, log_info, log_warn};
 
+/// GCM 标准 nonce 长度（96 bit）；密文布局为 Base64(nonce || 密文+标签)，
+/// 属存量数据格式约束，改动会导致历史密文不可解。
 const NONCE_SIZE: usize = 12;
 
 /// 恒定时间字符串比较（防时序侧信道）。
@@ -76,7 +78,7 @@ pub enum CryptoKeyError {
 /// 进程级加密密钥：`Result` 入锁，加载失败在使用处映射为错误而非 panic。
 static ENCRYPTION_KEY: OnceLock<Result<Vec<u8>, CryptoKeyError>> = OnceLock::new();
 
-/// 以 0600 权限原子写入密钥文件（覆盖已存在内容）。
+/// 以 0600 权限写入密钥文件（覆盖已存在内容）。
 /// 直接用带 mode 的 OpenOptions 创建，消除「先写后 chmod」窗口期内
 /// 其他本地用户读到密钥的可能（security-review I-6）。
 /// 返回写入是否成功。
@@ -106,6 +108,8 @@ fn backup_path_for(key_path: &str) -> String {
     format!("{key_path}.backup")
 }
 
+/// 生产密钥文件路径：`(主密钥, 备份密钥)`，主密钥固定 /etc/foims/encryption.key，
+/// 备份名按 [`backup_path_for`] 规则派生。
 fn get_key_paths() -> (String, String) {
     let app_name = "foims";
     let key_path = format!("/etc/{app_name}/encryption.key");
@@ -220,6 +224,8 @@ pub fn ensure_encryption_key() -> Result<&'static [u8], CryptoKeyError> {
     initialized.as_deref().map_err(std::clone::Clone::clone)
 }
 
+/// 密钥完整性自检（供启动期调用）：主密钥长度非法返回 Err；
+/// 备份缺失/不可读/与主密钥不一致仅记告警、不阻断启动。
 pub fn check_key_integrity() -> Result<(), String> {
     let key = ensure_encryption_key().map_err(|e| e.to_string())?;
     if key.len() != 32 {
@@ -301,7 +307,6 @@ fn decrypt_with_key(key: &[u8], encrypted_password: &str) -> Result<String, Stri
     let nonce = aes_gcm::Nonce::from(nonce_arr);
 
     let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| {
-        // 静态排查提示 + 关键长度参数，便于定位密钥不一致类问题
         log_warn!("log.crypto.decrypt_failed_hint");
         log_warn!(
             "log.crypto.decrypt_detail",
@@ -315,6 +320,8 @@ fn decrypt_with_key(key: &[u8], encrypted_password: &str) -> Result<String, Stri
     String::from_utf8(plaintext).map_err(|e| format!("解密失败: UTF-8解码错误: {e}"))
 }
 
+/// AES-GCM 加密（进程密钥 + 每次随机 nonce）：输出 Base64(nonce || 密文+标签)。
+/// 密钥加载失败（fail-closed 规则见 load_key_material 注释）映射为 Internal 错误。
 pub fn encrypt_password(password: &str) -> Result<String, AppError> {
     let key = ensure_encryption_key().map_err(|e| {
         log_error!("log.crypto.key_load_failed", error = e);
@@ -326,11 +333,14 @@ pub fn encrypt_password(password: &str) -> Result<String, AppError> {
     encrypt_with_key(key, nonce_bytes, password)
 }
 
+/// [`encrypt_password`] 输出的解密；密钥、Base64、长度、GCM 标签、UTF-8 任一
+/// 校验失败均以错误文本返回。
 pub fn decrypt_password(encrypted_password: &str) -> Result<String, String> {
     let key = ensure_encryption_key().map_err(|e| format!("解密失败: 加密密钥加载失败: {e}"))?;
     decrypt_with_key(key, encrypted_password)
 }
 
+/// [`encrypt_password`] 的 spawn_blocking 版本（避免阻塞 tokio 工作线程）。
 pub async fn encrypt_password_async(password: String) -> Result<String, AppError> {
     tokio::task::spawn_blocking(move || encrypt_password(&password))
         .await
@@ -339,6 +349,7 @@ pub async fn encrypt_password_async(password: String) -> Result<String, AppError
         })?
 }
 
+/// [`decrypt_password`] 的 spawn_blocking 版本（避免阻塞 tokio 工作线程）。
 pub async fn decrypt_password_async(encrypted: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || decrypt_password(&encrypted))
         .await
@@ -401,7 +412,7 @@ mod tests {
         encrypt_with_key(key, nonce, plaintext).unwrap_or_else(|e| panic!("测试加密应成功: {e}"))
     }
 
-    // ==================== 加解密往返（密钥注入，无文件系统依赖） ====================
+    // 加解密往返（密钥注入，无文件系统依赖）
 
     #[test]
     fn test_encrypt_decrypt() {
@@ -441,7 +452,6 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt_multibyte_utf8() {
-        // 多字节 UTF-8（中文 + emoji）往返保持字节一致
         let password = "超级管理员密码🔐P@ssw0rd！";
         let encrypted = encrypt_with(&test_key(), test_nonce(3), password);
         let decrypted =
@@ -509,7 +519,6 @@ mod tests {
 
     #[test]
     fn test_decrypt_rejects_tampered_nonce() {
-        // 篡改 nonce 同样导致解密失败
         let encrypted = encrypt_with(&test_key(), test_nonce(6), "tamper-nonce");
         let mut decoded = BASE64
             .decode(&encrypted)
@@ -570,7 +579,7 @@ mod tests {
         assert_eq!(decrypted, plaintext);
     }
 
-    // ==================== 密钥加载核心（临时目录，全分支覆盖） ====================
+    // 密钥加载核心（临时目录，全分支覆盖）
 
     #[test]
     fn test_load_key_material_generates_and_persists() {
@@ -666,7 +675,7 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
-    // ==================== 真实 /etc 密钥链路（环境不满足时跳过，不断言） ====================
+    // 真实 /etc 密钥链路（环境不满足时跳过，不断言）
 
     /// 真实密钥目录是否可正常加载（CI/非 root 开发机下不可写，此时
     /// 上面的临时目录测试已覆盖全部失败分支，这里仅验证生产装配）

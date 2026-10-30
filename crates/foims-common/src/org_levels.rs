@@ -106,7 +106,6 @@ pub fn validate_levels_mapping(levels: &Value) -> Result<String, AppMessage> {
         }
     }
 
-    // 所有子类型必须在映射中定义
     for child_type in &all_child_types {
         if !levels_map.contains_key(child_type) {
             return Err(
@@ -115,7 +114,6 @@ pub fn validate_levels_mapping(levels: &Value) -> Result<String, AppMessage> {
         }
     }
 
-    // 必须有且仅有一个根类型（根唯一）
     let root_types: Vec<&String> = levels_map
         .keys()
         .filter(|k| !all_child_types.contains(*k))

@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 布线链路领域模型：A/B 端点对（配线架/信息点/端口）构成的链路行模型、
+//! 创建与更新请求，及链路路径节点。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,16 +7,17 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== 物理链路模型 ====================
-
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
 pub struct CableLink {
     pub id: Uuid,
+    /// A 端点类型白名单：net_outlet/device_interface/patch_panel（DB CHECK），与 a_endpoint_id 组成多态引用
     pub a_endpoint_type: String,
     pub a_endpoint_id: Uuid,
+    /// B 端点类型白名单：net_outlet/device_interface/patch_panel（DB CHECK），与 b_endpoint_id 组成多态引用
     pub b_endpoint_type: String,
     pub b_endpoint_id: Uuid,
+    /// 链路介质白名单：ethernet/fiber/console，缺省 ethernet
     pub link_type: String,
     pub cable_label: Option<String>,
     pub length_m: Option<f64>,
@@ -28,6 +30,7 @@ pub struct CableLink {
 #[ts(export)]
 pub struct CableLinkWithDetails {
     pub id: Uuid,
+    /// A 端点类型白名单：net_outlet/device_interface/patch_panel（DB CHECK），与 a_endpoint_id 组成多态引用
     pub a_endpoint_type: String,
     pub a_endpoint_id: Uuid,
     pub a_endpoint_label: Option<String>,
@@ -35,6 +38,7 @@ pub struct CableLinkWithDetails {
     pub a_room_id: Option<Uuid>,
     pub a_cabinet_id: Option<Uuid>,
     pub a_device_id: Option<Uuid>,
+    /// B 端点类型白名单：net_outlet/device_interface/patch_panel（DB CHECK），与 b_endpoint_id 组成多态引用
     pub b_endpoint_type: String,
     pub b_endpoint_id: Uuid,
     pub b_endpoint_label: Option<String>,
@@ -42,6 +46,7 @@ pub struct CableLinkWithDetails {
     pub b_room_id: Option<Uuid>,
     pub b_cabinet_id: Option<Uuid>,
     pub b_device_id: Option<Uuid>,
+    /// 链路介质白名单：ethernet/fiber/console，缺省 ethernet
     pub link_type: String,
     pub cable_label: Option<String>,
     pub length_m: Option<f64>,
@@ -53,10 +58,13 @@ pub struct CableLinkWithDetails {
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct CableLinkCreate {
+    /// A 端点类型白名单：net_outlet/device_interface/patch_panel（DB CHECK），与 a_endpoint_id 组成多态引用
     pub a_endpoint_type: String,
     pub a_endpoint_id: Uuid,
+    /// B 端点类型白名单：net_outlet/device_interface/patch_panel（DB CHECK），与 b_endpoint_id 组成多态引用
     pub b_endpoint_type: String,
     pub b_endpoint_id: Uuid,
+    /// 链路介质白名单：ethernet/fiber/console，缺省 ethernet
     pub link_type: Option<String>,
     #[validate(length(max = 50, message = "server.cable_link.validation.cable_label_length"))]
     pub cable_label: Option<String>,
@@ -73,6 +81,7 @@ pub struct CableLinkCreate {
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct CableLinkUpdate {
+    /// 链路介质白名单：ethernet/fiber/console，缺省 ethernet
     pub link_type: Option<String>,
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
@@ -105,8 +114,6 @@ pub struct CablePathNode {
     pub cable_label: Option<String>,
     pub hop_type: String,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

@@ -5,7 +5,11 @@ export type DeviceUpdate = { name: string | null,
 /**
  * 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值
  */
-hostname: string | null | null, device_type: string | null, brand: string | null, model: string | null, serial_number: string | null, workstation_id: string | null | null, position_id: string | null | null, room_id: string | null, seller: string | null, location: string | null, snmp_version: string | null, 
+hostname: string | null | null, device_type: string | null, brand: string | null, model: string | null, serial_number: string | null, workstation_id: string | null | null, position_id: string | null | null, room_id: string | null, seller: string | null, location: string | null, 
+/**
+ * SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
+ */
+snmp_version: string | null, 
 /**
  * 双层 Option：null 清空 SNMP 团体名
  */

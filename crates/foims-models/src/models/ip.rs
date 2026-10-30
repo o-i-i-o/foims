@@ -1,12 +1,11 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! IP 地址领域模型：IP 明细行模型与详情响应、设备侧网络配置/端口/网卡
+//! 同步项，及自动分配与批量拉取请求。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
-
-// ==================== 设备详情模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -23,9 +22,11 @@ pub struct IpDetail {
     #[sqlx(default)]
     pub network_region: Option<String>,
     pub ip_address: String,
+    /// 地址族：4 或 6（DB 列 SMALLINT，缺省 4）
     pub ip_version: i16,
     #[sqlx(default)]
     pub mac_address: Option<String>,
+    /// IP 状态白名单：active/inactive，缺省 active（由 ip_status_sync 任务按 last_seen 新鲜度翻转）
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -52,9 +53,11 @@ pub struct IpDetailWithNames {
     pub network_name: String,
     pub network_region: String,
     pub ip_address: String,
+    /// 地址族：4 或 6（DB 列 SMALLINT，缺省 4）
     pub ip_version: i16,
     pub mac_address: Option<String>,
     pub hostname: Option<String>,
+    /// IP 状态白名单：active/inactive，缺省 active（由 ip_status_sync 任务按 last_seen 新鲜度翻转）
     pub status: String,
     pub last_seen: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -77,8 +80,6 @@ pub struct IpDetailCreate {
     ))]
     pub ip_address: String,
 }
-
-// ==================== 设备网卡配置同步模型（网卡 → 网口 → IP） ====================
 
 #[derive(Debug, Serialize, Deserialize, Validate, Clone, ts_rs::TS)]
 #[ts(export)]
@@ -167,8 +168,6 @@ pub struct PullIpDetailsRequest {
     /// None 表示全部子网：同步时不限定 interface_ips.subnet_id（前端“全部子网”选项）
     pub subnet_id: Option<Uuid>,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

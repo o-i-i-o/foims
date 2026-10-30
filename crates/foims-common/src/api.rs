@@ -24,7 +24,6 @@ pub struct ApiResponse<T> {
 }
 
 impl<T> ApiResponse<T> {
-    /// 构造成功响应。
     pub fn success(data: T, message: impl Into<AppMessage>) -> Self {
         let msg = message.into();
         Self {
@@ -35,7 +34,6 @@ impl<T> ApiResponse<T> {
         }
     }
 
-    /// 构造失败响应。
     pub fn error(message: impl Into<AppMessage>) -> Self {
         let msg = message.into();
         Self {

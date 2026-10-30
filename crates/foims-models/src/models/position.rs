@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 机位领域模型：机柜 U 位区间行模型、创建/更新请求，及附带 IP 明细的
+//! 详情响应。
 
 use super::ip::IpDetail;
 use chrono::{DateTime, Utc};
@@ -17,8 +18,6 @@ fn validate_u_order(start_u: i32, end_u: i32) -> Result<(), ValidationError> {
         ))
     }
 }
-
-// ==================== 机位模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -104,8 +103,6 @@ fn validate_position_update_u_order(req: &CabinetPositionUpdate) -> Result<(), V
         _ => Ok(()),
     }
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

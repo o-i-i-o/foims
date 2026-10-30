@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 用户领域模型：用户行模型与账号增改请求，及密码、邮箱、LDAP、二次验证
+//! 各登录方式的请求载荷。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,14 +7,13 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== 用户模型 ====================
-
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    /// 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
     pub role: String,
     /// 账户启用开关：false 表示被禁用（登录与令牌刷新均拒绝）
     pub enabled: bool,
@@ -34,8 +34,8 @@ pub struct UserCreate {
         message = "server.user.validation.username_no_at"
     ))]
     pub username: String,
-    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     /// bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     #[validate(custom(
         function = "crate::models::validate_password_max_bytes",
         message = "server.user.validation.password_max_length"
@@ -44,6 +44,7 @@ pub struct UserCreate {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
+    /// 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
     #[validate(custom(
         function = "crate::models::validate_role",
         message = "server.user.validation.role_invalid"
@@ -65,6 +66,7 @@ pub struct UserUpdate {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: Option<String>,
+    /// 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
     #[validate(custom(
         function = "crate::models::validate_role_option",
         message = "server.user.validation.role_invalid"
@@ -78,9 +80,9 @@ pub struct UserUpdate {
         message = "server.user.validation.password_expiry_range"
     ))]
     pub password_expiry_days: Option<i32>,
-    /// 管理员重置密码（None = 不修改；写入前过等保策略与历史重复检查）
-    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
+    /// 管理员重置密码（None = 不修改；写入前过等保策略与历史重复检查）；
     /// bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝
+    #[validate(length(min = 8, message = "server.user.validation.password_length"))]
     #[validate(custom(
         function = "crate::models::validate_password_max_bytes",
         message = "server.user.validation.password_max_length"
@@ -126,8 +128,6 @@ pub struct ResetPasswordRequest {
     pub new_password: String,
 }
 
-// ==================== 2FA 模型 ====================
-
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct TwoFactorLoginRequest {
@@ -167,8 +167,8 @@ pub struct SendLoginCodeRequest {
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct EmailLoginRequest {
-    #[validate(email(message = "server.common.validation.email_format"))]
     /// 与其余登录邮箱字段同口径：上限 100 字符
+    #[validate(email(message = "server.common.validation.email_format"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
     #[validate(length(min = 6, max = 6, message = "server.auth.validation.code_length"))]
@@ -192,8 +192,6 @@ pub struct LdapLoginRequest {
     pub captcha_id: Option<String>,
     pub captcha_text: Option<String>,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

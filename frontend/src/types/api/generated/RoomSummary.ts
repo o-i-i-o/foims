@@ -3,7 +3,11 @@
 /**
  * 组织节点下的房间摘要（组织页「房间」入口的子树列表）。
  */
-export type RoomSummary = { id: string, name: string, room_type: string, 
+export type RoomSummary = { id: string, name: string, 
+/**
+ * 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
+ */
+room_type: string, 
 /**
  * 房间直属组织名称（子树口径下用于区分不同下级组织的房间）
  */

@@ -1,12 +1,11 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 日志与通知领域模型：操作/登录日志行模型、调度任务与其执行日志、
+//! 站内通知，及任务创建/更新请求。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
-
-// ==================== 日志模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -23,8 +22,6 @@ pub struct OperationLog {
     pub ip_address: String,
     pub created_at: DateTime<Utc>,
 }
-
-// ==================== 定时任务模型 ====================
 
 /// scheduled_tasks 表行模型（真身定义，foims-scheduler 经 re-export 复用）
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
@@ -96,8 +93,6 @@ pub struct LoginLog {
     pub created_at: DateTime<Utc>,
 }
 
-// ==================== 通知模型 ====================
-
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
 pub struct Notification {
@@ -110,14 +105,10 @@ pub struct Notification {
     pub created_at: DateTime<Utc>,
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use validator::Validate;
-
-    // ---------- 定时任务请求 ----------
 
     #[test]
     fn test_scheduled_task_create_valid() -> Result<(), serde_json::Error> {
@@ -169,8 +160,6 @@ mod tests {
         assert!(empty.validate().is_ok());
         Ok(())
     }
-
-    // ---------- 日志实体序列化往返 ----------
 
     #[test]
     fn test_operation_log_serde_roundtrip() -> Result<(), serde_json::Error> {

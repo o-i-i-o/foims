@@ -17,7 +17,6 @@ pub struct AppMessage {
 }
 
 impl AppMessage {
-    /// 创建无参数消息。
     pub fn new(key: impl Into<String>) -> Self {
         Self {
             key: key.into(),
@@ -31,12 +30,10 @@ impl AppMessage {
         self
     }
 
-    /// 消息 key。
     pub fn key(&self) -> &str {
         &self.key
     }
 
-    /// 动态参数列表。
     pub fn params(&self) -> &[(String, String)] {
         &self.params
     }

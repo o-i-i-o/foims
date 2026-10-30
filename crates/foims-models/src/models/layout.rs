@@ -66,8 +66,6 @@ fn validate_position_coords(position: &Position) -> Result<(), validator::Valida
     }
 }
 
-// ==================== 布局模型 ====================
-
 #[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
 #[ts(export)]
 pub struct Position {
@@ -114,9 +112,9 @@ pub struct LayoutSaveRequest {
     #[validate(custom(function = validate_layout_type))]
     pub r#type: String,
     pub room_id: Uuid,
-    #[validate(length(min = 1, message = "server.visualization.layout_empty"))]
     /// nested 显式开启：validator derive 不自动展开 Vec 元素，
     /// 缺失时 LayoutItem 的坐标/element_type 校验在请求路径不会执行
+    #[validate(length(min = 1, message = "server.visualization.layout_empty"))]
     #[validate(nested)]
     pub layout: Vec<LayoutItem>,
 }
@@ -135,8 +133,6 @@ pub struct LayoutItem {
 fn validate_layout_item(item: &LayoutItem) -> Result<(), validator::ValidationError> {
     validate_position_coords(&item.position)
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

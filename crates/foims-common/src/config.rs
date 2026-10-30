@@ -16,7 +16,8 @@ pub const CONFIG_PATHS: [&str; 2] = [
     "config",            // 当前目录（仅开发直接运行二进制，不用于服务部署）
 ];
 
-// 获取配置文件路径
+/// 命中的配置路径主干（不含 .toml 后缀，按 [`CONFIG_PATHS`] 优先级）；
+/// 全部候选不存在时回退系统配置目录默认值。
 #[must_use]
 pub fn get_config_path() -> &'static str {
     for path in &CONFIG_PATHS {
@@ -24,11 +25,9 @@ pub fn get_config_path() -> &'static str {
             return path;
         }
     }
-    // 默认返回系统配置目录
     "/etc/foims/config"
 }
 
-// 获取配置文件完整路径
 #[must_use]
 pub fn get_config_file_path() -> String {
     format!("{}.toml", get_config_path())
@@ -130,7 +129,6 @@ pub struct ServerConfig {
     pub page_timeout: Option<u64>,    // 页面超时时间（分钟）
     #[serde(default)]
     pub cors_allowed_origins: Vec<String>, // CORS允许的源列表
-    /// 监听配置（UDS 模式）
     #[serde(default)]
     pub listen: ListenConfig,
 }
@@ -548,11 +546,12 @@ pub type SharedConfig = std::sync::Arc<ArcSwap<Config>>;
 pub use arc_swap::ArcSwap;
 
 impl Config {
+    /// 加载配置：按 [`CONFIG_PATHS`] 命中文件 → `FOIMS_*` 环境变量覆盖 →
+    /// 缺段归一（[snmp.live] 补默认）→ 关键项校验（database.host 非空、
+    /// jwt.secret ≥32 字节），任一校验失败返回 Err 阻止启动。
     pub fn load() -> Result<Self, config::ConfigError> {
-        // 构建配置加载器
         let mut builder = ConfigBuilder::builder();
 
-        // 首先加载配置文件（如果存在）
         let config_path = get_config_path();
         let config_file = format!("{config_path}.toml");
 
@@ -560,8 +559,7 @@ impl Config {
             builder = builder.add_source(config::File::with_name(config_path));
         }
 
-        // 然后加载环境变量（优先级高于配置文件）
-        // 单下划线即嵌套分隔符（separator="_" 映射为 "."），支持：
+        // 环境变量优先于配置文件；单下划线即嵌套分隔符（separator="_" 映射为 "."），支持：
         // - FOIMS_DATABASE_PASSWORD（覆盖 database.password）
         // - FOIMS_JWT_SECRET（覆盖 jwt.secret）
         builder = builder.add_source(
@@ -571,20 +569,14 @@ impl Config {
                 .try_parsing(true),
         );
 
-        // 构建配置
         let config = builder.build()?;
-
-        // 尝试反序列化
         let mut config: Self = config.try_deserialize()?;
 
-        // 配置文件缺 [snmp.live]：归一为默认开启实时采集。
-        // 反序列化阶段保持 None（PUT/备份恢复据此判断"未携带"并沿用磁盘值），
-        // 只在真正加载配置时补默认值。
+        // [snmp.live] 的缺省归一口径见 SnmpLiveConfig 字段注释（反序列化保持 None）
         if config.snmp.live.is_none() {
             config.snmp.live = Some(SnmpLiveConfig::default());
         }
 
-        // 环境变量覆盖敏感信息
         if let Ok(db_password) = std::env::var("FOIMS_DATABASE_PASSWORD")
             && !db_password.is_empty()
         {
@@ -597,7 +589,6 @@ impl Config {
             config.jwt.secret = jwt_secret;
         }
 
-        // 验证关键配置
         if config.database.host.is_empty() {
             return Err(config::ConfigError::Message(
                 "Database host is required".to_string(),

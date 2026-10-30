@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 信息点领域模型：信息点行模型、创建/更新请求，及回填所属房间名的
+//! 详情响应。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,7 +7,6 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== 信息点模型 ====================
 // 信息点特指网络插座，仅隶属房间；配线架为独立模型（见 patch_panel.rs）
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
@@ -53,8 +53,6 @@ pub struct NetOutletUpdate {
     pub name: Option<String>,
     pub room_id: Option<Uuid>,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

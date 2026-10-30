@@ -1,12 +1,11 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 组织领域模型：组织层级模板与组织机构行模型、创建/更新请求、递归树节点，
+//! 及层级路径（type_path）校验函数。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-// ==================== 组织管理模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -155,14 +154,10 @@ pub struct OrganizationUpdate {
     pub description: Option<String>,
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use validator::Validate;
-
-    // ---------- 类型路径校验 ----------
 
     #[test]
     fn test_validate_type_path_valid() {
@@ -207,8 +202,6 @@ mod tests {
         let bad_ref: &String = &bad_value;
         assert!(validate_type_path_option(&bad_ref).is_err());
     }
-
-    // ---------- 模板请求 ----------
 
     #[test]
     fn test_org_template_create_valid() -> Result<(), serde_json::Error> {
@@ -255,8 +248,6 @@ mod tests {
         assert!(full.validate().is_ok());
         Ok(())
     }
-
-    // ---------- 组织请求 ----------
 
     #[test]
     fn test_organization_create_valid() -> Result<(), serde_json::Error> {
@@ -319,8 +310,6 @@ mod tests {
         assert!(empty.validate().is_ok());
         Ok(())
     }
-
-    // ---------- 实体序列化往返 ----------
 
     #[test]
     fn test_organization_entity_serde_roundtrip() -> Result<(), serde_json::Error> {

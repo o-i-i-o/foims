@@ -1010,3 +1010,27 @@ v0.41.1
 2. 主程序 src/ 按口径完成审计：注释行 641→577（净 −64），装饰性 `// ====` 横幅在本目录清零（158→0 全仓基数中 src/ 部分）；重复注解收敛为单点说明（配置写盘「读-改-写锁 + 磁盘基底 + 刷新槽」纪律合并写在 update_system_config 一处、初始化模式无连接池改为在 pool 绑定点统一声明、services.rs 响应通道机理由模块头单点承载）；路由注册文件的逐组翻译型标签（子网管理/房间管理/2FA管理路由等）删除；为 main.rs 的 setup_panic_handler/security_headers_middleware/build_cors_layer/configure_app_services 与 config.rs、services.rs、log 模块的 handler 补齐用途/路由/错误情形文档注释。
 3. 版本：仅 z+1（v0.41.0→v0.41.1），按规则不触碰 Cargo.toml 与 frontend/package.json。
 4. 验证：`git diff -U0 -- src` 过滤后无任何非注释变更行（证明零行为改动）；`cargo fmt --all` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 0 告警。
+
+v0.41.2
+2026103000171301
+1. 全局注释审计阶段二A（仅注释，零行为变更）：crates/foims-common 全 19 文件按 code-style 1.1 口径审计完成，注释行 756→702，装饰性 `// ====` 横幅在本 crate 清零（net.rs/config.rs/crypto.rs/rate_limit.rs 保留 >600 行文件的极简 `// 分区名` 标签）。
+   - 去重复注解：rate_limit.rs 的「JWT 未验签 sub 不可作限流键」理由原先在 check_rate_limit 文档、charge_user 文档、中间件文档与调用点内联共 4 处各说一遍，现由 `check_rate_limit` 单点承载全量理由，其余两处改为指向该文档并只保留各自的独有口径（桶键名 `ip/login/email/user:{key}`、email 桶独立限额的目的）；pgpass.rs 的 create_new/0600 安全理由在结构体文档与函数体内重复，删内联副本；net.rs 删 is_localhost/get_real_ip 逐分支复述（保留 3 处 fail-close 场景标注）。
+   - 补有信息量的注释：rate_limit.rs 模块头补滑动窗口加权口径与三桶定义、`is_strict_path`/`is_email_path` 由无文档补为「为何 LDAP/SSO 计入严格桶」「为何发码走独立 email 桶」；crypto.rs 补 encrypt/decrypt/check_key_integrity 的 pub API 文档与 NONCE_SIZE 密文布局说明；net.rs 补 normalize_ipv4_address/get_cidr_type/generate_token_hash；config.rs 的 Config::load 补流水线说明。
+   - 删标识符翻译型注释：api.rs `构造成功响应/构造失败响应`、msg.rs `创建无参数消息/消息 key/动态参数列表`、report.rs `内核版本/架构标签/主机名/CPU 指标子结构`、task 执行器 `X 任务执行器`（阶段一同批）；pagination.rs 反向补 `new`/`from_query` 的钳位与回退口径。
+   - db_error.rs 的 `classify_db_error` 文档由「归类为面向用户的消息 key」改为实际口径（按 SQLSTATE 归类、无码时按消息文本识别 cidr/inet 解析失败、其余脱敏后记日志）；lib.rs 模块头断链 `[`AppError]` 修正为 `[`AppError`]`。
+2. 阶段二B 部分完成：crates/foims-models/src/models/device.rs 按 ts-rs 契约口径补齐白名单取值与单位（physical_type/interface_role/port_type 白名单、speed 文本口径、card_type 缺省 pcie），`bash da-scripts/gen-ts-types.sh` 已再生成，10 个 generated/*.ts 随附更新（+100/−15，纯 JSDoc 文本）；foims-models 其余 18 文件未开始。
+3. 版本：仅 z+1（v0.41.1→v0.41.2），Cargo.toml 与 frontend/package.json 不联动。
+4. 验证：`git diff -U0 -- crates/foims-common crates/foims-models` 过滤注释后无非注释变更行；`cargo fmt --all` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 0 告警；生成物无残留漂移。
+
+v0.41.3
+2026103000330101
+1. 全局注释审计阶段二B（仅注释，零行为变更）：crates/foims-models 全 19 文件按 code-style 1.1 口径审计完成。
+   - 装饰横幅：17 文件共 71 处 `// ==== X ====` 删除，仅 mod.rs（648 行、校验辅助 + Serde 辅助 + API 响应模型三种职责）保留 4 个极简 `// 分区名` 标签，符合「>600 行多职责文件」白名单。
+   - 模块头：13 个文件的 `//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。` 属版本溯源语（随迭代会腐烂且对读者无信息量），改写为「领域 + 承载的契约 + 供谁内联引用」的一句话职责；描述逐份对照真实字段而非结构名，例如 `NetOutletWithDetails` 只回填房间名（不写「携带位置与链路」）、`CabinetWithNetworks` 实际聚合机位/配线架与功耗统计（名字与字段不一致，按字段口径写）。
+   - 取值口径补齐：新增 27 条白名单/单位/缺省说明，每条与 foims-init `schema/tables/*` 的 DB CHECK 核对后才写入（room_type 六值、role 五值、snmp_version v1/v2c/v3、a/b_endpoint_type 三值、link_type 缺省 ethernet、ip status 缺省 active、ip_version 4|6 等），禁止凭命名臆造。
+   - 反向完成：network.rs `validate_cidr_fields` 原「模型层防御纵深」为空泛标签，改为真实规则（None 放行、Some 需格式合法且族别与字段一致）；`lib.rs`/`mod.rs` 保留已具备职责的模块头。
+   - 位置与重复修正：6 处 `///` 误插在 `#[validate]` 属性块与字段之间（同一 crate 内风格分裂且易被误读为上一条目的注释），统一移到属性块之前；device.rs 中 snmp_version 同一字段两条近义白名单（「白名单 v1/v2c/v3（DB CHECK 兜底）」+「SNMP 版本白名单…」）合并为一条；room.rs/cabinet.rs 功率字段的「JSON null 清空上限（不限制）」歧义断句改为「JSON null 清空（即不设上限）」。
+2. ts-rs 契约侧结论延续：本 crate 注释行净持平（488→488；删 169 补 104 主要是改写而非削减），因为 `///` 会渲染进前端 generated/*.ts 成为对外 API 文档，口径为「补全 + 收紧」；`bash da-scripts/gen-ts-types.sh` 再生成 26 个 generated/*.ts（+224/−36，全部为 JSDoc 文本与换行重排，无类型变化），重跑无残余 diff。
+3. 版本：仅 z+1（v0.41.2→v0.41.3），Cargo.toml 与 frontend/package.json 不联动。
+4. 验证：新增更强回退校验（HEAD 与工作区各自剥离注释后按行多重集比较，30 个 .rs 完全一致——可同时排除代码行删改与属性/字段顺序变动）；`cargo fmt --all` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 0 告警。
+5. 剩余：阶段三 foims-resource + foims-organization（装饰横幅现存于 foims-visualization/topology.rs、foims-auth/sso.rs、foims-agent-service 等，按 >600 行白名单逐个判定），阶段四至八同计划；前端 223 处横幅尚未处理。

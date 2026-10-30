@@ -52,7 +52,6 @@ impl PgPassFile {
         username: &str,
         password: &str,
     ) -> Result<Self, AppMessage> {
-        // 随机后缀避免并发冲突；用户名/库名仅作可读性前缀（转义路径分隔符）
         let pgpass_path = std::env::temp_dir().join(format!(
             ".pgpass_foims_{}_{}_{}_{}",
             sanitize_component(username),
@@ -61,8 +60,6 @@ impl PgPassFile {
             random_suffix()
         ));
         let pgpass_content = format!("{}:{}:{}:{}:{}\n", host, port, database, username, password);
-        // 以 0600 原子创建（create_new）：避免「先写后 chmod」窗口期内
-        // 其他本地用户读取到明文口令（security-review I-6）
         #[cfg(unix)]
         {
             use std::io::Write;

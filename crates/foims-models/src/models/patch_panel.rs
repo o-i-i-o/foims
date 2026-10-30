@@ -1,11 +1,10 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 配线架领域模型：配线架行模型，及回填机柜与房间名的详情响应。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-// ==================== 配线架模型 ====================
 // 配线架与信息点是不同概念，隶属机柜，由机柜弹窗内联同步管理
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
@@ -30,8 +29,6 @@ pub struct PatchPanelWithDetails {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

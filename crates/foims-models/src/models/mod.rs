@@ -13,7 +13,7 @@ pub use foims_common::validation::{
     PASSWORD_MAX_BYTES, validate_password_max_bytes, validate_role, validate_username_no_at,
 };
 
-// ==================== 验证函数 ====================
+// 验证函数
 
 pub fn validate_device_type_string(device_type: &str) -> Result<(), ValidationError> {
     match device_type {
@@ -143,7 +143,7 @@ pub fn validate_password_max_bytes_option(password: &&String) -> Result<(), Vali
     validate_password_max_bytes(password)
 }
 
-// ==================== 双层 Option 长度校验 ====================
+// 双层 Option 长度校验
 //
 // validator 的 #[validate(length)] 对 Option<Option<String>> 字段完全不生效
 // （security-review 第六节）：外层 Some 时不校验内层字符串长度，超长值直写
@@ -288,7 +288,7 @@ fn validate_length_str(
     Ok(())
 }
 
-// ==================== Serde 辅助函数 ====================
+// Serde 辅助函数
 
 /// 反序列化 Option<Option<T>>，区分三种状态：
 /// - 字段缺失 → None（不修改）
@@ -330,7 +330,7 @@ where
     deserializer.deserialize_option(OptionOptionVisitor(std::marker::PhantomData))
 }
 
-// ==================== API 响应模型 ====================
+// API 响应模型
 
 pub use foims_common::ApiResponse;
 
@@ -370,8 +370,6 @@ pub use snmp_event::*;
 pub use user::*;
 pub use workstation::*;
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,8 +381,6 @@ mod tests {
         #[serde(default, deserialize_with = "deserialize_some")]
         value: Option<Option<u32>>,
     }
-
-    // ---------- 设备类型校验 ----------
 
     #[test]
     fn test_validate_device_type_string_all_valid() {
@@ -429,8 +425,6 @@ mod tests {
         let bad_ref: &String = &bad_value;
         assert!(validate_device_type_option(&bad_ref).is_err());
     }
-
-    // ---------- 房间类型校验（大小写不敏感） ----------
 
     #[test]
     fn test_validate_room_type_string_valid() {
@@ -490,8 +484,6 @@ mod tests {
         assert!(validate_room_type_option(&bad_ref).is_err());
     }
 
-    // ---------- 角色校验（大小写敏感） ----------
-
     #[test]
     fn test_validate_role_valid() {
         assert!(validate_role("admin").is_ok());
@@ -522,8 +514,6 @@ mod tests {
         assert!(validate_role_option(&bad_ref).is_err());
     }
 
-    // ---------- DNS 数量校验 ----------
-
     #[test]
     fn test_validate_dns_count_within_limit() {
         // 0 ~ 5 个 DNS 均合法
@@ -542,8 +532,6 @@ mod tests {
             .unwrap_or_else(|| panic!("6 个 DNS 应被拒绝"));
         assert_eq!(err.code, "dns_count_exceeded");
     }
-
-    // ---------- IP 地址校验 ----------
 
     #[test]
     fn test_validate_ip_address_valid() {
@@ -583,8 +571,6 @@ mod tests {
         }
     }
 
-    // ---------- VLAN / IP 版本 / 密码字节上限校验 ----------
-
     #[test]
     fn test_validate_vlan_id_option_range() {
         // 1..=4094 合法，越界拒绝（数值字段按值传入）
@@ -618,8 +604,6 @@ mod tests {
         );
     }
 
-    // ---------- 新增双层 Option / 白名单校验函数 ----------
-
     #[test]
     fn test_validate_length_m_opt_range() {
         // 双层 Option 数值字段按值传入：0 与 10000 合法，负数/越上限/NaN 拒绝
@@ -637,8 +621,6 @@ mod tests {
         assert!(validate_email_opt(&&"a@b.com".to_string()).is_ok());
         assert!(validate_email_opt(&&"not-an-email".to_string()).is_err());
     }
-
-    // ---------- deserialize_some 三态语义 ----------
 
     #[test]
     fn test_deserialize_some_field_missing_is_none() {

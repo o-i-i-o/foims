@@ -4,7 +4,11 @@ import type { NetOutletBrief } from "./NetOutletBrief";
 import type { NetworkInfo } from "./NetworkInfo";
 import type { WorkstationBrief } from "./WorkstationBrief";
 
-export type RoomWithNetworks = { id: string, name: string, room_type: string, org_id: string, 
+export type RoomWithNetworks = { id: string, name: string, 
+/**
+ * 房间类型白名单（大小写不敏感）：OFFICE/LOBBY/RECEPTION/DATA_CENTER/TELECOM_CLOSET/OTHER
+ */
+room_type: string, org_id: string, 
 /**
  * 所属组织名称（org_id 非空且 FK RESTRICT，联查必有值）
  */

@@ -17,15 +17,12 @@ use std::collections::BTreeMap;
 pub struct ReportSystem {
     /// 操作系统描述（如 "Ubuntu 22.04 LTS"）。
     pub os: String,
-    /// 内核版本。
     pub kernel: String,
-    /// 架构标签（如 "x86_64"）。
     pub arch: String,
     /// 开机时长（秒）。
     pub uptime_secs: u64,
 }
 
-/// CPU 指标子结构。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReportCpu {
     /// 使用率（0-100）。

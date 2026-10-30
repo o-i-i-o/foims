@@ -2,7 +2,7 @@
 
 export type CabinetUpdate = { name: string | null, room_id: string | null, capacity: number | null, 
 /**
- * 双层 Option：字段缺失不修改、JSON null 清空上限（不限制）、值设置新值；
+ * 双层 Option：字段缺失不修改、JSON null 清空（即不设上限）、值设置新值；
  * 设置新值时柜内设备功耗之和不得超过该值
  */
 total_power_watts: number | null | null, 

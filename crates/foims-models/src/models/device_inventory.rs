@@ -14,8 +14,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-// ==================== ENTITY-MIB 物理实体 ====================
-
 /// `entPhysicalTable` 采集原始记录（落库前由 handler 补齐 id/device_id/时间）。
 #[derive(Debug, Clone)]
 pub struct EntityRecord {
@@ -55,8 +53,6 @@ pub struct DeviceEntity {
     pub updated_at: DateTime<Utc>,
 }
 
-// ==================== ENTITY-SENSOR-MIB 传感器 ====================
-
 /// `entSensorTable` 采集原始记录。
 #[derive(Debug, Clone)]
 pub struct SensorRecord {
@@ -86,8 +82,6 @@ pub struct DeviceSensor {
     pub updated_at: DateTime<Utc>,
 }
 
-// ==================== Q-BRIDGE-MIB VLAN 台账 ====================
-
 /// `dot1qVlanStaticTable` 采集原始记录（成员为 ifIndex 数组）。
 #[derive(Debug, Clone)]
 pub struct VlanRecord {
@@ -113,8 +107,6 @@ pub struct DeviceVlan {
     pub updated_at: DateTime<Utc>,
 }
 
-// ==================== CISCO-CDP-MIB 邻居 ====================
-
 /// `cdpCacheTable` 采集原始记录。
 #[derive(Debug, Clone)]
 pub struct CdpRecord {
@@ -139,8 +131,6 @@ pub struct DeviceCdp {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-// ==================== IEEE8023-LAG-MIB 聚合口 ====================
 
 /// `dot3adAggPortTable` 聚合口采集原始记录。
 #[derive(Debug, Clone)]
@@ -168,8 +158,6 @@ pub struct DeviceLag {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-// ==================== PFN-MIB PoE 供电端口 ====================
 
 /// `pethPsePortTable` 采集原始记录。
 #[derive(Debug, Clone)]

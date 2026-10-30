@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 工位领域模型：工位行模型、创建/更新请求，附带 IP 明细的详情响应，
+//! 以及房间/机柜下子资源（工位、机位、信息点、配线架）的整体同步请求。
 
 use super::ip::IpDetail;
 use chrono::{DateTime, Utc};
@@ -6,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-// ==================== 工位模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -78,8 +77,6 @@ pub struct WorkstationUpdate {
     ))]
     pub description: Option<Option<String>>,
 }
-
-// ==================== 批量同步模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
@@ -215,14 +212,10 @@ pub struct CabinetPatchPanelsSync {
     pub patch_panels: Vec<PatchPanelSyncItem>,
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use validator::Validate;
-
-    // ---------- 工位 ----------
 
     #[test]
     fn test_workstation_create_valid() -> Result<(), serde_json::Error> {
@@ -276,8 +269,6 @@ mod tests {
         assert!(errors.errors().contains_key("name"));
         Ok(())
     }
-
-    // ---------- 批量同步项 ----------
 
     #[test]
     fn test_workstation_sync_item_validation() -> Result<(), serde_json::Error> {
@@ -374,8 +365,6 @@ mod tests {
         Ok(())
     }
 
-    // ---------- 批量同步载体 ----------
-
     #[test]
     fn test_room_net_outlets_sync() -> Result<(), serde_json::Error> {
         let req: RoomNetOutletsSync = serde_json::from_value(serde_json::json!({
@@ -436,8 +425,6 @@ mod tests {
         assert!(panels.validate().is_ok());
         Ok(())
     }
-
-    // ---------- 实体序列化往返 ----------
 
     #[test]
     fn test_workstation_entity_serde_roundtrip() -> Result<(), serde_json::Error> {

@@ -21,7 +21,7 @@ pub fn validate_role(role: &str) -> Result<(), validator::ValidationError> {
     }
 }
 
-/// 密码字节长度校验（<=72 字节，multibyte 字符按 UTF-8 字节计）
+/// validator 入口：密码字节长度上限，口径见 [`PASSWORD_MAX_BYTES`]
 pub fn validate_password_max_bytes(password: &str) -> Result<(), validator::ValidationError> {
     if password.len() <= PASSWORD_MAX_BYTES {
         Ok(())

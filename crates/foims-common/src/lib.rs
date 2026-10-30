@@ -1,7 +1,7 @@
 //! FOIMS 工作区共享基础库。
 //!
 //! 提供各 crate 复用的统一 API 响应结构（[`ApiResponse`]）、统一 JSON
-//! 提取器（[`AppJson`]）、全局错误类型（[`AppError]`）、面向前端的
+//! 提取器（[`AppJson`]）、全局错误类型（[`AppError`]）、面向前端的
 //! i18n 消息类型（[`AppMessage`]）、PostgreSQL 错误归类映射
 //! （[`classify_db_error`]）与多语言日志宏基础设施（[`log_i18n`]）。
 

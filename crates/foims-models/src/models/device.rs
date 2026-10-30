@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 设备领域模型：设备与网卡/接口行模型、SNMP 与 LLDP/ARP 采集结果、
+//! 设备模板，及对应的创建/更新/同步请求。
 
 use super::ip::NetworkCardSyncItem;
 use chrono::{DateTime, Utc};
@@ -7,7 +8,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== 设备网卡模型 ====================
+// 设备网卡模型
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -15,6 +16,7 @@ pub struct NetworkCard {
     pub id: Uuid,
     pub device_id: Uuid,
     pub name: String,
+    /// 类型白名单：pcie/onboard/usb/virtual/wwan/wifi/other
     pub card_type: String,
     pub description: Option<String>,
     pub sort_order: i32,
@@ -30,6 +32,7 @@ pub struct NetworkCardCreate {
         message = "server.device.validation.nic_name_length"
     ))]
     pub name: String,
+    /// 白名单同 NetworkCard.card_type，缺省按 pcie 落库
     pub card_type: Option<String>,
     #[validate(length(max = 255, message = "server.common.validation.description_length"))]
     pub description: Option<String>,
@@ -52,7 +55,7 @@ pub struct NetworkCardUpdate {
     pub description: Option<Option<String>>,
 }
 
-// ==================== 统一端口/网口模型（device_interfaces） ====================
+// 统一端口/网口模型（device_interfaces）
 //
 // 设备端口与设备网口已合并为同一模型：普通设备为「网卡-网口-IP」
 // 层级，网络设备为「板卡-端口」（板卡即网卡，按端口名前缀自动生成）。
@@ -66,17 +69,19 @@ pub struct DeviceInterface {
     pub device_id: Uuid,
     pub nic_id: Option<Uuid>,
     pub name: String,
+    /// 物理介质白名单：rj45/sfp/sfp_plus/sfp28/qsfp_plus/qsfp28/wifi/virtual/other
     pub physical_type: String,
+    /// 用途白名单：management/business/loopback/uplink/other
     pub interface_role: String,
     pub mac_address: Option<String>,
     pub vlan_id: Option<i32>,
     pub description: Option<String>,
     pub sort_order: i32,
-    /// 二层端口类型（网络设备端口属性，SNMP 维护）
+    /// 二层端口类型白名单：access/trunk/hybrid/uplink/stack/console（网络设备端口属性，SNMP 维护）
     pub port_type: String,
     /// 端口状态（up/down/admin-down，SNMP 维护）
     pub status: String,
-    /// 端口速率（SNMP 维护）
+    /// 端口速率文本（如 1Gbps/2500Mbps，SNMP 采集换算，未知为 null）
     pub speed: Option<String>,
     /// Trunk 端口的 Native VLAN id（仅 trunk/hybrid 类型使用）
     pub native_vlan_id: Option<i32>,
@@ -150,6 +155,9 @@ pub struct DeviceInterfaceCreate {
     pub device_managed: Option<bool>,
 }
 
+/// 部分更新：单层 Option 字段缺失不修改；双层 Option 字段（mac_address/vlan_id/
+/// description/speed/native_vlan_id）为「缺失不修改 / JSON null 清空 / 值设置新值」，
+/// VLAN 类数值均限 1..=4094
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct DeviceInterfaceUpdate {
@@ -167,7 +175,6 @@ pub struct DeviceInterfaceUpdate {
         message = "server.device.validation.mac_length"
     ))]
     pub mac_address: Option<Option<String>>,
-    /// 双层 Option：null 显式清空、缺失不修改、数值设置新值；数值仅允许 1..=4094
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
         function = "crate::models::validate_vlan_id_option",
@@ -188,19 +195,18 @@ pub struct DeviceInterfaceUpdate {
         message = "server.device.validation.speed_length"
     ))]
     pub speed: Option<Option<String>>,
-    /// 双层 Option：null 显式清空（非 trunk/hybrid 类型留空即清除）、
-    /// 缺失不修改、数值设置新值；数值仅允许 1..=4094
+    /// 仅 trunk/hybrid 类型有效，其余类型清空即置空
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
         function = "crate::models::validate_vlan_id_option",
         message = "server.device.validation.vlan_id_range"
     ))]
     pub native_vlan_id: Option<Option<i32>>,
-    /// 缺省表示不修改（SNMP 覆盖同步时保留原值）
+    /// 缺失不修改；SNMP 覆盖同步时保留原值
     pub device_managed: Option<bool>,
 }
 
-// ==================== SNMP 相关模型 ====================
+// SNMP 相关模型
 
 /// SNMP 实时拉取的端口（未落库的原始数据，字段与统一网口模型对齐）
 #[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
@@ -210,16 +216,21 @@ pub struct SnmpPort {
     pub name: String,
     pub port_type: Option<String>,
     pub vlan_id: Option<i32>,
+    /// 端口状态（up/down/admin-down）
     pub status: Option<String>,
+    /// 端口速率文本（如 1Gbps/2500Mbps）
     pub speed: Option<String>,
     pub description: Option<String>,
 }
 
+/// SNMP 连通性测试：device_id 为 Some 时读取该设备已存配置、本请求字段逐项覆盖
+///（可临时改地址/凭据）；device_id 为 None 时用原始字段直连（version 缺省 v2c、port 缺省 161）
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SnmpTestRequest {
     pub device_id: Option<Uuid>,
     pub ip_address: Option<String>,
+    /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
     pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
     pub snmp_username: Option<String>,
@@ -230,6 +241,7 @@ pub struct SnmpTestRequest {
     pub snmp_port: Option<i32>,
 }
 
+/// ARP/FDB 实时观测原始条目（不落库，供轮询比对与拉取回显）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ArpEntry {
     pub ip_address: String,
@@ -238,6 +250,7 @@ pub struct ArpEntry {
     pub vlan_id: Option<i32>,
 }
 
+/// LLDP 邻居实时观测原始条目（不落库，供轮询比对与拉取回显）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LldpNeighbor {
     pub local_port: String,
@@ -256,12 +269,14 @@ pub struct SnmpMac {
     pub device_id: Uuid,
     pub ip_address: String,
     pub mac_address: String,
+    /// 观测端口名（如 G1/0/1）
     pub interface: Option<String>,
     pub vlan_id: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
+/// device_lldps 表行模型：LLDP 邻居观测落库（SNMP 轮询同步）
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
 pub struct DeviceLldp {
@@ -287,7 +302,7 @@ pub struct DeviceLldpCreate {
     pub neighbor_sys_desc: Option<String>,
 }
 
-// ==================== 设备模板模型 ====================
+// 设备模板模型
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -332,7 +347,7 @@ pub struct UpdateDeviceTemplateRequest {
     pub description: Option<String>,
 }
 
-// ==================== 设备模型 ====================
+// 设备模型
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -340,24 +355,31 @@ pub struct Device {
     pub id: Uuid,
     pub name: String,
     pub hostname: Option<String>,
+    /// 白名单见 DeviceCreate.device_type
     pub device_type: String,
     pub brand: Option<String>,
     pub model: Option<String>,
     pub serial_number: Option<String>,
     pub workstation_id: Option<Uuid>,
+    /// 机柜机位（cabinet_positions.id），与工位 workstation 分属两套归属
     pub position_id: Option<Uuid>,
     pub room_id: Uuid,
     pub template_id: Option<Uuid>,
     pub seller: Option<String>,
+    /// 自由文本位置备注（区别于 room/position 的结构化归属）
     pub location: Option<String>,
     // snmp_version/snmp_port 数据库列为可空（仅带 DEFAULT）：
     // 应用路径恒写值，但模型按可空声明避免外部写入 NULL 时解码失败（M-1）
+    /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
     pub snmp_version: Option<String>,
+    /// v1/v2c 团体名：入库加密，读响应恒为 null（脱敏，凭据不外发）
     pub snmp_community: Option<String>,
     pub snmp_username: Option<String>,
     pub snmp_auth_protocol: Option<String>,
+    /// 仅 v3 使用：入库加密，读响应恒为 null（脱敏）
     pub snmp_auth_password: Option<String>,
     pub snmp_priv_protocol: Option<String>,
+    /// 仅 v3 使用：入库加密，读响应恒为 null（脱敏）
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
     /// 设备额定功耗（瓦，None=未记录）
@@ -367,6 +389,8 @@ pub struct Device {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Device 附加 JOIN 派生列（工位/房间/机柜/机位 U 位/模板名）；
+/// snmp_community/snmp_auth_password/snmp_priv_password 与 Device 同口径响应脱敏为 null
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
 pub struct DeviceWithDetails {
@@ -384,12 +408,14 @@ pub struct DeviceWithDetails {
     pub room_name: Option<String>,
     pub cabinet_id: Option<Uuid>,
     pub cabinet_name: Option<String>,
+    /// 机位 U 区间（起止均含、start_u ≤ end_u；未入柜为 null）
     pub start_u: Option<i32>,
     pub end_u: Option<i32>,
     pub template_id: Option<Uuid>,
     pub template_name: Option<String>,
     pub seller: Option<String>,
     pub location: Option<String>,
+    /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
     pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
     pub snmp_username: Option<String>,
@@ -411,6 +437,8 @@ pub struct DeviceCreate {
     pub name: String,
     #[validate(length(max = 100, message = "server.device.validation.hostname_length"))]
     pub hostname: Option<String>,
+    /// 白名单 desktop/laptop/printer/server/network_device/switch/camera/phone/other；
+    /// template_id 命中时以模板的类型/品牌/型号为准
     #[validate(custom(
         function = "crate::models::validate_device_type_option",
         message = "server.device.validation.type_invalid"
@@ -430,11 +458,13 @@ pub struct DeviceCreate {
     pub seller: Option<String>,
     #[validate(length(max = 100, message = "server.device.validation.location_length"))]
     pub location: Option<String>,
+    /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version 兜底）
     #[validate(custom(
         function = "crate::models::validate_snmp_version_option",
         message = "server.device.validation.snmp_version_invalid"
     ))]
     pub snmp_version: Option<String>,
+    /// v1/v2c 团体名：入库加密，响应不回传
     #[validate(length(max = 100, message = "server.device.validation.snmp_community_length"))]
     pub snmp_community: Option<String>,
     #[validate(length(max = 50, message = "server.device.validation.snmp_username_length"))]
@@ -444,6 +474,7 @@ pub struct DeviceCreate {
         message = "server.device.validation.snmp_auth_protocol_length"
     ))]
     pub snmp_auth_protocol: Option<String>,
+    /// 仅 v3 使用；入库加密，响应不回传
     #[validate(length(
         max = 100,
         message = "server.device.validation.snmp_auth_password_length"
@@ -454,6 +485,7 @@ pub struct DeviceCreate {
         message = "server.device.validation.snmp_priv_protocol_length"
     ))]
     pub snmp_priv_protocol: Option<String>,
+    /// 仅 v3 使用；入库加密，响应不回传
     #[validate(length(
         max = 100,
         message = "server.device.validation.snmp_priv_password_length"
@@ -514,6 +546,7 @@ pub struct DeviceUpdate {
     pub seller: Option<String>,
     #[validate(length(max = 100, message = "server.device.validation.location_length"))]
     pub location: Option<String>,
+    /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
     #[validate(custom(
         function = "crate::models::validate_snmp_version_option",
         message = "server.device.validation.snmp_version_invalid"
@@ -589,14 +622,10 @@ pub struct DeviceUpdate {
     pub template_name: Option<String>,
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use validator::Validate;
-
-    // ---------- 设备网卡 ----------
 
     #[test]
     fn test_network_card_create_valid_and_invalid() -> Result<(), serde_json::Error> {
@@ -635,8 +664,6 @@ mod tests {
         assert!(set_desc.validate().is_ok());
         Ok(())
     }
-
-    // ---------- 设备接口 ----------
 
     #[test]
     fn test_device_interface_create_mac_too_long() -> Result<(), serde_json::Error> {
@@ -787,8 +814,6 @@ mod tests {
         assert!(null_speed.validate().is_ok());
         Ok(())
     }
-
-    // ---------- 设备创建 / 更新 ----------
 
     fn valid_device_create_json() -> serde_json::Value {
         serde_json::json!({
@@ -1006,8 +1031,6 @@ mod tests {
         Ok(())
     }
 
-    // ---------- SNMP / MAC / LLDP 辅助模型 ----------
-
     #[test]
     fn test_snmp_test_request_deserialize() -> Result<(), serde_json::Error> {
         let req: SnmpTestRequest = serde_json::from_value(serde_json::json!({
@@ -1062,8 +1085,6 @@ mod tests {
         assert_eq!(req.neighbor_sys_name.as_deref(), Some("ap-01"));
         Ok(())
     }
-
-    // ---------- 设备模板 ----------
 
     #[test]
     fn test_update_device_template_request_validation() -> Result<(), serde_json::Error> {
@@ -1174,8 +1195,6 @@ mod tests {
         assert!(errors.errors().contains_key("cards"), "错误应挂在 cards 上");
         Ok(())
     }
-
-    // ---------- 设备实体 ----------
 
     #[test]
     fn test_device_entity_serde_roundtrip() -> Result<(), serde_json::Error> {

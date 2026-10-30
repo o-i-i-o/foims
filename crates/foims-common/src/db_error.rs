@@ -22,7 +22,8 @@ pub enum DbErrorKind {
     Database(AppMessage),
 }
 
-/// 将 sqlx 错误归类为面向用户的消息 key。
+/// 按 PostgreSQL SQLSTATE 归类；无错误码时回退按消息文本识别 cidr/inet 解析失败，
+/// 其余一律记入服务端日志并归为 `Database`（脱敏后返回通用 key）。
 pub fn classify_db_error(err: &SqlxError) -> DbErrorKind {
     match err {
         SqlxError::Database(db_err) => match db_err.code().as_deref() {

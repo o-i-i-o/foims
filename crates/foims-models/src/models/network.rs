@@ -1,12 +1,11 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 网络领域模型：网络区域与网络（双栈 CIDR）行模型、创建/更新请求，
+//! 及供其他资源域内联引用的网络简要信息。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-// ==================== 网络区域模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -51,8 +50,6 @@ pub struct NetworkRegionUpdate {
     pub ipv4_cidrs: Option<Vec<String>>,
     pub ipv6_cidrs: Option<Vec<String>>,
 }
-
-// ==================== 子网模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -157,10 +154,9 @@ pub struct NetworkUpdate {
     pub description: Option<String>,
 }
 
-// ==================== 单元测试 ====================
-
-/// CIDR 格式校验（复用 foims-common 的 net 辅助，与 handler 同口径）：
-/// 模型层防御纵深
+/// CIDR 与网关校验（复用 foims-common 的 net 辅助，与 handler 同口径）：
+/// None 视为未填写放行，Some 则要求格式合法且族别与字段一致——`ipv4_*`
+/// 不接受 v6 值，`ipv6_*` 不接受 v4 值
 fn validate_cidr_fields(
     ipv4_cidr: Option<&str>,
     ipv6_cidr: Option<&str>,

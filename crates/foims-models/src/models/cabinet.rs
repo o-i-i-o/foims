@@ -1,4 +1,5 @@
-//! 由 models.rs 按资源域拆分而来，字段与校验规则未变。
+//! 机柜领域模型：机柜行模型、创建/更新请求，及聚合机位、配线架与功耗
+//! 统计的详情响应。
 
 use super::room::PositionBrief;
 use super::workstation::PatchPanelBrief;
@@ -7,8 +8,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
-
-// ==================== 机柜模型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
 #[ts(export)]
@@ -80,7 +79,7 @@ pub struct CabinetUpdate {
         message = "server.cabinet.validation.capacity_range"
     ))]
     pub capacity: Option<i32>,
-    /// 双层 Option：字段缺失不修改、JSON null 清空上限（不限制）、值设置新值；
+    /// 双层 Option：字段缺失不修改、JSON null 清空（即不设上限）、值设置新值；
     /// 设置新值时柜内设备功耗之和不得超过该值
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
@@ -96,8 +95,6 @@ pub struct CabinetUpdate {
     ))]
     pub description: Option<Option<String>>,
 }
-
-// ==================== 单元测试 ====================
 
 #[cfg(test)]
 mod tests {

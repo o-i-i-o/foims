@@ -14,6 +14,7 @@ pub struct Pagination {
 }
 
 impl Pagination {
+    /// 归一化分页：page 下限 1，page_size 钳到 1..=MAX_PAGE_SIZE，offset 饱和运算防溢出。
     #[must_use]
     pub fn new(page: i64, page_size: i64) -> Self {
         let page = page.max(1);
@@ -26,6 +27,7 @@ impl Pagination {
         }
     }
 
+    /// 从查询串读取 page/page_size 两键：缺失或非 i64 文本回退默认值，可解析但越界的值交由 [`Self::new`] 归一化。
     #[must_use]
     pub fn from_query(query: &HashMap<String, String>) -> Self {
         let page = query
@@ -63,13 +65,9 @@ pub fn paged_response<T: serde::Serialize>(
     })
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ---------- Pagination::new 边界 ----------
 
     #[test]
     fn test_new_normal_values() {
@@ -117,8 +115,6 @@ mod tests {
         assert_eq!(p.page_size, MAX_PAGE_SIZE);
         assert_eq!(p.offset, i64::MAX);
     }
-
-    // ---------- from_query ----------
 
     #[test]
     fn test_from_query_empty_map_uses_defaults() {
@@ -182,8 +178,6 @@ mod tests {
         assert_eq!(p.page_size, MAX_PAGE_SIZE);
     }
 
-    // ---------- total_pages ----------
-
     #[test]
     fn test_total_pages_exact_division() {
         // 整除：100 / 20 = 5
@@ -207,8 +201,6 @@ mod tests {
         let p = Pagination::new(1, 20);
         assert_eq!(p.total_pages(0), 0);
     }
-
-    // ---------- paged_response ----------
 
     #[test]
     fn test_paged_response_keys_and_values() {

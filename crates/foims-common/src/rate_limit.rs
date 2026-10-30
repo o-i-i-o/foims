@@ -1,4 +1,7 @@
-//! 请求限流。
+//! 请求限流：滑动窗口加权计数，按 IP / 用户 / 邮箱三套独立桶。
+//!
+//! 窗口计数取「上一窗口余下时段按重叠比例折算 + 当前窗口计数」并向上取整，
+//! 避免窗口边界处双倍放行；桶键与限额的选取口径见 [`RateLimiter::check_rate_limit`]。
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -146,9 +149,12 @@ impl RateLimiter {
         self
     }
 
-    /// 预鉴权限流检查：仅按 IP 维度（登录路径独立键与限额）与邮箱路径
-    /// 邮箱桶计数。用户维度不在此处理（JWT 未验签不可信），已认证请求由
-    /// [`RateLimiter::charge_user`] 在鉴权后补记。
+    /// 预鉴权限流检查：邮箱路径计 `email:{ip}` 桶，登录/爆破入口计 `login:{ip}`
+    /// 桶（独立限额），其余计 `ip:{ip}` 桶。
+    ///
+    /// 用户维度不在此处理：此时 JWT 尚未验签，`sub` 客户端可控，采信它既能被
+    /// 用来填满受害者的限流桶，也能靠轮换伪造绕开用户维度限流。已认证请求
+    /// 由鉴权中间件之后的 [`RateLimiter::charge_user`] 补记。
     pub fn check_rate_limit(
         &self,
         ip: &str,
@@ -180,12 +186,11 @@ impl RateLimiter {
         Ok(())
     }
 
-    /// 对已认证请求补记用户维度限流桶（超限返回 429 错误）。
+    /// 对已认证请求补记 `user:{user_id}` 桶（超限返回 429）。
     ///
-    /// 预鉴权限流中间件无法安全取得用户身份（JWT 未验签的 `sub` 可伪造，
-    /// 可借此填满受害者限流桶或绕开用户维度限流），因此该中间件路径只按
-    /// IP 计数；`user` 桶由鉴权中间件之后的钩子对已验证 claims 的请求
-    /// 调用本方法补记。限流语义：匿名按 IP，已认证 IP+用户双桶。
+    /// 只能由鉴权中间件之后、claims 已验证的调用方触发（预鉴权路径为何不可
+    /// 采信 `sub`，见 [`RateLimiter::check_rate_limit`]）。限流语义：匿名按 IP
+    /// 单桶，已认证 IP + 用户双桶。
     pub fn charge_user(&self, user_id: &str) -> Result<(), RateLimitError> {
         self.check_and_increment(
             &self.user_limits,
@@ -255,7 +260,8 @@ impl RateLimiter {
     }
 }
 
-/// 速率限制中间件状态
+/// 限流中间件状态：限流器实例 + 总开关（`enabled` 为 false 时中间件直接放行，
+/// 桶与限额仍按启动时配置构造，关闭期间不计数）
 #[derive(Clone)]
 pub struct RateLimitState {
     pub limiter: RateLimiter,
@@ -269,8 +275,9 @@ impl RateLimitState {
     }
 }
 
+/// 按登录限额（`login_limit`）严格计数的路径清单：登录/验证码/改密之外，
+/// LDAP 与 SSO 回调同为爆破入口（security-review A-9）
 fn is_strict_path(path: &str) -> bool {
-    // LDAP/SSO 回调同为爆破入口，纳入严格限流（A-9）
     let strict_paths = [
         "/api/auth/login",
         "/api/auth/login/email",
@@ -284,6 +291,8 @@ fn is_strict_path(path: &str) -> bool {
     strict_paths.contains(&path)
 }
 
+/// 走独立 `email:{ip}` 桶与 `email_limit` 限额的发码类路径（与普通 IP 桶
+/// 分开计数，避免发码耗尽常规请求的额度）
 fn is_email_path(path: &str) -> bool {
     let email_paths = [
         "/api/auth/login/send-code",
@@ -293,9 +302,9 @@ fn is_email_path(path: &str) -> bool {
     email_paths.contains(&path)
 }
 
-/// 速率限制中间件（axum from_fn_with_state 风格）
-///
-/// 用法：`.route_layer(middleware::from_fn_with_state(rate_limit_state, rate_limit_middleware))`
+/// 速率限制中间件：取真实客户端 IP 后做预鉴权计数，超限直接回 429
+/// （`.route_layer(middleware::from_fn_with_state(rate_limit_state, rate_limit_middleware))`，
+/// 须挂在鉴权中间件之外侧）
 pub async fn rate_limit_middleware(
     State(state): State<RateLimitState>,
     req: axum::extract::Request,
@@ -314,12 +323,8 @@ pub async fn rate_limit_middleware(
 
     let direct_ip = get_real_ip_from_parts(&parts);
 
-    // 统一做 IPv4 归一化（原 trusted_proxies 白名单无任何赋值入口恒为空，
-    // if/else 两分支语义重复，属死逻辑，已删除）
     let ip = normalize_ipv4_address(&direct_ip);
 
-    // 仅按 IP 维度预限流：JWT payload 未验签可伪造 sub，不能作为限流键；
-    // 已认证请求的用户桶由鉴权中间件之后的 charge_user 钩子补记
     if let Err(e) = state.limiter.check_rate_limit(&ip, is_strict, is_email) {
         log_warn!(
             "log.rate_limit.blocked",
@@ -357,13 +362,9 @@ pub fn start_cleanup_task(
     });
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ---------- 滑动窗口条目 ----------
 
     #[test]
     fn test_rate_limit_entry_new_and_increment() {
@@ -451,8 +452,6 @@ mod tests {
         assert_eq!(prev_start, old_start);
         assert!(!entry.is_expired(60));
     }
-
-    // ---------- 限流器整体行为 ----------
 
     #[test]
     fn test_check_rate_limit_ip_limit_enforced() {
@@ -552,8 +551,6 @@ mod tests {
         );
     }
 
-    // ---------- 路径分类 ----------
-
     #[test]
     fn test_is_strict_path() {
         assert!(is_strict_path("/api/auth/login"));
@@ -574,8 +571,6 @@ mod tests {
         assert!(!is_email_path("/api/auth/login"));
         assert!(!is_email_path("/api/auth/reset-password"));
     }
-
-    // ---------- 状态构造与 429 响应 ----------
 
     #[test]
     fn test_rate_limit_state_new() {

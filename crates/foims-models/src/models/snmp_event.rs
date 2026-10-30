@@ -6,8 +6,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-// ==================== 事件类型常量 ====================
-
 /// 端口链路翻动（up↔down）
 pub const SNMP_EVENT_LINK_FLIP: &str = "link_flip";
 /// 设备重启（sysUpTime 回退）
@@ -32,8 +30,6 @@ pub const SNMP_EVENT_CDP_REMOVED: &str = "cdp_neighbor_removed";
 pub const SNMP_SEVERITY_INFO: &str = "info";
 pub const SNMP_SEVERITY_WARNING: &str = "warning";
 pub const SNMP_SEVERITY_CRITICAL: &str = "critical";
-
-// ==================== 事件行模型 ====================
 
 /// `snmp_events` 表行模型：轮询/MAC 同步产出的观测事件（事实源）。
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]
@@ -63,8 +59,6 @@ pub struct SnmpEventQuery {
     /// ISO-8601 结束时间（含），按 occurred_at 过滤
     pub end: Option<String>,
 }
-
-// ==================== 终端定位结果 ====================
 
 /// GET /api/snmp/locate 定位命中行：按 MAC/IP 关联设备、端口、VLAN、登记状态。
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, ts_rs::TS)]

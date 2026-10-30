@@ -4,7 +4,11 @@ export type UserCreate = { username: string,
 /**
  * bcrypt 仅使用前 72 字节，超长静默截断（按字节计），入库前拒绝
  */
-password: string, email: string, role: string, 
+password: string, email: string, 
+/**
+ * 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
+ */
+role: string, 
 /**
  * 单独密码有效期（天），缺省或 0 表示不启用
  */
