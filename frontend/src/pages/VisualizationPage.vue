@@ -112,8 +112,6 @@ type LayoutLoadState = "saved" | "empty" | "stale" | "error";
 
 const { t } = useI18n();
 
-// 页签
-
 /** 页签 id 即 localStorage 偏好记忆键值；画布页签不参与 hash 深链 */
 const TABS = [
   { id: "workstation-visualization", titleKey: "visualization.workstation" },
@@ -134,8 +132,6 @@ const { activeTab, switchTab } = useSubTabs({
     }
   }
 });
-
-// 组织与房间下拉
 
 const orgTree = ref<OrganizationTreeNode[]>([]);
 const orgOptions = computed(() => flattenOrgTree(orgTree.value));
@@ -1351,7 +1347,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <!-- 机柜：机位由柜体 + U 区间推导，拖动柜体会员自动跟随 -->
+    <!-- 机柜：机位由柜体 + U 区间推导，拖动柜体时机位自动跟随 -->
     <div
       id="cabinet-visualization"
       class="tab-content"
@@ -1502,7 +1498,6 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <!-- 拓扑弹窗宿主 -->
     <ConnectionCreateModal
       v-if="connectionCreateOpen"
       :nodes="topologyNodes"
@@ -1534,7 +1529,6 @@ onBeforeUnmount(() => {
       @close="containerCoord.open = false"
     />
 
-    <!-- 资源编辑弹窗宿主 -->
     <WorkstationModal
       v-if="workstationModal.open"
       :workstation="workstationModal.workstation"

@@ -36,8 +36,6 @@ import type { ApiResult } from "../types/api";
 
 const { t } = useI18n();
 
-// 登录模式与视图状态
-
 const LOGIN_MODES = {
   PASSWORD: "password-login",
   EMAIL: "email-login",
@@ -54,10 +52,8 @@ const emailTabVisible = ref(true);
 const ldapTabVisible = ref(false);
 const ssoTabVisible = ref(false);
 
-// 站点根证书下载入口（有 CA 时才显示）
 const caAvailable = ref(false);
 
-// 表单字段
 const username = ref("");
 const password = ref("");
 const email = ref("");
@@ -68,17 +64,12 @@ const twoFactorCode = ref("");
 const rememberMe = ref(false);
 const showPassword = ref(false);
 
-// 错误条
 const errorMessage = ref("");
 const errorVisible = ref(false);
 
-// 忘记密码模态框
 const showForgotModal = ref(false);
 
-// 语言选择器
 const currentLanguage = ref(i18n.global.locale.value);
-
-// 图形验证码（连续失败触发）
 
 type CaptchaForm = "password" | "ldap";
 
@@ -88,7 +79,6 @@ const captchaState = reactive<Record<CaptchaForm, { id: string | null; failures:
 });
 const captchaInput = reactive<Record<CaptchaForm, string>>({ password: "", ldap: "" });
 
-// 2FA 上下文
 // kind: local（密码/邮箱，POST /api/auth/login/two-factor，字段 two_factor_code）
 //       ldap（外部登录，重试原端点，字段 code + 可选验证码快照）
 type TempAuthData =
@@ -103,12 +93,10 @@ type TempAuthData =
 
 let tempAuthData: TempAuthData | null = null;
 
-// 发送验证码倒计时
 const sendingCode = ref(false);
 const sendCodeCountdown = ref(0);
 let countdownTimer: number | undefined;
 
-// 按钮文案
 const loginSubmitLabel = computed(() =>
   submitting.value && activeView.value === "login" ? t("common.processing") : t("login.sign_in")
 );
@@ -712,7 +700,6 @@ function clearFollowEyes(prefix: string): void {
   clearInlineStyles(els[`${prefix}-pupil-r`], "transform");
 }
 
-// 紫色角色：身体倾斜 + 眼睛/瞳孔（含眨眼与密码可见时的偷看）
 function updatePurpleCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const purple = els["char-purple"];
   if (!purple) {
@@ -741,7 +728,6 @@ function updatePurpleCharacter(isShowingPwd: boolean, isLookingAway: boolean, po
   }
 }
 
-// 黑色角色：身体倾斜 + 眼睛/瞳孔（含眨眼）
 function updateBlackCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const black = els["char-black"];
   if (!black) {
@@ -767,7 +753,6 @@ function updateBlackCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos
   }
 }
 
-// 橙色角色：身体倾斜 + 眼睛/瞳孔 + 失败时的难过嘴
 function updateOrangeCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const orange = els["char-orange"];
   if (!orange) {
@@ -798,7 +783,6 @@ function updateOrangeCharacter(isShowingPwd: boolean, isLookingAway: boolean, po
   }
 }
 
-// 黄色角色：身体倾斜 + 眼睛/瞳孔/嘴
 function updateYellowCharacter(isShowingPwd: boolean, isLookingAway: boolean, pos: CharPos): void {
   const yellow = els["char-yellow"];
   if (!yellow) {
@@ -826,7 +810,6 @@ function updateYellowCharacter(isShowingPwd: boolean, isLookingAway: boolean, po
   }
 }
 
-// 更新所有角色姿态
 function updateCharacters(): void {
   const purple = els["char-purple"];
   const black = els["char-black"];
@@ -913,7 +896,6 @@ function togglePasswordVisible(): void {
   }
 }
 
-// 触发登录失败动画：角色摇头 + 难过嘴
 function triggerLoginError(): void {
   if (errorRecoverTimer) {
     clearTimeout(errorRecoverTimer);
@@ -1017,11 +999,10 @@ onUnmounted(() => {
     <AppToast />
 
     <div id="login-page">
-      <!-- ============ 左面板（动画角色） ============ -->
+      <!-- 左面板（动画角色） -->
       <div class="left-panel">
         <div class="characters-wrapper">
           <div class="characters-scene" ref="sceneRoot">
-            <!-- 紫色角色 -->
             <div class="character char-purple" id="char-purple">
               <div class="eyes" id="purple-eyes">
                 <div class="eyeball" id="purple-eye-l">
@@ -1032,7 +1013,6 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-            <!-- 黑色角色 -->
             <div class="character char-black" id="char-black">
               <div class="eyes" id="black-eyes">
                 <div class="eyeball" id="black-eye-l">
@@ -1043,7 +1023,6 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-            <!-- 橙色角色 -->
             <div class="character char-orange" id="char-orange">
               <div class="eyes" id="orange-eyes">
                 <div class="bare-pupil" id="orange-pupil-l"></div>
@@ -1051,7 +1030,6 @@ onUnmounted(() => {
               </div>
               <div class="orange-mouth" id="orange-mouth"></div>
             </div>
-            <!-- 黄色角色 -->
             <div class="character char-yellow" id="char-yellow">
               <div class="eyes" id="yellow-eyes">
                 <div class="bare-pupil" id="yellow-pupil-l"></div>
@@ -1063,7 +1041,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- ============ 右面板（表单） ============ -->
+      <!-- 右面板（表单） -->
       <div class="right-panel">
         <div class="form-container">
           <div class="login-lang-switch">
@@ -1131,7 +1109,6 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <!-- 视图容器 -->
           <div class="login-views">
             <!-- 登录视图（密码 / 邮箱 / LDAP / SSO） -->
             <div class="view" :class="{ active: activeView === 'login' }">

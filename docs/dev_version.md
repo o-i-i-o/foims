@@ -39,3 +39,7 @@ v0.43.1
 v0.43.2
 2026103016273701
 注释审计阶段六（前端纯 TS，41 文件，排除 ts-rs 生成物）：删除 6 文件 10 条名称直译注释（useToast/usePagedList/useSubTabs/pagedFetch/types.visualization/viewModel），其余注释为契约/单位/浏览器坑等 why 说明，保留；未动并行在途的 3 个 SFC 与 i18n JSON。验证：仅注释守卫为空、npm run typecheck、npm run build、biome check、oxlint 均通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
+
+v0.43.3
+2026103019014401
+注释审计阶段七（前端 SFC，92 个 .vue）：30 文件删除 98 条名称直译/步骤复述注释并清理删除注释后产生的连续空行；12 处 ==== 装饰横幅降级为极简分区标签（ResourcesPage 7、LoginPage 2、SubnetUsageModal 2、DashboardPage 1），全仓 SFC 装饰横幅清零；修正 VisualizationPage 机柜注释错字（柜体会员自动跟随→拖动柜体时机位自动跟随）。保留组件头职责/设计来源、Esc 栈/Teleport/焦点、i18n 动态键、SNMP 协议与脱敏、坐标/单位等 why 注释；未动 i18n JSON 与 ts-rs 生成物。验证：仅注释守卫为空、git diff --check、npm run typecheck、npm run build、biome check、oxlint（318 文件 0 警告 0 错误）均通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动

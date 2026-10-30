@@ -223,7 +223,6 @@ async function startSnmpSync(): Promise<void> {
   }
   syncing.value = true;
   try {
-    // 1. 拉取 SNMP 实时端口（不落库）
     const snmpResult = await apiGet<SnmpPort[]>(
       `/api/resources/devices/${props.deviceId}/snmp-ports`
     );
@@ -233,7 +232,6 @@ async function startSnmpSync(): Promise<void> {
     }
     const newPorts = snmpResult.data;
 
-    // 2. 现有网口（/nics cards 展平），按名称小写建索引
     const existingResult = await apiGet<{ cards?: NicCard[] }>(
       `/api/resources/devices/${props.deviceId}/nics`
     );
@@ -246,7 +244,6 @@ async function startSnmpSync(): Promise<void> {
       }
     }
 
-    // 3. 按名称（忽略大小写）分类：无冲突直接新增，有冲突弹决策弹窗
     const toAdd: SnmpPort[] = [];
     const conflicts: { snmpPort: SnmpPort; existingPort: NicPort }[] = [];
     for (const p of newPorts) {
@@ -451,10 +448,8 @@ async function applySnmpResults(
       </button>
     </template>
 
-    <!-- 端口详情（新增/编辑） -->
     <PortDetailModal v-if="portDetail" :port="portDetail" @close="portDetail = null" @saved="onPortSaved" />
 
-    <!-- SNMP 端口名称冲突决策 -->
     <PortConflictModal
       v-if="conflictRound"
       :conflicts="conflictRound.conflicts"

@@ -28,8 +28,6 @@ type IpsResponse = { data?: IpDetailWithNames[]; items?: IpDetailWithNames[] };
 // IP 可视化网格最多渲染 256 个地址块
 const MAX_DISPLAY_IPS = 256;
 
-// 数据查询
-
 const networkQuery = useQuery({
   queryKey: computed(() => ["network-detail", props.subnetId]),
   enabled: computed(() => !!props.subnetId),
@@ -69,8 +67,6 @@ const ipv6Ips = computed(() => allNetworkIps.value.filter((ip) => isV6(ip)));
 
 const hasIPv4 = computed(() => !!network.value?.ipv4_cidr);
 const hasIPv6 = computed(() => !!network.value?.ipv6_cidr);
-
-// IPv4/IPv6 页签
 
 const activeTab = ref("ipv4");
 
@@ -257,8 +253,6 @@ function ipBlockVisible(ip: string): boolean {
   return ipFilter.value === "used" ? isUsed : !isUsed;
 }
 
-// IPv6 统计
-
 const ipv6Stats = computed(() => {
   const activeIps = ipv6Ips.value.filter((ip) => ip.status === "active").length;
   return {
@@ -316,7 +310,7 @@ function formatDns(dns: string[] | null | undefined): string {
         <p>{{ networkQuery.error.value?.message || ipsQuery.error.value?.message }}</p>
       </div>
 
-      <!-- ==================== IPv4 页签 ==================== -->
+      <!-- IPv4 页签 -->
       <div v-else-if="activeTab === 'ipv4'" role="tabpanel">
         <div class="usage-stats">
           <div class="stat-item">
@@ -446,9 +440,8 @@ function formatDns(dns: string[] | null | undefined): string {
         </div>
       </div>
 
-      <!-- ==================== IPv6 页签 ==================== -->
+      <!-- IPv6 页签 -->
       <div v-else role="tabpanel">
-        <!-- 未配置 IPv6：空态提示 -->
         <div v-if="!hasIPv6" class="no-ipv6-info">
           <div class="no-ipv6-icon">📡</div>
           <p>{{ t("network.no_ipv6_config") }}</p>

@@ -72,7 +72,6 @@ async function verifySession() {
 }
 
 onMounted(() => {
-  // 恢复持久化的收起状态
   document.body.classList.toggle("sidebar-collapsed", collapsed.value);
   initTooltip();
   verifySession();

@@ -20,7 +20,6 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-// 打开弹窗默认全选
 const checked = ref<boolean[]>(props.items.map(() => true));
 const selectAll = ref(true);
 const printing = ref(false);

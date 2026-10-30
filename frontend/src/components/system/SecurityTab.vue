@@ -225,7 +225,6 @@ async function savePasswordPolicy(): Promise<void> {
             </button>
           </div>
         </header>
-        <!-- 输入字段 -->
         <div class="form-row">
           <div class="form-group">
             <label for="password-policy-min-length">{{ t("config.password_min_length") }}</label>
@@ -236,7 +235,6 @@ async function savePasswordPolicy(): Promise<void> {
             <input id="password-policy-history" v-model="policyHistory" type="number" min="0" max="24" :disabled="readonly" :aria-label="t('config.password_history')">
           </div>
         </div>
-        <!-- 复选框字段 -->
         <div class="form-row">
           <div class="form-group">
             <label class="checkbox-label">

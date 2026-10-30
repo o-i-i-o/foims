@@ -325,7 +325,6 @@ const saving = computed(() => saveMutation.isPending.value);
       </template>
     </div>
 
-    <!-- 模板编辑器子弹窗 -->
     <ModalShell v-if="editorOpen" :title="t('org_template.editor_title')" size="md" @close="editorOpen = false">
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
@@ -363,7 +362,6 @@ const saving = computed(() => saveMutation.isPending.value);
       </template>
     </ModalShell>
 
-    <!-- 删除确认 -->
     <ConfirmModal
       v-if="deletingTemplate"
       :message="t('org_template.delete_confirm', { name: deletingTemplate.name })"

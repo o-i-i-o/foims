@@ -49,7 +49,6 @@ const employees = computed(() =>
   employeesQuery.isError.value ? [] : (employeesQuery.data.value ?? [])
 );
 
-/** 性别取值显示文案 */
 function genderText(gender: string): string {
   if (gender === "male") {
     return t("employee.gender_male");
@@ -222,7 +221,6 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
       </table>
     </div>
 
-    <!-- 员工新增/编辑子弹窗 -->
     <ModalShell v-if="editOpen" :title="editTitle" size="sm" @close="editOpen = false">
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
@@ -263,7 +261,6 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
       </template>
     </ModalShell>
 
-    <!-- 删除确认 -->
     <ConfirmModal
       v-if="deletingEmployee"
       :message="t('employee.delete_confirm', { name: deletingEmployee.name })"

@@ -282,7 +282,6 @@ function handleOrgSaved() {
     <!-- 层级模板管理 -->
     <TemplateModal :open="templateModalOpen" @close="templateModalOpen = false" />
 
-    <!-- 组织节点删除确认 -->
     <ConfirmModal
       v-if="deletingOrg"
       :message="t('organization.delete_confirm', { name: deletingOrg.name })"

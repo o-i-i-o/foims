@@ -41,7 +41,6 @@ const ipv6Cidrs = ref<string[]>(
   props.region?.ipv6_cidrs?.length ? [...props.region.ipv6_cidrs] : [""]
 );
 
-/** 添加一行 */
 function addRow(list: string[]): void {
   list.push("");
 }

@@ -85,7 +85,6 @@ function createSide(): CableSideState {
     cabinetId: "",
     deviceId: "",
     endpointId: "",
-    // 选项列表
     scopeOptions: [],
     cabinetOptions: [],
     deviceOptions: [],

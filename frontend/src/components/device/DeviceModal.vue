@@ -64,8 +64,6 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// 常量选项
-
 const ROOM_TYPE_FILTER_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "office", labelKey: "room.type_office" },
   { value: "lobby", labelKey: "room.type_lobby" },
@@ -97,8 +95,6 @@ function snmpSecretPayload(value: string): string | null | undefined {
   }
   return maskToNull(value);
 }
-
-// 表单状态
 
 /** 表单状态；snmpPort/powerWatts 为数字输入 v-model，清空时为空串 */
 interface DeviceFormState {

@@ -73,8 +73,6 @@ const CableLinkModal = defineAsyncComponent({
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// 页签状态（记忆 + 深链）
-
 // 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
   { id: "network-regions", titleKey: "resources.network_regions" },
@@ -158,7 +156,6 @@ const rooms = usePagedList<RoomWithNetworks>({
   tag: queryKeys.rooms,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "rooms"),
-  // 房间列表默认按名称升序
   defaultSortBy: "name",
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -176,7 +173,6 @@ const cabinets = usePagedList<CabinetWithNetworks>({
   tag: queryKeys.cabinets,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "cabinets"),
-  // 机柜列表默认按名称升序
   defaultSortBy: "name",
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -194,7 +190,6 @@ const devices = usePagedList<DeviceWithDetails>({
   tag: queryKeys.devices,
   defaultPageSize: 20,
   enabled: computed(() => activeTab.value === "devices"),
-  // 设备列表默认按名称升序
   defaultSortBy: "name",
   defaultSortOrder: "asc",
   buildUrl: (page, pageSize, sortBy, sortOrder) =>
@@ -547,7 +542,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       </button>
     </div>
 
-    <!-- ==================== 网络区域页签 ==================== -->
+    <!-- 网络区域页签 -->
     <div
       v-show="activeTab === 'network-regions'"
       id="network-regions-tab"
@@ -658,7 +653,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       />
     </div>
 
-    <!-- ==================== 子网页签 ==================== -->
+    <!-- 子网页签 -->
     <div v-show="activeTab === 'networks'" id="networks-tab" class="tab-content" :class="{ active: activeTab === 'networks' }" role="tabpanel">
       <div class="table-container">
         <table id="networks-table" class="data-table" :aria-label="t('resources.network_segments')">
@@ -752,7 +747,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       />
     </div>
 
-    <!-- ==================== 房间页签 ==================== -->
+    <!-- 房间页签 -->
     <div v-show="activeTab === 'rooms'" id="rooms-tab" class="tab-content" :class="{ active: activeTab === 'rooms' }" role="tabpanel">
       <div class="table-container">
         <table id="rooms-table" class="data-table" :aria-label="t('resources.rooms')">
@@ -867,7 +862,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       />
     </div>
 
-    <!-- ==================== 机柜页签 ==================== -->
+    <!-- 机柜页签 -->
     <div v-show="activeTab === 'cabinets'" id="cabinets-tab" class="tab-content" :class="{ active: activeTab === 'cabinets' }" role="tabpanel">
       <div class="table-container">
         <table id="cabinets-table" class="data-table" :aria-label="t('resources.cabinets')">
@@ -963,7 +958,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       />
     </div>
 
-    <!-- ==================== 设备页签 ==================== -->
+    <!-- 设备页签 -->
     <div v-show="activeTab === 'devices'" id="devices-tab" class="tab-content" :class="{ active: activeTab === 'devices' }" role="tabpanel">
       <div class="table-container">
         <table id="devices-table" class="data-table" :aria-label="t('resources.devices')">
@@ -1061,7 +1056,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       />
     </div>
 
-    <!-- ==================== 线路页签 ==================== -->
+    <!-- 线路页签 -->
     <div v-show="activeTab === 'cable-links'" id="cable-links-tab" class="tab-content" :class="{ active: activeTab === 'cable-links' }" role="tabpanel">
       <div class="table-container">
         <table id="cable-links-table" class="data-table" :aria-label="t('resources.cable_links')">
@@ -1160,7 +1155,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
       />
     </div>
 
-    <!-- ==================== 弹窗 ==================== -->
+    <!-- 弹窗 -->
     <NetworkRegionModal
       v-if="regionModal.open"
       :region="regionModal.region"

@@ -25,7 +25,6 @@ const pct = computed(() => {
   return Math.min(100, Math.max(0, num));
 });
 
-// 使用率分档色：>85% 红、>60% 橙、其余绿
 const level = computed(() => {
   if (pct.value === null) {
     return "";

@@ -83,7 +83,6 @@ const cabinetOptions = computed<CabinetWithNetworks[]>(
   () => roomCabinetsQuery.data.value ?? []
 );
 
-// 房间切换 → 机柜选项刷新，旧选中作废
 function onRoomChange() {
   form.cabinetId = "";
 }

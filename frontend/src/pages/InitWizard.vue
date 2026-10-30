@@ -22,7 +22,6 @@ import AppToast from "../components/AppToast.vue";
 
 const { t } = useI18n();
 
-// 流程状态
 const currentStep = ref(1);
 const initMode = ref("create");
 
@@ -30,7 +29,6 @@ function goToStep(stepNum: number): void {
   currentStep.value = stepNum;
 }
 
-// 全局反馈
 // 加载遮罩：引用计数支持并发请求各自开关
 const loadingCount = ref(0);
 const showLoading = () => {
@@ -72,7 +70,6 @@ function translateErrorField(errorKey: string | undefined): string {
   return translated === errorKey ? unknownError.value : translated;
 }
 
-// 语言切换
 const currentLanguage = ref(i18n.global.locale.value);
 // 动态状态块文案在请求时定稿：语言切换后重新拉取
 watch(currentLanguage, (lang) => {

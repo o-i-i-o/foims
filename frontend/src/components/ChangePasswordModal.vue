@@ -40,7 +40,6 @@ async function handleSubmit() {
   if (result.success) {
     showToast(result.message, "success");
     emit("close");
-    // 改密后令牌全部失效，跳转登录页重新认证
     setTimeout(() => {
       redirectToLogin();
     }, 1200);

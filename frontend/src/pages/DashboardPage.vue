@@ -368,8 +368,6 @@ function trafficText(item: HostLoadItem): string {
   return item.live ? `↓ ${formatBps(item.live.rx_bps)} ↑ ${formatBps(item.live.tx_bps)}` : "-";
 }
 
-// 卡片跳转
-
 /**
  * 卡片点击跳转（声明式事件处理）：命中卡片内页签等按钮时不跳转；
  * 携带 tab 的卡片以 query 形式深链，目标分区迁移后按 query 定位页签。
@@ -500,7 +498,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
         </div>
       </article>
 
-      <!-- 跳转 ip 区 -->
       <article class="dashboard-card" @click="openSection($event, 'ip')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">🔗</span><span>{{ t("dashboard.recent_ips") }}</span></h3>
@@ -776,7 +773,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
 /* 状态色由 components/badges.css 的 .status-active/.status-inactive/.status-reserved 全局提供 */
 
-/* ===== 主机负载卡片（CPU/内存/温度/流量 页签轮播） ===== */
+/* 主机负载卡片（CPU/内存/温度/流量 页签轮播） */
 
 .host-metrics-tabs {
   display: flex;

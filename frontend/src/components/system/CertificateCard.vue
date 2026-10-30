@@ -47,7 +47,6 @@ function decorateCert(info: CertFileInfo, kind: "generated" | "imported"): CertR
   return { ...info, kind };
 }
 
-// 自生成与导入证书合并展示，以"证书类型"列区分
 const mergedCerts = computed<CertRow[]>(() => [
   ...(certsQuery.data.value?.generated ?? []).map((info) => decorateCert(info, "generated")),
   ...(certsQuery.data.value?.imported ?? []).map((info) => decorateCert(info, "imported"))

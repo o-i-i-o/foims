@@ -207,7 +207,6 @@ const deleteMutation = useMutation({
       </template>
     </div>
 
-    <!-- 删除确认 -->
     <ConfirmModal
       v-if="deleting"
       :message="t('common.confirm_delete', { name: deleting.name || '' })"

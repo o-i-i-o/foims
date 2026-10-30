@@ -52,8 +52,6 @@ const { t } = useI18n();
 
 const DEFAULT_PORT_NAME = "eth0";
 
-// 房间上下文（区域/网段选项来源）
-
 const roomNetworks = ref<NetworkInfo[]>([]);
 // 遗留数据：不属于当前房间的区域/网段，保留显示并标记
 const legacyRegionList = ref<{ id: string; name: string }[]>([]);
@@ -107,7 +105,6 @@ const regionOptions = computed<{ id: string; name: string }[]>(() => {
   return list;
 });
 
-// 房间允许的网段 ID 集合
 const roomSubnetIds = computed(() => new Set(roomNetworks.value.map((n) => n.id)));
 
 // 房间区域 id 集合（遗留区域登记判定用）

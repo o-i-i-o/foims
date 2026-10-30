@@ -17,7 +17,6 @@ const props = withDefaults(
 
 // 已知 key → 对应形状；空值回退默认图标；未知值（历史 emoji）走文本分支
 const shapes = computed<OrgIconShape[] | null>(() => {
-  // 局部变量承接索引访问，命中已知 key 时返回对应形状
   const known = props.icon ? ORG_ICONS[props.icon] : undefined;
   if (known) {
     return known;

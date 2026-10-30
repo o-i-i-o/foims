@@ -77,7 +77,6 @@ const form = reactive({
   description: props.port.description || ""
 });
 
-// VLAN 输入归一：有值时 parseInt，非法范围提交前校验拦截
 function parseVlanInput(raw: number | "" | null | undefined): number | null {
   if (raw === "" || raw === null || raw === undefined) {
     return null;
@@ -272,7 +271,6 @@ const deleteMutation = useMutation({
       </button>
     </template>
 
-    <!-- 删除确认 -->
     <ConfirmModal
       v-if="confirmingDelete"
       :message="t('device.confirm_delete_port')"

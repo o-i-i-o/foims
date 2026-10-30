@@ -45,8 +45,6 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// 基础表单
-
 /** 房间表单状态（roomType 保持 string：select v-model 会回写 string 值） */
 interface RoomFormState {
   name: string;
@@ -320,7 +318,6 @@ function validateChildren(): string | null {
 
 const saveMutation = useMutation({
   mutationFn: async (): Promise<string> => {
-    // 提交前置校验链
     if (!form.name.trim()) {
       throw new Error(t("room.name_required"));
     }
@@ -389,7 +386,6 @@ const saveMutation = useMutation({
       name: cab.name.trim(),
       capacity: cab.capacity
     }));
-    // 机房类仅机柜、办公类仅工位、"其他"两类齐全
     const childrenData: RoomChildrenSync = showCabinets.value
       ? {
           cabinets: cabinetItems,
@@ -407,7 +403,6 @@ const saveMutation = useMutation({
       throw new Error(syncResult.message || t("room.children_save_failed"));
     }
 
-    // 同步信息点（所有房型通用）
     const outletsPayload: RoomNetOutletsSync = {
       net_outlets: netOutlets.map((outlet) => ({
         id: outlet.id,

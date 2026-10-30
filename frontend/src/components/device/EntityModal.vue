@@ -65,7 +65,6 @@ async function syncData(): Promise<void> {
   await loadData();
 }
 
-// 空值兜底显示
 function orDash(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === "" ? "-" : String(value);
 }

@@ -53,7 +53,6 @@ function toggle() {
   inputEl.value?.focus();
 }
 
-/** 输入事件：从事件目标读取输入值并经 v-model 上抛 */
 function onInput(event: Event) {
   const target = event.target;
   if (target instanceof HTMLInputElement) {

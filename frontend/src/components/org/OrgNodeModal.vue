@@ -52,7 +52,6 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
-/** 表单状态 */
 interface OrgFormState {
   name: string;
   description: string;

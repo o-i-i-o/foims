@@ -156,7 +156,6 @@ function unbanIp(): void {
       </div>
     </header>
 
-    <!-- 配置 -->
     <div class="form-row">
       <div class="form-group">
         <label for="app-fail2ban-enabled">{{ t("security.enabled") }}</label>
@@ -179,7 +178,6 @@ function unbanIp(): void {
       </div>
     </div>
 
-    <!-- 已封禁 IP -->
     <h4 class="mt-md">{{ t("security.banned_ips") }}</h4>
     <div class="table-container">
       <table class="data-table">
@@ -213,7 +211,6 @@ function unbanIp(): void {
       </table>
     </div>
 
-    <!-- 追踪中的 IP -->
     <h4 class="mt-md">{{ t("security.tracked_ips") }}</h4>
     <div class="table-container">
       <table class="data-table">

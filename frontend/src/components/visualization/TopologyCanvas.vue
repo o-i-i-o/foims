@@ -139,8 +139,6 @@ const spaceDown = ref(false);
 /** 平移中（容器 cursor 切换 grabbing） */
 const panning = ref(false);
 
-// 交互状态
-
 type Interaction =
   | {
       kind: "pan";
@@ -232,8 +230,6 @@ watch(
   () => ensureIcons(),
   { immediate: true },
 );
-
-// 视图投影
 
 const layoutNodes = computed<TopologyCanvasNode[]>(() =>
   props.nodes.map((node) => ({ ...node, rect: effectiveRect(node) })),
@@ -529,8 +525,6 @@ const connectionRenders = computed<ConnectionRender[]>(() => {
   }
   return renders;
 });
-
-// 视野
 
 function fitView(): void {
   userAdjusted.value = false;
@@ -985,7 +979,6 @@ defineExpose({ setZoom, zoomBy, fitView, setConnectionMode });
         </g>
       </g>
 
-      <!-- 连线 -->
       <g class="connections-group">
         <g
           v-for="item in connectionRenders"
@@ -1077,7 +1070,6 @@ defineExpose({ setZoom, zoomBy, fitView, setConnectionMode });
         </g>
       </g>
 
-      <!-- 设备节点 -->
       <g class="elements-group">
         <g
           v-for="item in renderNodes"
