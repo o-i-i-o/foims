@@ -22,7 +22,7 @@ import AppToast from "../components/AppToast.vue";
 
 const { t } = useI18n();
 
-// ==================== 流程状态 ====================
+// 流程状态
 const currentStep = ref(1);
 const initMode = ref("create");
 
@@ -30,7 +30,7 @@ function goToStep(stepNum: number): void {
   currentStep.value = stepNum;
 }
 
-// ==================== 全局反馈 ====================
+// 全局反馈
 // 加载遮罩：引用计数支持并发请求各自开关
 const loadingCount = ref(0);
 const showLoading = () => {
@@ -72,7 +72,7 @@ function translateErrorField(errorKey: string | undefined): string {
   return translated === errorKey ? unknownError.value : translated;
 }
 
-// ==================== 语言切换 ====================
+// 语言切换
 const currentLanguage = ref(i18n.global.locale.value);
 // 动态状态块文案在请求时定稿：语言切换后重新拉取
 watch(currentLanguage, (lang) => {
@@ -83,7 +83,7 @@ watch(currentLanguage, (lang) => {
   }
 });
 
-// ==================== 第 1 步：PostgreSQL 检查 ====================
+// 第 1 步：PostgreSQL 检查
 // loading | success | error（loading 时容器内渲染检查中转圈）
 const pgCheck = ref("loading");
 const pgMessage = ref("");
@@ -117,7 +117,7 @@ async function checkPostgreSQL() {
   }
 }
 
-// ==================== 第 2 步：数据库配置 ====================
+// 第 2 步：数据库配置
 const dbConfig = reactive({
   type: "pgsql",
   host: "",
@@ -167,7 +167,7 @@ async function submitDbConfig() {
   }
 }
 
-// ==================== 第 3 步：数据库初始化 ====================
+// 第 3 步：数据库初始化
 // /api/init/db-status 载荷：连接与建表状态（error 为后端 i18n key）
 interface InitDbStatus {
   connected: boolean;
@@ -251,7 +251,7 @@ async function submitInitMode() {
   }
 }
 
-// ==================== 第 4 步：管理员账户 ====================
+// 第 4 步：管理员账户
 const admin = reactive({
   username: "admin",
   password: "",
@@ -289,7 +289,7 @@ async function submitAdmin() {
   setTimeout(handleRestart, 3000);
 }
 
-// ==================== 第 5 步：完成与重启 ====================
+// 第 5 步：完成与重启
 // 后端检测到程序未注册为 systemd 服务时不执行重启（restart_mode = manual），
 // 切换为手动重启指引并隐藏自动跳转与登录入口
 const manualRestart = ref(false);
@@ -340,7 +340,7 @@ async function waitForBackendRestart() {
   return probe(1);
 }
 
-// ==================== 控制台验证码 ====================
+// 控制台验证码
 const captchaLoading = ref(false);
 
 /** 获取并展示服务器控制台验证码（请求期间禁用全部验证码按钮） */

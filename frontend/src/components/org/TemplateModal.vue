@@ -26,8 +26,6 @@ const emit = defineEmits<{ close: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 模板列表 ====================
-
 const templatesQuery = useQuery({
   queryKey: ["org-templates"],
   queryFn: async (): Promise<OrgTemplateSummary[]> => {
@@ -40,8 +38,6 @@ const templatesQuery = useQuery({
   },
   enabled: computed(() => props.open)
 });
-
-// ==================== 层级树数据 ====================
 
 // 节点唯一标识（图标面板开合按 uid 定位）
 let uidSeq = 0;
@@ -140,8 +136,6 @@ function findDuplicateTypeName(nodes: TplTypeNode[]): string | null {
   return duplicate;
 }
 
-// ==================== 编辑器状态 ====================
-
 const editorOpen = ref(false);
 
 /** 编辑器状态：nodes 为层级树，activePicker 为图标面板打开的节点 uid */
@@ -224,8 +218,6 @@ watch(
     editor.quickFill = "";
   }
 );
-
-// ==================== 提交与删除 ====================
 
 const saveMutation = useMutation({
   mutationFn: () => {

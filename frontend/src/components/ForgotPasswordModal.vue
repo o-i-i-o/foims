@@ -21,32 +21,22 @@ async function handleSubmit() {
   successMessage.value = "";
 
   sending.value = true;
-  try {
-    const result = await apiPost<unknown, { email: string }>(
-      "/api/auth/forgot-password",
-      { email: email.value }
-    );
+  const result = await apiPost<unknown, { email: string }>(
+    "/api/auth/forgot-password",
+    { email: email.value }
+  );
 
-    if (result.success) {
-      successMessage.value = t("login.reset_email_sent");
-      email.value = "";
-      setTimeout(() => {
-        emit("close");
-        successMessage.value = "";
-      }, 3000);
-    } else {
-      errorMessage.value = result.message || t("login.send_failed");
-    }
-  } catch (error) {
-    // apiPost 永不 reject（失败归一为 ApiResult），此分支为防御性兜底
-    let message = t("login.send_failed");
-    if (error instanceof Error && error.message.includes("Network")) {
-      message = t("login.network_failed");
-    }
-    errorMessage.value = message;
-  } finally {
-    sending.value = false;
+  if (result.success) {
+    successMessage.value = t("login.reset_email_sent");
+    email.value = "";
+    setTimeout(() => {
+      emit("close");
+      successMessage.value = "";
+    }, 3000);
+  } else {
+    errorMessage.value = result.message || t("login.send_failed");
   }
+  sending.value = false;
 }
 </script>
 

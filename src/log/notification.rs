@@ -8,8 +8,8 @@ use axum::response::Response;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::utils::pagination::{Pagination, paged_response};
 use foims_auth::extractor::AuthUser;
+use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::Notification;
 

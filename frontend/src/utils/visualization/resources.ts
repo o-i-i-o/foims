@@ -35,8 +35,6 @@ export function roomsQuery(category: RoomCategory, orgId: string | null): RoomQu
   return { orgId, roomTypes: resolveRoomTypes(category) };
 }
 
-// ==================== 组织树 ====================
-
 /** 展平后的组织项（带缩进层级） */
 export interface FlatOrganization {
   id: string;

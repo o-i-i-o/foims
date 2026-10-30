@@ -13,7 +13,7 @@ use serde_json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-// ==================== 错误类型 ====================
+// 错误类型
 
 /// 可视化模块错误类型。
 #[derive(Debug, thiserror::Error)]
@@ -81,12 +81,12 @@ impl From<sqlx::Error> for VisualizationError {
     }
 }
 
-// ==================== API 响应模型 ====================
+// API 响应模型
 
 /// 统一 API 响应结构与成功响应构造（由 foims-common 提供，保持原有路径兼容）。
 pub use foims_common::{ApiResponse, ok_json};
 
-// ==================== 布局管理函数 ====================
+// 布局管理函数
 
 pub async fn save_layout(
     pool: &PgPool,

@@ -35,11 +35,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   /** 服务端登出：吊销令牌后回登录页（请求失败也兜底回登录页） */
   async function logout(): Promise<void> {
-    try {
-      await apiPost("/api/auth/logout", {});
-    } catch (error) {
-      console.error("退出登录请求失败:", error);
-    }
+    await apiPost("/api/auth/logout", {});
     localLogout();
   }
 

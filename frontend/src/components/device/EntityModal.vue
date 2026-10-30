@@ -34,48 +34,35 @@ const tab = ref<"entities" | "sensors">("entities");
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
-  try {
-    const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
-    if (!deviceResult.success) {
-      phase.value = "error";
-      errorMsg.value = t("device.entity.load_failed");
-      return;
-    }
-    deviceName.value = deviceResult.data?.name || "";
-
-    const entityResult = await apiGet<DeviceEntity[]>(`/api/resources/devices/${props.deviceId}/entities`);
-    if (!entityResult.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.entity.load_failed")}: ${entityResult.message || ""}`;
-      return;
-    }
-    const sensorResult = await apiGet<DeviceSensor[]>(`/api/resources/devices/${props.deviceId}/sensors`);
-    entities.value = entityResult.data || [];
-    sensors.value = sensorResult.success ? sensorResult.data || [] : [];
-    phase.value = entities.value.length === 0 ? "empty" : "ready";
-  } catch (error) {
-    // apiGet/apiPost 不 reject，此分支为防御性保留；非 Error 抛出值按空串回退
-    const message = error instanceof Error ? error.message : "";
+  const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
+  if (!deviceResult.success) {
     phase.value = "error";
-    errorMsg.value = `${t("common.load_failed")}: ${message}`;
+    errorMsg.value = t("device.entity.load_failed");
+    return;
   }
+  deviceName.value = deviceResult.data?.name || "";
+
+  const entityResult = await apiGet<DeviceEntity[]>(`/api/resources/devices/${props.deviceId}/entities`);
+  if (!entityResult.success) {
+    phase.value = "error";
+    errorMsg.value = `${t("device.entity.load_failed")}: ${entityResult.message || ""}`;
+    return;
+  }
+  const sensorResult = await apiGet<DeviceSensor[]>(`/api/resources/devices/${props.deviceId}/sensors`);
+  entities.value = entityResult.data || [];
+  sensors.value = sensorResult.success ? sensorResult.data || [] : [];
+  phase.value = entities.value.length === 0 ? "empty" : "ready";
 }
 
 async function syncData(): Promise<void> {
   phase.value = "syncing";
-  try {
-    const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/entities/sync`, {});
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.entity.sync_failed")}: ${result.message || ""}`;
-      return;
-    }
-    await loadData();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/entities/sync`, {});
+  if (!result.success) {
     phase.value = "error";
-    errorMsg.value = `${t("device.entity.sync_failed")}: ${message}`;
+    errorMsg.value = `${t("device.entity.sync_failed")}: ${result.message || ""}`;
+    return;
   }
+  await loadData();
 }
 
 // 空值兜底显示

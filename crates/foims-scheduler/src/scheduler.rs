@@ -360,7 +360,7 @@ async fn dispatch_single_task(
     db_config: &DatabaseConfig,
     task: crate::models::ScheduledTask,
 ) -> Result<(), sqlx::Error> {
-    // ---- 第一段：短事务原子认领 ----
+    // 第一段：短事务原子认领
     let mut claim_tx = pool.begin().await?;
     let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
         .bind(task_advisory_lock_key(task.id))
@@ -417,7 +417,7 @@ async fn dispatch_single_task(
     // 认领提交，咨询锁随之释放，执行阶段不再持锁
     claim_tx.commit().await?;
 
-    // ---- 第二段：锁外执行任务体 ----
+    // 第二段：锁外执行任务体
     let started_at = Utc::now();
     let ctx = TaskContext {
         pool: pool.clone(),
@@ -441,7 +441,7 @@ async fn dispatch_single_task(
         ),
     };
 
-    // ---- 第三段：短事务写回结果 ----
+    // 第三段：短事务写回结果
     // task_logs 与执行状态（last_run_at/last_result）是同源业务双写，
     // 同事务原子提交；next_run_at 已在认领时前移，此处不再改动
     let mut write_tx = pool.begin().await?;

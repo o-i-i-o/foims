@@ -24,14 +24,14 @@ use foims::system::task_executors::{
     BackupTaskExecutor, IpStatusSyncTaskExecutor, LogCleanupTaskExecutor, MacSyncTaskExecutor,
     PasswordExpirySyncTaskExecutor, TokenCleanupTaskExecutor,
 };
-use foims::utils::rate_limit::{
-    RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
-};
 use foims_agent_service::tasks::{
     AgentHistoryCleanupTaskExecutor, AgentOfflineTaskExecutor, AgentSnmpPollTaskExecutor,
 };
 use foims_common::config::Config;
 use foims_common::db::DbPool;
+use foims_common::rate_limit::{
+    RateLimitState, RateLimiter, rate_limit_middleware, start_cleanup_task,
+};
 use foims_init::InitContext;
 use foims_scheduler::{RunningScheduler, SchedulerState, TaskRegistry};
 

@@ -28,7 +28,7 @@ const circle = (attrs: Record<string, string>): OrgIconShape => ({ tag: "circle"
 
 /** 图标 key → SVG 形状定义（key 为运行时数据，按宽化 Record 消费） */
 export const ORG_ICONS: Record<string, OrgIconShape[]> = {
-  // ---- 业务组织层级 ----
+  // 业务组织层级
   // 集团：双子楼
   group: [
     path("M3 21V9l5-3v15"),
@@ -75,7 +75,7 @@ export const ORG_ICONS: Record<string, OrgIconShape[]> = {
     circle({ cx: "12", cy: "7", r: "4" })
   ],
 
-  // ---- 物理地点层级 ----
+  // 物理地点层级
   // 区域（大区）：地图
   region: [path("M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"), path("M9 4v14M15 6v14")],
   // 城市：城市天际线
@@ -109,7 +109,7 @@ export const ORG_ICONS: Record<string, OrgIconShape[]> = {
     path("M3 12h18", { "stroke-dasharray": "2.5 2.5" })
   ],
 
-  // ---- 功能空间 ----
+  // 功能空间
   // 大厅：廊柱大厅
   hall: [
     path("M3 21h18"),
@@ -161,7 +161,7 @@ export const ORG_ICONS: Record<string, OrgIconShape[]> = {
     path("M12 13v8")
   ],
 
-  // ---- 通用默认 ----
+  // 通用默认
   // 通用组织节点：文件夹
   org: [path("M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z")]
 };

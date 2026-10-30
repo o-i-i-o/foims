@@ -82,7 +82,7 @@ pub struct TableSpec {
 
 /// 全部表的规格。顺序即同一模块内的导入顺序（被引用表在前）。
 pub const TABLE_SPECS: &[TableSpec] = &[
-    // ---------- 组织模块 ----------
+    // 组织模块
     TableSpec {
         table: "org_templates",
         columns: &[
@@ -132,7 +132,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["org_id", "name"],
     },
-    // ---------- 房间模块 ----------
+    // 房间模块
     TableSpec {
         table: "rooms",
         columns: &[
@@ -186,7 +186,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["name"],
     },
-    // ---------- 网络区域模块（含房间-网段绑定） ----------
+    // 网络区域模块（含房间-网段绑定）
     TableSpec {
         table: "network_regions",
         columns: &[
@@ -239,7 +239,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["room_id", "subnet_id"],
     },
-    // ---------- 机柜模块 ----------
+    // 机柜模块
     TableSpec {
         table: "cabinets",
         columns: &[
@@ -285,7 +285,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["cabinet_id", "name"],
     },
-    // ---------- 设备模块 ----------
+    // 设备模块
     TableSpec {
         table: "device_templates",
         columns: &[
@@ -445,7 +445,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["ip_address"],
     },
-    // ---------- 线路模块 ----------
+    // 线路模块
     TableSpec {
         table: "cable_links",
         columns: &[
@@ -472,7 +472,7 @@ pub const TABLE_SPECS: &[TableSpec] = &[
         ],
         key: &["a_endpoint_id", "b_endpoint_id"],
     },
-    // ---------- 可视化模块 ----------
+    // 可视化模块
     TableSpec {
         table: "workstation_layouts",
         columns: &[

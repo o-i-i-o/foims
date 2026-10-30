@@ -55,8 +55,6 @@ export function deleteUser(id: string): Promise<ApiResult<unknown>> {
   return apiDelete(`/api/users/${id}`);
 }
 
-// ==================== 双因素认证（2FA） ====================
-
 export function initTwoFactor(userId: string): Promise<ApiResult<TwoFactorInitData>> {
   const payload: TwoFactorInitRequest = { user_id: userId };
   return apiPost<TwoFactorInitData, TwoFactorInitRequest>("/api/two-factor/init", payload);

@@ -74,8 +74,6 @@ const {
   hide: hideTooltip,
 } = useCanvasTooltip(tooltipRef);
 
-// ==================== 拖动（预览在组件内，落定交回父组件） ====================
-
 type DragKind = "node" | "door";
 
 interface DragState {
@@ -233,8 +231,6 @@ function onDragEnd(): void {
   }
 }
 
-// ==================== 视野适配 ====================
-
 function applyFit(): void {
   const rects = props.door
     ? [props.door.rect, ...props.nodes.map((node) => node.rect)]
@@ -254,8 +250,6 @@ onMounted(() => {
   syncContainerSize();
   applyFit();
 });
-
-// ==================== 提示与选中 ====================
 
 function onCanvasMouseMove(event: MouseEvent): void {
   if (drag.value) {

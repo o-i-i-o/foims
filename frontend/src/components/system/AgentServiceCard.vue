@@ -43,8 +43,6 @@ const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== 上报接收服务参数（agent 段） ====================
-
 // 最近一次加载的 agent 段基础参数（与监听无关的字段）：PUT 整体替换，
 // 保存时原样带回避免丢配置（未加载时为空对象，展开结果与 null 等价）
 let agentBase: Pick<
@@ -150,8 +148,6 @@ async function saveAgentConfig(): Promise<void> {
     savingAgent.value = false;
   }
 }
-
-// ==================== Agent 分发（版本 / 注册令牌 / 配置包） ====================
 
 // 操作系统 → 可用包格式（deb/rpm 为 Linux 系统包格式，zip 为 Windows 通用包）
 const AGENT_OS_FORMATS: Record<string, string[]> = {

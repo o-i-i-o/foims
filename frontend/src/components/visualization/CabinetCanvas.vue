@@ -80,8 +80,6 @@ const {
   hide: hideTooltip,
 } = useCanvasTooltip(tooltipRef);
 
-// ==================== 拖动（只拖柜体，机位不可单独移动） ====================
-
 interface DragState {
   id: string;
   start: { x: number; y: number };
@@ -218,8 +216,6 @@ function onDragEnd(): void {
   });
 }
 
-// ==================== 横向滚动与视野定型 ====================
-
 let scrollRaf = 0;
 
 /** 视野横向跟随滚动位置，纵向固定为渲染时容器高（滚动条出现不改变 U 高） */
@@ -270,8 +266,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("mousemove", onDragMove);
   window.removeEventListener("mouseup", onDragEnd);
 });
-
-// ==================== 提示与选中 ====================
 
 function onCanvasMouseMove(event: MouseEvent): void {
   if (drag.value) {

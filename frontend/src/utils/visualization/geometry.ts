@@ -18,7 +18,7 @@ import type {
   TopologyRoomGroup,
 } from "../../types/visualization";
 
-// ==================== 通用尺寸常量 ====================
+// 通用尺寸常量
 
 /** 网格步长（像素）：拖拽吸附与网格 pattern 的基本单位 */
 export const GRID_SIZE = 20;
@@ -35,7 +35,7 @@ export const ALIGNMENT_GUIDE_COLOR = "#3b82f6";
 export const MIN_VIEW_WIDTH = 1000;
 export const MIN_VIEW_HEIGHT = 800;
 
-// ==================== 工位布局常量 ====================
+// 工位布局常量
 
 /** 工位卡片默认尺寸 */
 export const WORKSTATION_WIDTH = 160;
@@ -50,7 +50,7 @@ export const WORKSTATION_FALLBACK_COLS = 4;
 /** 门元素默认矩形（房间入口示意） */
 export const DOOR_RECT: CanvasRect = { x: 50, y: 100, width: 40, height: 80 };
 
-// ==================== 机柜布局常量 ====================
+// 机柜布局常量
 
 /** 画布四周预留边距：首柜距左缘 / 柜底距底缘（像素，viewBox 1:1） */
 export const CABINET_EDGE_PADDING = 16;
@@ -70,7 +70,7 @@ export const CABINET_POSITION_WIDTH = 110;
  */
 export const DEFAULT_CABINET_CAPACITY = 42;
 
-// ==================== 拓扑分组常量 ====================
+// 拓扑分组常量
 
 /** 房间容器留白：四周内边距，顶部另加标题区高度 */
 export const ROOM_PADDING = 40;
@@ -100,7 +100,7 @@ export const GROUP_SEPARATION_ITERATIONS = 40;
 /** 同侧边缘上相邻锚点的错开间距 */
 export const ANCHOR_SPREAD = 18;
 
-// ==================== 基础校验 ====================
+// 基础校验
 
 /**
  * 布局坐标合法性校验：x/y 有限且非负、宽高有限且为正。
@@ -153,7 +153,7 @@ export function generateDomId(): string {
   ].join("-");
 }
 
-// ==================== 视图覆盖矩形与网格标尺 ====================
+// 视图覆盖矩形与网格标尺
 
 /**
  * 反算与可视区等大的世界坐标矩形（viewBox ∪ letterbox 区）。
@@ -271,7 +271,7 @@ export function buildGridRuler(
   return { lines, labels };
 }
 
-// ==================== 对齐线 ====================
+// 对齐线
 
 /** 一条对齐参考线 */
 export interface AlignmentSegment {
@@ -338,7 +338,7 @@ export function computeAlignmentSegments(
   return segments;
 }
 
-// ==================== 工位布局 ====================
+// 工位布局
 
 /** 自动排布的列数：按工位数量选择，保持画布接近方形 */
 export function workstationColumns(count: number): number {
@@ -403,7 +403,7 @@ export function workstationCanvasRect(
   };
 }
 
-// ==================== 机柜布局 ====================
+// 机柜布局
 
 /** 机柜布局输入：容量与已保存坐标（缺失时按默认排布） */
 export interface CabinetLayoutInput {
@@ -537,7 +537,7 @@ export function buildUMarks(capacity: number, uHeight: number, width: number): U
   return { lines, labels };
 }
 
-// ==================== 布局持久化投影 ====================
+// 布局持久化投影
 
 /**
  * 由视图模型投影出布局保存项（替代旧实现从 SVG DOM 反读属性）。
@@ -573,7 +573,7 @@ export function buildLayoutItems(entities: LayoutEntity[]): CanvasLayoutItem[] {
   return items;
 }
 
-// ==================== 拓扑：分组包围盒 ====================
+// 拓扑：分组包围盒
 
 /** 分组包围盒（含容器留白） */
 export interface GroupBox {
@@ -873,7 +873,7 @@ export function moveGroupTo<N extends RectNode>(
   return true;
 }
 
-// ==================== 拓扑：连线路径与锚点 ====================
+// 拓扑：连线路径与锚点
 
 /**
  * 选择连线出入口锚点：按两节点中心的主轴方向取向，
@@ -1016,7 +1016,7 @@ export function fitRects(
   };
 }
 
-// ==================== IP 归并 ====================
+// IP 归并
 
 /** 工位 ID → IP 明细（同一工位多条 IP 时 active 优先） */
 export function mapIpsByWorkstation<T extends { workstation_id: string | null; status: string }>(

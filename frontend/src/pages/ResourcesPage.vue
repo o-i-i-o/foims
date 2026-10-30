@@ -73,7 +73,7 @@ const CableLinkModal = defineAsyncComponent({
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 页签状态（记忆 + 深链） ====================
+// 页签状态（记忆 + 深链）
 
 // 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
@@ -90,9 +90,7 @@ const { activeTab, switchTab } = useSubTabs({
   tabs: TABS
 });
 
-// ==================== 分页列表封装（共享 composable，见 composables/usePagedList.js） ====================
-
-// ==================== 网络区域页签 ====================
+// 网络区域页签
 
 const regions = usePagedList<NetworkRegion>({
   tag: queryKeys.networkRegions,
@@ -107,7 +105,7 @@ const regions = usePagedList<NetworkRegion>({
     })}`
 });
 
-// ==================== 子网页签（4 列表头搜索过滤） ====================
+// 子网页签（4 列表头搜索过滤）
 
 // 输入态（表头搜索框 v-model）与查询参数分离：输入经防抖 300ms 同步进
 // 查询参数，queryKey 仅引用查询参数
@@ -154,7 +152,7 @@ watch(networkFilters, () => {
   }, 300);
 });
 
-// ==================== 房间页签 ====================
+// 房间页签
 
 const rooms = usePagedList<RoomWithNetworks>({
   tag: queryKeys.rooms,
@@ -172,7 +170,7 @@ const rooms = usePagedList<RoomWithNetworks>({
     })}`
 });
 
-// ==================== 机柜页签 ====================
+// 机柜页签
 
 const cabinets = usePagedList<CabinetWithNetworks>({
   tag: queryKeys.cabinets,
@@ -190,7 +188,7 @@ const cabinets = usePagedList<CabinetWithNetworks>({
     })}`
 });
 
-// ==================== 设备页签 ====================
+// 设备页签
 
 const devices = usePagedList<DeviceWithDetails>({
   tag: queryKeys.devices,
@@ -208,7 +206,7 @@ const devices = usePagedList<DeviceWithDetails>({
     })}`
 });
 
-// ==================== 线路页签 ====================
+// 线路页签
 
 const cableLinks = usePagedList<CableLinkWithDetails>({
   tag: queryKeys.cableLinks,
@@ -224,7 +222,7 @@ const cableLinks = usePagedList<CableLinkWithDetails>({
     })}`
 });
 
-// ==================== 弹窗与删除 ====================
+// 弹窗与删除
 
 const regionModal = reactive<{ open: boolean; region: NetworkRegion | null }>({ open: false, region: null });
 const networkModal = reactive<{ open: boolean; network: Network | null }>({ open: false, network: null });

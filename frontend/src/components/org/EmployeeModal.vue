@@ -30,8 +30,6 @@ const emit = defineEmits<{ close: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 员工列表 ====================
-
 const employeesQuery = useQuery({
   queryKey: computed(() => ["employees", props.orgId]),
   queryFn: async (): Promise<Employee[]> => {
@@ -61,8 +59,6 @@ function genderText(gender: string): string {
   }
   return t("employee.gender_unknown");
 }
-
-// ==================== 新增/编辑表单 ====================
 
 /** 编辑表单状态（gender 保持 string：select v-model 会回写 string 值） */
 interface EmployeeFormState {
@@ -142,8 +138,6 @@ function handleSubmit(): void {
   }
   saveMutation.mutate();
 }
-
-// ==================== 删除 ====================
 
 const deletingEmployee = ref<Employee | null>(null);
 

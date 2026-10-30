@@ -36,7 +36,7 @@ import type { ApiResult } from "../types/api";
 
 const { t } = useI18n();
 
-// ==================== 登录模式与视图状态 ====================
+// 登录模式与视图状态
 
 const LOGIN_MODES = {
   PASSWORD: "password-login",
@@ -78,7 +78,7 @@ const showForgotModal = ref(false);
 // 语言选择器
 const currentLanguage = ref(i18n.global.locale.value);
 
-// ==================== 图形验证码（连续失败触发） ====================
+// 图形验证码（连续失败触发）
 
 type CaptchaForm = "password" | "ldap";
 
@@ -88,7 +88,7 @@ const captchaState = reactive<Record<CaptchaForm, { id: string | null; failures:
 });
 const captchaInput = reactive<Record<CaptchaForm, string>>({ password: "", ldap: "" });
 
-// ==================== 2FA 上下文 ====================
+// 2FA 上下文
 // kind: local（密码/邮箱，POST /api/auth/login/two-factor，字段 two_factor_code）
 //       ldap（外部登录，重试原端点，字段 code + 可选验证码快照）
 type TempAuthData =
@@ -127,7 +127,7 @@ const sendCodeLabel = computed(() => {
   return t("login.send_code");
 });
 
-// ==================== 错误条与 2FA 视图切换 ====================
+// 错误条与 2FA 视图切换
 
 function showError(message: string): void {
   errorMessage.value = message;
@@ -151,7 +151,7 @@ function switchToTwoFactorView() {
   });
 }
 
-// ==================== 会话探测与初始化 ====================
+// 会话探测与初始化
 
 /** 已登录则跳主应用；401 时尝试刷新，成功同样跳转 */
 async function checkLoginStatus() {
@@ -223,7 +223,7 @@ function cleanUrlParams() {
   }
 }
 
-// ==================== 登录提交 ====================
+// 登录提交
 
 function handleTabClick(targetMode: string): void {
   if (submitting.value) {
@@ -496,7 +496,7 @@ function formatErrorMessage(message: string): string {
   return message;
 }
 
-// ==================== 图形验证码 ====================
+// 图形验证码
 
 /** 拉取新验证码图片（点击图片可刷新） */
 async function refreshCaptcha(form: CaptchaForm) {
@@ -536,7 +536,7 @@ function handleCaptchaOnFailure(form: CaptchaForm, messageKey: string | undefine
   }
 }
 
-// ==================== 发送邮箱登录验证码 ====================
+// 发送邮箱登录验证码
 
 async function handleSendLoginCode() {
   const mail = email.value.trim();
@@ -579,9 +579,7 @@ function startCountdown(seconds: number): void {
   }, 1000);
 }
 
-// ============================================================
 // 动画角色（移植自 example-files/animatedlogin.html，命令式实现）
-// ============================================================
 
 // 角色状态类全集（挂在 .character 根上，静态几何由 login.css 状态类供给）
 const CHAR_STATES = ["error", "look-away", "show-pwd", "face-each-other", "typing"];
@@ -995,7 +993,7 @@ function triggerLoginError(): void {
   }, 2500);
 }
 
-// ==================== 生命周期 ====================
+// 生命周期
 
 function onMouseMove(e: MouseEvent): void {
   mouseX = e.clientX;

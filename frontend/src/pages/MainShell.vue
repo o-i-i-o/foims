@@ -22,8 +22,6 @@ import NavIcon from "../components/NavIcon.vue";
 const { t } = useI18n();
 const auth = useAuthStore();
 
-// ==================== 侧边栏收起/展开 ====================
-
 const SIDEBAR_COLLAPSE_KEY = "sidebar-collapsed";
 
 function readCollapsedState(): boolean {
@@ -51,8 +49,6 @@ const toggleLabel = computed(() => t(collapsed.value ? "nav.expand_sidebar" : "n
 
 // 空闲超时看护（等保：超时尝试续期，失败回登录页）
 usePageTimeout();
-
-// ==================== 导航与壳层动作 ====================
 
 /** 按角色过滤可见分区（RBAC；路由守卫兜底重定向） */
 const visibleNavItems = computed(() => NAV_ITEMS.filter((item) => !auth.hiddenSections.includes(item.name)));

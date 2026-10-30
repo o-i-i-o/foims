@@ -67,8 +67,6 @@ export interface ImportCsvResponse {
 /** 证书类型：自生成（站点 CA 签发）/ 导入（外部证书） */
 export type CertificateKind = "generated" | "imported";
 
-// ==================== 系统配置（按段读写） ====================
-
 /**
  * 读取系统配置原文：各卡片只消费自己的段（server/agent/snmp/rate_limit），
  * 载荷类型由调用方以泛型指定，避免为每段复制整份配置契约。
@@ -92,8 +90,6 @@ export function restoreSystemConfig(config: unknown): Promise<ApiResult<unknown>
   return apiPost("/api/system/config/restore", config);
 }
 
-// ==================== LDAP 认证 ====================
-
 export function getLdapConfig(): Promise<ApiResult<LdapConfigResponse>> {
   return apiGet<LdapConfigResponse>("/api/system/ldap/config");
 }
@@ -105,8 +101,6 @@ export function updateLdapConfig(payload: UpdateLdapConfigRequest): Promise<ApiR
 export function testLdapConnection(): Promise<ApiResult<unknown>> {
   return apiPost("/api/system/ldap/test", {});
 }
-
-// ==================== SSO（OIDC） ====================
 
 export function getSsoConfig(): Promise<ApiResult<SsoConfigResponse>> {
   return apiGet<SsoConfigResponse>("/api/system/sso/config");
@@ -120,8 +114,6 @@ export function testSsoConnection(): Promise<ApiResult<unknown>> {
   return apiPost("/api/system/sso/test", {});
 }
 
-// ==================== 等保密码策略 ====================
-
 export function getPasswordPolicy(): Promise<ApiResult<PasswordPolicy>> {
   return apiGet<PasswordPolicy>("/api/system/password-policy");
 }
@@ -129,8 +121,6 @@ export function getPasswordPolicy(): Promise<ApiResult<PasswordPolicy>> {
 export function updatePasswordPolicy(payload: PasswordPolicy): Promise<ApiResult<unknown>> {
   return apiPut<unknown, PasswordPolicy>("/api/system/password-policy", payload);
 }
-
-// ==================== SMTP 与通知设置 ====================
 
 export function getSmtpConfig(): Promise<ApiResult<SmtpConfigResponse>> {
   return apiGet<SmtpConfigResponse>("/api/system/smtp/config");
@@ -152,8 +142,6 @@ export function updateNotificationSettings(payload: NotificationSettings): Promi
   return apiPut<unknown, NotificationSettings>("/api/system/notification/settings", payload);
 }
 
-// ==================== fail2ban ====================
-
 export function getFail2banStatus(): Promise<ApiResult<AppFail2banStatus>> {
   return apiGet<AppFail2banStatus>("/api/system/fail2ban/app/status");
 }
@@ -171,8 +159,6 @@ export function unbanIp(ip: string): Promise<ApiResult<BanActionResponse>> {
   const payload: UnbanIpRequest = { ip };
   return apiPost<BanActionResponse, UnbanIpRequest>("/api/system/fail2ban/app/unban", payload);
 }
-
-// ==================== 证书库存与操作 ====================
 
 /** 站点 CA 证书公开下载地址（浏览器直链） */
 export const CA_DOWNLOAD_URL = "/api/certificate/ca/download";
@@ -210,8 +196,6 @@ export function importCertificate(formData: FormData): Promise<ApiResult<unknown
   return apiPost("/api/system/certificate/import", formData);
 }
 
-// ==================== 导入导出 ====================
-
 export function importCsvData(formData: FormData): Promise<ApiResult<ImportCsvResponse>> {
   return apiPost<ImportCsvResponse>("/api/system/import-export/import/csv", formData);
 }
@@ -231,8 +215,6 @@ export function downloadDatabaseExport(): Promise<ApiResult<unknown>> {
   return apiGet("/api/system/import-export/export/database");
 }
 
-// ==================== systemd 服务 ====================
-
 export function getSystemServices(): Promise<ApiResult<ServiceStatusItem[]>> {
   return apiGet<ServiceStatusItem[]>("/api/system/services");
 }
@@ -241,8 +223,6 @@ export function getSystemServices(): Promise<ApiResult<ServiceStatusItem[]>> {
 export function runServiceOp(service: string, op: string): Promise<ApiResult<unknown>> {
   return apiPost(`/api/system/services/${encodeURIComponent(service)}/${encodeURIComponent(op)}`, {});
 }
-
-// ==================== 系统信息 ====================
 
 export function getSystemInfo(): Promise<ApiResult<SystemInfo>> {
   return apiGet<SystemInfo>("/api/system/info");

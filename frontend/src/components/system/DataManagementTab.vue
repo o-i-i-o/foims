@@ -30,8 +30,6 @@ const { t } = useI18n();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== 导入导出 ====================
-
 // 导入文件大小上限（与后端一致）
 const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
 
@@ -154,8 +152,6 @@ async function exportDatabase(): Promise<void> {
   downloadBlobResult(result, `foims_backup_${new Date().toISOString().slice(0, 10)}.sql`);
   showToast(t("import_export.export_db_success"), "success");
 }
-
-// ==================== 配置文件备份 / 恢复 ====================
 
 // 恢复暂存：（备份导出的 JSON 载荷 + 原文件名）二次确认后提交
 const configFileInput = ref<HTMLInputElement | null>(null);

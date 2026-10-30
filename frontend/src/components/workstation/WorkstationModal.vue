@@ -44,8 +44,6 @@ export interface WorkstationSavedPayload {
 
 const { t } = useI18n();
 
-// ==================== 表单 ====================
-
 /** 工位表单状态（x/y 为坐标输入框字符串，提交前再解析） */
 interface WorkstationFormState {
   roomId: string;
@@ -65,8 +63,6 @@ const form = reactive<WorkstationFormState>({
   description: props.workstation?.description ?? ""
 });
 
-// ==================== 房间下拉（仅办公类，含 org_id 供管理人级联） ====================
-
 const roomsQuery = useQuery({
   queryKey: ["options", "office-rooms"],
   queryFn: async (): Promise<Paged<Room> | null> => {
@@ -83,8 +79,6 @@ const roomOptions = computed(() => roomsQuery.data.value?.items ?? []);
 
 // 房间 → 所属组织映射：管理人下拉的唯一数据来源（房间组织为非空外键）
 const roomOrgMap = computed(() => new Map(roomOptions.value.map((room) => [room.id, room.org_id])));
-
-// ==================== 管理人下拉（按房间所属组织取员工） ====================
 
 // 快速切换房间时的过期员工响应由 vue-query 按 orgId 分键
 // 天然隔离，无需序号守卫
@@ -110,8 +104,6 @@ const employeeOptions = computed(() => (Array.isArray(employeesQuery.data.value)
 function onRoomChange(): void {
   form.managerId = "";
 }
-
-// ==================== 提交 ====================
 
 const saving = ref(false);
 

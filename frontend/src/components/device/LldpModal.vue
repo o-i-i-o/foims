@@ -22,7 +22,6 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-// ==================== 加载状态机（与 ArpModal 同构） ====================
 // loading 初始加载 / syncing 同步中 / ready 就绪 / empty 无数据 / error 失败
 type LoadPhase = "loading" | "syncing" | "ready" | "empty" | "error";
 
@@ -33,49 +32,34 @@ const neighbors = ref<DeviceLldp[]>([]);
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
-  try {
-    const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
-    if (!deviceResult.success) {
-      phase.value = "error";
-      errorMsg.value = t("device.load_failed");
-      return;
-    }
-    deviceName.value = deviceResult.data?.name || "";
-
-    const result = await apiGet<DeviceLldp[]>(`/api/resources/devices/${props.deviceId}/lldp-neighbors`);
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.load_lldp_failed")}: ${result.message || ""}`;
-      return;
-    }
-    neighbors.value = result.data || [];
-    phase.value = neighbors.value.length === 0 ? "empty" : "ready";
-  } catch (error) {
-    // apiGet/apiPost 不 reject，此分支为防御性保留；非 Error 抛出值按空串回退
-    const message = error instanceof Error ? error.message : "";
+  const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
+  if (!deviceResult.success) {
     phase.value = "error";
-    errorMsg.value = `${t("common.load_failed")}: ${message}`;
+    errorMsg.value = t("device.load_failed");
+    return;
   }
+  deviceName.value = deviceResult.data?.name || "";
+
+  const result = await apiGet<DeviceLldp[]>(`/api/resources/devices/${props.deviceId}/lldp-neighbors`);
+  if (!result.success) {
+    phase.value = "error";
+    errorMsg.value = `${t("device.load_lldp_failed")}: ${result.message || ""}`;
+    return;
+  }
+  neighbors.value = result.data || [];
+  phase.value = neighbors.value.length === 0 ? "empty" : "ready";
 }
 
 async function syncLldpData(): Promise<void> {
   phase.value = "syncing";
-  try {
-    const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/lldp/sync`, {});
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.sync_failed")}: ${result.message || ""}`;
-      return;
-    }
-    await loadData();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/lldp/sync`, {});
+  if (!result.success) {
     phase.value = "error";
-    errorMsg.value = `${t("device.sync_failed")}: ${message}`;
+    errorMsg.value = `${t("device.sync_failed")}: ${result.message || ""}`;
+    return;
   }
+  await loadData();
 }
-
-// ==================== 邻居端口展示逻辑 ====================
 
 function isMac(str: string): boolean {
   return /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(str);

@@ -36,8 +36,6 @@ const { t } = useI18n();
 const queryClient = useQueryClient();
 const auth = useAuthStore();
 
-// ==================== 列表查询（筛选 + 分页 + 轮询） ====================
-
 // 列表行类型：/api/agents 聚合 Agent 上报与 SNMP 采集源，字段超集未入
 // generated（id 兼容数值与字符串、source/label 为联查可选键、用量与
 // 温度可能缺报）
@@ -105,8 +103,6 @@ function applyFilters() {
   committedSignature = signature;
 }
 
-// ==================== 列表单元格渲染辅助 ====================
-
 // 状态元数据：状态点样式类 + 名称 i18n 键（active/offline 由上报自动翻转）
 const STATUS_META: Record<string, { dot: string; labelKey: string }> = {
   active: { dot: "agent-dot-active", labelKey: "agents.status_active" },
@@ -130,8 +126,6 @@ function formatTemp(temp: number | string | null): string {
   }
   return `${Number(temp).toFixed(1)}℃`;
 }
-
-// ==================== 实时快照覆盖（SNMP 行） ====================
 
 // SSE 推送的全部 SNMP 设备快照：仅覆盖当前页中 source='snmp' 的行，
 // 列表结构（分页/状态/关键字）仍由 30s 轮询维护
@@ -167,8 +161,6 @@ function liveTempValue(agent: AgentListItem): number | string | null {
 function liveLastSeen(agent: AgentListItem): string | null {
   return liveRow(agent)?.collected_at ?? agent.last_seen;
 }
-
-// ==================== 行内管理操作 ====================
 
 // 行内操作语义：detail 打开详情弹窗，disable/enable 经 PATCH 切换状态
 //（禁用后该机上报被 403 拒收，再启用即恢复），delete 需确认后 DELETE
@@ -208,8 +200,6 @@ function handleDeleteConfirmed() {
     deleteMutation.mutate(id);
   }
 }
-
-// ==================== 顶栏全局工具弹窗 ====================
 
 // SNMP 观测事件（不预填设备）与终端定位：均不依赖具体设备行，后端两接口
 // 为库内只读查询，与 SNMP 采集源同属本页职责，故由本页顶栏承载

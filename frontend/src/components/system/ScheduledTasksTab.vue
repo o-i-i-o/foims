@@ -31,8 +31,6 @@ const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== 列表（无分页，仅排序） ====================
-
 const sort = reactive<{ by: string; order: "asc" | "desc" }>({ by: "created_at", order: "desc" });
 // 无分页列表复用排序工具：sortClass/onThSort 只消费 sort 与 toggleSort
 const sortList: SortableTable = {
@@ -70,8 +68,6 @@ function typeLabel(taskType: string): string {
 function refetch(): void {
   queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
 }
-
-// ==================== 立即执行 / 启停 / 删除 ====================
 
 const confirmAction = ref<null | { type: "run" | "delete"; task: ScheduledTask }>(null); // { type, task }
 const confirmMessage = computed(() => {
@@ -161,8 +157,6 @@ async function doDelete(task: ScheduledTask): Promise<void> {
     deletingId.value = null;
   }
 }
-
-// ==================== 编辑 / 日志弹窗 ====================
 
 const editingTask = ref<ScheduledTask | null>(null);
 const showTaskModal = ref(false);

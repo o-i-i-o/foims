@@ -63,8 +63,6 @@ interface OrgFormState {
 const form = reactive<OrgFormState>({ name: "", description: "", typeId: "", templateId: "" });
 const rootLabel = ref("");
 
-// ==================== 查询：可选下级类型 / 模板列表 ====================
-
 const allowedQuery = useQuery({
   queryKey: computed(() => ["org-allowed-child-types", props.parentId]),
   queryFn: async (): Promise<AllowedChildTypesResponse | null> => {
@@ -104,8 +102,6 @@ const editTypeLabel = computed(() =>
   props.mode === "edit" ? getOrgTypeLabel(props.node?.org_type || "") : ""
 );
 
-// ==================== 打开时重置表单 ====================
-
 watch(
   () => props.open,
   (open) => {
@@ -132,8 +128,6 @@ function onTemplateChange(): void {
     rootLabel.value = "";
   }
 }
-
-// ==================== 提交 ====================
 
 const saveMutation = useMutation({
   mutationFn: async () => {

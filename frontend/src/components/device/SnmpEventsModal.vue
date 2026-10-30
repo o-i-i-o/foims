@@ -27,8 +27,6 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-// ==================== 筛选状态 ====================
-
 const filters = reactive({
   device_id: props.deviceId,
   event_type: "",
@@ -84,8 +82,6 @@ const list = usePagedList<SnmpEvent>({
   }
 });
 
-// ==================== 设备下拉与名称映射 ====================
-
 const devicesQuery = useQuery({
   queryKey: queryKeys.snmpEventDevices,
   queryFn: async () => {
@@ -109,8 +105,6 @@ const deviceNameMap = computed<Map<string, string>>(() => {
 function deviceName(id: string): string {
   return deviceNameMap.value.get(id) || id;
 }
-
-// ==================== 展示辅助 ====================
 
 const EVENT_TYPES = [
   "link_flip",

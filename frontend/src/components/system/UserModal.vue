@@ -31,8 +31,6 @@ const queryClient = useQueryClient();
 const isEdit = computed(() => props.user != null);
 const userId = computed(() => props.user?.id ?? null);
 
-// ==================== 第一步：账户信息 ====================
-
 const formRef = ref<HTMLFormElement | null>(null);
 const username = ref("");
 const email = ref("");
@@ -77,8 +75,6 @@ watch(
     passwordConfirm.value = "";
   }
 );
-
-// ==================== 第二步：双因素认证 ====================
 
 const step = ref<"account" | "2fa">("account");
 // 三态：unsaved 新用户待保存 / setup 扫码启用 / manage 已启用可禁用
@@ -198,8 +194,6 @@ async function confirmDisable(): Promise<void> {
     disabling.value = false;
   }
 }
-
-// ==================== 保存（第二页"保存"提交整个表单） ====================
 
 const saving = ref(false);
 

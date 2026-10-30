@@ -33,28 +33,21 @@ async function handleSubmit() {
   }
 
   submitting.value = true;
-  try {
-    const result = await apiPost<unknown, ChangePasswordRequest>("/api/auth/change-password", {
-      old_password: oldPassword.value,
-      new_password: newPassword.value
-    });
-    if (result.success) {
-      showToast(result.message, "success");
-      emit("close");
-      // 改密后令牌全部失效，跳转登录页重新认证
-      setTimeout(() => {
-        redirectToLogin();
-      }, 1200);
-    } else {
-      showToast(result.message, "error");
-    }
-  } catch (error) {
-    // apiPost 永不 reject（失败归一为 ApiResult），此分支为防御性兜底
-    console.error("修改密码请求失败:", error);
-    showToast(t("auth.change_password_failed"), "error");
-  } finally {
-    submitting.value = false;
+  const result = await apiPost<unknown, ChangePasswordRequest>("/api/auth/change-password", {
+    old_password: oldPassword.value,
+    new_password: newPassword.value
+  });
+  if (result.success) {
+    showToast(result.message, "success");
+    emit("close");
+    // 改密后令牌全部失效，跳转登录页重新认证
+    setTimeout(() => {
+      redirectToLogin();
+    }, 1200);
+  } else {
+    showToast(result.message, "error");
   }
+  submitting.value = false;
 }
 </script>
 

@@ -290,13 +290,11 @@ impl JwtUtils {
         });
     }
 
-    // 获取访问令牌过期时间
     #[must_use]
     pub const fn get_access_token_expiry(&self) -> u64 {
         self.config.access_token_expiry
     }
 
-    // 获取基于 remember_me 的实际刷新令牌过期时间
     #[must_use]
     pub const fn get_actual_refresh_token_expiry(&self, remember_me: bool) -> u64 {
         if remember_me {
@@ -365,7 +363,7 @@ pub fn get_client_info_from_parts(parts: &axum::http::request::Parts) -> (String
 // 此处再导出保持 `foims_auth::jwt::hash_password` 调用路径稳定
 pub use foims_common::crypto::hash_password;
 
-// ==================== Token 黑名单 ====================
+// Token 黑名单
 
 pub async fn is_token_revoked(pool: &sqlx::PgPool, token: &str) -> Result<bool, sqlx::Error> {
     let token_hash = foims_common::net::generate_token_hash(token);
@@ -515,7 +513,7 @@ mod tests {
         }
     }
 
-    // ==================== 密钥校验 ====================
+    // 密钥校验
 
     #[test]
     fn test_new_rejects_secret_shorter_than_32_chars() {
@@ -551,7 +549,7 @@ mod tests {
         assert_eq!(decoded.len(), 64, "解码后应为 64 字节");
     }
 
-    // ==================== 令牌签发与验签往返 ====================
+    // 令牌签发与验签往返
 
     #[test]
     fn test_access_token_roundtrip_claims() {
@@ -724,7 +722,7 @@ mod tests {
         assert_eq!(parsed.remember_me, claims.remember_me);
     }
 
-    // ==================== remember_me claim ====================
+    // remember_me claim
 
     #[test]
     fn test_refresh_token_carries_remember_me_claim() {
@@ -761,7 +759,7 @@ mod tests {
         assert_eq!(claims.remember_me, None);
     }
 
-    // ==================== 设备指纹 ====================
+    // 设备指纹
 
     #[test]
     fn test_device_fingerprint_deterministic_and_known_vector() {
@@ -801,7 +799,7 @@ mod tests {
         assert_ne!(base, changed_ua);
     }
 
-    // ==================== 请求头/Cookie 提取 ====================
+    // 请求头/Cookie 提取
 
     /// 构造带指定请求头的 parts
     fn make_parts(headers: &[(&str, &str)]) -> axum::http::request::Parts {
@@ -910,7 +908,7 @@ mod tests {
         assert_eq!(ua2, "unknown");
     }
 
-    // ==================== 密码哈希 ====================
+    // 密码哈希
 
     #[tokio::test]
     async fn test_hash_password_and_verify_roundtrip() {

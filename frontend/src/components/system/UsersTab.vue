@@ -44,8 +44,6 @@ function roleLabel(role: string): string {
   return t(keys[role] || "user.role_user");
 }
 
-// ==================== 新增/编辑弹窗 ====================
-
 const modalUser = ref<User | null>(null);
 const showUserModal = ref(false);
 
@@ -62,8 +60,6 @@ function openEdit(user: User): void {
 function handleModalSaved(): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.users });
 }
-
-// ==================== 删除（二次确认） ====================
 
 const deleteTarget = ref<User | null>(null);
 const deleting = ref(false);

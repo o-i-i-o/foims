@@ -78,8 +78,6 @@ interface CableSideState {
   seq: { scope: number; cabinet: number; device: number; endpoint: number };
 }
 
-// ==================== 端点级联（A/B 两端对称） ====================
-
 function createSide(): CableSideState {
   return reactive<CableSideState>({
     type: "net_outlet",
@@ -252,8 +250,6 @@ async function loadEndpointOptions(side: CableSideState, scopeValue: string): Pr
   }
 }
 
-// ==================== 编辑回填 ====================
-
 const detailQuery = useQuery({
   queryKey: () => ["cable-link", props.linkId],
   queryFn: async (): Promise<CableLinkWithDetails | null> => {
@@ -353,8 +349,6 @@ if (props.linkId) {
   onTypeChange(sideA);
   onTypeChange(sideB);
 }
-
-// ==================== 提交 ====================
 
 const saveMutation = useMutation({
   mutationFn: async (): Promise<ApiResult<CableLinkWithDetails> | null> => {

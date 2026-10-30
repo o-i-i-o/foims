@@ -42,8 +42,6 @@ import type {
 /** 画布内容四周留白（与几何模块 `CANVAS_CONTENT_PADDING` 同值，独立常量避免循环意图） */
 const CONTENT_PADDING = 50;
 
-// ==================== 布局索引 ====================
-
 /**
  * 布局项按元素 id 建索引（键统一小写）。
  * 工位/机柜数量多时避免逐个 `find`（O(N×M)）。
@@ -66,8 +64,6 @@ export function savedPosition(item: LayoutItem | undefined): Position | null {
   const { position } = item;
   return isValidRect(position) ? position : null;
 }
-
-// ==================== 工位画布 ====================
 
 /** 门元素：已保存记录沿用其主键（保证可拖拽可保存），未保存时生成临时 id */
 export function buildDoorNode(layout: LayoutItem[]): DoorCanvasNode {
@@ -155,8 +151,6 @@ export function contentViewBox(rects: CanvasRect[], container: { width: number; 
   };
 }
 
-// ==================== 机柜画布 ====================
-
 /** 机柜画布输入 */
 export interface CabinetCanvasInput {
   cabinets: RoomCabinet[];
@@ -224,8 +218,6 @@ export function buildCabinetCanvas(input: CabinetCanvasInput): CabinetCanvas {
 
   return { nodes, totalWidth: computed.totalWidth };
 }
-
-// ==================== 拓扑画布 ====================
 
 /** 拓扑节点坐标兜底（异常数据按网格原点排布，避免 NaN 进 viewBox） */
 function topologyRect(node: TopologyNodeWithDevice): CanvasRect {

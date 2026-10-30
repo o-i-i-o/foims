@@ -112,7 +112,7 @@ type LayoutLoadState = "saved" | "empty" | "stale" | "error";
 
 const { t } = useI18n();
 
-// ==================== 页签 ====================
+// 页签
 
 /** 页签 id 即 localStorage 偏好记忆键值；画布页签不参与 hash 深链 */
 const TABS = [
@@ -135,7 +135,7 @@ const { activeTab, switchTab } = useSubTabs({
   }
 });
 
-// ==================== 组织与房间下拉 ====================
+// 组织与房间下拉
 
 const orgTree = ref<OrganizationTreeNode[]>([]);
 const orgOptions = computed(() => flattenOrgTree(orgTree.value));
@@ -155,7 +155,7 @@ async function loadOrganizationTree(): Promise<void> {
   orgTree.value = resultArray(result);
 }
 
-// ==================== 工位画布 ====================
+// 工位画布
 
 const workstationOrgId = ref("");
 /** 房间类型过滤（空串 = 办公类全集） */
@@ -397,7 +397,7 @@ async function autoDrawWorkstationFromToolbar(): Promise<void> {
   await saveWorkstationLayout();
 }
 
-// ==================== 机柜画布 ====================
+// 机柜画布
 
 const cabinetOrgId = ref("");
 const cabinetRoomType = ref("");
@@ -700,7 +700,7 @@ async function saveCabinetLayout(options: { silent?: boolean } = {}): Promise<vo
   }
 }
 
-// ==================== 拓扑画布 ====================
+// 拓扑画布
 
 const topologyCanvas = ref<InstanceType<typeof TopologyCanvas> | null>(null);
 const topologyOrgId = ref("");
@@ -995,7 +995,7 @@ function onZoomSelectChange(event: Event): void {
   }
 }
 
-// ==================== 拓扑弹窗 ====================
+// 拓扑弹窗
 
 const connectionCreateOpen = ref(false);
 const connectionDetail = ref<TopologyConnection | null>(null);
@@ -1094,7 +1094,7 @@ async function removeTopologyDevice(deviceId: string): Promise<void> {
   await loadTopology();
 }
 
-// ==================== 确认弹窗 ====================
+// 确认弹窗
 
 type ConfirmTarget = "workstation-layout" | "cabinet-layout" | "remove-device";
 
@@ -1154,7 +1154,7 @@ async function deleteCabinetLayoutConfirmed(): Promise<void> {
   showToast(t("viz.layout_delete_success"), "success");
 }
 
-// ==================== 资源编辑弹窗 ====================
+// 资源编辑弹窗
 
 const workstationModal = reactive({
   open: false,
@@ -1230,7 +1230,7 @@ async function onWorkstationSaved(payload: WorkstationSavedPayload): Promise<voi
   }
 }
 
-// ==================== 初始化 ====================
+// 初始化
 
 let initialized = false;
 

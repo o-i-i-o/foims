@@ -52,7 +52,7 @@ const { t } = useI18n();
 
 const DEFAULT_PORT_NAME = "eth0";
 
-// ==================== 房间上下文（区域/网段选项来源） ====================
+// 房间上下文（区域/网段选项来源）
 
 const roomNetworks = ref<NetworkInfo[]>([]);
 // 遗留数据：不属于当前房间的区域/网段，保留显示并标记
@@ -175,7 +175,7 @@ function networkOptionLabel(n: NetworkOptionRow, legacy = false): string {
   return `${n.name}${cidrStr}${mark}`;
 }
 
-// ==================== 行模型（key 供 v-for 稳定渲染） ====================
+// 行模型（key 供 v-for 稳定渲染）
 
 interface IpRowState {
   key: number;
@@ -265,7 +265,7 @@ function emptyCardRow(): CardRowState {
   };
 }
 
-// ==================== 行增删（每级至少保留一行） ====================
+// 行增删（每级至少保留一行）
 
 function addCard(): void {
   cards.push(emptyCardRow());
@@ -303,7 +303,7 @@ function removeIp(port: PortRowState, index: number): void {
   port.ips.splice(index, 1);
 }
 
-// ==================== 遗留数据登记（编辑回显） ====================
+// 遗留数据登记（编辑回显）
 
 function registerLegacy(ipData: IpDetail): void {
   if (
@@ -368,7 +368,7 @@ function buildCardRow(cardData: DeviceCard, portsData: DeviceCardPort[]): CardRo
   return card;
 }
 
-// ==================== 对外接口（父组件调用） ====================
+// 对外接口（父组件调用）
 
 /** 新增路径：清空遗留记录并放置一张空网卡 */
 function resetForAdd(): void {
@@ -541,7 +541,7 @@ function collectData(): { cards: CardSyncPayload[]; errors: string[] } {
   return { cards: out, errors };
 }
 
-// ==================== 自动分配 IP ====================
+// 自动分配 IP
 
 /**
  * 表单内已填写的地址键（限同网段，排除本次要改写的行）。

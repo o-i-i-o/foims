@@ -33,45 +33,33 @@ function arrayLength(value: unknown): number {
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
-  try {
-    const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
-    if (!deviceResult.success) {
-      phase.value = "error";
-      errorMsg.value = t("device.vlan_ledger.load_failed");
-      return;
-    }
-    deviceName.value = deviceResult.data?.name || "";
-
-    const result = await apiGet<DeviceVlan[]>(`/api/resources/devices/${props.deviceId}/vlans`);
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.vlan_ledger.load_failed")}: ${result.message || ""}`;
-      return;
-    }
-    vlans.value = result.data || [];
-    phase.value = vlans.value.length === 0 ? "empty" : "ready";
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
+  if (!deviceResult.success) {
     phase.value = "error";
-    errorMsg.value = `${t("common.load_failed")}: ${message}`;
+    errorMsg.value = t("device.vlan_ledger.load_failed");
+    return;
   }
+  deviceName.value = deviceResult.data?.name || "";
+
+  const result = await apiGet<DeviceVlan[]>(`/api/resources/devices/${props.deviceId}/vlans`);
+  if (!result.success) {
+    phase.value = "error";
+    errorMsg.value = `${t("device.vlan_ledger.load_failed")}: ${result.message || ""}`;
+    return;
+  }
+  vlans.value = result.data || [];
+  phase.value = vlans.value.length === 0 ? "empty" : "ready";
 }
 
 async function syncData(): Promise<void> {
   phase.value = "syncing";
-  try {
-    const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/vlans/sync`, {});
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.vlan_ledger.sync_failed")}: ${result.message || ""}`;
-      return;
-    }
-    await loadData();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/vlans/sync`, {});
+  if (!result.success) {
     phase.value = "error";
-    errorMsg.value = `${t("device.vlan_ledger.sync_failed")}: ${message}`;
+    errorMsg.value = `${t("device.vlan_ledger.sync_failed")}: ${result.message || ""}`;
+    return;
   }
+  await loadData();
 }
 
 function memberCount(v: DeviceVlan): number {

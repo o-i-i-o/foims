@@ -17,8 +17,6 @@ import UsersTab from "../components/system/UsersTab.vue";
 
 const { t } = useI18n();
 
-// ==================== 页签状态（记忆 + 深链） ====================
-
 // 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
   { id: "system-info", titleKey: "system.info" },

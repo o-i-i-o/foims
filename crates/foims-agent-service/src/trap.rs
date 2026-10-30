@@ -333,8 +333,6 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
     format!("{truncated}…")
 }
 
-// ==================== 单元测试 ====================
-
 #[cfg(test)]
 mod tests {
     use super::*;

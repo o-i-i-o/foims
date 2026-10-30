@@ -29,8 +29,6 @@ const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== SMTP 服务器配置 ====================
-
 const smtpHost = ref("");
 const smtpPort = ref("587");
 const smtpUsername = ref("");
@@ -124,8 +122,6 @@ async function testSmtpConnection(): Promise<void> {
     testingSmtp.value = false;
   }
 }
-
-// ==================== 通知设置（方式矩阵 + 收件人） ====================
 
 const ipChange = ref(true);
 const agentAlert = ref(true);

@@ -50,8 +50,6 @@ const { t } = useI18n();
 const queryClient = useQueryClient();
 const auth = useAuthStore();
 
-// ==================== 端口数据 ====================
-
 const nicsQuery = useQuery({
   queryKey: computed(() => queryKeys.deviceNics(props.deviceId)),
   queryFn: async (): Promise<NicCard[]> => {
@@ -66,8 +64,6 @@ const nicsQuery = useQuery({
 });
 
 const cards = computed(() => nicsQuery.data.value ?? []);
-
-// ==================== 实时端口状态（SSE） ====================
 
 // 按端口名（忽略大小写）匹配实时快照（与 SNMP 同步同口径）：
 // 仅覆盖运行状态与收/发速率，缺失实时数据时回退库内值
@@ -164,8 +160,6 @@ function portTooltip(iface: NicPort): string {
   return parts.join(" | ");
 }
 
-// ==================== 端口详情弹窗（新增/编辑） ====================
-
 /** 端口详情弹窗的行数据（portId 为空 = 新增） */
 interface PortFormSource {
   portId: string;
@@ -210,8 +204,6 @@ function onPortSaved(): void {
   // 网口增删改会连带改写 IP 归属与连线，按设备写操作统一失效
   invalidateDeviceWrite(queryClient, props.deviceId);
 }
-
-// ==================== SNMP 同步 ====================
 
 const syncing = ref(false);
 

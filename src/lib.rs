@@ -40,4 +40,3 @@ pub mod log;
 pub mod routes;
 pub mod shutdown;
 pub mod system;
-pub mod utils;

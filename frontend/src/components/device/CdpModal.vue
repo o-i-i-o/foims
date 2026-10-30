@@ -28,45 +28,33 @@ const neighbors = ref<DeviceCdp[]>([]);
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
-  try {
-    const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
-    if (!deviceResult.success) {
-      phase.value = "error";
-      errorMsg.value = t("device.cdp.load_failed");
-      return;
-    }
-    deviceName.value = deviceResult.data?.name || "";
-
-    const result = await apiGet<DeviceCdp[]>(`/api/resources/devices/${props.deviceId}/cdp`);
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.cdp.load_failed")}: ${result.message || ""}`;
-      return;
-    }
-    neighbors.value = result.data || [];
-    phase.value = neighbors.value.length === 0 ? "empty" : "ready";
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
+  if (!deviceResult.success) {
     phase.value = "error";
-    errorMsg.value = `${t("common.load_failed")}: ${message}`;
+    errorMsg.value = t("device.cdp.load_failed");
+    return;
   }
+  deviceName.value = deviceResult.data?.name || "";
+
+  const result = await apiGet<DeviceCdp[]>(`/api/resources/devices/${props.deviceId}/cdp`);
+  if (!result.success) {
+    phase.value = "error";
+    errorMsg.value = `${t("device.cdp.load_failed")}: ${result.message || ""}`;
+    return;
+  }
+  neighbors.value = result.data || [];
+  phase.value = neighbors.value.length === 0 ? "empty" : "ready";
 }
 
 async function syncData(): Promise<void> {
   phase.value = "syncing";
-  try {
-    const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/cdp/sync`, {});
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.cdp.sync_failed")}: ${result.message || ""}`;
-      return;
-    }
-    await loadData();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/cdp/sync`, {});
+  if (!result.success) {
     phase.value = "error";
-    errorMsg.value = `${t("device.cdp.sync_failed")}: ${message}`;
+    errorMsg.value = `${t("device.cdp.sync_failed")}: ${result.message || ""}`;
+    return;
   }
+  await loadData();
 }
 
 function orDash(value: string | null | undefined): string {

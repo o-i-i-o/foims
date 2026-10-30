@@ -45,7 +45,7 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 基础表单 ====================
+// 基础表单
 
 /** 房间表单状态（roomType 保持 string：select v-model 会回写 string 值） */
 interface RoomFormState {
@@ -88,7 +88,7 @@ const ROOM_TYPE_KEY_SUFFIX: Record<RoomType, string> = {
   other: "other"
 };
 
-// ==================== 网段配置行 ====================
+// 网段配置行
 
 let nextRowKey = 1;
 
@@ -140,7 +140,7 @@ function removeNetworkConfig(index: number): void {
   networkConfigs.splice(index, 1);
 }
 
-// ==================== 房型分区与子项动态行 ====================
+// 房型分区与子项动态行
 
 // 办公类仅工位；机房类仅机柜；"其他"两类均可管理
 const isOfficeRoom = computed(() => ["office", "lobby", "reception"].includes(form.roomType));
@@ -197,7 +197,7 @@ function addChildCabinet(): void {
   childCabinets.push({ key: nextRowKey++, id: null, name: "", capacity: 42 });
 }
 
-// ==================== 信息点动态行 ====================
+// 信息点动态行
 
 /** 信息点动态行状态 */
 interface NetOutletRowState {
@@ -218,7 +218,7 @@ function addNetOutlet(): void {
   netOutlets.push({ key: nextRowKey++, id: null, name: "" });
 }
 
-// ==================== 下拉选项（组织树 / 组织员工） ====================
+// 下拉选项（组织树 / 组织员工）
 
 /** 组织下拉行（树形按深度缩进展示） */
 interface OrgOptionRow {
@@ -277,7 +277,7 @@ function onOrgChange(): void {
   }
 }
 
-// ==================== 提交 ====================
+// 提交
 
 const saving = ref(false);
 

@@ -343,7 +343,7 @@ pub fn record_login_success(ip: &str, username: &str) {
     }
 }
 
-// ==================== API 数据结构 ====================
+// API 数据结构
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -424,7 +424,7 @@ pub struct UnbanIpRequest {
     pub ip: String,
 }
 
-// ==================== 配置持久化 ====================
+// 配置持久化
 
 /// 从 system_configs 加载持久化配置（config_type='fail2ban'，KV 形式与
 /// LDAP/SSO/SMTP 一致）；未配置时保持内存默认值，读库失败仅告警。
@@ -500,7 +500,7 @@ pub async fn save_config_to_db(
     Ok(())
 }
 
-// ==================== API Handler ====================
+// API Handler
 
 /// 获取应用层 fail2ban 状态（登录即可读，管理操作见下方安全管理员端点）
 pub async fn get_app_fail2ban_status<P: AuthProvider>(
@@ -680,7 +680,7 @@ pub async fn app_ban_ip<P: AuthProvider>(
     ))
 }
 
-// ==================== 单元测试 ====================
+// 单元测试
 
 #[cfg(test)]
 mod tests {

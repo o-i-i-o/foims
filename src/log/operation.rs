@@ -8,7 +8,7 @@ use axum::response::Response;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::utils::pagination::{Pagination, paged_response};
+use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::OperationLog;
 
@@ -51,7 +51,7 @@ pub async fn get_operation_logs(
         _ => "ORDER BY ol.created_at DESC",
     };
 
-    let search_pattern = crate::utils::escape_like(&action);
+    let search_pattern = foims_common::net::escape_like(&action);
 
     let has_filters = !resource_type.is_empty()
         || !resource_id.is_empty()

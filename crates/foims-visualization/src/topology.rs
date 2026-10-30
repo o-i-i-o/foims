@@ -20,7 +20,7 @@ use validator::{Validate, ValidationError};
 
 use crate::layout::{VisualizationError, ok_json};
 
-// ==================== 请求/响应模型 ====================
+// 请求/响应模型
 
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
@@ -168,7 +168,7 @@ pub struct TopologyNodeWithDevice {
     pub ip_address: Option<String>,
 }
 
-// ==================== 节点管理 ====================
+// 节点管理
 
 pub async fn get_topology_nodes(pool: &PgPool) -> Result<Response, VisualizationError> {
     let nodes = sqlx::query_as::<_, TopologyNodeWithDevice>(
@@ -278,7 +278,7 @@ pub async fn delete_topology_node(
     Ok(ok_json((), "server.visualization.topology_node_deleted"))
 }
 
-// ==================== 连线查询（派生 + 存储） ====================
+// 连线查询（派生 + 存储）
 
 /// 递归 CTE 的派生结果行：via_* 数组按跳展开。
 #[derive(Debug, FromRow)]
@@ -566,7 +566,7 @@ pub async fn get_topology_connections(pool: &PgPool) -> Result<Response, Visuali
     ))
 }
 
-// ==================== 连线创建/删除 ====================
+// 连线创建/删除
 
 /// 校验端口列表全部属于指定设备，返回是否合法。
 async fn ports_belong_to_device(
@@ -822,7 +822,7 @@ pub async fn delete_topology_connection(
     ))
 }
 
-// ==================== 自动发现（基于线路数据确保节点） ====================
+// 自动发现（基于线路数据确保节点）
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]

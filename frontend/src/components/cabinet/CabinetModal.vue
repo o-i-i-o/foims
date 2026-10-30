@@ -37,8 +37,6 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 基础表单 ====================
-
 // totalPower 为输入框原始值（未换算），保留 string | number 联合
 const form = reactive<{
   roomId: string;
@@ -55,8 +53,6 @@ const form = reactive<{
   powerUnit: "W",
   description: props.cabinet?.description ?? ""
 });
-
-// ==================== 机位/配线架动态行 ====================
 
 /** 机位动态行（key 为前端行键，id 为已有机位主键） */
 interface PositionRow {
@@ -104,8 +100,6 @@ function addPatchPanel() {
   patchPanels.push({ key: nextRowKey++, id: null, name: "" });
 }
 
-// ==================== 下拉选项（机房类房间） ====================
-
 // 机柜的网络配置由所属房间自动继承，房间下拉仅列机房类（机房/弱电井/其他）
 const roomsQuery = useQuery({
   queryKey: ["options", "datacenter-rooms"],
@@ -123,8 +117,6 @@ const roomOptions = computed<Room[]>(() => {
   const items = roomsQuery.data.value?.items;
   return Array.isArray(items) ? items : [];
 });
-
-// ==================== 提交 ====================
 
 const saving = ref(false);
 

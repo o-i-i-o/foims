@@ -44,7 +44,6 @@ const queryClient = useQueryClient();
 
 const isEdit = computed(() => Boolean(props.task));
 
-// ==================== 任务 config（JsonValue）收窄辅助 ====================
 // 后端 config 为自由 JsonValue，字段历史数据可能缺省或类型漂移，统一收窄取值
 
 /** 读取 config 中指定键的字符串数组（非数组或元素非字符串一律丢弃） */
@@ -79,8 +78,6 @@ function configNumber(config: JsonValue | null, key: string): number | null {
   }
   return null;
 }
-
-// ==================== 基础字段 ====================
 
 const name = ref(props.task?.name || "");
 const taskType = ref(props.task?.task_type || "mac_sync");
@@ -172,8 +169,6 @@ function clearCronInvalid(index: number): void {
   cronInvalid.value[index] = false;
 }
 
-// ==================== mac_sync 配置（设备复选 + 子网下拉） ====================
-
 const devicesQuery = useQuery({
   queryKey: ["st-devices"],
   queryFn: async () => {
@@ -224,12 +219,8 @@ function toggleDevice(id: string): void {
   selectedDeviceIds.value = next;
 }
 
-// ==================== 天数配置（log_cleanup / ip_status_sync） ====================
-
 const keepDays = ref(String(configNumber(props.task?.config ?? null, "days") ?? 30));
 const staleDays = ref(String(configNumber(props.task?.config ?? null, "days") ?? 30));
-
-// ==================== 提交 ====================
 
 const submitInFlight = ref(false);
 

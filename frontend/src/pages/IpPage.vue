@@ -58,8 +58,6 @@ function networkText(row: IpRow): string {
   return `${row.network_name || t("common.unknown")} (${row.network_region || t("common.unknown")})`;
 }
 
-// ==================== 表头搜索过滤（输入态与查询参数分离，防抖 300ms） ====================
-
 const ipFilters = reactive({ device_name: "", device_type: "", network: "", ip_address: "" });
 const ipFilterParams = reactive({ device_name: "", device_type: "", network: "", ip_address: "" });
 
@@ -103,8 +101,6 @@ watch(ipFilters, () => {
     ipList.page = 1;
   }, 300);
 });
-
-// ==================== 拉取 MAC 弹窗 ====================
 
 const pullMacOpen = ref(false);
 

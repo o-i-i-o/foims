@@ -64,7 +64,7 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 常量选项 ====================
+// 常量选项
 
 const ROOM_TYPE_FILTER_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "office", labelKey: "room.type_office" },
@@ -98,7 +98,7 @@ function snmpSecretPayload(value: string): string | null | undefined {
   return maskToNull(value);
 }
 
-// ==================== 表单状态 ====================
+// 表单状态
 
 /** 表单状态；snmpPort/powerWatts 为数字输入 v-model，清空时为空串 */
 interface DeviceFormState {
@@ -171,7 +171,7 @@ function editor(): InstanceType<typeof NetworkCardEditor> {
   return cardEditor.value as InstanceType<typeof NetworkCardEditor>;
 }
 
-// ==================== 下拉选项与级联加载 ====================
+// 下拉选项与级联加载
 
 // 设备模板选项（编辑回显与模板自动填充共用）
 const templateOptions = ref<DeviceTemplateSummary[]>([]);
@@ -374,7 +374,7 @@ async function onTemplateChange(): Promise<void> {
   }
 }
 
-// ==================== 编辑回显 ====================
+// 编辑回显
 
 /**
  * 编辑回显 SNMP 字段：community/auth_password/priv_password 在 GET 响应中
@@ -465,7 +465,7 @@ async function fillDeviceFormForEdit(
   await editor().loadExisting(device.cards || []);
 }
 
-// ==================== SNMP 测试 / 信息拉取 ====================
+// SNMP 测试 / 信息拉取
 
 /** 从网卡编辑器收集首个已填 IP（SNMP 请求只使用首个 IP） */
 function firstCardIpAddress(): string | null {
@@ -577,7 +577,7 @@ async function getDeviceInfoFromSnmp(): Promise<void> {
   }
 }
 
-// ==================== 提交 ====================
+// 提交
 
 const saving = ref(false);
 
@@ -678,7 +678,7 @@ function submit(): void {
   saveMutation.mutate({ cards, powerWatts });
 }
 
-// ==================== 初始化 ====================
+// 初始化
 
 onMounted(async () => {
   // 模板下拉、组织下拉、房间选项（新增路径）互不依赖，并行加载

@@ -24,8 +24,6 @@ import type { TopologyNodeWithDevice } from "../types/api/generated/TopologyNode
 import type { ApiResult, Paged } from "../types/api";
 import type { RoomCabinet } from "../types/visualization";
 
-// ==================== 载荷归一 ====================
-
 /** 裸数组端点归一：服务端 success 但非数组视为异常形状，按空数组处理 */
 export function resultArray<T>(result: ApiResult<T[] | null>): T[] {
   return result.success && Array.isArray(result.data) ? result.data : [];
@@ -44,8 +42,6 @@ export function resultList<T>(result: ApiResult<T[] | { items?: T[] } | null>): 
   }
   return Array.isArray(result.data.items) ? result.data.items : [];
 }
-
-// ==================== 布局（工位 / 机柜） ====================
 
 /** 工位布局：`element_layouts` 中该房间的工位与门记录 */
 export function getWorkstationLayout(roomId: string): Promise<ApiResult<LayoutItem[]>> {
@@ -77,8 +73,6 @@ export function deleteCabinetLayout(roomId: string): Promise<ApiResult<unknown>>
   return apiDelete<unknown>(`/api/resources/layouts/positions/${encodeURIComponent(roomId)}`);
 }
 
-// ==================== 工位 / IP ====================
-
 /** 房间工位列表路径（供 `fetchAllPages` 逐页拼接分页参数） */
 export function workstationsByRoomPath(roomId: string): string {
   return `/api/resources/workstations?room_id=${encodeURIComponent(roomId)}`;
@@ -96,8 +90,6 @@ export function ipsByPositionIdsPath(positionIds: string[]): string {
 export function getIpsByPositionIds(positionIds: string[]): Promise<ApiResult<Paged<IpDetailWithNames>>> {
   return apiGet<Paged<IpDetailWithNames>>(ipsByPositionIdsPath(positionIds));
 }
-
-// ==================== 拓扑节点与连线 ====================
 
 /** 拓扑节点（含设备联查信息），裸数组响应 */
 export function getTopologyNodes(): Promise<ApiResult<TopologyNodeWithDevice[]>> {
@@ -148,8 +140,6 @@ export function autoDiscoverTopology(): Promise<ApiResult<TopologyAutoDiscoverRe
   );
 }
 
-// ==================== 设备详情（拓扑三页签与连线弹窗） ====================
-
 /** 设备端口列表路径（供 `fetchAllPages` 逐页拼接分页参数） */
 export function deviceInterfacesPath(deviceId: string): string {
   return `/api/resources/devices/${encodeURIComponent(deviceId)}/interfaces`;
@@ -171,8 +161,6 @@ export function getDeviceLldp(deviceId: string): Promise<ApiResult<DeviceLldp[] 
 
 /** 设备端口类型别名（调用方少一层 import） */
 export type DevicePort = DeviceInterface;
-
-// ==================== 资源下拉（组织 / 房间） ====================
 
 /** 组织树 */
 export function getOrganizationTree(): Promise<ApiResult<OrganizationTreeNode[]>> {

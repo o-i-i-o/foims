@@ -25,8 +25,8 @@ use foims_x509_management::{
 };
 
 use crate::app_state::AppState;
-use crate::utils::{RequestMeta, log_op_best_effort};
 use foims_auth::extractor::SysAdminUser;
+use foims_auth::meta::{RequestMeta, log_op_best_effort};
 use foims_common::AppError;
 use foims_common::AppJson;
 

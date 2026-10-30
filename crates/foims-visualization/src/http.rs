@@ -125,8 +125,6 @@ pub async fn get_room_cabinets_with_positions<P: DbProvider>(
         .map_err(AppError::from)
 }
 
-// ==================== 拓扑可视化 ====================
-
 pub async fn get_topology_nodes<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {

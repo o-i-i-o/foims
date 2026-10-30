@@ -75,8 +75,6 @@ function certDaysText(days: number | null | undefined): string {
   return days == null ? "-" : String(days);
 }
 
-// ==================== 弹窗与操作确认 ====================
-
 const showCaGenerate = ref(false);
 const showCaImport = ref(false);
 const showCertGenerate = ref(false);

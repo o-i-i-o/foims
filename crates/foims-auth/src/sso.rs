@@ -89,7 +89,7 @@ fn sso_http_client() -> Result<&'static reqwest::Client, AppError> {
         .ok_or_else(|| AppError::Internal(msg("server.sso.http_client_failed")))
 }
 
-// ==================== 配置模型 ====================
+// 配置模型
 
 /// SSO（OIDC）配置（`client_secret` 内存中为明文，落库前加密）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,7 +205,7 @@ pub async fn save_sso_config_to_db(pool: &PgPool, config: &SsoConfig) -> Result<
     Ok(())
 }
 
-// ==================== OIDC 客户端构建 ====================
+// OIDC 客户端构建
 
 /// 解析回调地址：仅使用显式配置的 redirect_uri。
 ///
@@ -322,7 +322,7 @@ async fn build_oidc_client(
     Ok(client)
 }
 
-// ==================== 登录 / 回调 ====================
+// 登录 / 回调
 
 /// 发起 OIDC 授权码流程：302 跳转 IdP 授权端点。
 pub async fn sso_login<P: AuthProvider>(State(state): State<Arc<P>>) -> Response {
@@ -608,7 +608,7 @@ fn sso_error_redirect(error_key: &str) -> Response {
     Redirect::to(&format!("/index.html?sso_error={error_key}")).into_response()
 }
 
-// ==================== 认证方式查询 ====================
+// 认证方式查询
 
 /// 公开的认证方式开关：登录页据此显示/隐藏 LDAP 与 SSO 标签。
 ///
@@ -648,7 +648,7 @@ async fn get_ldap_config_enabled(pool: &PgPool, config_type: &str) -> bool {
     }
 }
 
-// ==================== 配置管理接口 ====================
+// 配置管理接口
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]

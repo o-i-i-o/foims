@@ -58,8 +58,6 @@ function unitName(service: string): string {
   return service === "foims" ? "foims.service" : "nginx.service";
 }
 
-// ==================== 操作（stop/restart 需二次确认） ====================
-
 const opInFlight = ref(false);
 const confirmOp = ref<null | { service: string; op: ServiceOp }>(null);
 let recoveryTimer: ReturnType<typeof setInterval> | null = null;

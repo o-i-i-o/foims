@@ -24,8 +24,6 @@ const emit = defineEmits<{ close: []; changed: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 模板列表 ====================
-
 /** 列表行：后端 DeviceTemplateSummary 不返回 description，行内编辑的描述框恒为空（原行为保留） */
 type TemplateRow = DeviceTemplateSummary & { description?: string | null };
 
@@ -41,8 +39,6 @@ const templatesQuery = useQuery({
 });
 
 const templates = computed(() => templatesQuery.data.value ?? []);
-
-// ==================== 行内编辑 ====================
 
 const editingId = ref("");
 const editForm = reactive({ name: "", deviceType: "other", brand: "", model: "", description: "" });
@@ -93,8 +89,6 @@ const updateMutation = useMutation({
     showToast(`${t("common.operation_failed")}: ${error.message}`, "error");
   }
 });
-
-// ==================== 删除 ====================
 
 const deleting = ref<TemplateRow | null>(null);
 

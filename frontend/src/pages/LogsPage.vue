@@ -30,8 +30,6 @@ import Pagination from "../components/Pagination.vue";
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 页签状态（记忆 + 深链） ====================
-
 // 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
   { id: "operation", titleKey: "logs.operation_logs" },
@@ -44,13 +42,9 @@ const { activeTab, switchTab } = useSubTabs({
   tabs: TABS
 });
 
-// ==================== 分页列表（排序 + 越界回退） ====================
-
 const OPERATION_PAGE_SIZE = 50;
 const LOGIN_PAGE_SIZE = 50;
 const NOTIFICATION_PAGE_SIZE = 20;
-
-// ==================== 操作日志（含搜索） ====================
 
 const operationSearch = ref("");
 
@@ -74,8 +68,6 @@ watch(searchInput, (value) => {
   }, 500);
 });
 
-// ==================== 登录日志 / 通知 ====================
-
 const login = usePagedList<LoginLog>({
   tag: queryKeys.logsLogin,
   defaultPageSize: LOGIN_PAGE_SIZE,
@@ -89,8 +81,6 @@ const notifications = usePagedList<Notification>({
   enabled: computed(() => activeTab.value === "notifications"),
   buildUrl: (page, pageSize, sortBy, sortOrder) => notificationsUrl({ page, pageSize, sortBy, sortOrder })
 });
-
-// ==================== 通知已读操作 ====================
 
 const markReadMutation = useMutation({
   mutationFn: (id: string) => markNotificationRead(id),
@@ -121,8 +111,6 @@ function handleMarkAllConfirmed() {
   showMarkAllConfirm.value = false;
   markAllMutation.mutate();
 }
-
-// ==================== 操作日志详情 ====================
 
 const detailsLog = ref<OperationLog | null>(null);
 </script>

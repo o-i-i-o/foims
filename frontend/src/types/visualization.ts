@@ -13,8 +13,6 @@ import type { TopologyConnectionView } from "./api/generated/TopologyConnectionV
 import type { TopologyNodeWithDevice } from "./api/generated/TopologyNodeWithDevice";
 import type { WorkstationWithDetails } from "./api/generated/WorkstationWithDetails";
 
-// ==================== 几何 ====================
-
 /** 画布矩形（世界坐标，viewBox 1:1 像素） */
 export interface CanvasRect {
   x: number;
@@ -33,8 +31,6 @@ export interface AnchorPoint {
   dir: AnchorDirection;
 }
 
-// ==================== 工位画布 ====================
-
 /**
  * 工位画布节点：列表载荷（`WorkstationWithDetails`，不含 IP 明细）+
  * 画布矩形 + 归并后的 IP 明细行。
@@ -49,8 +45,6 @@ export interface DoorCanvasNode {
   id: string;
   rect: CanvasRect;
 }
-
-// ==================== 机柜画布 ====================
 
 /**
  * 房间机柜图里的机位（后端手写 JSON：id/name/cabinet_id/start_u/end_u/description）。
@@ -93,8 +87,6 @@ export interface CabinetCanvasNode extends Omit<RoomCabinet, "positions"> {
   positions: CabinetPositionCanvasNode[];
 }
 
-// ==================== 拓扑画布 ====================
-
 /** 拓扑设备节点：服务端节点载荷 + 画布矩形 */
 export type TopologyCanvasNode = TopologyNodeWithDevice & { rect: CanvasRect };
 
@@ -117,8 +109,6 @@ export interface TopologyRoomGroup<N> {
   loose: N[];
   nodes: N[];
 }
-
-// ==================== 布局持久化 ====================
 
 /** 布局归属实体：保存前由视图模型投影，替代旧实现从 SVG DOM 反读属性 */
 export interface LayoutEntity {

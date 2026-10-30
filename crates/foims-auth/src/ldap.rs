@@ -27,7 +27,7 @@ use foims_models::LdapLoginRequest;
 
 const LDAP_TIMEOUT: Duration = Duration::from_secs(10);
 
-// ==================== 配置模型 ====================
+// 配置模型
 
 /// LDAP 配置（`bind_password` 内存中为明文，落库前加密）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,7 +148,7 @@ pub async fn save_ldap_config_to_db(pool: &PgPool, config: &LdapConfig) -> Resul
     Ok(())
 }
 
-// ==================== LDAP 认证 ====================
+// LDAP 认证
 
 /// RFC 4515 过滤器值转义：转义反斜杠/括号/星号/空字节，防止破坏或 broaden 过滤器。
 fn escape_ldap_filter(input: &str) -> String {
@@ -459,7 +459,7 @@ pub(crate) async fn complete_external_login<P: AuthProvider>(
     build_login_response(user, login_tokens, meta.is_secure)
 }
 
-// ==================== 配置管理接口 ====================
+// 配置管理接口
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -614,7 +614,7 @@ pub async fn test_ldap_connection<P: AuthProvider>(
 mod tests {
     use super::*;
 
-    // ==================== RFC 4515 过滤器转义 ====================
+    // RFC 4515 过滤器转义
 
     #[test]
     fn test_escape_ldap_filter_special_chars() {

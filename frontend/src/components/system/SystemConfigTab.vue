@@ -44,8 +44,6 @@ const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== 会话设置（server 段） ====================
-
 // 最近一次加载的 server 段原文：PUT 整体替换，保存时原样带回其余字段
 // （初始空对象与 JS 展开 null 等价，均为仅覆盖两个编辑字段的载荷）
 let serverBase: ServerSection = {};
@@ -103,8 +101,6 @@ async function saveSystemConfig(): Promise<void> {
     savingConfig.value = false;
   }
 }
-
-// ==================== LDAP 认证配置 ====================
 
 const ldapEnabled = ref(false);
 const ldapUrl = ref("");
@@ -192,8 +188,6 @@ async function testLdapConnection(): Promise<void> {
     testingLdap.value = false;
   }
 }
-
-// ==================== SSO（OIDC）配置 ====================
 
 const ssoEnabled = ref(false);
 const ssoIssuerUrl = ref("");

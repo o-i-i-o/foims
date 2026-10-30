@@ -139,7 +139,7 @@ const spaceDown = ref(false);
 /** 平移中（容器 cursor 切换 grabbing） */
 const panning = ref(false);
 
-// ==================== 交互状态 ====================
+// 交互状态
 
 type Interaction =
   | {
@@ -203,7 +203,7 @@ function effectiveRect(node: TopologyCanvasNode): CanvasRect {
   return node.rect;
 }
 
-// ==================== 图标（本地 lucide，异步一次） ====================
+// 图标（本地 lucide，异步一次）
 
 const iconCache = reactive(new Map<string, string>());
 const requestedIcons = new Set<string>();
@@ -233,7 +233,7 @@ watch(
   { immediate: true },
 );
 
-// ==================== 视图投影 ====================
+// 视图投影
 
 const layoutNodes = computed<TopologyCanvasNode[]>(() =>
   props.nodes.map((node) => ({ ...node, rect: effectiveRect(node) })),
@@ -530,7 +530,7 @@ const connectionRenders = computed<ConnectionRender[]>(() => {
   return renders;
 });
 
-// ==================== 视野 ====================
+// 视野
 
 function fitView(): void {
   userAdjusted.value = false;
@@ -566,7 +566,7 @@ watch(containerSize, () => {
 
 watch(zoomScale, (scale) => emit("zoom-change", scale), { immediate: true });
 
-// ==================== 指针交互 ====================
+// 指针交互
 
 function closest<T extends Element>(target: EventTarget | null, selector: string): T | null {
   return target instanceof Element ? target.closest<T>(selector) : null;
@@ -822,7 +822,7 @@ function onWheel(event: WheelEvent): void {
   zoomAt(point, event.deltaY > 0 ? 1.1 : 0.9);
 }
 
-// ==================== 连线模式 ====================
+// 连线模式
 
 function cancelConnection(): void {
   connectionSource.value = null;
@@ -873,7 +873,7 @@ function handleAnchorClick(anchor: SVGElement): void {
   cancelConnection();
 }
 
-// ==================== 键盘（空格平移 / Esc 取消连线） ====================
+// 键盘（空格平移 / Esc 取消连线）
 
 function isCanvasVisible(): boolean {
   const element = containerRef.value;

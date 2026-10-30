@@ -72,8 +72,6 @@ impl<S: Send + Sync> FromRequestParts<S> for RequestMeta {
     }
 }
 
-// ==================== 操作日志 ====================
-
 pub struct OperationLogParams<'a> {
     pub ip_address: &'a str,
     pub user_id: Option<Uuid>,

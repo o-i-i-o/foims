@@ -27,8 +27,6 @@ const queryClient = useQueryClient();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== 日志统计 ====================
-
 const statsQuery = useQuery({
   queryKey: ["logs-stats"],
   queryFn: async () => {
@@ -50,8 +48,6 @@ function oldestText(value: string | null | undefined): string {
   }
   return `${t("logs.earliest_label")}: ${formatDate(value)}`;
 }
-
-// ==================== 日志清理 ====================
 
 const clearType = ref("operation");
 const clearDays = ref("30");
@@ -96,8 +92,6 @@ async function doClearLogs(): Promise<void> {
     clearing.value = false;
   }
 }
-
-// ==================== 日志外发（syslog） ====================
 
 const forwardingEnabled = ref("false");
 const forwardingProtocol = ref("udp");

@@ -40,8 +40,6 @@ const status = computed<Partial<AppFail2banStatus>>(() => statusQuery.data.value
 const bannedIps = computed<BannedIpInfo[]>(() => (Array.isArray(status.value.banned_ips) ? status.value.banned_ips : []));
 const trackedIps = computed<TrackedIpInfo[]>(() => (Array.isArray(status.value.tracked_ips) ? status.value.tracked_ips : []));
 
-// ==================== 配置表单 ====================
-
 const enabled = ref("false");
 const findtime = ref("");
 const maxRetry = ref("");
@@ -86,8 +84,6 @@ async function saveConfig(): Promise<void> {
     saving.value = false;
   }
 }
-
-// ==================== 封禁 / 解封 ====================
 
 const manualIp = ref("");
 // 解封确认目标（表格行内与手动解封共用）

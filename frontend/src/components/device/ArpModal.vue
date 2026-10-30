@@ -23,7 +23,6 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
-// ==================== 加载状态机 ====================
 // loading 初始加载 / syncing 同步中 / ready 就绪 / empty 无数据 / error 失败
 type LoadPhase = "loading" | "syncing" | "ready" | "empty" | "error";
 
@@ -34,55 +33,36 @@ const entries = ref<SnmpMac[]>([]);
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
-  try {
-    const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
-    if (!deviceResult.success) {
-      phase.value = "error";
-      errorMsg.value = t("device.load_failed");
-      return;
-    }
-    deviceName.value = deviceResult.data?.name || "";
-
-    const result = await apiGet<SnmpMac[]>(`/api/resources/devices/${props.deviceId}/macs`);
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.load_mac_failed")}: ${result.message || ""}`;
-      return;
-    }
-    entries.value = result.data || [];
-    phase.value = entries.value.length === 0 ? "empty" : "ready";
-  } catch (error) {
-    // apiGet/apiPost 不 reject，此分支为防御性保留；非 Error 抛出值按空串回退
-    const message = error instanceof Error ? error.message : "";
+  const deviceResult = await apiGet<DeviceWithDetails>(`/api/resources/devices/${props.deviceId}`);
+  if (!deviceResult.success) {
     phase.value = "error";
-    errorMsg.value = `${t("common.load_failed")}: ${message}`;
+    errorMsg.value = t("device.load_failed");
+    return;
   }
+  deviceName.value = deviceResult.data?.name || "";
+
+  const result = await apiGet<SnmpMac[]>(`/api/resources/devices/${props.deviceId}/macs`);
+  if (!result.success) {
+    phase.value = "error";
+    errorMsg.value = `${t("device.load_mac_failed")}: ${result.message || ""}`;
+    return;
+  }
+  entries.value = result.data || [];
+  phase.value = entries.value.length === 0 ? "empty" : "ready";
 }
 
 async function syncMacData(): Promise<void> {
   phase.value = "syncing";
-  try {
-    const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/macs/sync`, {});
-    if (!result.success) {
-      phase.value = "error";
-      errorMsg.value = `${t("device.sync_failed")}: ${result.message || ""}`;
-      return;
-    }
-    await loadData();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+  const result = await apiPost<unknown>(`/api/resources/devices/${props.deviceId}/macs/sync`, {});
+  if (!result.success) {
     phase.value = "error";
-    errorMsg.value = `${t("device.sync_failed")}: ${message}`;
+    errorMsg.value = `${t("device.sync_failed")}: ${result.message || ""}`;
+    return;
   }
+  await loadData();
 }
-
-// ==================== IPv4/IPv6 页签与搜索 ====================
 
 const activeTab = ref<"ipv4" | "ipv6">("ipv4");
-
-function switchTab(tab: "ipv4" | "ipv6"): void {
-  activeTab.value = tab;
-}
 
 const ipv4SearchInput = ref("");
 const ipv6SearchInput = ref("");
@@ -118,8 +98,6 @@ function filterEntries(list: SnmpMac[], term: string): SnmpMac[] {
 
 const ipv4Entries = computed(() => entries.value.filter((e) => e.ip_address?.includes(".")));
 const ipv6Entries = computed(() => entries.value.filter((e) => e.ip_address?.includes(":")));
-
-// ==================== 网段分组 ====================
 
 function groupNetworkOf(entry: SnmpMac, type: "ipv4" | "ipv6"): string {
   if (type === "ipv4") {
@@ -188,8 +166,6 @@ function buildGroups(list: SnmpMac[], type: "ipv4" | "ipv6") {
 const ipv4Groups = computed(() => buildGroups(filterEntries(ipv4Entries.value, ipv4Search.value), "ipv4"));
 const ipv6Groups = computed(() => buildGroups(filterEntries(ipv6Entries.value, ipv6Search.value), "ipv6"));
 
-// ==================== 分组折叠（默认全部收起） ====================
-
 const expandedGroups = ref(new Set<string>());
 
 function toggleGroup(network: string): void {
@@ -246,7 +222,7 @@ loadData();
               :class="{ active: activeTab === 'ipv4' }"
               role="tab"
               :aria-selected="activeTab === 'ipv4'"
-              @click="switchTab('ipv4')"
+              @click="activeTab = 'ipv4'"
             >
               IPv4 ({{ ipv4Entries.length }})
             </button>
@@ -256,7 +232,7 @@ loadData();
               :class="{ active: activeTab === 'ipv6' }"
               role="tab"
               :aria-selected="activeTab === 'ipv6'"
-              @click="switchTab('ipv6')"
+              @click="activeTab = 'ipv6'"
             >
               IPv6 ({{ ipv6Entries.length }})
             </button>

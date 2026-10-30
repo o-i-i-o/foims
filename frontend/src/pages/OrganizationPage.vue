@@ -25,8 +25,6 @@ import { queryKeys } from "../utils/queryKeys";
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
-// ==================== 数据查询 ====================
-
 const treeQuery = useQuery({
   queryKey: queryKeys.organizationsTree,
   queryFn: async (): Promise<OrganizationTreeNode[]> => {
@@ -86,8 +84,6 @@ function resolveIcon(orgType: unknown, templateId: string | null): string {
   return resolveOrgIcon(orgType, templateIconsById.value[templateId ?? ""] ?? {}, availableTypesQuery.data.value?.icons ?? {});
 }
 
-// ==================== 搜索（客户端过滤，防抖 300ms） ====================
-
 const searchInput = ref("");
 const searchKeyword = ref("");
 let searchTimer: number | undefined;
@@ -134,8 +130,6 @@ const searchState = computed(() => {
   return { visible, expand };
 });
 
-// ==================== 展开/折叠 ====================
-
 const allExpanded = ref(false);
 
 // 树渲染代际：数据变化或清空搜索时整树重挂载，节点展开态还原
@@ -147,8 +141,6 @@ watch(treeQuery.data, () => {
 function toggleAll() {
   allExpanded.value = !allExpanded.value;
 }
-
-// ==================== 树节点操作（注入给递归节点） ====================
 
 const orgModal = reactive<{ open: boolean; mode: string; node: OrganizationTreeNode | null; parentId: string }>({
   open: false,
@@ -193,8 +185,6 @@ function onAction(node: OrganizationTreeNode, action: string): void {
     deletingOrg.value = node;
   }
 }
-
-// ==================== 组织节点删除 ====================
 
 const deleteOrgMutation = useMutation({
   mutationFn: (node: OrganizationTreeNode) => apiDelete(`/api/resources/organizations/${node.id}`),

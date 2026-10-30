@@ -28,8 +28,6 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 
 const { t } = useI18n();
 
-// ==================== 表单 ====================
-
 const form = reactive<{
   name: string;
   roomId: string;
@@ -46,8 +44,6 @@ const form = reactive<{
   description: props.position?.description ?? ""
 });
 
-// ==================== 房间/机柜级联 ====================
-
 // 房间选项从机柜数据源只读去重派生（page_size=1000 后端上限，
 // 默认 20/页会把第 21 个及之后的机柜静默截断）
 const cabinetsSourceQuery = useQuery({
@@ -57,8 +53,7 @@ const cabinetsSourceQuery = useQuery({
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    const items = result.data?.items;
-    return Array.isArray(items) ? items : [];
+    return result.data?.items ?? [];
   }
 });
 
@@ -79,23 +74,19 @@ const roomCabinetsQuery = useQuery({
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    const items = result.data?.items;
-    return Array.isArray(items) ? items : [];
+    return result.data?.items ?? [];
   },
   enabled: computed(() => Boolean(form.roomId))
 });
 
-const cabinetOptions = computed<CabinetWithNetworks[]>(() => {
-  const data = roomCabinetsQuery.data.value;
-  return Array.isArray(data) ? data : [];
-});
+const cabinetOptions = computed<CabinetWithNetworks[]>(
+  () => roomCabinetsQuery.data.value ?? []
+);
 
 // 房间切换 → 机柜选项刷新，旧选中作废
 function onRoomChange() {
   form.cabinetId = "";
 }
-
-// ==================== 提交 ====================
 
 const saving = ref(false);
 

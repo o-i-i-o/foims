@@ -56,7 +56,7 @@ function useTopList<T>(tag: string, url: string) {
   return { ...query, data: computed(() => query.data.value ?? []) };
 }
 
-// ==================== 统计卡 ====================
+// 统计卡
 
 const statsQuery = useQuery({
   queryKey: ["dashboard-stats"],
@@ -85,7 +85,7 @@ const statValues = computed(() => {
   };
 });
 
-// ==================== 榜单卡 ====================
+// 榜单卡
 
 // 网络榜单行：联查附加的区域名称键未入 generated Network
 type NetworkTopItem = Network & { network_region_name?: string | null };
@@ -106,7 +106,7 @@ function logMetaText(log: OperationLog): string {
   return `${log.username || "-"} · ${formatTime(log.created_at)}`;
 }
 
-// ==================== 主机负载卡片（agent 快照 + SNMP 实时快照） ====================
+// 主机负载卡片（agent 快照 + SNMP 实时快照）
 
 /** 主机负载条目（/api/agents/top-metrics 行：主机名/IP/标签/指标值） */
 interface HostMetricItem {
@@ -368,7 +368,7 @@ function trafficText(item: HostLoadItem): string {
   return item.live ? `↓ ${formatBps(item.live.rx_bps)} ↑ ${formatBps(item.live.tx_bps)}` : "-";
 }
 
-// ==================== 卡片跳转 ====================
+// 卡片跳转
 
 /**
  * 卡片点击跳转（声明式事件处理）：命中卡片内页签等按钮时不跳转；

@@ -34,8 +34,6 @@ const { t } = useI18n();
 
 const readonly = isSectionReadonly("system");
 
-// ==================== 限流设置 ====================
-
 const configQuery = useQuery({
   queryKey: ["system-config"],
   queryFn: async () => {
@@ -103,8 +101,6 @@ async function saveRateLimitConfig(): Promise<void> {
     savingRateLimit.value = false;
   }
 }
-
-// ==================== 等保密码策略 ====================
 
 const policyQuery = useQuery({
   queryKey: ["password-policy"],

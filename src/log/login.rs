@@ -7,8 +7,8 @@ use axum::extract::{Query, State};
 use axum::response::Response;
 
 use crate::app_state::AppState;
-use crate::utils::pagination::{Pagination, paged_response};
 use foims_common::AppError;
+use foims_common::pagination::{Pagination, paged_response};
 use foims_models::LoginLog;
 
 /// GET /api/logs/login：分页查询登录日志。
@@ -40,7 +40,7 @@ pub async fn get_login_logs(
         _ => "ORDER BY created_at DESC",
     };
 
-    let search_pattern = crate::utils::escape_like(&search);
+    let search_pattern = foims_common::net::escape_like(&search);
     let conn = state.pool()?.get_conn();
 
     let (total, logs) = if search.is_empty() {

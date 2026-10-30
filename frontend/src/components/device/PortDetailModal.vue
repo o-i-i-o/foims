@@ -63,8 +63,6 @@ const PORT_STATUS_OPTIONS: { value: string; labelKey: string }[] = [
 
 const isNewPort = !props.port.portId;
 
-// ==================== 表单状态 ====================
-
 const form = reactive({
   name: props.port.name || "",
   physicalType: props.port.physicalType || "other",
@@ -90,8 +88,6 @@ function parseVlanInput(raw: number | "" | null | undefined): number | null {
 function isInvalidVlan(value: number | null): boolean {
   return value !== null && (Number.isNaN(value) || value < 1 || value > 4094);
 }
-
-// ==================== 保存 ====================
 
 const saveMutation = useMutation({
   mutationFn: async () => {
@@ -144,8 +140,6 @@ const saveMutation = useMutation({
     showToast(error.message || t("device.port_save_failed"), "error");
   }
 });
-
-// ==================== 删除（仅编辑态） ====================
 
 const confirmingDelete = ref(false);
 

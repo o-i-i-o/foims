@@ -1060,3 +1060,29 @@ v0.42.1
 1. SNMP 观测事件/终端定位入口迁移（前端功能优化，y+1）：两个全局按钮原在「资源管理-设备」页签表头 `device-toolbar-actions` 内，但二者均不依赖设备行（观测事件弹窗从工具栏进入时不预填 device_id，终端定位为独立查询，后端 /api/snmp/events 与 /api/snmp/locate 均为库内只读、仅需登录），与 SNMP 采集源同属主机监控职责——现移至「主机监控」页顶栏 `agents-toolbar` 的「告警阈值」按钮之后；ResourcesPage 删除两按钮及其 SnmpEventsModal/LocateModal 挂载与 `eventsModal`/`locateModal` 状态，改由 AgentsPage 承载（`eventsModal` 简化为 `{ open }`，deviceId 预填能力仍由 ArpModal 与设备 SNMP 汇聚弹窗的观测事件标签各自持有）；按钮文案复用既有 i18n 键 `device.snmp_events.title`/`device.locate.title`（弹窗标题同源，不新增重复文案）；设备页签表头仅保留「新增设备」按钮。
 2. 版本：仅前端联动，frontend/package.json 0.1.25→0.1.26（y+1，z 归零），根 Cargo.toml 不联动。
 3. 验证：`npm run typecheck` 通过；`npm run build` 通过。
+
+v0.42.2
+2026103012000001
+1. 去除 AI 味首批（仅前端，零行为变更）：Arp/Lldp/Cdp/Entity 四个 SNMP 弹窗删除在 apiGet/apiPost 永不 reject 契约下不可达的 try/catch 兜底（含自认「防御性保留」的注释），失败态仍由 `!result.success` 分支设置不变；ArpModal 删除仅赋值 `activeTab` 的 switchTab 包装，模板改为直接赋值；ResourcesPage 删除引用已不存在 `composables/usePagedList.js` 的空分区横幅。
+2. 版本：仅前端联动，frontend/package.json 0.1.26→0.1.27（z+1），根 Cargo.toml 不联动。
+3. 验证：`npm run typecheck` 通过；`npm run build` 通过；biome 配置忽略 Vue SFC，未产生检查结果。
+4. 遗留：LagModal/PoeModal/VlanLedgerModal 存在同构死 catch，未在本批批准范围。
+
+v0.42.3
+2026103012011101
+1. 去除 AI 味第二批（仅前端，零行为变更）：LagModal/PoeModal/VlanLedgerModal 删除 apiGet/apiPost 永不 reject 契约下不可达的 try/catch 兜底，失败态仍由 `!result.success` 分支设置，与首批 Arp/Lldp/Cdp/Entity 弹窗同构。
+2. 版本：仅前端联动，frontend/package.json 0.1.27→0.1.28（z+1），根 Cargo.toml 不联动。
+3. 验证：`npm run typecheck` 通过；`npm run build` 通过；`git diff --check` 无空白问题。
+4. 剩余：ChangePasswordModal/ForgotPasswordModal 与 stores/auth.ts 的兜底仍待确认；前端 213 处装饰横幅与注释审计阶段七重叠，待统一批次处理。
+
+v0.42.4
+2026103012083301
+1. 去除 AI 味收尾（前后端，零行为变更）：
+   - 前端死兜底：ChangePasswordModal/ForgotPasswordModal/stores/auth.ts 删除 apiPost 永不 reject 契约下不可达的 catch（改密失败态与登出跳转仍由返回值/无条件 localLogout 保证）；PositionModal 三处对已类型化数据源重复的 Array.isArray 收窄改为 `?? []`；SubnetUsageModal 删除 6 处重复的 noUncheckedIndexedAccess 收窄说明。
+   - 前端装饰横幅：213 处 `// ====` 全部清理——11 个 >600 行多职责文件（LoginPage/ResourcesPage/VisualizationPage/TopologyCanvas/DashboardPage/DeviceModal/RoomModal/InitWizard/NetworkCardEditor/SubnetUsageModal/geometry.ts）降级为裸分区标签 83 处，其余 130 处删除。
+   - 后端兼容层：删除 `src/utils` 纯 re-export 层（main/certificate/login/operation/notification 五处调用改直连 foims_common/foims_auth，lib.rs 移除模块声明）；jwt.rs 删除两处复述 getter 注释。
+   - 后端装饰横幅：31 处 `// ====` 清理——6 个 >600 行文件（topology/layout/jwt/ldap/sso/app_fail2ban）降级为裸标签 28 处，http/meta/trap 三处删除；orgConfig/spec/scheduler 共 14 处 `// ----` 去掉装饰保留标签（scheduler 三段事务边界语义不变）。
+   - 经核对 SubnetUsageModal 的 CIDR 计算与 utils/network.ts 无等价实现，搬迁只增加间接层，未动。
+2. 版本：仅前端 z+1，frontend/package.json 0.1.28→0.1.29；根 Cargo.toml 不联动。
+3. 验证：`npm run typecheck`、`npm run build` 通过；`cargo fmt --all` 通过；foims-auth/foims-visualization/foims-data-management/foims-scheduler 以 `--no-deps` 跑 clippy `-D warnings` 通过，foims/foims-agent-service 以 `cargo check --all-targets` 通过；变更包 `cargo test` 共 262 项全部通过。全仓 clippy 被既有 `crates/foims-snmp/src/collect/arp.rs:52` collapsible_if 阻断（HEAD 内容，非本批改动，未修）。
+4. 未动：仓库根 `.runtime-evidence/api-smoke.sh`、`mm_reward_qrcode_*.png`（是否清理由仓库所有者确认）；foims-agent 子工作区横幅；LoginPage 吉祥物动画拆分（结构调整单独立项）；operation.rs COUNT/SELECT 重复、config.rs 同构校验块（保留）。
