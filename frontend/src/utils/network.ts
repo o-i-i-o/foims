@@ -3,8 +3,7 @@
  *
  * IPv4 八位组拒绝前导零（如 "01"，避免八进制歧义）。
  * 本文件收录前端已接线页面的依赖链（网段弹窗校验、设备网卡 IP 校验）：
- * isIPv6 / isValidIP / isValidIPv4 / isValidIPv6 / isIpInCidr 及其内部实现，
- * 未收录的函数按页面所需再补。
+ * isIPv6 / isValidIP / isValidIPv4 / isValidIPv6 / isIpInCidr 及其内部实现。
  */
 
 /** 判断是否为 IPv6 地址（按是否含冒号粗判，配合 isValidIPv6 使用）。 */

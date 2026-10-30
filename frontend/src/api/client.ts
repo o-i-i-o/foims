@@ -126,16 +126,12 @@ async function handleUnauthorized<T>(
 
   if (!isRedirecting) {
     isRedirecting = true;
-    showToastAuthError();
+    showToast(t("api.token_expired"), "error");
     setTimeout(() => {
       redirectToLogin();
     }, 1500);
   }
   return { success: false, message: t("api.token_expired"), errorType: "token_expired", data: null };
-}
-
-function showToastAuthError(): void {
-  showToast(t("api.token_expired"), "error");
 }
 
 /** 解析非 2xx 响应体：JSON 时提取服务端消息，非 JSON 时保留原文片段 */

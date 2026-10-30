@@ -65,7 +65,7 @@ fn cpu_raw_oids() -> [async_snmp::Oid; 11] {
     ]
 }
 
-/// CPU Raw 计数器中 Idle 的下标（usage 分子）
+/// CPU Raw 计数器中 Idle 的下标（使用率公式的扣减项）
 const CPU_RAW_IDLE_IDX: usize = 3;
 
 /// Wait（iowait）下标：计入 total 但归入非 busy 侧（B5：与 top 口径一致，

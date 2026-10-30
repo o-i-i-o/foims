@@ -137,7 +137,7 @@ export function usePagedList<T>(options: UsePagedListOptions): PagedList<T> {
       if (!data || !Array.isArray(data.items) || data.items.length !== 0 || page.value <= 1) {
         return;
       }
-      const lastPage = data.total_pages || Math.ceil((data.total || 0) / pageSize.value);
+      const lastPage = data.total_pages;
       if (lastPage > 0 && page.value > lastPage) {
         page.value = lastPage;
       }

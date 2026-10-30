@@ -79,8 +79,6 @@ function falsy(value: unknown, what = "条件"): void {
   }
 }
 
-// ==================== 基础校验 ====================
-
 check("isValidRect 拒绝 NaN / 负值 / 零宽高", () => {
   falsy(isValidRect({ x: Number.NaN, y: 0, width: 10, height: 10 }));
   falsy(isValidRect({ x: -1, y: 0, width: 10, height: 10 }));
@@ -94,8 +92,6 @@ check("snapToGrid 四舍五入到最近网格点", () => {
   equal(snapToGrid(29), 20);
   equal(snapToGrid(-11), -20);
 });
-
-// ==================== 覆盖矩形与网格 ====================
 
 check("computeCoverRect 正方形 viewBox 在 16:9 容器中横向扩展", () => {
   const cover = computeCoverRect(
@@ -158,8 +154,6 @@ check("buildGridRuler 超大视野条数封顶", () => {
   equal(ruler?.lines.length, 1000);
 });
 
-// ==================== 对齐线 ====================
-
 check("computeAlignmentSegments 中心与左缘对齐命中各一条", () => {
   const segments = computeAlignmentSegments(
     { x: 100, y: 100, width: 160, height: 160 },
@@ -178,8 +172,6 @@ check("computeAlignmentSegments 超出阈值不产生参考线", () => {
   );
   equal(segments.length, 0);
 });
-
-// ==================== 工位布局 ====================
 
 check("workstationColumns 按数量分档", () => {
   equal(workstationColumns(3), 3);
@@ -215,8 +207,6 @@ check("workstationCanvasRect 覆盖内容且不小于最小视野", () => {
   // 6 列：150 + 6*180 + 50 = 1280
   equal(view.width, 1280);
 });
-
-// ==================== 机柜布局 ====================
 
 const cabinetInputs = [
   { id: "a", capacity: 42, savedX: null, savedWidth: null },
@@ -283,8 +273,6 @@ check("buildUMarks 线全量、编号含首末 U", () => {
   falsy(texts.has("2"));
 });
 
-// ==================== 布局投影 ====================
-
 check("buildLayoutItems 丢弃非有限值与零宽高、负坐标钳制为 0", () => {
   const items = buildLayoutItems([
     { id: "ok", elementType: "workstation", rect: { x: 10, y: 20, width: 160, height: 160 } },
@@ -306,8 +294,6 @@ check("buildLayoutItems 丢弃非有限值与零宽高、负坐标钳制为 0", 
   equal(items[1]?.position.y, 0);
   equal(items[0]?.position.rotation, 0);
 });
-
-// ==================== 拓扑分组 ====================
 
 check("cabinetGroupKey 优先 id、其次名称、否则 null", () => {
   equal(cabinetGroupKey({ cabinet_id: "c1", cabinet_name: "A" }), "cab:c1");
@@ -412,8 +398,6 @@ check("moveGroupTo 平移整组到目标原点", () => {
   falsy(moveGroupTo(nodes, 10, 20, 300, 400));
 });
 
-// ==================== 连线 ====================
-
 check("pickAnchor 优先主轴并夹在边缘内", () => {
   const right = pickAnchor(
     { x: 0, y: 0, width: 200, height: 100 },
@@ -485,8 +469,6 @@ check("fitRects 包裹全部内容并留白", () => {
   equal(view.height, 400);
   equal(fitRects([], 50, { x: 0, y: 0, width: 3000, height: 2000 }).width, 3000);
 });
-
-// ==================== IP 归并 ====================
 
 check("mapIpsByWorkstation 同工位 active 优先", () => {
   const map = mapIpsByWorkstation([

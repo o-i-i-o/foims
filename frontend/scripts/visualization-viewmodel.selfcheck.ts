@@ -130,8 +130,6 @@ function topologyNode(overrides: Partial<TopologyNodeWithDevice>): TopologyNodeW
   };
 }
 
-// ==================== 布局索引 ====================
-
 check("indexLayoutItems 键统一小写并跳过空 id", () => {
   const map = indexLayoutItems([layoutItem("AbC", "workstation", 0, 0), { ...layoutItem("", "workstation", 0, 0) }]);
   equal(map.size, 1);
@@ -143,8 +141,6 @@ check("savedPosition 拒绝负坐标与零宽高", () => {
   equal(savedPosition(layoutItem("a", "workstation", -10, 0)), null);
   truthy(savedPosition(layoutItem("a", "workstation", 10, 20)));
 });
-
-// ==================== 工位画布 ====================
 
 check("buildDoorNode 未保存时回退默认矩形并生成临时 id", () => {
   const door = buildDoorNode([]);
@@ -201,8 +197,6 @@ check("contentViewBox 覆盖内容并抬高到最小视野", () => {
   equal(box.height, 950);
 });
 
-// ==================== 机柜画布 ====================
-
 function roomCabinet(id: string, capacity: number, positions: RoomCabinet["positions"]): RoomCabinet {
   return {
     id,
@@ -236,8 +230,6 @@ check("buildCabinetCanvas 按 U 位推导机位矩形并保留已保存 x", () =
     truthy(node.rect.x + node.rect.width <= canvas.totalWidth);
   }
 });
-
-// ==================== 拓扑画布 ====================
 
 check("buildTopologyCanvasNodes 异常坐标回退网格原点", () => {
   const nodes = buildTopologyCanvasNodes([

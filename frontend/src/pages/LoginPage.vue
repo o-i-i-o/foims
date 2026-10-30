@@ -452,14 +452,6 @@ function formatErrorMessage(message: string): string {
     return t("api.failed");
   }
 
-  // 服务端 message 为 i18n key：尝试翻译（t() 缺键返回 key 本身）
-  if (message.includes(".")) {
-    const translated = t(message);
-    if (translated !== message) {
-      return translated;
-    }
-  }
-
   if (message.includes("账户已禁用")) {
     return t("api.account_disabled");
   }

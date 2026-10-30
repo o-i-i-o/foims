@@ -1,7 +1,7 @@
 {
   "name": "foims-frontend",
   "private": true,
-  "version": "0.1.31",
+  "version": "0.1.33",
   "type": "module",
   "description": "FOIMS 前端（Vue 3 + Vite，MPA 三入口）",
   "scripts": {

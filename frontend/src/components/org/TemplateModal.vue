@@ -33,7 +33,6 @@ const templatesQuery = useQuery({
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
-    // 原实现以 Array.isArray 防御非数组响应；类型保证下与 ?? [] 等价
     return result.data?.items ?? [];
   },
   enabled: computed(() => props.open)
@@ -62,7 +61,7 @@ function buildTreeFromMapping(levels: unknown, icons: unknown = {}): TplTypeNode
     levels && typeof levels === "object" && !Array.isArray(levels)
       ? (levels as Record<string, unknown>)
       : null;
-  // 全体子级引用集合：未被引用的 key 即根类型（原实现在 find 回调内重算，幂等故上提）
+  // 全体子级引用集合：未被引用的 key 即根类型
   const allChildren = new Set<unknown>(levelMap ? Object.values(levelMap).flat() : []);
   const rootType = levelMap ? Object.keys(levelMap).find((key) => !allChildren.has(key)) : null;
   if (!rootType) {
