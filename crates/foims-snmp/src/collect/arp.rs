@@ -49,10 +49,10 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
             continue;
         }
         let oid_parts = vb.oid.arcs();
-        if let Some(&if_index) = oid_parts.last() {
-            if let Some(name) = clean_snmp_text(vb.value.as_str()) {
-                map.insert(if_index, name);
-            }
+        if let Some(&if_index) = oid_parts.last()
+            && let Some(name) = clean_snmp_text(vb.value.as_str())
+        {
+            map.insert(if_index, name);
         }
     }
 

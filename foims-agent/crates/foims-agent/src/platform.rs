@@ -302,7 +302,7 @@ fn build_report(
         .map(|at| sample_at.duration_since(at).as_secs_f64())
         .unwrap_or(0.0);
 
-    // ---- CPU / 负载 / 内存 ----
+    // CPU / 负载 / 内存
     let cores = count_cores(families);
     let memory = ReportMemory {
         total: sample_value(families, "node_memory_MemTotal_bytes").max(0.0) as u64,
@@ -313,16 +313,16 @@ fn build_report(
         .max(0.0) as u64,
     };
 
-    // ---- 磁盘：filesystem 容量 + diskstats 差分 ----
+    // 磁盘：filesystem 容量 + diskstats 差分
     let diskstats = collect_disk_counters(families);
     // 首轮 elapsed 为 0，差分自动归 0，无需特判空基准
     let disks = build_disks(families, &diskstats, Some(&prev.disks), elapsed);
 
-    // ---- 网络：netdev 差分 ----
+    // 网络：netdev 差分
     let netdev = collect_net_counters(families);
     let nets = build_nets(families, &netdev, Some(&prev.nets), elapsed);
 
-    // ---- 更新差分基准 ----
+    // 更新差分基准
     let basis = DiffBasis {
         at: Some(sample_at),
         disks: diskstats,

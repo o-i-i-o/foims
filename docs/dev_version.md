@@ -1086,3 +1086,11 @@ v0.42.4
 2. 版本：仅前端 z+1，frontend/package.json 0.1.28→0.1.29；根 Cargo.toml 不联动。
 3. 验证：`npm run typecheck`、`npm run build` 通过；`cargo fmt --all` 通过；foims-auth/foims-visualization/foims-data-management/foims-scheduler 以 `--no-deps` 跑 clippy `-D warnings` 通过，foims/foims-agent-service 以 `cargo check --all-targets` 通过；变更包 `cargo test` 共 262 项全部通过。全仓 clippy 被既有 `crates/foims-snmp/src/collect/arp.rs:52` collapsible_if 阻断（HEAD 内容，非本批改动，未修）。
 4. 未动：仓库根 `.runtime-evidence/api-smoke.sh`、`mm_reward_qrcode_*.png`（是否清理由仓库所有者确认）；foims-agent 子工作区横幅；LoginPage 吉祥物动画拆分（结构调整单独立项）；operation.rs COUNT/SELECT 重复、config.rs 同构校验块（保留）。
+
+v0.42.5
+2026103014500001
+1. 去除 AI 味补充（零行为变更）：
+   - 后端：`crates/foims-snmp/src/collect/arp.rs` 嵌套 if 折叠为 let-chain（edition 2024），消除既有 clippy collapsible_if 阻断，短路与插入语义不变；至此全仓 clippy `-D warnings` 恢复通过。
+   - foims-agent 子工作区：ffi.rs 6 处、collectors/mod.rs 1 处三行式 `// ----` + 标题 + `// ----` 分隔块收敛为单行裸分区标签；两个 platform.rs 共 8 处内联 `// ----` 装饰线改为裸标签，注释文字保留。
+2. 版本：本次无前端改动，frontend/package.json 维持 0.1.29；根 Cargo.toml 不联动（z 段修改）；foims-agent 子工作区版本不联动（仅注释/格式）。
+3. 验证：根工作区 `cargo fmt --all -- --check`、`cargo clippy --release --workspace --all-targets -- -D warnings`、`cargo test --release -p foims-snmp`（73 项）通过；foims-agent `cargo fmt --all -- --check`、`cargo clippy --release --workspace --all-targets -- -D warnings`、`cargo test --release --workspace` 通过；`--include='*.rs'` 检索 `// ----`/`// -` 残留为 0。

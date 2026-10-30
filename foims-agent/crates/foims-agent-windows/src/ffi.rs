@@ -103,9 +103,7 @@ unsafe fn pwstr_to_string(ptr: PWSTR, call: &'static str) -> Result<String, FfiE
     String::from_utf16(slice).map_err(|_| FfiError::String { call })
 }
 
-// ---------------------------------------------------------------------------
 // PDH
-// ---------------------------------------------------------------------------
 
 /// PDH 查询：RAII 持有 HQUERY，Drop 时关闭
 pub struct PdhQuery {
@@ -287,9 +285,7 @@ impl PdhCounter {
     }
 }
 
-// ---------------------------------------------------------------------------
 // 注册表
-// ---------------------------------------------------------------------------
 
 /// 读取注册表 REG_SZ 字符串值
 pub fn reg_read_string(root: HKEY, subkey: &str, value: &str) -> Result<String, FfiError> {
@@ -366,9 +362,7 @@ pub fn reg_read_u32(root: HKEY, subkey: &str, value: &str) -> Result<u32, FfiErr
 /// 注册表根键：HKEY_LOCAL_MACHINE
 pub const REGISTRY_LOCAL_MACHINE: HKEY = HKEY_LOCAL_MACHINE;
 
-// ---------------------------------------------------------------------------
 // 系统信息
-// ---------------------------------------------------------------------------
 
 /// GetTickCount64：系统启动至今毫秒数
 pub fn tick_count_millis() -> u64 {
@@ -455,9 +449,7 @@ pub fn computer_name(kind: ComputerNameKind) -> Result<String, FfiError> {
     })
 }
 
-// ---------------------------------------------------------------------------
 // 卷信息（logical_disk 采集器）
-// ---------------------------------------------------------------------------
 
 /// 卷容量（字节）
 #[derive(Debug, Clone, Copy)]
@@ -545,9 +537,7 @@ pub fn drive_type(root: &str) -> u32 {
     unsafe { GetDriveTypeW(PCWSTR(root_w.as_ptr())) }
 }
 
-// ---------------------------------------------------------------------------
 // SCM（service 采集器）
-// ---------------------------------------------------------------------------
 
 /// 服务管理器连接：RAII 持有 SCM 句柄
 pub struct Scm {
@@ -779,9 +769,7 @@ pub fn process_create_time_unix(pid: u32) -> Option<f64> {
     Some(((ticks - 116_444_736_000_000_000) / 10_000_000) as f64)
 }
 
-// ---------------------------------------------------------------------------
 // 机器标识
-// ---------------------------------------------------------------------------
 
 /// 读取注册表 MachineGuid（HKLM\SOFTWARE\Microsoft\Cryptography）
 pub fn machine_guid() -> Result<String, FfiError> {

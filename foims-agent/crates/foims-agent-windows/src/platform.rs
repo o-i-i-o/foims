@@ -340,7 +340,7 @@ fn build_report(
         .map(|at| sample_at.duration_since(at).as_secs_f64())
         .unwrap_or(0.0);
 
-    // ---- 内存（swap 字段以提交量近似）----
+    // 内存（swap 字段以提交量近似）
     let memory = ReportMemory {
         total: sample_value(families, "windows_memory_physical_total_bytes").max(0.0) as u64,
         used: (sample_value(families, "windows_memory_physical_total_bytes")
@@ -350,16 +350,16 @@ fn build_report(
         swap_used: sample_value(families, "windows_memory_committed_bytes").max(0.0) as u64,
     };
 
-    // ---- 磁盘：logical_disk 容量 + 计数器差分 ----
+    // 磁盘：logical_disk 容量 + 计数器差分
     let diskstats = collect_disk_counters(families);
     // 首轮 elapsed 为 0，差分自动归 0，无需特判空基准
     let disks = build_disks(families, &diskstats, Some(&prev.disks), elapsed);
 
-    // ---- 网络：net 字节计数器差分 ----
+    // 网络：net 字节计数器差分
     let netdev = collect_net_counters(families);
     let nets = build_nets(families, &netdev, Some(&prev.nets), elapsed);
 
-    // ---- 更新差分基准 ----
+    // 更新差分基准
     let basis = DiffBasis {
         at: Some(sample_at),
         disks: diskstats,
