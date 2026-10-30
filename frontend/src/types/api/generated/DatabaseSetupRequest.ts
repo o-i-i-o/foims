@@ -13,6 +13,6 @@ export type DatabaseSetupRequest = {
 type: string, host: string, 
 /**
  * 端口以字符串接收：若用 u16，超出范围的数字会被 serde 直接拒绝，
- * 返回 axum 默认 422 纯文本而非项目统一的消息 key
+ * 返回 axum 默认 400 纯文本而非项目统一的消息 key
  */
 port: string, database: string, username: string, password: string, };

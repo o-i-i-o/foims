@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * 仪表盘：5 张统计卡（dashboard-stats 单端点）+ 6 张榜单卡（5 个分页接口 +
- * 主机负载 top-metrics）+ 主机负载三页签 10s 轮播（悬停暂停、手动切换
+ * 主机负载）。主机负载卡同时消费 agent 快照（top-metrics）与 SNMP 实时
+ * 快照（SSE），CPU/内存/温度/流量四页签 10s 轮播（悬停暂停、手动切换
  * 后永久停止）。dashboard-stats 失败后不做计数兜底：
  * 兜底与主端点同源依赖数据库，失败场景下同样不可用，仅会以 0 掩盖错误。
  * 查询统一 TanStack Query（staleTime 60s）。
@@ -105,7 +106,7 @@ function logMetaText(log: OperationLog): string {
   return `${log.username || "-"} · ${formatTime(log.created_at)}`;
 }
 
-// ==================== 主机负载卡片 ====================
+// ==================== 主机负载卡片（agent 快照 + SNMP 实时快照） ====================
 
 /** 主机负载条目（/api/agents/top-metrics 行：主机名/IP/标签/指标值） */
 interface HostMetricItem {
@@ -115,12 +116,31 @@ interface HostMetricItem {
   value: number | string | null;
 }
 
+/** 主机负载行：合并 agent 快照与 SNMP 实时快照后的统一视图模型 */
+interface HostLoadItem {
+  name: string;
+  meta: string;
+  /** IP 用于跨源去重（agent 行与实时行指向同一设备时取实时值） */
+  ip: string | null;
+  value: number;
+  /** 实时快照超过 30s 未更新（agent 快照本就是分钟级，不标记） */
+  stale: boolean;
+  /** 达到告警阈值（仅配置了该指标阈值时） */
+  abnormal: boolean;
+  /** 来源实时行（流量页签渲染读/写速率，agent 行无此字段） */
+  live: LiveSummaryRow | null;
+}
+
 /** 指标键 → 榜单数组（端点按需返回，未启用键可能缺失） */
 type HostMetrics = Partial<Record<"cpu" | "memory" | "temperature", HostMetricItem[]>>;
 
-const HOST_METRIC_KEYS = ["cpu", "memory", "temperature"] as const;
+/** 页签指标键：前三类同时来自 agent 快照与 SNMP 实时快照，流量仅 SNMP 实时提供 */
+const HOST_METRIC_KEYS = ["cpu", "memory", "temperature", "traffic"] as const;
 type HostMetricKey = (typeof HOST_METRIC_KEYS)[number];
 const HOST_METRIC_ROTATE_MS = 10 * 1000;
+const HOST_TOP_LIMIT = 5;
+/** 快照超过该秒数视为陈旧（采样 5s + 推送节拍 2s 的 3 倍余量） */
+const LIVE_STALE_SECS = 30;
 
 const hostMetricsQuery = useQuery({
   queryKey: ["dashboard-host-metrics"],
@@ -136,15 +156,141 @@ const hostMetricsQuery = useQuery({
   staleTime: CACHE_TTL
 });
 
+const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
+  !auth.hiddenSections.includes("agents")
+);
 const hostMetricActive = ref<HostMetricKey>("cpu");
+const hostOnlyAbnormal = ref(false);
+
+// 阈值复用主机告警配置（CPU/内存/温度；流量无阈值）
+const thresholdsQuery = useQuery({
+  queryKey: ["agent-alert-thresholds"],
+  queryFn: async (): Promise<AlertThresholds | null> => {
+    const result = await apiGet<AlertThresholds>("/api/agents/alert-thresholds");
+    if (!result.success) {
+      throw new Error(result.message || t("common.load_failed"));
+    }
+    return result.data;
+  },
+  enabled: computed(() => !auth.hiddenSections.includes("agents")),
+  staleTime: CACHE_TTL
+});
+
+function liveMetricValue(row: LiveSummaryRow, metric: HostMetricKey): number | null {
+  switch (metric) {
+    case "cpu":
+      return row.cpu_usage_pct;
+    case "memory":
+      return row.mem_usage_pct;
+    case "temperature":
+      return row.temperature_c;
+    case "traffic":
+      return row.rx_bps == null && row.tx_bps == null
+        ? null
+        : (row.rx_bps ?? 0) + (row.tx_bps ?? 0);
+  }
+}
+
+function hostThreshold(metric: HostMetricKey): number | null {
+  const thresholds = thresholdsQuery.data.value;
+  if (!thresholds?.enabled) {
+    return null;
+  }
+  switch (metric) {
+    case "cpu":
+      return thresholds.cpu_pct;
+    case "memory":
+      return thresholds.mem_pct;
+    case "temperature":
+      return thresholds.temp_c;
+    case "traffic":
+      return null;
+  }
+}
+
+/** 当前页签是否配置了告警阈值（流量无阈值） */
+const hostHasThreshold = computed(() => hostThreshold(hostMetricActive.value) != null);
+
+/** 实时快照按 IP 建索引：同一设备以实时值为准，覆盖 agent 分钟级快照 */
+const liveByIp = computed(() => {
+  const map = new Map<string, LiveSummaryRow>();
+  for (const row of liveDevices.value) {
+    if (row.ip) {
+      map.set(row.ip, row);
+    }
+  }
+  return map;
+});
+
+const hostLoadItems = computed<HostLoadItem[]>(() => {
+  const metric = hostMetricActive.value;
+  const threshold = hostThreshold(metric);
+  const now = Date.now();
+  const items: HostLoadItem[] = [];
+
+  // agent 快照：流量页签无此来源（只有 SNMP 实时推送带速率）
+  const restItems = metric === "traffic" ? [] : (hostMetricsQuery.data.value?.[metric] ?? []);
+  for (const row of restItems) {
+    const value = Number(row.value);
+    if (!Number.isFinite(value) || (row.ip && liveByIp.value.has(row.ip))) {
+      continue;
+    }
+    items.push({
+      name: row.hostname || row.ip || "-",
+      meta: [row.label, row.ip].filter(Boolean).join(" · ") || "-",
+      ip: row.ip,
+      value,
+      stale: false,
+      abnormal: threshold != null && value >= threshold,
+      live: null
+    });
+  }
+
+  for (const row of liveDevices.value) {
+    const value = liveMetricValue(row, metric);
+    if (value == null) {
+      continue;
+    }
+    const collected = Date.parse(row.collected_at);
+    items.push({
+      name: row.device_name || row.ip || "-",
+      meta: [t("dashboard.live_source"), row.ip, row.vendor].filter(Boolean).join(" · "),
+      ip: row.ip || null,
+      value,
+      stale: !Number.isFinite(collected) || now - collected > LIVE_STALE_SECS * 1000,
+      abnormal: threshold != null && value >= threshold,
+      live: row
+    });
+  }
+
+  const filtered = hostOnlyAbnormal.value ? items.filter((item) => item.abnormal) : items;
+  filtered.sort((a, b) => b.value - a.value);
+  return filtered.slice(0, HOST_TOP_LIMIT);
+});
+
+const hostEmptyKey = computed(() => {
+  // 快照与实时来源均为空且实时连接未建立：等待首帧推送
+  const restEmpty = !hostMetricsQuery.data.value;
+  if (liveDevices.value.length === 0 && !liveConnected.value && restEmpty) {
+    return "dashboard.live_waiting";
+  }
+  if (hostOnlyAbnormal.value) {
+    return "dashboard.no_live_abnormal";
+  }
+  return hostMetricActive.value === "traffic" ? "dashboard.no_live_data" : "dashboard.no_host_metrics_data";
+});
+
+function selectHostMetric(metric: HostMetricKey): void {
+  hostMetricActive.value = metric;
+  // 流量无阈值配置：切走时关闭「仅异常」避免筛出空列表
+  if (hostThreshold(metric) == null) {
+    hostOnlyAbnormal.value = false;
+  }
+}
+
 // 手动切换页签后置 true：用户意图优先，自动轮播永久停止
 let hostMetricManual = false;
 let rotateTimer: number | undefined;
-
-const hostMetricItems = computed<HostMetricItem[]>(() => {
-  const data = hostMetricsQuery.data.value;
-  return data?.[hostMetricActive.value] ?? [];
-});
 
 function startRotation() {
   if (rotateTimer || hostMetricManual) {
@@ -164,10 +310,10 @@ function stopRotation() {
   }
 }
 
-function selectHostMetric(metric: HostMetricKey) {
+function toggleHostMetric(metric: HostMetricKey) {
   hostMetricManual = true;
   stopRotation();
-  hostMetricActive.value = metric;
+  selectHostMetric(metric);
 }
 
 function onCardMouseEnter() {
@@ -182,15 +328,6 @@ function onCardMouseLeave() {
 
 startRotation();
 onUnmounted(stopRotation);
-
-/** 主机显示名与副行 */
-function hostName(item: HostMetricItem): string {
-  return item.hostname || item.ip || "-";
-}
-
-function hostMeta(item: HostMetricItem): string {
-  return [item.label, item.ip].filter(Boolean).join(" · ") || "-";
-}
 
 /** 使用率迷你条分档（复用 agent-usage 约定：>85 红 >60 橙） */
 function usageLevel(value: number | string | null): string {
@@ -226,119 +363,15 @@ function tempText(value: number | string | null): string {
   return Number.isFinite(num) ? `${num.toFixed(1)}℃` : "-";
 }
 
-// ==================== SNMP 实时 Top（SSE） ====================
-
-// 与 DB 榜单互补：实时卡片覆盖全部 SNMP 设备内存快照（秒级推送），
-// 排序取前 N；超告警阈值标红，可只看异常
-const LIVE_METRIC_KEYS = ["cpu", "memory", "temperature", "traffic"] as const;
-type LiveMetricKey = (typeof LIVE_METRIC_KEYS)[number];
-const LIVE_TOP_LIMIT = 5;
-/** 快照超过该秒数视为陈旧（采样 5s + 推送节拍 2s 的 3 倍余量） */
-const LIVE_STALE_SECS = 30;
-
-const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
-  !auth.hiddenSections.includes("agents")
-);
-const liveMetricActive = ref<LiveMetricKey>("cpu");
-const liveOnlyAbnormal = ref(false);
-
-// 阈值复用主机告警配置（CPU/内存/温度；流量无阈值）
-const thresholdsQuery = useQuery({
-  queryKey: ["agent-alert-thresholds"],
-  queryFn: async (): Promise<AlertThresholds | null> => {
-    const result = await apiGet<AlertThresholds>("/api/agents/alert-thresholds");
-    if (!result.success) {
-      throw new Error(result.message || t("common.load_failed"));
-    }
-    return result.data;
-  },
-  enabled: computed(() => !auth.hiddenSections.includes("agents")),
-  staleTime: CACHE_TTL
-});
-
-function liveMetricValue(row: LiveSummaryRow, metric: LiveMetricKey): number | null {
-  switch (metric) {
-    case "cpu":
-      return row.cpu_usage_pct;
-    case "memory":
-      return row.mem_usage_pct;
-    case "temperature":
-      return row.temperature_c;
-    case "traffic":
-      return row.rx_bps == null && row.tx_bps == null
-        ? null
-        : (row.rx_bps ?? 0) + (row.tx_bps ?? 0);
-  }
-}
-
-function liveThreshold(metric: LiveMetricKey): number | null {
-  const thresholds = thresholdsQuery.data.value;
-  if (!thresholds?.enabled) {
-    return null;
-  }
-  switch (metric) {
-    case "cpu":
-      return thresholds.cpu_pct;
-    case "memory":
-      return thresholds.mem_pct;
-    case "temperature":
-      return thresholds.temp_c;
-    case "traffic":
-      return null;
-  }
-}
-
-const liveHasThreshold = computed(() => liveThreshold(liveMetricActive.value) != null);
-
-interface LiveTopItem {
-  row: LiveSummaryRow;
-  value: number;
-  abnormal: boolean;
-  stale: boolean;
-}
-
-const liveTopItems = computed<LiveTopItem[]>(() => {
-  const metric = liveMetricActive.value;
-  const threshold = liveThreshold(metric);
-  const now = Date.now();
-  const items: LiveTopItem[] = [];
-  for (const row of liveDevices.value) {
-    const value = liveMetricValue(row, metric);
-    if (value == null) {
-      continue;
-    }
-    const collected = Date.parse(row.collected_at);
-    const stale = !Number.isFinite(collected) || now - collected > LIVE_STALE_SECS * 1000;
-    const abnormal = threshold != null && value >= threshold;
-    if (liveOnlyAbnormal.value && !abnormal) {
-      continue;
-    }
-    items.push({ row, value, abnormal, stale });
-  }
-  items.sort((a, b) => b.value - a.value);
-  return items.slice(0, LIVE_TOP_LIMIT);
-});
-
-const liveEmptyKey = computed(() => {
-  if (!liveConnected.value && liveDevices.value.length === 0) {
-    return "dashboard.live_waiting";
-  }
-  return liveOnlyAbnormal.value ? "dashboard.no_live_abnormal" : "dashboard.no_live_data";
-});
-
-function selectLiveMetric(metric: LiveMetricKey): void {
-  liveMetricActive.value = metric;
-  // 流量无阈值配置：切走时关闭「仅异常」避免筛出空列表
-  if (liveThreshold(metric) == null) {
-    liveOnlyAbnormal.value = false;
-  }
+/** 流量榜值：读/写速率（bps） */
+function trafficText(item: HostLoadItem): string {
+  return item.live ? `↓ ${formatBps(item.live.rx_bps)} ↑ ${formatBps(item.live.tx_bps)}` : "-";
 }
 
 // ==================== 卡片跳转 ====================
 
 /**
- * 卡片点击跳转（声明式事件处理）：
- * 命中卡片内链接或按钮时不跳转（view-all 按钮不触发分区跳转）；
+ * 卡片点击跳转（声明式事件处理）：命中卡片内页签等按钮时不跳转；
  * 携带 tab 的卡片以 query 形式深链，目标分区迁移后按 query 定位页签。
  */
 function openSection(event: MouseEvent, name: string, tab?: string): void {
@@ -393,60 +426,65 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
     </div>
 
     <div class="dashboard-grid">
-      <!-- SNMP 实时负载：SSE 秒级推送全部设备内存快照，排序取前 N，
-           超告警阈值标红，可只看异常（流量无阈值） -->
+      <!-- 主机负载：CPU/内存/温度/流量 四页签轮播，agent 快照与 SNMP 实时
+           快照合并展示（同一设备实时值优先），超阈值标红、可只看异常 -->
       <article
         v-if="!auth.hiddenSections.includes('agents')"
-        class="dashboard-card"
+        class="dashboard-card host-metrics-card"
         @click="openSection($event, 'agents')"
+        @mouseenter="onCardMouseEnter"
+        @mouseleave="onCardMouseLeave"
       >
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">⚡</span><span>{{ t("dashboard.snmp_live_top") }}</span></h3>
+          <h3><span class="card-icon">🖥️</span><span>{{ t("dashboard.host_metrics") }}</span></h3>
           <span class="live-stream-state" :class="{ on: liveConnected }">
             {{ liveConnected ? t("dashboard.live_on") : t("dashboard.live_off") }}
           </span>
         </header>
-        <div class="dashboard-card-body">
-          <div class="host-metrics-tabs" role="tablist" :aria-label="t('dashboard.snmp_live_top')">
+        <div class="dashboard-card-body host-metrics-body">
+          <div class="host-metrics-tabs" role="tablist" :aria-label="t('dashboard.host_metrics')">
             <button
-              v-for="metric in LIVE_METRIC_KEYS"
+              v-for="metric in HOST_METRIC_KEYS"
               :key="metric"
               type="button"
               class="host-metrics-tab"
-              :class="{ active: liveMetricActive === metric }"
+              :class="{ active: hostMetricActive === metric }"
               role="tab"
-              :aria-selected="liveMetricActive === metric ? 'true' : 'false'"
-              @click="selectLiveMetric(metric)"
+              :aria-selected="hostMetricActive === metric ? 'true' : 'false'"
+              @click="toggleHostMetric(metric)"
             >
               {{ t(`dashboard.metric_${metric}`) }}
             </button>
-            <label v-if="liveHasThreshold" class="live-abnormal-toggle" @click.stop>
-              <input v-model="liveOnlyAbnormal" type="checkbox">
+            <label v-if="hostHasThreshold" class="live-abnormal-toggle" @click.stop>
+              <input v-model="hostOnlyAbnormal" type="checkbox">
               {{ t("dashboard.only_abnormal") }}
             </label>
           </div>
           <ul class="top-list">
-            <li v-if="liveTopItems.length === 0" class="empty-list-item">{{ t(liveEmptyKey) }}</li>
+            <!-- 实时快照已到达时先展示，避免分钟级快照加载期挡住实时数据 -->
+            <template v-if="hostMetricsQuery.isLoading.value && liveDevices.length === 0">
+              <li v-for="n in 3" :key="'sk' + n" class="loading-item"><span class="skeleton"></span></li>
+            </template>
+            <li v-else-if="hostMetricsQuery.isError.value" class="empty-list-item">{{ hostMetricsQuery.error.value?.message }}</li>
+            <li v-else-if="hostLoadItems.length === 0" class="empty-list-item">{{ t(hostEmptyKey) }}</li>
             <template v-else>
               <li
-                v-for="(item, index) in liveTopItems"
-                :key="item.row.device_id"
+                v-for="(item, index) in hostLoadItems"
+                :key="`${item.ip}-${item.name}-${index}`"
                 :class="{ 'live-stale': item.stale }"
               >
                 <div class="item-name">
                   <span class="item-icon">{{ index + 1 }}</span>
                   <div>
-                    <div>{{ item.row.device_name || item.row.ip || "-" }}</div>
+                    <div>{{ item.name }}</div>
                     <div class="item-meta">
-                      {{ item.row.ip }} · {{ item.row.vendor }}<template v-if="item.stale"> · {{ t("dashboard.live_stale") }}</template>
+                      {{ item.meta }}<template v-if="item.stale"> · {{ t("dashboard.live_stale") }}</template>
                     </div>
                   </div>
                 </div>
-                <span v-if="liveMetricActive === 'traffic'" class="item-value live-traffic">
-                  ↓ {{ formatBps(item.row.rx_bps) }} ↑ {{ formatBps(item.row.tx_bps) }}
-                </span>
+                <span v-if="hostMetricActive === 'traffic'" class="item-value live-traffic">{{ trafficText(item) }}</span>
                 <span
-                  v-else-if="liveMetricActive === 'temperature'"
+                  v-else-if="hostMetricActive === 'temperature'"
                   class="item-value"
                   :class="{ 'live-abnormal': item.abnormal }"
                 >{{ tempText(item.value) }}</span>
@@ -462,66 +500,10 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
         </div>
       </article>
 
-      <!-- 主机负载：CPU/内存/温度 三页签轮播（无权限角色不渲染卡片） -->
-      <article
-        v-if="!auth.hiddenSections.includes('agents')"
-        class="dashboard-card host-metrics-card"
-        @click="openSection($event, 'agents')"
-        @mouseenter="onCardMouseEnter"
-        @mouseleave="onCardMouseLeave"
-      >
-        <header class="dashboard-card-header">
-          <h3><span class="card-icon">🖥️</span><span>{{ t("dashboard.host_metrics") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
-        </header>
-        <div class="dashboard-card-body host-metrics-body">
-          <div class="host-metrics-tabs" role="tablist" :aria-label="t('dashboard.host_metrics')">
-            <button
-              v-for="metric in HOST_METRIC_KEYS"
-              :key="metric"
-              type="button"
-              class="host-metrics-tab"
-              :class="{ active: hostMetricActive === metric }"
-              role="tab"
-              :aria-selected="hostMetricActive === metric ? 'true' : 'false'"
-              @click="selectHostMetric(metric)"
-            >
-              {{ t(`dashboard.metric_${metric}`) }}
-            </button>
-          </div>
-          <ul class="top-list">
-            <template v-if="hostMetricsQuery.isLoading.value">
-              <li v-for="n in 3" :key="'sk' + n" class="loading-item"><span class="skeleton"></span></li>
-            </template>
-            <li v-else-if="hostMetricsQuery.isError.value" class="empty-list-item">{{ hostMetricsQuery.error.value?.message }}</li>
-            <li v-else-if="hostMetricItems.length === 0" class="empty-list-item">{{ t("dashboard.no_host_metrics_data") }}</li>
-            <template v-else>
-              <li v-for="(item, index) in hostMetricItems" :key="`${item.ip}-${index}`">
-                <div class="item-name">
-                  <span class="item-icon">{{ index + 1 }}</span>
-                  <div>
-                    <div>{{ hostName(item) }}</div>
-                    <div class="item-meta">{{ hostMeta(item) }}</div>
-                  </div>
-                </div>
-                <span v-if="hostMetricActive === 'temperature'" class="item-value">{{ tempText(item.value) }}</span>
-                <span v-else class="agent-usage">
-                  <span class="agent-usage-bar">
-                    <span class="agent-usage-fill" :class="`agent-usage-${usageLevel(item.value)}`" :style="{ width: usageWidth(item.value) }"></span>
-                  </span>
-                  <span class="agent-usage-num">{{ usageNum(item.value) }}%</span>
-                </span>
-              </li>
-            </template>
-          </ul>
-        </div>
-      </article>
-
       <!-- 跳转 ip 区 -->
       <article class="dashboard-card" @click="openSection($event, 'ip')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">🔗</span><span>{{ t("dashboard.recent_ips") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -550,7 +532,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
       <article class="dashboard-card" @click="openSection($event, 'logs')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">📋</span><span>{{ t("dashboard.recent_logs") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -578,7 +559,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
       <article class="dashboard-card" @click="openSection($event, 'resources', 'networks')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">🌐</span><span>{{ t("dashboard.top_networks") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -606,7 +586,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
       <article class="dashboard-card" @click="openSection($event, 'resources', 'rooms')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">🏠</span><span>{{ t("dashboard.top_rooms") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -634,7 +613,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
       <article class="dashboard-card" @click="openSection($event, 'resources', 'cabinets')">
         <header class="dashboard-card-header">
           <h3><span class="card-icon">🗄️</span><span>{{ t("dashboard.top_cabinets") }}</span></h3>
-          <button type="button" class="view-all">{{ t("dashboard.view_all") }}</button>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -722,20 +700,6 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   font-size: 1.1rem;
 }
 
-.view-all {
-  font-size: 0.8rem;
-  color: var(--color-primary);
-  font-weight: 500;
-  transition:
-    color var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.dashboard-card:hover .view-all {
-  color: var(--color-primary-hover);
-  transform: translateX(3px);
-}
-
 .dashboard-card-body {
   padding: var(--space-md) var(--space-lg);
   min-height: 300px;
@@ -812,7 +776,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
 /* 状态色由 components/badges.css 的 .status-active/.status-inactive/.status-reserved 全局提供 */
 
-/* ===== 主机负载卡片（CPU/内存/温度 页签轮播） ===== */
+/* ===== 主机负载卡片（CPU/内存/温度/流量 页签轮播） ===== */
 
 .host-metrics-tabs {
   display: flex;
@@ -848,7 +812,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   color: #fff;
 }
 
-/* SNMP 实时负载卡片：SSE 连接状态 / 仅异常开关 / 超阈值与陈旧样式 */
+/* 实时快照相关：SSE 连接状态 / 仅异常开关 / 超阈值与陈旧样式 */
 
 .live-stream-state {
   display: inline-flex;
