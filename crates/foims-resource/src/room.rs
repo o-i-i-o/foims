@@ -1,4 +1,5 @@
-//! 房间资源管理（含子网绑定与子资源级联）。
+//! 房间（rooms）资源：房间 CRUD、网段绑定与工位/机柜/信息点子资源的差量
+//! 同步，供前端空间管理与设备位置绑定使用。
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -50,6 +51,8 @@ fn room_by_id_query(room_id: Uuid) -> sqlx::QueryBuilder<sqlx::Postgres> {
     builder
 }
 
+/// GET /api/resources/rooms：分页获取房间列表（关键字、组织子树、逗号分隔房型过滤与白名单排序，
+/// 响应含网段/工位数/已分配功率摘要）。
 pub async fn get_rooms<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -80,7 +83,6 @@ pub async fn get_rooms<P: DbProvider>(
         _ => " ORDER BY r.name ASC",
     };
 
-    // 可选过滤：org_id（组织节点）、room_type（逗号分隔的类型集合）
     let org_filter: Option<Uuid> = match query.get("org_id") {
         Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
             AppError::Validation(msg("server.common.invalid_param").with("param", "org_id"))
@@ -248,6 +250,8 @@ pub async fn get_rooms<P: DbProvider>(
     ))
 }
 
+/// POST /api/resources/rooms：创建房间（事务内校验全局重名与组织/网段引用：重名 409，引用非法 400，
+/// subnet_ids 随房间一并绑定）。
 pub async fn create_room<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -366,7 +370,7 @@ pub async fn create_room<P: DbProvider>(
     Ok(foims_common::ok_json(room, "server.room.created"))
 }
 
-/// 房间编辑回显专用轻量端点（GET /{id}/brief）。
+/// GET /api/resources/rooms/{id}/brief：房间编辑回显专用轻量端点，房间不存在 404。
 ///
 /// 完整详情接口的组装视图查询较多，而编辑弹窗需要
 /// name/room_type/org_id/description/networks 以及工位/机柜/信息点子项，
@@ -454,6 +458,8 @@ pub async fn get_room_brief<P: DbProvider>(
     ))
 }
 
+/// GET /api/resources/rooms/{id}：获取房间详情（组装视图：网段、工位/机柜/信息点子项与功率摘要并行取回；
+/// 房间不存在 404）。
 pub async fn get_room<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -465,7 +471,7 @@ pub async fn get_room<P: DbProvider>(
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.room.not_found")))?;
 
-    // 以下查询相互独立，并行执行替代原先的串行等待
+    // 以下查询相互独立，并行执行避免串行等待
     let conn = state.pool()?.get_conn();
     // 办公类（含"其他"）携带工位、机房类（含"其他"）携带机柜，
     // 与 helpers::room_allows_workstation / room_allows_cabinet 同一判定
@@ -587,6 +593,9 @@ pub async fn get_room<P: DbProvider>(
     ))
 }
 
+/// PUT /api/resources/rooms/{id}：更新房间（缺省字段保留旧值、null 清空总功率
+/// 上限；行锁内复核重名与组织/房型变更的存量子项约束，subnet_ids 整体替换：
+/// 子项冲突或新上限低于房内功耗 400、重名 409、房间不存在 404）。
 pub async fn update_room<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -599,8 +608,7 @@ pub async fn update_room<P: DbProvider>(
     // 存在性检查即 FOR UPDATE 锁行，为后续功率上限校验关闭并发写入窗口
     let mut tx = state.pool()?.get_conn().begin().await?;
 
-    // 存在性检查即 FOR UPDATE 锁行：同时取出当前组织与房型，用于计算
-    // 换组织/换房型需校验房内既有子项
+    // 随存在性检查取回当前组织与房型：换组织/换房型需据此校验房内既有子项
     let current: Option<(Uuid, String)> =
         sqlx::query_as("SELECT org_id, room_type FROM rooms WHERE id = $1 FOR UPDATE")
             .bind(id)
@@ -623,8 +631,6 @@ pub async fn update_room<P: DbProvider>(
         }
     }
 
-    // 设置（调低）总功率上限时的容量校验：房内已分配功耗不得超过新值；
-    // 缺省不修改、null 清空上限不受限
     if let Some(Some(limit)) = req.total_power_watts {
         crate::helpers::ensure_power_limit_covers_allocated(
             &mut tx,
@@ -688,7 +694,6 @@ pub async fn update_room<P: DbProvider>(
         }
     }
 
-    // subnet_ids 引用存在性校验
     if let Some(subnet_ids) = &req.subnet_ids {
         for subnet_id in subnet_ids {
             let network_exists: bool =
@@ -805,6 +810,8 @@ pub async fn update_room<P: DbProvider>(
     Ok(foims_common::ok_json(room, "server.room.updated"))
 }
 
+/// DELETE /api/resources/rooms/{id}：删除房间（存在机柜、工位、信息点或直接挂载设备时 400，
+/// 计数检查与删除同事务；不存在 404）。
 pub async fn delete_room<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -887,6 +894,7 @@ pub async fn delete_room<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.room.deleted"))
 }
 
+/// GET /api/resources/rooms/{id}/networks：获取房间绑定的网段列表（不分页；房间不存在返回 404）。
 pub async fn get_room_networks<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -917,6 +925,8 @@ pub async fn get_room_networks<P: DbProvider>(
     ))
 }
 
+/// PUT /api/resources/rooms/{id}/children：差量同步房间子资源（按房型性质取工位或机柜集合，
+/// 缺对应集合时 400；请求缺失项删除、被引用时 400，逐项重名与责任人预检后新增或更新，整批同事务）。
 pub async fn sync_room_children<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -981,6 +991,8 @@ pub async fn sync_room_children<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.room.children_synced"))
 }
 
+/// PUT /api/resources/rooms/{id}/net-outlets：差量同步房间信息点（请求缺失项删除，被线路引用时 400；
+/// 逐项名称唯一预检后新增或更新，整批同事务）。
 pub async fn sync_room_net_outlets<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -1031,7 +1043,6 @@ pub async fn sync_room_net_outlets<P: DbProvider>(
         }
     }
 
-    // 新增或更新
     for item in items {
         validate_net_outlet_name(&mut tx, &item.name, item.id).await?;
         if let Some(item_id) = item.id {
@@ -1269,12 +1280,12 @@ async fn sync_cabinet_children(
     Ok(())
 }
 
+/// 信息点名称唯一性预检（全局范围、不限房间；冲突返回 409）。
 async fn validate_net_outlet_name(
     conn: &mut sqlx::PgConnection,
     name: &str,
     exclude_id: Option<Uuid>,
 ) -> Result<(), AppError> {
-    // 信息点名称在所有房间范围内唯一（不再限定同一房间）
     crate::helpers::ensure_unique_name(
         conn,
         "net_outlets",
@@ -1287,6 +1298,7 @@ async fn validate_net_outlet_name(
     .await
 }
 
+/// 工位名称唯一性预检（同房间内唯一；冲突返回 409）。
 async fn validate_workstation_name(
     conn: &mut sqlx::PgConnection,
     name: &str,
@@ -1305,6 +1317,7 @@ async fn validate_workstation_name(
     .await
 }
 
+/// 机柜名称唯一性预检（同房间内唯一，与独立创建路径的 UNIQUE(room_id, name) 同口径；冲突返回 409）。
 async fn validate_cabinet_name(
     conn: &mut sqlx::PgConnection,
     name: &str,

@@ -33,13 +33,13 @@ const OPTION_QUERIES: &[(&str, &str)] = &[
     ("device-templates", "SELECT id, name FROM device_templates"),
 ];
 
-/// GET /api/resources/options/{resource}——下拉专用 id+name 列表。
+/// GET /api/resources/options/{resource}：下拉专用 id+name 精简列表。
 ///
 /// 可选过滤参数（按资源生效，不适用时被忽略）：
 /// - `room_id`：cabinets / workstations / net-outlets / devices
 /// - `region_id`：networks
 /// - `cabinet_id` / `workstation_id`：devices（cabinet_id 经机位关联）；
-///   devices 的三个过滤参数互斥，同时给出多个时返回 422
+///   devices 的三个过滤参数互斥，同时给出多个时返回 400
 pub async fn get_resource_options<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(resource): Path<String>,
@@ -51,15 +51,13 @@ pub async fn get_resource_options<P: DbProvider>(
         ));
     };
 
-    // 过滤参数非法 UUID 显式 422（与 net_outlet/patch_panel 口径一致），
-    // 不再静默忽略退化为全量列表
     let room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
     let region_id = crate::helpers::parse_optional_uuid(&query, "region_id")?;
     let cabinet_id = crate::helpers::parse_optional_uuid(&query, "cabinet_id")?;
     let workstation_id = crate::helpers::parse_optional_uuid(&query, "workstation_id")?;
 
     // devices 资源的过滤参数互斥：room_id / cabinet_id / workstation_id
-    // 同时给出多个时显式 422（并列罗列冲突参数），不再静默忽略其一
+    // 同时给出多个时显式 400（并列罗列冲突参数），不再静默忽略其一
     if resource == "devices" {
         let mut given: Vec<&str> = Vec::with_capacity(3);
         if room_id.is_some() {
@@ -80,7 +78,6 @@ pub async fn get_resource_options<P: DbProvider>(
 
     let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(*base_sql);
 
-    // 过滤条件按资源白名单拼接，值经 Uuid 解析后 bind（参数化）
     let push_cond =
         |builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, column: &str, value: Uuid| {
             builder.push(" WHERE ");

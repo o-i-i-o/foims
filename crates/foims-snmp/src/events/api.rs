@@ -19,7 +19,9 @@ use crate::core::normalize_mac;
 
 use foims_common::log_info;
 
-/// GET /api/snmp/events：分页查询观测事件（按 occurred_at 倒序）。
+/// GET /api/snmp/events：分页查询观测事件（device_id/event_type/severity
+/// 精确过滤，start/end 限定 occurred_at 闭区间，固定按 occurred_at 倒序；
+/// 时间参数非 ISO-8601 即 400）。
 pub async fn list_snmp_events<P: DbProvider>(
     State(state): State<Arc<P>>,
     _user: foims_auth::extractor::AuthUser,
@@ -28,8 +30,8 @@ pub async fn list_snmp_events<P: DbProvider>(
     let pool = state.pool()?.get_conn();
     let pagination = Pagination::new(query.page.unwrap_or(1), query.page_size.unwrap_or(20));
 
-    // 时间范围：ISO-8601 解析失败视为非法输入（早于查询返回校验错误）；
-    // C10：专用 invalid_time 文案 key，不再复用定位器语义的 invalid_locator
+    // 时间参数解析失败用专用 invalid_time 文案，与定位参数错误的 invalid_locator
+    // 语义区分，前端据此提示不同字段
     let start: Option<DateTime<Utc>> = match query.start.as_deref() {
         Some(s) => Some(s.parse().map_err(|_| {
             AppError::Validation(msg("server.snmp.invalid_time").with("field", "start"))
@@ -43,7 +45,6 @@ pub async fn list_snmp_events<P: DbProvider>(
         None => None,
     };
 
-    // 总数
     let mut count_builder =
         sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM snmp_events WHERE 1=1");
     push_event_filters(
@@ -60,7 +61,6 @@ pub async fn list_snmp_events<P: DbProvider>(
         .fetch_one(&pool)
         .await?;
 
-    // 列表行
     let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         r"SELECT id, device_id, event_type, interface, severity, detail, occurred_at, created_at
            FROM snmp_events WHERE 1=1",
@@ -116,16 +116,15 @@ fn push_event_filters(
     }
 }
 
-/// GET /api/snmp/locate 查询参数（mac 与 ip 至少给一个）。
+/// GET /api/snmp/locate 查询参数。
 #[derive(Debug, serde::Deserialize)]
 pub struct LocateQuery {
     pub mac: Option<String>,
     pub ip: Option<String>,
 }
 
-/// MAC 等值匹配的全部书写形态（C8：此前用 REPLACE(UPPER(col)) 表达式
-/// 匹配，列侧函数运算无法走索引；改为把输入展开成常见入库形态后用
-/// `= ANY(...)` 纯列等值匹配）。
+/// MAC 等值匹配的全部书写形态：把输入展开成入库常见形态后用 `= ANY(...)`
+/// 做纯列等值匹配，列侧套函数会让索引失效。
 #[must_use]
 fn mac_match_forms(mac_norm: &str) -> Vec<String> {
     if mac_norm.is_empty() {
@@ -149,7 +148,8 @@ fn mac_match_forms(mac_norm: &str) -> Vec<String> {
     forms
 }
 
-/// GET /api/snmp/locate?mac=...|ip=...：终端定位。
+/// GET /api/snmp/locate?mac=...|ip=...：终端定位（mac 与 ip 至少给一个，
+/// 全缺或 ip 非合法 IP 字面量即 400）。
 ///
 /// ARP/FDB 学习条目（source='arp'）与网口静态 MAC 直查（source='static'）并集，
 /// `registered` 标记该 IP 是否已在 interface_ips 登记为资产。
@@ -171,7 +171,6 @@ pub async fn locate_device<P: DbProvider>(
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
 
-    // 校验 IP 合法性（非法即拒，避免无意义查询）
     if let Some(ip) = &ip
         && ip.parse::<std::net::IpAddr>().is_err()
     {
@@ -185,15 +184,14 @@ pub async fn locate_device<P: DbProvider>(
     }
 
     let mac_norm = mac_norm.unwrap_or_default();
-    // C8：列侧纯等值 ANY 匹配（命中入库常见形态），不再对列做函数运算
     let mac_forms: Option<Vec<String>> = {
         let forms = mac_match_forms(&mac_norm);
         (!forms.is_empty()).then_some(forms)
     };
     let ip_bind: Option<&str> = ip.as_deref();
 
-    // ARP 命中 + 网口静态 MAC 直查，UNION ALL 归一列宽
-    //（IP 条件同样改为 INET 纯列等值，host() 表达式不参与匹配，C8）
+    // 两分支列宽归一后 UNION ALL 合并，static 分支无 ip/occurred_at 语义，补 NULL；
+    // host() 仅作展示列，IP 匹配同样是 INET 纯列等值
     let rows = sqlx::query_as::<_, DeviceLocateResult>(
         r#"
         SELECT a.device_id,
@@ -257,7 +255,7 @@ mod tests {
 
     #[test]
     fn mac_match_forms_covers_common_stored_shapes() {
-        // C8：输入展开为纯/冒号/连字符 × 大小写形态，供列侧等值匹配
+        // 输入展开为纯/冒号/连字符 × 大小写形态，供列侧等值匹配
         let forms = mac_match_forms("AABBCCDDEEFF");
         assert!(forms.contains(&"AABBCCDDEEFF".to_string()));
         assert!(forms.contains(&"aabbccddeeff".to_string()));

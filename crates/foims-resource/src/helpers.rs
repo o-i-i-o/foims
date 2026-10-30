@@ -8,9 +8,9 @@ use uuid::Uuid;
 use foims_common::AppError;
 use foims_common::msg;
 
-// ==================== 查询参数解析 ====================
+// 查询参数解析
 
-/// 解析可选 UUID 查询参数：缺省/空串返回 None，非法值返回 422。
+/// 解析可选 UUID 查询参数：缺省/空串返回 None，非法值返回 400。
 ///
 /// 过滤参数不静默忽略非法值退化为全量列表（口径与 network.rs 一致）；
 /// 各资源列表 handler 统一走此唯一定义，不再各自内联闭包。
@@ -26,7 +26,7 @@ pub(crate) fn parse_optional_uuid(
     }
 }
 
-// ==================== 名称唯一性预检 ====================
+// 名称唯一性预检
 
 /// SQL 标识符（表名/列名）校验：仅允许字母数字与下划线。
 ///
@@ -93,7 +93,7 @@ where
     Ok(())
 }
 
-// ==================== 子网业务查询 ====================
+// 子网业务查询
 
 pub const NETWORK_QUERY: &str = r"
     SELECT n.id, n.name, n.network_region_id, nt.name as network_region,
@@ -107,6 +107,8 @@ pub const NETWORK_QUERY: &str = r"
     WHERE n.id = $1
 ";
 
+/// 按 [`NETWORK_QUERY`] 的固定列序（0..12）装配 `Network`：改 SQL 列序必须同步
+/// 此处的下标；DNS 数组的 JSON 反序列化失败返回 500（数据已损坏，不是用户输入问题）。
 pub fn parse_network_from_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<foims_models::Network, AppError> {
@@ -143,6 +145,8 @@ pub fn parse_network_from_row(
     })
 }
 
+/// 校验子网已绑定到指定房间：`subnet_id` 为 None 表示未选子网直接通过，
+/// 已选但 `room_networks` 无对应关联时返回 400（房间与子网的绑定只能经房间侧维护）。
 pub async fn validate_network_in_room<'e, E>(
     executor: E,
     room_id: Uuid,
@@ -201,7 +205,7 @@ where
     Ok(())
 }
 
-// ==================== 功率容量校验 ====================
+// 功率容量校验
 
 /// 功率上限作用域：机柜按机位关联设备求和，房间按归属设备求和。
 pub(crate) enum PowerScope {
@@ -351,7 +355,7 @@ pub(crate) async fn ensure_power_limit_covers_allocated(
     Ok(())
 }
 
-// ==================== 空间归属与责任人校验 ====================
+// 空间归属与责任人校验
 
 /// 房间空间属性：组织归属与房型。
 ///
@@ -426,7 +430,7 @@ where
     }
 }
 
-// ==================== MAC 唯一性 ====================
+// MAC 唯一性
 
 /// 归一 MAC 的 SQL 表达式（与 [`foims_common::net::normalize_mac`] 同口径）。
 ///
@@ -495,7 +499,7 @@ where
     Ok(())
 }
 
-// ==================== 子网探测与 IP 比对 ====================
+// 子网探测与 IP 比对
 
 /// 按房间已绑定网段探测 IP 所属子网；探测不中返回 None。
 ///
@@ -536,7 +540,7 @@ pub(crate) fn same_ip(left: &str, right: &str) -> bool {
     }
 }
 
-// ==================== 空间归属联动 ====================
+// 空间归属联动
 
 /// 设备的空间挂载点：父侧房间变更时据此定位需要跟随迁移的设备。
 pub(crate) enum DeviceScope {

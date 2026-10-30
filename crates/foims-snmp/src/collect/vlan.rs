@@ -16,6 +16,10 @@ use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
 };
 
+/// 采集 VLAN 台账（VLAN id / 名称 / 成员与 untagged 端口 ifIndex 列表）。
+///
+/// 错误仅来自鉴权构造与会话建立；无 Q-BRIDGE-MIB 的设备返回空集。
+/// VLAN id 只保留 1..=4094。
 pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRecord>, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
@@ -27,7 +31,6 @@ pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRec
         .await
         .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
 
-    // 桥端口(dot1dBasePort) → ifIndex 映射（成员位图换算前提）
     let bp_if_raw = walk_index_value_map(
         &client,
         oid!(1, 3, 6, 1, 2, 1, 17, 1, 4, 1, 2),
@@ -74,9 +77,8 @@ pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRec
     };
 
     let mut vlans = Vec::new();
-    // C1：名称/egress/untagged 三列索引并集驱动并排序——此前仅以
-    // names.keys() 驱动，不返回名称列的 VLAN（行存在但无 name 列）
-    // 会连成员位图一起丢失
+    // 驱动集合取三列索引并集：部分 VLAN 行存在却不返回名称列，只按
+    // names 驱动会连它的成员位图一起丢失
     let mut vlan_ids: Vec<u32> = names
         .keys()
         .chain(egress.keys())

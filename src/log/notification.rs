@@ -13,7 +13,7 @@ use foims_auth::extractor::AuthUser;
 use foims_common::{AppError, msg};
 use foims_models::Notification;
 
-/// 分页查询当前登录用户的通知 —— GET /api/notifications。
+/// GET /api/notifications：分页查询当前登录用户的通知。
 ///
 /// `status` 仅 `unread`/`read` 两个值参与过滤，其余（含缺省 `all`）不过滤。
 pub async fn get_notifications(
@@ -85,7 +85,7 @@ pub async fn get_notifications(
     ))
 }
 
-/// 标记单条通知为已读 —— PUT /api/notifications/{id}/read。
+/// PUT /api/notifications/{id}/read：标记单条通知为已读。
 ///
 /// 仅当前用户的通知可标记：id 不存在或归属他人均返回 NotFound。
 pub async fn mark_notification_read(
@@ -118,7 +118,7 @@ pub async fn mark_notification_read(
     Ok(foims_common::ok_json((), "server.notification.marked_read"))
 }
 
-/// 标记当前用户全部通知为已读 —— PUT /api/notifications/mark-all-read。
+/// PUT /api/notifications/mark-all-read：标记当前用户全部通知为已读。
 ///
 /// 不做存在性校验：无匹配行也返回成功。
 pub async fn mark_all_notifications_read(

@@ -32,7 +32,8 @@ const NEIGHBOR_ADDR_MAX_CHARS: usize = 64;
 /// device_cdps.neighbor_platform 列宽（VARCHAR(128)）
 const NEIGHBOR_PLATFORM_MAX_CHARS: usize = 128;
 
-/// 读库：返回设备已落库的 CDP 邻居。
+/// GET /api/resources/devices/{id}/cdp：读库返回设备已落库的 CDP 邻居，
+/// 设备不存在 404。
 pub async fn get_device_cdps<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -57,7 +58,8 @@ pub async fn get_device_cdps<P: DbProvider>(
     Ok(foims_common::ok_json(rows, "server.device.cdp.fetched"))
 }
 
-/// 采集并落库设备 CDP 邻居，同时产出邻居增删事件。
+/// POST /api/resources/devices/{id}/cdp/sync：采集并落库设备 CDP 邻居，同时产出
+/// 邻居增删事件；设备未配 IP 或 SNMP 凭据、采集失败均 400。
 pub async fn sync_cdps_from_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,

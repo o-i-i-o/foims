@@ -1,9 +1,8 @@
-//! SNMP 实时快照 Web API（实时展示阶段二）。
+//! SNMP 实时快照 Web API。
 //!
 //! 数据来自 [`crate::live_poll::LiveRegistry`]（只驻内存，不落库）：
-//! - `GET /api/agents/live`：全量快照列表（首次加载与 SSE 不可用时的兜底）；
-//! - `GET /api/agents/live/stream`：SSE 变更推送——`summary` 事件为全部设备
-//!   的轻量摘要，带 `?device_id=` 时另推该设备的 `device` 事件（含端口明细）。
+//! [`list_live`] 给全量摘要列表（首次加载与 SSE 不可用时的兜底），
+//! [`live_stream`] 推送变更（摘要 + 可选单设备端口明细）。
 //!
 //! 鉴权沿用 `/api/agents` nest 内的 `agent_admin_guard`（admin/secadmin）；
 //! 浏览器 EventSource 同源请求自动携带 HttpOnly Cookie，无需令牌参数。

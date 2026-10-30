@@ -1,4 +1,5 @@
-//! 机柜资源管理。
+//! 机柜（cabinets）资源：机柜 CRUD、柜内机位差量同步与区域/网段视图，
+//! 供前端机柜管理与设备上架定位使用。
 
 use std::sync::Arc;
 
@@ -21,6 +22,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
+/// GET /api/resources/cabinets：分页获取机柜列表（关键字与房间过滤、白名单排序，批量补齐房间名/机位数/已分配功率）。
 pub async fn get_cabinets<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -39,9 +41,11 @@ pub async fn get_cabinets<P: DbProvider>(
         .unwrap_or_else(|| "asc".to_string());
 
     let search_pattern = foims_common::net::escape_like(&search);
-    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    // 非法 UUID 显式 400（与 network.rs 口径一致），不静默退化为全量列表
     let parsed_room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
 
+    // ORDER BY 白名单，未匹配时回落默认序，避免注入；各查询分支 push 的排序段
+    // 只取此处的常量
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY c.name DESC",
         ("room_name", "desc") => "ORDER BY rm.name DESC NULLS LAST, c.name ASC",
@@ -61,7 +65,6 @@ pub async fn get_cabinets<P: DbProvider>(
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             "SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id",
         );
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -82,7 +85,6 @@ pub async fn get_cabinets<P: DbProvider>(
             "SELECT c.id, c.name, c.room_id, c.capacity, c.total_power_watts, c.description, c.created_at::TIMESTAMPTZ, c.updated_at::TIMESTAMPTZ FROM cabinets c LEFT JOIN rooms rm ON c.room_id = rm.id WHERE c.room_id = ",
         );
         qb.push_bind(parsed_room_id);
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -111,7 +113,6 @@ pub async fn get_cabinets<P: DbProvider>(
             .push(" OR c.description ILIKE ")
             .push_bind(&search_pattern)
             .push(")");
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -136,7 +137,6 @@ pub async fn get_cabinets<P: DbProvider>(
         qb.push_bind(&search_pattern)
             .push(" OR c.description ILIKE ")
             .push_bind(&search_pattern);
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -207,6 +207,8 @@ pub async fn get_cabinets<P: DbProvider>(
     ))
 }
 
+/// GET /api/resources/network-regions/{id}/cabinets：获取网络区域下的机柜（可按网段收敛，
+/// 网段不属于该区域时 400；不分页，按名称排序）。
 pub async fn get_cabinets_by_network_region<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(region_id_str): Path<String>,
@@ -273,6 +275,8 @@ pub async fn get_cabinets_by_network_region<P: DbProvider>(
     Ok(foims_common::ok_json(cabinets, "server.cabinet.fetched"))
 }
 
+/// POST /api/resources/cabinets：创建机柜（房间房型与同房间重名预检、写入同事务：房型不允许或房间不存在 400，
+/// 重名 409）。
 pub async fn create_cabinet<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -360,6 +364,8 @@ pub async fn create_cabinet<P: DbProvider>(
     Ok(foims_common::ok_json(cabinet, "server.cabinet.created"))
 }
 
+/// GET /api/resources/cabinets/{id}：获取机柜详情（含机位与配线架清单、机位数与已分配功率摘要；
+/// 机柜不存在返回 404）。
 pub async fn get_cabinet<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -408,7 +414,6 @@ pub async fn get_cabinet<P: DbProvider>(
         })
         .collect();
 
-    // 加载该机柜下的配线架（独立表，隶属机柜）
     let pp_rows =
         sqlx::query("SELECT id, name FROM patch_panels WHERE cabinet_id = $1 ORDER BY name")
             .bind(cabinet.id)
@@ -444,6 +449,9 @@ pub async fn get_cabinet<P: DbProvider>(
     ))
 }
 
+/// PUT /api/resources/cabinets/{id}：更新机柜（缺省字段保留旧值、null 清空总功率
+/// 上限；行锁内复核房型/重名/功率后写入，换房时级联迁移柜内设备：房型不允许或
+/// 新上限低于在柜设备功耗 400、机柜不存在 404、重名 409）。
 pub async fn update_cabinet<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -485,8 +493,6 @@ pub async fn update_cabinet<P: DbProvider>(
         .await?;
     }
 
-    // 设置（调低）总功率上限时的容量校验：柜内已分配功耗不得超过新值；
-    // 缺省不修改、null 清空上限不受限
     if let Some(Some(limit)) = req.total_power_watts {
         crate::helpers::ensure_power_limit_covers_allocated(
             &mut tx,
@@ -531,8 +537,7 @@ pub async fn update_cabinet<P: DbProvider>(
 
     // 换房时柜内机位上的设备必须跟随房间（设备位置不变量 I1）：父侧
     // cabinets 先落库，再改 devices.room_id——设备行的 BEFORE 触发器会回查
-    // 父侧房间，顺序颠倒会拿旧房间报错；同时按新房间绑定网段清理失效 IP、
-    // 校验新房间功耗上限
+    // 父侧房间，顺序颠倒会拿旧房间报错
     crate::helpers::sync_devices_room(
         &mut tx,
         crate::helpers::DeviceScope::Cabinet(id),
@@ -567,6 +572,8 @@ pub async fn update_cabinet<P: DbProvider>(
     Ok(foims_common::ok_json(cabinet, "server.cabinet.updated"))
 }
 
+/// DELETE /api/resources/cabinets/{id}：删除机柜（存在机位、机位被设备占用或配线架被线路引用时 400，
+/// 检查与删除同事务；不存在 404）。
 pub async fn delete_cabinet<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -651,6 +658,8 @@ pub async fn delete_cabinet<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.cabinet.deleted"))
 }
 
+/// GET /api/resources/cabinets/{id}/networks：获取机柜所属房间绑定的网段列表（不分页；
+/// 机柜不存在返回 404）。
 pub async fn get_cabinet_networks<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -684,6 +693,8 @@ pub async fn get_cabinet_networks<P: DbProvider>(
     ))
 }
 
+/// PUT /api/resources/cabinets/{id}/positions：差量同步机柜机位（请求缺失项删除，被设备占用时 400；
+/// 逐项重名与 U 位重叠预检后新增或更新，整批同事务）。
 pub async fn sync_cabinet_positions<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -745,7 +756,6 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
         )
         .await?;
 
-        // U 位重叠预检：返回 422 而非触发器 P0001 的 500
         crate::position::ensure_no_u_overlap(&mut tx, Some(id), item.start_u, item.end_u, item.id)
             .await?;
 
@@ -766,7 +776,7 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             .execute(&mut *tx)
             .await
             .map_err(|e| {
-                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 400）
                 if let sqlx::Error::Database(ref db_err) = e
                     && db_err.code().as_deref() == Some("P0001")
                     && db_err.message().contains("U位范围重叠")
@@ -794,7 +804,6 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             .execute(&mut *tx)
             .await
             .map_err(|e| {
-                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
                 if let sqlx::Error::Database(ref db_err) = e
                     && db_err.code().as_deref() == Some("P0001")
                     && db_err.message().contains("U位范围重叠")

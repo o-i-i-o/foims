@@ -167,7 +167,7 @@ impl LiveCollector {
             }
         }
 
-        // 端口速率与计数器状态：首轮/间隔非正时只更新基线不出速率
+        // 首轮或间隔非正时只更新计数器基线、不出速率
         let prev_ports = self.prev.as_ref().map(|p| &p.ports);
         let mut next_ports: BTreeMap<u32, PortCounters> = BTreeMap::new();
         let mut ports = Vec::with_capacity(self.profile.ports.len());

@@ -20,6 +20,8 @@ use validator::Validate;
 
 use super::network::acquire_network_cidr_write_lock;
 
+/// GET /api/resources/network-regions：分页获取网络区域（`search` 匹配名称与
+/// 描述；`sort_by` 白名单 name/ipv4_cidrs/ipv6_cidrs/created_at）。
 pub async fn get_network_regions<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -32,7 +34,7 @@ pub async fn get_network_regions<P: DbProvider>(
     let sort_by = query.get("sort_by").cloned().unwrap_or_default();
     let sort_order = query.get("sort_order").cloned().unwrap_or_default();
 
-    // ORDER BY 白名单，未匹配时回落默认序，避免注入。
+    // 未命中白名单时回落默认序（值经 match 常量拼接，不引入用户输入）；
     // CIDR 列取数组首元素参与排序，空数组（NULL）固定排末尾
     let order_clause = match (sort_by.as_str(), sort_order.as_str()) {
         ("name", "desc") => "ORDER BY name DESC",
@@ -66,7 +68,6 @@ pub async fn get_network_regions<P: DbProvider>(
 
     let network_regions = if search.is_empty() {
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(base_select);
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -81,7 +82,6 @@ pub async fn get_network_regions<P: DbProvider>(
         qb.push_bind(&pattern)
             .push(" OR description ILIKE ")
             .push_bind(&pattern);
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -98,7 +98,7 @@ pub async fn get_network_regions<P: DbProvider>(
 }
 
 /// 区域 CIDR 数组入库前校验：逐条 [`foims_common::net::validate_cidr`]
-/// 格式检查（非法直接 422，而非绑定后撞 PG 22P02 报 500），
+/// 格式检查（非法直接 400，而非绑定后撞 PG 22P02 报 500），
 /// 并拒绝数组内重复条目（重复项对包含语义无增益，只会污染展示）。
 fn validate_region_cidr_array(
     cidrs: Option<&Vec<String>>,
@@ -123,13 +123,14 @@ fn validate_region_cidr_array(
     Ok(())
 }
 
+/// POST /api/resources/network-regions：创建网络区域（CIDR 数组在绑定 `CIDR[]`
+/// 前校验格式与数组内重复，非法值 400；重名预检与写入同事务，重名 409）。
 pub async fn create_network_region<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<NetworkRegionCreate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
-    // CIDR 数组前置校验：非法格式/数组内重复在绑定 CIDR[] 前拦截
     validate_region_cidr_array(req.ipv4_cidrs.as_ref(), "ipv4_cidrs")?;
     validate_region_cidr_array(req.ipv6_cidrs.as_ref(), "ipv6_cidrs")?;
 
@@ -204,6 +205,8 @@ pub async fn create_network_region<P: DbProvider>(
     ))
 }
 
+/// GET /api/resources/network-regions/{id}：读取单个网络区域（CIDR 数组经
+/// `text()` 收敛为字符串数组，无值时返回空数组；不存在 404）。
 pub async fn get_network_region<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -223,6 +226,9 @@ pub async fn get_network_region<P: DbProvider>(
     ))
 }
 
+/// PUT /api/resources/network-regions/{id}：更新网络区域（预检、写入与更新后
+/// 复查同一事务，并与网段写入互斥；收缩 CIDR 导致下辖网段越界时整体回滚 400，
+/// 不存在 404、重名 409）。
 pub async fn update_network_region<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -230,8 +236,6 @@ pub async fn update_network_region<P: DbProvider>(
     AppJson(req): AppJson<NetworkRegionUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
-    // CIDR 数组前置校验（含数组内重复检查）：收缩区域等更新场景
-    // 在绑定 CIDR[] 前拦截非法值
     validate_region_cidr_array(req.ipv4_cidrs.as_ref(), "ipv4_cidrs")?;
     validate_region_cidr_array(req.ipv6_cidrs.as_ref(), "ipv6_cidrs")?;
 
@@ -295,7 +299,7 @@ pub async fn update_network_region<P: DbProvider>(
     })?;
 
     // 区域 CIDR 更新后复查：其下所有网段的 CIDR 仍须被新区域范围包含，
-    // 越界则整体回滚（422），避免收缩区域后下辖网段悬空
+    // 越界则整体回滚（400），避免收缩区域后下辖网段悬空
     if req.ipv4_cidrs.is_some() || req.ipv6_cidrs.is_some() {
         let rows: Vec<(Option<String>, Option<String>)> = sqlx::query_as(
             "SELECT ipv4_cidr::TEXT, ipv6_cidr::TEXT FROM network_cidrs WHERE network_region_id = $1",
@@ -363,6 +367,8 @@ pub async fn update_network_region<P: DbProvider>(
     ))
 }
 
+/// DELETE /api/resources/network-regions/{id}：删除网络区域（存在性与占用检查
+/// 同 DELETE 包进事务并与网段写入互斥；不存在 404，区域下仍有网段时 400）。
 pub async fn delete_network_region<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -427,8 +433,6 @@ mod tests {
         cidr_belongs_to_region, get_cidr_type, validate_cidr, validate_gateway_in_cidr,
     };
 
-    // ==================== CIDR 格式校验（IPv4） ====================
-
     #[test]
     fn test_validate_cidr_ipv4_valid() {
         // 主机位全 0 的合法网段（含前缀边界 0 与 32）
@@ -488,8 +492,6 @@ mod tests {
         }
     }
 
-    // ==================== CIDR 类型识别 ====================
-
     #[test]
     fn test_get_cidr_type_v4_v6_and_none() {
         assert_eq!(get_cidr_type("10.0.0.0/8"), Some("ipv4"));
@@ -511,8 +513,6 @@ mod tests {
         assert_ne!(get_cidr_type("10.0.0.0/8"), Some("ipv6"));
         assert_ne!(get_cidr_type("2001:db8::/32"), Some("ipv4"));
     }
-
-    // ==================== 网关与网段归属校验 ====================
 
     #[test]
     fn test_gateway_in_cidr_ipv4_ok() {
@@ -572,8 +572,6 @@ mod tests {
         );
     }
 
-    // ==================== 网段与区域 CIDR 包含关系 ====================
-
     #[test]
     fn test_cidr_belongs_to_region_empty_region_allows_all() {
         // 区域未定义 CIDR 时不做限制
@@ -609,8 +607,6 @@ mod tests {
         assert!(!cidr_belongs_to_region("10.0.0.0/7", &region_v4));
     }
 
-    // ==================== 区域 CIDR 数组前置校验 ====================
-
     #[test]
     fn test_validate_region_cidr_array_valid() {
         // None（字段缺省）与合法数组均通过
@@ -625,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_validate_region_cidr_array_invalid_format() {
-        // 非法 CIDR（主机位非 0 / 前缀越界 / 非法文本 / 空串）在绑定前拦截为 422
+        // 非法 CIDR（主机位非 0 / 前缀越界 / 非法文本 / 空串）在绑定前拦截为 400
         for bad in ["192.168.1.1/24", "10.0.0.0/33", "abc", ""] {
             let list = vec!["10.0.0.0/8".to_string(), bad.to_string()];
             let err = super::validate_region_cidr_array(Some(&list), "ipv4_cidrs")
@@ -633,7 +629,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("非法 CIDR {bad:?} 应被拒绝"));
             assert!(
                 matches!(err, AppError::Validation(_)),
-                "应为 422 校验错误，实际 {err}"
+                "应为 400 校验错误，实际 {err}"
             );
         }
     }

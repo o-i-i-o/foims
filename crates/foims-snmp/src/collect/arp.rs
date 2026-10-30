@@ -50,7 +50,6 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
         }
         let oid_parts = vb.oid.arcs();
         if let Some(&if_index) = oid_parts.last() {
-            // 名称归一（B3）：trim/空串/异常字面量不写入映射
             if let Some(name) = clean_snmp_text(vb.value.as_str()) {
                 map.insert(if_index, name);
             }
@@ -141,8 +140,12 @@ fn parse_ipnet_to_physical_index(oid_parts: &[u32]) -> Option<(u32, String)> {
     Some((if_index, ip_addr))
 }
 
+/// 采集 ARP/FDB 表：IPv4 arpEntries 与 IPv6 ipNetToPhysical 双表 walk 后
+/// 按 (ip, mac) 去重合并；接口名取 ifName，VLAN 由 Q-BRIDGE 表按 MAC 归属。
+///
+/// 任一 walk 迭代出错即整体失败（区别于 [`walk_if_name_map`] 等辅助表的
+/// 缺失降级），避免半张 ARP 表被当成完整快照参与差异比对。
 pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<ArpEntry>, SnmpError> {
-    // 复用 snmp_target：IPv6 地址须包裹方括号，直接 ip:port 拼接必然解析失败
     let addr = snmp_target(&params.ip, params.port);
     let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
@@ -240,8 +243,6 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
         }
 
         let oid_parts = vb.oid.arcs();
-        // ipNetToPhysicalPhysAddress 行：ifIndex/addrLen/地址均取自索引弧
-        //（addrType 位于 ifIndex 与 addrLen 之间，仅作索引用途）
         if let Some((if_index, ip_addr)) = parse_ipnet_to_physical_index(oid_parts)
             && let Some(bytes) = vb.value.as_bytes()
             && bytes.len() >= 6
@@ -301,8 +302,7 @@ pub fn diff_arp_entries(
 
     let mut events = Vec::new();
 
-    // 首轮基线：无论 MAC 是否已知，全部按 arp_added(info) 落表，不发未知/冲突事件
-    //（基线语义是建立观测面，而非判定接入合法性）
+    // 基线只建立观测面、不判定接入合法性，故未知 MAC 也按 arp_added 落表
     if baseline {
         for entry in new {
             events.push(ObsEvent::new(
@@ -318,9 +318,8 @@ pub fn diff_arp_entries(
     let old_ips: HashSet<&str> = old.iter().map(|(ip, _)| ip.as_str()).collect();
     let new_ips: HashSet<&str> = new.iter().map(|e| e.ip_address.as_str()).collect();
 
-    // 新增条目（本轮出现、旧表无该 IP）：MAC 已登记落 arp_added，
-    // 未知 MAC 落 unknown_device（应管尽管：未登记设备接入才告警，
-    // 已登记设备的 DHCP 漂移 IP 不报未知，MAC 移动由拉取侧 IP 变更检测覆盖）
+    // 应管尽管：未登记设备接入才报未知，已登记 MAC 的漂移 IP 归 arp_added，
+    // 其 MAC 移动由拉取侧 IP 变更检测覆盖
     // 同一新增 MAC 多 IP 时仅按首个条目产出一条事件，避免风暴（冲突另有专门事件）
     let mut handled_new_macs: HashSet<&str> = HashSet::new();
     for entry in new {
@@ -350,7 +349,6 @@ pub fn diff_arp_entries(
         }
     }
 
-    // 移除条目（旧表有、本轮消失）
     for (ip, mac) in old {
         if !new_ips.contains(ip.as_str()) {
             events.push(ObsEvent::new(
@@ -390,8 +388,6 @@ pub fn diff_arp_entries(
 mod tests {
     use super::*;
 
-    /// 构造 ipNetToPhysicalPhysAddress 行 OID：基弧(10) + ifIndex + addrType
-    /// + addrLen + 地址字节，与 RFC 4293 索引编码一致。
     fn neighbor_oid(if_index: u32, addr_type: u32, addr: &[u8]) -> Vec<u32> {
         let mut oid: Vec<u32> = vec![1, 3, 6, 1, 2, 1, 4, 35, 1, 4];
         oid.push(if_index);
@@ -446,7 +442,6 @@ mod tests {
 
     #[test]
     fn diff_baseline_only_records_added() {
-        // 首轮基线：无论 MAC 是否已知，全部落 arp_added，不发未知设备/冲突
         let new = vec![arp_entry("10.0.0.5", "AA:BB:CC:DD:EE:01")];
         let known = HashSet::new();
         let events = diff_arp_entries(&[], &new, &known, true);
@@ -477,7 +472,6 @@ mod tests {
         assert!(types.contains(&"arp_added"), "应有已知 MAC 新增");
         assert!(types.contains(&"unknown_device"), "应有未知 MAC 新增");
         assert!(types.contains(&"arp_removed"), "应有移除");
-        // 未变条目不产生事件
         assert_eq!(
             events
                 .iter()
@@ -490,8 +484,6 @@ mod tests {
 
     #[test]
     fn diff_known_mac_at_new_ip_is_not_unknown_device() {
-        // 应管尽管：已登记设备的 DHCP 漂移 IP（同 MAC 出现在新 IP）
-        // 落 arp_added 而非 unknown_device，MAC 移动由拉取侧 IP 变更检测覆盖
         let old = vec![("10.0.0.1".to_string(), "AA:01".to_string())];
         let new = vec![
             arp_entry("10.0.0.1", "AA:01"),
@@ -503,7 +495,6 @@ mod tests {
             events.iter().all(|e| e.event_type != "unknown_device"),
             "已知 MAC 不应报未知设备"
         );
-        // 同一新增 MAC 多 IP 仅产出一条 arp_added（风暴控制按 MAC 维度）
         let added: Vec<&ObsEvent> = events
             .iter()
             .filter(|e| e.event_type == "arp_added")

@@ -35,6 +35,7 @@ impl From<SwitchConfigError> for super::SnmpError {
     }
 }
 
+/// 读设备 SNMP 配置行与探测用 IP（IP 口径见 [`get_device_ip_address`]）。
 pub async fn get_device_snmp_config(
     pool: &sqlx::PgPool,
     device_id: &Uuid,
@@ -58,6 +59,8 @@ pub async fn get_device_snmp_config(
     Ok((switch, ip_address))
 }
 
+/// 设备探测用 IP：该设备网口的 IP 按 `created_at` 升序取首个（多地址时
+/// 口径固定为最早登记的一条），未登记返回 None。
 pub async fn get_device_ip_address(
     pool: &sqlx::PgPool,
     device_id: &Uuid,

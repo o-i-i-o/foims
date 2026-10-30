@@ -1,8 +1,5 @@
-//! 组织与人员模块（组织架构/员工/组织模板）。
-//!
-//! 与资源管理（`resource`）平级的业务模块：组织树 CRUD 见 `organization`
-//! 子模块，员工挂在组织节点下（`employee`），组织类型模板见 `org_template`。
-//! 本文件仅做模块组装与路径再导出（`foims_organization::*` 保持不变）。
+//! 组织与人员业务模块（与资源管理 `resource` 平级）：组织树、员工与
+//! 组织类型模板；本文件仅做模块组装与路径再导出。
 
 // 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
 // workspace lints + CI `-D warnings` 强制禁止。cfg(test) 仅作用于测试构建。

@@ -1,12 +1,7 @@
-//! Agent 监控 Web API（设计 docs/agent-design.md §5.3）。
+//! Agent 监控 Web API（设计 docs/agent-design.md §5.3）：Agent 列表、主机
+//! 负载 Top 榜、详情、历史曲线与 label/status 维护。
 //!
-//! 挂载于 /api/agents（与配置包下载同 nest，经 agent_admin_guard 纵深防御）：
-//! - `GET  /api/agents`：分页列表（keyword 匹配 hostname/label/ip，不含 raw_metrics）；
-//! - `GET  /api/agents/top-metrics`：主机负载 Top 榜（CPU/内存/温度各前 N，仪表盘用）；
-//! - `GET  /api/agents/{id}`：详情（含 raw_metrics）；
-//! - `GET  /api/agents/{id}/history`：曲线数据（hours 1..=168，超 200 点均匀抽样）；
-//! - `PATCH /api/agents/{id}`：改 label/status（status 白名单 active|disabled）；
-//! - `DELETE /api/agents/{id}`：删除（history 经 FK CASCADE 级联清理）。
+//! 挂载于 /api/agents（与配置包下载同 nest，经 agent_admin_guard 纵深防御）。
 
 use std::sync::Arc;
 
@@ -97,7 +92,6 @@ fn push_filters(
         builder.push(" AND status = ").push_bind(status.to_string());
     }
     if let Some(keyword) = keyword.map(str::trim).filter(|s| !s.is_empty()) {
-        // ILIKE 模糊匹配 hostname/label/ip，转义 %_\ 防通配符注入
         let pattern = escape_like(keyword);
         builder
             .push(" AND (hostname ILIKE ")
@@ -110,7 +104,8 @@ fn push_filters(
     }
 }
 
-/// GET /api/agents：分页列表（不含 raw_metrics）。
+/// GET /api/agents：分页列表（keyword 模糊匹配 hostname/label/ip，status
+/// 精确过滤，按 last_seen、created_at 倒序；响应不含 raw_metrics）。
 pub async fn list_agents<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -119,7 +114,6 @@ pub async fn list_agents<S: ConfigProvider>(
     let pool = state.pool()?.get_conn();
     let pagination = Pagination::new(query.page.unwrap_or(1), query.page_size.unwrap_or(20));
 
-    // 总数
     let mut count_builder =
         sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM monitored_hosts WHERE 1=1");
     push_filters(
@@ -133,7 +127,7 @@ pub async fn list_agents<S: ConfigProvider>(
         .fetch_one(&pool)
         .await?;
 
-    // 列表行（NUMERIC 统一 cast float8 读取；不取 raw_metrics）
+    // NUMERIC 列统一 cast 为 float8 后按 f64 读取
     let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         r#"SELECT id, device_id, status, source, hostname, label, ip, os, arch, agent_version,
                   cpu_usage::float8 AS cpu_usage,
@@ -348,7 +342,6 @@ pub async fn get_agent_history<S: ConfigProvider>(
     let points: Vec<Value> = rows
         .into_iter()
         .map(|(t, metrics)| {
-            // 曲线精简快照键：cpu/mem/disk/temp/rx_bps/tx_bps（缺键时补 null）
             let pick = |key: &str| metrics.get(key).cloned().unwrap_or(Value::Null);
             json!({
                 "t": rfc3339(t),
@@ -367,7 +360,8 @@ pub async fn get_agent_history<S: ConfigProvider>(
     ))
 }
 
-/// PATCH /api/agents/{id}：更新备注与状态（status 白名单），行不存在返回 404。
+/// PATCH /api/agents/{id}：更新备注（trim 后 ≤100 字符）与状态（白名单
+/// active|disabled）；取值越界或两者皆缺返回 400，行不存在返回 404。
 pub async fn patch_agent<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,

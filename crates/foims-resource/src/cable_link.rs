@@ -24,8 +24,9 @@ use foims_common::pagination::{Pagination, paged_response};
 use foims_models::{CableLinkCreate, CableLinkUpdate, CableLinkWithDetails, CablePathNode};
 
 /// 合法的端点资源类型。
+/// 合法端点类型，与 cable_links 的 a/b_endpoint_type DB CHECK 同集。
 const VALID_ENDPOINT_TYPES: [&str; 3] = ["net_outlet", "device_interface", "patch_panel"];
-/// 合法的链路类型。
+/// 合法链路介质，与 cable_links.link_type 的 DB CHECK 同集（列缺省 ethernet）。
 const VALID_LINK_TYPES: [&str; 3] = ["ethernet", "fiber", "console"];
 /// `cable_links_with_details` 视图与 `CableLinkWithDetails` 映射对应的列清单。
 const CABLE_LINK_COLUMNS: &str = "cl.id, cl.a_endpoint_type, cl.a_endpoint_id, cl.a_endpoint_label, \
@@ -35,6 +36,7 @@ const CABLE_LINK_COLUMNS: &str = "cl.id, cl.a_endpoint_type, cl.a_endpoint_id, c
      cl.link_type, cl.cable_label, cl.length_m, cl.tested, \
      cl.created_at::TIMESTAMPTZ, cl.updated_at::TIMESTAMPTZ";
 
+/// 端点类型白名单校验，越界返回 400 并附有效取值列表。
 fn validate_endpoint_type(endpoint_type: &str) -> Result<(), AppError> {
     if VALID_ENDPOINT_TYPES.contains(&endpoint_type) {
         Ok(())
@@ -46,6 +48,7 @@ fn validate_endpoint_type(endpoint_type: &str) -> Result<(), AppError> {
     }
 }
 
+/// 链路介质白名单校验，越界返回 400 并附有效取值列表。
 fn validate_link_type(link_type: &str) -> Result<(), AppError> {
     if VALID_LINK_TYPES.contains(&link_type) {
         Ok(())
@@ -120,7 +123,7 @@ pub async fn get_cable_links<P: DbProvider>(
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let endpoint_type = query.get("endpoint_type").map(String::as_str);
-    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    // 非法 UUID 显式 400（与 network.rs 口径一致），不静默退化为全量列表
     let endpoint_id = match query.get("endpoint_id") {
         Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
             AppError::Validation(msg("server.common.invalid_param").with("param", "endpoint_id"))
@@ -212,7 +215,7 @@ async fn ensure_interfaces_on_different_devices(
     Ok(())
 }
 
-/// 端点 (类型, id) 存在性预检：端点资源缺失时返回 422，
+/// 端点 (类型, id) 存在性预检：端点资源缺失时返回 400，
 /// 不再依赖 cable_links 防删触发器的 P0001 自定义异常（→ 500）。
 /// 表名来自类型白名单映射（非用户输入直拼），id 经参数绑定。
 async fn ensure_endpoint_exists(
@@ -314,7 +317,7 @@ pub async fn create_cable_link<P: DbProvider>(
         ensure_interfaces_on_different_devices(&mut tx, a_id, b_id).await?;
     }
 
-    // 端点资源存在性预检：缺失时 422，而非触发器 P0001 的 500
+    // 端点资源存在性预检：缺失时 400，而非触发器 P0001 的 500
     ensure_endpoint_exists(&mut tx, &a_type, a_id).await?;
     ensure_endpoint_exists(&mut tx, &b_type, b_id).await?;
 
@@ -637,8 +640,6 @@ pub async fn get_cable_path<P: DbProvider>(
 mod tests {
     use super::*;
 
-    // ==================== 端点/链路类型校验 ====================
-
     #[test]
     fn test_validate_endpoint_type_accepts_all_valid_types() {
         for endpoint_type in VALID_ENDPOINT_TYPES {
@@ -694,8 +695,6 @@ mod tests {
             );
         }
     }
-
-    // ==================== 端点规范化序 ====================
 
     #[test]
     fn test_sort_endpoints_orders_by_type_string() {

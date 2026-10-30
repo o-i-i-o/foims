@@ -143,6 +143,10 @@ async fn collect_vlan_members(
     members
 }
 
+/// 采集设备端口表：ifDescr/ifAdminStatus/ifOperStatus/ifHighSpeed/ifSpeed
+/// 逐列 walk 后按 ifIndex 组装，另以 BRIDGE/Q-BRIDGE 表补 VLAN 与端口类型。
+///
+/// 错误仅来自鉴权构造与会话建立；MIB 缺失的字段一律降级为 NULL。
 pub async fn get_device_ports_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<SnmpPort>, SnmpError> {

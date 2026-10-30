@@ -12,11 +12,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-/// 获取所有可用的组织类型配置（从所有模板中提取）
+/// GET /api/resources/org-templates/available-types：汇总全部模板中可选的组织类型
+/// 配置，供新建组织时选类型；icons 结构或取值非法 400，存量 levels 数据损坏 500。
 pub async fn get_available_org_types<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
-    // 获取所有模板
     let templates: Vec<OrgTemplate> = sqlx::query_as(
         "SELECT id, name, levels, icons, description, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ
          FROM org_templates ORDER BY created_at ASC",
@@ -24,18 +24,14 @@ pub async fn get_available_org_types<P: DbProvider>(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    // 提取所有唯一的组织类型
     let mut all_types: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut all_icons: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
     for template in &templates {
-        // 从levels中提取所有类型
         if let Some(levels_obj) = template.levels.as_object() {
-            // 添加父类型
             for parent_type in levels_obj.keys() {
                 all_types.insert(parent_type.clone());
             }
-            // 添加子类型
             for children in levels_obj.values() {
                 if let Some(children_arr) = children.as_array() {
                     for child in children_arr {
@@ -47,7 +43,6 @@ pub async fn get_available_org_types<P: DbProvider>(
             }
         }
 
-        // 合并icons配置
         if let Some(icons_obj) = template.icons.as_object() {
             for (type_name, icon) in icons_obj {
                 all_icons.insert(type_name.clone(), icon.clone());
@@ -55,7 +50,6 @@ pub async fn get_available_org_types<P: DbProvider>(
         }
     }
 
-    // 构建返回数据
     let types: Vec<String> = all_types.into_iter().collect();
     let icons = serde_json::Value::Object(all_icons);
 
@@ -228,7 +222,8 @@ pub fn get_allowed_children(
         .collect()
 }
 
-/// 获取所有模板
+/// GET /api/resources/org-templates：列出全部模板（不分页，按 created_at 升序，
+/// 响应为摘要视图：id/名称/levels/icons/描述）。
 pub async fn get_org_templates<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
@@ -244,7 +239,7 @@ pub async fn get_org_templates<P: DbProvider>(
     ))
 }
 
-/// 获取单个模板
+/// GET /api/resources/org-templates/{id}：获取单个模板全字段，不存在 404。
 pub async fn get_org_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -264,7 +259,8 @@ pub async fn get_org_template<P: DbProvider>(
     ))
 }
 
-/// 创建模板
+/// POST /api/resources/org-templates：创建组织模板（校验 levels 结构与 icons 格式；
+/// 模板名冲突返回 409）。
 pub async fn create_org_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -275,7 +271,6 @@ pub async fn create_org_template<P: DbProvider>(
     // 校验 levels 映射格式（返回值仅用于校验，无需保留）
     foims_common::org_levels::validate_levels_mapping(&req.levels).map_err(AppError::Validation)?;
 
-    // 校验 icons 格式
     let icons = req.icons.clone().unwrap_or_else(|| serde_json::json!({}));
     validate_icons_mapping(&icons, &req.levels)?;
 
@@ -335,7 +330,9 @@ pub async fn create_org_template<P: DbProvider>(
     ))
 }
 
-/// 更新模板
+/// PUT /api/resources/org-templates/{id}：更新组织模板（事务锁行与组织创建/删除
+/// 互斥；在用模板的 levels 变更不得改变存量节点类型语义）：破坏存量语义 400、
+/// 模板不存在 404、名称冲突 409。
 pub async fn update_org_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -344,7 +341,6 @@ pub async fn update_org_template<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // 如果更新了 levels，需要校验
     if let Some(ref levels_val) = req.levels {
         foims_common::org_levels::validate_levels_mapping(levels_val)
             .map_err(AppError::Validation)?;
@@ -364,7 +360,6 @@ pub async fn update_org_template<P: DbProvider>(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.org_template.not_found")))?;
 
-    // 检查是否有关联的组织节点正在使用此模板
     let usage_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM organizations WHERE template_id = $1")
             .bind(id)
@@ -495,7 +490,8 @@ pub async fn update_org_template<P: DbProvider>(
     ))
 }
 
-/// 删除模板
+/// DELETE /api/resources/org-templates/{id}：删除组织模板（不存在 404；被组织节点
+/// 引用时 400，避免存量节点失去类型定义）。
 pub async fn delete_org_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

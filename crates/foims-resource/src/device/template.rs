@@ -1,4 +1,5 @@
-//! 设备模板管理。
+//! 设备模板台账：模板为设备创建提供预填属性（名称/类型/品牌/型号），
+//! 名称全局唯一，被设备引用时禁止删除。
 
 use axum::extract::{Path, State};
 use axum::response::Response;
@@ -12,7 +13,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-/// 获取所有设备模板
+/// GET /api/resources/device-templates：列出全部模板摘要（不分页，按 created_at
+/// 升序，响应只含 id/名称/类型/品牌/型号）。
 pub async fn get_device_templates<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
@@ -28,7 +30,7 @@ pub async fn get_device_templates<P: DbProvider>(
     ))
 }
 
-/// 获取单个设备模板
+/// GET /api/resources/device-templates/{id}：获取单个模板全字段，不存在 404。
 pub async fn get_device_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -48,7 +50,8 @@ pub async fn get_device_template<P: DbProvider>(
     ))
 }
 
-/// 删除设备模板
+/// DELETE /api/resources/device-templates/{id}：删除模板（不存在 404；被设备
+/// 引用时 400 并附引用台数，存在检查与删除同事务）。
 pub async fn delete_device_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -97,7 +100,9 @@ pub async fn delete_device_template<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.device_template.deleted"))
 }
 
-/// 更新设备模板
+/// PUT /api/resources/device-templates/{id}：全量更新模板（`device_type` 走与
+/// 创建路径同一白名单；不存在 404，类型越界或 brand/model/description 超列宽
+/// 400，重名 409；预检、写入与并发兜底同事务）。
 pub async fn update_device_template<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

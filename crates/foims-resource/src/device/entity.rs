@@ -29,7 +29,8 @@ const ENT_SW_REV_MAX_CHARS: usize = 64;
 /// device_sensors.name 列宽（VARCHAR(255)）
 const SENSOR_NAME_MAX_CHARS: usize = 255;
 
-/// 读库：返回设备已落库的物理实体清单。
+/// GET /api/resources/devices/{id}/entities：读库返回已落库的物理实体清单
+/// （按 ent_index 排序；设备不存在 404）。
 pub async fn get_device_entities<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -54,7 +55,8 @@ pub async fn get_device_entities<P: DbProvider>(
     Ok(foims_common::ok_json(rows, "server.device.entity.fetched"))
 }
 
-/// 读库：返回设备已落库的传感器读数。
+/// GET /api/resources/devices/{id}/sensors：读库返回已落库的传感器读数
+/// （按 ent_index 排序；设备不存在 404）。
 pub async fn get_device_sensors<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -79,7 +81,10 @@ pub async fn get_device_sensors<P: DbProvider>(
     Ok(foims_common::ok_json(rows, "server.device.sensors.fetched"))
 }
 
-/// 采集并落库设备物理实体 + 传感器（一次同步写两张表）。
+/// POST /api/resources/devices/{id}/entities/sync：SNMP 采集并覆盖式落库物理实体
+/// 与传感器（两表同事务、逐行 SAVEPOINT 容错单行失败，清理本次未见的陈旧
+/// ent_index）；设备未配 IP 或 SNMP 凭据、采集失败均 400；响应回读实体清单，
+/// 部分失败时消息附 synced/failed 计数。
 pub async fn sync_entities_from_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -192,7 +197,6 @@ pub async fn sync_entities_from_snmp<P: DbProvider>(
         .await?;
     }
 
-    // 传感器逐行 upsert
     let mut seen_sensor_ent: Vec<i32> = Vec::with_capacity(sensors.len());
     for r in &sensors {
         seen_sensor_ent.push(r.ent_index);

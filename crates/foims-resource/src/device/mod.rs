@@ -30,7 +30,7 @@ pub use vlan::*;
 
 use foims_common::{AppError, msg};
 
-/// Valid device types matching the database CHECK constraint
+/// 设备类型白名单，与数据库 CHECK 约束保持一致
 const VALID_DEVICE_TYPES: [&str; 9] = [
     "desktop",
     "laptop",
@@ -43,6 +43,7 @@ const VALID_DEVICE_TYPES: [&str; 9] = [
     "other",
 ];
 
+/// 设备类型白名单校验，越界返回 400 并附有效取值列表。
 fn validate_device_type(device_type: &str) -> Result<(), AppError> {
     if VALID_DEVICE_TYPES.contains(&device_type) {
         Ok(())

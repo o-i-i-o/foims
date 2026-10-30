@@ -28,7 +28,8 @@ fn u32_array_json(values: &[u32]) -> serde_json::Value {
     )
 }
 
-/// 读库：返回设备已落库的 VLAN 台账。
+/// GET /api/resources/devices/{id}/vlans：读库返回设备已落库的 VLAN 台账，
+/// 设备不存在 404。
 pub async fn get_device_vlans<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -53,7 +54,8 @@ pub async fn get_device_vlans<P: DbProvider>(
     Ok(foims_common::ok_json(rows, "server.device.vlan.fetched"))
 }
 
-/// 采集并落库设备 VLAN 台账。
+/// POST /api/resources/devices/{id}/vlans/sync：采集并落库设备 VLAN 台账；
+/// 设备未配 IP 或 SNMP 凭据、采集失败均 400。
 pub async fn sync_vlans_from_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,

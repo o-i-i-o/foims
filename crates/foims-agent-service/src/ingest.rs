@@ -1,14 +1,15 @@
 //! Agent 上报入库（设计 docs/agent-design.md §3.3）。
 //!
 //! 本模块面向 agent 的机器接口（QUIC/HTTP3，无 ApiResponse 信封），错误
-//! 以 `{"error": "..."}` 简单格式返回，状态码语义：401 令牌无效、403 已禁用、
-//! 400 请求非法、413 体积超限、429 上报过于频繁、500 入库失败。
+//! 以 `{"error": "..."}` 简单格式返回；`ingest` 产生 401 令牌无效、403 已禁用、
+//! 400 请求非法、429 上报过于频繁、500 入库失败，体积超限的 413 由传输层
+//! [`crate::report_server`] 产生。
 //!
 //! 认证模型（共享注册令牌）：所有 agent 使用配置文件中的同一注册令牌
 //! （`agent.enrollment_token`，经配置包分发）作 Bearer 凭据，服务端比对
-//! SHA-256 哈希；不再按安装包逐台签发令牌。注册模型：首报自动注册
-//! （按 machine_id upsert，行初始 active、label 取 hostname），删除页面
-//! 记录后同机可再次注册，无「激活」流程；IP 仅作展示字段。
+//! SHA-256 哈希。注册模型：首报自动注册（按 machine_id upsert，行初始
+//! active、label 取 hostname），删除页面记录后同机可再次注册，无「激活」
+//! 流程；IP 仅作展示字段。
 
 use axum::Json;
 use axum::http::{HeaderMap, StatusCode};
@@ -25,7 +26,7 @@ const MAX_CLOCK_SKEW_SECS: i64 = 300;
 /// 采集时刻允许的最大历史深度（秒）：断网恢复后批量补报的历史帧
 /// （agent 侧队列上限 120 帧，正常深度远小于该防御性上限）
 const MAX_PAST_AGE_SECS: i64 = 86_400;
-/// 上报间隔下限（秒，响应控制面不低于该值）
+/// 生效上报间隔下限（秒）：频控闸门以间隔的一半作为最小上报间隔
 const MIN_REPORT_INTERVAL_SECS: u64 = 10;
 /// 温度读数业务范围（℃）：越界视为明显异常，且会溢出 max_temp 的 NUMERIC(5,1)
 const TEMP_MIN_C: f64 = -100.0;
@@ -59,7 +60,7 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .then(|| token.to_ascii_lowercase())
 }
 
-/// 校验使用率数值：有限且落在 [0, 100]（纯函数，单测覆盖）。
+/// 校验使用率数值：有限且落在 [0, 100]。
 fn pct_in_range(value: f64) -> bool {
     value.is_finite() && (0.0..=100.0).contains(&value)
 }
@@ -140,7 +141,6 @@ fn validate_report(
             ));
         }
         if sensor.kind == "temp" {
-            // 温度越界会溢出 max_temp NUMERIC(5,1) 上限导致数据库 500
             if !(TEMP_MIN_C..=TEMP_MAX_C).contains(&sensor.value) {
                 return Err(format!(
                     "sensor {} 温度读数越界: {}（允许 {TEMP_MIN_C}~{TEMP_MAX_C}℃）",
@@ -168,8 +168,7 @@ struct TrimmedReport {
     agent_version: String,
 }
 
-/// 校验单个文本字段：trim 后判空 + 长度上限，通过返回 trim 后的值
-/// （纯函数，单测覆盖）。
+/// 校验单个文本字段：trim 后判空 + 长度上限，通过返回 trim 后的值。
 fn check_text_field(name: &str, raw: &str, max_len: usize) -> Result<String, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -182,8 +181,7 @@ fn check_text_field(name: &str, raw: &str, max_len: usize) -> Result<String, Str
     Ok(trimmed.to_string())
 }
 
-/// 校验并规范化上报文本字段：全部字段 trim 后判空并校验长度上限
-/// （纯函数，单测覆盖）。
+/// 对上报的全部文本字段逐项执行 [`check_text_field`] 校验。
 fn normalize_report(report: &AgentReport) -> Result<TrimmedReport, String> {
     Ok(TrimmedReport {
         machine_id: check_text_field("machine_id", &report.machine_id, MAX_MACHINE_ID_LEN)?,
@@ -199,9 +197,9 @@ fn normalize_report(report: &AgentReport) -> Result<TrimmedReport, String> {
     })
 }
 
-/// 解析请求体为帧序列：含 `frames` 字段视为批量（AgentReportBatch），
-/// 否则按单帧解析（旧版 agent 平滑兼容）。空批量返回空序列由调用方拒绝
-/// （纯函数，单测覆盖）。
+/// 解析请求体为帧序列：含 `frames` 字段视为批量（AgentReportBatch），否则按
+/// 单帧解析（agent `--once` 与冒烟客户端为单帧单报）。空批量返回空序列，
+/// 由调用方拒绝。
 fn parse_frames(body: &[u8]) -> Result<(Vec<AgentReport>, u64), String> {
     match serde_json::from_slice::<foims_common::report::AgentReportBatch>(body) {
         Ok(batch) => Ok((batch.frames, batch.dropped)),
@@ -228,8 +226,8 @@ pub async fn ingest(
     body: &[u8],
     peer_ip: &str,
 ) -> IngestResult {
-    // 1. Bearer 令牌 → SHA-256 → 与共享注册令牌哈希比对（每请求读共享配置
-    //    槽，令牌重新生成后即时生效，无需重启）
+    // Bearer 令牌 → SHA-256 → 与共享注册令牌哈希比对（每请求读共享配置
+    // 槽，令牌重新生成后即时生效，无需重启）
     let Some(token) = bearer_token(headers) else {
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：缺少合法的 Bearer 令牌");
     };
@@ -245,10 +243,10 @@ pub async fn ingest(
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效");
     }
 
-    // 1b. 上报频控：last_seen 距今小于生效间隔一半时拒绝（429），防止恶意
-    // agent 高频写库。闸门在入库 upsert 的 WHERE 中原子判定（见步骤 6），
-    // 消除「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent
-    // 按下发间隔上报不受影响
+    // 上报频控：last_seen 距今小于生效间隔一半时拒绝（429），防止恶意 agent
+    // 高频写库。闸门内联在入库 upsert 的 WHERE 中原子判定，消除
+    // 「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent 按
+    // 下发间隔上报不受影响
     let interval = config
         .agent
         .report_interval_secs
@@ -256,8 +254,6 @@ pub async fn ingest(
     let min_gap_secs = i64::try_from(interval / 2).unwrap_or(i64::MAX);
     drop(config);
 
-    // 2. 解析为帧序列：含 frames 字段视为批量（AgentReportBatch），
-    //    否则按单帧解析（agent --once 单帧上报兼容，在用链路非历史兼容）
     let (frames, dropped) = match parse_frames(body) {
         Ok(parsed) => parsed,
         Err(e) => return error_json(StatusCode::BAD_REQUEST, &e),
@@ -266,8 +262,7 @@ pub async fn ingest(
         return error_json(StatusCode::BAD_REQUEST, "上报批次为空");
     }
 
-    // 3. 逐帧校验：非法帧丢弃计数（整批全非法才拒绝，合法帧继续入库；
-    //    单帧路径整批即一条，语义与旧版一致）
+    // 逐帧校验：非法帧丢弃计数，整批全非法才拒绝（合法帧继续入库）
     let now = Utc::now();
     let mut valid: Vec<(AgentReport, DateTime<Utc>, TrimmedReport)> =
         Vec::with_capacity(frames.len());
@@ -298,8 +293,8 @@ pub async fn ingest(
         );
     }
 
-    // 4. 帧间机器标识一致性：正常批量各帧 machine_id 相同，不一致说明
-    //    请求体被拼装篡改，整批拒绝
+    // 帧间机器标识一致性：正常批量各帧 machine_id 相同，不一致说明请求体
+    // 被拼装篡改，整批拒绝
     let Some((last_report, _, last_trimmed)) = valid.last() else {
         return error_json(StatusCode::BAD_REQUEST, "上报批次为空");
     };
@@ -308,15 +303,13 @@ pub async fn ingest(
         return error_json(StatusCode::BAD_REQUEST, "批量帧 machine_id 不一致");
     }
 
-    // 5. 快照列计算：以最后一帧（最新）刷新 monitored_hosts 主行快照与告警评估
+    // 快照列以最后一帧（最新）刷新 monitored_hosts 主行，告警评估同帧
     let mem_pct = mem_usage_pct(last_report.memory.total, last_report.memory.used);
     let disk_pct = disk_usage_pct(&last_report.disks);
     let temp = max_temp(&last_report.sensors);
     let raw_metrics = serde_json::to_value(last_report).unwrap_or(Value::Null);
     let ip = normalize_ipv4_address(peer_ip);
 
-    // 6. 单事务入库：禁用拒收检查 + 首报自动注册/快照刷新（含频控闸门）
-    //    + 逐帧历史写入
     let mut tx = match ctx.pool.begin().await {
         Ok(tx) => tx,
         Err(e) => {
@@ -324,7 +317,7 @@ pub async fn ingest(
             return error_json(StatusCode::INTERNAL_SERVER_ERROR, "数据库事务开启失败");
         }
     };
-    // 6a. 禁用行前置拒收：不刷新快照、不写历史（禁用即完全断供）
+    // 禁用行前置拒收：不刷新快照、不写历史（禁用即完全断供）
     let existing = sqlx::query_as::<_, (Uuid, String)>(
         "SELECT id, status FROM monitored_hosts WHERE machine_id = $1",
     )
@@ -345,10 +338,9 @@ pub async fn ingest(
         return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用，禁止上报");
     }
 
-    // 6b. 首报自动注册 / 快照刷新：INSERT（新机，status/label 初始）+
-    //     ON CONFLICT 刷新（既有行；label 不覆盖，用户备注保留；offline 翻转
-    //     active；频控闸门 WHERE 原子判定，0 行即 429）。冲突目标须带
-    //     partial index 谓词（machine_id 仅对非空行唯一）
+    // INSERT 新机 + ON CONFLICT 刷新既有行：label 不覆盖（保留用户备注），
+    // 频控闸门内联在 WHERE 原子判定（0 行即 429）；冲突目标须带 partial
+    // index 谓词（machine_id 仅对非空行唯一）
     let upsert = sqlx::query_as::<_, (Uuid, String)>(
         r"INSERT INTO monitored_hosts (machine_id, source, status, label, hostname, ip, os, kernel,
                               arch, agent_version, cpu_usage, mem_usage_pct, disk_usage_pct,
@@ -403,18 +395,17 @@ pub async fn ingest(
             );
         }
     };
-    // 注册竞态窗口内被禁用（步骤 6a 之后、upsert 之前被置 disabled）：同样拒收
+    // 注册竞态窗口内被禁用（前置拒收检查之后、upsert 之前置 disabled）：同样拒收
     if status == "disabled" {
         return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用，禁止上报");
     }
-    // 逐帧写入历史曲线：每帧独立精简快照；唯一索引 (agent_id, collected_at)
-    // 冲突时跳过（agent 重试/重放同一采集时刻的幂等去重，避免重复上报写重）
+    // 唯一索引 (agent_id, collected_at) 冲突时跳过：agent 重试/重放同一采集
+    // 时刻的幂等去重，避免重复上报写重
     for (report, collected_at, _) in &valid {
         let mem = mem_usage_pct(report.memory.total, report.memory.used);
         let disk = disk_usage_pct(&report.disks);
         let frame_temp = max_temp(&report.sensors);
-        // 流量合计（bit/s）：各网卡速率求和，无网卡 → null（与 SNMP 轮询
-        // 路径的快照键保持一致，供详情网络曲线共用）
+        // 流量合计（bit/s）：各网卡求和，无网卡为 null；键名与 SNMP 轮询快照一致
         let sum_bps = |get: fn(&foims_common::report::ReportNet) -> f64| -> Option<f64> {
             (!report.nets.is_empty()).then(|| report.nets.iter().map(get).sum())
         };
@@ -448,7 +439,7 @@ pub async fn ingest(
         return error_json(StatusCode::INTERNAL_SERVER_ERROR, "入库失败：事务提交出错");
     }
 
-    // 7. 批量观测日志：帧数/丢弃数（单帧上报不产生噪音）
+    // 批量观测日志：单帧上报不产生噪音，仅多帧或有丢弃时记录
     if valid.len() > 1 || dropped > 0 {
         foims_common::log_info!(
             "log.agent.ingest_batch",
@@ -458,8 +449,8 @@ pub async fn ingest(
         );
     }
 
-    // 8. 告警评估：入库成功后按全局阈值评估最后一帧快照，交由 episode 运行时
-    // 判定开告警/窗口内累计/复位；内部失败自行记日志，不影响已成功的上报响应
+    // 告警评估：入库成功后按全局阈值评估最后一帧快照，开告警/窗口内累计/复位
+    // 交由 episode 运行时判定；其内部失败自行记日志，不影响已成功的上报响应
     let values = crate::alerts::MetricValues {
         cpu_pct: Some(last_report.cpu.usage_pct),
         mem_pct,
@@ -473,7 +464,7 @@ pub async fn ingest(
     };
     ctx.alerts.evaluate_host(&host, values).await;
 
-    // 9. 响应控制面：下发上报间隔（不低于下限）与最新版本通告
+    // 响应控制面：回传当前配置的上报间隔（未做下限钳制）与最新版本通告
     (
         StatusCode::OK,
         Json(json!(foims_common::report::ReportResponse {

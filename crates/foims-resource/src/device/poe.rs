@@ -22,7 +22,8 @@ use foims_snmp::events::record_events;
 /// device_poe_ports.if_name 列宽（VARCHAR(100)）
 const IF_NAME_MAX_CHARS: usize = 100;
 
-/// 读库：返回设备已落库的 PoE 供电端口。
+/// GET /api/resources/devices/{id}/poe：读库返回设备已落库的 PoE 供电端口，
+/// 设备不存在 404。
 pub async fn get_device_poe<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -47,7 +48,8 @@ pub async fn get_device_poe<P: DbProvider>(
     Ok(foims_common::ok_json(rows, "server.device.poe.fetched"))
 }
 
-/// 采集并落库设备 PoE 供电端口，同时产出供电中断事件。
+/// POST /api/resources/devices/{id}/poe/sync：采集并落库设备 PoE 供电端口，
+/// 同时产出供电中断事件；设备未配 IP 或 SNMP 凭据、采集失败均 400。
 pub async fn sync_poe_from_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,

@@ -54,7 +54,7 @@ fn push_workstation_filters(
     }
 }
 
-/// 分页获取工位列表（支持关键字、机房过滤与白名单排序）。
+/// GET /api/resources/workstations：分页获取工位列表（支持关键字、机房过滤与白名单排序）。
 pub async fn get_workstations<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -71,8 +71,6 @@ pub async fn get_workstations<P: DbProvider>(
         .unwrap_or_else(|| "asc".to_string());
 
     let search_pattern = (!search.is_empty()).then(|| foims_common::net::escape_like(&search));
-    // 过滤参数非法 UUID 显式 422（与 options.rs/patch_panel.rs 口径一致），
-    // 不再静默忽略退化为全量列表；空串视为未提供
     let parsed_room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
 
     // ORDER BY 白名单，未匹配时回落默认序，避免注入
@@ -131,7 +129,8 @@ pub async fn get_workstations<P: DbProvider>(
     ))
 }
 
-/// 创建工位（同房间内名称唯一，检查与写入在同一事务内）。
+/// POST /api/resources/workstations：创建工位（房间须为允许工位的房型；同房间内
+/// 名称唯一，预检与写入同事务：房型不允许 400、重名 409）。
 pub async fn create_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -277,7 +276,8 @@ async fn fetch_workstation_ips(
     .await
 }
 
-/// 获取工位详情（含设备 IP 明细）。
+/// GET /api/resources/workstations/{id}：获取工位详情（含设备 IP 明细），
+/// 工位不存在 404。
 pub async fn get_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -294,8 +294,9 @@ pub async fn get_workstation<P: DbProvider>(
     ))
 }
 
-/// 更新工位（名称/房间/管理人缺省保留旧值，管理人可显式清空；
-/// 房间变更时同事务清理工位布局，布局坐标随房间失效）。
+/// PUT /api/resources/workstations/{id}：更新工位（名称/房间/管理人缺省保留旧值、
+/// 管理人可显式清空；房间变更时同事务清理工位布局，布局坐标随房间失效：
+/// 房型不允许 400、工位不存在 404、重名 409）。
 pub async fn update_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -444,7 +445,8 @@ pub async fn update_workstation<P: DbProvider>(
     Ok(foims_common::ok_json(result, "server.workstation.updated"))
 }
 
-/// 删除工位（连同布局数据一并清理，同一事务内完成）。
+/// DELETE /api/resources/workstations/{id}：删除工位（连同布局数据一并清理，
+/// 占用检查与删除同事务：被设备占用 400、不存在 404）。
 pub async fn delete_workstation<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

@@ -2,23 +2,12 @@
 //!
 //! 周期任务：扫描 devices 表中已配置 SNMP 凭据（community/username）且带
 //! 管理 IP 的设备，逐台采集并 upsert 为 `source='snmp'` 的 monitored_hosts 行：
-//! - 每台设备采集前先确保基线行存在（配置即入库）：参数构造/连接/采集
-//!   失败也不静默消失，先以 offline 落位，可达后由采集成功路径翻 active；
-//! - 管理地址（`ip`）由设备台账唯一提供：设备侧改变 IP 的写入路径即时
-//!   刷新主机行，轮询只在建行时落一次初值、不对已有行回写该字段；
-//! - machine_id 合成 `snmp:{device_id}`（与 agent machine_id 命名空间隔离）；
+//! - machine_id 合成 `snmp:{device_id}`，与 agent 机器指纹命名空间隔离；
 //! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
-//! - 单台成功即 last_seen=NOW() 并翻转 offline → active；连续失败超过
-//!   离线阈值（轮询间隔 × 2，即连续两轮未成功）由本模块统一置 offline，
-//!   agent_offline 任务仅对 source='agent' 生效，互不干扰；
 //! - 设备删除时 monitored_hosts 行经 device_id 外键级联清理。
 //!
-//! 采集范围（二期）：一期系统组（sysName/sysDescr/sysUpTime）+ 二期性能
-//! 指标（CPU/内存/磁盘/温度/流量/负载，见 [`foims_snmp::collect::metrics`]）。热列
-//! （cpu_usage/mem_usage_pct/disk_usage_pct/max_temp）仅在采得新值时
-//! 覆盖（COALESCE 保留旧值），raw_metrics 总是整体写回（含
-//! `_snmp_state` 差值状态）；同时向 host_metrics_history 追加曲线
-//! 快照（cpu/mem/disk/temp/rx_bps/tx_bps）。
+//! 采集范围：MIB-II 系统组（sysName/sysDescr/sysUpTime）+ 性能指标
+//! （CPU/内存/磁盘/温度/流量/负载，见 [`foims_snmp::collect::metrics`]）。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -227,11 +216,8 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
     let device_id = row.device.id;
     let device_name = row.device.name.as_str();
     let ip = row.ip.as_str();
-    // machine_id 合成命名空间：与实时路径、离线翻转同源
     let machine_id = snmp_machine_id(device_id);
 
-    // 先保证基线行存在：即便参数构造/连接/采集失败，已配置 SNMP 的设备也应
-    // 在主机监控可见（offline），而非静默消失（设计「配置后自动入库」）
     ensure_snmp_host_present(pool, &machine_id, device_id, device_name, ip).await;
 
     // SNMP 参数构造（含密文解密与 v1/v2c/v3 认证装配，复用设备测试路径）
@@ -251,12 +237,10 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
         }
     };
 
-    // 系统组（一期）：sysName/sysDescr/sysUpTime，缺失容忍
     let info = read_system_info(&client).await;
-    // 设备可达性判定：系统组三个 OID 全部无响应说明设备不可达（后续
-    // 指标采集必然同样超时）。此时按采集失败处理（基线行已由 ensure 保底
-    // 存在，但不标记 active、不刷新 last_seen、不写指标），否则该行会被误
-    // 标记 active 并永不触发离线翻转，仪表盘负载卡片与主机状态展示互相矛盾
+    // 设备可达性判定：系统组三个 OID 全部无响应说明设备不可达（后续指标采集
+    // 必然同样超时），按采集失败处理；否则该行会被误标记 active 并永不触发
+    // 离线翻转，仪表盘负载卡片与主机状态展示互相矛盾
     if info.hostname.is_none() && info.os.is_none() && info.uptime_secs.is_none() {
         tracing::debug!("SNMP 采集无任何响应: 设备 {device_name}（{device_id}，{ip}），按失败处理");
         return Err(());

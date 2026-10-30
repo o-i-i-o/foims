@@ -3,7 +3,8 @@
 //! `entPhysicalTable`（1.3.6.1.2.1.47.1.1.1.1）以单一 entPhysicalIndex 为
 //! 实例索引，逐列 walk 汇总；`entSensorTable`（1.3.6.1.2.1.99.1.1.1）实例
 //! 索引为 (entPhysicalIndex, entSensorIndex) 双弧，取次末弧映射实体、末弧
-//! 作传感器实例。vendor 差异或缺失列一律降级 NULL/跳过，不阻断同步。
+//! 作传感器实例。两表都以「各列索引并集」驱动遍历：单列缺失只把该字段降级
+//! 为 NULL，不丢整行。vendor 差异或缺失列一律降级 NULL/跳过，不阻断同步。
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -53,6 +54,9 @@ fn str_value(map: &HashMap<u32, Value>, index: u32) -> Option<String> {
     clean_snmp_text(map.get(&index).and_then(|v| v.as_str()))
 }
 
+/// 采集物理实体清单（类别/名称/型号/序列号/厂商/三级版本/FRU/父实体）。
+///
+/// 错误仅来自鉴权构造与会话建立；单列 walk 失败只记日志并降级为空值。
 pub async fn get_entities_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<EntityRecord>, SnmpError> {
@@ -66,7 +70,6 @@ pub async fn get_entities_via_snmp(
         .await
         .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
 
-    // entPhysicalTable 各列（基 OID 尾弧为列号，实例尾弧为 entPhysicalIndex）
     let descr = walk_index_value_map(
         &client,
         oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 1),
@@ -135,9 +138,7 @@ pub async fn get_entities_via_snmp(
     .await;
 
     let mut entities = Vec::new();
-    // C1：取各列索引并集驱动——此前以 name_map.keys() 驱动，缺失
-    // entPhysicalName 列的实体整体丢行（名称字段应降级 NULL 而非丢
-    // 掉整个实体）；排序保证输出确定性
+    // 排序去重保证台账输出确定性
     let mut indexes: Vec<u32> = descr
         .keys()
         .chain(name_map.keys())
@@ -170,6 +171,9 @@ pub async fn get_entities_via_snmp(
     Ok(entities)
 }
 
+/// 采集传感器读数（类型/量程标度/精度/当前值/状态，按实体索引归属）。
+///
+/// 错误仅来自鉴权构造与会话建立；`name` 不在所 walk 的 5 列内，恒为 None。
 pub async fn get_sensors_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<SensorRecord>, SnmpError> {
@@ -183,10 +187,8 @@ pub async fn get_sensors_via_snmp(
         .await
         .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
 
-    // entSensorTable 双弧索引：以 (次末弧=ent_index, 末弧=sensor_index) 组合键
     let mut by_key: HashMap<(i32, u32), SensorRecord> = HashMap::new();
 
-    // 逐列 walk：捕获 (ent_index, sensor_index) → 值，再合并成记录
     let type_map = walk_sensor_columns(&client, 1).await;
     let scale_map = walk_sensor_columns(&client, 2).await;
     let precision_map = walk_sensor_columns(&client, 3).await;
@@ -201,7 +203,6 @@ pub async fn get_sensors_via_snmp(
         .chain(status_map.keys())
         .copied()
     {
-        // C1：并集驱动，单列缺失不丢整行传感器记录
         let (ent_index, _) = key;
         by_key.insert(
             key,
@@ -235,7 +236,7 @@ async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<(i32, u32), a
         3 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 3),
         4 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 4),
         5 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 5),
-        // C2：越界列号显式拒绝，禁止兜底分支静默 walk 错列
+        // 未知列号直接跳过，不给兜底 OID（否则静默 walk 到错列）
         other => {
             tracing::debug!("未知传感器列号 {other}，跳过");
             return HashMap::new();
@@ -274,9 +275,7 @@ mod tests {
         assert_eq!(ent_class_name(Some(3)).as_deref(), Some("chassis"));
         assert_eq!(ent_class_name(Some(4)).as_deref(), Some("port"));
         assert_eq!(ent_class_name(Some(6)).as_deref(), Some("fan"));
-        // 未知数值回退 class<N>
         assert_eq!(ent_class_name(Some(99)).as_deref(), Some("class99"));
-        // 缺失保持缺失
         assert_eq!(ent_class_name(None), None);
     }
 

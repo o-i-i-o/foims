@@ -34,9 +34,7 @@ pub enum ProbeError {
     SystemGroup(String),
 }
 
-// ============================================================
 // OID 常量
-// ============================================================
 
 fn sys_object_id() -> Oid {
     oid!(1, 3, 6, 1, 2, 1, 1, 2, 0)
@@ -46,7 +44,7 @@ fn sys_descr() -> Oid {
     oid!(1, 3, 6, 1, 2, 1, 1, 1, 0)
 }
 
-// IF-MIB / IF-MIB ifXTable
+// IF-MIB（ifTable 与 ifXTable 列）
 fn if_name() -> Oid {
     oid!(1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1)
 }
@@ -148,9 +146,7 @@ fn lm_temp_value() -> Oid {
     oid!(1, 3, 6, 1, 4, 1, 2021, 13, 16, 2, 1, 3)
 }
 
-// ============================================================
 // 探测入口
-// ============================================================
 
 /// 探测设备厂商 profile：系统组 GET + 端口/资源组索引 walk。
 ///
@@ -241,9 +237,7 @@ fn detect_vendor(object_id: Option<&Oid>, descr: Option<&str>) -> VendorKind {
     }
 }
 
-// ============================================================
 // 端口清单
-// ============================================================
 
 /// 物理以太网 + 聚合口类型（ethernetCsmacd/fastEthernet/gigabitEthernet/ieee8023adLag）。
 const LIVE_IF_TYPES: [u32; 4] = [6, 62, 117, 161];
@@ -302,9 +296,7 @@ async fn discover_ports(client: &Client<UdpHandle>) -> Vec<PortMeta> {
     ports
 }
 
-// ============================================================
 // CPU
-// ============================================================
 
 async fn discover_cpu(client: &Client<UdpHandle>, vendor: VendorKind) -> Vec<RawSource> {
     let vendor_columns: &[Oid] = match vendor {
@@ -333,9 +325,7 @@ async fn percent_sources(client: &Client<UdpHandle>, column: &Oid) -> Vec<RawSou
         .collect()
 }
 
-// ============================================================
 // 内存
-// ============================================================
 
 async fn discover_mem(client: &Client<UdpHandle>, vendor: VendorKind) -> MemPlan {
     let memory = match vendor {
@@ -478,9 +468,7 @@ async fn discover_hr_mem(client: &Client<UdpHandle>) -> Option<MemPlan> {
     })
 }
 
-// ============================================================
 // 温度
-// ============================================================
 
 async fn discover_temp(client: &Client<UdpHandle>, vendor: VendorKind) -> Vec<TempSource> {
     let vendor_columns: &[Oid] = match vendor {
@@ -495,12 +483,12 @@ async fn discover_temp(client: &Client<UdpHandle>, vendor: VendorKind) -> Vec<Te
             return sources;
         }
     }
-    // 回退 1：ENTITY-SENSOR-MIB（交换机通用传感器表）
+    // ENTITY-SENSOR-MIB（交换机通用传感器表）
     let sensors = discover_entity_sensors(client).await;
     if !sensors.is_empty() {
         return sensors;
     }
-    // 回退 2：LM-SENSORS-MIB（Linux 主机）
+    // LM-SENSORS-MIB（Linux 主机）
     discover_lm_sensors(client).await
 }
 
@@ -584,9 +572,7 @@ async fn discover_lm_sensors(client: &Client<UdpHandle>) -> Vec<TempSource> {
         .collect()
 }
 
-// ============================================================
 // 工具
-// ============================================================
 
 /// walk 一列并返回 `行索引 → 值`（异常值跳过）。
 async fn walk_column(client: &Client<UdpHandle>, base: Oid) -> BTreeMap<u32, Value> {
@@ -657,7 +643,6 @@ mod tests {
         assert_eq!(detect_vendor(Some(&huawei), None), VendorKind::Huawei);
         let h3c = Oid::parse("1.3.6.1.4.1.25506.1.1").unwrap();
         assert_eq!(detect_vendor(Some(&h3c), None), VendorKind::H3c);
-        // 惠普企业号需 Comware 描述串确认，否则不误判为华三
         let hp = Oid::parse("1.3.6.1.4.1.11.2.3.7").unwrap();
         assert_eq!(
             detect_vendor(Some(&hp), Some("HP Comware Platform Software")),

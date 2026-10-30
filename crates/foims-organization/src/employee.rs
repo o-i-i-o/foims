@@ -41,7 +41,8 @@ fn validate_phone(phone: &Option<String>) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 获取员工列表（可选 org_id / search 过滤，登录即可读，供下拉与模态框使用）。
+/// GET /api/resources/employees：获取员工列表（可选 org_id / search 过滤，
+/// 登录即可读，供下拉与模态框使用）。
 pub async fn get_employees<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -96,7 +97,7 @@ pub async fn get_employees<P: DbProvider>(
     ))
 }
 
-/// 查询单个员工。
+/// GET /api/resources/employees/{id}：查询单个员工，不存在 404。
 pub async fn get_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -117,7 +118,8 @@ pub async fn get_employee<P: DbProvider>(
     Ok(foims_common::ok_json(employee, "server.employee.fetched"))
 }
 
-/// 创建员工（同组织内名称唯一，检查与写入在同一事务内）。
+/// POST /api/resources/employees：创建员工（同组织内名称唯一，预检与写入同事务：
+/// 组织不存在 404、重名 409）。
 pub async fn create_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -196,8 +198,9 @@ pub async fn create_employee<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.employee.created"))
 }
 
-/// 更新员工（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值；
-/// 空串语义为清空对应字段）。
+/// PUT /api/resources/employees/{id}：更新员工（字段缺失经 COALESCE 保留旧值、
+/// 空串清空对应字段；同组织内名称唯一，预检与写入同事务：不存在 404、
+/// 重名 409）。
 pub async fn update_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -295,7 +298,8 @@ pub async fn update_employee<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.employee.updated"))
 }
 
-/// 删除员工（工位管理人引用为 ON DELETE RESTRICT，删除前预检并给出可读错误）。
+/// DELETE /api/resources/employees/{id}：删除员工（工位管理人引用为 ON DELETE
+/// RESTRICT，故先预检并 400 提示改挂，不存在 404）。
 pub async fn delete_employee<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

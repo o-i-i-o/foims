@@ -1034,3 +1034,29 @@ v0.41.3
 3. 版本：仅 z+1（v0.41.2→v0.41.3），Cargo.toml 与 frontend/package.json 不联动。
 4. 验证：新增更强回退校验（HEAD 与工作区各自剥离注释后按行多重集比较，30 个 .rs 完全一致——可同时排除代码行删改与属性/字段顺序变动）；`cargo fmt --all` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 0 告警。
 5. 剩余：阶段三 foims-resource + foims-organization（装饰横幅现存于 foims-visualization/topology.rs、foims-auth/sso.rs、foims-agent-service 等，按 >600 行白名单逐个判定），阶段四至八同计划；前端 223 处横幅尚未处理。
+
+v0.41.4
+2026103009415001
+1. 全局注释审计阶段三（仅注释，零行为变更）：crates/foims-resource（含 device/ 子目录 14 文件）与 crates/foims-organization 全量审计完成，另附带修正阶段一遗留的 src/log/*.rs handler 口径与 foims-init/types.rs 一处错误码文案。
+   - 错误码口径纠偏（本阶段最重要发现）：仓内注释大量断言「校验失败返回 422」，但 foims-common/src/error.rs 的 AppError 只有 400/401/403/404/409/500 出口（Validation→BAD_REQUEST，axum 0.8 的 JSON 拒绝经 map_json_rejection 同样落到 Validation），全仓不存在 422。已把 11 个文件共 20 余处注释断言统一改为 400，并把「校验类一律 400，不存在 422」写入 code-style 1.1，避免后续阶段复制错误口径。
+   - handler 文档统一：按「单行式 METHOD /api/...：动作 + 口径」补齐 81 个 handler 的路径与错误语义（400/404/409 逐条取自 handler 体内的 AppError 变体，非命名推断），并修正 device/nic.rs、organization.rs、options.rs 中的「动作 —— 路径」倒装与 —— 分隔符；code-style 1.1 的范本改为 net_outlet.rs。
+   - 装饰横幅：foims-organization/organization.rs 3 处 `// ==== X ====` 降级为极简 `// X`，device/nic.rs 与 network_region.rs 测试模块内 10 处横幅删除；foims-resource + foims-organization 现为零装饰横幅。
+   - 重复注解择一处写全：删除与 helper 文档三处重复的内联注解（parse_optional_uuid 的「非法 UUID 显式 400」、ensure_power_limit_covers_allocated 的功率容量校验、validate_region_cidr_array 的 CIDR 数组前置校验），以及 network.rs 两个查询分支重复的「排序段为白名单常量」（match 处已写全）、net_outlet.rs 的 push_bind 溯源语。
+   - 空泛模块头改写：cabinets.rs / room.rs / ip.rs / position.rs / device/template.rs 的 `//! X 资源管理。` 升级为「域 + 承载职责 + 供谁使用」，与 foims-models 阶段二B 同口径。
+2. 规模与口径：本轮 33 个 .rs 注释行 1280→1359（+79）。补多于删的原因与阶段二B 一致——handler 文档此前普遍缺路径、缺错误语义，属「完善注释」而非削减；同时删除的复述型/溯源型注释共 90 余行。
+3. 版本：仅 z+1（v0.41.3→v0.41.4），Cargo.toml 与 frontend/package.json 不联动。
+4. 验证：代码行多重集守卫（HEAD 与工作区各自剥离注释、去空行后按 Counter 比较）33 文件完全一致，排除代码删改与顺序变动；属性行后紧跟 /// 的错位扫描 0 命中；`cargo fmt --all` 通过；`cargo clippy --release --workspace --all-targets -- -D warnings` 0 告警；`bash da-scripts/gen-ts-types.sh` 仅 DatabaseSetupRequest.ts 的 JSDoc 随 422→400 文案变化，重跑无残余漂移。
+5. 遗留（非注释，需另行决策）：network_region.rs:632 测试断言文案仍写「应为 422 校验错误」，属代码字符串而非注释，本阶段未改；前端 i18n locales 存在与本任务无关的未提交改动，未触碰。
+6. 剩余：阶段四 foims-snmp + foims-agent-service，阶段五 auth/init/data-management/x509/scheduler/visualization/services，阶段六至七前端，阶段八 foims-agent 工作空间与全仓收尾。
+
+v0.42.0
+2026103011194801
+1. 仪表盘卡片整合（前端功能优化，y+1）：删除 6 张卡片头部的冗余「查看全部」按钮（整卡点击跳转已覆盖同一动作，按钮仅增加误触面）；独立「SNMP 实时负载」卡片并入「主机负载」卡片——按既定口径 SNMP 与 agent 信息统一由主机监控模块输出，实时 SSE 快照与 agent 分钟级快照在同一卡片内合并展示（按 IP 去重、实时值优先），页签扩为 CPU/内存/温度/流量四类，保留实时连接状态、30s 陈旧标记、超阈值标红与「仅异常」筛选（流量无阈值）；实时数据到达时不再被快照加载骨架挡住；清理 `.view-all` 样式与失效 i18n 键 `dashboard.view_all`/`dashboard.snmp_live_top`，新增 `dashboard.live_source`（合并行的实时来源标注）。
+2. 版本：仅前端联动，frontend/package.json 0.1.24→0.1.25（y+1，z 归零），根 Cargo.toml 不联动。
+3. 验证：`npm run typecheck` 通过；`npm run build` 通过。
+
+v0.42.1
+2026103014321501
+1. SNMP 观测事件/终端定位入口迁移（前端功能优化，y+1）：两个全局按钮原在「资源管理-设备」页签表头 `device-toolbar-actions` 内，但二者均不依赖设备行（观测事件弹窗从工具栏进入时不预填 device_id，终端定位为独立查询，后端 /api/snmp/events 与 /api/snmp/locate 均为库内只读、仅需登录），与 SNMP 采集源同属主机监控职责——现移至「主机监控」页顶栏 `agents-toolbar` 的「告警阈值」按钮之后；ResourcesPage 删除两按钮及其 SnmpEventsModal/LocateModal 挂载与 `eventsModal`/`locateModal` 状态，改由 AgentsPage 承载（`eventsModal` 简化为 `{ open }`，deviceId 预填能力仍由 ArpModal 与设备 SNMP 汇聚弹窗的观测事件标签各自持有）；按钮文案复用既有 i18n 键 `device.snmp_events.title`/`device.locate.title`（弹窗标题同源，不新增重复文案）；设备页签表头仅保留「新增设备」按钮。
+2. 版本：仅前端联动，frontend/package.json 0.1.25→0.1.26（y+1，z 归零），根 Cargo.toml 不联动。
+3. 验证：`npm run typecheck` 通过；`npm run build` 通过。

@@ -92,9 +92,7 @@ const STORAGE_DESCR_PHYS_MEM: &str = "Physical memory";
 /// net-snmp hrStorageTable 中"可用内存"行的描述串（精确匹配）
 const STORAGE_DESCR_AVAIL_MEM: &str = "Available memory";
 
-// ============================================================
 // 上一轮状态（raw_metrics 私有键 _snmp_state）
-// ============================================================
 
 /// CPU 计数器快照：ssCpuRaw* 按 B5 口径求和 + 非 busy（Idle+Wait）分量
 ///（差值算使用率）
@@ -146,9 +144,7 @@ pub struct SnmpState {
     pub last_poll_ts: Option<i64>,
 }
 
-// ============================================================
 // 采集结果
-// ============================================================
 
 /// 单网卡速率结果（bit/s；差值不可得时为 None，与 agent 上报口径一致）
 #[derive(Debug, Clone, Default)]
@@ -200,9 +196,7 @@ pub struct SnmpSnapshot {
     pub state: SnmpState,
 }
 
-// ============================================================
 // 采集入口
-// ============================================================
 
 /// 采集单台设备全部性能指标并计算差值类指标（CPU 使用率/网卡速率）。
 ///
@@ -251,9 +245,7 @@ pub async fn collect(
     }
 }
 
-// ============================================================
 // 纯函数（差值/归一/聚合，单测覆盖）
-// ============================================================
 
 /// Counter32 差值（回绕校正：cur < prev 时按 2^32 计数空间回绕）
 fn delta32(prev: u64, cur: u64) -> u64 {
@@ -285,8 +277,8 @@ pub fn cpu_usage_pct(prev: CpuCounters, cur: CpuCounters) -> Option<f64> {
 /// cur<prev 时仅当 prev 落在 32 位计数空间才按 2^32 回绕校正；
 /// prev 超过 u32 最大值说明本轮使用的是 64 位计数器，其 cur<prev 只
 /// 可能是设备重启计数清零（2^64 回绕在现实流量下不可达），无法可信
-/// 差值 → None；旧实现无差别加 2^32 既会产出虚假峰值，也会在
-/// prev−cur>2^32 时使 u64 减法下溢。
+/// 差值 → None；无差别加 2^32 会产出虚假峰值，且 prev−cur>2^32 时
+/// u64 减法下溢。
 pub fn iface_rate_bps(
     prev: u64,
     cur: u64,
@@ -299,10 +291,9 @@ pub fn iface_rate_bps(
     let delta = if cur >= prev {
         cur - prev
     } else if prev <= u64::from(u32::MAX) {
-        // Counter32 回绕：(2^32 − prev) + cur，区间内不会下溢
+        // Counter32 回绕校正，32 位空间内不会下溢
         (u64::from(u32::MAX) - prev) + cur + 1
     } else {
-        // Counter64 空间计数清零：丢弃本轮差值，等下轮重建基线
         return None;
     };
     let cap = match speed_bps {
@@ -401,7 +392,6 @@ pub fn detect_link_flips(
             _ => "changed",
         };
         let admin_down = cur == 2 && cur_admin.get(iface) == Some(&2);
-        // up 恢复、以及管理面 down 导致的 oper down 均降噪为 info；非预期 down 为 critical
         let severity = if direction == "up" || admin_down {
             SNMP_SEVERITY_INFO
         } else {
@@ -415,7 +405,7 @@ pub fn detect_link_flips(
         ));
     }
     // 接口消失补报：上轮 up 而本轮 ifTable 不再报告该接口（板卡拔出/
-    // 子接口删除等）此前静默漏报；标 vanished 并取 info 控制告警面
+    // 子接口删除），标 vanished 并取 info 控制告警面
     for (iface, &old) in &prev.if_status {
         if old == 1 && !cur_status.contains_key(iface) {
             events.push(ObsEvent::new(
@@ -462,9 +452,7 @@ fn format_secs(secs: i64) -> String {
     format!("{h}h {m}m {s}s")
 }
 
-// ============================================================
 // 采集实现
-// ============================================================
 
 /// CPU：GET ssCpuRaw* 11 个计数器 → 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和与
 /// 非 busy（Idle+Wait）分量 → 与上一轮差值算使用率。Idle 缺失时整体
@@ -475,8 +463,8 @@ async fn collect_cpu(
 ) -> (Option<CpuCounters>, Option<f64>) {
     let counters = match client.get_many(&cpu_raw_oids()).await {
         Ok(resp) => {
-            // 与请求等长有序（FixedCardinality）；异常值（No Such Instance
-            // 等）按缺失处理：Idle 缺失整体 None，其余缺失计 0
+            // 响应与请求等长且有序（FixedCardinality）；异常值
+            //（No Such Instance 等）归为缺失
             let vals: Vec<Option<u64>> = resp
                 .varbinds
                 .iter()
@@ -501,7 +489,6 @@ async fn collect_cpu(
                     .iter()
                     .filter_map(|i| vals.get(*i).copied().flatten())
                     .sum();
-                // 非 busy 侧含 Wait（B5）：usage = 1−(Idle+Wait)/total
                 idle.map(|idle| CpuCounters {
                     total,
                     idle: idle + wait,
@@ -910,9 +897,7 @@ async fn collect_load(client: &Client<UdpHandle>) -> (Option<f64>, Option<f64>, 
     (load1, load5, load15)
 }
 
-// ============================================================
 // 采集工具函数
-// ============================================================
 
 /// bulk walk 全量收集（单条 walk 错误即中断，保留已收条目；
 /// 流建立失败返回空，由调用方按"该类缺失"处理）
@@ -999,9 +984,7 @@ fn num_map(value: &SnmpValue, map: &mut BTreeMap<u32, u64>, idx: u32) {
     }
 }
 
-// ============================================================
 // 上报 JSON 合成
-// ============================================================
 
 /// 合成与 AgentReport 同形的上报 JSON（前端主机详情弹窗无需改动即可
 /// 渲染；agent_version 缺省、kernel/arch 等设备侧不可得字段置 null，
@@ -1096,7 +1079,6 @@ mod tests {
         // Δtotal=10000 Δidle=9000 → 10%（浮点容差比较）
         let usage = cpu_usage_pct(prev, cur).unwrap();
         assert!((usage - 10.0).abs() < 1e-9);
-        // Δtotal=0 → None
         assert_eq!(cpu_usage_pct(cur, cur), None, "同值差值应判 None");
         // idle 零增长 → 100%
         let busy = CpuCounters {
@@ -1131,7 +1113,7 @@ mod tests {
         // 速率未知用 100Gbps 兜底
         let rate = iface_rate_bps(0, 3_750_000_000_000, 300, None).unwrap();
         assert!((rate - 100_000_000_000.0).abs() < 1.0);
-        // 低速虚拟口（10 bit/s）不作为校验基准，走兜底
+        // 低速虚拟口（10 bit/s）不作为校验基准
         assert!(
             iface_rate_bps(0, 37_500_000_000, 300, Some(10)).is_some(),
             "ifSpeed 过低应视为未知"
@@ -1139,14 +1121,12 @@ mod tests {
         // 32 位回绕：prev=MAX−149 回绕归零 → Δ=150 字节 → 4 bit/s
         let rate = iface_rate_bps(u64::from(u32::MAX) - 149, 0, 300, Some(1_000_000)).unwrap();
         assert!((rate - 4.0).abs() < 0.01);
-        // B2 回归：prev 超出 32 位空间（Counter64）时 cur<prev 属计数清零，
-        // 应拒绝差值；旧实现加 2^32 校正会下溢恐慌或产出虚假峰值
+        // B2 回归：prev 超出 32 位空间（Counter64）时 cur<prev 属计数清零
         assert_eq!(
             iface_rate_bps(40_000_000_000, 100, 300, Some(1_000_000_000)),
             None,
             "64 位计数器 cur<prev 应判 None"
         );
-        // 时段非法
         assert_eq!(iface_rate_bps(0, 100, 0, None), None);
         assert_eq!(iface_rate_bps(0, 100, -5, None), None);
     }
@@ -1162,12 +1142,10 @@ mod tests {
 
     #[test]
     fn 使用率聚合_内存磁盘温度与流量求和() {
-        // 内存
         assert_eq!(mem_usage_pct(None), None);
         assert_eq!(mem_usage_pct(Some((0, 100))), None, "total=0 应为 None");
         assert_eq!(mem_usage_pct(Some((1000, 250))), Some(25.0));
         assert_eq!(mem_usage_pct(Some((1000, 2000))), Some(100.0), "越界钳制");
-        // 磁盘取最大
         let disks = vec![
             DiskRow {
                 device: "a".into(),
@@ -1190,7 +1168,6 @@ mod tests {
         ];
         assert_eq!(disk_usage_pct(&disks), Some(50.0));
         assert_eq!(disk_usage_pct(&[]), None);
-        // 温度取最大
         let sensors = vec![
             SensorRow {
                 label: "a".into(),
@@ -1232,7 +1209,6 @@ mod tests {
 
     #[test]
     fn 状态反序列化_缺字段降级与完整解析() {
-        // 完整状态
         let full = r#"{"ts":1000,"cpu":{"total":10,"idle":8},"ifaces":{"eth0":{"in_octets":1,"out_octets":2}}}"#;
         let state: SnmpState = serde_json::from_str(full).unwrap_or_default();
         assert_eq!(state.ts, 1000);
@@ -1242,7 +1218,6 @@ mod tests {
         let partial: SnmpState = serde_json::from_str(r#"{"ts":1000}"#).unwrap_or_default();
         assert_eq!(partial.cpu, None);
         assert!(partial.ifaces.is_empty());
-        // 空对象
         let empty: SnmpState = serde_json::from_str("{}").unwrap_or_default();
         assert_eq!(empty.ts, 0);
     }
@@ -1303,7 +1278,6 @@ mod tests {
         assert_eq!(report["nets"][0]["errors"]["in"], 3);
         assert_eq!(report["sensors"][0]["kind"], "temp");
         assert_eq!(report["sensors"][0]["value"], 54.0);
-        // 私有状态键随 JSON 写回
         assert_eq!(report["_snmp_state"]["cpu"]["total"], 10);
         assert!(report["collected_at"].is_string());
     }
@@ -1318,13 +1292,12 @@ mod tests {
 
     #[test]
     fn 链路翻动_基线不发事件与方向区分() {
-        // 基线：上一轮 if_status 空 → 无事件
         let prev = SnmpState::default();
         let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 1)].into_iter().collect();
         let admin: BTreeMap<String, i32> = BTreeMap::new();
         assert!(detect_link_flips(&prev, &cur, &admin).is_empty());
 
-        // 上一轮 up(1)，本轮 down(2) 且 admin up(1) → critical down
+        // 上一轮 up(1)，本轮 down(2) 且 admin up(1)
         let prev = state_with_status(&[("ge0/1", 1)]);
         let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 2)].into_iter().collect();
         let admin: BTreeMap<String, i32> = [("ge0/1".to_string(), 1)].into_iter().collect();
@@ -1335,7 +1308,6 @@ mod tests {
         assert_eq!(events[0].detail["direction"], "down");
         assert_eq!(events[0].detail["admin_down"], false);
 
-        // down→up 恢复：info
         let prev = state_with_status(&[("ge0/1", 2)]);
         let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 1)].into_iter().collect();
         let events = detect_link_flips(&prev, &cur, &BTreeMap::new());
@@ -1345,7 +1317,7 @@ mod tests {
 
     #[test]
     fn 链路翻动_admin_down降噪为info() {
-        // oper down(2) 且 admin down(2) → 标注 admin_down=true、降为 info
+        // oper down(2) 且 admin down(2)
         let prev = state_with_status(&[("ge0/1", 1)]);
         let cur: BTreeMap<String, i32> = [("ge0/1".to_string(), 2)].into_iter().collect();
         let admin: BTreeMap<String, i32> = [("ge0/1".to_string(), 2)].into_iter().collect();
@@ -1356,18 +1328,15 @@ mod tests {
 
     #[test]
     fn 重启检测_回退与边界() {
-        // 无历史或无本轮 → None
         assert!(detect_reboot(None, Some(100), 300).is_none());
         assert!(detect_reboot(Some(1000), None, 300).is_none());
-        // uptime 递增（未重启）→ None
         assert!(detect_reboot(Some(1000), Some(1300), 300).is_none());
-        // 上一轮 uptime ≤ 300s（刚上线）→ None（不据低时钟判重启）
+        // 上一轮 uptime 200s 未过 REBOOT_MIN_PREV_UPTIME_SECS 门槛
         assert!(detect_reboot(Some(200), Some(50), 300).is_none());
         // 回退：上轮 3600s、本轮 60s、间隔 300s → 停机 = 300-60 = 240s
         let ev = detect_reboot(Some(3600), Some(60), 300).unwrap_or_else(|| panic!("应检出重启"));
         assert_eq!(ev.event_type, "device_reboot");
         assert_eq!(ev.detail["downtime_secs"], 240);
-        // gap < cur 时停机时长钳 0
         let ev = detect_reboot(Some(3600), Some(300), 100).unwrap_or_else(|| panic!("应检出重启"));
         assert_eq!(ev.detail["downtime_secs"], 0);
     }

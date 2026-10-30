@@ -1,5 +1,5 @@
-//! 设备 MAC 地址表入库与查询（ARP/FDB 纯采集已迁
-//! foims-snmp::collect::arp，本模块保留 handler 与 snmp_arp_entries 落库 SQL）。
+//! 设备 MAC 地址表入库与查询（ARP/FDB 采集在 foims-snmp::collect::arp，
+//! 本模块保留 handler 与 snmp_arp_entries 落库 SQL）。
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -21,6 +21,9 @@ use foims_snmp::events::record_events;
 /// snmp_arp_entries.interface 列宽（VARCHAR(50)，与建表契约一致）
 const INTERFACE_MAX_CHARS: usize = 50;
 
+/// POST /api/resources/devices/{id}/macs/sync：经 SNMP 采集设备 ARP 表并落库
+/// （逐行 SAVEPOINT 容错单行失败，采集成功即整体清理陈旧行）；未配 IP 与采集
+/// 失败均 400；观测事件落库为尽力而为旁路，不影响台账写入结果。
 pub async fn get_device_mac_table<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -147,7 +150,6 @@ pub async fn get_device_mac_table<P: DbProvider>(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    // 按同步结果构造消息：有失败 / 全部成功
     let message = if failed_count > 0 {
         msg("server.device.mac.sync_partial")
             .with("synced", upserted_count)
@@ -159,6 +161,7 @@ pub async fn get_device_mac_table<P: DbProvider>(
     Ok(foims_common::ok_json(saved_macs, message))
 }
 
+/// 读库：返回设备已落库的 MAC 记录（按 IP 排序；设备不存在返回 404）。
 pub async fn get_device_macs_from_db<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,

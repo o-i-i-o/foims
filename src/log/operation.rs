@@ -12,7 +12,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
 use foims_models::OperationLog;
 
-/// 分页查询操作审计日志 —— GET /api/logs/operation。
+/// GET /api/logs/operation：分页查询操作审计日志。
 ///
 /// 过滤参数 `resource_type`/`resource_id`/`user_id` 为等值匹配；`action`
 /// 作为 ILIKE 搜索词，同时匹配动作、用户名、IP、资源类型与资源 id。

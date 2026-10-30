@@ -2,10 +2,10 @@
 //!
 //! 站点 CA（/etc/ssl/foims-ca/ca.pem + ca.key）存在时，为 QUIC 监听端签发
 //! server 证书（serverAuth EKU + 本机全部网卡 IP 的 SAN），为 agent 签发共享
-//! client 证书（clientAuth EKU，随下载包分发作为 mTLS 上报身份）。
-//! 四个物料文件齐备且 `agent_ca_fingerprint` 指纹文件与当前站点 CA 一致时
-//! 直接复用，不重复签发；站点 CA 轮换（重新 init）后指纹不匹配，自动重签
-//! 全部物料并更新指纹文件，避免旧 CA 签发的证书导致 agent mTLS 握手失败。
+//! client 证书（clientAuth EKU，SAN 留空——上报身份仅由证书链保证，随下载包
+//! 分发）。四个物料文件齐备且 `agent_ca_fingerprint` 指纹文件与当前站点 CA
+//! 一致时直接复用，不重复签发；站点 CA 轮换（重新 init）后指纹不匹配，自动
+//! 重签全部物料并更新指纹文件，避免旧 CA 签发的证书导致 agent mTLS 握手失败。
 //!
 //! x509-management 的 `generate_certificate` 将 serverAuth EKU 硬编码
 //! （面向浏览器/服务端证书场景），无法签发 clientAuth 证书，故此处直接
@@ -39,24 +39,18 @@ const AGENT_CERT_VALIDITY_DAYS: i64 = 1825;
 /// 证书 PEM 起始标记（复用校验的包含性检查）
 const PEM_CERT_HEADER: &str = "-----BEGIN CERTIFICATE-----";
 
-/// 证书物料就绪结果：QUIC 监听端文件路径 + 客户端证书 PEM 内容（供组包）。
+/// 证书物料就绪结果：QUIC 监听端证书/私钥路径 + agent 客户端证书与私钥 PEM
+/// （客户端 PEM 含单张证书，随下载组包分发）。
 #[derive(Debug, Clone)]
 pub struct AgentCertMaterial {
-    /// QUIC 监听端证书路径
     pub server_cert_path: String,
-    /// QUIC 监听端私钥路径
     pub server_key_path: String,
-    /// Agent 客户端证书 PEM（含单张证书）
     pub client_cert_pem: String,
-    /// Agent 客户端私钥 PEM
     pub client_key_pem: String,
 }
 
-/// 枚举本机全部网卡的 IPv4/IPv6 地址（供 server 证书 SAN）。
-///
-/// 经 `if-addrs`（getifaddrs 的纯安全封装）真实枚举；枚举失败时仍保留
-/// 固定回环项，保证 SAN 不为空。结果排序去重，保证同一机器多次签发
-/// 产出的 SAN 序列稳定。
+/// 枚举本机全部网卡的 IPv4/IPv6 地址，作为 server 证书 SAN 候选；枚举失败
+/// 不报错，由 [`dedup_sort_ips`] 补回环项保证 SAN 不为空。
 #[must_use]
 pub fn collect_local_sans() -> Vec<IpAddr> {
     let ips: Vec<IpAddr> = if_addrs::get_if_addrs()
@@ -73,7 +67,7 @@ fn sort_ips_loopback_last(mut ips: Vec<IpAddr>) -> Vec<IpAddr> {
 }
 
 /// 归并候选 IP 与固定回环项（127.0.0.1、::1 恒在且殿后），排序去重后返回
-/// （纯函数，单测覆盖稳定性）。
+/// （纯函数）。
 fn dedup_sort_ips(ips: Vec<IpAddr>) -> Vec<IpAddr> {
     sort_ips_loopback_last(
         ips.into_iter()
@@ -112,7 +106,6 @@ fn issue_material(
     let ca_key = KeyPair::from_pem(ca_key_pem).map_err(|e| format!("站点 CA 私钥解析失败: {e}"))?;
     let issuer = rcgen::Issuer::from_ca_cert_pem(ca_cert_pem, ca_key).map_err(gen_error)?;
 
-    // server 证书：serverAuth EKU + 本机全部 IP 的 SAN（QUIC/HTTP3 服务器认证）
     let server_key = KeyPair::generate().map_err(gen_error)?;
     let mut server_params = CertificateParams::default();
     server_params.distinguished_name = leaf_dn("foims-agent-server");
@@ -122,7 +115,6 @@ fn issue_material(
         .signed_by(&server_key, &issuer)
         .map_err(gen_error)?;
 
-    // client 证书：clientAuth EKU（SAN 留空——客户端身份仅由证书链保证）
     let client_key = KeyPair::generate().map_err(gen_error)?;
     let mut client_params = CertificateParams::default();
     client_params.distinguished_name = leaf_dn("foims-agent-client");
@@ -168,7 +160,6 @@ fn issue_client_material(
     let ca_key = KeyPair::from_pem(ca_key_pem).map_err(|e| format!("站点 CA 私钥解析失败: {e}"))?;
     let issuer = rcgen::Issuer::from_ca_cert_pem(ca_cert_pem, ca_key).map_err(gen_error)?;
 
-    // client 证书：clientAuth EKU（SAN 留空——客户端身份仅由证书链保证）
     let client_key = KeyPair::generate().map_err(gen_error)?;
     let mut client_params = CertificateParams::default();
     client_params.distinguished_name = leaf_dn("foims-agent-client");
@@ -199,7 +190,7 @@ async fn write_cert_file(path: &PathBuf, content: &str) -> Result<(), String> {
         .map_err(|e| format!("写入证书失败 {}: {e}", path.display()))
 }
 
-/// 写入私钥（unix 下 0600 独占创建，消除"先写后 chmod"窗口期）。
+/// 写入私钥：unix 下建文件即带 0600，消除「先写后 chmod」的窗口期。
 async fn write_key_file(path: &PathBuf, content: &str) -> Result<(), String> {
     use tokio::io::AsyncWriteExt;
 
@@ -241,21 +232,23 @@ fn ca_cert_fingerprint(ca_cert_pem: &str) -> Result<String, String> {
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-/// 比对存量指纹文件内容与当前 CA 指纹（trim 后忽略大小写，兼容手工维护的大写十六进制）。
+/// 比对存量指纹文件与当前 CA 指纹：trim 后忽略大小写，容忍手工维护的
+/// 大写十六进制指纹文件。
 fn fingerprint_matches(current: &str, stored: &str) -> bool {
     stored.trim().eq_ignore_ascii_case(current)
 }
 
 /// 复用判定：四个物料文件可读 + 指纹文件与当前 CA 指纹一致 + 两张证书 PEM
 /// 含证书起始头，全部满足才返回既有物料；任一不满足返回 None（走重签路径）。
+/// server 私钥只校验可读性（内容格式由 TLS 加载兜底）；指纹文件缺失或不匹配
+/// 一律重签，防止站点 CA 轮换后旧物料被复用；物料缺失是首次启动的常态，
+/// 不告警。
 async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCertMaterial> {
     let server_cert_path = dir.join(SERVER_CERT);
     let server_key_path = dir.join(SERVER_KEY);
     let client_cert_path = dir.join(CLIENT_CERT);
     let client_key_path = dir.join(CLIENT_KEY);
 
-    // 任一物料不可读：按缺失处理（首次启动为常态，无需告警）；
-    // server 私钥仅校验可读性（内容格式由 TLS 加载兜底），其余内容随结果返回
     let Ok(server_cert) = read_pem(&server_cert_path, "server 证书").await else {
         return None;
     };
@@ -269,7 +262,6 @@ async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCer
         return None;
     };
 
-    // 站点 CA 指纹校验：文件缺失或不匹配均重签，防止 CA 轮换后旧物料被复用
     match tokio::fs::read_to_string(dir.join(AGENT_CA_FINGERPRINT_FILE)).await {
         Ok(stored) if fingerprint_matches(ca_fingerprint, &stored) => {}
         Ok(_) => {
@@ -288,7 +280,6 @@ async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCer
         }
     }
 
-    // 证书内容最低限度校验：必须含证书起始头（私钥格式由 TLS 加载兜底）
     if !server_cert.contains(PEM_CERT_HEADER) || !client_cert.contains(PEM_CERT_HEADER) {
         foims_common::log_warn!(
             "log.agent.certs_reuse_rejected",
@@ -337,15 +328,12 @@ async fn ensure_agent_certs_in(
     let ca_cert = read_pem(ca_cert_path, "站点 CA 证书").await?;
     let ca_fingerprint = ca_cert_fingerprint(&ca_cert)?;
 
-    // 四文件齐备且指纹匹配：直接复用既有物料（证书过期由 TLS 握手暴露，CA 轮换由指纹校验兜底）
+    // 物料齐备且指纹匹配即复用；证书过期由 TLS 握手暴露
     if let Some(material) = try_reuse_material(dir, &ca_fingerprint).await {
         return Ok(material);
     }
 
-    // 重签路径：要求站点 CA 私钥存在（证书管理页生成）
     let ca_key = read_pem(ca_key_path, "站点 CA 私钥").await?;
-
-    // rcgen 签发移出异步线程
     let (server_pem, server_key_pem, client_pem, client_key_pem) =
         tokio::task::spawn_blocking(move || {
             issue_material(&ca_cert, &ca_key, collect_local_sans())
@@ -360,7 +348,7 @@ async fn ensure_agent_certs_in(
     write_key_file(&dir.join(SERVER_KEY), &server_key_pem).await?;
     write_cert_file(&dir.join(CLIENT_CERT), &client_pem).await?;
     write_key_file(&dir.join(CLIENT_KEY), &client_key_pem).await?;
-    // 记录本次签发所用 CA 指纹，供下次启动复用校验（公开物料，默认 0644）
+    // 落 CA 指纹供下次启动复用校验；公开物料用 0644（区别于 0600 私钥）
     write_cert_file(&dir.join(AGENT_CA_FINGERPRINT_FILE), &ca_fingerprint).await?;
 
     foims_common::log_info!("log.agent.certs_issued", dir = AGENT_CERT_DIR);
@@ -399,7 +387,6 @@ async fn renew_client_cert_in(
     let ca_cert = read_pem(ca_cert_path, "站点 CA 证书").await?;
     let ca_key = read_pem(ca_key_path, "站点 CA 私钥").await?;
 
-    // rcgen 签发移出异步线程
     let (cert_pem, key_pem, not_after_unix) =
         tokio::task::spawn_blocking(move || issue_client_material(&ca_cert, &ca_key))
             .await
@@ -423,7 +410,6 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// 解析测试用 IP 字面量（测试代码允许 unwrap）
     fn ip(s: &str) -> IpAddr {
         s.parse().unwrap()
     }
@@ -471,9 +457,7 @@ mod tests {
         assert_eq!(sans.len(), 3, "去重后应仅 2 个 IP + 1 个域名: {sans:?}");
     }
 
-    // ==================== CA 指纹复用校验 ====================
-
-    /// 构造一次性临时目录（无 tempfile 依赖，沿用 foims-services 先例）。
+    /// 构造一次性临时目录（不引入 tempfile 依赖）。
     fn temp_dir(tag: &str) -> PathBuf {
         let base = std::env::temp_dir().join(format!(
             "foims-agent-cert-test-{tag}-{}",
@@ -579,7 +563,6 @@ mod tests {
             .await
             .unwrap();
 
-        // 旧版本升级场景：物料齐备但无指纹文件，应重签兜底
         fs::remove_file(material_dir.join(AGENT_CA_FINGERPRINT_FILE)).unwrap();
         let second = ensure_agent_certs_in(&material_dir, &ca_cert_path, &ca_key_path)
             .await

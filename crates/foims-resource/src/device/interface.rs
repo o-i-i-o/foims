@@ -67,7 +67,7 @@ fn validate_port_status(status: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 分页获取指定设备的接口列表。
+/// GET /api/resources/devices/{id}/interfaces：分页获取指定设备的接口列表。
 pub async fn get_device_interfaces<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -96,7 +96,8 @@ pub async fn get_device_interfaces<P: DbProvider>(
     ))
 }
 
-/// 分页获取全部设备接口（跨设备视图，支持关键字模糊匹配）。
+/// GET /api/resources/devices/interfaces：分页获取全部设备接口（跨设备视图，
+/// 关键字模糊匹配与白名单排序）。
 pub async fn get_all_device_interfaces<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -171,7 +172,9 @@ async fn resolve_nic_id(
     get_or_create_auto_nic(tx, device_id, group).await
 }
 
-/// 为设备创建网络接口（同设备名称唯一，存在性检查与写入在同一事务内）。
+/// POST /api/resources/devices/{id}/interfaces：为设备创建网络接口（同设备内
+/// 名称唯一、MAC 全局唯一，存在性检查与写入同事务：角色/物理类型缺失 400、
+/// 设备不存在 404、重名或 MAC 已占用 409）。
 ///
 /// 端口模态框/SNMP 同步创建的接口默认 `device_managed = false`
 /// （不在设备模态框展示）；设备模态框整体同步走 `nic::apply_network_config`。
@@ -310,7 +313,8 @@ pub async fn create_device_interface<P: DbProvider>(
     ))
 }
 
-/// 获取单个接口详情（含所属设备名）。
+/// GET /api/resources/devices/interfaces/{interface_id}：获取单个接口详情
+/// （含所属设备名），接口不存在 404。
 pub async fn get_device_interface<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(interface_id): Path<Uuid>,
@@ -335,7 +339,8 @@ pub async fn get_device_interface<P: DbProvider>(
     ))
 }
 
-/// 更新网络接口。
+/// PUT /api/resources/devices/interfaces/{interface_id}：更新网络接口
+/// （接口不存在 404、重名或 MAC 已占用 409）。
 ///
 /// 普通字段缺失表示不修改（`COALESCE` 保留旧值）；可空字段
 /// （MAC/描述/速率）为 `Option<Option<T>>`，
@@ -481,7 +486,8 @@ pub async fn update_device_interface<P: DbProvider>(
     ))
 }
 
-/// 删除网络接口。
+/// DELETE /api/resources/devices/interfaces/{interface_id}：删除网络接口
+/// （接口不存在 404）。
 ///
 /// 接口可能被 IP 地址与物理链路引用，在同一事务内先清理关联数据
 /// 再删除接口，避免外键约束与防删触发器（cable_links 侧）报错；
@@ -509,13 +515,11 @@ pub async fn delete_device_interface<P: DbProvider>(
             .fetch_one(&mut *tx)
             .await?;
 
-    // 先删除相关的 IP 地址
     sqlx::query("DELETE FROM interface_ips WHERE device_interface_id = $1")
         .bind(interface_id)
         .execute(&mut *tx)
         .await?;
 
-    // 删除相关的电缆链接
     sqlx::query(
         r"DELETE FROM cable_links
          WHERE (a_endpoint_type = 'device_interface' AND a_endpoint_id = $1)
@@ -525,7 +529,6 @@ pub async fn delete_device_interface<P: DbProvider>(
     .execute(&mut *tx)
     .await?;
 
-    // 删除接口
     sqlx::query("DELETE FROM device_interfaces WHERE id = $1")
         .bind(interface_id)
         .execute(&mut *tx)
@@ -594,7 +597,9 @@ fn snmp_port_to_create(port: &SnmpPort) -> DeviceInterfaceCreate {
     }
 }
 
-/// 从 SNMP 同步设备端口（批量入库，未指定类型时回退默认值）。
+/// POST /api/resources/devices/{id}/interfaces/sync-snmp：从 SNMP 同步设备端口
+/// （批量入库，未指定类型时回退默认值）：设备不存在 404、未配管理地址或采集
+/// 失败 400。
 ///
 /// 两语句同事务，先 UPDATE 后 INSERT：
 /// 1. UPDATE 以本批 SNMP 采集值刷新已存在端口的二层属性
@@ -753,7 +758,6 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
         saved_count = builder.build().execute(&mut *tx).await?.rows_affected() as usize;
         tx.commit().await?;
     }
-    // 无效端口（校验未通过被跳过）不参与更新与入库
 
     let saved_interfaces = sqlx::query_as::<_, DeviceInterface>(
         "SELECT * FROM device_interfaces WHERE device_id = $1 ORDER BY name",
@@ -762,7 +766,6 @@ pub async fn sync_ports_from_snmp<P: DbProvider>(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    // 按同步结果构造消息：区分无数据 / 含无效端口 / 全部无效
     let message = if ports.is_empty() {
         msg("server.device.interface.snmp_no_ports")
     } else if saved_count > 0 || updated_count > 0 {

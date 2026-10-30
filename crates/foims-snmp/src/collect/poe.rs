@@ -2,12 +2,8 @@
 //!
 //! pethPsePortTable（1.3.6.1.2.1.105.1.3.1）实例索引为
 //! (pethPsePortGroupIndex, pethPsePortIndex) 双弧，`pethPsePortIfIndex`(.7)
-//! 关联真实 ifIndex，端口名经 ifDescr 表映射。实测功率 best-effort 取 Cisco
-//! `cpeExtPsePortPwrConsumption`（CISCO-PHYSICAL-ADDTL-STATS-MIB，0.1W→W
-//! 换算），缺失 NULL。
-//!
-//! 供电中断 diff 与第一层 ARP 同构：某端口 `detectionStatus` 由 delivering(3)
-//! 转入 disabled(1)/fault(4)/test(5)/other(6) 之一即产出 `poe_port_off`(warning)。
+//! 关联真实 ifIndex，端口名经 ifDescr 表映射。实测功率 best-effort 取
+//! Cisco `cpeExtPsePortPwrConsumption`，缺失为 NULL。
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -68,10 +64,9 @@ fn i32_at(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<i32> {
     map.get(key).and_then(|v| value_as_i32(Some(v)))
 }
 
-/// walk cpeExtPsePortPwrConsumption（CISCO-PHYSICAL-ADDTL-STATS-MIB
-/// 1.3.6.1.4.1.9.9.16.1.1.3.1.4，单弧 ifIndex 索引，单位 0.1W）。
-/// B6：既有注释宣称实测功率 best-effort，此前实现缺失（硬编码
-/// None）；非 Cisco 设备不实现该表，walk 失败记告警返回空集（NULL）。
+/// walk `cpeExtPsePortPwrConsumption`（1.3.6.1.4.1.9.9.16.1.1.3.1.4，
+/// 单弧 ifIndex 索引，设备侧单位 0.1W）：非 Cisco 设备不实现该表，
+/// walk 失败只记告警并返回空映射（实测功率落 NULL）。
 async fn walk_poe_power_consumption(client: &Client) -> HashMap<u32, f64> {
     let mut map = HashMap::new();
     let Ok(mut walk) = client.walk(oid!(1, 3, 6, 1, 4, 1, 9, 9, 16, 1, 1, 3, 1, 4)) else {
@@ -88,13 +83,16 @@ async fn walk_poe_power_consumption(client: &Client) -> HashMap<u32, f64> {
         }
         if let (Some(&if_index), Some(raw)) = (vb.oid.arcs().last(), value_as_i32(Some(&vb.value)))
         {
-            // 0.1W → W 换算
             map.insert(if_index, f64::from(raw) / 10.0);
         }
     }
     map
 }
 
+/// 采集 PoE 端口：pethPsePortTable 列 2/5/6/7（管理态/检测态/功率类别/
+/// ifIndex）逐列 walk，再按 ifIndex 对齐实测功率。
+///
+/// 错误仅来自鉴权构造与会话建立；表缺失或列缺失只降级为空值。
 pub async fn get_poe_ports_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<PoeRecord>, SnmpError> {
@@ -121,8 +119,8 @@ pub async fn get_poe_ports_via_snmp(
     let if_index_map = walk_poe_column(&client, 7).await;
     let power_map = walk_poe_power_consumption(&client).await;
 
-    // 端口名与实测功率均按 ifIndex 对齐（B6：cpdExt 实测功率
-    // 非 Cisco 缺失时 NULL，不阻断其余字段）
+    // 行由 pethPsePortIfIndex(.7) 驱动：端口名与实测功率均按真实 ifIndex
+    // 对齐（PoE 表自身索引是 group/port 双弧），缺该列的条目无法归属端口
     let mut keys: Vec<&(u32, u32)> = if_index_map.keys().collect();
     keys.sort_unstable();
     let mut ports = Vec::new();
@@ -150,7 +148,8 @@ pub async fn get_poe_ports_via_snmp(
     Ok(ports)
 }
 
-/// 比对上一轮与本轮 PoE 端口，检出供电中断（`delivering(3)` 转入非供电态）。
+/// 比对上一轮与本轮 PoE 端口：`delivering(3)` 转入非供电态即产出
+/// `poe_port_off`(warning)，转入 searching(2) 属重协商过渡态、不告警。
 ///
 /// 纯函数：`prev` 为设备现有 device_poe_ports 行，`cur` 为本轮采集记录，按
 /// `if_index` 对齐；首轮基线（prev 空）不发事件。detail 含端口名/类别/前后状态。
@@ -163,7 +162,6 @@ pub fn diff_poe_power(prev: &[DevicePoePort], cur: &[PoeRecord]) -> Vec<ObsEvent
 
     let mut events = Vec::new();
     for r in cur {
-        // 仅"上一轮在供电、本轮掉电"才告警；searching(2) 视为过渡态不告警
         let Some(PSE_DELIVERING) = prev_by_if.get(&r.if_index).copied().flatten() else {
             continue;
         };
@@ -220,7 +218,6 @@ mod tests {
 
     #[test]
     fn baseline_no_events() {
-        // 首轮无 prev：即便本轮有掉电端口也不告警（无参照）
         let events = diff_poe_power(&[], &[cur(1, 4)]);
         assert!(events.is_empty(), "首轮基线不发供电中断事件");
     }
@@ -243,14 +240,12 @@ mod tests {
 
     #[test]
     fn searching_transition_not_alerted() {
-        // delivering → searching(2) 过渡态不告警
         let prev_rows = vec![prev(1, PSE_DELIVERING)];
         assert!(diff_poe_power(&prev_rows, &[cur(1, 2)]).is_empty());
     }
 
     #[test]
     fn was_off_now_off_no_alert() {
-        // 上轮就非供电(4)，本轮仍非供电：无"掉电"跳变，不告警
         let prev_rows = vec![prev(1, 4)];
         assert!(diff_poe_power(&prev_rows, &[cur(1, 4)]).is_empty());
     }

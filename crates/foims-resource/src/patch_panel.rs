@@ -1,4 +1,5 @@
-//! 配线架资源管理。
+//! 配线架资源：列表查询（供线路端点选择）与机柜弹窗内的整体同步；
+//! 配线架隶属机柜，名称在单机柜范围内唯一。
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -14,7 +15,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-/// 配线架列表（供线路端点选择等场景使用），按机柜过滤
+/// GET /api/resources/patch-panels：分页获取配线架列表（供线路端点选择场景，
+/// `search` 匹配名称、`cabinet_id` 过滤，非法 UUID 显式 400 而非静默忽略）。
 pub async fn get_patch_panels<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -53,7 +55,7 @@ pub async fn get_patch_panels<P: DbProvider>(
     let has_cabinet_filter = parsed_cabinet_id.is_some();
     let has_search = !search.is_empty();
 
-    // 动态条件全部参数化构建（原手工 $N 编号方式改为 push_bind 自动编号）
+    // 动态条件全部参数化构建（push_bind 自动编号，不拼接用户输入原文）
     let mut count_qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         "SELECT COUNT(*) FROM patch_panels_with_details ap WHERE 1=1",
     );
@@ -101,7 +103,10 @@ pub async fn get_patch_panels<P: DbProvider>(
     ))
 }
 
-/// 同步机柜下的配线架（独立表，隶属机柜）
+/// PUT /api/resources/cabinets/{id}/patch-panels：整体同步机柜下的配线架
+/// （请求即最终状态：缺失项删除、带 id 项更新、无 id 项新增；机柜存在性检查
+/// 在本事务内做，避免事务外快照读与写入之间的 TOCTOU）：机柜不存在 404、
+/// 单机柜内重名 409、待删配线架被线路引用 400。
 pub async fn sync_cabinet_patch_panels<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -110,8 +115,6 @@ pub async fn sync_cabinet_patch_panels<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // 机柜存在性检查放进同步事务内，避免事务外的快照读与后续写入
-    // 之间出现 TOCTOU（与 sync_room_children 同口径）
     let mut tx = state.pool()?.get_conn().begin().await?;
 
     let cabinet_exists: bool =
@@ -126,7 +129,6 @@ pub async fn sync_cabinet_patch_panels<P: DbProvider>(
     let items = &req.patch_panels;
     let now = Utc::now();
 
-    // 既有配线架 id 范围（仅本机柜的）
     let existing_ids: Vec<Uuid> =
         sqlx::query_scalar("SELECT id FROM patch_panels WHERE cabinet_id = $1")
             .bind(id)
@@ -154,7 +156,6 @@ pub async fn sync_cabinet_patch_panels<P: DbProvider>(
         }
     }
 
-    // 新增或更新（名称在本机柜范围内唯一）
     for item in items {
         let dup: Option<Uuid> = sqlx::query_scalar(
             "SELECT id FROM patch_panels WHERE cabinet_id = $1 AND name = $2 AND ($3::uuid IS NULL OR id != $3)",

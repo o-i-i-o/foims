@@ -1,7 +1,4 @@
 //! 观测事件模块（snmp_events 落库、站内通知、查询与定位）。
-//!
-//! 第 0 步自 foims-resource 下放通知 helper（create_notification 等），
-//! 事件写入/查询 API 在本模块随功能叠加。
 
 pub mod api;
 pub mod notify;
@@ -19,7 +16,6 @@ use foims_models::{
 
 use crate::core::truncate_to_column_width;
 
-// 通知 helper 与 API handler 一并再导出，供 crate 内/外同路径调用
 pub use api::{list_snmp_events, locate_device};
 pub use notify::{
     create_notification, encode_notification_content, send_device_swap_notification,
@@ -63,8 +59,8 @@ impl ObsEvent {
             .to_string()
     }
 
-    /// detail.macs 数组拼接为逗号分隔串（ARP 冲突通知用；A1：此前
-    /// 冲突事件误读 mac 字段，模板 {{mac}} 永远渲染为空）
+    /// detail.macs 数组拼接为逗号分隔串：ARP 冲突事件的 MAC 列表在
+    /// `macs` 数组而非 `mac` 字段，通知模板的 `{{mac}}` 须取自本函数。
     fn macs_field(&self) -> String {
         self.detail
             .get("macs")
@@ -106,18 +102,17 @@ fn notification_body_key(event_type: &str) -> Option<&'static str> {
 /// snmp_events.interface 列宽（VARCHAR(100)，与建表契约一致）
 const EVENT_INTERFACE_MAX_CHARS: usize = 100;
 
-/// 同源事件抑制窗口（分钟）：同设备+同类型+同端口+同 detail 在窗口内
-/// 已落库时不重复落库与通知（C7：冲突/移除等持续性事件在轮询间隔
-/// 短于事件持续时长时会逐轮重复，形成事件表膨胀与通知风暴；
-/// 键含 interface，避免不同端口的同方向事件被互相抑制）
+/// 同源事件抑制窗口（分钟）：同设备 + 同类型 + 同端口 + 同 detail 在窗口内
+/// 已落库时不重复落库与通知。冲突/移除等持续性事件在轮询间隔短于其持续
+/// 时长时会逐轮重复，会同时放大事件表与通知量；键含 interface，避免不同
+/// 端口的同方向事件互相抑制。
 const EVENT_SUPPRESSION_WINDOW_MINUTES: i64 = 30;
 
 /// 批量落库观测事件，并对关键事件逐条发站内通知；`unknown_device`
 /// 另按「通知配置」中 snmp_event 邮件开关发邮件。
 ///
 /// 事件表为事实源：落库失败即返回错误（由调用方记日志），通知/邮件失败
-/// 仅记日志、不影响事件落库。文案用的设备名查询失败降级为 UUID，
-/// 不阻断落库（C7）。
+/// 仅记日志、不影响事件落库。文案用的设备名查询失败降级为 UUID。
 pub async fn record_events(
     pool: &PgPool,
     device_id: Uuid,
@@ -127,7 +122,6 @@ pub async fn record_events(
         return Ok(());
     }
 
-    // 设备名用于通知与邮件文案（查询失败降级为 UUID 字符串）
     let device_name: String =
         match sqlx::query_scalar::<_, String>("SELECT name FROM devices WHERE id = $1")
             .bind(device_id)
@@ -147,7 +141,6 @@ pub async fn record_events(
         };
 
     // 抑制过滤：命中窗口内已落库事件或本批重复键的条目丢弃
-    // 键为 (event_type, interface, detail)，端口维度参与去重
     let window_start =
         chrono::Utc::now() - chrono::Duration::minutes(EVENT_SUPPRESSION_WINDOW_MINUTES);
     let recent: Vec<(String, Option<String>, serde_json::Value)> = sqlx::query_as(
@@ -175,8 +168,8 @@ pub async fn record_events(
         return Ok(());
     }
 
-    // 单语句 UNNEST 批量插入（C7：此前逐行 round-trip，首轮全量
-    // arp_added 场景下会放大成数百次网络往返）
+    // 单语句 UNNEST 批量插入：逐行插入在首轮全量 arp_added 场景下会放大成
+    // 数百次网络往返
     let occurred_at = chrono::Utc::now();
     let ids: Vec<Uuid> = pending.iter().map(|_| Uuid::new_v4()).collect();
     let event_types: Vec<&str> = pending.iter().map(|e| e.event_type).collect();
@@ -210,7 +203,7 @@ pub async fn record_events(
         count = rows.rows_affected()
     );
 
-    // 通知仅对关键事件（抑制后的集合）；失败逐条降级记日志，不回滚已落库事件
+    // 通知只发抑制后的集合，逐条降级不回滚已落库事件
     if pending.iter().any(|e| should_notify(e.event_type)) {
         let admin_ids: Vec<Uuid> = sqlx::query_scalar(
             "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'secadmin')",
@@ -291,7 +284,6 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
         }
     }
 
-    // 邮件仅未知设备场景，且受 snmp_event 方式开关门控
     if ev.event_type == SNMP_EVENT_UNKNOWN_DEVICE
         && foims_auth::smtp::load_notification_methods(pool)
             .await
@@ -329,7 +321,6 @@ mod tests {
         assert!(should_notify(SNMP_EVENT_DEVICE_REBOOT));
         assert!(should_notify(SNMP_EVENT_UNKNOWN_DEVICE));
         assert!(should_notify(SNMP_EVENT_ARP_CONFLICT));
-        // 高频/低价值事件只落表不通知
         assert!(!should_notify("arp_added"));
         assert!(!should_notify("arp_removed"));
     }
@@ -352,13 +343,11 @@ mod tests {
             serde_json::json!({ "direction": "down" }),
         );
         assert_eq!(ev.str_field("direction"), "down");
-        // 缺失字段返回空串而非 panic
         assert_eq!(ev.str_field("absent"), "");
     }
 
     #[test]
     fn obs_event_macs_field_joins_array() {
-        // A1：冲突通知的 mac 插值取自 macs 数组拼接
         let ev = ObsEvent::new(
             SNMP_EVENT_ARP_CONFLICT,
             None,
@@ -366,7 +355,6 @@ mod tests {
             serde_json::json!({ "ip": "10.0.0.1", "macs": ["AA:01", "BB:02"] }),
         );
         assert_eq!(ev.macs_field(), "AA:01, BB:02");
-        // 非冲突事件/缺字段返回空串
         let plain = ObsEvent::new(
             SNMP_EVENT_UNKNOWN_DEVICE,
             None,

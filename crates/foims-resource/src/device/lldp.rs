@@ -1,5 +1,5 @@
-//! 设备 LLDP 邻居入库（SNMP 采集已迁 foims-snmp::collect::lldp，本模块
-//! 保留校验、handler 与 device_lldps 落库 SQL）。
+//! 设备 LLDP 邻居入库与查询（SNMP 邻居采集在 foims-snmp::collect::lldp，
+//! 本模块保留校验、handler 与 device_lldps 落库 SQL）。
 
 use std::sync::Arc;
 
@@ -69,6 +69,8 @@ pub async fn get_lldp_neighbors(
         .map_err(|e| AppError::Snmp(msg("server.device.snmp.lldp_fetch_failed").with("error", e)))
 }
 
+/// GET /api/resources/devices/{id}/lldp-neighbors：读库返回已落库的 LLDP 邻居
+/// 台账（按 local_port 排序；设备不存在 404）。
 pub async fn get_device_lldp_neighbors<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -94,6 +96,9 @@ pub async fn get_device_lldp_neighbors<P: DbProvider>(
     Ok(foims_common::ok_json(lldps, "server.device.lldp.fetched"))
 }
 
+/// POST /api/resources/devices/{id}/lldp/sync：经 SNMP 采集邻居并在同一事务内
+/// upsert 全部邻居、清理消失项；设备/IP/SNMP 配置问题与采集失败均 400；
+/// 空采集视为采集异常，跳过清理保留存量。
 pub async fn sync_lldp_from_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -201,7 +206,6 @@ pub async fn sync_lldp_from_snmp<P: DbProvider>(
     .fetch_all(&conn)
     .await?;
 
-    // 按同步结果构造消息：有失败（部分成功）/ 有变化 / 无变化
     let message = if failed_count > 0 {
         msg("server.device.lldp.sync_partial")
             .with("synced", synced_count)

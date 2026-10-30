@@ -59,10 +59,9 @@ pub async fn agent_admin_guard(req: Request, next: Next) -> Response {
 }
 
 /// GET /api/agents/config-package?format=deb|rpm|zip：按所选操作系统现场
-/// 组配置包返回。
+/// 组配置包返回：格式非法 400，站点 CA/客户端证书/注册令牌缺失 409，
+/// 组包失败 500。
 ///
-/// 流程：格式校验 → CA → 客户端证书 → 解析上报地址 → 生成 agent.toml
-/// （共享注册令牌 + 间隔取系统配置并 clamp）→ 组包 → 流式返回。
 /// 不写库：注册由 agent 首报自动完成（machine_id upsert），根治下载即建
 /// pending 行的脏数据问题。
 pub async fn download_config_package<S: ConfigProvider>(
@@ -72,7 +71,7 @@ pub async fn download_config_package<S: ConfigProvider>(
     headers: axum::http::HeaderMap,
     uri: axum::http::Uri,
 ) -> Result<Response, AppError> {
-    // 1. 格式校验（deb/rpm 由包管理器安装配置文件，zip 双平台通用）
+    // deb/rpm 由包管理器安装配置文件，zip 为双平台通用格式
     let format = params.format.as_str();
     if !matches!(format, "deb" | "rpm" | "zip") {
         return Err(AppError::Validation(
@@ -80,12 +79,12 @@ pub async fn download_config_package<S: ConfigProvider>(
         ));
     }
 
-    // 2. 站点 CA（未生成 CA 时拒绝下载，提示先在证书管理页生成）
+    // 未生成站点 CA 时拒绝下载，提示先在证书管理页生成
     let ca_pem = tokio::fs::read(crate::SITE_CA_PATH)
         .await
         .map_err(|_| AppError::Conflict(msg("server.agent.ca_missing")))?;
 
-    // 2b. Agent 客户端证书（mTLS 上报身份；未生成时提示先启用 Agent 采集）
+    // 客户端证书是 mTLS 上报身份；未生成时提示先启用 Agent 采集
     let certs_dir = std::path::Path::new(crate::cert::AGENT_CERT_DIR);
     let client_cert_pem = tokio::fs::read_to_string(certs_dir.join(crate::cert::CLIENT_CERT))
         .await
@@ -94,7 +93,6 @@ pub async fn download_config_package<S: ConfigProvider>(
         .await
         .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
 
-    // 3. 注册令牌：未配置时拒绝（无法生成可用配置包）
     let config = state.config();
     let enrollment_token = config.agent.enrollment_token.trim().to_string();
     if !foims_common::net::valid_enrollment_token(&enrollment_token) {
@@ -103,8 +101,6 @@ pub async fn download_config_package<S: ConfigProvider>(
         )));
     }
 
-    // 4. 上报地址：公共URL开关 → 手动覆盖 → 监听地址推导（通配主机时按
-    //    请求 Host 兜底）
     let agent = config.agent.clone();
     let public_url = config.server.public_url.clone();
     let server_addr = resolve_report_addr(
@@ -117,7 +113,6 @@ pub async fn download_config_package<S: ConfigProvider>(
         &uri,
     )?;
 
-    // 5. agent.toml（服务端下载时生成；采集/上报间隔均取系统配置并 clamp）
     let collect_interval = agent
         .collect_interval_secs
         .clamp(COLLECT_INTERVAL_MIN_SECS, COLLECT_INTERVAL_MAX_SECS);
@@ -132,7 +127,7 @@ pub async fn download_config_package<S: ConfigProvider>(
          collect_interval_secs = {collect_interval}\n"
     );
 
-    // 6. 组包（配置包无架构维度：deb=all / rpm=noarch / zip 平铺）
+    // 配置包无架构维度：deb=all / rpm=noarch / zip 平铺
     let inputs = PackageInputs {
         agent_toml: &agent_toml,
         ca_pem: &ca_pem,
@@ -149,7 +144,7 @@ pub async fn download_config_package<S: ConfigProvider>(
             "application/x-rpm",
             packaging::build_rpm(env!("CARGO_PKG_VERSION"), &inputs),
         ),
-        // 格式已在步骤 1 校验，此分支防御性兜底
+        // 格式已在前面校验拒绝，此分支仅为 match 穷尽兜底
         _ => {
             return Err(AppError::Validation(
                 msg("server.agent.unknown_format").with("format", &params.format),
@@ -166,7 +161,6 @@ pub async fn download_config_package<S: ConfigProvider>(
         }
     };
 
-    // 7. 流式返回（attachment 文件名 foims-agent-config-<版本>.<格式>）
     log_info!(
         "log.agent.config_package_downloaded",
         format = params.format,

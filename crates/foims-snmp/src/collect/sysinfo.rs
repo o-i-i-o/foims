@@ -17,11 +17,14 @@ pub struct DeviceSnmpInfo {
     pub hostname: Option<String>,
 }
 
+/// 采集设备识别信息：GET sysDescr（1.3.6.1.2.1.1.1.0）推导品牌与型号，
+/// 再 GET sysName（1.3.6.1.2.1.1.5.0）取主机名。
+///
+/// sysDescr 缺失即整体失败；sysName 部分设备不实现，异常响应容忍为 None。
 pub async fn get_device_info_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<DeviceSnmpInfo, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
-    // 超时统一取 params.timeout_secs（与 ports/lldp/arp 等采集器同口径）
     let timeout = Duration::from_secs(params.timeout_secs);
     let auth = build_auth(params).map_err(SnmpError::Message)?;
     let client = Client::builder(&addr, auth)
@@ -68,9 +71,10 @@ fn has_vendor_word(sys_descr: &str, word: &str) -> bool {
         .any(|token| token == word)
 }
 
+/// 从 sysDescr 自由文本推导厂商名：词边界优先命中完整厂商词，连字符厂商名
+/// （tp-link/d-link）分词后命中第二词，其余保留子串启发式（hpe/3com 等嵌在
+/// 描述中，ArubaOS/ExtremeXOS 属系统名拼接词，误命中概率极低）。
 fn identify_vendor(sys_descr: &str) -> String {
-    // 词边界优先匹配完整厂商词；连字符厂商名（tp-link/d-link）分词后
-    // 分别命中第二词；其余保留既有子串启发式（如 hpe/3com 嵌在描述中）
     let has = |word: &str| has_vendor_word(sys_descr, word);
     let lower = sys_descr.to_lowercase();
 
@@ -93,8 +97,6 @@ fn identify_vendor(sys_descr: &str) -> String {
         return "HP/HPE".to_string();
     }
     if has("aruba") || lower.contains("aruba") {
-        // 词边界 + 子串双口径：ArubaOS 这类厂商与系统名拼接词仍属专用
-        // 品牌名，误命中概率极低（cisco/extreme 同理）
         return "Aruba".to_string();
     }
     if has("netgear") {
@@ -113,7 +115,6 @@ fn identify_vendor(sys_descr: &str) -> String {
         return "MikroTik".to_string();
     }
     if has("extreme") || lower.contains("extreme") {
-        // ExtremeXOS 为系统名拼接词，同 Aruba 口径保留子串兼容
         return "Extreme Networks".to_string();
     }
     if has("alcatel") || lower.contains("alcatel-lucent") {
@@ -129,6 +130,8 @@ fn identify_vendor(sys_descr: &str) -> String {
     "Unknown".to_string()
 }
 
+/// 型号取 sysDescr 中前两个含数字的词直接拼接（无分隔符，如
+/// 「S5720 5700EI」→ `S57205700EI`）；无数字词时返回原描述，超 50 字符截断。
 fn extract_model(sys_descr: &str) -> String {
     let model: String = sys_descr
         .split_whitespace()
@@ -150,8 +153,6 @@ fn extract_model(sys_descr: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ==================== 厂商识别 ====================
 
     #[test]
     fn test_identify_vendor_known_brands() {
@@ -190,40 +191,32 @@ mod tests {
 
     #[test]
     fn test_identify_vendor_case_insensitive_and_priority() {
-        // 大小写不敏感
         assert_eq!(identify_vendor("CISCO IOS"), "Cisco");
         assert_eq!(identify_vendor("HUAWEI S5720"), "Huawei");
-        // 优先级：cisco 先于 huawei 判定
+        // 判定顺序即优先级：cisco 分支先于 huawei 命中
         assert_eq!(identify_vendor("cisco device by huawei oem"), "Cisco");
-        // 未知厂商
         assert_eq!(identify_vendor("Some Generic Device"), "Unknown");
         assert_eq!(identify_vendor(""), "Unknown");
     }
 
     #[test]
     fn test_identify_vendor_word_boundary_no_substring_false_positive() {
-        // C4：子串误配回归——"ship" 含 "hp"、"Sharp" 含 "hp"，词边界匹配后不得命中
+        // 子串误配回归："ship" 含 "hp"、"Sharp" 含 "hp"，词边界匹配后不得命中
         assert_eq!(identify_vendor("Friendship Leader 3000"), "Unknown");
         assert_eq!(identify_vendor("Sharp LCD Panel"), "Unknown");
-        // 独立成词的 hp 仍要命中
         assert_eq!(identify_vendor("hp 2920 Switch"), "HP/HPE");
     }
 
-    // ==================== 型号提取 ====================
-
     #[test]
     fn test_extract_model_with_digits() {
-        // 取前两个含数字的词（无分隔符拼接）
+        // 两个含数字词无分隔符拼接
         assert_eq!(extract_model("Huawei S5720 5700EI"), "S57205700EI");
-        // 仅一个含数字词
         assert_eq!(extract_model("Cisco IOS C2960 Software"), "C2960");
     }
 
     #[test]
     fn test_extract_model_without_digits() {
-        // 无数字词时短串原样返回
         assert_eq!(extract_model("Generic Switch"), "Generic Switch");
-        // 长串（超过 50 字符）截断为前 50 字符
         let long_descr = "X".repeat(80);
         let model = extract_model(&long_descr);
         assert_eq!(model.len(), 50, "超长描述应截断为 50 字符");

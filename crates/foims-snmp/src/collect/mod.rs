@@ -1,5 +1,4 @@
-//! SNMP 采集实现：系统信息、端口表、LLDP 邻居、ARP/FDB 表、性能指标，
-//! 以及第二层网络侧台账（物理实体/传感器/VLAN/CDP/LAG/PoE）。
+//! SNMP 采集实现：逐列 walk 设备 MIB，产出可直接落库的台账与指标记录。
 
 pub mod arp;
 pub mod cdp;

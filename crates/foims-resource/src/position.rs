@@ -1,4 +1,5 @@
-//! 机柜机位（positions）资源管理。
+//! 机柜机位（positions）资源：U 位区间 CRUD 与占用设备的 IP 明细，
+//! 供前端机位台账、机柜可视化与设备上架使用。
 //!
 //! 机位是机柜内的 U 位区间，可被设备占用并绑定 IP。列表过滤使用
 //! sqlx `QueryBuilder` 动态拼接（关键字经 `escape_like` 转义、排序走
@@ -58,14 +59,14 @@ fn push_position_filters(
     }
 }
 
-/// 分页获取机位列表（支持关键字、机柜、机房过滤与白名单排序）。
+/// GET /api/resources/positions：分页获取机位列表（支持关键字、机柜、机房过滤与白名单排序）。
 pub async fn get_positions<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let pagination = Pagination::from_query(&query);
     let search = query.get("search").cloned().unwrap_or_default();
-    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    // 非法 UUID 显式 400（与 network.rs 口径一致），不静默退化为全量列表
     let cabinet_id = crate::helpers::parse_optional_uuid(&query, "cabinet_id")?;
     let room_id = crate::helpers::parse_optional_uuid(&query, "room_id")?;
     let sort_by = query
@@ -141,8 +142,8 @@ pub async fn get_positions<P: DbProvider>(
 }
 
 /// U 位区间重叠预检（与 trg_check_position_overlap 触发器同口径）：
-/// 预检返回 422；并发窗口由触发器兜底，触发 P0001 的语句统一在
-/// map_err 中映射为校验错误
+/// 预检返回 400；并发窗口由触发器兜底，触发 P0001 的语句统一在
+/// map_err 中映射为校验错误。
 pub(crate) async fn ensure_no_u_overlap(
     conn: &mut sqlx::PgConnection,
     cabinet_id: Option<Uuid>,
@@ -168,7 +169,9 @@ pub(crate) async fn ensure_no_u_overlap(
     Ok(())
 }
 
-/// 创建机位（同机柜内名称唯一，检查与写入在同一事务内）。
+/// POST /api/resources/positions：创建机位（机位必须隶属机柜；同机柜内名称唯一、
+/// U 位区间不得重叠，预检与写入同事务：缺机柜或区间重叠 400、机柜不存在 404、
+/// 重名 409）。
 pub async fn create_cabinet_position<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -208,7 +211,6 @@ pub async fn create_cabinet_position<P: DbProvider>(
     )
     .await?;
 
-    // U 位重叠预检：返回 422 而非触发器 P0001 的 500
     ensure_no_u_overlap(&mut tx, Some(cabinet_id), req.start_u, req.end_u, None).await?;
 
     let id = Uuid::new_v4();
@@ -230,7 +232,7 @@ pub async fn create_cabinet_position<P: DbProvider>(
     .await
     .map_err(|e| {
         // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409；
-        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 400）
         if let sqlx::Error::Database(ref db_err) = e {
             if db_err.is_unique_violation() {
                 return AppError::Conflict(msg("server.position.name_exists"));
@@ -321,7 +323,8 @@ async fn fetch_position_ips(
     .await
 }
 
-/// 获取机位详情（含占用设备的 IP 明细）。
+/// GET /api/resources/positions/{id}：获取机位详情（含占用设备的 IP 明细；
+/// 机位不存在 404）。
 pub async fn get_cabinet_position<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -335,7 +338,9 @@ pub async fn get_cabinet_position<P: DbProvider>(
     Ok(foims_common::ok_json(position, "server.position.fetched"))
 }
 
-/// 更新机位（字段缺失表示不修改，`Option` 绑定经 COALESCE 保留旧值）。
+/// PUT /api/resources/positions/{id}：更新机位（字段缺失经 COALESCE 保留旧值；
+/// 换柜时按目标房间与机柜的功率上限复核在柜设备，重名与 U 位重叠沿用创建口径：
+/// 机位或机柜不存在 404、功率超限或区间重叠 400、重名 409）。
 pub async fn update_cabinet_position<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -377,8 +382,6 @@ pub async fn update_cabinet_position<P: DbProvider>(
             Some(cabinet_id) => cabinet_id,
             None => cur_cabinet_id,
         };
-        // 机柜列可空（cabinet_id IS NULL 的未归属机位），共享预检的
-        // IS NOT DISTINCT FROM 语义与原内联 SQL 一致
         crate::helpers::ensure_unique_name(
             &mut *tx,
             "positions",
@@ -391,8 +394,7 @@ pub async fn update_cabinet_position<P: DbProvider>(
         .await?;
     }
 
-    // U 位重叠预检（以最终生效的机柜与区间为口径）：
-    // 返回 400 而非触发器 P0001 的 500
+    // U 位重叠预检：以最终生效的机柜与区间为口径
     {
         let final_cabinet_id = if req.cabinet_id.is_some() {
             req.cabinet_id.flatten()
@@ -503,7 +505,7 @@ pub async fn update_cabinet_position<P: DbProvider>(
     .await
     .map_err(|e| {
         // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409；
-        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 422）
+        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 400）
         if let sqlx::Error::Database(ref db_err) = e {
             if db_err.is_unique_violation() {
                 return AppError::Conflict(msg("server.position.name_exists"));
@@ -566,7 +568,8 @@ pub async fn update_cabinet_position<P: DbProvider>(
     Ok(foims_common::ok_json(result, "server.position.updated"))
 }
 
-/// 删除机位（被设备占用时拒绝删除）。
+/// DELETE /api/resources/positions/{id}：删除机位（不存在 404；被设备占用时
+/// 400，占用检查与删除同事务）。
 pub async fn delete_cabinet_position<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

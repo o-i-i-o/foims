@@ -18,6 +18,8 @@ use validator::Validate;
 
 use super::validate_device_type;
 
+/// GET /api/resources/devices：分页获取设备列表（关键字/类型/工位/机位/房间/机柜过滤与白名单排序，
+/// 响应脱敏 SNMP 凭据）。
 pub async fn get_devices<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -26,7 +28,7 @@ pub async fn get_devices<P: DbProvider>(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    // 非法 UUID 显式 422（与 network.rs 口径一致），不静默退化为全量列表
+    // 非法 UUID 显式 400（与 network.rs 口径一致），不静默退化为全量列表
     let workstation_id = crate::helpers::parse_optional_uuid(&query, "workstation_id")?;
     let position_id = crate::helpers::parse_optional_uuid(&query, "position_id")?;
     let device_type = query.get("device_type").cloned();
@@ -59,7 +61,7 @@ pub async fn get_devices<P: DbProvider>(
     let search_pattern = foims_common::net::escape_like(&search);
 
     // 动态过滤条件统一参数化构建：全部值经 push_bind 传参，
-    // 不拼接用户输入原文（原手工 $N 编号方式废弃）
+    // 不拼接用户输入原文
     fn push_device_filters(
         qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
         search_pattern: Option<&str>,
@@ -179,6 +181,8 @@ fn sanitize_device_response<T: serde::Serialize>(
     Ok(v)
 }
 
+/// POST /api/resources/devices：创建设备（事务内校验位置引用与房间一致性，同房间重名返回 409，
+/// 网卡配置必须随请求提交）。
 pub async fn create_device<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -490,6 +494,8 @@ pub async fn create_device<P: DbProvider>(
     Ok(foims_common::ok_json(sanitized, "server.device.created"))
 }
 
+/// GET /api/resources/devices/{id}：获取单个设备详情（网卡配置并行拉取，SNMP 凭据脱敏不回传；
+/// 设备不存在返回 404）。
 pub async fn get_device<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -532,6 +538,9 @@ pub async fn get_device<P: DbProvider>(
     Ok(foims_common::ok_json(result, "server.device.fetched"))
 }
 
+/// PUT /api/resources/devices/{id}：更新设备（缺省字段保留旧值、null 清空，
+/// 事务内复核位置/功率/房间一致性，重提 cards 整体替换网卡）：工位与机位互斥
+/// 或位置/网段跨房间不一致 400、设备或引用对象不存在 404、重名 409。
 pub async fn update_device<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -540,7 +549,6 @@ pub async fn update_device<P: DbProvider>(
 ) -> Result<Response, AppError> {
     req.validate()?;
 
-    // Validate device_type if provided
     if let Some(ref dt) = req.device_type {
         validate_device_type(dt)?;
     }
@@ -569,7 +577,6 @@ pub async fn update_device<P: DbProvider>(
         }
     }
 
-    // Fetch current device data for business validations
     let current_row = sqlx::query(
         "SELECT workstation_id, position_id, room_id, power_watts FROM devices WHERE id = $1",
     )
@@ -582,7 +589,6 @@ pub async fn update_device<P: DbProvider>(
     let current_room_id: Uuid = current_row.get("room_id");
     let current_power_watts: Option<i32> = current_row.get("power_watts");
 
-    // Resolve the final values for Option<Option<Uuid>> fields
     let resolved_workstation_id = match &req.workstation_id {
         None => current_ws_id,
         Some(Some(ws_id)) => {
@@ -622,7 +628,7 @@ pub async fn update_device<P: DbProvider>(
     }
 
     // 房间一致性预检（与 trg_validate_device_room_consistency 同口径，
-    // 预检返回 422，触发器仅兜底并发窗口）
+    // 预检返回 400，触发器仅兜底并发窗口）
     let resolved_room_id = req.room_id.unwrap_or(current_room_id);
     if let Some(ws_id) = resolved_workstation_id {
         let ws_room: Uuid = sqlx::query_scalar("SELECT room_id FROM workstations WHERE id = $1")
@@ -780,7 +786,6 @@ pub async fn update_device<P: DbProvider>(
         AppError::from(e)
     })?;
 
-    // Handle network config replacement if cards are provided
     if let Some(cards) = &req.cards {
         let room_id = req.room_id.unwrap_or(current_room_id);
         super::nic::apply_network_config(&mut tx, id, room_id, cards, now).await?;
@@ -855,7 +860,6 @@ pub async fn update_device<P: DbProvider>(
 
     tx.commit().await?;
 
-    // Fetch updated device with details
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
@@ -876,7 +880,6 @@ pub async fn update_device<P: DbProvider>(
     .fetch_one(&state.pool()?.get_conn())
     .await?;
 
-    // Fetch updated network cards (with nested ports and IPs)
     let cards = super::nic::fetch_device_network_config(&state.pool()?.get_conn(), id).await?;
 
     // SNMP 凭据密文脱敏（与列表/create 响应同口径）
@@ -907,6 +910,8 @@ pub async fn update_device<P: DbProvider>(
     Ok(foims_common::ok_json(result, "server.device.updated"))
 }
 
+/// DELETE /api/resources/devices/{id}：删除设备（先清理线路与拓扑引用再删主记录，规避防删触发器报错；
+/// 不存在返回 404）。
 pub async fn delete_device<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

@@ -20,10 +20,8 @@ use crate::report_server::ReportContext;
 /// 续期门槛：请求证书剩余寿命低于该天数才允许换发（约 90 天窗口）
 pub const RENEW_REMAINING_DAYS_THRESHOLD: i64 = 90;
 
-/// 续期单条请求的处理结果（状态码 + JSON 响应体）。
 type RenewResult = (StatusCode, Json<Value>);
 
-/// 简单错误响应（与 ingest::error_json 同构）
 fn error_json(status: StatusCode, message: String) -> RenewResult {
     (status, Json(json!({ "error": message })))
 }
@@ -66,7 +64,6 @@ pub async fn handle_renew(
         );
     }
 
-    // 剩余寿命校验：低于阈值才换发
     let (remaining_days, _) = match cert_remaining(&request.client_cert_pem) {
         Ok(lifetime) => lifetime,
         Err(e) => return error_json(StatusCode::BAD_REQUEST, e),

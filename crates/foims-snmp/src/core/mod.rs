@@ -38,6 +38,8 @@ pub struct DeviceForSnmp {
 }
 
 impl DeviceForSnmp {
+    /// 设备行转 SNMP 连接参数：community 类凭据解密后注入，`snmp_port`
+    /// 缺省 161、`snmp_version` 缺省 v2c。
     pub async fn to_snmp_params_async(
         &self,
         ip_address: &str,
@@ -56,7 +58,6 @@ impl DeviceForSnmp {
             auth_pass: creds.auth_password,
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
-            // C9：超时取共享常量，与轮询路径同源
             timeout_secs: SNMP_TIMEOUT_SECS,
         })
     }
@@ -144,6 +145,8 @@ pub fn parse_priv_protocol(proto: &str) -> Result<PrivProtocol, String> {
     }
 }
 
+/// 按 `params.version` 构造 v1/v2c/v3 鉴权配置，错误为中文文案串。
+/// v3 凭据半配置组合（协议与密码缺一）显式报错，不静默降级安全级别。
 pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
     match params.version.as_str() {
         "v1" => {
@@ -151,7 +154,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                 .community
                 .as_deref()
                 .ok_or_else(|| "SNMP v1/v2c 需要配置 community 字符串".to_string())?;
-            // v1 真实使用 v1 协议版本构造（此前误复用 v2c，v1 选项形同虚设，S-4）
+            // v1 必须用 Auth::v1 构造，复用 v2c 会让 v1 选项形同虚设（S-4）
             Ok(Auth::v1(community))
         }
         "v2c" => {
@@ -166,13 +169,12 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                 .username
                 .as_deref()
                 .ok_or_else(|| "SNMPv3需要用户名".to_string())?;
-            // 0.18 起 USM 构建器为 UsmConfig，auth/auth_priv 会立即校验
-            // 协议支持性与密码长度，失败需转换为既有 String 错误
+            // 0.18 起 UsmConfig 的 auth/auth_priv 在构造时即校验协议
+            // 支持性与密码长度
             let usm = UsmConfig::new(username.to_string());
 
-            // 半配置凭据一律显式报错，禁止静默降级安全级别
-            //（noAuthNoPriv 仅限四项全缺省；协议在而密码缺失多为解密
-            // 失败/存量脏数据，降级发包会以明文绕过设备侧 USM）
+            // 协议在而密码缺失多为解密失败/存量脏数据，降级发包会以明文
+            // 绕过设备侧 USM；noAuthNoPriv 仅限四项全缺省
             match (params.auth_proto.as_deref(), params.auth_pass.as_deref()) {
                 (Some(_), None) => return Err("SNMPv3认证协议已配置但认证密码缺失".to_string()),
                 (None, Some(_)) => return Err("SNMPv3认证密码已配置但认证协议缺失".to_string()),
@@ -219,6 +221,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
     }
 }
 
+/// `async_snmp` 错误 → 面向用户的中文文案（未列出的变体归「未知错误」兜底）。
 #[must_use]
 pub fn format_snmp_error(e: Box<Error>) -> String {
     match *e {
@@ -353,7 +356,7 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
         .await
         .map_err(|e| SnmpError::Message(format!("SNMP请求失败: {}", format_snmp_error(e))))?;
 
-    // 0.18 起单 OID GET 返回变量绑定列表，取首个绑定的值
+    // 0.18 起单 OID GET 返回变量绑定列表
     let value = result
         .varbinds
         .first()
@@ -402,7 +405,6 @@ mod tests {
     use async_snmp::{CommunityVersion, ErrorStatus, WalkAbortReason};
     use std::net::SocketAddr;
 
-    /// 构造 v2c 参数
     fn v2c_params(community: Option<&str>) -> SnmpParamsLegacy {
         SnmpParamsLegacy {
             ip: "192.0.2.1".to_string(),
@@ -418,7 +420,6 @@ mod tests {
         }
     }
 
-    /// 构造 v3 参数
     fn v3_params(
         username: Option<&str>,
         auth_proto: Option<&str>,
@@ -440,8 +441,6 @@ mod tests {
         }
     }
 
-    // ==================== 认证参数构造 ====================
-
     #[test]
     fn test_build_auth_v2c() {
         let auth =
@@ -455,7 +454,6 @@ mod tests {
 
     #[test]
     fn test_build_auth_v1_uses_v1_protocol() {
-        // S-4 修复：v1 分支真实使用 Auth::v1（此前误复用 v2c 构造）
         let mut params = v2c_params(Some("private"));
         params.version = "v1".to_string();
         let auth = build_auth(&params).unwrap_or_else(|e| panic!("v1 构造失败: {e}"));
@@ -468,11 +466,9 @@ mod tests {
 
     #[test]
     fn test_snmp_target_wraps_ipv6_in_brackets() {
-        // IPv6 目标必须包裹方括号，IPv4 原样拼接（S-2）
         assert_eq!(snmp_target("192.0.2.1", 161), "192.0.2.1:161");
         assert_eq!(snmp_target("2001:db8::1", 161), "[2001:db8::1]:161");
         assert_eq!(snmp_target("fe80::1%25eth0", 161), "[fe80::1%25eth0]:161");
-        // 已带括号的输入不重复包裹
         assert_eq!(snmp_target("[2001:db8::1]", 161), "[2001:db8::1]:161");
     }
 
@@ -503,7 +499,6 @@ mod tests {
 
     #[test]
     fn test_build_auth_v3_no_auth_level() {
-        // noAuthNoPriv：仅用户名
         let auth = build_auth(&v3_params(Some("readonly"), None, None))
             .unwrap_or_else(|e| panic!("v3 无认证构造失败: {e}"));
         let Auth::Usm(usm) = auth else {
@@ -515,7 +510,6 @@ mod tests {
 
     #[test]
     fn test_build_auth_v3_auth_only() {
-        // authNoPriv：认证协议 + 密码，不配隐私协议
         let auth = build_auth(&v3_params(Some("admin"), Some("SHA-256"), None))
             .unwrap_or_else(|e| panic!("v3 authNoPriv 构造失败: {e}"));
         let Auth::Usm(usm) = auth else {
@@ -527,7 +521,6 @@ mod tests {
 
     #[test]
     fn test_build_auth_v3_auth_priv_all_protocols() {
-        // authPriv：全部认证 × 隐私协议别名组合均应构造成功
         for auth_proto in [
             "MD5", "SHA", "SHA-1", "SHA1", "SHA-224", "SHA-256", "SHA-384", "SHA-512",
         ] {
@@ -557,11 +550,9 @@ mod tests {
         assert_eq!(usm.priv_protocol(), Some(PrivProtocol::Aes128));
         assert_eq!(usm.security_level(), SecurityLevel::AuthPriv);
 
-        // 旧别名 AES-192/AES-256 保持 0.17 语义，映射到 Blumenthal 扩展
         for (alias, expected) in [
             ("AES-192", PrivProtocol::Aes192Blumenthal),
             ("AES256", PrivProtocol::Aes256Blumenthal),
-            // 新显式别名应能选中 Reeder 扩展
             ("AES-256-CISCO", PrivProtocol::Aes256Reeder),
         ] {
             let auth = build_auth(&v3_params(Some("admin"), Some("SHA"), Some(alias)))
@@ -594,7 +585,6 @@ mod tests {
 
     #[test]
     fn test_build_auth_v3_rejects_partial_credentials() {
-        // B1：半配置凭据显式报错，禁止静默降级 noAuthNoPriv/authNoPriv
         // 认证协议在而密码缺失
         let mut params = v3_params(Some("admin"), Some("SHA-256"), None);
         params.auth_pass = None;
@@ -614,7 +604,6 @@ mod tests {
 
     #[test]
     fn test_normalize_blank_treats_whitespace_as_unset() {
-        // 空白密文解密产物归一为 None（A3 根治：避免空串绕过鉴权语义）
         assert_eq!(normalize_blank(Some("".to_string())), None);
         assert_eq!(normalize_blank(Some("   ".to_string())), None);
         assert_eq!(normalize_blank(None), None);
@@ -626,7 +615,6 @@ mod tests {
 
     #[test]
     fn test_normalize_mac_strips_separators_and_uppercases() {
-        // 跨表 MAC 比对统一口径：分隔符无关、大小写无关
         assert_eq!(normalize_mac("aa:bb:cc:dd:ee:ff"), "AABBCCDDEEFF");
         assert_eq!(normalize_mac("AA-BB-CC-DD-EE-FF"), "AABBCCDDEEFF");
         assert_eq!(normalize_mac("aa.bb.cc.dd.ee.ff"), "AABBCCDDEEFF");
@@ -635,13 +623,11 @@ mod tests {
 
     #[test]
     fn test_clean_snmp_text_rejects_exception_literals() {
-        // B3：异常字面量（含下划线/连字符/大小写变体）在字符串入口丢弃
         assert!(is_exception_literal("noSuchObject"));
         assert!(is_exception_literal(" NoSuch_Instance "));
         assert!(is_exception_literal("no-such-name"));
         assert!(is_exception_literal("endOfMibView"));
         assert!(!is_exception_literal("GigabitEthernet0/1"));
-        // 归一：trim + 空串/异常字面量 → None
         assert_eq!(
             clean_snmp_text(Some("  ge0/0/1 ")).as_deref(),
             Some("ge0/0/1")
@@ -651,8 +637,6 @@ mod tests {
         assert_eq!(clean_snmp_text(None), None);
     }
 
-    // ==================== 错误格式化 ====================
-
     fn test_target() -> SocketAddr {
         "192.0.2.10:161"
             .parse()
@@ -661,7 +645,6 @@ mod tests {
 
     #[test]
     fn test_format_snmp_error_variants() {
-        // 超时
         let timeout = Error::Timeout {
             target: test_target(),
             elapsed: Duration::from_secs(5),
@@ -671,7 +654,6 @@ mod tests {
         assert!(text.contains("连接超时"), "超时错误文案: {text}");
         assert!(text.contains("192.0.2.10:161"), "应包含目标地址: {text}");
 
-        // 网络错误
         let network = Error::Network {
             target: test_target(),
             source: std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused"),
@@ -679,7 +661,6 @@ mod tests {
         let text = format_snmp_error(Box::new(network));
         assert!(text.contains("网络错误"), "网络错误文案: {text}");
 
-        // SNMP 协议错误
         let snmp_err = Error::Snmp {
             target: test_target(),
             status: ErrorStatus::NoSuchName,
@@ -691,19 +672,16 @@ mod tests {
         assert!(text.contains("SNMP错误"), "协议错误文案: {text}");
         assert!(text.contains("NoSuchName"), "应包含错误状态: {text}");
 
-        // 认证失败
         let auth_err = Error::Auth {
             target: test_target(),
         };
         assert!(format_snmp_error(Box::new(auth_err)).contains("认证失败"));
 
-        // 响应格式错误
         let malformed = Error::MalformedResponse {
             target: test_target(),
         };
         assert!(format_snmp_error(Box::new(malformed)).contains("响应格式错误"));
 
-        // Walk 中断
         let aborted = Error::WalkAborted {
             target: test_target(),
             reason: WalkAbortReason::Cycle,
@@ -711,15 +689,12 @@ mod tests {
         let text = format_snmp_error(Box::new(aborted));
         assert!(text.contains("Walk中断"), "Walk 中断文案: {text}");
 
-        // 配置错误
         let config = Error::Config("bad config".into());
         assert_eq!(format_snmp_error(Box::new(config)), "配置错误: bad config");
 
-        // 无效 OID
         let invalid_oid = Error::InvalidOid("1.2.x".into());
         assert_eq!(format_snmp_error(Box::new(invalid_oid)), "无效OID: 1.2.x");
 
-        // 兜底分支
         let closed = Error::Closed {
             target: test_target(),
         };

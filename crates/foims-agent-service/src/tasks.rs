@@ -1,10 +1,6 @@
-//! Agent 监控闭环调度任务执行器（设计 docs/agent-design.md §5）。
-//!
-//! 由主程序 TaskRegistry 注册、系统级定时任务驱动：
-//! - `agent_offline`：每分钟按 上报间隔 × 离线倍数 将失联 active agent 置为 offline；
-//! - `agent_history_cleanup`：每日清理超过保留期的 host_metrics_history；
-//! - `agent_snmp_poll`：周期轮询已配置 SNMP 的设备，采集结果以 source='snmp'
-//!   的 monitored_hosts 行呈现于主机监控页（详见 [`crate::snmp_poll`]）。
+//! Agent 监控闭环调度任务执行器（设计 docs/agent-design.md §5）：由主程序
+//! TaskRegistry 注册、系统级定时任务驱动的 agent 离线判定、历史指标清理与
+//! SNMP 设备轮询三个执行器（采集细节见 [`crate::snmp_poll`]）。
 
 use async_trait::async_trait;
 use foims_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
@@ -16,11 +12,11 @@ use crate::snmp_poll;
 
 /// SNMP 轮询间隔缺省值（秒，调度注册侧保持一致）
 const DEFAULT_SNMP_POLL_INTERVAL_SECS: u64 = 300;
-/// 历史保留天数缺省值与上限（对齐天数类任务的既有口径）
+/// 历史保留天数缺省值与上限（天数类清理任务共用口径）
 const DEFAULT_RETENTION_DAYS: i64 = 30;
 const MAX_RETENTION_DAYS: i64 = 3650;
 
-/// 从任务配置读取 u64 参数（缺失/类型不符回落默认值）。
+/// 从任务配置读取正整数参数（缺失、类型不符或 ≤0 时回落默认值）。
 fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
     config
         .get(key)
@@ -133,8 +129,7 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
         );
 
         // 同任务内追加清理 snmp_events：保留天数与 host_metrics_history 同源，
-        // 均取任务 config（注册侧由 agent 配置段注入，缺省 30，范围 1-3650），
-        // 不再另读 system_configs，避免同一业务参数两处定义
+        // 均取任务 config（注册侧由 agent 配置段注入，缺省 30，范围 1-3650）
         let snmp_days = ctx
             .config
             .get("snmp_event_retention_days")

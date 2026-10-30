@@ -20,6 +20,10 @@ use crate::core::{
 /// ifType 常量：ieee8023adLap（LACP 链路聚合口）。
 const IF_TYPE_LACP: i32 = 161;
 
+/// 采集 LACP 聚合口台账（聚合口 + 成员端口名/ifIndex）。
+///
+/// 错误仅来自鉴权构造与会话建立；无 LACP 的设备返回空集。
+/// `lacp_state` 本采集器不填（恒为 None）。
 pub async fn get_lags_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<LagRecord>, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
@@ -44,7 +48,7 @@ pub async fn get_lags_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<LagRecor
     )
     .await;
 
-    // 聚合口集合：ifType==161 的 ifIndex（排序保证输出确定性）
+    // 排序保证台账输出确定性
     let mut aggregators: Vec<u32> = if_type
         .iter()
         .filter(|(_, v)| value_as_i32(Some(v)) == Some(IF_TYPE_LACP))
@@ -56,7 +60,6 @@ pub async fn get_lags_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<LagRecor
         return Ok(Vec::new());
     }
 
-    // 成员 ifIndex → 聚合口 ifIndex（AttachedAggID 值）
     let attached = walk_index_value_map(
         &client,
         oid!(1, 3, 6, 1, 2, 1, 34, 2, 4, 1, 7),

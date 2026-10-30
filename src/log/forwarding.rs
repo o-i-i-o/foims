@@ -247,7 +247,7 @@ async fn send(config: &LogForwardingConfig, message: &str) -> Result<(), String>
     Ok(())
 }
 
-/// 读取外发配置 —— GET /api/system/logs/forwarding。
+/// GET /api/system/logs/forwarding：读取外发配置。
 pub async fn get_forwarding(
     State(state): State<Arc<AppState>>,
     _secadmin: foims_auth::extractor::SecAdminUser,
@@ -259,7 +259,7 @@ pub async fn get_forwarding(
     ))
 }
 
-/// 更新外发配置 —— PUT /api/system/logs/forwarding（校验与缓存失效见 `save`）。
+/// PUT /api/system/logs/forwarding：更新外发配置（校验与缓存失效见 `save`）。
 pub async fn update_forwarding(
     State(state): State<Arc<AppState>>,
     _secadmin: foims_auth::extractor::SecAdminUser,
@@ -269,7 +269,7 @@ pub async fn update_forwarding(
     Ok(foims_common::ok_json((), "server.logs.forwarding_updated"))
 }
 
-/// 发送固定测试报文验证链路连通性 —— POST /api/system/logs/forwarding/test。
+/// POST /api/system/logs/forwarding/test：发送固定测试报文验证链路连通性。
 ///
 /// 外发未启用时返回 Validation 错误，不静默成功。
 pub async fn test_forwarding(

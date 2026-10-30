@@ -1,4 +1,4 @@
-//! 站内通知与 IP 变更/设备更换告警（自 foims-resource::helpers 下放）。
+//! 站内通知与 IP 变更/设备更换告警。
 //!
 //! 仅依赖 foims-common（日志）与 foims-auth（SMTP 开关/发送），
 //! 供资源域（ip.rs）、采集服务域（alerts.rs/trap.rs）与 SNMP 事件模块共用。
@@ -111,7 +111,6 @@ pub async fn send_ip_change_notification(
         recipients = admin_ids.len()
     );
 
-    // 邮件方式开关关闭时跳过发送（站内通知不受影响）
     if foims_auth::smtp::load_notification_methods(pool)
         .await
         .ip_change

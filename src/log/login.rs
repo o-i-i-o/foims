@@ -11,7 +11,7 @@ use crate::utils::pagination::{Pagination, paged_response};
 use foims_common::AppError;
 use foims_models::LoginLog;
 
-/// 分页查询登录日志 —— GET /api/logs/login。
+/// GET /api/logs/login：分页查询登录日志。
 ///
 /// `search` 为 ILIKE 搜索词，匹配用户名、IP 与 UA。
 pub async fn get_login_logs(

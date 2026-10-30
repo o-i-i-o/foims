@@ -1,7 +1,7 @@
-//! SNMP 探测与信息采集 handler（test-snmp / snmp-info / snmp-ports）。
+//! SNMP 连通性探测与设备信息系统（test-snmp / snmp-info / snmp-ports）。
 //!
-//! 依赖 foims-common::DbProvider 泛型状态，与资源域 handler 模式一致；
-//! 路由注册在主程序 routes 中指向本模块。
+//! 探测入参允许与设备库配置混用（请求字段优先）；目标地址受 SSRF 约束，
+//! 组播与链路本地段拒绝，回环与私有段只告警放行。
 
 use std::sync::Arc;
 
@@ -19,6 +19,9 @@ use crate::collect::ports::get_device_ports_via_snmp;
 use crate::collect::sysinfo::get_device_info_via_snmp;
 use crate::core::{DecryptedSnmpCredentials, SnmpParamsLegacy, get_device_snmp_config, test_snmp};
 
+/// POST /api/resources/devices/{id}/test-snmp：按设备库已存配置发起连通性
+/// 探测；路径 `id` 覆盖请求体的 `device_id`，其余口径同
+/// `/api/resources/devices/test-snmp`。
 pub async fn test_snmp_connection_by_id<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -29,11 +32,13 @@ pub async fn test_snmp_connection_by_id<P: DbProvider>(
     test_snmp_connection(State(state), AppJson(test_req)).await
 }
 
+/// POST /api/resources/devices/test-snmp：向目标地址发起一次性 SNMP 探测，
+/// 成功返回 `sysDescr`。请求字段优先、缺省回退设备库配置（凭据经解密）；
+/// 设备不存在 404，IP 缺失/非法/组播/链路本地 400，探测失败 400。
 pub async fn test_snmp_connection<P: DbProvider>(
     State(state): State<Arc<P>>,
     AppJson(req): AppJson<SnmpTestRequest>,
 ) -> Result<Response, AppError> {
-    // 记录测试请求概要（Option 值先转为字符串以便日志参数化）
     let device_id_label = req.device_id.map(|d| d.to_string()).unwrap_or_default();
     let ip_label = req.ip_address.clone().unwrap_or_default();
     let version_label = req.snmp_version.clone().unwrap_or_default();
@@ -44,7 +49,6 @@ pub async fn test_snmp_connection<P: DbProvider>(
         version = version_label
     );
 
-    // req 在解构后不再使用，字段按所有权移动；设备配置作为回退值（req 优先）
     let (ip, version, community, username, auth_proto, auth_pass, priv_proto, priv_pass, port) =
         if let Some(device_id) = req.device_id {
             let conn = state.pool()?.get_conn();
@@ -100,8 +104,8 @@ pub async fn test_snmp_connection<P: DbProvider>(
     match parsed_ip {
         std::net::IpAddr::V4(v4) => {
             if v4.is_link_local() {
-                // 169.254.0.0/16 已覆盖云元数据端点 169.254.169.254，
-                // 由链路本地检查统一拒绝（原专用分支不可达，已移除，S-3）
+                // 云元数据端点 169.254.169.254 落在 169.254.0.0/16 内，
+                // 由链路本地检查统一拒绝
                 return Err(AppError::Validation(msg(
                     "server.device.snmp.link_local_forbidden",
                 )));
@@ -111,13 +115,11 @@ pub async fn test_snmp_connection<P: DbProvider>(
             }
         }
         std::net::IpAddr::V6(v6) => {
-            // IPv6 链路本地（fe80::/10）与 IPv4 同样拒绝
             if v6.is_unicast_link_local() {
                 return Err(AppError::Validation(msg(
                     "server.device.snmp.link_local_forbidden",
                 )));
             }
-            // IPv6 没有与 IPv4 相同的私有/链路本地概念，但检查常用受限范围
             if v6.is_unique_local() {
                 log_warn!("log.device.snmp.ula_ip_allowed", ip = ip);
             }
@@ -134,11 +136,11 @@ pub async fn test_snmp_connection<P: DbProvider>(
         auth_pass: auth_pass.clone(),
         priv_proto: priv_proto.clone(),
         priv_pass: priv_pass.clone(),
-        // 连通性探测用短超时（C3：单一口径，由 params.timeout_secs 承载）
+        // 连通性探测固定短超时，不沿用设备侧周期采集的超时配置
         timeout_secs: 5,
     };
 
-    // 记录测试参数（敏感凭据只记录是否设置，不记录明文）
+    // 凭据属敏感物料，日志只记是否设置、不落明文
     let community_label = community.as_ref().map(|_| "set").unwrap_or("none");
     let username_label = username.clone().unwrap_or_default();
     log_info!(
@@ -161,6 +163,8 @@ pub async fn test_snmp_connection<P: DbProvider>(
     }
 }
 
+/// GET /api/resources/devices/{id}/snmp-info：实时读取设备的品牌、型号、
+/// 主机名。设备不存在 404，未配置 IP 400，采集失败 400。
 pub async fn get_device_info_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -188,6 +192,9 @@ pub async fn get_device_info_snmp<P: DbProvider>(
     }
 }
 
+/// GET /api/resources/devices/{id}/snmp-ports：实时读取设备端口清单
+/// （名称/类型/VLAN/状态/速率/描述），不落库。设备不存在 404，
+/// 未配置 IP 400，采集失败 400。
 pub async fn get_device_ports_snmp<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -215,8 +222,7 @@ pub async fn get_device_ports_snmp<P: DbProvider>(
 mod tests {
     use super::*;
 
-    /// 测试桩：不依赖数据库的 DbProvider 实现（连接池为 None，
-    /// SNMP 测试走直接 IP 输入路径，不触及数据库分支）
+    /// 测试桩：pool 为 None，迫使探测走直接 IP 输入路径，不触及数据库分支
     #[derive(Clone)]
     struct TestState {
         pool: Option<foims_common::db::DbPool>,
@@ -230,7 +236,6 @@ mod tests {
         }
     }
 
-    /// 构造不依赖数据库的测试状态
     fn make_state() -> Arc<TestState> {
         Arc::new(TestState { pool: None })
     }
@@ -262,8 +267,6 @@ mod tests {
         );
     }
 
-    // ==================== SSRF 地址分类（不发起真实网络请求的拒绝分支） ====================
-
     #[tokio::test]
     async fn test_snmp_rejects_multicast_addresses() {
         assert_snmp_ip_rejected(Some("224.0.0.1"), "server.device.snmp.multicast_forbidden").await;
@@ -273,14 +276,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_snmp_rejects_link_local_and_metadata_addresses() {
-        // IPv4 链路本地（169.254.0.0/16）
         assert_snmp_ip_rejected(
             Some("169.254.1.1"),
             "server.device.snmp.link_local_forbidden",
         )
         .await;
-        // 云元数据端点 169.254.169.254 亦属链路本地段：
-        // 现状先命中 is_link_local 检查（元数据专用分支不可达，已记录为生产问题）
+        // 元数据端点 169.254.169.254 亦属链路本地段，期望 key 因此是
+        // link_local 而非专用分支
         assert_snmp_ip_rejected(
             Some("169.254.169.254"),
             "server.device.snmp.link_local_forbidden",
@@ -290,10 +292,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_snmp_rejects_invalid_or_missing_ip() {
-        // 非法 IP 字符串
         assert_snmp_ip_rejected(Some("not-an-ip"), "server.device.snmp.ip_invalid").await;
         assert_snmp_ip_rejected(Some("999.1.1.1"), "server.device.snmp.ip_invalid").await;
-        // 缺失或空 IP
         assert_snmp_ip_rejected(None, "server.device.snmp.ip_required").await;
         assert_snmp_ip_rejected(Some(""), "server.device.snmp.ip_required").await;
     }

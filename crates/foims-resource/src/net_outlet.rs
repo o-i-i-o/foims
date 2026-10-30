@@ -15,6 +15,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
+/// GET /api/resources/net-outlets：分页获取信息点（`search` 名称模糊匹配与
+/// `room_id` 过滤，排序白名单 name/created_at；`room_id` 非法值显式 400，
+/// 不静默忽略退化为全量列表）。
 pub async fn get_net_outlets<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -52,7 +55,6 @@ pub async fn get_net_outlets<P: DbProvider>(
     let has_room_filter = parsed_room_id.is_some();
     let has_search = !search.is_empty();
 
-    // 动态条件全部参数化构建（原手工 $N 编号方式改为 push_bind 自动编号）
     let mut count_qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         "SELECT COUNT(*) FROM net_outlets_with_details ap WHERE 1=1",
     );
@@ -99,6 +101,8 @@ pub async fn get_net_outlets<P: DbProvider>(
     ))
 }
 
+/// POST /api/resources/net-outlets：创建信息点（先校验房间存在，否则 400；
+/// 名称为全局唯一约束 `uq_net_outlets_name`，重名转 409）。
 pub async fn create_net_outlet<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -163,6 +167,8 @@ pub async fn create_net_outlet<P: DbProvider>(
     ))
 }
 
+/// GET /api/resources/net-outlets/{id}：读取单条信息点（走
+/// `net_outlets_with_details` 视图回填房间名；不存在返回 404）。
 pub async fn get_net_outlet<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -183,6 +189,8 @@ pub async fn get_net_outlet<P: DbProvider>(
     ))
 }
 
+/// PUT /api/resources/net-outlets/{id}：更新信息点（事务内先校验存在性，
+/// 名称/房间缺省不修改；不存在 404、换绑到不存在的房间 400、重名 409）。
 pub async fn update_net_outlet<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -266,6 +274,8 @@ pub async fn update_net_outlet<P: DbProvider>(
     ))
 }
 
+/// DELETE /api/resources/net-outlets/{id}：删除信息点（不存在 404；
+/// 被布线链路引用时由防删触发器转 400，提示先解除链路）。
 pub async fn delete_net_outlet<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

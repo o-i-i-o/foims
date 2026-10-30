@@ -94,7 +94,9 @@ pub async fn get_or_create_auto_nic(
         .map_err(AppError::from)
 }
 
-/// 同步设备的网卡配置（网卡 → 网口 → IP），按 id 差量同步
+/// PUT /api/resources/devices/{id}/network-config：同步设备的网卡配置
+/// （网卡 → 网口 → IP），按 id 差量同步；整批同事务，设备不存在 404、
+/// 空 cards 或 `port_id` 重复/跨设备改挂 400、网口重名 409。
 pub async fn sync_device_network_config<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
@@ -159,8 +161,6 @@ pub async fn apply_network_config(
     cards: &[NetworkCardSyncItem],
     now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // 空 cards 属于非法请求：网卡/网口必须由调用方显式提交，
-    // 不再回退硬编码默认配置（网卡1 + eth0）
     validate_cards_not_empty(cards)?;
 
     // 幸存的非托管网口（SNMP/端口模态框来源）与本次提交的托管网口共用
@@ -184,10 +184,6 @@ pub async fn apply_network_config(
             }
         }
     }
-
-    // 快照托管网口的二层运行属性（端口类型/状态/速率/Native VLAN，由端口
-    // 模态框或 SNMP 维护）：保留网口原地更新、不再重建，因此无需回填；
-    // 新增网口没有存量可继承，用默认值。
 
     // 现存托管网口 id 与请求保留的 port.id 求差集，只删除真正被移除的网口：
     // 删除网口会级联清空其 interface_ips，重建时必须把 IP 的 status/
@@ -337,8 +333,6 @@ pub async fn apply_network_config(
             validate_physical_type(physical_type)?;
             let interface_role = port.interface_role.as_deref().unwrap_or("business");
             validate_interface_role(interface_role)?;
-            // MAC 落库前统一为规范形态（AA:BB:CC:DD:EE:FF），并做请求内
-            // 去重与全局唯一预检
             let mac_address = crate::helpers::normalize_mac_input(port.mac_address.as_deref())?;
             if let Some(mac) = mac_address.as_deref() {
                 if !seen_macs.insert(foims_common::net::normalize_mac(mac)) {
@@ -580,7 +574,6 @@ pub async fn fetch_device_network_config(
     let cards = cards?;
     let ports = ports?;
 
-    // 网口 ID → 其 IP 列表（批量结果按接口分组）
     let mut ips_by_port: HashMap<Uuid, Vec<IpDetail>> = HashMap::new();
     for ip in ip_rows? {
         ips_by_port
@@ -589,7 +582,6 @@ pub async fn fetch_device_network_config(
             .push(ip);
     }
 
-    // 网卡 ID → 网口列表
     let mut ports_by_card: HashMap<Uuid, Vec<DeviceInterface>> = HashMap::new();
     for port in ports {
         if let Some(nic_id) = port.nic_id {
@@ -627,7 +619,8 @@ pub async fn fetch_device_network_config(
     Ok(result)
 }
 
-/// 获取设备的网卡配置（含嵌套网口、IP）—— GET /api/resources/devices/{id}/nics
+/// GET /api/resources/devices/{id}/nics：获取设备的网卡配置（含嵌套网口与 IP，
+/// 设备不存在 404）。
 pub async fn get_device_nics<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -656,6 +649,7 @@ fn validate_cards_not_empty(cards: &[NetworkCardSyncItem]) -> Result<(), AppErro
     Ok(())
 }
 
+/// 校验网卡形态是否在白名单内，越界返回 400。
 fn validate_card_type(card_type: &str) -> Result<(), AppError> {
     if !matches!(
         card_type,
@@ -668,6 +662,7 @@ fn validate_card_type(card_type: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 校验网口物理接口类型是否在白名单内，越界返回 400。
 pub fn validate_physical_type(physical_type: &str) -> Result<(), AppError> {
     if !matches!(
         physical_type,
@@ -688,6 +683,7 @@ pub fn validate_physical_type(physical_type: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 校验网口角色是否在白名单内，越界返回 400。
 pub fn validate_interface_role(interface_role: &str) -> Result<(), AppError> {
     if !matches!(
         interface_role,
@@ -703,8 +699,6 @@ pub fn validate_interface_role(interface_role: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ==================== 网卡类型校验 ====================
 
     #[test]
     fn test_validate_card_type_accepts_all_valid() {
@@ -730,8 +724,6 @@ mod tests {
             );
         }
     }
-
-    // ==================== 物理接口类型校验 ====================
 
     #[test]
     fn test_validate_physical_type_accepts_all_valid() {
@@ -768,8 +760,6 @@ mod tests {
         }
     }
 
-    // ==================== 接口角色校验 ====================
-
     #[test]
     fn test_validate_interface_role_accepts_all_valid() {
         for role in ["management", "business", "loopback", "uplink", "other"] {
@@ -794,11 +784,8 @@ mod tests {
         }
     }
 
-    // ==================== 自动网卡分组 ====================
-
     #[test]
     fn test_port_group_prefix_slash_names() {
-        // 含 / 的端口名取首个板卡段（保留板卡号）
         assert_eq!(port_group_prefix("xg1/0/0/1"), "xg1");
         assert_eq!(
             port_group_prefix("GigabitEthernet1/0/1"),
@@ -809,7 +796,6 @@ mod tests {
 
     #[test]
     fn test_port_group_prefix_plain_names() {
-        // 无 / 的端口名去尾部数字合并同组；纯数字/空串回退整名
         assert_eq!(port_group_prefix("eth0"), "eth");
         assert_eq!(port_group_prefix("eth10"), "eth");
         assert_eq!(port_group_prefix("Vlan-interface"), "Vlan-interface");
@@ -819,11 +805,8 @@ mod tests {
         assert_eq!(port_group_prefix("/0/1"), "/0/");
     }
 
-    // ==================== 空 cards 校验 ====================
-
     #[test]
     fn test_validate_cards_not_empty() {
-        // 空配置（未提交网卡）必须被拒绝，不允许回退默认网卡/网口
         let err = validate_cards_not_empty(&[])
             .err()
             .unwrap_or_else(|| panic!("空 cards 应被拒绝"));

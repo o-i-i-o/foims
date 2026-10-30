@@ -90,6 +90,9 @@ async fn ensure_cidr_not_overlapping(
     Ok(())
 }
 
+/// GET /api/resources/networks：分页获取网段（`search` 同时命中名称/描述/双栈
+/// CIDR，`region_id` 非法值显式 400 而非静默忽略，排序白名单未命中回落
+/// created_at DESC）。
 pub async fn get_networks<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -98,7 +101,7 @@ pub async fn get_networks<P: DbProvider>(
     let page_size = pagination.page_size;
     let offset = pagination.offset;
     let search = query.get("search").cloned().unwrap_or_default();
-    // 过滤参数非法 UUID 显式 422（与 options.rs/patch_panel.rs 口径一致），
+    // 过滤参数非法 UUID 显式 400（与 options.rs/patch_panel.rs 口径一致），
     // 不再静默忽略退化为全量列表；空串视为未提供
     let region_id = match query.get("region_id") {
         Some(v) if !v.is_empty() => Some(Uuid::parse_str(v).map_err(|_| {
@@ -136,7 +139,8 @@ pub async fn get_networks<P: DbProvider>(
         || !ipv4_filter.is_empty()
         || !ipv6_filter.is_empty();
 
-    // 动态过滤条件统一参数化构建：全部值经 push_bind 传参，不拼接用户输入原文
+    /// 列表与计数查询共用同一套过滤条件：全部值经 push_bind 参数化，
+    /// 不拼接用户输入原文
     fn push_network_filters(
         qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
         search: &str,
@@ -222,7 +226,6 @@ pub async fn get_networks<P: DbProvider>(
             &ipv4_filter,
             &ipv6_filter,
         );
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -242,7 +245,6 @@ pub async fn get_networks<P: DbProvider>(
                FROM network_cidrs n
                JOIN network_regions nt ON n.network_region_id = nt.id",
         );
-        // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
         qb.push(" LIMIT ").push_bind(page_size);
         qb.push(" OFFSET ").push_bind(offset);
@@ -261,6 +263,9 @@ pub async fn get_networks<P: DbProvider>(
     ))
 }
 
+/// POST /api/resources/networks：创建网段（事务 + 序列化写锁内完成区域存在性、
+/// 同区域重名、重复/重叠 CIDR 与越出区域校验后写入；区域不存在 404、
+/// 重名或 CIDR 唯一冲突 409、CIDR 非法/越界/与既有段重叠 400）。
 pub async fn create_network<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -468,6 +473,8 @@ pub async fn create_network<P: DbProvider>(
     Ok(foims_common::ok_json(network, "server.network.created"))
 }
 
+/// GET /api/resources/networks/{id}：读取单个网段（网关与 DNS 由 SQL 侧
+/// `host()` 去掩码/收敛为文本数组；不存在 404）。
 pub async fn get_network<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -494,6 +501,10 @@ pub async fn get_network<P: DbProvider>(
     Ok(foims_common::ok_json(network, "server.network.fetched"))
 }
 
+/// PUT /api/resources/networks/{id}：更新网段（与创建同一事务同一套校验，另加
+/// 两条更新专属口径：改 CIDR 时旧段已被 IP 明细占用则 409，CIDR 变更走双层
+/// Option——缺省不修改、null 清空、值设置新值；不存在 404、区域不存在 404、
+/// 重名 409、越出区域 CIDR 或重叠 400）。
 pub async fn update_network<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -718,7 +729,7 @@ pub async fn update_network<P: DbProvider>(
     // 清空（Some(None)）与不修改（None）无需重叠复核
     ensure_cidr_not_overlapping(&mut tx, req_ipv4_cidr, req_ipv6_cidr, Some(id)).await?;
 
-    // 修改 CIDR 后校验存量 IP 仍在新网段内：有越界 IP 时拒绝（422）并列出数量
+    // 修改 CIDR 后校验存量 IP 仍在新网段内：有越界 IP 时拒绝（400）并列出数量
     if req.ipv4_cidr.is_some() || req.ipv6_cidr.is_some() {
         let outside_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM interface_ips \
@@ -820,6 +831,8 @@ pub async fn update_network<P: DbProvider>(
     Ok(foims_common::ok_json(network, "server.network.updated"))
 }
 
+/// DELETE /api/resources/networks/{id}：删除网段（计数检查与 DELETE 同事务，
+/// 防止检查后被并发写入绕过；不存在 404，被 IP 明细或房间引用时 400）。
 pub async fn delete_network<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,

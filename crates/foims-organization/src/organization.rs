@@ -1,7 +1,5 @@
-//! 组织树（organizations）资源：type_path 解析、组织 CRUD 与树构建。
-//!
-//! 由 lib.rs 拆分而来（纯移动）：原 lib.rs 同时承担模块组装与组织域
-//! 全部业务，现业务下沉至本文件，lib.rs 仅保留模块声明与再导出。
+//! 组织树（organizations）资源：type_path 解析、组织节点 CRUD、树构建与
+//! 节点房间摘要，供前端组织管理页面使用。
 
 use crate::org_template::get_allowed_children;
 use axum::extract::{Path, Query, State};
@@ -25,7 +23,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
 
-// ==================== type_path 解析工具 ====================
+// type_path 解析工具
 // resolve_type_name（type_path → 类型名）与根节点查找已收敛至
 // foims_common::org_levels 单点实现，与 CSV 导入端共用同一导航规则。
 
@@ -118,9 +116,10 @@ pub(crate) fn blank_to_none(value: Option<String>) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-// ==================== API 处理函数 ====================
+// API 处理函数
 
-/// 获取组织列表（支持按 parent_id 筛选）
+/// GET /api/resources/organizations：分页获取组织列表（关键字搜索与
+/// parent_id / root_only 过滤，后两者语义互斥，同时给出 400）。
 pub async fn get_organizations<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<HashMap<String, String>>,
@@ -151,7 +150,6 @@ pub async fn get_organizations<P: DbProvider>(
         )));
     }
 
-    // 辅助函数：构建WHERE子句
     fn build_where_clause(
         qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
         search: &str,
@@ -183,7 +181,6 @@ pub async fn get_organizations<P: DbProvider>(
         }
     }
 
-    // 构建计数查询
     let mut count_qb = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM organizations");
     build_where_clause(&mut count_qb, &search, parent_id, root_only);
 
@@ -193,7 +190,6 @@ pub async fn get_organizations<P: DbProvider>(
         .fetch_one(&state.pool()?.get_conn())
         .await?;
 
-    // 构建列表查询
     let mut list_qb = sqlx::QueryBuilder::new(
         "SELECT id, name, type_path, parent_id, description, template_id, level_index, \
          created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM organizations",
@@ -211,7 +207,6 @@ pub async fn get_organizations<P: DbProvider>(
         .fetch_all(&state.pool()?.get_conn())
         .await?;
 
-    // 解析 org_type
     let items = resolve_org_list_types(&state, &organizations).await?;
 
     Ok(foims_common::ok_json(
@@ -220,7 +215,8 @@ pub async fn get_organizations<P: DbProvider>(
     ))
 }
 
-/// 获取组织树形结构
+/// GET /api/resources/organizations/tree：一次取回全部组织节点后在内存组装为树
+/// （不分页，按 created_at 升序；模板 levels 经批量查询一次取回，避免逐节点回查）。
 pub async fn get_organization_tree<P: DbProvider>(
     State(state): State<Arc<P>>,
 ) -> Result<Response, AppError> {
@@ -231,7 +227,6 @@ pub async fn get_organization_tree<P: DbProvider>(
     .fetch_all(&state.pool()?.get_conn())
     .await?;
 
-    // 批量加载所有涉及的模板 levels（单条查询）
     let template_ids: Vec<Uuid> = {
         let mut ids = std::collections::HashSet::new();
         for org in &all_orgs {
@@ -251,12 +246,11 @@ pub async fn get_organization_tree<P: DbProvider>(
     ))
 }
 
-/// 从扁平列表构建树形结构（优化版本）
+/// 从扁平组织列表构建树形结构
 fn build_tree(
     all_orgs: &[Organization],
     template_levels_map: &HashMap<Uuid, serde_json::Value>,
 ) -> Vec<OrganizationTreeNode> {
-    // 先按 parent_id 分组
     let mut children_map: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
     let mut node_map: HashMap<Uuid, &Organization> = HashMap::new();
 
@@ -277,14 +271,13 @@ fn build_tree(
     ) -> Option<OrganizationTreeNode> {
         let org = node_map.get(&org_id)?;
 
-        // 从模板解析类型名称
         let org_type = org
             .template_id
             .and_then(|tid| template_levels_map.get(&tid))
             .and_then(|levels| resolve_type_name(levels, &org.type_path).ok())
             .unwrap_or_else(|| org.type_path.clone());
 
-        // 深度安全检查
+        // 超深降级：保留节点本身但不再展开子级，避免整棵树构建中断
         if depth > MAX_ORG_DEPTH {
             return Some(OrganizationTreeNode {
                 id: org.id,
@@ -326,7 +319,6 @@ fn build_tree(
         })
     }
 
-    // 构建根节点
     all_orgs
         .iter()
         .filter(|org| org.parent_id.is_none())
@@ -334,7 +326,8 @@ fn build_tree(
         .collect()
 }
 
-/// 获取单个组织节点（含子节点）
+/// GET /api/resources/organizations/{id}：获取单个组织节点（含直接子节点、父节点名
+/// 与下级/房间计数），节点不存在 404。
 pub async fn get_organization<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -396,7 +389,8 @@ pub async fn get_organization<P: DbProvider>(
     Ok(foims_common::ok_json(result, "server.organization.fetched"))
 }
 
-/// 创建组织节点
+/// POST /api/resources/organizations：创建组织节点（事务内锁定父节点与模板校验 type_path/深度，
+/// 同级重名返回 409）。
 pub async fn create_organization<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -412,7 +406,6 @@ pub async fn create_organization<P: DbProvider>(
         )));
     }
 
-    // 可空描述空串规范化为 NULL（清空语义）
     let description = blank_to_none(req.description.clone());
 
     let mut tx = state.pool()?.get_conn().begin().await?;
@@ -428,7 +421,6 @@ pub async fn create_organization<P: DbProvider>(
         .await?
         .ok_or_else(|| AppError::NotFound(msg("server.organization.parent_not_found")))?;
 
-        // 子节点继承父节点的模板
         let parent_template_id = parent.template_id.ok_or_else(|| {
             AppError::Validation(msg("server.organization.parent_template_missing"))
         })?;
@@ -447,7 +439,6 @@ pub async fn create_organization<P: DbProvider>(
         .await?
         .ok_or_else(|| AppError::Validation(msg("server.org_template.not_found")))?;
 
-        // 使用 type_path 校验
         let parent_type_name = resolve_type_name(&template.levels, &parent.type_path)?;
         let allowed_children = get_allowed_children(&template.levels, &parent_type_name)?;
         if allowed_children.is_empty() {
@@ -458,7 +449,6 @@ pub async fn create_organization<P: DbProvider>(
             ));
         }
 
-        // 校验 type_path 是否在父节点的允许子级中
         let allowed_with_path =
             get_allowed_children_with_path(&template.levels, &parent.type_path)?;
         let is_valid = allowed_with_path
@@ -513,7 +503,6 @@ pub async fn create_organization<P: DbProvider>(
             return Err(AppError::NotFound(msg("server.org_template.not_found")));
         }
 
-        // 根节点 type_path 必须是 "0"
         if req.type_path != "0" {
             return Err(AppError::Validation(msg(
                 "server.organization.root_type_path_invalid",
@@ -623,10 +612,10 @@ pub async fn create_organization<P: DbProvider>(
     ))
 }
 
-/// 更新组织节点
+/// PUT /api/resources/organizations/{id}：更新组织节点
 ///
-/// 仅支持更新 name / description。
-/// type_path 由模板结构决定，不允许通过此接口修改。
+/// 仅支持更新 name / description；type_path 由模板结构决定，请求携带且与存量
+/// 不一致时 400（不做静默忽略）。同级重名 409、节点不存在 404。
 pub async fn update_organization<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -646,7 +635,6 @@ pub async fn update_organization<P: DbProvider>(
     .await?
     .ok_or_else(|| AppError::NotFound(msg("server.organization.not_found")))?;
 
-    // type_path 不允许通过此接口修改（由模板结构决定）
     if let Some(ref new_type_path) = req.type_path
         && new_type_path != &existing.type_path
     {
@@ -655,8 +643,7 @@ pub async fn update_organization<P: DbProvider>(
         )));
     }
 
-    // 名称变更校验：同级下不能重名；且名称禁止包含 '/'
-    //（与导入端口径一致，组织树以路径引用名称）
+    // 改名同样禁止 '/'（与导入端口径一致：组织树以路径引用名称）
     if let Some(ref new_name) = req.name {
         if new_name.contains('/') {
             return Err(AppError::Validation(msg(
@@ -751,7 +738,8 @@ pub async fn update_organization<P: DbProvider>(
     ))
 }
 
-/// 删除组织节点
+/// DELETE /api/resources/organizations/{id}：删除组织节点（不依赖级联销毁，
+/// 改为删除前预检）：存在子组织、房间或挂靠员工 400、节点不存在 404。
 pub async fn delete_organization<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -826,7 +814,9 @@ pub async fn delete_organization<P: DbProvider>(
     Ok(foims_common::ok_json((), "server.organization.deleted"))
 }
 
-/// 获取指定节点的下级类型信息（基于模板）
+/// GET /api/resources/organizations/{id}/allowed-child-types：按节点模板给出可新建的
+/// 下级类型与层级，供组织树「添加下级」弹窗；节点不存在 404、节点未绑定模板或
+/// 模板已缺失 400。
 pub async fn get_allowed_child_types<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -886,7 +876,8 @@ pub async fn get_allowed_child_types<P: DbProvider>(
     ))
 }
 
-/// 获取指定父节点的子节点列表
+/// GET /api/resources/organizations/{id}/children：获取指定父节点的直接子节点列表
+/// （按 created_at 升序），父节点不存在 404。
 pub async fn get_children<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -915,7 +906,7 @@ pub async fn get_children<P: DbProvider>(
     ))
 }
 
-// ==================== 内部辅助函数 ====================
+// 内部辅助函数
 
 /// 批量解析组织列表的 org_type
 async fn resolve_org_list_types<P: DbProvider>(
@@ -961,7 +952,7 @@ async fn resolve_org_list_types<P: DbProvider>(
     Ok(items)
 }
 
-/// 获取节点深度（从根到该节点的层数）
+/// 获取节点深度（从根到该节点的层数），上溯父链时检出环并报错。
 async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize, AppError> {
     let mut depth = 0usize;
     let mut current_id = node_id;
@@ -993,7 +984,8 @@ async fn get_depth(conn: &mut sqlx::PgConnection, node_id: Uuid) -> Result<usize
     Ok(depth)
 }
 
-/// 获取组织节点下（含全部下级组织）的房间摘要列表。
+/// GET /api/resources/organizations/{id}/rooms：获取组织节点下（含全部下级组织）
+/// 的房间摘要列表，节点不存在 404。
 ///
 /// 房间是「组织 → 房间 → 工位/机柜/设备」链上的空间归属点，组织页看的是
 /// 该节点整个子树的房间，故与 resources/rooms 的 org_id 过滤同取子树口径；

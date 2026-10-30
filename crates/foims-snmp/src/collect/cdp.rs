@@ -1,10 +1,8 @@
-//! CISCO-CDP-MIB 邻居采集（cdpCacheTable）与邻居增删事件比对。
+//! CISCO-CDP-MIB 邻居采集（cdpCacheTable 1.3.6.1.4.1.9.9.23.1.1.1.1）与
+//! 邻居增删事件比对。
 //!
-//! cdpCacheTable（1.3.6.1.4.1.9.9.23.1.1.1.1）实例索引为
-//! (本地 ifIndex, 缓存条目号) 双弧，本地端口名经 ifDescr 表映射。非 Cisco
-//! 设备不实现 CDP，walk 建立失败记告警并返回空集。邻居 diff 与第一层
-//! `diff_arp_entries` 同构：按 (local_port, neighbor_device_id) 自然键比对新旧，
-//! 新增→`cdp_neighbor_added`(info)、消失→`cdp_neighbor_removed`(info)。
+//! 非 Cisco 设备不实现 CDP：单列 walk 建立失败只记告警并返回空映射，整体
+//! 采集照常成功（与 LLDP 的 walk 硬失败口径相反）。
 
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -58,7 +56,8 @@ async fn walk_cdp_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value
     map
 }
 
-/// 值列取字符串（优先 as_str，回退 as_bytes→UTF-8 lossy，去空白）。
+/// 值列取字符串：优先 as_str，回退字节按 UTF-8 lossy 转码，去内嵌 NUL 与
+/// 两端空白；空串与异常字面量按缺失处理返回 None（B3）。
 fn column_str(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<String> {
     let v = map.get(key)?;
     let s = v
@@ -67,13 +66,16 @@ fn column_str(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<Stri
         .or_else(|| v.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()))?;
     let t = s.trim_matches('\0').trim();
     if t.is_empty() || is_exception_literal(t) {
-        // B3：异常字面量不作为真实邻居字段
         None
     } else {
         Some(t.to_string())
     }
 }
 
+/// 采集 CDP 邻居：ifDescr 与 cdpCacheTable 列 4/6/7/8（邻居地址/设备 ID/
+/// 端口/平台）逐列 walk 后按 (ifIndex, 缓存条目) 组装。
+///
+/// 错误仅来自鉴权构造与会话建立；表缺失或列缺失只降级为空值。
 pub async fn get_cdp_neighbors_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<CdpRecord>, SnmpError> {
@@ -101,8 +103,7 @@ pub async fn get_cdp_neighbors_via_snmp(
     let platform = walk_cdp_column(&client, 8).await;
 
     let mut neighbors = Vec::new();
-    // C1：四列索引并集驱动并排序（确定性输出）；无 device_id 的条目
-    // 仍按自然键要求跳过，但不再因 walk 到达顺序丢失可比对记录
+    // C1：四列索引取并集驱动并排序，保证输出确定、不因 walk 到达顺序漏行
     let mut keys: Vec<(u32, u32)> = device_id
         .keys()
         .chain(address.keys())
@@ -113,7 +114,7 @@ pub async fn get_cdp_neighbors_via_snmp(
     keys.sort_unstable();
     keys.dedup();
     for key in keys {
-        // 无邻居设备 ID 的缓存条目跳过（自然键的一部分，缺失无法判定增删）
+        // 设备 ID 是自然键的一部分，缺失则无法判定增删
         let key = &key;
         let Some(neighbor_device_id) = column_str(&device_id, key) else {
             continue;
@@ -227,7 +228,6 @@ mod tests {
 
     #[test]
     fn added_and_removed_detected() {
-        // 旧：Gi0/1->SW-A、Gi0/2->SW-B；新：Gi0/1->SW-A（不变）、Gi0/3->SW-C（新增）
         let prev_rows = vec![prev("Gi0/1", "SW-A"), prev("Gi0/2", "SW-B")];
         let cur_rows = vec![cur("Gi0/1", "SW-A"), cur("Gi0/3", "SW-C")];
         let events = diff_cdp_neighbors(&prev_rows, &cur_rows);

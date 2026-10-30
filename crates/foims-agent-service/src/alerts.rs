@@ -3,10 +3,7 @@
 //! 阈值存 `system_configs`（config_type='agent', key='alert_thresholds'），全局
 //! 一套、按指标可单独停用（留空），另带四个窗口参数（持续时长 / 静默窗口 /
 //! 恢复冷却 / 迟滞带）。评估、状态持久化与通知由 [`crate::alert_episode`] 的
-//! episode 运行时承担，本模块只做三件事：
-//! - 配置的读取、校验与保存（Web API 两端点）；
-//! - 全局共用的指标口径（指标名 ↔ 阈值 ↔ 当前值 ↔ 通知正文 key）与通知常量；
-//! - 保存阈值后作废运行时缓存并补扫一轮（调低阈值无需等兜底扫描周期）。
+//! episode 运行时承担，本模块只管配置面读写与跨模块共用的指标/通知口径常量。
 
 use std::sync::Arc;
 
@@ -30,17 +27,17 @@ pub(crate) const NOTIFICATION_TYPE: &str = "agent_alert";
 /// 通知标题 i18n key（前端按用户语言翻译，key 见 frontend/src/i18n 文案）
 pub(crate) const NOTIFICATION_TITLE_KEY: &str = "server.notification.agent_alert.title";
 
-/// 告警指标名（host_alert_episodes.metric 列）与开告警正文 key 成对定义
+/// 告警指标名（写入 host_alert_episodes.metric 列）
 pub(crate) const METRIC_CPU: &str = "cpu";
 pub(crate) const METRIC_MEM: &str = "mem";
 pub(crate) const METRIC_DISK: &str = "disk";
 pub(crate) const METRIC_TEMP: &str = "temp";
-/// 开告警正文 i18n key（静默窗口内就地累计复用同一条文案，只更新数值与次数）
+/// 开告警正文 i18n key（与 METRIC_* 逐项成对）
 const BODY_KEY_CPU: &str = "server.notification.agent_alert.body_cpu";
 const BODY_KEY_MEM: &str = "server.notification.agent_alert.body_mem";
 const BODY_KEY_DISK: &str = "server.notification.agent_alert.body_disk";
 const BODY_KEY_TEMP: &str = "server.notification.agent_alert.body_temp";
-/// 恢复通知正文 i18n key（与开告警同指标成对，免前端翻译指标名）
+/// 恢复通知正文 i18n key（与 BODY_* 逐项成对）
 const RESOLVED_KEY_CPU: &str = "server.notification.agent_alert.resolved_cpu";
 const RESOLVED_KEY_MEM: &str = "server.notification.agent_alert.resolved_mem";
 const RESOLVED_KEY_DISK: &str = "server.notification.agent_alert.resolved_disk";
@@ -178,8 +175,7 @@ pub(crate) struct MetricSpec {
     pub(crate) resolved_key: &'static str,
 }
 
-/// 按固定顺序组装四个指标的评估口径；阈值为 None 的指标由调用方跳过
-/// （不监控该指标）。
+/// 按固定顺序组装四个指标的评估口径；阈值为 None 的指标由调用方跳过。
 pub(crate) fn metric_specs(thresholds: &AlertThresholds, values: MetricValues) -> [MetricSpec; 4] {
     [
         MetricSpec {
@@ -256,7 +252,8 @@ pub(crate) async fn load_thresholds(pool: &sqlx::PgPool) -> AlertThresholds {
     }
 }
 
-/// 通知接收人：所有启用状态的管理员（admin/sysadmin/secadmin，用户口径）；按人各一条，已读状态独立。
+/// 通知接收人：所有启用状态的管理员（admin/sysadmin/secadmin）；按人各写
+/// 一条，已读状态独立。
 pub(crate) async fn admin_recipient_ids(pool: &sqlx::PgPool) -> Result<Vec<Uuid>, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'sysadmin', 'secadmin')",
@@ -277,7 +274,8 @@ pub async fn get_alert_thresholds<S: ConfigProvider>(
     ))
 }
 
-/// PUT /api/agents/alert-thresholds：保存全局阈值并立即按当前快照补扫一轮。
+/// PUT /api/agents/alert-thresholds：保存全局阈值并立即按当前快照补扫一轮；
+/// 阈值或窗口参数越界返回 400，写库失败返回 500。
 pub async fn put_alert_thresholds<S: ConfigProvider + AlertProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -416,7 +414,6 @@ mod tests {
 
     #[test]
     fn 存量阈值配置_缺窗口字段按默认补齐() {
-        // 升级前落库的 JSON 不含窗口字段，反序列化必须落到默认而非 0（0 会失去抖动抑制）
         let t: AlertThresholds = serde_json::from_str(
             r#"{"enabled":true,"cpu_pct":90,"mem_pct":null,"disk_pct":null,"temp_c":null}"#,
         )

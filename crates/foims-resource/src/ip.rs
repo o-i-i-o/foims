@@ -1,4 +1,5 @@
-//! IP 地址管理：列表检索、设备 IP 绑定与 MAC 同步。
+//! IP 地址资源：明细检索与设备绑定、网段可用地址与自动分配、SNMP MAC
+//! 拉取与判活、批量录入，供前端 IP 台账与设备纳管使用。
 
 use std::sync::Arc;
 
@@ -120,6 +121,8 @@ fn push_ip_filters(builder: &mut sqlx::QueryBuilder<sqlx::Postgres>, filters: &I
     }
 }
 
+/// GET /api/resources/ip：分页获取 IP 明细列表（基于 ip_with_details 视图的
+/// 关键字/状态/设备/网段/机位过滤与白名单排序）。
 pub async fn get_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
     Query(query): Query<std::collections::HashMap<String, String>>,
@@ -225,6 +228,8 @@ pub async fn get_ip_details<P: DbProvider>(
     ))
 }
 
+/// GET /api/resources/devices/{id}/ips：获取指定设备的 IP 明细（按网卡联查、地址升序，不分页；
+/// 设备不存在返回 404）。
 pub async fn get_device_ips<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -266,6 +271,8 @@ pub async fn get_device_ips<P: DbProvider>(
     ))
 }
 
+/// POST /api/resources/devices/{id}/ips：为设备网卡新增 IP 明细（事务内校验地址全局唯一与网段归属：
+/// 已存在 409，网段探测不中或引用非法 400）。
 pub async fn create_device_ip<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -510,6 +517,7 @@ struct IpChangeRow {
     registered_ips: Vec<String>,
 }
 
+/// 以交换机 SNMP ARP 观测同步设备网口 MAC 与 IP 判活，单事务落库、通知在事务外下发（空观测时回滚判活翻转）。
 async fn sync_switch_macs(
     pool: &sqlx::PgPool,
     device_id: Uuid,
@@ -575,7 +583,7 @@ async fn sync_switch_macs(
         }
     };
 
-    // ============ IP 判活 ============
+    // IP 判活
     // 判活范围：指定子网取该子网；全部子网模式仅取本次观测触达的子网
     //（设备 ARP 表未覆盖的网段不参与判活，避免误杀无关网段地址）。
     // 范围内未被本次观测命中的 active 地址判为失活；未命中行不刷新
@@ -1013,6 +1021,7 @@ pub struct MacPullDefaults {
     pub subnet_id: Option<Uuid>,
 }
 
+/// 将本次拉取选择按 (config_type, key) 幂等 upsert 进 system_configs，失败即报错、不静默丢失偏好。
 async fn save_pull_defaults(
     conn: &sqlx::PgPool,
     defaults: &MacPullDefaults,
@@ -1061,6 +1070,8 @@ pub async fn get_pull_default_devices<P: DbProvider>(
     ))
 }
 
+/// POST /api/resources/ip/pull：逐台执行所选交换机的 MAC 拉取同步（设备去重保序），
+/// 聚合更新/判活/变更计数并返回所选子网或设备的 IP 行。
 pub async fn pull_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
     _user: foims_auth::extractor::AuthUser,
@@ -1185,6 +1196,7 @@ pub async fn pull_ip_details<P: DbProvider>(
     Ok(foims_common::ok_json(results, message))
 }
 
+/// 供定时任务调用的单设备 MAC 拉取同步：失败与空观测以 i18n key 字符串返回错误，不回传聚合计数。
 pub async fn pull_ip_details_internal(
     pool: &sqlx::PgPool,
     device_id: Uuid,
@@ -1213,6 +1225,8 @@ pub async fn pull_ip_details_internal(
 // 与导入导出的行级校验共用同一口径
 pub use foims_common::net::detect_ip_version;
 
+/// 枚举 CIDR 内的可用地址（剔除网络/广播地址、网关与已占用项；缺省上限 IPv4 1000、IPv6 100，
+/// 非法 CIDR 记日志后返回空）。
 pub fn find_available_ips_in_cidr(
     cidr_str: &str,
     gateway: Option<&String>,
@@ -1265,6 +1279,8 @@ pub fn find_available_ips_in_cidr(
     available
 }
 
+/// GET /api/resources/ip/available/{subnet_id}：获取网段内可用 IP（
+/// IPv4/IPv6 各取前 256 个，排除已登记地址、网关与网络/广播地址；网段不存在 404）。
 pub async fn get_available_ips<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(subnet_id): Path<Uuid>,
@@ -1316,6 +1332,8 @@ pub async fn get_available_ips<P: DbProvider>(
     ))
 }
 
+/// POST /api/resources/ip/auto-assign：在指定子网内为设备网卡分配一个可用 IP（IPv4 优先；
+/// 设备或网段不存在 404，无可用地址 400、唯一冲突 409）。
 pub async fn auto_assign_ip<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
@@ -1432,7 +1450,7 @@ pub async fn auto_assign_ip<P: DbProvider>(
             if let sqlx::Error::Database(ref db_err) = e
                 && db_err.is_unique_violation()
             {
-                // 与 create_device_ip 的映射口径一致：唯一冲突返回 409 而非 422
+                // 与 create_device_ip 的映射口径一致：唯一冲突返回 409 而非 400
                 return Err(AppError::Conflict(msg("server.ip.already_assigned")));
             }
             return Err(AppError::from(e));
@@ -1479,6 +1497,8 @@ pub async fn auto_assign_ip<P: DbProvider>(
     Ok(foims_common::ok_json(mapping, "server.ip.auto_assigned"))
 }
 
+/// POST /api/resources/devices/{id}/auto-assign-ip：设备视角的自动分配，以路径
+/// id 覆盖请求中的 device_id 后复用 [`auto_assign_ip`]（错误语义同该接口）。
 pub async fn auto_assign_device_ip<P: DbProvider>(
     State(state): State<Arc<P>>,
     Path(id): Path<Uuid>,
@@ -1493,12 +1513,15 @@ pub async fn auto_assign_device_ip<P: DbProvider>(
 /// 批量创建单条记录的条数上限，防止一次请求写入过量数据
 const BATCH_IP_CREATE_LIMIT: usize = 500;
 
+/// POST /api/resources/ip/batch：批量新增 IP 明细（逐条校验设备/网段归属与网卡
+/// 后在同一事务写入；单条失败不中断、错误按条目序号回传；无有效条目或地址
+/// 越出设备所在房间 400）。
 pub async fn batch_create_ip_details<P: DbProvider>(
     State(state): State<Arc<P>>,
     meta: RequestMeta,
     AppJson(req): AppJson<Vec<IpDetailCreate>>,
 ) -> Result<Response, AppError> {
-    // 条数上限：超出直接拒绝整个批次（422），不做部分写入
+    // 条数上限：超出直接拒绝整个批次（400），不做部分写入
     if req.len() > BATCH_IP_CREATE_LIMIT {
         return Err(AppError::Validation(
             msg("server.common.invalid_param").with("param", "items"),
@@ -1787,7 +1810,6 @@ pub async fn batch_create_ip_details<P: DbProvider>(
     )
     .await;
 
-    // 响应中的错误列表序列化为 {key, params} 结构，由前端翻译展示
     let error_items: Vec<serde_json::Value> = errors
         .iter()
         .map(|e| serde_json::json!({ "key": e.key(), "params": e.params_map() }))
@@ -1810,8 +1832,6 @@ pub async fn batch_create_ip_details<P: DbProvider>(
 mod tests {
     use super::*;
     use std::collections::HashSet;
-
-    // ==================== IP 版本识别 ====================
 
     #[test]
     fn test_detect_ip_version_ipv4_valid() {
@@ -1845,7 +1865,6 @@ mod tests {
 
     #[test]
     fn test_detect_ip_version_ipv4_mapped_ipv6_is_v6() {
-        // IPv4 映射的 IPv6 地址按 IPv6 处理
         let version = detect_ip_version("::ffff:192.168.1.1")
             .unwrap_or_else(|e| panic!("映射地址应识别成功: {e}"));
         assert_eq!(version, 6);
@@ -1853,7 +1872,6 @@ mod tests {
 
     #[test]
     fn test_detect_ip_version_invalid_inputs() {
-        // 各类非法输入应返回 Validation 错误
         for invalid in [
             "",               // 空串
             "abc",            // 非数字
@@ -1876,11 +1894,8 @@ mod tests {
         }
     }
 
-    // ==================== 网段可用 IP 计算 ====================
-
     #[test]
     fn test_find_available_invalid_cidr_returns_empty() {
-        // 非法 CIDR 返回空列表而非 panic
         for bad in ["not-a-cidr", "192.168.1.1", "", "10.0.0.0/33", "::/129"] {
             let result = find_available_ips_in_cidr(bad, None, &HashSet::new(), None);
             assert!(result.is_empty(), "非法 CIDR {bad:?} 应返回空列表");
@@ -1889,7 +1904,6 @@ mod tests {
 
     #[test]
     fn test_find_available_ipv4_excludes_network_and_broadcast() {
-        // /24 子网应排除网络地址与广播地址
         let available = find_available_ips_in_cidr("192.168.1.0/24", None, &HashSet::new(), None);
         assert_eq!(available.len(), 254, "/24 应有 254 个可用地址");
         assert_eq!(available.first().map(String::as_str), Some("192.168.1.1"));
@@ -1925,7 +1939,6 @@ mod tests {
 
     #[test]
     fn test_find_available_respects_max_count() {
-        // max_count 截断结果数量
         let available = find_available_ips_in_cidr("10.0.0.0/24", None, &HashSet::new(), Some(3));
         assert_eq!(available.len(), 3);
         assert_eq!(
@@ -2001,7 +2014,6 @@ mod tests {
 
     #[test]
     fn test_find_available_full_subnet_returns_empty() {
-        // 所有主机地址均被占用时应返回空列表
         let mut used: HashSet<String> = HashSet::new();
         for i in 1..=2 {
             used.insert(format!("192.168.9.{i}"));

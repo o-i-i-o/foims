@@ -11,6 +11,8 @@ use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
 };
 
+/// walk 单个 OID 并对每个变量调用 `process`：`error_msg` 是建表与迭代两类
+/// 错误的统一前缀；遇 `EndOfMibView` 正常终止，其余异常值跳过，迭代错误冒泡。
 async fn snmp_walk<F>(
     client: &Client,
     oid: async_snmp::Oid,
@@ -41,10 +43,13 @@ where
     Ok(())
 }
 
+/// 采集 LLDP 邻居：逐表 walk ifName、lldpLocPort 与 lldpRemTable，按
+/// (本地端口, 邻居索引) 组装列值；系统名与 chassis ID 均缺失的行不上报。
+///
+/// 任一表 walk 出错即整体失败；表内缺列只作字段缺失或端口名回退处理。
 pub async fn get_lldp_neighbors_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<foims_models::LldpNeighbor>, SnmpError> {
-    // 复用 snmp_target：IPv6 地址须包裹方括号，直接 ip:port 拼接必然解析失败
     let addr = snmp_target(&params.ip, params.port);
     let timeout = std::time::Duration::from_secs(params.timeout_secs);
 
@@ -66,7 +71,6 @@ pub async fn get_lldp_neighbors_via_snmp(
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 11 {
             let if_index = oid_parts[10].to_string();
-            // 名称归一（B3）：trim/空串/异常字面量不写入映射
             let name = clean_snmp_text(vb.value.as_str()).or_else(|| {
                 vb.value
                     .as_bytes()
@@ -210,8 +214,7 @@ pub async fn get_lldp_neighbors_via_snmp(
                     if let Some(port_id) = vb.value.as_bytes() {
                         let subtype = port_subtype_map.get(&key).copied().unwrap_or(1);
                         let port_id_str = format_lldp_id(port_id, subtype);
-                        // C6：调试日志不再输出邻居原始字节（含 MAC 等设备
-                        // 标识），仅保留格式化结果与类型
+                        // C6：日志只出格式化结果，避免邻居原始字节（含 MAC）落盘
                         debug!(
                             "邻居端口 {:?} subtype={} formatted={}",
                             key, subtype, port_id_str
@@ -233,7 +236,6 @@ pub async fn get_lldp_neighbors_via_snmp(
                     }
                 }
                 9 => {
-                    // B3：系统名/描述同样走归一入口（trim/空串/异常字面量 → None）
                     let sys_name = clean_snmp_text(vb.value.as_str()).or_else(|| {
                         vb.value
                             .as_bytes()
@@ -269,6 +271,8 @@ pub async fn get_lldp_neighbors_via_snmp(
     Ok(neighbors)
 }
 
+/// 本地端口展示名：ifName 优先，否则用端口 ID；ID 是 MAC 时改用端口描述
+/// （MAC 对运维定位无辨识价值），端口 ID 缺失时回退端口号本身。
 fn get_local_port_name(
     local_port_num: &str,
     if_name_map: &HashMap<String, String>,
@@ -305,6 +309,8 @@ fn is_mac_address(s: &str) -> bool {
         .all(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
+/// 按 LLDP 子类型渲染端口/机箱 ID：1/2/5/6/7 为文本，3/4 为 MAC，
+/// 其余子类型（含未知 0）按字节可打印性回退为文本或逐字节 MAC。
 fn format_lldp_id(bytes: &[u8], subtype: u8) -> String {
     if bytes.is_empty() {
         return String::new();
@@ -379,11 +385,8 @@ mod tests {
     #[test]
     fn format_lldp_id_按子类型分派() {
         assert_eq!(format_lldp_id(&[], 1), "");
-        // subtype 1/2/5/6/7：按 UTF-8 文本
         assert_eq!(format_lldp_id(b"Gi0/1", 1), "Gi0/1");
-        // subtype 3/4：MAC 格式化
         assert_eq!(format_lldp_id(&[0x0A, 0x0B], 4), "0A:0B");
-        // 其它子类型：可打印则文本，否则 MAC
         assert_eq!(format_lldp_id(b"host", 8), "host");
         assert_eq!(format_lldp_id(&[0x01, 0x02, 0x03], 8), "01:02:03");
     }
@@ -400,17 +403,14 @@ mod tests {
             [("2".to_string(), "GigabitEthernet2".to_string())]
                 .into_iter()
                 .collect();
-        // if_name 命中优先
         assert_eq!(
             get_local_port_name("1", &if_name, &port_id, &port_desc),
             "eth0"
         );
-        // port_id 为 MAC：取 port_desc 描述
         assert_eq!(
             get_local_port_name("2", &if_name, &port_id, &port_desc),
             "GigabitEthernet2"
         );
-        // 均为空：回退 local_port_num 本身
         let empty: HashMap<String, String> = HashMap::new();
         assert_eq!(get_local_port_name("9", &empty, &empty, &empty), "9");
     }

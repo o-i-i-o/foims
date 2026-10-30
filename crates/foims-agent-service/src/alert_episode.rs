@@ -101,13 +101,13 @@ impl EpisodeStatus {
 enum Level {
     /// 严格大于阈值
     Over,
-    /// 落在复位水位与阈值之间（抖动抑制带）
+    /// 复位水位之上且不高于阈值（含等于阈值，抖动抑制带）
     Band,
-    /// 跌破复位水位
+    /// 不高于复位水位（含相等），视为真正回落
     Under,
 }
 
-/// 复位水位：阈值按迟滞带比例下移后的取值，读数需低于它才算真正回落。
+/// 复位水位：阈值按迟滞带比例下移后的取值。
 fn recover_level(threshold: u8, hysteresis_pct: u8) -> f64 {
     f64::from(threshold) * (100.0 - f64::from(hysteresis_pct)) / 100.0
 }
@@ -173,15 +173,12 @@ pub struct Episode {
     pub status: EpisodeStatus,
     /// 本轮超标起点（for_secs 计时基准）
     pub started_at: DateTime<Utc>,
-    /// 最近一次开告警时刻
     pub opened_at: Option<DateTime<Utc>>,
     /// 最近一次恢复时刻（冷却判定基准，开新告警不清空）
     pub resolved_at: Option<DateTime<Utc>>,
-    /// 最近一次超标观测时刻
     pub last_exceed_at: DateTime<Utc>,
     /// 最近一次发出通知时刻（静默窗口计时基准）
     pub last_notified_at: Option<DateTime<Utc>>,
-    /// 最近一次读数
     pub last_value: f64,
     /// 最近一次评估生效的阈值（与当前配置不一致时立即改写并落盘）
     pub threshold: u8,
@@ -191,7 +188,6 @@ pub struct Episode {
     pub notify_ids: Vec<Uuid>,
     /// 行是否已落库（未落库的 Pending 消散无需 DELETE，省掉无效写）
     pub persisted: bool,
-    /// 计数/时间变化待刷盘
     pub dirty: bool,
 }
 
@@ -346,7 +342,7 @@ struct MetricEvaluation<'a> {
     metric: &'static str,
     threshold: u8,
     value: Option<f64>,
-    /// 开告警正文的 i18n key（静默窗口内的就地累计复用同一条文案）
+    /// 开告警正文的 i18n key
     body_key: &'static str,
     /// 恢复正文的 i18n key（与 body_key 同指标成对）
     resolved_key: &'static str,
@@ -716,7 +712,6 @@ impl AlertRuntime {
         }
 
         if effects.refresh {
-            // 静默窗口内不重发：同一批通知行就地刷新，文案不变、只更新数值与累计次数
             let content = alert_content(ev.host, episode, ev.body_key);
             if let Err(e) = self
                 .refresh_notifications(&episode.notify_ids, &content)
@@ -764,8 +759,8 @@ impl AlertRuntime {
             recipients = recipients.len()
         );
 
-        // 邮件仅在开告警时发送，且受「通知配置」主机告警邮件开关门控；
-        // 发送失败只记日志——邮件丢失可接受，站内通知失败才保持未通知态重试
+        // 受「通知配置」主机告警邮件开关门控；发送失败只记日志——邮件丢失可
+        // 接受，站内通知失败才保持未通知态重试
         if let Some(email) = email
             && foims_auth::smtp::load_notification_methods(&self.pool)
                 .await
@@ -864,7 +859,7 @@ impl AlertRuntime {
         Ok(())
     }
 
-    /// 刷盘周期内变化的计数（Pending 等待时长、Active 累计次数）。
+    /// 周期刷盘：写回 dirty 或尚未落库的 episode（计数变化不逐次写库）。
     pub async fn flush_dirty(&self) {
         let targets: Vec<Episode> = self
             .episodes
@@ -909,8 +904,6 @@ impl AlertRuntime {
     }
 
     async fn load_hosts(&self) -> Result<Vec<SweepHost>, sqlx::Error> {
-        // 实时采集在跑时 SNMP 主机交给秒级路径，扫描只兜底 agent 上报主机，
-        // 否则旧快照会把刚恢复的告警重新拖回 Pending
         let sql = if self.live_covers_snmp {
             SWEEP_SQL_AGENT
         } else {
