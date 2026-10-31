@@ -12,7 +12,7 @@ use uuid::Uuid;
 use foims_common::AppJson;
 use foims_common::DbProvider;
 use foims_common::{AppError, msg};
-use foims_common::{log_info, log_warn};
+use foims_common::log_info;
 use foims_models::SnmpTestRequest;
 
 use crate::collect::ports::get_device_ports_via_snmp;
@@ -89,42 +89,11 @@ pub async fn test_snmp_connection<P: DbProvider>(
     };
 
     // 拒绝组播/链路本地地址防止 SSRF；回环与私有地址属机房管理正常目标
-    // （本机 snmpd 联调、环回对照设备），仅告警放行
-    let parsed_ip: std::net::IpAddr = ip
-        .parse()
-        .map_err(|_| AppError::Validation(msg("server.device.snmp.ip_invalid").with("ip", &ip)))?;
-    if parsed_ip.is_loopback() {
-        log_warn!("log.device.snmp.loopback_ip_allowed", ip = ip);
-    }
-    if parsed_ip.is_multicast() {
-        return Err(AppError::Validation(msg(
-            "server.device.snmp.multicast_forbidden",
-        )));
-    }
-    match parsed_ip {
-        std::net::IpAddr::V4(v4) => {
-            if v4.is_link_local() {
-                // 云元数据端点 169.254.169.254 落在 169.254.0.0/16 内，
-                // 由链路本地检查统一拒绝
-                return Err(AppError::Validation(msg(
-                    "server.device.snmp.link_local_forbidden",
-                )));
-            }
-            if v4.is_private() {
-                log_warn!("log.device.snmp.private_ip_allowed", ip = ip);
-            }
-        }
-        std::net::IpAddr::V6(v6) => {
-            if v6.is_unicast_link_local() {
-                return Err(AppError::Validation(msg(
-                    "server.device.snmp.link_local_forbidden",
-                )));
-            }
-            if v6.is_unique_local() {
-                log_warn!("log.device.snmp.ula_ip_allowed", ip = ip);
-            }
-        }
-    }
+    // （本机 snmpd 联调、环回对照设备），仅告警放行。SSRF 口径与 ping/端口探测
+    // 共用 foims_common::net::guard_probe_ip，避免多处重复实现
+    ip.parse::<std::net::IpAddr>()
+        .map_err(|_| AppError::Validation(msg("server.device.snmp.ip_invalid").with("ip", &ip)))
+        .and_then(foims_common::net::guard_probe_ip)?;
 
     let snmp_params = SnmpParamsLegacy {
         ip: ip.clone(),

@@ -279,6 +279,74 @@ pub fn parse_inet(value: &str) -> Option<std::net::IpAddr> {
     addr.parse::<std::net::IpAddr>().ok()
 }
 
+/// 探测目标地址 SSRF 约束（SNMP 探测、ping、TCP 端口等主动外发场景共用单一口径）：
+/// - 组播、链路本地（含云元数据端点 169.254.0.0/16）直接拒绝；
+/// - 回环与私有/ULA 段属机房管理正常目标（本机联调、内网设备），仅告警放行。
+///
+/// 入参为已解析地址；调用方负责解析失败与 IP 文本非法的 400（携原始输入）。
+/// 错误键与既有 `test_snmp` 保持一致，前端文案无需新增映射。
+pub fn guard_probe_ip(ip: std::net::IpAddr) -> Result<(), AppError> {
+    let text = ip.to_string();
+    if ip.is_loopback() {
+        crate::log_warn!("log.device.snmp.loopback_ip_allowed", ip = text);
+    }
+    if ip.is_multicast() {
+        return Err(AppError::Validation(msg(
+            "server.device.snmp.multicast_forbidden",
+        )));
+    }
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            if v4.is_link_local() {
+                // 云元数据端点 169.254.169.254 落在 169.254.0.0/16 内，由此统一拒绝
+                return Err(AppError::Validation(msg(
+                    "server.device.snmp.link_local_forbidden",
+                )));
+            }
+            if v4.is_private() {
+                crate::log_warn!("log.device.snmp.private_ip_allowed", ip = text);
+            }
+        }
+        std::net::IpAddr::V6(v6) => {
+            if v6.is_unicast_link_local() {
+                return Err(AppError::Validation(msg(
+                    "server.device.snmp.link_local_forbidden",
+                )));
+            }
+            if v6.is_unique_local() {
+                crate::log_warn!("log.device.snmp.ula_ip_allowed", ip = text);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 解析探测目标（主机名或 IP）为 IP 并施加 SSRF 约束：IP 字面量直解，
+/// 否则先 DNS 解析取首个地址。供 SNMP 调试、ping、TCP 端口探测共用单一口径。
+pub async fn resolve_probe_ip(target: &str) -> Result<std::net::IpAddr, AppError> {
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Validation(msg("server.debug.target_required")));
+    }
+    let ip = if let Ok(parsed) = trimmed.parse::<std::net::IpAddr>() {
+        parsed
+    } else {
+        // 端口 0 仅为查询地址族，取首个解析结果
+        tokio::net::lookup_host((trimmed, 0))
+            .await
+            .map_err(|_| {
+                AppError::Validation(msg("server.debug.host_unresolved").with("host", trimmed))
+            })?
+            .next()
+            .ok_or_else(|| {
+                AppError::Validation(msg("server.debug.host_unresolved").with("host", trimmed))
+            })?
+            .ip()
+    };
+    guard_probe_ip(ip)?;
+    Ok(ip)
+}
+
 /// 解析 cidr 值，返回 (网络地址, 前缀长度)。
 #[must_use]
 pub fn parse_cidr(value: &str) -> Option<(std::net::IpAddr, u8)> {
@@ -544,6 +612,32 @@ mod tests {
         assert_eq!(get_cidr_type("10.0.0.0/8"), Some("ipv4"));
         assert_eq!(get_cidr_type("2001:db8::/32"), Some("ipv6"));
         assert_eq!(get_cidr_type("bad-cidr"), None);
+    }
+
+    #[test]
+    fn test_guard_probe_ip_rejects_multicast_and_link_local() {
+        // 组播、v4/v6 链路本地（含云元数据端点）拒绝
+        assert_eq!(
+            validation_key(guard_probe_ip("224.0.0.1".parse().expect("合法 IPv4"))),
+            "server.device.snmp.multicast_forbidden"
+        );
+        assert_eq!(
+            validation_key(guard_probe_ip("169.254.169.254".parse().expect("合法 IPv4"))),
+            "server.device.snmp.link_local_forbidden"
+        );
+        assert_eq!(
+            validation_key(guard_probe_ip("fe80::1".parse().expect("合法 IPv6"))),
+            "server.device.snmp.link_local_forbidden"
+        );
+    }
+
+    #[test]
+    fn test_guard_probe_ip_allows_private_loopback_public() {
+        // 回环/私有/ULA 属机房管理目标（告警放行），公网正常放行
+        for ok in ["127.0.0.1", "10.0.0.5", "192.168.1.1", "fc00::1", "8.8.8.8"] {
+            let ip: std::net::IpAddr = ok.parse().expect("合法地址");
+            assert!(guard_probe_ip(ip).is_ok(), "{ok} 应放行");
+        }
     }
 
     #[test]

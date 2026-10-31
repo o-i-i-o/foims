@@ -10,6 +10,7 @@
 
 pub mod collect;
 pub mod core;
+pub mod debug;
 pub mod events;
 pub mod handlers;
 pub mod live;

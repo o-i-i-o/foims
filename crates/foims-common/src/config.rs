@@ -4,16 +4,13 @@ use config::Config as ConfigBuilder;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-// 配置文件搜索路径（按优先级）：系统配置目录（服务/安装包部署）→ 当前目录（仅开发
+// 配置文件搜索路径（按优先级）：系统配置目录（服务/安装包部署）、当前目录（仅开发
 // 环境直接运行二进制时使用；systemd 单元不设工作目录，不会命中此项）
 //
-// 不保留旧版 /opt/foims/config.toml 备用路径：/opt/foims 已废弃（旧静态资源
-// 目录，前端资源改到 /usr/share/foims/web），配置只落在 /etc/foims 或开发
-// 工作目录，避免"同一份配置存在两个可写副本"导致运维改错文件、升级/回滚
-// 互相覆盖。
+//前端资源落到 /usr/share/foims/web），配置只落在 /etc/foims 或开发工作目录。
 pub const CONFIG_PATHS: [&str; 2] = [
-    "/etc/foims/config", // 系统配置目录（生产唯一落点）- 最高优先级
-    "config",            // 当前目录（仅开发直接运行二进制，不用于服务部署）
+    "/etc/foims/config", 
+    "config", 
 ];
 
 /// 命中的配置路径主干（不含 .toml 后缀，按 [`CONFIG_PATHS`] 优先级）；
@@ -90,7 +87,7 @@ const fn default_health_check_interval() -> u64 {
 /// - axum 监听 Unix Domain Socket，使用 h2c (HTTP/2 cleartext) 协议
 /// - nginx 通过 `proxy_http_version 2.0` 以 h2c 反代到 axum
 /// - 静态文件由 nginx 直接托管，axum 仅服务 API
-/// - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 性能优于 HTTP/1.1
+/// - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ListenConfig {
     /// UDS socket 文件路径，默认 /run/foims/api.sock
@@ -137,7 +134,7 @@ pub struct ServerConfig {
 pub struct JwtConfig {
     pub secret: String,
     pub access_token_expiry: String, // 带单位的过期时间，如"15m"表示15分钟
-    pub refresh_token_expiry: String, // 带单位的过期时间，如"7d"表示7天
+    pub refresh_token_expiry: String, // 单位 秒（s）、分钟（m）、小时（h）、天（d）
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]

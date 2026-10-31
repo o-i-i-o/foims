@@ -2933,6 +2933,34 @@
       "located": "定位到 {{count}} 条记录",
       "invalid_locator": "定位参数非法（MAC/IP 至少给一个且格式正确）",
       "invalid_time": "时间范围非法（应为 ISO-8601 格式）"
+    },
+    "debug": {
+      "target_required": "目标地址不能为空",
+      "host_unresolved": "主机名解析失败: {{host}}",
+      "ping_unavailable": "Ping 执行失败或系统缺少 ping 工具",
+      "ping": {
+        "success": "Ping 探测完成"
+      },
+      "dns": {
+        "success": "DNS 解析完成"
+      },
+      "port_timeout": "端口连接超时",
+      "port_refused": "端口不可达（连接被拒绝）",
+      "port": {
+        "success": "端口探测完成"
+      },
+      "mib": {
+        "success": "MIB 对照查询完成"
+      },
+      "snmp": {
+        "success": "SNMP 查询完成",
+        "failed": "SNMP 操作失败: {{error}}",
+        "session_failed": "SNMP 会话建立失败: {{error}}",
+        "op_invalid": "不支持的操作类型: {{op}}",
+        "oids_empty": "OID 列表不能为空",
+        "oids_too_many": "单次 GET 的 OID 数量过多（上限 {{max}}）",
+        "oid_invalid": "OID 格式非法: {{oid}}"
+      }
     }
   },
   "ldap": {

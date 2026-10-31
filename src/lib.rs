@@ -36,6 +36,7 @@ extern crate rust_i18n;
 i18n!("src/i18n", fallback = "en");
 
 pub mod app_state;
+pub mod debug;
 pub mod log;
 pub mod routes;
 pub mod shutdown;

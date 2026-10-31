@@ -2933,6 +2933,34 @@
       "located": "Located {{count}} record(s)",
       "invalid_locator": "Invalid locator (provide a valid MAC or IP)",
       "invalid_time": "Invalid time range (ISO-8601 expected)"
+    },
+    "debug": {
+      "target_required": "Target address is required",
+      "host_unresolved": "Failed to resolve hostname: {{host}}",
+      "ping_unavailable": "Ping failed to run or the ping tool is missing",
+      "ping": {
+        "success": "Ping probe completed"
+      },
+      "dns": {
+        "success": "DNS resolution completed"
+      },
+      "port_timeout": "Port connection timed out",
+      "port_refused": "Port unreachable (connection refused)",
+      "port": {
+        "success": "Port probe completed"
+      },
+      "mib": {
+        "success": "MIB lookup completed"
+      },
+      "snmp": {
+        "success": "SNMP query completed",
+        "failed": "SNMP operation failed: {{error}}",
+        "session_failed": "Failed to establish SNMP session: {{error}}",
+        "op_invalid": "Unsupported operation type: {{op}}",
+        "oids_empty": "OID list is required",
+        "oids_too_many": "Too many OIDs for a single GET (max {{max}})",
+        "oid_invalid": "Invalid OID format: {{oid}}"
+      }
     }
   },
   "ldap": {

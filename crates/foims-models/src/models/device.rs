@@ -255,6 +255,57 @@ pub struct IpmiTestRequest {
     pub ipmi_auth_algo: Option<String>,
 }
 
+/// 主机监控调试：一次性 SNMP GET/WALK 探测（手动输入目标 + 凭据，不依赖设备库）。
+/// 目标地址受 SSRF 约束（与 test-snmp 同口径），凭据字段缺省按匿名 v2c community 处理。
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SnmpDebugRequest {
+    /// 目标主机名或 IP（主机名先解析为 IP 再走 SSRF 校验）
+    pub target: String,
+    /// 操作：`get`（对 oids 逐个 GET）| `walk`（对首个基 OID bulk 遍历）
+    pub op: String,
+    /// 目标 OID 列表（get 可多值；walk 仅用首个作基 OID）
+    pub oids: Vec<String>,
+    /// SNMP 版本白名单：v1/v2c/v3（缺省 v2c）
+    pub snmp_version: Option<String>,
+    pub snmp_community: Option<String>,
+    pub snmp_username: Option<String>,
+    pub snmp_auth_protocol: Option<String>,
+    pub snmp_auth_password: Option<String>,
+    pub snmp_priv_protocol: Option<String>,
+    pub snmp_priv_password: Option<String>,
+    /// SNMP 端口（缺省 161）
+    pub snmp_port: Option<i32>,
+}
+
+/// SNMP 调试结果行：`oid` 为响应变量绑定的原始点分文本，`name` 命中内置
+/// MIB 对照表时填符号名（否则空串），`value_type` 为 SNMP 类型，`value` 为可读文本。
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SnmpDebugRow {
+    pub oid: String,
+    pub name: String,
+    pub value_type: String,
+    pub value: String,
+}
+
+/// MIB 名称/OID 双向对照查询请求（纯静态表，不入库、不触网）。
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct MibQueryRequest {
+    /// OID（点分，可带或不带前导点）或名称/缩写关键字（大小写不敏感子串匹配）
+    pub query: String,
+}
+
+/// MIB 对照条目。
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct MibEntry {
+    pub oid: String,
+    pub name: String,
+    pub description: String,
+}
+
 /// ARP/FDB 实时观测原始条目（不落库，供轮询比对与拉取回显）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ArpEntry {
