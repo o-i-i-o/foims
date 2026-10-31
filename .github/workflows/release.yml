@@ -1,0 +1,242 @@
+name: Release
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # 依赖安装：与 package-lock.json 严格一致（Vue 3 + Vite 工程；
+      # 旧版原生 JS 的 eslint/stylelint/jest 等工具链已随 web-archive/ 存档退役）
+      - name: 安装依赖
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      # 阻断级：构建期集中暴露 SFC 编译错误、模板引用缺失与 import 断链
+      - name: 前端构建
+        working-directory: frontend
+        run: npm run build
+
+      # 阻断级：lint 栈（Biome 管 CSS 与格式、Oxlint 管 JS 质量，均为独立
+      # 二进制脱离 Node 环境运行，配置见根 biome.json 与 .oxlintrc.json；
+      # 存档目录 web-archive/ 已排除）。版本有意固定（不用 @latest：阻断门需
+      # 可复现），三处联动：本文件 npx 版本、根 devDependencies、biome.json 的
+      # $schema（文档命令示例同步）；升级统一走
+      # da-scripts/upgrade-lint-tools.sh，自动改全部引用点并附探针验证
+      - name: Biome（CSS + 格式检查）
+        run: npx --yes @biomejs/biome@2.6.3 check frontend
+
+      - name: Oxlint（JS 质量检查）
+        run: npx --yes oxlint@1.89.0
+
+      # 可视化纯函数自检（geometry/viewmodel，纯逻辑无浏览器依赖），
+      # 与后端单测同源把关视图模型计算，防止纯函数层回归无人拦截
+      - name: 可视化纯函数自检
+        working-directory: frontend
+        run: npm run selfcheck:viz
+
+  # 主程序任务：检查（fmt/clippy/test）→ 编译 → deb / rpm / zip 产物。
+  # 不再级联 agent（见 agent-build 任务），两任务并行互不等待。
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # build-essential/pkg-config/libssl-dev/libpq-dev 为主程序构建依赖，
+      # lintian 为 DEB 包检查
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          components: rustfmt, clippy
+
+      # 仓库根即 Cargo workspace（members 含 crates/*），无需额外 workspaces 配置
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+
+      - name: 检查代码格式
+        run: cargo fmt --check
+
+      # --workspace --all-targets：覆盖各成员 crate 的 lib/bin/tests 全部目标，
+      # 关闭旧命令（仅 root crate 默认目标）对成员 crate 的漏检窗口。
+      # 各 crate 根 #![cfg_attr(test, allow(..))] 只豁免 crate 内部测试模块；
+      # 若将来新增 tests/ 集成测试（独立 crate，不置 cfg(test)），其中仍禁止 unwrap/expect。
+      # 生产代码在所有目标上均受 -D warnings 强约束
+      - name: 运行 clippy 检查
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
+
+      - name: 运行测试
+        run: cargo test --release --workspace
+
+      # ts-rs 类型生成物漂移校验：export_bindings 测试重跑后，
+      # frontend/src/types/api/generated/ 不得产生与入库版本（git add -N
+      # 使新增未跟踪文件也纳入 diff）不一致的差异
+      - name: TS 类型生成物漂移校验
+        run: |
+          git add -N frontend/src/types/api/generated
+          git diff --exit-code -- frontend/src/types/api/generated
+
+      - name: 构建项目
+        run: cargo build --release --verbose
+
+      # 前端构建在打包脚本内现场执行（npm ci + vite build），需 Node 工具链
+      - name: 安装 Node（打包脚本前端构建）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # 打包脚本 scripts/build-pkgs.sh 无需 root：deb（dpkg-deb）/rpm（rpmbuild
+      # 用户态 _dbpath）/zip（裸二进制）三格式，产物输出至 target/
+      - name: 构建主程序安装包（deb/rpm/zip）
+        run: bash scripts/build-pkgs.sh
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: foims-release
+          path: |
+            target/foims_*.deb
+            target/foims-*.rpm
+            target/foims_*.zip
+          retention-days: 30
+
+  # Agent 交叉编译任务：与主程序 build 并行。agent 独立工作空间 foims-agent/
+  # （随本仓检出）的 build-agent.sh 编译多平台静态二进制并组装 OS 系统包
+  # （Linux 每目标 deb/rpm、Windows zip：exe + 服务安装/卸载脚本），由 release 任务与主程序产物一并
+  # 上传发布页供用户按需下载；主程序 DEB 不含 agent，服务端 web 页只现场组
+  # 配置包。
+  #
+  # 检查门（fmt / clippy / 本机单测）与主程序 build 任务同源同级别：agent 工作
+  # 空间自持 [workspace.lints] 护栏（见 foims-agent/Cargo.toml），若不显式跑
+  # clippy 则护栏形同虚设（曾有 13 处测试内 unwrap/unwrap_err 长期无人拦截）。
+  #
+  # 交叉后端用 cargo-zigbuild：zig cc 兼任交叉 C 编译器与链接器（ring 等依赖
+  # 直接编），替代 musl.cc 工具链下载——该站点多次间歇不可达（v0.6.3/v0.7.2/
+  # v0.7.3 三轮修复仍失败），最终弃用。zig 由 mlugg/setup-zig 官方社区
+  # Action 安装（minisign 验签 + 多镜像回退 + 自动缓存，比 npm 方式更稳），
+  # 锁精确版本 0.13.0（本地 e2e 已验证该版本与 ring 兼容，有意升级时同步
+  # 更新版本号）；cargo-zigbuild 走 crates.io 稳定版。均不锁哈希（与
+  # v0.7.2 结论一致），功能正确性由 --version 校验与构建产物把关。
+  #
+  # 各目标的 rust-std 组件由 build-agent.sh 内部 rustup target add 安装
+  # （zig 仅接管 C 编译/链接，std 仍来自 rustup），故此处无需预装 targets。
+  agent-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # dpkg-deb 为 ubuntu-latest 自带；rpm 提供 rpmbuild（Agent rpm 组装）。
+      # build-essential/pkg-config 供本机 target 的 cargo test/clippy 编译 ring（cc）使用。
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm build-essential pkg-config
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      # 仅缓存 agent 独立工作空间（foims-agent/ 自持 Cargo.lock 与 target/）
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: foims-agent
+
+      - name: 检查 Agent 代码格式
+        working-directory: foims-agent
+        run: cargo fmt --check
+
+      # --workspace --all-targets 与主程序 build 任务同口径：覆盖各成员 crate 的
+      # lib/bin/tests 全部目标。不同于主仓（各 crate 根以 cfg_attr(test, allow)
+      # 豁免内部测试模块），agent 工作空间无该豁免，生产与测试代码均受
+      # -D warnings 强约束（口径说明见 foims-agent/Cargo.toml 护栏注释）
+      - name: 运行 Agent clippy 检查
+        working-directory: foims-agent
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
+
+      # 交叉产物无法在 runner 上执行，先对本机 target（x86_64）跑一遍单测，
+      # 让 agent-core/protocol/collectors 的逻辑回归在跨平台构建前就被把关
+      - name: 运行 Agent 本机测试
+        working-directory: foims-agent
+        run: cargo test --release
+
+      - name: 安装 zig 交叉后端
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: 安装 cargo-zigbuild
+        run: |
+          cargo install cargo-zigbuild --locked
+          zig version
+          cargo-zigbuild --version
+
+      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出 zip（exe+服务脚本），
+      # 产物归集到 foims-agent/dist/packages/
+      - name: 构建 Agent 多平台安装包
+        run: AGENT_BACKEND=zigbuild bash foims-agent/scripts/build-agent.sh
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-release
+          path: foims-agent/dist/packages/*
+          retention-days: 30
+
+  # 发布物来自两个并行构建任务的 artifact（主程序 deb/rpm/zip + Agent 系统包），
+  # 本任务不重复构建
+  release:
+    needs: [build, agent-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      # artifact 内部为文件平铺（upload-artifact v4 以各 path 的公共祖先为
+      # 根，target/ 与 packages/ 目录层级不进 artifact），按目录落位后
+      # files 用目录级通配，避免子路径 glob 落空静默丢产物
+      - name: 下载主程序构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: foims-release
+          path: release-assets/main
+
+      - name: 下载 Agent 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-release
+          path: release-assets/agent
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-assets/main/*
+            release-assets/agent/*
+          generate_release_notes: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
