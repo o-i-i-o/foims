@@ -2,7 +2,7 @@
 set -e # 任意命令失败，脚本直接退出
 
 #开发分支
-DEV_BRANCH=Dev
+DEV_BRANCH=Dev-vue3
 #主分支
 MASTER_BRANCH=master
 
