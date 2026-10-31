@@ -1,6 +1,6 @@
 [package]
 name = "foims"
-version = "0.33.1"
+version = "0.33.2"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -77,12 +77,18 @@ if-addrs = "0.15"
 # 网络 / 哈希 / 并发表 / 配置加载（主程序与 foims-common 共享）
 ipnetwork = "0.21.1"
 
+# HMAC（钉钉 webhook 加签）
+hmac = "0.13.0"
+
 # JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
 openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
 rand = "0.10.3"
+
+# Webhook 通知推送（钉钉/企业微信/通用）
+reqwest = { version = "0.12.23", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization
 serde = { version = "1.0.229", features = ["derive"] }

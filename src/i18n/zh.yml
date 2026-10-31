@@ -315,6 +315,10 @@ log:
     recipients_empty: "邮件收件人列表为空，跳过MAC变更邮件通知"
     recipients_parse_failed: "通知收件人配置解析失败，已按空列表处理: {{error}}"
     recipients_query_failed: "查询邮件收件人配置失败: {{error}}"
+  webhook:
+    config_query_failed: "查询Webhook配置失败，已按全部未配置处理: {{error}}"
+    send_failed: "Webhook通知发送失败 (channel: {{channel}}): {{error}}"
+    sent: "Webhook通知发送成功 (channel: {{channel}})"
   system:
     db_check_failed: "数据库连接检查失败: {{error}}"
     disable_init_requested: "收到关闭初始化模式请求"

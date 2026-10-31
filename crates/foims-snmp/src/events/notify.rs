@@ -133,6 +133,16 @@ pub async fn send_ip_change_notification(
             ),
         }
     }
+    // Webhook 渠道（内部受 webhook_ip_change 开关门控，未配置渠道静默跳过）
+    foims_auth::webhook::send_ip_change_webhook(
+        pool,
+        source_device,
+        &workstation_name,
+        mac_address,
+        registered_ip,
+        observed_ip,
+    )
+    .await;
 
     Ok(())
 }
@@ -203,6 +213,16 @@ pub async fn send_device_swap_notification(
             ),
         }
     }
+    // Webhook 渠道（内部受 webhook_ip_change 开关门控，未配置渠道静默跳过）
+    foims_auth::webhook::send_device_swap_webhook(
+        pool,
+        source_device,
+        &workstation_name,
+        ip_address,
+        old_mac,
+        new_mac,
+    )
+    .await;
 
     Ok(())
 }

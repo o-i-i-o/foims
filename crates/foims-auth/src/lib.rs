@@ -1,7 +1,8 @@
 //! FOIMS 认证与用户管理。
 //!
 //! 登录（本地/LDAP/SSO/2FA）、JWT 签发与校验、用户管理、等保密码策略、
-//! 应用层 fail2ban、SMTP 邮件与审计操作日志。handler 面向 [`provider::AuthProvider`]
+//! 应用层 fail2ban、SMTP 邮件与 Webhook（通用/钉钉/企业微信）通知推送、
+//! 审计操作日志。handler 面向 [`provider::AuthProvider`]
 //! 泛型编写，由主程序 `AppState` 实现以提供连接池、JWT 工具与配置。
 
 // 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」）；生产代码仍由
@@ -20,6 +21,7 @@ pub mod provider;
 pub mod smtp;
 pub mod sso;
 pub mod user;
+pub mod webhook;
 
 // 供主程序直接引用的常用提取器（完整集合见 extractor 模块）
 pub use extractor::AccountAdminUser;

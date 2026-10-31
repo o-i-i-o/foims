@@ -309,6 +309,25 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
             log_warn!("log.snmp.unknown_device_email_failed", error = e);
         }
     }
+    // Webhook 渠道（内部受 webhook_snmp_event 开关门控，未配置渠道静默跳过）
+    if ev.event_type == SNMP_EVENT_UNKNOWN_DEVICE {
+        let vlan_id = ev
+            .detail
+            .get("vlan_id")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32);
+        let ip = ev.str_field("ip");
+        let mac = ev.str_field("mac");
+        foims_auth::webhook::send_unknown_device_webhook(
+            pool,
+            device_name,
+            &iface,
+            vlan_id,
+            &ip,
+            &mac,
+        )
+        .await;
+    }
 }
 
 #[cfg(test)]

@@ -17,10 +17,13 @@ import type { PasswordPolicy } from "../types/api/generated/PasswordPolicy";
 import type { SsoConfigResponse } from "../types/api/generated/SsoConfigResponse";
 import type { SystemInfo } from "../types/api/generated/SystemInfo";
 import type { UnbanIpRequest } from "../types/api/generated/UnbanIpRequest";
+import type { TestWebhookRequest } from "../types/api/generated/TestWebhookRequest";
 import type { UpdateFail2banConfigRequest } from "../types/api/generated/UpdateFail2banConfigRequest";
 import type { UpdateLdapConfigRequest } from "../types/api/generated/UpdateLdapConfigRequest";
 import type { UpdateSmtpConfigRequest } from "../types/api/generated/UpdateSmtpConfigRequest";
 import type { UpdateSsoConfigRequest } from "../types/api/generated/UpdateSsoConfigRequest";
+import type { UpdateWebhookConfigRequest } from "../types/api/generated/UpdateWebhookConfigRequest";
+import type { WebhookConfigResponse } from "../types/api/generated/WebhookConfigResponse";
 
 /** 封禁/解封响应载荷（后端 json! 动态构造，仅取提示文案） */
 export interface BanActionResponse {
@@ -140,6 +143,20 @@ export function getNotificationSettings(): Promise<ApiResult<NotificationSetting
 
 export function updateNotificationSettings(payload: NotificationSettings): Promise<ApiResult<unknown>> {
   return apiPut<unknown, NotificationSettings>("/api/system/notification/settings", payload);
+}
+
+export function getWebhookConfig(): Promise<ApiResult<WebhookConfigResponse>> {
+  return apiGet<WebhookConfigResponse>("/api/system/webhook/config");
+}
+
+export function updateWebhookConfig(payload: UpdateWebhookConfigRequest): Promise<ApiResult<unknown>> {
+  return apiPut<unknown, UpdateWebhookConfigRequest>("/api/system/webhook/config", payload);
+}
+
+/** 向指定渠道发送测试消息（channel 取值由后端 WebhookChannel 约定） */
+export function testWebhookChannel(channel: TestWebhookRequest["channel"]): Promise<ApiResult<unknown>> {
+  const payload: TestWebhookRequest = { channel };
+  return apiPost<unknown, TestWebhookRequest>("/api/system/webhook/test", payload);
 }
 
 export function getFail2banStatus(): Promise<ApiResult<AppFail2banStatus>> {

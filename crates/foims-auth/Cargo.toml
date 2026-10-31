@@ -56,6 +56,10 @@ openidconnect = { workspace = true }
 # 邮件发送（验证码 / 密码重置）
 lettre = { workspace = true }
 
+# Webhook 通知推送（钉钉加签 / 企业微信 / 通用）
+hmac = { workspace = true }
+reqwest = { workspace = true }
+
 # 两步验证（TOTP）
 totp-rs = { workspace = true }
 time = { workspace = true }

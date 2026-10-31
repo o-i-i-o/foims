@@ -3,8 +3,9 @@
 /**
  * 通知方式开关（存储于 system_configs：config_type='notification'，key='methods'）。
  *
- * 按通知类型记录各方式（目前仅邮件）是否启用；前端「通知配置」卡片矩阵
- * 逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用。
+ * 按通知类型记录各方式（邮件 / Webhook）是否启用；前端「通知配置」卡片
+ * 矩阵逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用；
+ * 存量 JSON 缺少 webhook_* 字段时同样按启用处理（发送侧对未配置渠道静默跳过）。
  */
 export type NotificationMethods = { 
 /**
@@ -20,4 +21,16 @@ agent_alert: boolean,
 /**
  * SNMP 观测事件（未知终端等）通知的邮件方式开关
  */
-snmp_event: boolean, };
+snmp_event: boolean, 
+/**
+ * IP 地址变更通知的 Webhook 方式开关（通用/钉钉/企业微信渠道共用）
+ */
+webhook_ip_change: boolean, 
+/**
+ * 主机资源告警通知的 Webhook 方式开关
+ */
+webhook_agent_alert: boolean, 
+/**
+ * SNMP 观测事件通知的 Webhook 方式开关
+ */
+webhook_snmp_event: boolean, };

@@ -1013,12 +1013,32 @@
     "password_placeholder": "Enter SMTP password",
     "from_placeholder": "Enter sender email"
   },
+  "webhook": {
+    "settings": "Webhook Notifications",
+    "generic_url": "Generic Webhook URL",
+    "generic_url_placeholder": "Full receiver URL",
+    "generic_hint": "Pushed via POST JSON (title/message fields) to this URL",
+    "dingtalk_url": "DingTalk Bot Webhook",
+    "dingtalk_url_placeholder": "Bot webhook URL (with access_token)",
+    "dingtalk_secret": "DingTalk Sign Secret",
+    "dingtalk_secret_configured": "Configured (leave blank to keep unchanged)",
+    "dingtalk_secret_input": "Sign secret from bot security settings (starts with SEC)",
+    "wecom_key": "WeCom Bot Key",
+    "wecom_key_placeholder": "The key parameter in the group bot webhook URL",
+    "test": "Test Delivery",
+    "test_generic": "Test Generic",
+    "test_dingtalk": "Test DingTalk",
+    "test_wecom": "Test WeCom",
+    "save_success": "Webhook configuration saved successfully",
+    "save_failed": "Failed to save webhook configuration",
+    "test_success": "Webhook test message sent successfully",
+    "test_failed": "Failed to send webhook test message"
+  },
   "notification": {
     "settings": "Notification Settings",
     "col_type": "Notification Type",
     "col_email": "Email",
     "col_webhook": "Webhook",
-    "pending": "Coming Soon",
     "type_ip_change": "IP Address Change",
     "type_agent_alert": "Host Alert",
     "email_recipients": "Email Recipients",
@@ -2720,6 +2740,23 @@
         "recipients_required": "Recipients are required",
         "subject_length": "Subject must be 1 to 255 characters",
         "username_length": "SMTP username is required and must not exceed 100 characters"
+      }
+    },
+    "webhook": {
+      "channel_not_configured": "This webhook channel is not configured",
+      "config_retrieved": "Webhook configuration retrieved",
+      "config_updated": "Webhook configuration updated successfully",
+      "http_error": "Webhook receiver returned HTTP {{status}}",
+      "remote_rejected": "Webhook receiver rejected: {{errmsg}}",
+      "request_failed": "Failed to send webhook request: {{error}}",
+      "secret_encrypt_failed": "Failed to encrypt DingTalk sign secret",
+      "test_success": "Webhook test message sent successfully",
+      "url_required": "Webhook URL is not set",
+      "validation": {
+        "key_length": "WeCom bot key must not exceed 128 characters",
+        "secret_length": "DingTalk sign secret must not exceed 256 characters",
+        "url_length": "Webhook URL must not exceed 2048 characters",
+        "url_scheme": "{{field}} must be an http:// or https:// URL"
       }
     },
     "system": {

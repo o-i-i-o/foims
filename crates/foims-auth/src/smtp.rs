@@ -79,6 +79,10 @@ mod tests {
     fn 通知方式默认全启用() {
         let m = NotificationMethods::default();
         assert!(m.ip_change && m.agent_alert && m.snmp_event);
+        assert!(
+            m.webhook_ip_change && m.webhook_agent_alert && m.webhook_snmp_event,
+            "webhook 方式缺省同样全启用"
+        );
     }
 
     #[test]
@@ -374,8 +378,9 @@ pub async fn send_email_to_users(
 
 /// 通知方式开关（存储于 system_configs：config_type='notification'，key='methods'）。
 ///
-/// 按通知类型记录各方式（目前仅邮件）是否启用；前端「通知配置」卡片矩阵
-/// 逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用。
+/// 按通知类型记录各方式（邮件 / Webhook）是否启用；前端「通知配置」卡片
+/// 矩阵逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用；
+/// 存量 JSON 缺少 webhook_* 字段时同样按启用处理（发送侧对未配置渠道静默跳过）。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct NotificationMethods {
@@ -390,6 +395,15 @@ pub struct NotificationMethods {
     /// SNMP 观测事件（未知终端等）通知的邮件方式开关
     #[serde(default = "default_true")]
     pub snmp_event: bool,
+    /// IP 地址变更通知的 Webhook 方式开关（通用/钉钉/企业微信渠道共用）
+    #[serde(default = "default_true")]
+    pub webhook_ip_change: bool,
+    /// 主机资源告警通知的 Webhook 方式开关
+    #[serde(default = "default_true")]
+    pub webhook_agent_alert: bool,
+    /// SNMP 观测事件通知的 Webhook 方式开关
+    #[serde(default = "default_true")]
+    pub webhook_snmp_event: bool,
 }
 
 fn default_true() -> bool {
@@ -402,6 +416,9 @@ impl Default for NotificationMethods {
             ip_change: true,
             agent_alert: true,
             snmp_event: true,
+            webhook_ip_change: true,
+            webhook_agent_alert: true,
+            webhook_snmp_event: true,
         }
     }
 }
@@ -499,12 +516,39 @@ async fn send_notification_email(pool: &PgPool, subject: &str, body: &str) -> Re
     send_email_to_users(pool, &user_ids, subject, body).await
 }
 
+/// 主机告警指标的中文名与单位（邮件与 Webhook 文案共用）。
+pub fn host_alert_metric_label(metric: &str) -> (&'static str, &'static str) {
+    match metric {
+        "cpu" => ("CPU使用率", "%"),
+        "mem" => ("内存使用率", "%"),
+        "disk" => ("磁盘使用率", "%"),
+        "temp" => ("温度", "℃"),
+        _ => ("指标", ""),
+    }
+}
+
+/// IP 地址变更通知文案（标题, 正文），邮件与 Webhook 渠道共用。
+///
+/// MAC 为物理实体、IP 为虚拟实体：本通知表达“设备（{mac}）从登记 IP
+/// 移动到了新的观测 IP”，`source_device` 为拉取到该观测的来源设备名。
+pub fn ip_change_message(
+    source_device: &str,
+    workstation_name: &str,
+    mac_address: &str,
+    registered_ip: &str,
+    observed_ip: &str,
+) -> (String, String) {
+    let title = format!("IP地址变更通知 - 工位: {workstation_name}");
+    let body = format!(
+        "尊敬的管理员：\n\n工位 {workstation_name} 的设备 IP 地址发生变更，详情如下：\n工位名称：{workstation_name}\n设备MAC：{mac_address}\n登记 IP：{registered_ip}\n观测 IP：{observed_ip}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+    );
+    (title, body)
+}
+
 /// 发送 IP 地址变更告警邮件（同一物理设备 MAC 出现在非登记的 IP 上）。
 ///
 /// 收件人列表存于 `system_configs`（config_type='notification'，
 /// key='email_recipients'，JSON 数组），未配置时静默跳过。
-/// MAC 为物理实体、IP 为虚拟实体：本通知表达“设备（{mac}）从登记 IP
-/// 移动到了新的观测 IP”，`source_device` 为拉取到该观测的来源设备名。
 pub async fn send_ip_change_email(
     pool: &PgPool,
     source_device: &str,
@@ -513,22 +557,35 @@ pub async fn send_ip_change_email(
     registered_ip: &str,
     observed_ip: &str,
 ) -> Result<(), AppError> {
-    let email_body = format!(
-        "尊敬的管理员：\n\n工位 {workstation_name} 的设备 IP 地址发生变更，详情如下：\n工位名称：{workstation_name}\n设备MAC：{mac_address}\n登记 IP：{registered_ip}\n观测 IP：{observed_ip}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+    let (title, body) = ip_change_message(
+        source_device,
+        workstation_name,
+        mac_address,
+        registered_ip,
+        observed_ip,
     );
-
-    send_notification_email(
-        pool,
-        &format!("IP地址变更通知 - 工位: {workstation_name}"),
-        &email_body,
-    )
-    .await
+    send_notification_email(pool, &title, &body).await
 }
 
-/// 发送工位 IP 上设备更换告警邮件（登记 IP 不变、学到新 MAC）。
+/// 工位 IP 上设备更换通知文案（登记 IP 不变、学到新 MAC），邮件与 Webhook 渠道共用。
 ///
 /// 与 IP 变更通知同属“MAC/IP 对应关系异动”类，受 ip_change 开关门控；
 /// `source_device` 为拉取到该观测的来源设备名。
+pub fn device_swap_message(
+    source_device: &str,
+    workstation_name: &str,
+    ip_address: &str,
+    old_mac: &str,
+    new_mac: &str,
+) -> (String, String) {
+    let title = format!("工位设备更换通知 - 工位: {workstation_name}");
+    let body = format!(
+        "尊敬的管理员：\n\n工位 {workstation_name} 的 IP {ip_address} 上设备更换，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+    );
+    (title, body)
+}
+
+/// 发送工位 IP 上设备更换告警邮件（登记 IP 不变、学到新 MAC）。
 pub async fn send_device_swap_email(
     pool: &PgPool,
     source_device: &str,
@@ -537,22 +594,36 @@ pub async fn send_device_swap_email(
     old_mac: &str,
     new_mac: &str,
 ) -> Result<(), AppError> {
-    let email_body = format!(
-        "尊敬的管理员：\n\n工位 {workstation_name} 的 IP {ip_address} 上设备更换，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+    let (title, body) = device_swap_message(
+        source_device,
+        workstation_name,
+        ip_address,
+        old_mac,
+        new_mac,
     );
-
-    send_notification_email(
-        pool,
-        &format!("工位设备更换通知 - 工位: {workstation_name}"),
-        &email_body,
-    )
-    .await
+    send_notification_email(pool, &title, &body).await
 }
 
-/// 发送主机资源告警邮件（CPU/内存/磁盘/温度阈值超标）。
+/// 主机资源告警通知文案，邮件与 Webhook 渠道共用。
 ///
 /// `metric` 为 host_alert_episodes 的指标名（cpu/mem/disk/temp），
 /// 值与阈值单位随指标变化（温度 ℃，其余 %）。
+pub fn host_alert_message(
+    hostname: &str,
+    ip_address: &str,
+    metric: &str,
+    value: f64,
+    threshold: u8,
+) -> (String, String) {
+    let (label, unit) = host_alert_metric_label(metric);
+    let title = format!("主机资源告警 - {hostname}: {label}超标");
+    let body = format!(
+        "尊敬的管理员：\n\n主机 {hostname} 触发资源告警，详情如下：\n主机名称：{hostname}\nIP地址：{ip_address}\n告警指标：{label}\n当前值：{value:.1}{unit}\n告警阈值：{threshold}{unit}\n\n请及时确认处理。\n\n此致，\nFOIMS系统"
+    );
+    (title, body)
+}
+
+/// 发送主机资源告警邮件（CPU/内存/磁盘/温度阈值超标）。
 pub async fn send_host_alert_email(
     pool: &PgPool,
     hostname: &str,
@@ -561,30 +632,32 @@ pub async fn send_host_alert_email(
     value: f64,
     threshold: u8,
 ) -> Result<(), AppError> {
-    let (label, unit) = match metric {
-        "cpu" => ("CPU使用率", "%"),
-        "mem" => ("内存使用率", "%"),
-        "disk" => ("磁盘使用率", "%"),
-        "temp" => ("温度", "℃"),
-        _ => ("指标", ""),
-    };
-    let email_body = format!(
-        "尊敬的管理员：\n\n主机 {hostname} 触发资源告警，详情如下：\n主机名称：{hostname}\nIP地址：{ip_address}\n告警指标：{label}\n当前值：{value:.1}{unit}\n告警阈值：{threshold}{unit}\n\n请及时确认处理。\n\n此致，\nFOIMS系统"
-    );
+    let (title, body) = host_alert_message(hostname, ip_address, metric, value, threshold);
+    send_notification_email(pool, &title, &body).await
+}
 
-    send_notification_email(
-        pool,
-        &format!("主机资源告警 - {hostname}: {label}超标"),
-        &email_body,
-    )
-    .await
+/// 未知设备接入通知文案，邮件与 Webhook 渠道共用。
+///
+/// MAC 为物理实体，未知判定基于 MAC 未登记于任何设备网口；`ip`/`interface`/
+/// `device_name` 仅为发现位置（在哪个设备端口、哪个 IP 上学到）。
+pub fn unknown_device_message(
+    device_name: &str,
+    interface: &str,
+    vlan_id: Option<i32>,
+    ip_address: &str,
+    mac_address: &str,
+) -> (String, String) {
+    let vlan_text = vlan_id.map_or_else(|| "-".to_string(), |v| v.to_string());
+    let title = format!("未知设备接入通知 - {device_name}/{interface}");
+    let body = format!(
+        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的设备，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nMAC地址：{mac_address}\n发现位 IP：{ip_address}\n\n请确认该设备是否授权接入。\n\n此致，\nFOIMS系统"
+    );
+    (title, body)
 }
 
 /// 发送未知设备接入告警邮件（SNMP ARP/FDB 同步学到未登记的 MAC）。
 ///
-/// 收件人复用 notification_recipients 机制；MAC 为物理实体，未知判定
-/// 基于 MAC 未登记于任何设备网口；`ip`/`interface`/`device_name` 仅为
-/// 发现位置（在哪个设备端口、哪个 IP 上学到）。
+/// 收件人复用 notification_recipients 机制。
 pub async fn send_unknown_device_email(
     pool: &PgPool,
     device_name: &str,
@@ -593,15 +666,7 @@ pub async fn send_unknown_device_email(
     ip_address: &str,
     mac_address: &str,
 ) -> Result<(), AppError> {
-    let vlan_text = vlan_id.map_or_else(|| "-".to_string(), |v| v.to_string());
-    let email_body = format!(
-        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的设备，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nMAC地址：{mac_address}\n发现位 IP：{ip_address}\n\n请确认该设备是否授权接入。\n\n此致，\nFOIMS系统"
-    );
-
-    send_notification_email(
-        pool,
-        &format!("未知设备接入通知 - {device_name}/{interface}"),
-        &email_body,
-    )
-    .await
+    let (title, body) =
+        unknown_device_message(device_name, interface, vlan_id, ip_address, mac_address);
+    send_notification_email(pool, &title, &body).await
 }

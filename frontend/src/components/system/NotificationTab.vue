@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * SMTP 配置页签：
- * SMTP 服务器卡片（未配置属正常业务态）+ 通知设置卡片（方式矩阵 +
- * 收件人复选清单）。Webhook 列为占位（暂未实现）保留展示。
+ * SMTP 服务器卡片（未配置属正常业务态）+ Webhook 通知卡片（通用/钉钉/企业微信
+ * 三渠道，未配置属正常业务态）+ 通知设置卡片（方式矩阵 + 收件人复选清单）。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -10,14 +10,18 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
   getNotificationSettings,
   getSmtpConfig,
+  getWebhookConfig,
   testSmtpConnection as requestSmtpTest,
+  testWebhookChannel as requestWebhookTest,
   updateNotificationSettings,
-  updateSmtpConfig
+  updateSmtpConfig,
+  updateWebhookConfig
 } from "../../api/system";
 import { listUsersForPicker } from "../../api/users";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import type { UpdateSmtpConfigRequest } from "../../types/api/generated/UpdateSmtpConfigRequest";
+import type { UpdateWebhookConfigRequest } from "../../types/api/generated/UpdateWebhookConfigRequest";
 import type { NotificationSettings } from "../../types/api/generated/NotificationSettings";
 import type { NotificationMethods } from "../../types/api/generated/NotificationMethods";
 import type { User } from "../../types/api/generated/User";
@@ -123,9 +127,92 @@ async function testSmtpConnection(): Promise<void> {
   }
 }
 
+// ---- Webhook 通知（通用 / 钉钉 / 企业微信三渠道，未配置属正常业务态） ----
+
+const genericUrl = ref("");
+const dingtalkUrl = ref("");
+const dingtalkSecret = ref("");
+const dingtalkHasSecret = ref(false);
+const wecomKey = ref("");
+
+const webhookQuery = useQuery({
+  queryKey: ["webhook-config"],
+  queryFn: async () => {
+    const result = await getWebhookConfig();
+    if (!result.success) {
+      throw new Error(result.message || t("common.load_failed"));
+    }
+    return result.data;
+  },
+  enabled: computed(() => props.active)
+});
+
+watch(
+  () => webhookQuery.data.value,
+  (config) => {
+    if (!config) {
+      return;
+    }
+    genericUrl.value = config.generic_url || "";
+    dingtalkUrl.value = config.dingtalk_url || "";
+    wecomKey.value = config.wecom_key || "";
+    dingtalkHasSecret.value = Boolean(config.dingtalk_has_secret);
+    dingtalkSecret.value = "";
+  }
+);
+
+const savingWebhook = ref(false);
+
+async function saveWebhookConfig(): Promise<void> {
+  if (savingWebhook.value) {
+    return;
+  }
+  savingWebhook.value = true;
+  try {
+    const payload: UpdateWebhookConfigRequest = {
+      generic_url: genericUrl.value,
+      dingtalk_url: dingtalkUrl.value,
+      // 加签密钥留空表示保留已存密钥（与 SMTP 密码同口径）
+      dingtalk_secret: dingtalkSecret.value,
+      wecom_key: wecomKey.value
+    };
+    const result = await updateWebhookConfig(payload);
+    if (result.success) {
+      showToast(t("webhook.save_success"), "success");
+      queryClient.invalidateQueries({ queryKey: ["webhook-config"] });
+    } else {
+      showToast(`${t("webhook.save_failed")}: ${result.message}`, "error");
+    }
+  } finally {
+    savingWebhook.value = false;
+  }
+}
+
+const testingChannel = ref("");
+
+async function testWebhookChannel(channel: "generic" | "dingtalk" | "wecom"): Promise<void> {
+  if (testingChannel.value) {
+    return;
+  }
+  testingChannel.value = channel;
+  try {
+    const result = await requestWebhookTest(channel);
+    if (result.success) {
+      showToast(t("webhook.test_success"), "success");
+    } else {
+      showToast(`${t("webhook.test_failed")}: ${result.message}`, "error");
+    }
+  } finally {
+    testingChannel.value = "";
+  }
+}
+
 const ipChange = ref(true);
 const agentAlert = ref(true);
 const snmpEvent = ref(true);
+const webhookIpChange = ref(true);
+const webhookAgentAlert = ref(true);
+const webhookSnmpEvent = ref(true);
 const selectedIds = ref<Set<string>>(new Set());
 
 const usersQuery = useQuery({
@@ -172,6 +259,9 @@ watch(
     ipChange.value = methods.ip_change !== false;
     agentAlert.value = methods.agent_alert !== false;
     snmpEvent.value = methods.snmp_event !== false;
+    webhookIpChange.value = methods.webhook_ip_change !== false;
+    webhookAgentAlert.value = methods.webhook_agent_alert !== false;
+    webhookSnmpEvent.value = methods.webhook_snmp_event !== false;
     selectedIds.value = new Set(settings.email_recipients || []);
   }
 );
@@ -194,13 +284,16 @@ async function saveNotificationSettings(): Promise<void> {
   }
   savingNotification.value = true;
   try {
-    // 通知方式矩阵：仅邮件方式可配置，webhook 为前端占位不提交后端字段
+    // 通知方式矩阵：行=通知类型，列=邮件/Webhook 两种方式
     const payload: NotificationSettings = {
       email_recipients: [...selectedIds.value],
       methods: {
         ip_change: ipChange.value,
         agent_alert: agentAlert.value,
-        snmp_event: snmpEvent.value
+        snmp_event: snmpEvent.value,
+        webhook_ip_change: webhookIpChange.value,
+        webhook_agent_alert: webhookAgentAlert.value,
+        webhook_snmp_event: webhookSnmpEvent.value
       }
     };
     const result = await updateNotificationSettings(payload);
@@ -274,6 +367,101 @@ async function saveNotificationSettings(): Promise<void> {
         </div>
       </section>
 
+      <!-- Webhook 通知设置（通用 / 钉钉 / 企业微信） -->
+      <section class="config-card">
+        <header class="config-card-header">
+          <div class="config-card-title">
+            <span class="icon">🔗</span>
+            <span>{{ t("webhook.settings") }}</span>
+          </div>
+          <div v-if="!readonly" class="card-header-actions">
+            <button type="button" class="btn btn-primary" :disabled="savingWebhook" @click="saveWebhookConfig">
+              {{ t("common.save") }}
+            </button>
+          </div>
+        </header>
+        <div class="form-row">
+          <div class="form-group form-group-block">
+            <label for="webhook-generic-url">{{ t("webhook.generic_url") }}</label>
+            <input
+              id="webhook-generic-url"
+              v-model="genericUrl"
+              type="url"
+              :placeholder="t('webhook.generic_url_placeholder')"
+              :aria-label="t('webhook.generic_url')"
+              :disabled="readonly"
+              autocomplete="off"
+            >
+            <div class="form-hint">{{ t("webhook.generic_hint") }}</div>
+          </div>
+          <div class="form-group form-group-block">
+            <label for="webhook-dingtalk-url">{{ t("webhook.dingtalk_url") }}</label>
+            <input
+              id="webhook-dingtalk-url"
+              v-model="dingtalkUrl"
+              type="url"
+              :placeholder="t('webhook.dingtalk_url_placeholder')"
+              :aria-label="t('webhook.dingtalk_url')"
+              :disabled="readonly"
+              autocomplete="off"
+            >
+          </div>
+          <div class="form-group form-group-block">
+            <label for="webhook-dingtalk-secret">{{ t("webhook.dingtalk_secret") }}</label>
+            <input
+              id="webhook-dingtalk-secret"
+              v-model="dingtalkSecret"
+              type="password"
+              autocomplete="new-password"
+              :placeholder="t(dingtalkHasSecret ? 'webhook.dingtalk_secret_configured' : 'webhook.dingtalk_secret_input')"
+              :aria-label="t('webhook.dingtalk_secret')"
+              :disabled="readonly"
+            >
+          </div>
+          <div class="form-group form-group-block">
+            <label for="webhook-wecom-key">{{ t("webhook.wecom_key") }}</label>
+            <input
+              id="webhook-wecom-key"
+              v-model="wecomKey"
+              type="text"
+              :placeholder="t('webhook.wecom_key_placeholder')"
+              :aria-label="t('webhook.wecom_key')"
+              :disabled="readonly"
+              autocomplete="off"
+            >
+          </div>
+          <div v-if="!readonly" class="form-group form-group-block">
+            <span class="group-label">{{ t("webhook.test") }}</span>
+            <div class="webhook-test-actions">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                :disabled="testingChannel !== ''"
+                @click="testWebhookChannel('generic')"
+              >
+                {{ t("webhook.test_generic") }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                :disabled="testingChannel !== ''"
+                @click="testWebhookChannel('dingtalk')"
+              >
+                {{ t("webhook.test_dingtalk") }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                :disabled="testingChannel !== ''"
+                @click="testWebhookChannel('wecom')"
+              >
+                {{ t("webhook.test_wecom") }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- 通知设置 -->
       <div class="notification-settings-section">
         <section class="config-card">
@@ -286,7 +474,7 @@ async function saveNotificationSettings(): Promise<void> {
               {{ t("common.save") }}
             </button>
           </header>
-          <!-- 通知方式矩阵：行=通知类型，列=通知方式；Webhook 列为占位，暂未实现 -->
+          <!-- 通知方式矩阵：行=通知类型，列=邮件/Webhook 两种方式 -->
           <table class="notification-matrix">
             <thead>
               <tr>
@@ -299,17 +487,17 @@ async function saveNotificationSettings(): Promise<void> {
               <tr>
                 <td>{{ t("notification.type_ip_change") }}</td>
                 <td><input v-model="ipChange" type="checkbox" :disabled="readonly"></td>
-                <td><span class="status-badge status-reserved">{{ t("notification.pending") }}</span></td>
+                <td><input v-model="webhookIpChange" type="checkbox" :disabled="readonly"></td>
               </tr>
               <tr>
                 <td>{{ t("notification.type_agent_alert") }}</td>
                 <td><input v-model="agentAlert" type="checkbox" :disabled="readonly"></td>
-                <td><span class="status-badge status-reserved">{{ t("notification.pending") }}</span></td>
+                <td><input v-model="webhookAgentAlert" type="checkbox" :disabled="readonly"></td>
               </tr>
               <tr>
                 <td>{{ t("notification.type_snmp_event") }}</td>
                 <td><input v-model="snmpEvent" type="checkbox" :disabled="readonly"></td>
-                <td><span class="status-badge status-reserved">{{ t("notification.pending") }}</span></td>
+                <td><input v-model="webhookSnmpEvent" type="checkbox" :disabled="readonly"></td>
               </tr>
             </tbody>
           </table>

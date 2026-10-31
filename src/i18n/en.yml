@@ -315,6 +315,10 @@ log:
     recipients_empty: "Email recipient list is empty, skipping MAC change email"
     recipients_parse_failed: "Failed to parse notification recipients, treated as empty: {{error}}"
     recipients_query_failed: "Failed to query email recipient configuration: {{error}}"
+  webhook:
+    config_query_failed: "Failed to query webhook configuration, treated as unconfigured: {{error}}"
+    send_failed: "Webhook notification failed (channel: {{channel}}): {{error}}"
+    sent: "Webhook notification sent (channel: {{channel}})"
   system:
     db_check_failed: "Database connection check failed: {{error}}"
     disable_init_requested: "Disable init mode request received"

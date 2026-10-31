@@ -1043,6 +1043,106 @@ pub async fn send_system_email(
     Ok(foims_common::ok_json((), "server.smtp.email_sent"))
 }
 
+// Webhook 通知配置（通用 / 钉钉 / 企业微信）
+
+/// Webhook 配置响应载荷（GET /api/system/webhook/config）。
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct WebhookConfigResponse {
+    /// 通用 Webhook 接收端完整 URL
+    pub generic_url: String,
+    /// 钉钉机器人 Webhook 地址（含 access_token）
+    pub dingtalk_url: String,
+    /// 是否已配置钉钉加签密钥（密文不回传，口径同 SMTP has_password）
+    pub dingtalk_has_secret: bool,
+    /// 企业微信群机器人 key
+    pub wecom_key: String,
+}
+
+/// GET /api/system/webhook/config：读取三渠道 Webhook 配置。
+pub async fn get_webhook_config(
+    State(state): State<Arc<AppState>>,
+    _user: foims_auth::extractor::AuthUser,
+) -> Result<Response, AppError> {
+    let config = foims_auth::webhook::get_webhook_config_from_db(&state.pool()?.get_conn()).await;
+    Ok(foims_common::ok_json(
+        WebhookConfigResponse {
+            generic_url: config.generic_url,
+            dingtalk_url: config.dingtalk_url,
+            dingtalk_has_secret: !config.dingtalk_secret.is_empty(),
+            wecom_key: config.wecom_key,
+        },
+        "server.webhook.config_retrieved",
+    ))
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
+pub struct UpdateWebhookConfigRequest {
+    #[validate(length(max = 2048, message = "server.webhook.validation.url_length"))]
+    pub generic_url: String,
+    #[validate(length(max = 2048, message = "server.webhook.validation.url_length"))]
+    pub dingtalk_url: String,
+    /// 空 = 保留已存加签密钥（口径同 SMTP 密码留空保持）
+    #[validate(length(max = 256, message = "server.webhook.validation.secret_length"))]
+    pub dingtalk_secret: String,
+    #[validate(length(max = 128, message = "server.webhook.validation.key_length"))]
+    pub wecom_key: String,
+}
+
+/// 校验 Webhook URL：非空时必须为 http(s) 地址（空 = 未配置该渠道）。
+fn validate_webhook_url(field: &str, raw: &str) -> Result<(), AppError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Ok(());
+    }
+    Err(AppError::Validation(
+        msg("server.webhook.validation.url_scheme").with("field", field),
+    ))
+}
+
+/// PUT /api/system/webhook/config：保存三渠道 Webhook 配置；加签密钥留空
+/// 表示保留已存密钥。
+pub async fn update_webhook_config(
+    State(state): State<Arc<AppState>>,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
+    AppJson(req): AppJson<UpdateWebhookConfigRequest>,
+) -> Result<Response, AppError> {
+    req.validate()?;
+    validate_webhook_url("generic_url", &req.generic_url)?;
+    validate_webhook_url("dingtalk_url", &req.dingtalk_url)?;
+
+    // 密钥留空按「保留已存」处理：以磁盘配置为基底合并，避免覆盖丢失
+    let mut config =
+        foims_auth::webhook::get_webhook_config_from_db(&state.pool()?.get_conn()).await;
+    config.generic_url = req.generic_url.trim().to_string();
+    config.dingtalk_url = req.dingtalk_url.trim().to_string();
+    if !req.dingtalk_secret.is_empty() {
+        config.dingtalk_secret = req.dingtalk_secret;
+    }
+    config.wecom_key = req.wecom_key.trim().to_string();
+
+    foims_auth::webhook::save_webhook_config_to_db(&state.pool()?.get_conn(), &config).await?;
+
+    Ok(foims_common::ok_json((), "server.webhook.config_updated"))
+}
+
+#[derive(Debug, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
+pub struct TestWebhookRequest {
+    pub channel: foims_auth::webhook::WebhookChannel,
+}
+
+/// POST /api/system/webhook/test：向指定渠道发送测试消息（依赖已保存配置）。
+pub async fn test_webhook(
+    State(state): State<Arc<AppState>>,
+    _sysadmin: foims_auth::extractor::SysAdminUser,
+    AppJson(req): AppJson<TestWebhookRequest>,
+) -> Result<Response, AppError> {
+    foims_auth::webhook::test_webhook_channel(&state.pool()?.get_conn(), req.channel).await?;
+    Ok(foims_common::ok_json((), "server.webhook.test_success"))
+}
+
 // 等保密码策略
 
 /// GET /api/system/password-policy：读取密码策略（未配置时返回等保三级默认值；

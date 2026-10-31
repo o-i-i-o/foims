@@ -780,7 +780,7 @@ impl AlertRuntime {
 
         // 受「通知配置」主机告警邮件开关门控；发送失败只记日志——邮件丢失可
         // 接受，站内通知失败才保持未通知态重试
-        if let Some(email) = email
+        if let Some(email) = &email
             && foims_auth::smtp::load_notification_methods(&self.pool)
                 .await
                 .agent_alert
@@ -800,6 +800,18 @@ impl AlertRuntime {
                 metric = email.metric,
                 error = e
             );
+        }
+        // Webhook 渠道（内部受 webhook_agent_alert 开关门控，未配置渠道静默跳过）
+        if let Some(email) = &email {
+            foims_auth::webhook::send_host_alert_webhook(
+                &self.pool,
+                &host.hostname,
+                &host.ip,
+                email.metric,
+                email.value,
+                email.threshold,
+            )
+            .await;
         }
         Ok(ids)
     }

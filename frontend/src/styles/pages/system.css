@@ -606,7 +606,7 @@
     margin-top: 2rem;
   }
 
-  /* 通知方式矩阵：行=通知类型，列=通知方式 */
+  /* 通知方式矩阵：行=通知类型，列=邮件/Webhook 两种方式 */
   .notification-matrix {
     width: 100%;
     border-collapse: collapse;
@@ -632,9 +632,18 @@
     vertical-align: middle;
   }
 
-  /* 占位徽章收缩为内容宽度，避免撑满整列 */
-  .notification-matrix .status-badge {
-    display: inline-flex;
+  /* Webhook 卡片：渠道说明文字与分渠道测试按钮组 */
+  .system-config-section .form-hint {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    margin-top: 0.25rem;
+    line-height: 1.4;
+  }
+
+  .webhook-test-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
   .users-checkbox-list {
