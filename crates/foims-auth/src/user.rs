@@ -231,8 +231,7 @@ pub async fn create_user<P: AuthProvider>(
 
     tx.commit().await?;
 
-    let details =
-        json!({"username": req.username, "email": req.email, "phone": phone, "role": req.role});
+    let details = json!({"username": req.username, "email": req.email, "phone": phone, "role": req.role});
     log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;
     log_info!("log.user.created", username = req.username, id = id);
 
