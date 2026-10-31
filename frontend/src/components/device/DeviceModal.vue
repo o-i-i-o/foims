@@ -1048,7 +1048,6 @@ onMounted(async () => {
               <input id="device-ipmi-port" v-model="form.ipmiPort" type="number" autocomplete="off">
             </div>
           </div>
-          <p class="proto-config-hint">{{ t("device.ipmi_config_hint") }}</p>
         </section>
       </div>
     </form>
