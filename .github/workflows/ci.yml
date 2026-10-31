@@ -129,9 +129,9 @@ jobs:
 
   # Agent 交叉编译任务：与主程序 build 并行。agent 独立工作空间 foims-agent/
   # （随本仓检出）的 build-agent.sh 编译多平台静态二进制并组装 OS 系统包
-  # （Linux 每目标 deb/rpm、Windows zip：exe + 服务安装/卸载脚本），由 release 任务与主程序产物一并
-  # 上传发布页供用户按需下载；主程序 DEB 不含 agent，服务端 web 页只现场组
-  # 配置包。
+  # （Linux 每目标 deb/rpm、Windows 双架构 zip：exe + 服务安装/卸载脚本），
+  # 由 release 任务与主程序产物一并上传发布页供用户按需下载；主程序 DEB
+  # 不含 agent，服务端 web 页只现场组配置包。
   #
   # 检查门（fmt / clippy / 本机单测）与主程序 build 任务同源同级别：agent 工作
   # 空间自持 [workspace.lints] 护栏（见 foims-agent/Cargo.toml），若不显式跑
@@ -203,8 +203,20 @@ jobs:
           zig version
           cargo-zigbuild --version
 
-      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 目标出 zip（exe+服务脚本），
-      # 产物归集到 foims-agent/dist/packages/
+      # windows gnullvm 交叉工具链：aarch64-pc-windows-gnullvm（官方 tier2
+      # std）需要 llvm-mingw 的 clang/lld 与自带 mingw sysroot，zig 只覆盖
+      # gnu abi 担当不了 gnullvm；版本锁 20261020（升级需连同
+      # build-agent.sh 的 LLVM_MINGW_PREFIX 约定一并重验）
+      - name: 安装 llvm-mingw 交叉工具链
+        run: |
+          curl -fsSL --retry 3 -o /tmp/llvm-mingw.tar.xz \
+            https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64.tar.xz
+          sudo mkdir -p /opt/llvm-mingw
+          sudo tar -xJf /tmp/llvm-mingw.tar.xz -C /opt/llvm-mingw --strip-components=1
+          /opt/llvm-mingw/bin/aarch64-w64-mingw32-clang --version
+
+      # 全部 tier1/2 Linux 目标出 deb/rpm、windows 双架构目标（amd64/arm64）
+      # 出 zip（exe+服务脚本），产物归集到 foims-agent/dist/packages/
       - name: 构建 Agent 多平台安装包
         run: AGENT_BACKEND=zigbuild bash foims-agent/scripts/build-agent.sh
 
@@ -241,7 +253,7 @@ jobs:
           path: release-assets/agent
 
       - name: 创建 GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             release-assets/main/*

@@ -33,13 +33,17 @@
 #     仅影响 tier1/2
 #   - tier1/2 目标：stable 直编，缺 std 组件时 rustup target add；
 #     国内镜像源缺组件（404）时自动回退官方源离线安装（校验 sha256）
-#   - windows 目标：x86_64/aarch64-pc-windows-gnu（rustup 官方 std，stable
-#     直编；msvc 需 Windows 宿主，不在本脚本矩阵）；链接由 windows-gnu 的
-#     self-contained rust-lld 承担（Rust 1.71+ 默认），mingw-w64 交叉编译器
-#     仅承担 ring 的 C 编译（gcc 后端：x86_64 用 x86_64-w64-mingw32-gcc、
-#     aarch64 用 aarch64-w64-mingw32-gcc），zig 后端免注入。
-#     aarch64 为实验性目标：ring 的 aarch64-windows-gnu 汇编路径未经长期
-#     验证，构建失败会进 FAILED 汇总（不影响其他目标产物）
+#   - windows 目标：x86_64 用 gnu（rustup 官方 std，stable 直编；msvc 需
+#     Windows 宿主，不在本脚本矩阵），链接由 self-contained rust-lld 承担
+#     （Rust 1.71+ 默认），mingw-w64 交叉编译器仅承担 ring 的 C 编译
+#     （x86_64-w64-mingw32-gcc），zig 后端免注入。
+#     aarch64 用 gnullvm（Windows on ARM）：rustc/rustup 无
+#     aarch64-pc-windows-gnu（CI 实测：无官方 std 且 rustc 无内置 spec），
+#     gnullvm 才是官方 tier2 std 目标，需 llvm-mingw 工具链（clang/lld +
+#     mingw sysroot；zig 仅覆盖 gnu abi，担当不了 gnullvm），路径经
+#     LLVM_MINGW_PREFIX 提供（默认 /opt/llvm-mingw）。aarch64 为实验性
+#     目标：ring 在 gnullvm 的汇编路径未经长期验证，构建失败会进 FAILED
+#     汇总（不影响其他目标产物）
 #   - tier3 目标：需 nightly + rust-src，用 -Z build-std 现场构建 std
 #     （与 node_exporter .promu.yml 的 crossbuild 矩阵对齐，OpenBSD 另行处理）
 #   - 版本策略：agent 版本独立自管理（版本号取本工作空间根 Cargo.toml 的
@@ -75,11 +79,12 @@ TIER12_TARGETS=(
     armv7-unknown-linux-musleabihf
 )
 
-# windows：rustup 官方 std，stable 直编（gnu 目标；msvc 需 Windows 宿主）。
-# aarch64 为 Windows on ARM 支持（实验性，见上方设计约束说明）
+# windows：x86_64 用 gnu（rustup 官方 std，stable 直编；msvc 需 Windows
+# 宿主）；aarch64 用 gnullvm（Windows on ARM，官方 tier2 std；为何不用
+# windows-gnu 见上方设计约束说明）
 WINDOWS_TARGETS=(
     x86_64-pc-windows-gnu
-    aarch64-pc-windows-gnu
+    aarch64-pc-windows-gnullvm
 )
 
 # tier3：无官方 std 预编译，nightly -Z build-std 现场构建
@@ -249,7 +254,8 @@ install_target_offline() {
 # 各 musl 目标对应的交叉 C 编译器：依赖链中含 C 代码（如 ring）时，
 # cc-rs 按目标前缀查找编译器且不回退宿主 cc，必须显式注入 CC_<target>。
 # x86_64 用发行版 musl-tools 的 musl-gcc；其余用 musl.cc 交叉工具链。
-# windows-gnu 用 mingw-w64 交叉编译器（ring 需要），双架构各取对应前缀。
+# windows-gnu 用 mingw-w64 交叉编译器；gnullvm 用 llvm-mingw 的 clang
+# （C 编译与链接驱动一体，sysroot 随工具链自带），均服务于 ring。
 cc_for_target() {
     case "$1" in
         x86_64-unknown-linux-musl)    command -v musl-gcc || true ;;
@@ -258,7 +264,7 @@ cc_for_target() {
         armv7-unknown-linux-musleabihf)
             echo "/opt/musl-cross/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc" ;;
         x86_64-pc-windows-gnu)        command -v x86_64-w64-mingw32-gcc || true ;;
-        aarch64-pc-windows-gnu)       command -v aarch64-w64-mingw32-gcc || true ;;
+        aarch64-pc-windows-gnullvm)   echo "${LLVM_MINGW_PREFIX:-/opt/llvm-mingw}/bin/aarch64-w64-mingw32-clang" ;;
         *) : ;;
     esac
 }
@@ -316,29 +322,38 @@ build_tier3() {
         -Z build-std=std,panic_abort --target "$target")
 }
 
-# 构建 windows（gnu 目标，stable 直编）：
-# gcc 后端：mingw-w64 交叉 C 编译器承担 ring 编译（链接由 self-contained
-# rust-lld 承担，与 tier1/2 注入 rust-lld 的场景不同，无需 LINKER 变量）；
-# zig 后端：zig cc 兼任 C 编译器与链接器，免注入
+# 构建 windows（stable 直编）：
+# gnu（x86_64）：zig 后端 zig cc 兼任 C 编译器与链接器；gcc 后端 mingw gcc
+#   只编 C，链接由 self-contained rust-lld 承担（1.71+ 默认）
+# gnullvm（aarch64）：不走 zigbuild（zig 担当不了 gnullvm），固定用
+#   llvm-mingw 的 clang 驱动——同时承担 ring 编译（CC_<target>）与链接
+#   （LINKER，sysroot 随工具链自带）
 build_windows() {
     local target="$1"
     if ! target_std_installed "$target"; then
         rustup target add "$target" || install_target_offline "$target"
     fi
-    if [ "$ZIGBUILD" -eq 1 ]; then
+    if [ "$ZIGBUILD" -eq 1 ] && [ "$target" != "aarch64-pc-windows-gnullvm" ]; then
         (cd "$PROJECT_DIR" && \
             cargo zigbuild --release -p "$CRATE_WINDOWS" --target "$target")
         return
     fi
     local cc_var cc
-    # cc-rs 认小写形式（如 CC_aarch64_pc_windows_gnu），按目标推导变量名
+    # cc-rs 认小写形式（如 CC_aarch64_pc_windows_gnullvm），按目标推导变量名
     cc_var="CC_$(echo "$target" | tr '.' '_')"
     cc="$(cc_for_target "$target")"
     if [ -n "$cc" ] && [ -x "$cc" ]; then
-        (cd "$PROJECT_DIR" && env "$cc_var=$cc" \
-            cargo build --release -p "$CRATE_WINDOWS" --target "$target")
+        if [ "$target" = "aarch64-pc-windows-gnullvm" ]; then
+            local linker_var
+            linker_var="CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_LINKER"
+            (cd "$PROJECT_DIR" && env "$cc_var=$cc" "$linker_var=$cc" \
+                cargo build --release -p "$CRATE_WINDOWS" --target "$target")
+        else
+            (cd "$PROJECT_DIR" && env "$cc_var=$cc" \
+                cargo build --release -p "$CRATE_WINDOWS" --target "$target")
+        fi
     else
-        echo "警告：[$target] 未找到 mingw-w64 交叉 C 编译器（ring 需要），仅以 rust-lld 继续" >&2
+        echo "警告：[$target] 未找到交叉 C 编译器（ring 需要），仅以默认链接器继续" >&2
         (cd "$PROJECT_DIR" && \
             cargo build --release -p "$CRATE_WINDOWS" --target "$target")
     fi
@@ -552,8 +567,8 @@ SPEC_EOF
 # Windows zip 的架构名（沿用既有 windows-amd64 命名风格）；未适配返回空串
 win_arch_of() {
     case "$1" in
-        x86_64-pc-windows-gnu)  echo amd64 ;;
-        aarch64-pc-windows-gnu) echo arm64 ;;
+        x86_64-pc-windows-gnu)      echo amd64 ;;
+        aarch64-pc-windows-gnullvm) echo arm64 ;;
         *) echo "" ;;
     esac
 }
