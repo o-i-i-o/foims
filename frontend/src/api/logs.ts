@@ -67,6 +67,11 @@ export function loginLogsUrl(query: PagedQuery): string {
   return buildPagedUrl("/api/logs/login", query);
 }
 
+/** 运行日志 SSE 流 URL（EventSource 建连用，lang 为期望的日志语言） */
+export function runtimeLogsUrl(lang: string): string {
+  return `/api/logs/live?lang=${encodeURIComponent(lang)}`;
+}
+
 /** 通知列表分页 URL */
 export function notificationsUrl(query: PagedQuery): string {
   return buildPagedUrl("/api/notifications", query);

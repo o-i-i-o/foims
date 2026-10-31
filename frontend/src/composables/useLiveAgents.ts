@@ -12,7 +12,7 @@ import type { LiveSummaryRow } from "../types/api/generated/LiveSummaryRow";
 
 const LIVE_STREAM_URL = "/api/agents/live/stream";
 
-function parseJson(raw: unknown): unknown {
+export function parseJson(raw: unknown): unknown {
   if (typeof raw !== "string") {
     return null;
   }

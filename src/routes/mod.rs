@@ -19,7 +19,7 @@ use crate::app_state::AppState;
 use crate::log::notification::{
     get_notifications, mark_all_notifications_read, mark_notification_read,
 };
-use crate::log::{get_login_logs, get_operation_logs};
+use crate::log::{get_live_logs, get_login_logs, get_operation_logs};
 use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_enrollment_token,
@@ -740,6 +740,7 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/logs/operation", get(get_operation_logs))
         .route("/api/logs/login", get(get_login_logs))
+        .route("/api/logs/live", get(get_live_logs))
         .route("/api/notifications", get(get_notifications))
         .route("/api/notifications/{id}/read", put(mark_notification_read))
         .route(

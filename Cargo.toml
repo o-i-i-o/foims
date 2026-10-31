@@ -1,6 +1,6 @@
 [package]
 name = "foims"
-version = "0.33.4"
+version = "0.33.5"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -110,6 +110,8 @@ time = "0.3.55"
 
 # Async
 tokio = { version = "1.54.1", features = ["full"] }
+# SSE 流适配（broadcast → Stream，运行日志实时推送）
+tokio-stream = { version = "0.1", features = ["sync"] }
 
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
@@ -148,6 +150,7 @@ default = []
 
 [dependencies]
 async-trait = { workspace = true }
+tokio-stream = { workspace = true }
 
 # Workspace dependencies (使用共享版本)
 axum = { workspace = true }

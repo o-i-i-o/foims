@@ -12,10 +12,12 @@
 //!   本模块按 target 将事件路由到对应语言的控制台/文件输出层。
 
 pub mod forwarding;
+pub mod live;
 pub mod login;
 pub mod notification;
 pub mod operation;
 
+pub use live::get_live_logs;
 pub use login::get_login_logs;
 pub use operation::get_operation_logs;
 
@@ -274,6 +276,9 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
                 .with_filter(build_filter(&log_cfg.console_lang, &all_langs, i18n_level)),
         )
         .with(file_layers)
+        // 运行日志 SSE 层：放行全部激活语言的事件（语言标记随事件下发，
+        // 由各 SSE 连接按请求语言过滤），普通事件口径与控制台层一致
+        .with(live::live_log_layer().with_filter(live::build_live_filter(&all_langs, i18n_level)))
         .init();
 
     // 订阅器就绪后，统一通过日志记录引导阶段的降级情况

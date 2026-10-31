@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
- * 日志管理页：操作日志 / 登录日志 / 通知三个页签，排序 + 分页 + 操作日志搜索。
+ * 日志管理页：操作日志 / 登录日志 / 运行日志 / 通知四个页签，
+ * 排序 + 分页 + 操作日志搜索；运行日志经 SSE 实时推送（不走分页查询）。
  * 数据层为 TanStack Query 首次实战接线：queryFn 内对归一化失败（success:false）
  * 抛出以进入 error 态；通知已读操作经 useMutation + 失效缓存刷新。
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { loginLogsUrl, markAllNotificationsRead, markNotificationRead, notificationsUrl, operationLogsUrl } from "../api/logs";
@@ -18,6 +19,7 @@ import {
 import { showToast } from "../composables/useToast";
 import { usePagedList } from "../composables/usePagedList";
 import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
+import { useLiveLogs } from "../composables/useLiveLogs";
 import { queryKeys } from "../utils/queryKeys";
 import type { LoginLog } from "../types/api/generated/LoginLog";
 import type { Notification } from "../types/api/generated/Notification";
@@ -34,6 +36,7 @@ const queryClient = useQueryClient();
 const TABS = [
   { id: "operation", titleKey: "logs.operation_logs" },
   { id: "login", titleKey: "logs.login_logs" },
+  { id: "runtime", titleKey: "logs.runtime_logs" },
   { id: "notifications", titleKey: "logs.notifications" }
 ] as const satisfies readonly [SubTabMeta, ...SubTabMeta[]];
 
@@ -74,6 +77,39 @@ const login = usePagedList<LoginLog>({
   enabled: computed(() => activeTab.value === "login"),
   buildUrl: (page, pageSize, sortBy, sortOrder) => loginLogsUrl({ page, pageSize, sortBy, sortOrder })
 });
+
+// 运行日志：页签激活时建 SSE 连接，切离即断开（连接内只推新增日志）
+const {
+  logs: liveLogs,
+  connected: liveConnected,
+  paused: livePaused,
+  clear: clearLiveLogs
+} = useLiveLogs(computed(() => activeTab.value === "runtime"));
+
+// 跟随滚动：仅在用户本就停在底部时跟随新日志下滚，上翻查看历史不抢滚动条
+const livePane = ref<HTMLElement | null>(null);
+const livePinned = ref(true);
+
+function onLiveScroll(): void {
+  const pane = livePane.value;
+  if (pane) {
+    livePinned.value = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 30;
+  }
+}
+
+watch(
+  () => liveLogs.value.length,
+  async () => {
+    if (!livePinned.value || livePaused.value) {
+      return;
+    }
+    await nextTick();
+    const pane = livePane.value;
+    if (pane) {
+      pane.scrollTop = pane.scrollHeight;
+    }
+  }
+);
 
 const notifications = usePagedList<Notification>({
   tag: queryKeys.notifications,
@@ -300,6 +336,43 @@ const detailsLog = ref<OperationLog | null>(null);
       />
     </div>
 
+    <div id="runtime-tab" v-show="activeTab === 'runtime'" class="tab-content" :class="{ active: activeTab === 'runtime' }" role="tabpanel">
+      <div class="live-toolbar">
+        <span class="live-status" :class="{ connected: liveConnected }">
+          <span class="live-dot" aria-hidden="true"></span>
+          {{ liveConnected ? t("logs.live_connected") : t("logs.live_disconnected") }}
+        </span>
+        <span v-if="livePaused" class="live-paused-hint">{{ t("logs.live_paused_hint") }}</span>
+        <div class="live-actions">
+          <button type="button" class="btn btn-secondary btn-sm" @click="livePaused = !livePaused">
+            {{ livePaused ? t("logs.live_resume") : t("logs.live_pause") }}
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" @click="clearLiveLogs">
+            {{ t("logs.live_clear") }}
+          </button>
+        </div>
+      </div>
+      <div ref="livePane" class="live-pane" @scroll="onLiveScroll">
+        <p v-if="liveLogs.length === 0" class="live-empty">{{ t("logs.live_empty") }}</p>
+        <template v-else>
+          <p
+            v-for="(entry, index) in liveLogs"
+            :key="index"
+            class="live-line"
+            :class="`live-${entry.level.toLowerCase()}`"
+          >
+            <template v-if="entry.skipped">{{ t("logs.live_skipped", { n: entry.skipped }) }}</template>
+            <template v-else>
+              <span class="live-ts">{{ entry.ts }}</span>
+              <span class="live-level">{{ entry.level }}</span>
+              <span class="live-target">{{ entry.target }}</span>
+              <span class="live-msg">{{ entry.message }}</span>
+            </template>
+          </p>
+        </template>
+      </div>
+    </div>
+
     <div id="notifications-tab" v-show="activeTab === 'notifications'" class="tab-content" :class="{ active: activeTab === 'notifications' }" role="tabpanel">
       <div class="table-container">
         <table id="notifications-table" class="data-table" :aria-label="t('logs.notifications')">
@@ -415,5 +488,106 @@ const detailsLog = ref<OperationLog | null>(null);
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 运行日志：终端风格滚动窗（非表格），工具栏挂连接状态与暂停/清空 */
+.live-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger);
+}
+
+.live-status.connected .live-dot {
+  background: var(--color-success);
+}
+
+.live-paused-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning-text);
+}
+
+.live-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.live-pane {
+  height: 480px;
+  overflow: auto;
+  padding: 8px 12px;
+  background: #212529;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+}
+
+.live-pane .live-empty {
+  margin: 16px 0;
+  color: #adb5bd;
+  text-align: center;
+}
+
+.live-line {
+  margin: 0;
+  color: #dee2e6;
+}
+
+.live-ts,
+.live-target {
+  color: #adb5bd;
+  margin-right: 8px;
+}
+
+.live-level {
+  display: inline-block;
+  min-width: 44px;
+  margin-right: 8px;
+  font-weight: 600;
+  color: #8ce99a;
+}
+
+.live-line.live-warn {
+  color: #ffec99;
+}
+
+.live-line.live-warn .live-level {
+  color: #ffd43b;
+}
+
+.live-line.live-error {
+  color: #ffc9c9;
+}
+
+.live-line.live-error .live-level {
+  color: #ff8787;
+}
+
+.live-line.live-debug,
+.live-line.live-trace {
+  color: #868e96;
+}
+
+.live-line.live-debug .live-level,
+.live-line.live-trace .live-level {
+  color: #adb5bd;
 }
 </style>

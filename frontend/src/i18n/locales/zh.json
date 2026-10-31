@@ -1269,6 +1269,7 @@
   "logs": {
     "operation_logs": "操作日志",
     "login_logs": "登录日志",
+    "runtime_logs": "运行日志",
     "notifications": "通知",
     "search_placeholder": "搜索日志...",
     "operation_time": "操作时间",
@@ -1292,6 +1293,14 @@
     "clear_all_confirm": "确定要删除全部日志吗？此操作不可撤销。",
     "clear_days_confirm": "确定要清理 {{days}} 天前的日志吗？此操作不可撤销。",
     "clear_failed": "清理日志失败",
+    "live_connected": "已连接",
+    "live_disconnected": "未连接",
+    "live_pause": "暂停",
+    "live_resume": "继续",
+    "live_clear": "清空",
+    "live_paused_hint": "已暂停接收：画面已冻结，新日志暂不显示",
+    "live_empty": "暂无运行日志，等待实时推送...",
+    "live_skipped": "接收过慢，已跳过 {{n}} 条日志",
     "operation_types": {
       "create": "创建",
       "update": "更新",
@@ -2475,7 +2484,8 @@
       "forwarding_protocol_invalid": "协议仅支持 udp 或 tcp",
       "forwarding_disabled": "日志外发未启用，请先启用并保存",
       "forwarding_test_failed": "测试报文发送失败",
-      "forwarding_test_sent": "测试报文已发送，请在采集端确认"
+      "forwarding_test_sent": "测试报文已发送，请在采集端确认",
+      "live_unavailable": "运行日志推送不可用（日志系统未就绪）"
     },
     "net_outlet": {
       "created": "信息点创建成功",

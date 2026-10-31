@@ -1494,7 +1494,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.33.4"
+version = "0.33.5"
 dependencies = [
  "async-trait",
  "axum",
@@ -1523,6 +1523,7 @@ dependencies = [
  "thiserror 2.0.21",
  "time",
  "tokio",
+ "tokio-stream",
  "toml 1.1.8+spec-1.1.0",
  "tower-http 0.7.1",
  "tracing",
@@ -5049,6 +5050,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
