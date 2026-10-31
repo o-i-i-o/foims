@@ -165,7 +165,6 @@
     "ipmi_password": "Password",
     "ipmi_port": "Port",
     "ipmi_auth_algo": "Auth Algorithm",
-    "ipmi_config_hint": "Out-of-band (BMC) credentials: port defaults to 623, privilege level is fixed to administrator; leave empty when not configured.",
     "test_snmp": "Test SNMP",
     "test_ipmi": "Test IPMI",
     "ipmi_test_success": "IPMI connection succeeded",

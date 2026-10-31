@@ -165,7 +165,6 @@
     "ipmi_password": "口令",
     "ipmi_port": "端口",
     "ipmi_auth_algo": "认证算法",
-    "ipmi_config_hint": "带外管理（BMC）凭据：端口默认 623，特权级固定 administrator；未配置时留空。",
     "test_snmp": "测试SNMP",
     "test_ipmi": "测试IPMI",
     "ipmi_test_success": "IPMI 连接成功",
