@@ -6,6 +6,10 @@ export type UserCreate = { username: string,
  */
 password: string, email: string, 
 /**
+ * 手机号码（选填，空串经 handler 规范化为 NULL；字符白名单校验在 handler 侧）
+ */
+phone: string | null, 
+/**
  * 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
  */
 role: string, 

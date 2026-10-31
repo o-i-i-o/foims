@@ -2,6 +2,10 @@
 
 export type User = { id: string, username: string, email: string, 
 /**
+ * 手机号码（可空，选填联系信息；口径与 employees.phone 一致）
+ */
+phone: string | null, 
+/**
  * 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
  */
 role: string, 

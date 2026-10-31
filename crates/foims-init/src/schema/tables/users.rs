@@ -7,6 +7,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             username VARCHAR(50) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE NOT NULL,
+            phone VARCHAR(20),
             role VARCHAR(20) NOT NULL
                 CONSTRAINT chk_users_role
                 CHECK (role IN ('admin', 'sysadmin', 'secadmin', 'auditor', 'user')),

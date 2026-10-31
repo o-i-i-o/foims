@@ -17,11 +17,30 @@ use foims_common::AppJson;
 use foims_common::log_info;
 use foims_common::pagination::{Pagination, paged_response};
 use foims_common::{AppError, msg};
-use foims_models::{User, UserCreate, UserUpdate};
+use foims_models::{User, UserCreate, UserUpdate, is_valid_phone};
 
 /// 管理员删除路径的固定咨询锁键（"FOIMS" 魔数 + 序号 2 的 int64 编码，
 /// 仅作为串行化标记，与其他锁键不冲突即可）
 const ADMIN_DELETE_ADVISORY_LOCK_KEY: i64 = 0x464F_494D_5300_0002;
+
+/// 手机号格式校验（非空时执行，空串视为未填写；口径同 employees 侧）
+fn validate_phone(phone: &Option<String>) -> Result<(), AppError> {
+    if let Some(phone) = phone.as_deref().map(str::trim).filter(|s| !s.is_empty())
+        && !is_valid_phone(phone)
+    {
+        return Err(AppError::Validation(msg(
+            "server.user.validation.phone_invalid",
+        )));
+    }
+    Ok(())
+}
+
+/// 手机号规范化：trim 后空串转 NULL（选填字段不落空串）
+fn normalize_phone(phone: Option<String>) -> Option<String> {
+    phone
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+}
 
 /// GET /api/users：用户列表（登录即可读：只读系统模块的普通用户/审计员需
 /// 展示账户信息；增删改由账户管理员端点约束；search 模糊匹配用户名/邮箱，
@@ -64,7 +83,7 @@ pub async fn get_users<P: AuthProvider>(
             .await?;
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-            "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users",
+            "SELECT id, username, email, phone, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users",
         );
         // 排序段为白名单常量，经 push 拼接
         qb.push(" ").push(order_clause);
@@ -86,7 +105,7 @@ pub async fn get_users<P: AuthProvider>(
         .await?;
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-            "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE ",
+            "SELECT id, username, email, phone, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE username ILIKE ",
         );
         qb.push_bind(&search_pattern)
             .push(" OR email ILIKE ")
@@ -141,6 +160,10 @@ pub async fn create_user<P: AuthProvider>(
         return Err(AppError::Conflict(msg("server.user.email_exists")));
     }
 
+    // 手机号：空串规范化为 NULL，非空时校验字符白名单
+    let phone = normalize_phone(req.phone.clone());
+    validate_phone(&phone)?;
+
     // 提权防护：仅超管可授予 admin 角色（sysadmin/secadmin 共管其余账户）
     if req.role == "admin" && account_admin.role != "admin" {
         return Err(AppError::Forbidden(msg(
@@ -160,13 +183,14 @@ pub async fn create_user<P: AuthProvider>(
     let mut tx = conn.begin().await?;
 
     let insert_result = sqlx::query(
-        "INSERT INTO users (id, username, password_hash, email, role, enabled, password_expiry_days, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        "INSERT INTO users (id, username, password_hash, email, phone, role, enabled, password_expiry_days, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(id)
     .bind(&req.username)
     .bind(&hashed_password)
     .bind(&req.email)
+    .bind(&phone)
     .bind(&req.role)
     .bind(true)
     .bind(req.password_expiry_days.unwrap_or(0))
@@ -207,7 +231,8 @@ pub async fn create_user<P: AuthProvider>(
 
     tx.commit().await?;
 
-    let details = json!({"username": req.username, "email": req.email, "role": req.role});
+    let details =
+        json!({"username": req.username, "email": req.email, "phone": phone, "role": req.role});
     log_op_best_effort(&conn, &meta, "create_user", "user", Some(&id), &details).await;
     log_info!("log.user.created", username = req.username, id = id);
 
@@ -215,6 +240,7 @@ pub async fn create_user<P: AuthProvider>(
         id,
         username: req.username.clone(),
         email: req.email.clone(),
+        phone,
         role: req.role.clone(),
         enabled: true,
         password_expiry_days: req.password_expiry_days.unwrap_or(0),
@@ -236,7 +262,7 @@ pub async fn get_user<P: AuthProvider>(
     let conn = state.pool()?.get_conn();
 
     let user = sqlx::query_as::<_, User>(
-        "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
+        "SELECT id, username, email, phone, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
     )
     .bind(id)
     .fetch_optional(&conn)
@@ -257,6 +283,11 @@ pub async fn update_user<P: AuthProvider>(
     AppJson(req): AppJson<UserUpdate>,
 ) -> Result<Response, AppError> {
     req.validate()?;
+
+    // 手机号三态：字段缺失不修改 / null 清空 / 有值更新；空串规范化为 NULL
+    let phone_set = req.phone.is_some();
+    let phone = normalize_phone(req.phone.clone().flatten());
+    validate_phone(&phone)?;
 
     let conn = state.pool()?.get_conn();
 
@@ -344,16 +375,19 @@ pub async fn update_user<P: AuthProvider>(
          role = COALESCE($2, role),
          enabled = COALESCE($3, enabled),
          password_expiry_days = COALESCE($4, password_expiry_days),
-         password_hash = COALESCE($5, password_hash),
-         password_changed_at = COALESCE($6, password_changed_at),
-         tokens_invalidated_at = CASE WHEN $7::BOOLEAN THEN NOW() ELSE tokens_invalidated_at END,
-         updated_at = $8
-         WHERE id = $9",
+         phone = CASE WHEN $5::BOOLEAN THEN $6 ELSE phone END,
+         password_hash = COALESCE($7, password_hash),
+         password_changed_at = COALESCE($8, password_changed_at),
+         tokens_invalidated_at = CASE WHEN $9::BOOLEAN THEN NOW() ELSE tokens_invalidated_at END,
+         updated_at = $10
+         WHERE id = $11",
     )
     .bind(&req.email)
     .bind(&req.role)
     .bind(req.enabled)
     .bind(req.password_expiry_days)
+    .bind(phone_set)
+    .bind(&phone)
     .bind(&new_password_hash)
     .bind(password_reset.then_some(now))
     .bind(role_changed || disabling || password_reset)
@@ -380,12 +414,12 @@ pub async fn update_user<P: AuthProvider>(
 
     tx.commit().await?;
 
-    let details = json!({"email": req.email, "role": req.role, "enabled": req.enabled, "password_expiry_days": req.password_expiry_days, "password_reset": req.password.is_some()});
+    let details = json!({"email": req.email, "phone": phone, "role": req.role, "enabled": req.enabled, "password_expiry_days": req.password_expiry_days, "password_reset": req.password.is_some()});
     log_op_best_effort(&conn, &meta, "update_user", "user", Some(&id), &details).await;
     log_info!("log.user.updated", id = id);
 
     let user = sqlx::query_as::<_, User>(
-        "SELECT id, username, email, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
+        "SELECT id, username, email, phone, role, enabled, password_expiry_days, two_factor_enabled, two_factor_verified, created_at::TIMESTAMPTZ, updated_at::TIMESTAMPTZ FROM users WHERE id = $1"
     )
     .bind(id)
     .fetch_one(&conn)

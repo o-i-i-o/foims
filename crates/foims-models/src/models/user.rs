@@ -13,6 +13,8 @@ pub struct User {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    /// 手机号码（可空，选填联系信息；口径与 employees.phone 一致）
+    pub phone: Option<String>,
     /// 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
     pub role: String,
     /// 账户启用开关：false 表示被禁用（登录与令牌刷新均拒绝）
@@ -44,6 +46,10 @@ pub struct UserCreate {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: String,
+    /// 手机号码（选填，空串经 handler 规范化为 NULL；字符白名单校验在 handler 侧）
+    #[serde(default)]
+    #[validate(length(max = 20, message = "server.user.validation.phone_length"))]
+    pub phone: Option<String>,
     /// 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
     #[validate(custom(
         function = "crate::models::validate_role",
@@ -66,6 +72,14 @@ pub struct UserUpdate {
     #[validate(email(message = "server.user.validation.email_invalid"))]
     #[validate(length(max = 100, message = "server.user.validation.email_length"))]
     pub email: Option<String>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值；
+    /// 空串经 trim 后放行，handler 侧规范化为 NULL（口径同 EmployeeUpdate.phone）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_phone_opt",
+        message = "server.user.validation.phone_length"
+    ))]
+    pub phone: Option<Option<String>>,
     /// 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
     #[validate(custom(
         function = "crate::models::validate_role_option",
@@ -367,6 +381,37 @@ mod tests {
         }))?;
         assert!(req.validate().is_ok());
         assert_eq!(req.enabled, Some(false));
+
+        // phone 三态：缺省不修改 / null 清空 / 值设置新值
+        assert_eq!(req.phone, None);
+        let clear: UserUpdate = serde_json::from_value(serde_json::json!({ "phone": null }))?;
+        assert!(clear.validate().is_ok());
+        assert_eq!(clear.phone, Some(None));
+        let set: UserUpdate =
+            serde_json::from_value(serde_json::json!({ "phone": "13800138000" }))?;
+        assert!(set.validate().is_ok());
+        assert_eq!(set.phone, Some(Some("13800138000".to_string())));
+        Ok(())
+    }
+
+    #[test]
+    fn test_user_phone_validation() -> Result<(), serde_json::Error> {
+        // 超过 20 字符拒绝（创建与更新同口径）
+        let long: UserCreate = serde_json::from_value(serde_json::json!({
+            "username": "alice",
+            "password": "password123",
+            "email": "alice@example.com",
+            "role": "user",
+            "phone": "1".repeat(21)
+        }))?;
+        let Err(errors) = long.validate() else {
+            panic!("超长手机号应被拒绝");
+        };
+        assert!(errors.errors().contains_key("phone"));
+
+        let long_update: UserUpdate =
+            serde_json::from_value(serde_json::json!({ "phone": "1".repeat(21) }))?;
+        assert!(long_update.validate().is_err());
         Ok(())
     }
 
@@ -584,6 +629,7 @@ mod tests {
             id: Uuid::new_v4(),
             username: "alice".to_string(),
             email: "alice@example.com".to_string(),
+            phone: Some("13800138000".to_string()),
             role: "admin".to_string(),
             enabled: true,
             password_expiry_days: 0,

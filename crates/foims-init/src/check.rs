@@ -83,6 +83,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "username",
             "password_hash",
             "email",
+            "phone",
             "role",
             "enabled",
             "auth_provider",

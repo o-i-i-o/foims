@@ -277,6 +277,7 @@ pub(crate) struct ExternalUser {
     pub(crate) id: Uuid,
     pub(crate) username: String,
     pub(crate) email: String,
+    pub(crate) phone: Option<String>,
     pub(crate) role: String,
     pub(crate) enabled: bool,
     pub(crate) two_factor_enabled: bool,
@@ -308,6 +309,7 @@ pub(crate) async fn find_or_create_external_user(
             Uuid,
             String,
             String,
+            Option<String>,
             String,
             bool,
             bool,
@@ -316,14 +318,14 @@ pub(crate) async fn find_or_create_external_user(
             DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, email, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at
+        "SELECT id, username, email, phone, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at
            FROM users WHERE username = $1",
     )
     .bind(username)
     .fetch_optional(conn)
     .await?
     {
-        let (id, db_username, mut db_email, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at) = row;
+        let (id, db_username, mut db_email, phone, role, enabled, two_factor_enabled, auth_provider, created_at, updated_at) = row;
         if auth_provider != provider {
             return Err(AppError::Conflict(msg("server.auth.provider_mismatch")));
         }
@@ -347,6 +349,7 @@ pub(crate) async fn find_or_create_external_user(
             id,
             username: db_username,
             email: db_email,
+            phone,
             role,
             enabled,
             two_factor_enabled,
@@ -412,6 +415,8 @@ pub(crate) async fn find_or_create_external_user(
                 id,
                 username,
                 email,
+                // 新建外部账户无手机号
+                phone: None,
                 role,
                 enabled,
                 two_factor_enabled,
@@ -461,6 +466,8 @@ pub(crate) async fn find_or_create_external_user(
                     id,
                     username,
                     email,
+                    // 新建外部账户无手机号
+                    phone: None,
                     role,
                     enabled,
                     two_factor_enabled,

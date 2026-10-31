@@ -10,8 +10,11 @@
 --      idx_monitored_hosts_device_id 唯一索引由 (device_id) 改为
 --      (device_id, source)——同一设备的 SNMP 行与 IPMI 行并存的前提。
 --   3. devices_with_details 视图补 4 列（CREATE OR REPLACE，列顺序与建表一致）。
---   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs）
---   与 check.rs 表/列/列宽清单已同步新增。存量数据无需订正（新列均为可空/带默认）。
+--   4. users 新增可空列 phone VARCHAR(20)（用户手机号码，选填；口径同
+--      employees.phone：数字与 + - 空格，空串不入库）。
+--   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs、
+--   users.rs）与 check.rs 表/列/列宽清单已同步新增。存量数据无需订正
+--  （新列均为可空/带默认）。
 BEGIN;
 
 -- ===== 1. devices IPMI 凭据列 =====
@@ -67,5 +70,9 @@ LEFT JOIN positions p ON d.position_id = p.id
 LEFT JOIN cabinets cab ON p.cabinet_id = cab.id
 LEFT JOIN rooms r ON d.room_id = r.id
 LEFT JOIN device_templates dt ON d.template_id = dt.id;
+
+-- ===== 4. users 手机号码列 =====
+-- 用户手机号码（选填可空）：新增后即可入库，存量行保持 NULL 无需回填。
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
 
 COMMIT;

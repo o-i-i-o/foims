@@ -161,6 +161,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
             Uuid,
             String,
             String,
+            Option<String>,
             String,
             bool,
             bool,
@@ -171,7 +172,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
             DateTime<Utc>,
         ),
     >(
-        "SELECT id, username, email, role, enabled, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider, created_at, updated_at FROM users WHERE email = $1",
+        "SELECT id, username, email, phone, role, enabled, two_factor_enabled, two_factor_email_code, two_factor_email_code_expiry, auth_provider, created_at, updated_at FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(&conn)
@@ -196,6 +197,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
         id,
         username,
         email,
+        phone,
         role,
         enabled,
         two_factor_enabled,
@@ -343,6 +345,7 @@ pub async fn login_with_email_code<P: AuthProvider>(
         id,
         username: username.clone(),
         email,
+        phone,
         role: role.clone(),
         enabled,
         // 登录响应不回传有效期，0 占位

@@ -10,10 +10,11 @@ import type { TwoFactorEnableRequest } from "../types/api/generated/TwoFactorEna
 import type { TwoFactorInitRequest } from "../types/api/generated/TwoFactorInitRequest";
 import type { User } from "../types/api/generated/User";
 
-/** 用户新增/编辑表单载荷（新增与编辑共用；password 缺省表示不改密码） */
+/** 用户新增/编辑表单载荷（新增与编辑共用；password 缺省表示不改密码，phone 空串表示清空） */
 export interface UserFormPayload {
   username: string;
   email: string;
+  phone: string;
   role: string;
   enabled: boolean;
   password_expiry_days: number;

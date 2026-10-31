@@ -34,6 +34,7 @@ const userId = computed(() => props.user?.id ?? null);
 const formRef = ref<HTMLFormElement | null>(null);
 const username = ref("");
 const email = ref("");
+const phone = ref("");
 const password = ref("");
 const passwordConfirm = ref("");
 const role = ref("user");
@@ -68,6 +69,7 @@ watch(
     twoFactorTargetEnabled = Boolean(user.two_factor_enabled);
     username.value = user.username || "";
     email.value = user.email || "";
+    phone.value = user.phone || "";
     role.value = user.role || "user";
     enabled.value = String(Boolean(user.enabled));
     passwordExpiryDays.value = String(user.password_expiry_days ?? 0);
@@ -217,6 +219,8 @@ async function handleSave(): Promise<void> {
   const userData: UserFormPayload = {
     username: username.value,
     email: email.value,
+    // 空串提交表示清空手机号，后端规范化为 NULL
+    phone: phone.value.trim(),
     role: role.value,
     enabled: enabled.value === "true",
     password_expiry_days: Number.parseInt(passwordExpiryDays.value, 10) || 0
@@ -272,6 +276,15 @@ async function handleSave(): Promise<void> {
             >
           </div>
           <div class="form-group">
+            <label for="user-status">{{ t("user.status") }}<span class="required">*</span></label>
+            <select id="user-status" v-model="enabled" name="enabled" required>
+              <option value="true">{{ t("user.status_enabled") }}</option>
+              <option value="false">{{ t("user.status_disabled") }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
             <label for="user-email">{{ t("user.email") }}<span class="required">*</span></label>
             <input
               id="user-email"
@@ -281,6 +294,18 @@ async function handleSave(): Promise<void> {
               autocomplete="email"
               required
               :placeholder="t('user.email_placeholder')"
+            >
+          </div>
+          <div class="form-group">
+            <label for="user-phone">{{ t("user.phone") }}</label>
+            <input
+              id="user-phone"
+              v-model="phone"
+              type="tel"
+              name="phone"
+              maxlength="20"
+              autocomplete="off"
+              :placeholder="t('user.phone_placeholder')"
             >
           </div>
         </div>
@@ -321,15 +346,6 @@ async function handleSave(): Promise<void> {
               <option value="user">{{ t("user.role_user") }}</option>
             </select>
           </div>
-          <div class="form-group">
-            <label for="user-status">{{ t("user.status") }}<span class="required">*</span></label>
-            <select id="user-status" v-model="enabled" name="enabled" required>
-              <option value="true">{{ t("user.status_enabled") }}</option>
-              <option value="false">{{ t("user.status_disabled") }}</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="user-password-expiry">{{ t("user.password_expiry_f") }}</label>
             <input id="user-password-expiry" v-model="passwordExpiryDays" type="number" name="password_expiry_days" min="0" max="36500">

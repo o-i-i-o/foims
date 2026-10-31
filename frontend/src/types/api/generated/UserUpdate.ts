@@ -2,6 +2,11 @@
 
 export type UserUpdate = { email: string | null, 
 /**
+ * 双层 Option：字段缺失不修改、JSON null 清空（SET NULL）、值设置新值；
+ * 空串经 trim 后放行，handler 侧规范化为 NULL（口径同 EmployeeUpdate.phone）
+ */
+phone: string | null | null, 
+/**
  * 角色白名单：admin（超管）/sysadmin/secadmin/auditor（等保三权分立）/user（普通用户）
  */
 role: string | null, enabled: boolean | null, 

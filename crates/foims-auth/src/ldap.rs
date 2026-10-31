@@ -448,6 +448,7 @@ pub(crate) async fn complete_external_login<P: AuthProvider>(
         id: external.id,
         username: external.username,
         email: external.email,
+        phone: external.phone,
         role: external.role,
         enabled: external.enabled,
         // 外部认证账户不使用本地密码有效期，0 占位

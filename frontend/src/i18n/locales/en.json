@@ -937,6 +937,8 @@
   "user": {
     "list": "User list",
     "email": "Email",
+    "phone": "Phone Number",
+    "phone_placeholder": "Enter phone number",
     "role": "Role",
     "role_admin": "Super Administrator",
     "role_sysadmin": "System Administrator",
@@ -2862,6 +2864,8 @@
         "username_length": "Username must be 3 to 50 characters",
         "username_no_at": "Username cannot contain the @ character (reserved for email login)",
         "email_length": "Email cannot exceed 100 characters",
+        "phone_length": "Phone number cannot exceed 20 characters",
+        "phone_invalid": "Phone number allows digits, +, - and spaces only",
         "password_max_length": "Password cannot exceed 72 bytes",
         "password_expiry_range": "Password validity must be between 0 and 36500 days"
       },
