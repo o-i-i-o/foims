@@ -55,16 +55,14 @@ const SWEEP_INTERVAL_SECS: u64 = 300;
 /// resolved 记录保留时长（秒）：超期即从库与内存回收
 const RESOLVED_KEEP_SECS: i64 = 3_600;
 
-/// 兜底扫描取数（仅 agent 上报主机）：SNMP 主机由秒级实时路径评估
-const SWEEP_SQL_AGENT: &str = "SELECT id, hostname, ip, cpu_usage::float8 AS cpu_pct, \
+/// 兜底扫描取数前缀（agent + 由实时路径未覆盖的来源）：source 列表按实时
+/// 采集开关动态拼接（见 [`AlertRuntime::load_hosts`]）——某来源开启实时采集时
+/// 其秒级读数归实时路径，兜底扫描不再包含，避免 5 分钟前的快照把刚恢复的
+/// 告警拖回待决；agent 上报主机始终由兜底扫描维护。
+const SWEEP_SQL_PREFIX: &str = "SELECT id, hostname, ip, cpu_usage::float8 AS cpu_pct, \
      mem_usage_pct::float8 AS mem_pct, disk_usage_pct::float8 AS disk_pct, \
      max_temp::float8 AS temp_c \
-     FROM monitored_hosts WHERE source = 'agent' AND status = 'active'";
-/// 兜底扫描取数（agent + SNMP）：实时采集未开启时 SNMP 只有 5 分钟快照列可读
-const SWEEP_SQL_BOTH: &str = "SELECT id, hostname, ip, cpu_usage::float8 AS cpu_pct, \
-     mem_usage_pct::float8 AS mem_pct, disk_usage_pct::float8 AS disk_pct, \
-     max_temp::float8 AS temp_c \
-     FROM monitored_hosts WHERE source IN ('agent', 'snmp') AND status = 'active'";
+     FROM monitored_hosts WHERE status = 'active' AND source IN (";
 /// 活动主机全集（episode 清理口径）：覆盖实时路径与兜底扫描两侧的主机
 const ACTIVE_HOST_SQL: &str = "SELECT id FROM monitored_hosts WHERE status = 'active'";
 
@@ -503,16 +501,20 @@ pub struct AlertRuntime {
     /// SNMP 主机是否由实时路径负责评估：为真时兜底扫描跳过 source='snmp' 行，
     /// 避免 5 分钟前的快照读数把实时路径刚恢复的告警重新拖回 Pending
     live_covers_snmp: bool,
+    /// IPMI 主机是否由实时路径负责评估：为真时兜底扫描跳过 source='ipmi' 行
+    /// （IPMI 仅温度参与告警，与 SNMP 同理由实时路径评估）
+    live_covers_ipmi: bool,
 }
 
 impl AlertRuntime {
-    pub fn new(pool: PgPool, live_covers_snmp: bool) -> Self {
+    pub fn new(pool: PgPool, live_covers_snmp: bool, live_covers_ipmi: bool) -> Self {
         Self {
             pool,
             episodes: DashMap::new(),
             policy: RwLock::new(None),
             policy_stale: AtomicBool::new(true),
             live_covers_snmp,
+            live_covers_ipmi,
         }
     }
 
@@ -921,14 +923,19 @@ impl AlertRuntime {
     }
 
     async fn load_hosts(&self) -> Result<Vec<SweepHost>, sqlx::Error> {
-        let sql = if self.live_covers_snmp {
-            SWEEP_SQL_AGENT
-        } else {
-            SWEEP_SQL_BOTH
-        };
-        sqlx::query_as::<_, SweepHost>(sql)
-            .fetch_all(&self.pool)
-            .await
+        // agent 始终兜底；SNMP/IPMI 仅当各自实时路径未开启时纳入（否则由实时
+        // 路径按秒级读数评估，兜底扫描的 5 分钟快照会与之冲突）。source 列表
+        // 全为固定字面量，经 QueryBuilder 拼接无注入风险。
+        let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(SWEEP_SQL_PREFIX);
+        qb.push("'agent'");
+        if !self.live_covers_snmp {
+            qb.push(", 'snmp'");
+        }
+        if !self.live_covers_ipmi {
+            qb.push(", 'ipmi'");
+        }
+        qb.push(")");
+        qb.build_query_as::<SweepHost>().fetch_all(&self.pool).await
     }
 
     /// 主机行被删除/禁用/离线后其 episode 不再有意义：静默清理

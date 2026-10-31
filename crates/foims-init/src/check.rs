@@ -265,6 +265,10 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "snmp_priv_protocol",
             "snmp_priv_password",
             "snmp_port",
+            "ipmi_username",
+            "ipmi_password",
+            "ipmi_port",
+            "ipmi_auth_algo",
             "power_watts",
             "description",
             "created_at",
@@ -942,6 +946,8 @@ pub fn get_required_column_widths() -> Vec<(&'static str, &'static str, i32)> {
         ("devices", "snmp_username", 128),
         ("devices", "snmp_auth_password", 255),
         ("devices", "snmp_priv_password", 255),
+        ("devices", "ipmi_username", 62),
+        ("devices", "ipmi_password", 160),
     ]
 }
 
@@ -959,7 +965,7 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         ("interface_ips", "subnet_id"),
         // agent 状态机（active|offline|disabled）必须有值
         ("monitored_hosts", "status"),
-        // 数据来源（agent|snmp）必须有值：区分 Agent 上报与 SNMP 轮询记录
+        // 数据来源（agent|snmp|ipmi）必须有值：区分 Agent 上报、SNMP 轮询与 IPMI 带外记录
         ("monitored_hosts", "source"),
         // 指标历史必须归属 agent 且带采集时间与指标载荷
         ("host_metrics_history", "agent_id"),
@@ -1014,7 +1020,7 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ("uq_devices_room_name", "devices"),
         // 同机重复安装判重：machine_id 仅对已回填行唯一（agents.rs 部分唯一索引）
         ("idx_monitored_hosts_machine_id", "monitored_hosts"),
-        // 一台设备至多一条 SNMP 采集记录（agents.rs 部分唯一索引）
+        // 一台设备每个来源至多一条采集记录（(device_id, source) 部分唯一索引）
         ("idx_monitored_hosts_device_id", "monitored_hosts"),
         // 指标历史 (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING
         // 幂等去重，防重复上报写重（agents.rs 建表时创建）

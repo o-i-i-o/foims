@@ -8,9 +8,12 @@
 //! 全量指标供详情页曲线渲染，保留期由调度任务清理。
 //!
 //! source 区分数据来源：'agent'（FOIMS Agent 主动上报）/'snmp'（服务端
-//! SNMP 轮询设备，machine_id 合成 'snmp:{device_id}'，不经上报鉴权）；
-//! device_id 关联 devices，设备删除级联清理。status/source 均有 CHECK
-//! 约束白名单，与其余枚举列风格一致。
+//! SNMP 轮询设备，machine_id 合成 'snmp:{device_id}'，不经上报鉴权）/
+//! 'ipmi'（服务端 IPMI 带外轮询设备，machine_id 合成 'ipmi:{device_id}'）；
+//! device_id 关联 devices，设备删除级联清理。同一设备的 SNMP 行与 IPMI 行
+//! 并存（BMC 管理口与 OS 不同来源，各自独立落库），故 device_id 唯一性按
+//! (device_id, source) 组合约束。status/source 均有 CHECK 约束白名单，与其余
+//! 枚举列风格一致。
 
 pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -18,7 +21,7 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             machine_id TEXT,
             source TEXT NOT NULL DEFAULT 'agent'
-                CONSTRAINT chk_monitored_hosts_source CHECK (source IN ('agent', 'snmp')),
+                CONSTRAINT chk_monitored_hosts_source CHECK (source IN ('agent', 'snmp', 'ipmi')),
             device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
             label TEXT,
             status TEXT NOT NULL DEFAULT 'active'
@@ -51,10 +54,11 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 一台设备至多一条 SNMP 采集记录（snmp_poll upsert 判重锚点）
+    // 一台设备每个来源至多一条采集记录：同设备 SNMP 行与 IPMI 行并存的前提
+    //（snmp_poll/ipmi_poll upsert 判重锚点，device_id 对同一 source 唯一）
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS idx_monitored_hosts_device_id
-            ON monitored_hosts (device_id) WHERE device_id IS NOT NULL",
+            ON monitored_hosts (device_id, source) WHERE device_id IS NOT NULL",
     )
     .execute(pool)
     .await?;

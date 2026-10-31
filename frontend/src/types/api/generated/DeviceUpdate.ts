@@ -35,6 +35,22 @@ snmp_priv_protocol: string | null | null,
  */
 snmp_priv_password: string | null | null, snmp_port: number | null, 
 /**
+ * 双层 Option：字段缺失不修改、JSON null 清空（IPMI 用户名）
+ */
+ipmi_username: string | null | null, 
+/**
+ * 双层 Option：掩码回显提交时按原值保留；null 清空 IPMI 口令
+ */
+ipmi_password: string | null | null, 
+/**
+ * 双层 Option：null 清空（IPMI 端口，展示语义）
+ */
+ipmi_port: number | null | null, 
+/**
+ * 双层 Option：null 清空（IPMI 认证算法 sha1|sha256）
+ */
+ipmi_auth_algo: string | null | null, 
+/**
  * 双层 Option：字段缺失不修改、JSON null 清空功耗（SET NULL）、值设置新值
  */
 power_watts: number | null | null, 

@@ -127,21 +127,22 @@ function formatTemp(temp: number | string | null): string {
   return `${Number(temp).toFixed(1)}℃`;
 }
 
-// SSE 推送的全部 SNMP 设备快照：仅覆盖当前页中 source='snmp' 的行，
-// 列表结构（分页/状态/关键字）仍由 30s 轮询维护
+// SSE 推送的全部实时快照（source='snmp' 与 source='ipmi' 两路）：按
+// `source|device_id` 复合键覆盖当前页对应采集行（同设备 SNMP/IPMI 各自快照
+// 独立），列表结构（分页/状态/关键字）仍由 30s 轮询维护
 const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
   !auth.hiddenSections.includes("agents")
 );
-const liveByDevice = computed(() => {
+const liveBySourceDevice = computed(() => {
   const map = new Map<string, LiveSummaryRow>();
   for (const row of liveDevices.value) {
-    map.set(row.device_id, row);
+    map.set(`${row.source}|${row.device_id}`, row);
   }
   return map;
 });
 
 function liveRow(agent: AgentListItem): LiveSummaryRow | undefined {
-  return agent.device_id ? liveByDevice.value.get(agent.device_id) : undefined;
+  return agent.device_id ? liveBySourceDevice.value.get(`${agent.source}|${agent.device_id}`) : undefined;
 }
 
 // 实时值缺失（部分采集失败）时回退列表快照值，避免列闪空
@@ -267,9 +268,9 @@ const locateModal = reactive({ open: false });
             </td>
             <td>
               {{ agent.hostname || "-" }}<span
-                v-if="agent.source === 'snmp'"
+                v-if="agent.source === 'snmp' || agent.source === 'ipmi'"
                 class="agent-source-badge"
-              >{{ t("agents.source_snmp") }}</span><span
+              >{{ agent.source === "ipmi" ? t("agents.source_ipmi") : t("agents.source_snmp") }}</span><span
                 v-if="liveRow(agent)"
                 class="agent-live-badge"
                 :title="t('agents.live_realtime')"
@@ -294,9 +295,9 @@ const locateModal = reactive({ open: false });
               >
                 <NavIcon name="eye" />
               </button>
-              <!-- SNMP 采集行不经上报鉴权，禁用/启用仅对 Agent 行有意义 -->
+              <!-- SNMP/IPMI 采集行不经上报鉴权，禁用/启用仅对 Agent 行有意义 -->
               <button
-                v-if="agent.source !== 'snmp' && agent.status === 'active'"
+                v-if="agent.source !== 'snmp' && agent.source !== 'ipmi' && agent.status === 'active'"
                 type="button"
                 class="icon-btn btn-warning"
                 :data-tooltip="t('agents.btn_disable')"
@@ -306,7 +307,7 @@ const locateModal = reactive({ open: false });
                 <NavIcon name="lock" />
               </button>
               <button
-                v-if="agent.source !== 'snmp' && agent.status === 'disabled'"
+                v-if="agent.source !== 'snmp' && agent.source !== 'ipmi' && agent.status === 'disabled'"
                 type="button"
                 class="icon-btn btn-success"
                 :data-tooltip="t('agents.btn_enable')"

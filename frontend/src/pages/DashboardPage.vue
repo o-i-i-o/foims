@@ -211,11 +211,19 @@ function hostThreshold(metric: HostMetricKey): number | null {
 /** 当前页签是否配置了告警阈值（流量无阈值） */
 const hostHasThreshold = computed(() => hostThreshold(hostMetricActive.value) != null);
 
-/** 实时快照按 IP 建索引：同一设备以实时值为准，覆盖 agent 分钟级快照 */
+/** 实时快照按 IP 建索引：同 IP 取当前页签有值的最优来源行（ipmi > agent > snmp）覆盖分钟级快照 */
+const SOURCE_RANK: Record<string, number> = { ipmi: 0, agent: 1, snmp: 2 };
 const liveByIp = computed(() => {
+  const metric = hostMetricActive.value;
   const map = new Map<string, LiveSummaryRow>();
-  for (const row of liveDevices.value) {
-    if (row.ip) {
+  const rows = [...liveDevices.value].sort(
+    (a, b) => (SOURCE_RANK[a.source] ?? 9) - (SOURCE_RANK[b.source] ?? 9),
+  );
+  for (const row of rows) {
+    if (!row.ip || liveMetricValue(row, metric) == null) {
+      continue;
+    }
+    if (!map.has(row.ip)) {
       map.set(row.ip, row);
     }
   }
@@ -251,10 +259,16 @@ const hostLoadItems = computed<HostLoadItem[]>(() => {
     if (value == null) {
       continue;
     }
+    // 同 IP 存在更优来源的实时行则跳过（与后端 SOURCE_RANK_SQL 口径对齐）
+    if (row.ip && liveByIp.value.get(row.ip) !== row) {
+      continue;
+    }
     const collected = Date.parse(row.collected_at);
+    // IPMI 行无 CPU/内存/流量语义，仅温度页签带值；meta 前置来源便于区分 BMC 视角
+    const sourceLabel = row.source === "ipmi" ? t("agents.source_ipmi") : null;
     items.push({
       name: row.device_name || row.ip || "-",
-      meta: [t("dashboard.live_source"), row.ip, row.vendor].filter(Boolean).join(" · "),
+      meta: [sourceLabel, t("dashboard.live_source"), row.ip, row.vendor].filter(Boolean).join(" · "),
       ip: row.ip || null,
       value,
       stale: !Number.isFinite(collected) || now - collected > LIVE_STALE_SECS * 1000,

@@ -34,6 +34,8 @@ pub struct AppState {
     /// SNMP 实时快照注册表（只驻内存；实时列表与 SSE 端点读取，
     /// 写入方为 agent-service 的实时采集 worker）。
     pub live_registry: Arc<foims_agent_service::LiveRegistry>,
+    /// IPMI 实时快照注册表（结构对齐 `live_registry`，按 device_id 键）。
+    pub ipmi_live_registry: Arc<foims_agent_service::IpmiLiveRegistry>,
     /// 告警 episode 运行时（阈值缓存 + 状态机 + 落库通知）：初始化模式无
     /// 连接池时为 None，告警评估与配置补扫随之缺席。
     pub alerts: Option<Arc<foims_agent_service::AlertRuntime>>,
@@ -51,11 +53,16 @@ pub struct AppState {
 }
 
 impl AppState {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "应用状态装配入参天然较多，聚合结构体反增样板"
+    )]
     pub fn new(
         config: Config,
         pool: Option<DbPool>,
         task_registry: Arc<TaskRegistry>,
         live_registry: Arc<foims_agent_service::LiveRegistry>,
+        ipmi_live_registry: Arc<foims_agent_service::IpmiLiveRegistry>,
         alerts: Option<Arc<foims_agent_service::AlertRuntime>>,
         shutdown: ShutdownSignal,
         rate_limiter: RateLimiter,
@@ -68,6 +75,7 @@ impl AppState {
             jwt_utils,
             task_registry,
             live_registry,
+            ipmi_live_registry,
             alerts,
             shutdown,
             rate_limiter,
@@ -109,6 +117,10 @@ impl foims_agent_service::AlertProvider for AppState {
 impl foims_agent_service::LiveProvider for AppState {
     fn live_registry(&self) -> Arc<foims_agent_service::LiveRegistry> {
         self.live_registry.clone()
+    }
+
+    fn ipmi_live_registry(&self) -> Arc<foims_agent_service::IpmiLiveRegistry> {
+        self.ipmi_live_registry.clone()
     }
 
     fn live_shutdown(&self) -> tokio::sync::broadcast::Receiver<()> {

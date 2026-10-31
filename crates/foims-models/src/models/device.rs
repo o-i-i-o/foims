@@ -241,6 +241,20 @@ pub struct SnmpTestRequest {
     pub snmp_port: Option<i32>,
 }
 
+/// IPMI 连通性测试：device_id 为 Some 时读取该设备已存配置、本请求字段逐项覆盖
+///（可临时改地址/凭据）；device_id 为 None 时用原始字段直连（auth_algo 缺省 sha256）。
+/// 会话端口固定 623（ruipmi 约束），端口不可临时覆盖。
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct IpmiTestRequest {
+    pub device_id: Option<Uuid>,
+    pub ip_address: Option<String>,
+    pub ipmi_username: Option<String>,
+    pub ipmi_password: Option<String>,
+    /// IPMI 认证算法白名单：sha1/sha256
+    pub ipmi_auth_algo: Option<String>,
+}
+
 /// ARP/FDB 实时观测原始条目（不落库，供轮询比对与拉取回显）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ArpEntry {
@@ -382,6 +396,14 @@ pub struct Device {
     /// 仅 v3 使用：入库加密，读响应恒为 null（脱敏）
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
+    /// IPMI 用户名（带外管理账户）：明文存储，读响应原样返回
+    pub ipmi_username: Option<String>,
+    /// IPMI 口令：入库加密，读响应恒为 null（脱敏，凭据不外发）
+    pub ipmi_password: Option<String>,
+    /// IPMI 会话端口：ruipmi 固定 623，本列仅承载展示语义、采集侧不使用
+    pub ipmi_port: Option<i32>,
+    /// IPMI 认证算法白名单：sha1/sha256（DB CHECK chk_devices_ipmi_auth_algo）
+    pub ipmi_auth_algo: Option<String>,
     /// 设备额定功耗（瓦，None=未记录）
     pub power_watts: Option<i32>,
     pub description: Option<String>,
@@ -424,6 +446,11 @@ pub struct DeviceWithDetails {
     pub snmp_priv_protocol: Option<String>,
     pub snmp_priv_password: Option<String>,
     pub snmp_port: Option<i32>,
+    /// IPMI 凭据：username/端口/算法明文，password 响应脱敏为 null（与 Device 同口径）
+    pub ipmi_username: Option<String>,
+    pub ipmi_password: Option<String>,
+    pub ipmi_port: Option<i32>,
+    pub ipmi_auth_algo: Option<String>,
     pub power_watts: Option<i32>,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -497,6 +524,25 @@ pub struct DeviceCreate {
         message = "server.device.validation.snmp_port_range"
     ))]
     pub snmp_port: Option<i32>,
+    /// IPMI 用户名（带外管理账户，≤16 字节）：与 password 均非空即视为「已配置」
+    #[validate(length(max = 16, message = "server.device.validation.ipmi_username_length"))]
+    pub ipmi_username: Option<String>,
+    /// IPMI 口令（≤20 字节）：入库加密，响应不回传
+    #[validate(length(max = 20, message = "server.device.validation.ipmi_password_length"))]
+    pub ipmi_password: Option<String>,
+    /// IPMI 会话端口（ruipmi 固定 623，本字段仅展示）
+    #[validate(range(
+        min = 1,
+        max = 65535,
+        message = "server.device.validation.ipmi_port_range"
+    ))]
+    pub ipmi_port: Option<i32>,
+    /// IPMI 认证算法白名单：sha1/sha256（DB CHECK chk_devices_ipmi_auth_algo 兜底）
+    #[validate(custom(
+        function = "crate::models::validate_ipmi_auth_algo_option",
+        message = "server.device.validation.ipmi_auth_algo_invalid"
+    ))]
+    pub ipmi_auth_algo: Option<String>,
     /// 设备额定功耗（瓦，0..=10_000_000；缺省/null=未记录）
     #[validate(custom(
         function = "crate::models::validate_power_watts",
@@ -600,6 +646,34 @@ pub struct DeviceUpdate {
         message = "server.device.validation.snmp_port_range"
     ))]
     pub snmp_port: Option<i32>,
+    /// 双层 Option：字段缺失不修改、JSON null 清空（IPMI 用户名）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_ipmi_username_opt",
+        message = "server.device.validation.ipmi_username_length"
+    ))]
+    pub ipmi_username: Option<Option<String>>,
+    /// 双层 Option：掩码回显提交时按原值保留；null 清空 IPMI 口令
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_ipmi_password_opt",
+        message = "server.device.validation.ipmi_password_length"
+    ))]
+    pub ipmi_password: Option<Option<String>>,
+    /// 双层 Option：null 清空（IPMI 端口，展示语义）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_ipmi_port_opt",
+        message = "server.device.validation.ipmi_port_range"
+    ))]
+    pub ipmi_port: Option<Option<i32>>,
+    /// 双层 Option：null 清空（IPMI 认证算法 sha1|sha256）
+    #[serde(default, deserialize_with = "crate::models::deserialize_some")]
+    #[validate(custom(
+        function = "crate::models::validate_ipmi_auth_algo_opt",
+        message = "server.device.validation.ipmi_auth_algo_invalid"
+    ))]
+    pub ipmi_auth_algo: Option<Option<String>>,
     /// 双层 Option：字段缺失不修改、JSON null 清空功耗（SET NULL）、值设置新值
     #[serde(default, deserialize_with = "crate::models::deserialize_some")]
     #[validate(custom(
@@ -1220,6 +1294,10 @@ mod tests {
             snmp_priv_protocol: None,
             snmp_priv_password: None,
             snmp_port: Some(161),
+            ipmi_username: None,
+            ipmi_password: None,
+            ipmi_port: None,
+            ipmi_auth_algo: None,
             power_watts: Some(350),
             description: None,
             created_at: Utc::now(),
@@ -1263,6 +1341,10 @@ mod tests {
             snmp_priv_protocol: None,
             snmp_priv_password: None,
             snmp_port: None,
+            ipmi_username: None,
+            ipmi_password: None,
+            ipmi_port: None,
+            ipmi_auth_algo: None,
             power_watts: None,
             description: None,
             created_at: Utc::now(),

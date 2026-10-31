@@ -232,6 +232,7 @@ type DeviceEditCardPort = DeviceInterface & { ips: IpDetail[] };
 type DeviceEditCard = NetworkCard & { ports: DeviceEditCardPort[] };
 type DeviceEditData = DeviceWithDetails & {
   snmp_configured: boolean;
+  ipmi_configured: boolean;
   cards?: DeviceEditCard[];
 };
 
@@ -279,7 +280,7 @@ function openCabinetModal(cabinet: CabinetWithNetworks | null = null): void {
   cabinetModal.open = true;
 }
 
-// 编辑设备：先取完整详情（含 cards 与 snmp_configured），成功后打开弹窗回显
+// 编辑设备：先取完整详情（含 cards 与 snmp_configured/ipmi_configured），成功后打开弹窗回显
 async function editDevice(id: string): Promise<void> {
   const result = await apiGet<DeviceEditData>(`/api/resources/devices/${id}`);
   if (!result.success || !result.data) {

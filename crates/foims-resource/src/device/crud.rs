@@ -126,6 +126,7 @@ pub async fn get_devices<P: DbProvider>(
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.ipmi_username, d.ipmi_password, d.ipmi_port, d.ipmi_auth_algo,
                 d.power_watts,
                 d.description,
                 d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
@@ -168,6 +169,8 @@ pub async fn get_devices<P: DbProvider>(
 /// 响应脱敏：SNMP 凭据密文不出现在任何 JSON 响应中（列表/create/update
 /// 同口径），同时提供 snmp_configured 供前端判定设备是否已配置 SNMP 凭据
 ///（v2c 设备仅有 community，snmp_version 列有 DEFAULT 'v2c' 不能作依据）。
+/// IPMI 同口径：ipmi_password 密文脱敏为 null（username 明文保留供回显），
+/// ipmi_configured = username 与 password 均非空（与「已配置」判定一致）。
 fn sanitize_device_response<T: serde::Serialize>(
     device: &T,
 ) -> Result<serde_json::Value, AppError> {
@@ -178,6 +181,9 @@ fn sanitize_device_response<T: serde::Serialize>(
     v["snmp_community"] = serde_json::Value::Null;
     v["snmp_auth_password"] = serde_json::Value::Null;
     v["snmp_priv_password"] = serde_json::Value::Null;
+    let ipmi_configured = v["ipmi_username"].is_string() && v["ipmi_password"].is_string();
+    v["ipmi_configured"] = serde_json::Value::Bool(ipmi_configured);
+    v["ipmi_password"] = serde_json::Value::Null;
     Ok(v)
 }
 
@@ -339,6 +345,17 @@ pub async fn create_device<P: DbProvider>(
         Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
         _ => None,
     };
+    // IPMI 口令密文落库（AES-GCM），username/端口/算法明文；端口缺省 623
+    //（ruipmi 会话端口固定 623），认证算法缺省 sha256（套件 17）。
+    let encrypted_ipmi_password = match &req.ipmi_password {
+        Some(p) if !p.is_empty() => Some(encrypt_password_async(p.clone()).await?),
+        _ => None,
+    };
+    let ipmi_port = req.ipmi_port.unwrap_or(623);
+    let ipmi_auth_algo = req
+        .ipmi_auth_algo
+        .clone()
+        .unwrap_or_else(|| "sha256".to_string());
 
     let snmp_version = req
         .snmp_version
@@ -347,8 +364,8 @@ pub async fn create_device<P: DbProvider>(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, power_watts, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
+        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, ipmi_username, ipmi_password, ipmi_port, ipmi_auth_algo, power_watts, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)",
     )
     .bind(id)
     .bind(&req.name)
@@ -371,6 +388,10 @@ pub async fn create_device<P: DbProvider>(
     .bind(&req.snmp_priv_protocol)
     .bind(&encrypted_priv_password)
     .bind(snmp_port)
+    .bind(&req.ipmi_username)
+    .bind(&encrypted_ipmi_password)
+    .bind(ipmi_port)
+    .bind(&ipmi_auth_algo)
     .bind(req.power_watts)
     .bind(&req.description)
     .bind(now)
@@ -462,6 +483,10 @@ pub async fn create_device<P: DbProvider>(
         snmp_priv_protocol: req.snmp_priv_protocol,
         snmp_priv_password: encrypted_priv_password,
         snmp_port: Some(snmp_port),
+        ipmi_username: req.ipmi_username,
+        ipmi_password: encrypted_ipmi_password,
+        ipmi_port: Some(ipmi_port),
+        ipmi_auth_algo: Some(ipmi_auth_algo),
         power_watts: req.power_watts,
         description: req.description,
         created_at: now,
@@ -511,6 +536,7 @@ pub async fn get_device<P: DbProvider>(
                     d.snmp_version, d.snmp_community, d.snmp_username,
                     d.snmp_auth_protocol, d.snmp_auth_password,
                     d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                    d.ipmi_username, d.ipmi_password, d.ipmi_port, d.ipmi_auth_algo,
                     d.power_watts,
                     d.description,
                     d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,
@@ -712,6 +738,11 @@ pub async fn update_device<P: DbProvider>(
         Some(Some(p)) if !p.is_empty() => Some(encrypt_password_async(p.to_string()).await?),
         _ => None,
     };
+    // IPMI 口令：Some(Some(非空)) 加密新值、Some(None) 清空、None 不修改（与 SNMP 同口径）
+    let encrypted_ipmi_password = match req.ipmi_password.as_ref().map(|v| v.as_deref()) {
+        Some(Some(p)) if !p.is_empty() => Some(encrypt_password_async(p.to_string()).await?),
+        _ => None,
+    };
 
     sqlx::query(
         "UPDATE devices SET
@@ -734,10 +765,14 @@ pub async fn update_device<P: DbProvider>(
          snmp_priv_protocol = CASE WHEN $24::boolean THEN $25 ELSE snmp_priv_protocol END,
          snmp_priv_password = CASE WHEN $26::boolean THEN $27 ELSE snmp_priv_password END,
          snmp_port = COALESCE($28, snmp_port),
-         power_watts = CASE WHEN $29::boolean THEN $30 ELSE power_watts END,
-         description = CASE WHEN $31::boolean THEN $32 ELSE description END,
-         updated_at = $33
-         WHERE id = $34",
+         ipmi_username = CASE WHEN $29::boolean THEN $30 ELSE ipmi_username END,
+         ipmi_password = CASE WHEN $31::boolean THEN $32 ELSE ipmi_password END,
+         ipmi_port = CASE WHEN $33::boolean THEN $34 ELSE ipmi_port END,
+         ipmi_auth_algo = CASE WHEN $35::boolean THEN $36 ELSE ipmi_auth_algo END,
+         power_watts = CASE WHEN $37::boolean THEN $38 ELSE power_watts END,
+         description = CASE WHEN $39::boolean THEN $40 ELSE description END,
+         updated_at = $41
+         WHERE id = $42",
     )
     .bind(&req.name)
     // 双层 Option：Some(_) 时 SET（Some(None) 绑定 NULL 即清空），None 不进 SET
@@ -768,6 +803,14 @@ pub async fn update_device<P: DbProvider>(
     .bind(req.snmp_priv_password.is_some())
     .bind(&encrypted_priv_password)
     .bind(req.snmp_port)
+    .bind(req.ipmi_username.is_some())
+    .bind(req.ipmi_username.clone().flatten())
+    .bind(req.ipmi_password.is_some())
+    .bind(&encrypted_ipmi_password)
+    .bind(req.ipmi_port.is_some())
+    .bind(req.ipmi_port.flatten())
+    .bind(req.ipmi_auth_algo.is_some())
+    .bind(req.ipmi_auth_algo.clone().flatten())
     .bind(req.power_watts.is_some())
     .bind(req.power_watts.flatten())
     .bind(req.description.is_some())
@@ -867,6 +910,7 @@ pub async fn update_device<P: DbProvider>(
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
+                d.ipmi_username, d.ipmi_password, d.ipmi_port, d.ipmi_auth_algo,
                 d.power_watts,
                 d.description,
                 d.workstation_name, d.room_name, d.cabinet_id, d.cabinet_name,

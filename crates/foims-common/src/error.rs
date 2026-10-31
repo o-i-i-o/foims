@@ -39,6 +39,9 @@ pub enum AppError {
 
     #[error("SNMP错误: {0}")]
     Snmp(AppMessage),
+
+    #[error("IPMI错误: {0}")]
+    Ipmi(AppMessage),
 }
 
 impl AppError {
@@ -52,6 +55,7 @@ impl AppError {
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Snmp(_) => StatusCode::BAD_REQUEST,
+            AppError::Ipmi(_) => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -65,7 +69,8 @@ impl AppError {
             | AppError::Forbidden(m)
             | AppError::Conflict(m)
             | AppError::Internal(m)
-            | AppError::Snmp(m) => m,
+            | AppError::Snmp(m)
+            | AppError::Ipmi(m) => m,
         }
     }
 }

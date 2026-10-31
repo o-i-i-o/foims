@@ -32,12 +32,18 @@ use tokio::sync::broadcast::Receiver as ShutdownReceiver;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
+use foims_common::config::IpmiLiveConfig;
 use foims_common::config::SnmpLiveConfig;
+use foims_ipmi::{IpmiLiveSnapshot, IpmiParams};
 use foims_snmp::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
 use foims_snmp::live::{LiveCollector, LiveSnapshot, MAX_OIDS_PER_REQUEST, probe};
 
 use crate::alert_episode::{AlertRuntime, HostRef};
 use crate::alerts::MetricValues;
+use crate::ipmi_poll::{
+    IpmiDeviceRow, collect_device, ensure_ipmi_host_present, ipmi_machine_id, load_ipmi_devices,
+    load_ipmi_host_id,
+};
 use crate::snmp_poll::{
     SnmpDeviceRow, ensure_snmp_host_present, load_snmp_devices, load_snmp_host_id, snmp_machine_id,
 };
@@ -510,6 +516,346 @@ async fn connect_live(
         .connect()
         .await
         .map_err(|e| format!("创建SNMP实时会话失败: {}", format_snmp_error(e)))
+}
+
+// ============================ IPMI 实时采集 ============================
+//
+// 与 SNMP 实时路径结构对齐（每设备 worker + 错峰 + 指数退避 + 60s 清单重载），
+// 但采集本体是「采样即建会话、结束后关闭」（`collect_device`），无会话/探测
+// 复用状态；IPMI 无端口/CPU/内存语义，只就温度读数进告警评估。
+
+/// 单设备 IPMI 实时快照（设备身份 + 采集结果）。
+#[derive(Debug, Clone)]
+pub struct IpmiLiveDeviceSnapshot {
+    pub device_id: Uuid,
+    pub device_name: String,
+    pub ip: String,
+    pub snapshot: IpmiLiveSnapshot,
+}
+
+impl IpmiLiveDeviceSnapshot {
+    /// 快照年龄（秒，负值归零）：消费方据此过滤陈旧数据。
+    pub fn age_secs(&self, now: DateTime<Utc>) -> i64 {
+        (now - self.snapshot.collected_at).num_seconds().max(0)
+    }
+}
+
+/// IPMI 实时快照注册表：设备 ID → 最近一次成功快照（结构对齐 [`LiveRegistry`]）。
+#[derive(Debug, Default)]
+pub struct IpmiLiveRegistry {
+    devices: DashMap<Uuid, Arc<IpmiLiveDeviceSnapshot>>,
+    /// 写入代数：每次 upsert/remove 自增，SSE 端按变化推送而非空转。
+    revision: AtomicU64,
+}
+
+impl IpmiLiveRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn upsert(&self, snapshot: IpmiLiveDeviceSnapshot) {
+        self.devices.insert(snapshot.device_id, Arc::new(snapshot));
+        self.revision.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// 当前写入代数（只增不减，消费方比对前后值判断是否有更新）。
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Relaxed)
+    }
+
+    pub fn get(&self, device_id: Uuid) -> Option<Arc<IpmiLiveDeviceSnapshot>> {
+        self.devices
+            .get(&device_id)
+            .map(|entry| entry.value().clone())
+    }
+
+    /// 当前全部快照（按设备 ID 无序）。
+    pub fn all(&self) -> Vec<Arc<IpmiLiveDeviceSnapshot>> {
+        self.devices
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+
+    pub fn remove(&self, device_id: Uuid) {
+        if self.devices.remove(&device_id).is_some() {
+            self.revision.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.devices.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.devices.is_empty()
+    }
+}
+
+/// 单个 IPMI 设备 worker 的不可变上下文。
+struct IpmiWorkerContext {
+    device_id: Uuid,
+    /// 告警 episode 主体（`monitored_hosts.id`，source='ipmi' 行）
+    host_id: Uuid,
+    device_name: String,
+    ip: String,
+    params: IpmiParams,
+    config: IpmiLiveConfig,
+    registry: Arc<IpmiLiveRegistry>,
+    alerts: Arc<AlertRuntime>,
+    semaphore: Arc<Semaphore>,
+    initial_delay: Duration,
+}
+
+/// 已启动 IPMI worker 的句柄：凭据/地址变化时用于比对与重启。
+struct IpmiWorkerHandle {
+    params: IpmiParams,
+    task: JoinHandle<()>,
+}
+
+/// 启动 IPMI 实时采集（`enabled = false` 时不启动）。句柄丢弃不影响采集。
+pub fn start_ipmi_live_poller(
+    pool: PgPool,
+    config: IpmiLiveConfig,
+    registry: Arc<IpmiLiveRegistry>,
+    alerts: Arc<AlertRuntime>,
+    shutdown: ShutdownReceiver<()>,
+) {
+    if !config.enabled {
+        return;
+    }
+    tokio::spawn(run_ipmi_supervisor(
+        pool, config, registry, alerts, shutdown,
+    ));
+}
+
+/// IPMI supervisor：周期重载设备清单并按差异增删/重启 worker。
+async fn run_ipmi_supervisor(
+    pool: PgPool,
+    config: IpmiLiveConfig,
+    registry: Arc<IpmiLiveRegistry>,
+    alerts: Arc<AlertRuntime>,
+    mut shutdown: ShutdownReceiver<()>,
+) {
+    let semaphore = Arc::new(Semaphore::new(config.max_concurrency.max(1)));
+    let mut workers: HashMap<Uuid, IpmiWorkerHandle> = HashMap::new();
+    let mut started = false;
+
+    loop {
+        match load_ipmi_devices(&pool).await {
+            Ok(rows) => {
+                reconcile_ipmi(
+                    &pool,
+                    &rows,
+                    &config,
+                    &registry,
+                    &alerts,
+                    &semaphore,
+                    &mut workers,
+                )
+                .await;
+                if !started {
+                    started = true;
+                    foims_common::log_info!(
+                        "system.ipmi_live_started",
+                        devices = workers.len(),
+                        interval = config.interval_secs
+                    );
+                }
+            }
+            Err(e) => {
+                foims_common::log_error!("system.ipmi_live_devices_load_failed", error = e);
+            }
+        }
+
+        tokio::select! {
+            _ = shutdown.recv() => break,
+            _ = tokio::time::sleep(Duration::from_secs(DEVICE_RELOAD_SECS)) => {}
+        }
+    }
+
+    for (_, worker) in workers.drain() {
+        worker.task.abort();
+    }
+    foims_common::log_info!("system.ipmi_live_stopped");
+}
+
+/// 对比数据库 IPMI 设备清单与运行中的 worker：新增/变更重启，删除清理。
+async fn reconcile_ipmi(
+    pool: &PgPool,
+    rows: &[IpmiDeviceRow],
+    config: &IpmiLiveConfig,
+    registry: &Arc<IpmiLiveRegistry>,
+    alerts: &Arc<AlertRuntime>,
+    semaphore: &Arc<Semaphore>,
+    workers: &mut HashMap<Uuid, IpmiWorkerHandle>,
+) {
+    let total = rows.len();
+    let mut seen = HashSet::with_capacity(total);
+
+    for (index, row) in rows.iter().enumerate() {
+        let device_id = row.device.id;
+        seen.insert(device_id);
+
+        // 告警 episode 以监控主机行为主体：基线行缺失时补建并即刻回填 id
+        let host_id = match row.host_id {
+            Some(id) => id,
+            None => {
+                ensure_ipmi_host_present(
+                    pool,
+                    &ipmi_machine_id(device_id),
+                    device_id,
+                    &row.device.name,
+                    &row.ip,
+                )
+                .await;
+                match load_ipmi_host_id(pool, device_id).await {
+                    Some(id) => id,
+                    None => continue,
+                }
+            }
+        };
+
+        // 参数构造含凭据解密；未配置（用户名/口令缺失）时清理快照并跳过
+        let params = match row.device.to_ipmi_params_async(&row.ip).await {
+            Ok(Some(params)) => params,
+            Ok(None) => {
+                registry.remove(device_id);
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "IPMI 实时采集参数构造失败: 设备 {}（{device_id}）: {e}",
+                    row.device.name
+                );
+                continue;
+            }
+        };
+
+        if workers
+            .get(&device_id)
+            .is_some_and(|worker| worker.params == params)
+        {
+            continue;
+        }
+        if let Some(worker) = workers.remove(&device_id) {
+            worker.task.abort();
+        }
+
+        let context = IpmiWorkerContext {
+            device_id,
+            host_id,
+            device_name: row.device.name.clone(),
+            ip: row.ip.clone(),
+            params: params.clone(),
+            config: config.clone(),
+            registry: registry.clone(),
+            alerts: alerts.clone(),
+            semaphore: semaphore.clone(),
+            initial_delay: stagger_delay(config.interval_secs, index, total),
+        };
+        workers.insert(
+            device_id,
+            IpmiWorkerHandle {
+                params,
+                task: tokio::spawn(run_ipmi_worker(context)),
+            },
+        );
+    }
+
+    workers.retain(|device_id, worker| {
+        if seen.contains(device_id) {
+            true
+        } else {
+            worker.task.abort();
+            registry.remove(*device_id);
+            false
+        }
+    });
+}
+
+/// 单设备常驻采集循环：每轮先取全局许可，结束后按结果正常间隔或退避休眠。
+async fn run_ipmi_worker(context: IpmiWorkerContext) {
+    tokio::time::sleep(context.initial_delay).await;
+
+    let interval = Duration::from_secs(context.config.interval_secs.max(1));
+    let max_backoff = Duration::from_secs(context.config.max_backoff_secs.max(interval.as_secs()));
+    let mut backoff = interval;
+
+    loop {
+        let cycle_start = Instant::now();
+        let permit = match context.semaphore.clone().acquire_owned().await {
+            Ok(permit) => permit,
+            Err(_) => return,
+        };
+        let ok = run_ipmi_cycle(&context).await;
+        drop(permit);
+
+        let wait = if ok {
+            backoff = interval;
+            interval
+        } else {
+            let wait = backoff;
+            backoff = backoff.saturating_mul(2).min(max_backoff);
+            wait
+        };
+        tokio::time::sleep(wait.saturating_sub(cycle_start.elapsed())).await;
+    }
+}
+
+/// 执行一轮：建会话采样（外层 timeout 封顶整个 SDR 枚举），成功则覆盖注册表
+/// 并就温度读数进告警评估；失败返回 false（保留上一份成功快照，由退避重试）。
+async fn run_ipmi_cycle(context: &IpmiWorkerContext) -> bool {
+    let timeout = Duration::from_secs(context.config.timeout_secs.max(1));
+    let reading = match tokio::time::timeout(timeout, collect_device(&context.params)).await {
+        Ok(Ok(reading)) => reading,
+        Ok(Err(e)) => {
+            tracing::debug!(
+                "IPMI 实时采集失败: 设备 {}（{}，{}）: {e}",
+                context.device_name,
+                context.device_id,
+                context.ip
+            );
+            return false;
+        }
+        Err(_) => {
+            tracing::debug!(
+                "IPMI 实时采集超时: 设备 {}（{}，{}）",
+                context.device_name,
+                context.device_id,
+                context.ip
+            );
+            return false;
+        }
+    };
+
+    let temp_c = reading.max_temp;
+    let snapshot = IpmiLiveSnapshot::from_reading(&reading, Utc::now());
+    context.registry.upsert(IpmiLiveDeviceSnapshot {
+        device_id: context.device_id,
+        device_name: context.device_name.clone(),
+        ip: context.ip.clone(),
+        snapshot,
+    });
+
+    // 告警评估：IPMI 仅温度有实时读数，cpu/mem/disk 置 None 保持既有状态
+    context
+        .alerts
+        .evaluate_host(
+            &HostRef {
+                id: context.host_id,
+                hostname: context.device_name.clone(),
+                ip: context.ip.clone(),
+            },
+            MetricValues {
+                cpu_pct: None,
+                mem_pct: None,
+                disk_pct: None,
+                temp_c,
+            },
+        )
+        .await;
+    true
 }
 
 #[cfg(test)]

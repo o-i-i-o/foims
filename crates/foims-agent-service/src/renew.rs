@@ -176,6 +176,7 @@ mod tests {
             alerts: std::sync::Arc::new(crate::alert_episode::AlertRuntime::new(
                 pool.clone(),
                 false,
+                false,
             )),
             pool,
             config: std::sync::Arc::new(foims_common::config::ArcSwap::from_pointee(config)),

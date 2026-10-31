@@ -37,6 +37,7 @@ import type { OrganizationTreeNode } from "../../types/api/generated/Organizatio
 import type { PortSyncItem } from "../../types/api/generated/PortSyncItem";
 import type { RoomWithNetworks } from "../../types/api/generated/RoomWithNetworks";
 import type { SnmpTestRequest } from "../../types/api/generated/SnmpTestRequest";
+import type { IpmiTestRequest } from "../../types/api/generated/IpmiTestRequest";
 import type { WorkstationWithDetails } from "../../types/api/generated/WorkstationWithDetails";
 
 /** GET /devices/{id} 的网卡树（fetch_device_network_config 组装：网卡 → 网口 → IP 明细） */
@@ -52,9 +53,13 @@ type CardSyncPayload = Omit<NetworkCardSyncItem, "ports"> & { ports: PortSyncPay
 const props = withDefaults(
   defineProps<{
     /** null = 新增；对象 = 编辑回显（GET /devices/{id} 完整数据，含 cards）；
-     * snmp_configured 为后端脱敏层注入的计算标记（凭据密文已置 null，
+     * snmp_configured/ipmi_configured 为后端脱敏层注入的计算标记（凭据密文已置 null，
      * 前端凭它判定是否已配置凭据） */
-    device?: (DeviceWithDetails & { snmp_configured: boolean; cards?: DeviceCard[] }) | null;
+    device?: (DeviceWithDetails & {
+      snmp_configured: boolean;
+      ipmi_configured: boolean;
+      cards?: DeviceCard[];
+    }) | null;
   }>(),
   { device: null }
 );
@@ -126,6 +131,10 @@ interface DeviceFormState {
   snmpAuthPassword: string;
   snmpPrivProtocol: string;
   snmpPrivPassword: string;
+  ipmiUsername: string;
+  ipmiPassword: string;
+  ipmiPort: number | "";
+  ipmiAuthAlgo: string;
 }
 
 const form = reactive<DeviceFormState>({
@@ -156,7 +165,11 @@ const form = reactive<DeviceFormState>({
   snmpAuthProtocol: "",
   snmpAuthPassword: "",
   snmpPrivProtocol: "",
-  snmpPrivPassword: ""
+  snmpPrivPassword: "",
+  ipmiUsername: "",
+  ipmiPassword: "",
+  ipmiPort: 623,
+  ipmiAuthAlgo: "sha256"
 });
 
 const cardEditor = ref<InstanceType<typeof NetworkCardEditor> | null>(null);
@@ -391,9 +404,21 @@ function setSnmpFieldValues(device: DeviceWithDetails & { snmp_configured: boole
   form.snmpPrivPassword = device.snmp_configured ? PASSWORD_MASK : "";
 }
 
+/**
+ * 编辑回显 IPMI 字段：password 在 GET 响应中已脱敏为 null，凭据存在性以
+ * ipmi_configured 计算标记判定（username 与 password 均非空）；已配置即掩码
+ * 占位，未改动时按键缺省提交保留原值。username/端口/算法为非敏感列按实际值回显。
+ */
+function setIpmiFieldValues(device: DeviceWithDetails & { ipmi_configured: boolean }): void {
+  form.ipmiUsername = device.ipmi_username || "";
+  form.ipmiPassword = device.ipmi_configured ? PASSWORD_MASK : "";
+  form.ipmiPort = device.ipmi_port || 623;
+  form.ipmiAuthAlgo = device.ipmi_auth_algo || "sha256";
+}
+
 /** 编辑路径回显：基础字段 → 房间上下文（下拉五路并行）→ 网卡数据 */
 async function fillDeviceFormForEdit(
-  device: DeviceWithDetails & { snmp_configured: boolean; cards?: DeviceCard[] }
+  device: DeviceWithDetails & { snmp_configured: boolean; ipmi_configured: boolean; cards?: DeviceCard[] }
 ): Promise<void> {
   form.name = device.name || "";
   form.hostname = device.hostname || "";
@@ -408,6 +433,7 @@ async function fillDeviceFormForEdit(
   form.description = device.description || "";
   form.templateId = device.template_id || "";
   setSnmpFieldValues(device);
+  setIpmiFieldValues(device);
 
   if (!device.room_id) {
     await editor().loadExisting(device.cards || []);
@@ -530,6 +556,35 @@ async function testSnmpConnection(): Promise<void> {
   }
 }
 
+const testingIpmi = ref(false);
+
+/** IPMI 连接测试：取首个已填 IP（口径同 test-snmp）；编辑态带 device_id，掩码口令传 null 由后端读取已存凭据 */
+async function testIpmiConnection(): Promise<void> {
+  const ip = firstCardIpAddress();
+  if (!ip) {
+    showToast(t("device.ip_required"), "warning");
+    return;
+  }
+  testingIpmi.value = true;
+  try {
+    const data: IpmiTestRequest = {
+      device_id: props.device?.id ?? null,
+      ip_address: ip,
+      ipmi_username: form.ipmiUsername || null,
+      ipmi_password: maskToNull(form.ipmiPassword),
+      ipmi_auth_algo: form.ipmiAuthAlgo || "sha256"
+    };
+    const result = await apiPost("/api/resources/devices/test-ipmi", data);
+    if (result.success) {
+      showToast(t("device.ipmi_test_success"), "success");
+    } else {
+      showToast(`${t("device.ipmi_test_failed")}: ${result.message}`, "error");
+    }
+  } finally {
+    testingIpmi.value = false;
+  }
+}
+
 const fetchingSnmp = ref(false);
 
 /** GET /devices/{id}/snmp-info 载荷 */
@@ -589,13 +644,17 @@ const saveMutation = useMutation({
     cards: CardSyncPayload[];
     powerWatts: number | null;
   }) => {
-    // 三个掩码键放宽为可缺省：undefined 经 JSON.stringify 省略键，后端
+    // 四个掩码键放宽为可缺省：undefined 经 JSON.stringify 省略键，后端
     // 双层 Option 按键缺失处理（不修改）；null 仍表示主动清空
-    const deviceData: Omit<DeviceUpdate, "snmp_community" | "snmp_auth_password" | "snmp_priv_password"> & {
+    const deviceData: Omit<
+      DeviceUpdate,
+      "snmp_community" | "snmp_auth_password" | "snmp_priv_password" | "ipmi_password"
+    > & {
       template_id: string | null;
       snmp_community?: string | null;
       snmp_auth_password?: string | null;
       snmp_priv_password?: string | null;
+      ipmi_password?: string | null;
     } = {
       name: form.name.trim(),
       hostname: form.hostname || null,
@@ -621,6 +680,10 @@ const saveMutation = useMutation({
       snmp_auth_password: snmpSecretPayload(form.snmpAuthPassword),
       snmp_priv_protocol: form.snmpPrivProtocol || null,
       snmp_priv_password: snmpSecretPayload(form.snmpPrivPassword),
+      ipmi_username: form.ipmiUsername || null,
+      ipmi_password: snmpSecretPayload(form.ipmiPassword),
+      ipmi_port: Number.parseInt(String(form.ipmiPort), 10) || 623,
+      ipmi_auth_algo: form.ipmiAuthAlgo || "sha256",
       cards
     };
     const result = props.device?.id
@@ -888,80 +951,114 @@ onMounted(async () => {
       <NetworkCardEditor ref="cardEditor" :room-id="form.roomId" :initial-cards="props.device?.cards || []" />
 
       <hr class="section-divider">
-      <h4 class="section-subtitle">{{ t("device.snmp_config") }}</h4>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="device-snmp-version">{{ t("device.snmp_version") }}</label>
-          <select id="device-snmp-version" v-model="form.snmpVersion">
-            <option value="v2c">SNMPv1/v2c</option>
-            <option value="v3">SNMPv3</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="device-snmp-port">{{ t("device.snmp_port") }}</label>
-          <input id="device-snmp-port" v-model="form.snmpPort" type="number" autocomplete="off">
-        </div>
-      </div>
-      <div v-show="form.snmpVersion !== 'v3'" class="form-row">
-        <div class="form-group flex-1">
-          <label for="device-snmp-community">{{ t("device.snmp_community") }}</label>
-          <input
-            id="device-snmp-community"
-            v-model="form.snmpCommunity"
-            type="text"
-            placeholder="public"
-            autocomplete="off"
-          >
-        </div>
-      </div>
-      <div v-show="form.snmpVersion === 'v3'">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-snmp-username">{{ t("device.snmp_username") }}</label>
-            <input id="device-snmp-username" v-model="form.snmpUsername" type="text" autocomplete="off">
+      <div class="proto-config-columns">
+        <section class="proto-config-col">
+          <h4 class="section-subtitle">{{ t("device.snmp_config") }}</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device-snmp-version">{{ t("device.snmp_version") }}</label>
+              <select id="device-snmp-version" v-model="form.snmpVersion">
+                <option value="v2c">SNMPv1/v2c</option>
+                <option value="v3">SNMPv3</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="device-snmp-port">{{ t("device.snmp_port") }}</label>
+              <input id="device-snmp-port" v-model="form.snmpPort" type="number" autocomplete="off">
+            </div>
           </div>
-          <div class="form-group">
-            <label for="device-snmp-auth-protocol">{{ t("device.snmp_auth_protocol") }}</label>
-            <select id="device-snmp-auth-protocol" v-model="form.snmpAuthProtocol">
-              <option value="">{{ t("device.snmp_no_auth") }}</option>
-              <option value="MD5">MD5</option>
-              <option value="SHA">SHA</option>
-              <option value="SHA-224">SHA-224</option>
-              <option value="SHA-256">SHA-256</option>
-              <option value="SHA-384">SHA-384</option>
-              <option value="SHA-512">SHA-512</option>
-            </select>
+          <div v-show="form.snmpVersion !== 'v3'" class="form-row">
+            <div class="form-group flex-1">
+              <label for="device-snmp-community">{{ t("device.snmp_community") }}</label>
+              <input
+                id="device-snmp-community"
+                v-model="form.snmpCommunity"
+                type="text"
+                placeholder="public"
+                autocomplete="off"
+              >
+            </div>
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-snmp-auth-password">{{ t("device.snmp_auth_password") }}</label>
-            <input id="device-snmp-auth-password" v-model="form.snmpAuthPassword" type="password" autocomplete="new-password">
+          <div v-show="form.snmpVersion === 'v3'">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="device-snmp-username">{{ t("device.snmp_username") }}</label>
+                <input id="device-snmp-username" v-model="form.snmpUsername" type="text" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="device-snmp-auth-protocol">{{ t("device.snmp_auth_protocol") }}</label>
+                <select id="device-snmp-auth-protocol" v-model="form.snmpAuthProtocol">
+                  <option value="">{{ t("device.snmp_no_auth") }}</option>
+                  <option value="MD5">MD5</option>
+                  <option value="SHA">SHA</option>
+                  <option value="SHA-224">SHA-224</option>
+                  <option value="SHA-256">SHA-256</option>
+                  <option value="SHA-384">SHA-384</option>
+                  <option value="SHA-512">SHA-512</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="device-snmp-auth-password">{{ t("device.snmp_auth_password") }}</label>
+                <input id="device-snmp-auth-password" v-model="form.snmpAuthPassword" type="password" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label for="device-snmp-priv-protocol">{{ t("device.snmp_priv_protocol") }}</label>
+                <select id="device-snmp-priv-protocol" v-model="form.snmpPrivProtocol">
+                  <option value="">{{ t("device.snmp_no_priv") }}</option>
+                  <option value="DES">DES</option>
+                  <option value="AES">AES</option>
+                  <option value="AES-128">AES-128</option>
+                  <option value="AES-192">AES-192</option>
+                  <option value="AES-256">AES-256</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="device-snmp-priv-password">{{ t("device.snmp_priv_password") }}</label>
+                <input id="device-snmp-priv-password" v-model="form.snmpPrivPassword" type="password" autocomplete="new-password">
+              </div>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="device-snmp-priv-protocol">{{ t("device.snmp_priv_protocol") }}</label>
-            <select id="device-snmp-priv-protocol" v-model="form.snmpPrivProtocol">
-              <option value="">{{ t("device.snmp_no_priv") }}</option>
-              <option value="DES">DES</option>
-              <option value="AES">AES</option>
-              <option value="AES-128">AES-128</option>
-              <option value="AES-192">AES-192</option>
-              <option value="AES-256">AES-256</option>
-            </select>
+        </section>
+        <section class="proto-config-col">
+          <h4 class="section-subtitle">{{ t("device.ipmi_config") }}</h4>
+          <div class="form-row form-row-2col">
+            <div class="form-group">
+              <label for="device-ipmi-username">{{ t("device.ipmi_username") }}</label>
+              <input id="device-ipmi-username" v-model="form.ipmiUsername" type="text" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="device-ipmi-password">{{ t("device.ipmi_password") }}</label>
+              <input id="device-ipmi-password" v-model="form.ipmiPassword" type="password" autocomplete="new-password">
+            </div>
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="device-snmp-priv-password">{{ t("device.snmp_priv_password") }}</label>
-            <input id="device-snmp-priv-password" v-model="form.snmpPrivPassword" type="password" autocomplete="new-password">
+          <div class="form-row form-row-2col">
+            <div class="form-group">
+              <label for="device-ipmi-auth-algo">{{ t("device.ipmi_auth_algo") }}</label>
+              <select id="device-ipmi-auth-algo" v-model="form.ipmiAuthAlgo">
+                <option value="sha256">SHA256（Cipher Suite 17）</option>
+                <option value="sha1">SHA1（Cipher Suite 3）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="device-ipmi-port">{{ t("device.ipmi_port") }}</label>
+              <input id="device-ipmi-port" v-model="form.ipmiPort" type="number" autocomplete="off">
+            </div>
           </div>
-        </div>
+          <p class="proto-config-hint">{{ t("device.ipmi_config_hint") }}</p>
+        </section>
       </div>
     </form>
 
     <template #footer>
       <button type="button" class="btn-secondary" :disabled="testingSnmp" @click="testSnmpConnection">
         {{ testingSnmp ? t("common.testing") : t("device.test_snmp") }}
+      </button>
+      <button type="button" class="btn-secondary" :disabled="testingIpmi" @click="testIpmiConnection">
+        {{ testingIpmi ? t("common.testing") : t("device.test_ipmi") }}
       </button>
       <button type="button" class="btn-primary" :disabled="fetchingSnmp" @click="getDeviceInfoFromSnmp">
         {{ fetchingSnmp ? t("device.fetching_snmp") : t("device.get_snmp_info") }}
@@ -979,3 +1076,23 @@ onMounted(async () => {
     />
   </ModalShell>
 </template>
+
+<style scoped>
+/* SNMP 与 IPMI 协议配置左右两栏：窄容器堆叠、宽容器并排，各列独立小节标题 */
+.proto-config-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-lg, 24px);
+  align-items: start;
+}
+
+.proto-config-col {
+  min-width: 0;
+}
+
+.proto-config-hint {
+  margin: var(--space-sm, 8px) 0 0;
+  font-size: 0.85em;
+  color: var(--text-muted, #8a8f98);
+}
+</style>

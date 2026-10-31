@@ -15,6 +15,8 @@
 //!   性能指标采集本体在 foims-snmp::collect::metrics；
 //! - [`live_poll`]：SNMP 实时采集（秒级定向 GET + 内存快照注册表，不落库，
 //!   供实时展示与 Top 榜；趋势仍由 snmp_poll 落库）；
+//! - [`ipmi_poll`]：IPMI 带外轮询采集（纳入主机监控页，source='ipmi'），
+//!   SDR/传感器采集本体在 foims-ipmi::collect；
 //! - [`live_api`]：实时快照 Web API（全量列表 + SSE 变更推送）；
 //! - [`trap`]：SNMP Trap/Inform 接收（属采集服务，非资源管理业务）；
 //! - [`tasks`]：离线判定、SNMP 轮询与历史清理调度任务执行器。
@@ -34,6 +36,7 @@ pub mod alerts;
 pub mod api;
 pub mod cert;
 pub mod ingest;
+pub mod ipmi_poll;
 pub mod live_api;
 pub mod live_poll;
 pub mod packaging;
@@ -45,5 +48,8 @@ pub mod trap;
 
 pub use alert_episode::{AlertProvider, AlertRuntime, HostRef};
 pub use live_api::LiveProvider;
-pub use live_poll::{LiveDeviceSnapshot, LiveRegistry, start_live_poller};
+pub use live_poll::{
+    IpmiLiveDeviceSnapshot, IpmiLiveRegistry, LiveDeviceSnapshot, LiveRegistry,
+    start_ipmi_live_poller, start_live_poller,
+};
 pub use trap::start_trap_receiver;

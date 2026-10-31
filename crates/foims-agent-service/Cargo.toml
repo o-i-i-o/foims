@@ -1,6 +1,6 @@
 [package]
 name = "foims-agent-service"
-version = "0.1.24"
+version = "0.1.25"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS 数据采集服务：agent 分发打包与 QUIC mTLS 接收、SNMP 轮询/Trap 接收、证书签发续期"
@@ -42,6 +42,8 @@ foims-auth = { path = "../foims-auth" }
 foims-common = { path = "../foims-common" }
 # SNMP 域（协议层/性能指标采集/事件通知）；域拆分后本 crate 不再依赖 foims-resource
 foims-snmp = { path = "../foims-snmp" }
+# IPMI 域（BMC RMCP+ 会话/SDR 传感器采集/实时快照）
+foims-ipmi = { path = "../foims-ipmi" }
 foims-scheduler = { path = "../foims-scheduler" }
 
 [dev-dependencies]

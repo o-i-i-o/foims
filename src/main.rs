@@ -25,7 +25,8 @@ use foims::system::task_executors::{
     PasswordExpirySyncTaskExecutor, TokenCleanupTaskExecutor,
 };
 use foims_agent_service::tasks::{
-    AgentHistoryCleanupTaskExecutor, AgentOfflineTaskExecutor, AgentSnmpPollTaskExecutor,
+    AgentHistoryCleanupTaskExecutor, AgentIpmiPollTaskExecutor, AgentOfflineTaskExecutor,
+    AgentSnmpPollTaskExecutor,
 };
 use foims_common::config::Config;
 use foims_common::db::DbPool;
@@ -494,14 +495,21 @@ async fn main() -> std::io::Result<()> {
     let live_registry = Arc::new(foims_agent_service::LiveRegistry::new());
     let live_config = config.snmp.live.clone().filter(|live| live.enabled);
 
+    // IPMI 实时采集：与 SNMP 双路径同构（内存快照，不落库）；秒级读数供实时
+    // 展示与 Top 榜，趋势仍由 5 分钟带外轮询落库。注册表按 device_id 与
+    // SNMP 同一 SSE/列表载荷中按 source 区分
+    let ipmi_live_registry = Arc::new(foims_agent_service::IpmiLiveRegistry::new());
+    let ipmi_live_config = config.ipmi.live.clone().filter(|live| live.enabled);
+
     // 告警 episode 运行时：实时采集、agent 上报、常驻兜底扫描三条路径共用的
-    // 单实例（阈值缓存 + 状态机 + 落库与通知）。实时采集开启时 SNMP 主机的
-    // 秒级读数归实时路径，兜底扫描只兜底 agent 上报主机，避免 5 分钟前的
+    // 单实例（阈值缓存 + 状态机 + 落库与通知）。某来源实时采集开启时该来源
+    // 主机的秒级读数归实时路径，兜底扫描不再包含，避免 5 分钟前的
     // 快照把刚恢复的告警拖回待决。
     let alert_runtime = pool.as_ref().map(|db_pool| {
         Arc::new(foims_agent_service::AlertRuntime::new(
             db_pool.get_conn(),
             live_config.is_some(),
+            ipmi_live_config.is_some(),
         ))
     });
     if let Some(runtime) = alert_runtime.as_ref() {
@@ -519,6 +527,19 @@ async fn main() -> std::io::Result<()> {
             db_pool.get_conn(),
             live,
             live_registry.clone(),
+            runtime,
+            shutdown.subscribe(),
+        );
+    }
+
+    if let Some(live) = ipmi_live_config
+        && let Some(db_pool) = pool.as_ref()
+        && let Some(runtime) = alert_runtime.clone()
+    {
+        foims_agent_service::start_ipmi_live_poller(
+            db_pool.get_conn(),
+            live,
+            ipmi_live_registry.clone(),
             runtime,
             shutdown.subscribe(),
         );
@@ -542,6 +563,7 @@ async fn main() -> std::io::Result<()> {
         )));
         registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
         registry.register(Box::new(AgentSnmpPollTaskExecutor));
+        registry.register(Box::new(AgentIpmiPollTaskExecutor));
         registry
     });
 
@@ -559,7 +581,7 @@ async fn main() -> std::io::Result<()> {
                 // 系统任务统一「启动播种 + 按库注册」：scheduled_tasks 中的
                 // is_system 行是当前代码与配置的投影（任务管理页只读展示），
                 // cron/config 每次启动重算回写，避免代码与 DB 两份定义漂移
-                let seeds: [SystemTaskSeed<'_>; 7] = [
+                let seeds: [SystemTaskSeed<'_>; 8] = [
                     (
                         "system_backup",
                         "backup",
@@ -612,6 +634,15 @@ async fn main() -> std::io::Result<()> {
                     (
                         "system_agent_snmp_poll",
                         "agent_snmp_poll",
+                        "0 */5 * * * *",
+                        serde_json::json!({ "interval_secs": 300 }),
+                    ),
+                    // IPMI 带外设备轮询（每 5 分钟）：已配置 IPMI 凭据的设备以
+                    // source='ipmi' 呈现于主机监控页，连续两轮失败置 offline
+                    // （ipmi_poll 自行判定）
+                    (
+                        "system_agent_ipmi_poll",
+                        "agent_ipmi_poll",
                         "0 */5 * * * *",
                         serde_json::json!({ "interval_secs": 300 }),
                     ),
@@ -714,6 +745,7 @@ async fn main() -> std::io::Result<()> {
             pool.clone(),
             task_registry.clone(),
             live_registry,
+            ipmi_live_registry,
             alert_runtime.clone(),
             shutdown.clone(),
             rate_limiter.clone(),

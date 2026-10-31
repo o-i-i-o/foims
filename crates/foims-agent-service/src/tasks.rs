@@ -1,6 +1,7 @@
 //! Agent 监控闭环调度任务执行器（设计 docs/agent-design.md §5）：由主程序
-//! TaskRegistry 注册、系统级定时任务驱动的 agent 离线判定、历史指标清理与
-//! SNMP 设备轮询三个执行器（采集细节见 [`crate::snmp_poll`]）。
+//! TaskRegistry 注册、系统级定时任务驱动的 agent 离线判定、历史指标清理、
+//! SNMP 与 IPMI 设备轮询四个执行器（采集细节见 [`crate::snmp_poll`] 与
+//! [`crate::ipmi_poll`]）。
 
 use async_trait::async_trait;
 use foims_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
@@ -8,10 +9,13 @@ use serde_json::Value;
 
 use foims_common::{log_debug, msg};
 
+use crate::ipmi_poll;
 use crate::snmp_poll;
 
 /// SNMP 轮询间隔缺省值（秒，调度注册侧保持一致）
 const DEFAULT_SNMP_POLL_INTERVAL_SECS: u64 = 300;
+/// IPMI 轮询间隔缺省值（秒，与 SNMP 同 5 分钟节奏）
+const DEFAULT_IPMI_POLL_INTERVAL_SECS: u64 = 300;
 /// 历史保留天数缺省值与上限（天数类清理任务共用口径）
 const DEFAULT_RETENTION_DAYS: i64 = 30;
 const MAX_RETENTION_DAYS: i64 = 3650;
@@ -182,6 +186,35 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
         let (ok, fail) = snmp_poll::poll_all(&ctx.pool, interval_secs).await;
         log_debug!("log.task.agent_snmp_poll_completed", ok = ok, fail = fail);
         Ok("server.task.agent_snmp_poll_completed".to_string())
+    }
+}
+
+/// IPMI 设备带外轮询任务执行器：采集已配置 IPMI 凭据的设备（Get Device ID +
+/// Chassis Status + SDR 传感器），结果以 source='ipmi' 的 monitored_hosts 行
+/// 呈现于主机监控页，并按轮询间隔 × 2 翻转连续失联设备为 offline
+/// （采集细节见 [`crate::ipmi_poll`]）。
+pub struct AgentIpmiPollTaskExecutor;
+
+#[async_trait]
+impl TaskExecutor for AgentIpmiPollTaskExecutor {
+    fn task_type(&self) -> &str {
+        "agent_ipmi_poll"
+    }
+
+    /// 5 分钟例行运行，成功日志降为 debug 避免刷屏
+    fn debug_routine_logs(&self) -> bool {
+        true
+    }
+
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+        let interval_secs = config_u64(
+            &ctx.config,
+            "interval_secs",
+            DEFAULT_IPMI_POLL_INTERVAL_SECS,
+        );
+        let (ok, fail) = ipmi_poll::poll_all(&ctx.pool, interval_secs).await;
+        log_debug!("log.task.agent_ipmi_poll_completed", ok = ok, fail = fail);
+        Ok("server.task.agent_ipmi_poll_completed".to_string())
     }
 }
 

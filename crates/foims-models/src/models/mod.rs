@@ -277,6 +277,50 @@ pub fn validate_speed_opt(value: &&String) -> Result<(), ValidationError> {
     validate_length_str(value, 20, "server.device.validation.speed_length")
 }
 
+/// Device.ipmi_username（IPMI 规范用户名 ≤16 字节；DB 列 VARCHAR(62) 留余量）
+pub fn validate_ipmi_username_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 16, "server.device.validation.ipmi_username_length")
+}
+
+/// Device.ipmi_password（IPMI 规范口令 ≤20 字节；DB 列以密文落库加宽为 VARCHAR(160)）
+pub fn validate_ipmi_password_opt(value: &&String) -> Result<(), ValidationError> {
+    validate_length_str(value, 20, "server.device.validation.ipmi_password_length")
+}
+
+/// DeviceUpdate.ipmi_port（端口 1..=65535；双层 Option 数值由 derive 按值传入）
+pub fn validate_ipmi_port_opt(value: i32) -> Result<(), ValidationError> {
+    if (1..=65535).contains(&value) {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.device.validation.ipmi_port_range",
+        ))
+    }
+}
+
+/// IPMI 认证算法白名单（sha1|sha256，对应 RAKP suite 3/17；DB CHECK
+/// chk_devices_ipmi_auth_algo 兜底）——单一口径供 Create（单层 Option，按 &String）
+/// 与 Update（双层 Option，按 &&String）两个 custom 包装复用。
+fn validate_ipmi_auth_algo_str(algo: &str) -> Result<(), ValidationError> {
+    if matches!(algo, "sha1" | "sha256") {
+        Ok(())
+    } else {
+        Err(ValidationError::new(
+            "server.device.validation.ipmi_auth_algo_invalid",
+        ))
+    }
+}
+
+/// DeviceCreate.ipmi_auth_algo（单层 Option<String>，derive 按 &&String 传入）
+pub fn validate_ipmi_auth_algo_option(algo: &&String) -> Result<(), ValidationError> {
+    validate_ipmi_auth_algo_str(algo.as_str())
+}
+
+/// DeviceUpdate.ipmi_auth_algo（双层 Option<Option<String>>，derive 解包后按 &&String 传入）
+pub fn validate_ipmi_auth_algo_opt(algo: &&String) -> Result<(), ValidationError> {
+    validate_ipmi_auth_algo_str(algo.as_str())
+}
+
 fn validate_length_str(
     value: &str,
     max_chars: usize,

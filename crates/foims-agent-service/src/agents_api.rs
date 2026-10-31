@@ -99,6 +99,16 @@ pub(crate) fn rfc3339(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
+/// 同 IP 多来源去重优先级（ipmi > agent > snmp）：实际场景 agent 与 ipmi 分处
+/// 不同 IP（BMC 管理口与 OS），此处仅作同 IP 并存时展示层的确定性取舍。
+/// SQL 片段：列表与 Top 榜的 `ROW_NUMBER() OVER (... ORDER BY <本表达式>)` 共用。
+const SOURCE_RANK_SQL: &str =
+    "(CASE source WHEN 'ipmi' THEN 0 WHEN 'agent' THEN 1 WHEN 'snmp' THEN 2 ELSE 3 END)";
+
+/// 去重窗口函数的分区键：NULL ip 行以自身 id 单独成组（恒保留），非 NULL ip
+/// 行按 IP 分组取 rank 最优。
+const DEDUP_PARTITION_SQL: &str = "COALESCE(ip, id::text)";
+
 /// 向 QueryBuilder 追加与列表一致的过滤条件（status 精确 + keyword 模糊）。
 fn push_filters(
     builder: &mut sqlx::QueryBuilder<sqlx::Postgres>,
@@ -131,13 +141,22 @@ pub async fn list_agents<S: ConfigProvider>(
     let pool = state.pool()?.get_conn();
     let pagination = Pagination::new(query.page.unwrap_or(1), query.page_size.unwrap_or(20));
 
-    let mut count_builder =
-        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM monitored_hosts WHERE 1=1");
+    // 同 IP 去重（ipmi > agent > snmp）：按 IP（NULL 以自身 id）分组取 rank 最优行，
+    // 各来源 DB 行保留不变，仅展示层去重。count 与 rows 共用同一 dedup CTE。
+    let mut count_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
+        r"WITH dedup AS (
+             SELECT id, ROW_NUMBER() OVER (
+               PARTITION BY {DEDUP_PARTITION_SQL}
+               ORDER BY {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
+             ) AS rn
+             FROM monitored_hosts WHERE 1=1"
+    ));
     push_filters(
         &mut count_builder,
         query.status.as_deref(),
         query.keyword.as_deref(),
     );
+    count_builder.push(") SELECT COUNT(*) FROM dedup WHERE rn = 1");
     let total: i64 = count_builder
         .build_query_scalar()
         .persistent(false)
@@ -145,22 +164,32 @@ pub async fn list_agents<S: ConfigProvider>(
         .await?;
 
     // NUMERIC 列统一 cast 为 float8 后按 f64 读取
-    let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        r#"SELECT id, device_id, status, source, hostname, label, ip, os, arch, agent_version,
-                  cpu_usage::float8 AS cpu_usage,
-                  mem_usage_pct::float8 AS mem_usage_pct,
-                  disk_usage_pct::float8 AS disk_usage_pct,
-                  max_temp::float8 AS max_temp,
-                  uptime_secs, last_seen
-             FROM monitored_hosts WHERE 1=1"#,
-    );
+    let mut rows_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
+        r"WITH dedup AS (
+             SELECT id, device_id, status, source, hostname, label, ip, os, arch, agent_version,
+                    cpu_usage, mem_usage_pct, disk_usage_pct, max_temp, uptime_secs, last_seen, created_at,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY {DEDUP_PARTITION_SQL}
+                      ORDER BY {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
+                    ) AS rn
+             FROM monitored_hosts WHERE 1=1"
+    ));
     push_filters(
         &mut rows_builder,
         query.status.as_deref(),
         query.keyword.as_deref(),
     );
     rows_builder
-        .push(" ORDER BY last_seen DESC NULLS LAST, created_at DESC LIMIT ")
+        .push(
+            r") SELECT id, device_id, status, source, hostname, label, ip, os, arch, agent_version,
+                  cpu_usage::float8 AS cpu_usage,
+                  mem_usage_pct::float8 AS mem_usage_pct,
+                  disk_usage_pct::float8 AS disk_usage_pct,
+                  max_temp::float8 AS max_temp,
+                  uptime_secs, last_seen
+             FROM dedup WHERE rn = 1
+             ORDER BY last_seen DESC NULLS LAST, created_at DESC LIMIT ",
+        )
         .push_bind(pagination.page_size)
         .push(" OFFSET ")
         .push_bind(pagination.offset);
@@ -226,13 +255,24 @@ pub async fn get_top_metrics<S: ConfigProvider>(
 
     let mut body = serde_json::Map::new();
     for (key, column) in TOP_METRIC_COLUMNS {
+        // 与列表同口径的 IP 去重（ipmi > agent > snmp）：先在 active 行内按 IP
+        // 取 rank 最优行，再按指标非空排序取 Top N（IPMI 行为 rank 最优但
+        // cpu/mem 无读数时自然不参与该类榜单）。
         let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
-            r#"SELECT id, hostname, label, ip,
-                      {column}::float8 AS value, last_seen
+            r"WITH dedup AS (
+                 SELECT id, hostname, label, ip, {column} AS metric, last_seen,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY {DEDUP_PARTITION_SQL}
+                          ORDER BY {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
+                        ) AS rn
                  FROM monitored_hosts
-                WHERE status = 'active' AND {column} IS NOT NULL
-                ORDER BY {column} DESC
-                LIMIT "#
+                WHERE status = 'active'
+               )
+               SELECT id, hostname, label, ip, metric::float8 AS value, last_seen
+                 FROM dedup
+                WHERE rn = 1 AND metric IS NOT NULL
+                ORDER BY metric DESC
+                LIMIT "
         ));
         builder.push_bind(limit);
         let rows = builder.build().fetch_all(&pool).await?;

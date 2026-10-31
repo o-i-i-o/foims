@@ -461,6 +461,7 @@ mod tests {
             i18n: None,
             rate_limit: RateLimitConfig::default(),
             snmp: SnmpConfig::default(),
+            ipmi: foims_common::config::IpmiConfig::default(),
             agent: foims_common::config::AgentConfig::default(),
         }
     }

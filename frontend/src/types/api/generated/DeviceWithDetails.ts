@@ -12,4 +12,8 @@ start_u: number | null, end_u: number | null, template_id: string | null, templa
 /**
  * SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
  */
-snmp_version: string | null, snmp_community: string | null, snmp_username: string | null, snmp_auth_protocol: string | null, snmp_auth_password: string | null, snmp_priv_protocol: string | null, snmp_priv_password: string | null, snmp_port: number | null, power_watts: number | null, description: string | null, created_at: string, updated_at: string, };
+snmp_version: string | null, snmp_community: string | null, snmp_username: string | null, snmp_auth_protocol: string | null, snmp_auth_password: string | null, snmp_priv_protocol: string | null, snmp_priv_password: string | null, snmp_port: number | null, 
+/**
+ * IPMI 凭据：username/端口/算法明文，password 响应脱敏为 null（与 Device 同口径）
+ */
+ipmi_username: string | null, ipmi_password: string | null, ipmi_port: number | null, ipmi_auth_algo: string | null, power_watts: number | null, description: string | null, created_at: string, updated_at: string, };

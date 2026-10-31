@@ -24,6 +24,22 @@ snmp_auth_password: string | null, snmp_priv_protocol: string | null,
  */
 snmp_priv_password: string | null, snmp_port: number | null, 
 /**
+ * IPMI 用户名（带外管理账户，≤16 字节）：与 password 均非空即视为「已配置」
+ */
+ipmi_username: string | null, 
+/**
+ * IPMI 口令（≤20 字节）：入库加密，响应不回传
+ */
+ipmi_password: string | null, 
+/**
+ * IPMI 会话端口（ruipmi 固定 623，本字段仅展示）
+ */
+ipmi_port: number | null, 
+/**
+ * IPMI 认证算法白名单：sha1/sha256（DB CHECK chk_devices_ipmi_auth_algo 兜底）
+ */
+ipmi_auth_algo: string | null, 
+/**
  * 设备额定功耗（瓦，0..=10_000_000；缺省/null=未记录）
  */
 power_watts: number | null, 

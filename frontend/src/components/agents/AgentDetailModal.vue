@@ -32,6 +32,24 @@ interface AgentDetail {
   raw_metrics: RawMetrics | null;
 }
 
+/** IPMI 单个传感器读数（_ipmi_state.temps/fans/volts 元素，与 LiveSensorRow 同构） */
+interface IpmiSensorEntry {
+  name?: string | null;
+  value?: number | string | null;
+  unit?: string | null;
+}
+
+/** IPMI 私有明细（落库 raw_metrics._ipmi_state，collect.to_report 口径） */
+interface IpmiState {
+  power_on?: boolean | null;
+  manuf_id?: number | null;
+  product_id?: number | null;
+  fw_revision?: string | null;
+  temps?: IpmiSensorEntry[] | null;
+  fans?: IpmiSensorEntry[] | null;
+  volts?: IpmiSensorEntry[] | null;
+}
+
 /** raw_metrics 上报 JSON 的消费字段（全部可选：agent 上报可能缺键） */
 interface RawMetrics {
   machine_id?: string | null;
@@ -83,6 +101,8 @@ interface RawMetrics {
     kind?: string | null;
     value?: number | string | null;
   }> | null;
+  /** IPMI 主机专用：BMC 传感器与电源状态（SNMP/Agent 行无此键） */
+  _ipmi_state?: IpmiState | null;
 }
 
 /** 24h 曲线点（后端补齐六键，缺值为 null） */
@@ -173,7 +193,9 @@ onUnmounted(() => {
 const live = computed(() => {
   const deviceId = agent.value?.device_id;
   if (deviceId) {
-    return liveDevices.value.find((row) => row.device_id === deviceId);
+    // 同设备可能存在 SNMP 与 IPMI 两路快照（各自独立采集），按行来源优先匹配
+    const rows = liveDevices.value.filter((row) => row.device_id === deviceId);
+    return rows.find((row) => row.source === agent.value?.source) ?? rows[0];
   }
   const ip = agent.value?.ip;
   return ip ? liveDevices.value.find((row) => row.ip === ip) : undefined;
@@ -210,6 +232,34 @@ const displayCpu = computed(() => liveCpu.value ?? raw.value.cpu?.usage_pct ?? n
 const displayMemPct = computed(() => liveMemPct.value ?? agent.value?.mem_usage_pct ?? null);
 const displayMemUsed = computed(() => liveMemUsed.value ?? raw.value.memory?.used ?? null);
 const displayMemTotal = computed(() => liveMemTotal.value ?? raw.value.memory?.total ?? null);
+
+// ===== IPMI 硬件视图：BMC 无 CPU/内存/磁盘/网络语义，详情改展温度/风扇/电压与电源状态 =====
+const isIpmi = computed(() => agent.value?.source === "ipmi");
+const ipmiState = computed<IpmiState>(() => raw.value._ipmi_state ?? {});
+/** 电源状态：优先秒级实时快照（Get Chassis Status），回落 5 分钟轮询落库值 */
+const ipmiPowerOn = computed<boolean | null>(() => {
+  if (liveFresh.value && live.value?.power_on != null) {
+    return live.value.power_on;
+  }
+  return ipmiState.value.power_on ?? null;
+});
+const ipmiTemps = computed(() => ipmiState.value.temps ?? []);
+const ipmiFans = computed(() => ipmiState.value.fans ?? []);
+const ipmiVolts = computed(() => ipmiState.value.volts ?? []);
+const ipmiHasSensors = computed(
+  () => ipmiTemps.value.length + ipmiFans.value.length + ipmiVolts.value.length > 0
+);
+
+/** 传感器行文案：RPM 取整、其余保留一位小数，附单位 */
+function formatIpmiSensor(entry: IpmiSensorEntry): string {
+  const value = Number(entry.value);
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  const unit = entry.unit ?? "";
+  const text = /rpm/i.test(unit) ? String(Math.round(value)) : value.toFixed(1);
+  return `${text} ${unit}`.trim();
+}
 
 /** 采集端口选项（GET /api/agents/{id}/monitor-port） */
 interface MonitorPortOption {
@@ -456,6 +506,10 @@ function formatUnit(unit: string): (value: number) => string {
       <!-- 头部概要：状态徽章 + IP -->
       <div class="agent-detail-summary">
         <span class="status-badge agent-detail-badge" :class="statusMeta?.badge">{{ statusText }}</span>
+        <span
+          v-if="agent.source === 'snmp' || agent.source === 'ipmi'"
+          class="agent-source-badge"
+        >{{ agent.source === "ipmi" ? t("agents.source_ipmi") : t("agents.source_snmp") }}</span>
         <span class="agent-detail-ip">{{ agent.ip || "-" }}</span>
       </div>
 
@@ -474,7 +528,42 @@ function formatUnit(unit: string): (value: number) => string {
           </dl>
         </section>
 
-        <section class="agent-detail-card">
+        <section v-if="isIpmi" class="agent-detail-card agent-detail-card-wide">
+          <h4 class="agent-detail-card-title">{{ t("agents.group_ipmi") }}<span v-if="liveFresh && live?.source === 'ipmi'" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
+          <dl class="agent-kv">
+            <dt>{{ t("agents.ipmi_power") }}</dt>
+            <dd>
+              <span v-if="ipmiPowerOn != null" class="status-badge" :class="ipmiPowerOn ? 'status-up' : 'status-down'">
+                {{ ipmiPowerOn ? t("agents.ipmi_power_on") : t("agents.ipmi_power_off") }}
+              </span>
+              <span v-else>-</span>
+            </dd>
+            <dt>{{ t("agents.ipmi_vendor") }}</dt><dd>{{ agent.os || "-" }}</dd>
+            <dt>{{ t("agents.ipmi_fw") }}</dt><dd>{{ ipmiState.fw_revision || "-" }}</dd>
+          </dl>
+          <div class="agent-rows">
+            <p v-if="!ipmiHasSensors" class="agent-detail-empty">{{ t("common.no_data") }}</p>
+            <template v-else>
+              <div v-for="(s, index) in ipmiTemps" :key="`t-${index}`" class="agent-sensor-row">
+                <span class="agent-sensor-label">{{ s.name || "-" }}</span>
+                <span class="agent-sensor-kind">{{ t("agents.sensor_temp") }}</span>
+                <span class="agent-sensor-value">{{ formatIpmiSensor(s) }}</span>
+              </div>
+              <div v-for="(s, index) in ipmiFans" :key="`f-${index}`" class="agent-sensor-row">
+                <span class="agent-sensor-label">{{ s.name || "-" }}</span>
+                <span class="agent-sensor-kind">{{ t("agents.sensor_fan") }}</span>
+                <span class="agent-sensor-value">{{ formatIpmiSensor(s) }}</span>
+              </div>
+              <div v-for="(s, index) in ipmiVolts" :key="`v-${index}`" class="agent-sensor-row">
+                <span class="agent-sensor-label">{{ s.name || "-" }}</span>
+                <span class="agent-sensor-kind">{{ t("agents.sensor_volt") }}</span>
+                <span class="agent-sensor-value">{{ formatIpmiSensor(s) }}</span>
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <section v-if="!isIpmi" class="agent-detail-card">
           <h4 class="agent-detail-card-title">{{ t("agents.group_cpu") }}<span v-if="liveCpu != null" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
           <div class="agent-cpu-big">{{ displayCpu == null ? "-" : `${Number(displayCpu).toFixed(1)}%` }}</div>
           <dl class="agent-kv">
@@ -483,7 +572,7 @@ function formatUnit(unit: string): (value: number) => string {
           </dl>
         </section>
 
-        <section class="agent-detail-card">
+        <section v-if="!isIpmi" class="agent-detail-card">
           <h4 class="agent-detail-card-title">{{ t("agents.group_memory") }}<span v-if="liveMemPct != null" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
           <div class="agent-mem-bar">
             <AgentUsageBar :value="displayMemPct" />
@@ -495,7 +584,7 @@ function formatUnit(unit: string): (value: number) => string {
           </dl>
         </section>
 
-        <section class="agent-detail-card agent-detail-card-wide">
+        <section v-if="!isIpmi" class="agent-detail-card agent-detail-card-wide">
           <h4 class="agent-detail-card-title">{{ t("agents.group_disk") }}</h4>
           <div class="agent-rows">
             <p v-if="!(raw.disks ?? []).length" class="agent-detail-empty">{{ t("common.no_data") }}</p>
@@ -512,7 +601,7 @@ function formatUnit(unit: string): (value: number) => string {
           </div>
         </section>
 
-        <section class="agent-detail-card">
+        <section v-if="!isIpmi" class="agent-detail-card">
           <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}<span v-if="liveFresh" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
           <!-- SNMP：每台设备只采一个端口（默认首端口），速率取秒级实时快照 -->
           <template v-if="agent.source === 'snmp'">
@@ -578,7 +667,7 @@ function formatUnit(unit: string): (value: number) => string {
           </div>
         </section>
 
-        <section class="agent-detail-card">
+        <section v-if="!isIpmi" class="agent-detail-card">
           <h4 class="agent-detail-card-title">{{ t("agents.group_sensors") }}</h4>
           <div class="agent-rows">
             <div v-if="liveTemp != null" class="agent-sensor-row">
@@ -604,15 +693,15 @@ function formatUnit(unit: string): (value: number) => string {
       <!-- 近 24 小时迷你曲线（2×2，SVG 自绘） -->
       <h4 class="agent-spark-heading">{{ t("agents.chart_heading") }}</h4>
       <div class="agent-spark-grid">
-        <div class="agent-spark-card">
+        <div v-if="!isIpmi" class="agent-spark-card">
           <h5>{{ t("agents.chart_cpu") }}</h5>
           <AgentSparkline :series="sparkSeries.cpu" :format-value="formatUnit('%')" :aria-label="t('agents.chart_cpu')" />
         </div>
-        <div class="agent-spark-card">
+        <div v-if="!isIpmi" class="agent-spark-card">
           <h5>{{ t("agents.chart_memory") }}</h5>
           <AgentSparkline :series="sparkSeries.memory" :format-value="formatUnit('%')" :aria-label="t('agents.chart_memory')" />
         </div>
-        <div class="agent-spark-card">
+        <div v-if="!isIpmi" class="agent-spark-card">
           <h5>{{ t("agents.chart_disk") }}</h5>
           <AgentSparkline :series="sparkSeries.disk" :format-value="formatUnit('%')" :aria-label="t('agents.chart_disk')" />
         </div>
@@ -620,7 +709,7 @@ function formatUnit(unit: string): (value: number) => string {
           <h5>{{ t("agents.chart_temp") }}</h5>
           <AgentSparkline :series="sparkSeries.temp" :format-value="formatUnit('℃')" :aria-label="t('agents.chart_temp')" />
         </div>
-        <div class="agent-spark-card">
+        <div v-if="!isIpmi" class="agent-spark-card">
           <h5 class="agent-spark-title">
             <span>{{ t("agents.chart_net") }}</span>
             <span class="agent-net-legend">

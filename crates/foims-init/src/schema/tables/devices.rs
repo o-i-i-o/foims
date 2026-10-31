@@ -27,6 +27,19 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             snmp_priv_protocol VARCHAR(10),
             snmp_priv_password VARCHAR(255),
             snmp_port INTEGER DEFAULT 161,
+            -- IPMI 带外管理凭据（RMCP+ 会话）：username 与 password 均非空即
+            -- 视为「已配置」，不设独立开关列。password 以密文落库（AES-GCM +
+            -- base64：明文 +28 字节再编码），列宽须容纳模型允许的最长明文
+            -- 加密结果（IPMI 规范口令 ≤20 字节，详见 check.rs 列宽契约）。
+            -- 端口/权限/算法受 ruipmi 约束固定：会话端口恒 623（IPMI_LANPLUS_PORT
+            -- 硬编码），特权固定 Administrator，故 ipmi_port 仅承载展示语义、
+            -- 采集侧不使用；ipmi_auth_algo 选择 RAKP 完整性/加密套件（sha256=17、
+            -- sha1=3），老固件兼容回落用 sha1。
+            ipmi_username VARCHAR(62),
+            ipmi_password VARCHAR(160),
+            ipmi_port INTEGER DEFAULT 623,
+            ipmi_auth_algo VARCHAR(10) DEFAULT 'sha256'
+                CONSTRAINT chk_devices_ipmi_auth_algo CHECK (ipmi_auth_algo IN ('sha1', 'sha256')),
             -- 设备额定功耗（瓦，可空=未记录）；机柜/房间功率容量校验的求和来源
             power_watts INTEGER
                 CONSTRAINT chk_devices_power_watts CHECK (power_watts IS NULL OR power_watts >= 0),

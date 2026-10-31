@@ -1,0 +1,45 @@
+[package]
+name = "foims-ipmi"
+version = "0.1.0"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS IPMI 域：BMC RMCP+ 会话、传感器采集（SDR/读数）、连通性探测与实时快照"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# IPMI v2.0 RMCP+ 异步客户端（纯 Rust：会话 + SDR/SEL/FRU 解析）
+ruipmi = "0.6.2"
+
+# Axum（IPMI 连通性探测 handler）
+axum = { workspace = true }
+
+# SQLx（设备凭据只读查询）
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Date/Time（实时快照时间戳）
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# Async（会话复用与采集并发）
+tokio = { workspace = true }
+
+# 日志
+tracing = { workspace = true }
+
+# 错误处理
+thiserror = { workspace = true }
+
+# Workspace crates（依赖方向：foims-resource / foims-agent-service → 本 crate，
+# 本 crate 不依赖二者）
+foims-common = { path = "../foims-common" }
+foims-models = { path = "../foims-models" }
+foims-auth = { path = "../foims-auth" }
+
+[lints]
+workspace = true

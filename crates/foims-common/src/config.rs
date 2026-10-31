@@ -414,6 +414,80 @@ impl Default for SnmpConfig {
     }
 }
 
+/// IPMI 带外采集配置段（`[ipmi]`）。
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct IpmiConfig {
+    /// 5 分钟轮询落库总开关（缺省开启）
+    #[serde(default = "default_ipmi_poll_enabled")]
+    pub poll_enabled: bool,
+    /// 秒级实时采集配置（同 SNMP 双路径：内存快照 → SSE/Top/告警评估，不写库）。
+    /// 缺省归一为 [`IpmiLiveConfig::default`]（`enabled = true`）。
+    #[serde(default)]
+    pub live: Option<IpmiLiveConfig>,
+}
+
+impl Default for IpmiConfig {
+    fn default() -> Self {
+        Self {
+            poll_enabled: default_ipmi_poll_enabled(),
+            live: None,
+        }
+    }
+}
+
+const fn default_ipmi_poll_enabled() -> bool {
+    true
+}
+
+/// IPMI 实时采集配置（结构对齐 [`SnmpLiveConfig`]，默认间隔/超时取 IPMI 语义）。
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct IpmiLiveConfig {
+    /// 总开关（缺省开启）
+    #[serde(default = "default_live_enabled")]
+    pub enabled: bool,
+    /// 单轮采样间隔（秒，下限 1）：每轮建会话、采集、关会话
+    #[serde(default = "default_ipmi_live_interval")]
+    pub interval_secs: u64,
+    /// 单轮采集总体超时（秒）：ruipmi 内部会话/命令超时固定 3.5s×重试不可配，
+    /// 本值仅用于外层 `tokio::time::timeout` 封顶整个 SDR 枚举（防劣质 BMC 卡死）
+    #[serde(default = "default_ipmi_live_timeout")]
+    pub timeout_secs: u64,
+    /// 单轮采样最大并发设备数（BMC 会话资源有限，默认低于 SNMP）
+    #[serde(default = "default_ipmi_live_concurrency")]
+    pub max_concurrency: usize,
+    /// 设备清单刷新间隔（秒）
+    #[serde(default = "default_live_inventory_refresh")]
+    pub inventory_refresh_secs: u64,
+    /// 连续失败后的最大退避（秒）
+    #[serde(default = "default_live_max_backoff")]
+    pub max_backoff_secs: u64,
+}
+
+const fn default_ipmi_live_interval() -> u64 {
+    5
+}
+
+const fn default_ipmi_live_timeout() -> u64 {
+    8
+}
+
+const fn default_ipmi_live_concurrency() -> usize {
+    8
+}
+
+impl Default for IpmiLiveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_live_enabled(),
+            interval_secs: default_ipmi_live_interval(),
+            timeout_secs: default_ipmi_live_timeout(),
+            max_concurrency: default_ipmi_live_concurrency(),
+            inventory_refresh_secs: default_live_inventory_refresh(),
+            max_backoff_secs: default_live_max_backoff(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Config {
     pub database: DatabaseConfig,
@@ -425,6 +499,8 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     #[serde(default)]
     pub snmp: SnmpConfig,
+    #[serde(default)]
+    pub ipmi: IpmiConfig,
     #[serde(default)]
     pub agent: AgentConfig,
 }
@@ -568,6 +644,10 @@ impl Config {
         // [snmp.live] 的缺省归一口径见 SnmpLiveConfig 字段注释（反序列化保持 None）
         if config.snmp.live.is_none() {
             config.snmp.live = Some(SnmpLiveConfig::default());
+        }
+        // [ipmi.live] 同口径归一：缺省开启，零配置即得 IPMI 秒级实时展示
+        if config.ipmi.live.is_none() {
+            config.ipmi.live = Some(IpmiLiveConfig::default());
         }
 
         if let Ok(db_password) = std::env::var("FOIMS_DATABASE_PASSWORD")

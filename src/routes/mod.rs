@@ -609,6 +609,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             post(foims_snmp::handlers::test_snmp_connection::<AppState>),
         )
         .route(
+            "/api/resources/devices/test-ipmi",
+            post(foims_ipmi::handlers::test_ipmi_connection::<AppState>),
+        )
+        .route(
             "/api/resources/devices/{id}",
             get(foims_resource::get_device::<AppState>)
                 .put(foims_resource::update_device::<AppState>)
@@ -633,6 +637,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route(
             "/api/resources/devices/{id}/test-snmp",
             post(foims_snmp::handlers::test_snmp_connection_by_id::<AppState>),
+        )
+        .route(
+            "/api/resources/devices/{id}/test-ipmi",
+            post(foims_ipmi::handlers::test_ipmi_connection_by_id::<AppState>),
         )
         .route(
             "/api/resources/devices/{id}/macs",
