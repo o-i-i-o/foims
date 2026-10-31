@@ -97,13 +97,33 @@ jobs:
         run: npm run selfcheck:viz
 
   # 主程序任务：检查（fmt/clippy/test）→ 编译 → deb / rpm / zip 产物。
-  # 不再级联 agent（见 agent-build 任务），两任务并行互不等待；
-  # 依赖 prepare 的版本门禁，tag 被占用时构建提前失败不白跑
+  # 不再级联 agent（见 agent-build 任务），与 agent-build 并行互不等待；
+  # 依赖 prepare 的版本门禁，tag 被占用时构建提前失败不白跑。
+  #
+  # matrix 双架构（x86_64 / aarch64）：aarch64 用 GitHub 原生 ARM runner，
+  # 不走 zig 交叉——lettre 引入 native-tls/openssl-sys（链接系统 libssl），
+  # 交叉编译拿不到目标架构的 libssl；而 build-pkgs.sh 以
+  # dpkg --print-architecture 取架构，ARM runner 上原生直接出 arm64 的
+  # deb/rpm/zip 三格式包，脚本零改动。检查门（fmt/clippy/test/TS 漂移）
+  # 与架构无关，只在 x86_64 leg 执行一次；aarch64 leg 仅编译打包，
+  # 不重复检查门
   build:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            run_checks: true
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            run_checks: false
 
     steps:
       - uses: actions/checkout@v4
@@ -119,14 +139,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          target: x86_64-unknown-linux-gnu
+          target: ${{ matrix.target }}
           components: rustfmt, clippy
 
-      # 仓库根即 Cargo workspace（members 含 crates/*），无需额外 workspaces 配置
+      # 仓库根即 Cargo workspace（members 含 crates/*），无需额外 workspaces
+      # 配置；缓存键按架构区分，双 leg 不互相覆盖
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: foims-build-${{ matrix.arch }}
 
+      # 以下四个检查门仅 x86_64 leg 执行（口径与 agent-build 的本机检查门同源）
       - name: 检查代码格式
+        if: matrix.run_checks
         run: cargo fmt --check
 
       # --workspace --all-targets：覆盖各成员 crate 的 lib/bin/tests 全部目标，
@@ -135,15 +160,18 @@ jobs:
       # 若将来新增 tests/ 集成测试（独立 crate，不置 cfg(test)），其中仍禁止 unwrap/expect。
       # 生产代码在所有目标上均受 -D warnings 强约束
       - name: 运行 clippy 检查
+        if: matrix.run_checks
         run: cargo clippy --release --workspace --all-targets -- -D warnings
 
       - name: 运行测试
+        if: matrix.run_checks
         run: cargo test --release --workspace
 
       # ts-rs 类型生成物漂移校验：export_bindings 测试重跑后，
       # frontend/src/types/api/generated/ 不得产生与入库版本（git add -N
       # 使新增未跟踪文件也纳入 diff）不一致的差异
       - name: TS 类型生成物漂移校验
+        if: matrix.run_checks
         run: |
           git add -N frontend/src/types/api/generated
           git diff --exit-code -- frontend/src/types/api/generated
@@ -158,14 +186,16 @@ jobs:
           node-version: 24
 
       # 打包脚本 scripts/build-pkgs.sh 无需 root：deb（dpkg-deb）/rpm（rpmbuild
-      # 用户态 _dbpath）/zip（裸二进制）三格式，产物输出至 target/
+      # 用户态 _dbpath）/zip（裸二进制）三格式，产物输出至 target/；
+      # 架构自动取 dpkg --print-architecture（ARM runner 即出 arm64 包）
       - name: 构建主程序安装包（deb/rpm/zip）
         run: bash scripts/build-pkgs.sh
 
+      # artifact 名带架构：upload-artifact v4 同名二次上传会直接失败
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: foims-release
+          name: foims-release-${{ matrix.arch }}
           path: |
             target/foims_*.deb
             target/foims-*.rpm
@@ -272,11 +302,18 @@ jobs:
     steps:
       # artifact 内部为文件平铺（upload-artifact v4 以各 path 的公共祖先为
       # 根，target/ 与 packages/ 目录层级不进 artifact），按目录落位后
-      # files 用目录级通配，避免子路径 glob 落空静默丢产物
-      - name: 下载主程序构建产物
+      # files 用目录级通配，避免子路径 glob 落空静默丢产物；主程序双架构
+      # 的两个 artifact 平铺进同一目录（包文件名含架构后缀，互不冲突）
+      - name: 下载主程序构建产物（x86_64）
         uses: actions/download-artifact@v4
         with:
-          name: foims-release
+          name: foims-release-x86_64
+          path: release-assets/main
+
+      - name: 下载主程序构建产物（aarch64）
+        uses: actions/download-artifact@v4
+        with:
+          name: foims-release-aarch64
           path: release-assets/main
 
       - name: 下载 Agent 构建产物
