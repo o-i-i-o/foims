@@ -12,7 +12,7 @@
 #   dist/bin/<target>/foims-agent[.exe]          # 每目标一个静态二进制（组装原料）
 #   dist/packages/foims-agent_<版本>_<deb架构>.deb   # Linux 程序包（systemd）
 #   dist/packages/foims-agent-<版本>-1.<rpm架构>.rpm # Linux 程序包（systemd）
-#   dist/packages/foims-agent-<版本>-windows-amd64.zip # Windows 程序包（服务模式）
+#   dist/packages/foims-agent-<版本>-windows-<amd64|arm64>.zip # Windows 程序包（服务模式）
 #   dist/packages/SHA256SUMS                     # 全部系统包校验和
 #
 # 分发模型：系统包由 CI 上传至发布页（Release）供用户按需下载；服务端
@@ -33,9 +33,13 @@
 #     仅影响 tier1/2
 #   - tier1/2 目标：stable 直编，缺 std 组件时 rustup target add；
 #     国内镜像源缺组件（404）时自动回退官方源离线安装（校验 sha256）
-#   - windows 目标：x86_64-pc-windows-gnu（rustup 官方 std，stable 直编）；
-#     msvc 目标需 MSVC 工具链（仅 Windows 宿主），不在本脚本矩阵；
-#     gcc 后端需 mingw-w64 交叉编译器（ring 需要），zig 后端免注入
+#   - windows 目标：x86_64/aarch64-pc-windows-gnu（rustup 官方 std，stable
+#     直编；msvc 需 Windows 宿主，不在本脚本矩阵）；链接由 windows-gnu 的
+#     self-contained rust-lld 承担（Rust 1.71+ 默认），mingw-w64 交叉编译器
+#     仅承担 ring 的 C 编译（gcc 后端：x86_64 用 x86_64-w64-mingw32-gcc、
+#     aarch64 用 aarch64-w64-mingw32-gcc），zig 后端免注入。
+#     aarch64 为实验性目标：ring 的 aarch64-windows-gnu 汇编路径未经长期
+#     验证，构建失败会进 FAILED 汇总（不影响其他目标产物）
 #   - tier3 目标：需 nightly + rust-src，用 -Z build-std 现场构建 std
 #     （与 node_exporter .promu.yml 的 crossbuild 矩阵对齐，OpenBSD 另行处理）
 #   - 版本策略：agent 版本独立自管理（版本号取本工作空间根 Cargo.toml 的
@@ -71,9 +75,11 @@ TIER12_TARGETS=(
     armv7-unknown-linux-musleabihf
 )
 
-# windows：rustup 官方 std，stable 直编（gnu 目标；msvc 需 Windows 宿主）
+# windows：rustup 官方 std，stable 直编（gnu 目标；msvc 需 Windows 宿主）。
+# aarch64 为 Windows on ARM 支持（实验性，见上方设计约束说明）
 WINDOWS_TARGETS=(
     x86_64-pc-windows-gnu
+    aarch64-pc-windows-gnu
 )
 
 # tier3：无官方 std 预编译，nightly -Z build-std 现场构建
@@ -243,7 +249,7 @@ install_target_offline() {
 # 各 musl 目标对应的交叉 C 编译器：依赖链中含 C 代码（如 ring）时，
 # cc-rs 按目标前缀查找编译器且不回退宿主 cc，必须显式注入 CC_<target>。
 # x86_64 用发行版 musl-tools 的 musl-gcc；其余用 musl.cc 交叉工具链。
-# windows-gnu 用 mingw-w64 交叉编译器（ring 需要）。
+# windows-gnu 用 mingw-w64 交叉编译器（ring 需要），双架构各取对应前缀。
 cc_for_target() {
     case "$1" in
         x86_64-unknown-linux-musl)    command -v musl-gcc || true ;;
@@ -252,6 +258,7 @@ cc_for_target() {
         armv7-unknown-linux-musleabihf)
             echo "/opt/musl-cross/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc" ;;
         x86_64-pc-windows-gnu)        command -v x86_64-w64-mingw32-gcc || true ;;
+        aarch64-pc-windows-gnu)       command -v aarch64-w64-mingw32-gcc || true ;;
         *) : ;;
     esac
 }
@@ -310,7 +317,8 @@ build_tier3() {
 }
 
 # 构建 windows（gnu 目标，stable 直编）：
-# gcc 后端：rust-lld 链接 + mingw-w64 交叉 C 编译器（ring 需要）；
+# gcc 后端：mingw-w64 交叉 C 编译器承担 ring 编译（链接由 self-contained
+# rust-lld 承担，与 tier1/2 注入 rust-lld 的场景不同，无需 LINKER 变量）；
 # zig 后端：zig cc 兼任 C 编译器与链接器，免注入
 build_windows() {
     local target="$1"
@@ -322,10 +330,12 @@ build_windows() {
             cargo zigbuild --release -p "$CRATE_WINDOWS" --target "$target")
         return
     fi
-    local cc
+    local cc_var cc
+    # cc-rs 认小写形式（如 CC_aarch64_pc_windows_gnu），按目标推导变量名
+    cc_var="CC_$(echo "$target" | tr '.' '_')"
     cc="$(cc_for_target "$target")"
     if [ -n "$cc" ] && [ -x "$cc" ]; then
-        (cd "$PROJECT_DIR" && env "CC_x86_64_pc_windows_gnu=$cc" \
+        (cd "$PROJECT_DIR" && env "$cc_var=$cc" \
             cargo build --release -p "$CRATE_WINDOWS" --target "$target")
     else
         echo "警告：[$target] 未找到 mingw-w64 交叉 C 编译器（ring 需要），仅以 rust-lld 继续" >&2
@@ -539,17 +549,33 @@ SPEC_EOF
     rm -rf "$top"
 }
 
+# Windows zip 的架构名（沿用既有 windows-amd64 命名风格）；未适配返回空串
+win_arch_of() {
+    case "$1" in
+        x86_64-pc-windows-gnu)  echo amd64 ;;
+        aarch64-pc-windows-gnu) echo arm64 ;;
+        *) echo "" ;;
+    esac
+}
+
 # Windows 程序包：zip 平铺（exe + sc.exe 服务安装/卸载脚本 + README），
-# 解压后以管理员运行 install.cmd 注册 SCM 服务（步骤见包内 README.txt）
+# 解压后以管理员运行 install.cmd 注册 SCM 服务（步骤见包内 README.txt）。
+# 包名按架构区分（windows-amd64 / windows-arm64），双目标互不覆盖；
+# 安装脚本与 README 架构无关，双架构复用同一组物料
 package_windows_zip() {
-    local target="$1" pkgtmp
+    local target="$1" arch pkgtmp
+    arch="$(win_arch_of "$target")"
+    if [ -z "$arch" ]; then
+        echo "错误：[$target] 未适配 windows zip 架构映射" >&2
+        return 1
+    fi
     pkgtmp="$(mktemp -d)"
     install -m 755 "$BIN_DIR/$target/$CRATE.exe" "$pkgtmp/foims-agent.exe"
     install -m 644 "$README_WIN_SRC" "$pkgtmp/README.txt"
     install -m 755 "$INSTALL_CMD_SRC" "$pkgtmp/install.cmd"
     install -m 755 "$UNINSTALL_CMD_SRC" "$pkgtmp/uninstall.cmd"
     # 失败显式 return 1（if 条件上下文调用时 set -e 失效，见 package_linux_rpm 注释）
-    if ! (cd "$pkgtmp" && zip -q -X "$PKG_DIR/$CRATE-$VERSION-windows-amd64.zip" \
+    if ! (cd "$pkgtmp" && zip -q -X "$PKG_DIR/$CRATE-$VERSION-windows-$arch.zip" \
         foims-agent.exe install.cmd uninstall.cmd README.txt); then
         rm -rf "$pkgtmp"
         return 1
