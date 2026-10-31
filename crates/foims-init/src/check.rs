@@ -310,6 +310,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "speed",
             "native_vlan_id",
             "device_managed",
+            "monitored",
             "created_at",
             "updated_at",
         ],
@@ -1005,6 +1006,9 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         // 网口 MAC 归一后全域唯一（indexes.rs 表达式部分索引）：
         // 设备网卡同步/ARP 拉取/导入的 MAC 判重均依赖该唯一索引兜底
         ("uq_device_interfaces_mac_key", "device_interfaces"),
+        // 每设备至多一个实时采集端口（indexes.rs 部分唯一索引）：
+        // 并发设置采集端口时回退到唯一索引兜底，避免多端口速率叠加
+        ("uq_device_interfaces_monitored", "device_interfaces"),
         // 同房间设备名唯一（devices.rs 建表后补建）：
         // 兜底创建/更新/导入路径的并发判重窗口
         ("uq_devices_room_name", "devices"),

@@ -2,11 +2,11 @@
  * SNMP 实时快照订阅（SSE）。
  *
  * 同源 EventSource 自动携带 HttpOnly Cookie（后端 /api/agents 组经
- * agent_admin_guard 鉴权），断线由浏览器按 retry 自动重连；组件卸载时
+ * agent_admin_guard 鉴权），断线由浏览器按 retry 自动重连；引用计数归零时
  * 关闭连接。服务端只在注册表有写入时推送，`summary` 为全量摘要，
  * 带 device_id 订阅时另推该设备的 `device` 事件（端口明细）。
  */
-import { onUnmounted, ref } from "vue";
+import { onUnmounted, ref, type Ref } from "vue";
 import type { LiveDeviceDetail } from "../types/api/generated/LiveDeviceDetail";
 import type { LiveSummaryRow } from "../types/api/generated/LiveSummaryRow";
 
@@ -23,30 +23,65 @@ function parseJson(raw: unknown): unknown {
   }
 }
 
+/** 全量摘要流的页面级共享通道：连接、数据、引用计数同生命周期 */
+interface SummaryChannel {
+  devices: Ref<LiveSummaryRow[]>;
+  connected: Ref<boolean>;
+  source: EventSource;
+  refs: number;
+}
+
+let summaryChannel: SummaryChannel | null = null;
+
 /**
- * 订阅实时摘要。`enabled=false`（角色无主机监控权限）时不建连接，
- * 避免 EventSource 对 403 无限重连。
+ * 取用共享摘要流（已有则复用并计数）：服务端每个节拍为「每条连接」构建并
+ * 序列化一次全量快照，同页多消费方（看板/主机列表/详情弹窗）各建一条连接
+ * 等于成倍放大服务端开销与带宽。
  */
-export function useLiveAgents(enabled = true) {
+function acquireSummaryChannel(): SummaryChannel {
+  if (summaryChannel) {
+    summaryChannel.refs += 1;
+    return summaryChannel;
+  }
   const devices = ref<LiveSummaryRow[]>([]);
   const connected = ref(false);
-
-  const source = enabled ? new EventSource(LIVE_STREAM_URL) : null;
-  source?.addEventListener("open", () => {
+  const source = new EventSource(LIVE_STREAM_URL);
+  source.addEventListener("open", () => {
     connected.value = true;
   });
-  source?.addEventListener("error", () => {
+  source.addEventListener("error", () => {
     connected.value = false;
   });
-  source?.addEventListener("summary", (event: MessageEvent) => {
+  source.addEventListener("summary", (event: MessageEvent) => {
     const parsed = parseJson(event.data);
     if (Array.isArray(parsed)) {
       devices.value = parsed as LiveSummaryRow[];
     }
   });
-  onUnmounted(() => source?.close());
+  summaryChannel = { devices, connected, source, refs: 1 };
+  return summaryChannel;
+}
 
-  return { devices, connected };
+/**
+ * 订阅实时摘要。`enabled=false`（角色无主机监控权限）时不建连接也不复用，
+ * 返回空快照，避免 EventSource 对 403 无限重连。
+ */
+export function useLiveAgents(enabled = true) {
+  if (!enabled) {
+    return { devices: ref<LiveSummaryRow[]>([]), connected: ref(false) };
+  }
+  const channel = acquireSummaryChannel();
+  onUnmounted(() => {
+    channel.refs -= 1;
+    if (channel.refs === 0) {
+      channel.source.close();
+      // 仅当仍是当前共享实例时释放，避免误影响后来重建的通道
+      if (summaryChannel === channel) {
+        summaryChannel = null;
+      }
+    }
+  });
+  return { devices: channel.devices, connected: channel.connected };
 }
 
 /** 单设备实时明细订阅（端口状态/速率），用于设备端口弹窗。 */

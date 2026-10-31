@@ -39,6 +39,9 @@ pub(crate) struct SnmpDeviceRow {
     pub(crate) device: DeviceForSnmp,
     /// 设备首个网口 IP（host() 文本形式，IPv6 不含方括号）
     pub(crate) ip: String,
+    /// 实时流量采集端口名（device_interfaces.monitored；未配置时为 None，
+    /// 由采集器回落探测结果首端口）
+    pub(crate) monitor_if: Option<String>,
     /// 对应 `monitored_hosts` 行 id（告警 episode 主体；基线行缺失时为 None）
     pub(crate) host_id: Option<uuid::Uuid>,
 }
@@ -127,6 +130,7 @@ pub(crate) async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow
                   d.snmp_username, d.snmp_auth_protocol, d.snmp_auth_password,
                   d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
                   first_ip.ip AS ip,
+                  mon.name AS monitor_if,
                   mh.id AS host_id
              FROM devices d
              LEFT JOIN LATERAL (
@@ -137,6 +141,13 @@ pub(crate) async fn load_snmp_devices(pool: &PgPool) -> Result<Vec<SnmpDeviceRow
                   ORDER BY i.created_at
                   LIMIT 1
              ) first_ip ON true
+             LEFT JOIN LATERAL (
+                 SELECT di.name
+                   FROM device_interfaces di
+                  WHERE di.device_id = d.id AND di.monitored
+                  ORDER BY di.sort_order, di.name
+                  LIMIT 1
+             ) mon ON true
              LEFT JOIN monitored_hosts mh
                         ON mh.machine_id = 'snmp:' || d.id::text
             WHERE (d.snmp_community IS NOT NULL OR d.snmp_username IS NOT NULL)

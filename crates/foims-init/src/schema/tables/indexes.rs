@@ -16,6 +16,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_device_interfaces_mac_key ON device_interfaces(translate(upper(mac_address), ':-. ', '')) WHERE mac_address IS NOT NULL AND translate(upper(mac_address), ':-. ', '') <> ''",
         "CREATE INDEX IF NOT EXISTS idx_device_interfaces_nic_id ON device_interfaces(nic_id) WHERE nic_id IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_device_interfaces_device_managed ON device_interfaces(device_managed) WHERE device_managed",
+        // 实时采集端口唯一：同一设备最多一个 monitored 行，避免多端口流量叠加
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_device_interfaces_monitored ON device_interfaces(device_id) WHERE monitored",
         "CREATE INDEX IF NOT EXISTS idx_device_nics_device_id ON device_nics(device_id)",
         "CREATE INDEX IF NOT EXISTS idx_snmp_arp_entries_device_id ON snmp_arp_entries(device_id)",
         "CREATE INDEX IF NOT EXISTS idx_snmp_arp_entries_ip_address ON snmp_arp_entries(ip_address)",

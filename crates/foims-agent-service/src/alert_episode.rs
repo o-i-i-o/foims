@@ -47,6 +47,9 @@ type EpisodeKey = (Uuid, &'static str);
 const POLICY_TTL_SECS: i64 = 300;
 /// dirty episode 刷盘周期（秒）
 const FLUSH_INTERVAL_SECS: u64 = 60;
+/// 静默窗口内通知文案刷新节流（秒）：秒级采样下逐秒 UPDATE 同一条通知
+/// 内容没有运维价值，只会把写库频率拉高一个量级
+const NOTIFY_REFRESH_SECS: i64 = 60;
 /// 兜底扫描周期（秒）
 const SWEEP_INTERVAL_SECS: u64 = 300;
 /// resolved 记录保留时长（秒）：超期即从库与内存回收
@@ -179,6 +182,8 @@ pub struct Episode {
     pub last_exceed_at: DateTime<Utc>,
     /// 最近一次发出通知时刻（静默窗口计时基准）
     pub last_notified_at: Option<DateTime<Utc>>,
+    /// 最近一次刷新通知文案时刻（仅内存节流，不落库）
+    pub last_refresh_at: Option<DateTime<Utc>>,
     pub last_value: f64,
     /// 最近一次评估生效的阈值（与当前配置不一致时立即改写并落盘）
     pub threshold: u8,
@@ -204,6 +209,7 @@ impl Episode {
             resolved_at: None,
             last_exceed_at: now,
             last_notified_at: None,
+            last_refresh_at: None,
             last_value: 0.0,
             threshold,
             exceed_count: 0,
@@ -290,7 +296,15 @@ impl Episode {
                             if (now - at).num_seconds() < windows.quiet_secs as i64
                                 && !self.notify_ids.is_empty() =>
                         {
-                            effects.refresh = true
+                            // 秒级采样下按 NOTIFY_REFRESH_SECS 节流刷新文案，
+                            // 未到期只累计计数（计数走 dirty 周期刷盘）
+                            if self
+                                .last_refresh_at
+                                .is_none_or(|at| (now - at).num_seconds() >= NOTIFY_REFRESH_SECS)
+                            {
+                                self.last_refresh_at = Some(now);
+                                effects.refresh = true;
+                            }
                         }
                         _ => effects.renotify = true,
                     }
@@ -312,6 +326,7 @@ impl Episode {
                 self.started_at = now;
                 self.opened_at = None;
                 self.last_notified_at = None;
+                self.last_refresh_at = None;
                 self.notify_ids.clear();
                 self.exceed_count = 1;
                 self.last_value = value;
@@ -428,6 +443,8 @@ impl EpisodeRow {
             resolved_at: self.resolved_at,
             last_exceed_at: self.last_exceed_at,
             last_notified_at: self.last_notified_at,
+            // 刷新节流仅影响本进程内的写库频率，重启后首轮允许刷一次
+            last_refresh_at: None,
             last_value: self.last_value.unwrap_or_default(),
             threshold,
             exceed_count: self.exceed_count,
@@ -1076,6 +1093,25 @@ mod tests {
 
         let renotify = ep.step(Some(96.0), 80, &w, at(301));
         assert!(renotify.renotify, "窗口外重发一条");
+    }
+
+    #[test]
+    fn 秒级采样下文案刷新按窗口节流() {
+        let w = windows(0, 300, 600, 0);
+        let mut ep = episode(at(0));
+        ep.step(Some(90.0), 80, &w, at(0));
+        ep.last_notified_at = Some(at(0));
+        ep.notify_ids.push(Uuid::new_v4());
+
+        assert!(ep.step(Some(91.0), 80, &w, at(1)).refresh, "首轮立即刷新");
+        // 1s 采样的后续读数只累计计数，不再逐秒 UPDATE 通知内容
+        let throttled = ep.step(Some(92.0), 80, &w, at(2));
+        assert!(throttled.is_none(), "节流窗口内不重复刷新");
+        assert_eq!(ep.exceed_count, 3, "计数仍逐次累计");
+        assert!(
+            ep.step(Some(93.0), 80, &w, at(61)).refresh,
+            "节流到期后恢复刷新"
+        );
     }
 
     #[test]

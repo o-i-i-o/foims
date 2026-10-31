@@ -330,12 +330,10 @@ pub struct SnmpLiveConfig {
     /// 总开关（缺省开启；500 台以内建议保持开启）
     #[serde(default = "default_live_enabled")]
     pub enabled: bool,
-    /// 状态/流量组采样间隔（秒，下限 2）
+    /// 单轮采样间隔（秒，下限 1）：状态/流量与 CPU/内存/温度同轮采集，
+    /// 保证展示层读数是秒级的；设备量大时可整体调大降载
     #[serde(default = "default_live_interval")]
     pub interval_secs: u64,
-    /// 资源组（CPU/内存/温度）采样间隔（秒，通常高于状态组以降低负载）
-    #[serde(default = "default_live_resource_interval")]
-    pub resource_interval_secs: u64,
     /// 单次请求超时（秒，实时路径需短于全量轮询的 5s）
     #[serde(default = "default_live_timeout")]
     pub timeout_secs: u64,
@@ -355,11 +353,7 @@ const fn default_live_enabled() -> bool {
 }
 
 const fn default_live_interval() -> u64 {
-    5
-}
-
-const fn default_live_resource_interval() -> u64 {
-    15
+    1
 }
 
 const fn default_live_timeout() -> u64 {
@@ -383,7 +377,6 @@ impl Default for SnmpLiveConfig {
         Self {
             enabled: default_live_enabled(),
             interval_secs: default_live_interval(),
-            resource_interval_secs: default_live_resource_interval(),
             timeout_secs: default_live_timeout(),
             max_concurrency: default_live_concurrency(),
             inventory_refresh_secs: default_live_inventory_refresh(),

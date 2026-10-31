@@ -458,4 +458,11 @@ CREATE TABLE IF NOT EXISTS host_alert_episodes (
 
 DROP TABLE IF EXISTS host_alert_states;
 
+-- ===== 8. SNMP 实时采集端口 =====
+-- 每设备最多一个采集端口：实时流量只采该口（未配置时回落探测到的第一个端口），
+-- 站内秒级展示用，不落指标表
+ALTER TABLE device_interfaces ADD COLUMN IF NOT EXISTS monitored BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_device_interfaces_monitored
+    ON device_interfaces(device_id) WHERE monitored;
+
 COMMIT;

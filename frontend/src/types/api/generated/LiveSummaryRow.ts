@@ -3,4 +3,12 @@
 /**
  * 单设备实时摘要（SSE `summary` 事件元素与列表接口共用）。
  */
-export type LiveSummaryRow = { device_id: string, device_name: string, ip: string, collected_at: string, vendor: string, cpu_usage_pct: number | null, mem_usage_pct: number | null, mem_used: number | null, mem_total: number | null, temperature_c: number | null, uptime_secs: number | null, rx_bps: number | null, tx_bps: number | null, ports_up: number, ports_total: number, partial: boolean, };
+export type LiveSummaryRow = { device_id: string, device_name: string, ip: string, collected_at: string, vendor: string, cpu_usage_pct: number | null, mem_usage_pct: number | null, mem_used: number | null, mem_total: number | null, temperature_c: number | null, uptime_secs: number | null, 
+/**
+ * 本轮流量采集端口名（未配置时为首端口）
+ */
+monitor_if: string | null, 
+/**
+ * 采集端口入/出向速率（bit/s），不再全设备求和
+ */
+rx_bps: number | null, tx_bps: number | null, ports_up: number, ports_total: number, partial: boolean, };

@@ -4,10 +4,12 @@
  * 详情与历史各走一条 useQuery；曲线为声明式渲染，无延迟测量时序依赖
  * （SVG 按 viewBox 等比缩放，容器宽度不影响绘制）。
  */
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
-import { apiGet } from "../../api/client";
+import { apiGet, apiPut } from "../../api/client";
+import { showToast } from "../../composables/useToast";
+import { useLiveAgents } from "../../composables/useLiveAgents";
 import { formatBps, formatDateTime } from "../../utils/formatter";
 import ModalShell from "../ModalShell.vue";
 import AgentSparkline from "./AgentSparkline.vue";
@@ -16,6 +18,9 @@ import AgentUsageBar from "./AgentUsageBar.vue";
 /** 主机详情载荷（GET /api/agents/{id}，仅声明本弹窗消费的字段） */
 interface AgentDetail {
   status: string;
+  source: string | null;
+  /** SNMP 主机关联的设备 id（实时快照按此匹配；Agent 主机为 null） */
+  device_id: string | null;
   hostname: string | null;
   ip: string | null;
   os: string | null;
@@ -23,6 +28,7 @@ interface AgentDetail {
   agent_version: string | null;
   uptime_secs: number | null;
   mem_usage_pct: number | null;
+  max_temp: number | null;
   raw_metrics: RawMetrics | null;
 }
 
@@ -134,7 +140,145 @@ const historyQuery = useQuery({
 
 const agent = computed(() => detailQuery.data.value);
 
-const raw = computed(() => agent.value?.raw_metrics || {});
+const raw = computed<RawMetrics>(() => agent.value?.raw_metrics ?? {});
+
+// ===== SNMP 实时快照（秒级 CPU/内存/温度/流量）：只读内存注册表，不落库 =====
+// 弹窗自带一条 SSE 订阅：SNMP 主机按 device_id 匹配，Agent 主机按 IP 兜底
+const { devices: liveDevices, connected: liveConnected } = useLiveAgents();
+
+/** 快照新鲜窗口：采样与 SSE 节拍均为 1s，留 10s 容忍丢包/短暂重连 */
+const LIVE_FRESH_MS = 10_000;
+
+/** 秒级时钟：驱动新鲜度重算，SSE 断流后按时回落而非永久停留旧读数 */
+const nowTick = ref(Date.now());
+
+/**
+ * 本端收到该设备新快照的本地时刻：不拿服务端 collected_at 和本地时钟做差，
+ * 否则两端时钟不同步（偏快超过新鲜窗口）会把实时读数误判为陈旧。
+ */
+const liveSeenAt = ref(0);
+
+let clock: number | undefined;
+onMounted(() => {
+  clock = window.setInterval(() => {
+    nowTick.value = Date.now();
+  }, 1000);
+});
+onUnmounted(() => {
+  if (clock !== undefined) {
+    window.clearInterval(clock);
+  }
+});
+
+const live = computed(() => {
+  const deviceId = agent.value?.device_id;
+  if (deviceId) {
+    return liveDevices.value.find((row) => row.device_id === deviceId);
+  }
+  const ip = agent.value?.ip;
+  return ip ? liveDevices.value.find((row) => row.ip === ip) : undefined;
+});
+
+// 采集时间推进 = 新快照到手；离线设备保留的陈旧快照不会推进，自然过期
+watch(
+  () => live.value?.collected_at,
+  (collectedAt) => {
+    if (collectedAt) {
+      liveSeenAt.value = Date.now();
+    }
+  }
+);
+
+/** 快照 10s 内视为实时；陈旧时回落 5 分钟全量口径，避免展示冻结读数 */
+const liveFresh = computed(
+  () => live.value != null && nowTick.value - liveSeenAt.value < LIVE_FRESH_MS
+);
+
+/** 最近一次实时快照的采集时间（有快照即展示，不受新鲜度影响） */
+const liveCollectedAt = computed(() => live.value?.collected_at ?? null);
+
+/** 已收到过快照但 SSE 连接断开：提示读数已停止刷新 */
+const liveLost = computed(() => !liveConnected.value && live.value != null);
+
+const liveCpu = computed(() => (liveFresh.value ? (live.value?.cpu_usage_pct ?? null) : null));
+const liveMemPct = computed(() => (liveFresh.value ? (live.value?.mem_usage_pct ?? null) : null));
+const liveMemUsed = computed(() => (liveFresh.value ? (live.value?.mem_used ?? null) : null));
+const liveMemTotal = computed(() => (liveFresh.value ? (live.value?.mem_total ?? null) : null));
+const liveTemp = computed(() => (liveFresh.value ? (live.value?.temperature_c ?? null) : null));
+
+const displayCpu = computed(() => liveCpu.value ?? raw.value.cpu?.usage_pct ?? null);
+const displayMemPct = computed(() => liveMemPct.value ?? agent.value?.mem_usage_pct ?? null);
+const displayMemUsed = computed(() => liveMemUsed.value ?? raw.value.memory?.used ?? null);
+const displayMemTotal = computed(() => liveMemTotal.value ?? raw.value.memory?.total ?? null);
+
+/** 采集端口选项（GET /api/agents/{id}/monitor-port） */
+interface MonitorPortOption {
+  name: string;
+  status: string;
+  speed: string | null;
+  monitored: boolean;
+}
+
+interface MonitorPortPayload {
+  device_id: string;
+  if_name: string | null;
+  ports: MonitorPortOption[];
+}
+
+// 仅 SNMP 主机有采集端口概念：Agent 主机不发起该请求
+const monitorPortQuery = useQuery({
+  queryKey: computed(() => ["agent-monitor-port", props.agentId]),
+  queryFn: async (): Promise<MonitorPortPayload | null> => {
+    const result = await apiGet<MonitorPortPayload>(`/api/agents/${props.agentId}/monitor-port`);
+    if (!result.success) {
+      throw new Error(result.message || t("common.load_failed"));
+    }
+    return result.data;
+  },
+  enabled: computed(() => agent.value?.source === "snmp")
+});
+
+const monitorPortOptions = computed(() => monitorPortQuery.data.value?.ports ?? []);
+
+/** 下拉当前值：空串 = 未指定，采集器回落设备首端口 */
+const selectedPort = ref("");
+const savingPort = ref(false);
+
+watch(
+  monitorPortQuery.data,
+  (data) => {
+    selectedPort.value = data?.if_name ?? "";
+  },
+  { immediate: true }
+);
+
+async function saveMonitorPort(): Promise<void> {
+  if (savingPort.value) {
+    return;
+  }
+  savingPort.value = true;
+  try {
+    const result = await apiPut<MonitorPortPayload, { if_name: string | null }>(
+      `/api/agents/${props.agentId}/monitor-port`,
+      { if_name: selectedPort.value || null }
+    );
+    if (!result.success) {
+      showToast(result.message || t("common.save_failed"), "error");
+      return;
+    }
+    showToast(t("agents.monitor_port_saved"), "success");
+    await monitorPortQuery.refetch();
+  } finally {
+    savingPort.value = false;
+  }
+}
+
+/** 下拉变更即保存（无额外按钮）：以事件目标值兜底，避免与 v-model 时序耦合 */
+async function onPortChange(event: Event): Promise<void> {
+  const target = event.target as HTMLSelectElement | null;
+  selectedPort.value = target?.value ?? "";
+  await saveMonitorPort();
+}
 
 const detailError = computed(() => detailQuery.error.value?.message || t("common.load_failed"));
 
@@ -331,8 +475,8 @@ function formatUnit(unit: string): (value: number) => string {
         </section>
 
         <section class="agent-detail-card">
-          <h4 class="agent-detail-card-title">{{ t("agents.group_cpu") }}</h4>
-          <div class="agent-cpu-big">{{ raw.cpu?.usage_pct == null ? "-" : `${Number(raw.cpu.usage_pct).toFixed(1)}%` }}</div>
+          <h4 class="agent-detail-card-title">{{ t("agents.group_cpu") }}<span v-if="liveCpu != null" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
+          <div class="agent-cpu-big">{{ displayCpu == null ? "-" : `${Number(displayCpu).toFixed(1)}%` }}</div>
           <dl class="agent-kv">
             <dt>{{ t("agents.label_load") }}</dt><dd>{{ formatLoads(raw.cpu || {}) }}</dd>
             <dt>{{ t("agents.label_cores") }}</dt><dd>{{ raw.cpu?.cores ?? "-" }}</dd>
@@ -340,13 +484,13 @@ function formatUnit(unit: string): (value: number) => string {
         </section>
 
         <section class="agent-detail-card">
-          <h4 class="agent-detail-card-title">{{ t("agents.group_memory") }}</h4>
+          <h4 class="agent-detail-card-title">{{ t("agents.group_memory") }}<span v-if="liveMemPct != null" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
           <div class="agent-mem-bar">
-            <AgentUsageBar :value="agent.mem_usage_pct" />
+            <AgentUsageBar :value="displayMemPct" />
           </div>
           <dl class="agent-kv">
-            <dt>{{ t("agents.label_total") }}</dt><dd>{{ formatBytes(raw.memory?.total) }}</dd>
-            <dt>{{ t("agents.label_used") }}</dt><dd>{{ formatBytes(raw.memory?.used) }}</dd>
+            <dt>{{ t("agents.label_total") }}</dt><dd>{{ formatBytes(displayMemTotal) }}</dd>
+            <dt>{{ t("agents.label_used") }}</dt><dd>{{ formatBytes(displayMemUsed) }}</dd>
             <dt>{{ t("agents.label_swap") }}</dt><dd>{{ formatSwap(raw.memory || {}) }}</dd>
           </dl>
         </section>
@@ -369,8 +513,41 @@ function formatUnit(unit: string): (value: number) => string {
         </section>
 
         <section class="agent-detail-card">
-          <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}</h4>
-          <div class="agent-rows">
+          <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}<span v-if="liveFresh" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
+          <!-- SNMP：每台设备只采一个端口（默认首端口），速率取秒级实时快照 -->
+          <template v-if="agent.source === 'snmp'">
+            <dl class="agent-kv">
+              <dt>{{ t("agents.monitor_port_label") }}</dt>
+              <dd>
+                <select
+                  v-model="selectedPort"
+                  class="agent-monitor-select"
+                  :disabled="savingPort || monitorPortQuery.isPending.value"
+                  @change="onPortChange"
+                >
+                  <option value="">{{ t("agents.monitor_port_default") }}</option>
+                  <option v-for="port in monitorPortOptions" :key="port.name" :value="port.name">
+                    {{ port.name }} · {{ port.status }}
+                  </option>
+                </select>
+              </dd>
+              <dt>{{ t("agents.monitor_port_traffic") }}</dt>
+              <dd v-if="liveFresh">
+                <span class="agent-live-rx">↓ {{ formatBps(live?.rx_bps) }}</span>
+                <span class="agent-live-tx">↑ {{ formatBps(live?.tx_bps) }}</span>
+              </dd>
+              <dd v-else>{{ t("agents.monitor_port_waiting") }}</dd>
+              <dt>{{ t("agents.monitor_port_active") }}</dt>
+              <dd>{{ live?.monitor_if || "-" }}</dd>
+              <dt>{{ t("agents.monitor_port_links") }}</dt>
+              <dd>{{ live ? `${live.ports_up} / ${live.ports_total}` : "-" }}</dd>
+              <dt>{{ t("agents.live_updated_at") }}</dt>
+              <dd>{{ liveCollectedAt ? formatDateTime(liveCollectedAt) : "-" }}</dd>
+            </dl>
+            <p v-if="liveLost" class="agent-detail-hint">{{ t("agents.live_stream_lost") }}</p>
+            <p class="agent-detail-hint">{{ t("agents.monitor_port_hint") }}</p>
+          </template>
+          <div v-else class="agent-rows">
             <p v-if="!(raw.nets ?? []).length" class="agent-detail-empty">{{ t("common.no_data") }}</p>
             <table v-else class="agent-nets-table">
               <thead>
@@ -404,8 +581,18 @@ function formatUnit(unit: string): (value: number) => string {
         <section class="agent-detail-card">
           <h4 class="agent-detail-card-title">{{ t("agents.group_sensors") }}</h4>
           <div class="agent-rows">
-            <p v-if="!(raw.sensors ?? []).length" class="agent-detail-empty">{{ t("common.no_data") }}</p>
-            <div v-for="(sensor, index) in raw.sensors" v-else :key="index" class="agent-sensor-row">
+            <div v-if="liveTemp != null" class="agent-sensor-row">
+              <span class="agent-sensor-label">{{ t("agents.sensor_temp") }}</span>
+              <span class="agent-sensor-kind">{{ t("agents.live_realtime") }}</span>
+              <span class="agent-sensor-value">{{ liveTemp.toFixed(1) }} ℃</span>
+            </div>
+            <p
+              v-if="!(raw.sensors ?? []).length && liveTemp == null"
+              class="agent-detail-empty"
+            >
+              {{ t("common.no_data") }}
+            </p>
+            <div v-for="(sensor, index) in raw.sensors" :key="index" class="agent-sensor-row">
               <span class="agent-sensor-label">{{ sensor.label || "-" }}</span>
               <span class="agent-sensor-kind">{{ sensorText(sensor).kindLabel }}</span>
               <span class="agent-sensor-value">{{ sensorText(sensor).value }}</span>

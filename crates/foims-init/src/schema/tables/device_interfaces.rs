@@ -29,6 +29,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             speed VARCHAR(20),
             native_vlan_id INTEGER,
             device_managed BOOLEAN NOT NULL DEFAULT FALSE,
+            -- SNMP 实时采集端口：每设备最多一个（部分唯一索引见 indexes.rs），
+            -- 流量只采该端口；未指定时采集探测到的第一个端口
+            monitored BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             UNIQUE(device_id, name)

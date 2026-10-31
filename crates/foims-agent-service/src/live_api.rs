@@ -27,8 +27,8 @@ use foims_common::{AppError, msg};
 use crate::agents_api::rfc3339;
 use crate::live_poll::{LiveDeviceSnapshot, LiveRegistry};
 
-/// SSE 推送节拍：注册表有写入时按此节拍下发（设备采样 5s，2s 节拍足够）。
-const SSE_TICK_SECS: u64 = 2;
+/// SSE 推送节拍：与默认采样间隔（1s）对齐，注册表有写入时逐秒下发。
+const SSE_TICK_SECS: u64 = 1;
 /// SSE 心跳间隔：低于常见代理 60s 空闲超时，避免连接被误断。
 const SSE_KEEPALIVE_SECS: u64 = 15;
 
@@ -62,6 +62,9 @@ pub struct LiveSummaryRow {
     pub mem_total: Option<u64>,
     pub temperature_c: Option<f64>,
     pub uptime_secs: Option<i64>,
+    /// 本轮流量采集端口名（未配置时为首端口）
+    pub monitor_if: Option<String>,
+    /// 采集端口入/出向速率（bit/s），不再全设备求和
     pub rx_bps: Option<f64>,
     pub tx_bps: Option<f64>,
     pub ports_up: u32,
@@ -104,6 +107,7 @@ fn summary_row(device: &LiveDeviceSnapshot) -> LiveSummaryRow {
         mem_total: snapshot.mem_total,
         temperature_c: snapshot.temperature_c,
         uptime_secs: snapshot.uptime_secs,
+        monitor_if: snapshot.monitor_if.clone(),
         rx_bps: snapshot.rx_bps,
         tx_bps: snapshot.tx_bps,
         ports_up: snapshot
@@ -253,6 +257,7 @@ mod tests {
                 mem_usage_pct: Some(25.0),
                 temperature_c: Some(41.0),
                 uptime_secs: Some(3600),
+                monitor_if: Some("Gi0/1".to_string()),
                 ports: vec![
                     LivePortSnapshot {
                         if_index: 1,

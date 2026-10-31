@@ -1,6 +1,6 @@
 [package]
 name = "foims-snmp"
-version = "0.1.4"
+version = "0.1.6"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS SNMP 域：协议参数构造与鉴权、设备采集（系统信息/端口/LLDP/ARP/性能指标）、观测事件与站内通知"
@@ -28,6 +28,8 @@ uuid = { workspace = true }
 
 # Async（UdpHandle 传输层）
 tokio = { workspace = true }
+# 实时采集分块 GET 并发下发
+futures-util = "0.3"
 
 # 错误处理
 thiserror = { workspace = true }

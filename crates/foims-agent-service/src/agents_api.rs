@@ -24,6 +24,9 @@ use foims_common::{ApiResponse, AppError, msg};
 /// 曲线数据抽样上限：超过该点数按均匀步长抽取，避免前端渲染卡顿
 const HISTORY_MAX_POINTS: usize = 200;
 
+/// 采集端口名长度上限（与 device_interfaces.name VARCHAR(50) 对齐）
+const MAX_INTERFACE_NAME_LEN: usize = 50;
+
 /// GET /api/agents 查询参数。
 #[derive(Debug, Deserialize)]
 pub struct ListAgentsQuery {
@@ -47,6 +50,20 @@ pub struct PatchAgentBody {
 
 /// PATCH 状态白名单（在线/离线由上报自动翻转，仅禁用需人工设置）
 const PATCHABLE_STATUSES: &[&str] = &["active", "disabled"];
+
+/// PUT /api/agents/{id}/monitor-port 请求体。
+#[derive(Debug, Deserialize)]
+pub struct MonitorPortBody {
+    /// 实时流量采集端口名；缺省/空串表示不指定（回落设备首端口）
+    if_name: Option<String>,
+}
+
+/// 采集端口名规整：trim 后空串视为「未指定」（纯函数，单测覆盖）。
+fn normalize_monitor_if(name: Option<&str>) -> Option<String> {
+    name.map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+}
 
 /// 校验 PATCH 的 status 取值：缺省通过，越界值返回 Err（纯函数，单测覆盖）。
 fn normalize_patch_status(status: Option<&str>) -> Result<Option<String>, String> {
@@ -250,7 +267,7 @@ pub async fn get_agent_detail<S: ConfigProvider>(
 ) -> Result<Response, AppError> {
     let pool = state.pool()?.get_conn();
     let row = sqlx::query(
-        r#"SELECT id, machine_id, label, status, source, hostname, ip, os, kernel, arch,
+        r#"SELECT id, machine_id, label, status, source, device_id, hostname, ip, os, kernel, arch,
                   agent_version,
                   cpu_usage::float8 AS cpu_usage,
                   mem_usage_pct::float8 AS mem_usage_pct,
@@ -272,6 +289,7 @@ pub async fn get_agent_detail<S: ConfigProvider>(
         "label": row.get::<Option<String>, _>("label"),
         "status": row.get::<String, _>("status"),
         "source": row.get::<String, _>("source"),
+        "device_id": row.get::<Option<Uuid>, _>("device_id"),
         "hostname": row.get::<Option<String>, _>("hostname"),
         "ip": row.get::<Option<String>, _>("ip"),
         "os": row.get::<Option<String>, _>("os"),
@@ -291,6 +309,134 @@ pub async fn get_agent_detail<S: ConfigProvider>(
     Ok(foims_common::ok_json(
         body,
         msg("server.agent.detail_retrieved"),
+    ))
+}
+
+/// 取 `source='snmp'` 主机行对应的设备 id；Agent 主机或未关联设备返回 None。
+async fn load_host_device_id(pool: &sqlx::PgPool, host_id: Uuid) -> Result<Option<Uuid>, AppError> {
+    let row =
+        sqlx::query("SELECT device_id FROM monitored_hosts WHERE id = $1 AND source = 'snmp'")
+            .bind(host_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|row| row.get::<Option<Uuid>, _>("device_id")))
+}
+
+/// 设备端口选项与当前采集端口（`monitored` 行）。
+async fn load_monitor_ports(
+    pool: &sqlx::PgPool,
+    device_id: Uuid,
+) -> Result<(Option<String>, Vec<Value>), AppError> {
+    let rows = sqlx::query(
+        r#"SELECT name, status, speed, monitored
+             FROM device_interfaces
+            WHERE device_id = $1
+            ORDER BY sort_order, name"#,
+    )
+    .bind(device_id)
+    .fetch_all(pool)
+    .await?;
+    let mut current = None;
+    let mut ports = Vec::with_capacity(rows.len());
+    for row in rows {
+        let name = row.get::<String, _>("name");
+        let monitored = row.get::<bool, _>("monitored");
+        if monitored {
+            current = Some(name.clone());
+        }
+        ports.push(json!({
+            "name": name,
+            "status": row.get::<String, _>("status"),
+            "speed": row.get::<Option<String>, _>("speed"),
+            "monitored": monitored,
+        }));
+    }
+    Ok((current, ports))
+}
+
+/// GET /api/agents/{id}/monitor-port：读取实时流量采集端口与可选端口清单。
+pub async fn get_monitor_port<S: ConfigProvider>(
+    State(state): State<Arc<S>>,
+    _user: AdminOrSecAdminUser,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
+    let pool = state.pool()?.get_conn();
+    let Some(device_id) = load_host_device_id(&pool, id).await? else {
+        return Err(AppError::Validation(msg(
+            "server.agent.monitor_port_agent_source",
+        )));
+    };
+    let (if_name, ports) = load_monitor_ports(&pool, device_id).await?;
+    Ok(foims_common::ok_json(
+        json!({ "device_id": device_id, "if_name": if_name, "ports": ports }),
+        msg("server.agent.monitor_port_retrieved"),
+    ))
+}
+
+/// PUT /api/agents/{id}/monitor-port：设置实时流量采集端口（每设备最多一个）。
+///
+/// 只改 `device_interfaces.monitored`，不落指标库；实时采集 worker 在下一轮
+/// 重载（≤60s）比对到端口变化后自行重建，无需重启服务。
+pub async fn put_monitor_port<S: ConfigProvider>(
+    State(state): State<Arc<S>>,
+    _user: AdminOrSecAdminUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<MonitorPortBody>,
+) -> Result<Response, AppError> {
+    let pool = state.pool()?.get_conn();
+    let Some(device_id) = load_host_device_id(&pool, id).await? else {
+        return Err(AppError::Validation(msg(
+            "server.agent.monitor_port_agent_source",
+        )));
+    };
+    let wanted = normalize_monitor_if(body.if_name.as_deref());
+    if wanted
+        .as_deref()
+        .is_some_and(|name| name.chars().count() > MAX_INTERFACE_NAME_LEN)
+    {
+        return Err(AppError::Validation(msg(
+            "server.agent.monitor_port_invalid",
+        )));
+    }
+    if let Some(name) = wanted.as_deref() {
+        let exists =
+            sqlx::query("SELECT 1 FROM device_interfaces WHERE device_id = $1 AND name = $2")
+                .bind(device_id)
+                .bind(name)
+                .fetch_optional(&pool)
+                .await?
+                .is_some();
+        if !exists {
+            return Err(AppError::Validation(msg(
+                "server.agent.monitor_port_invalid",
+            )));
+        }
+    }
+
+    // 部分唯一索引 (device_id) WHERE monitored 不允许一条 UPDATE 同时置两行，
+    // 故在同一事务内先清空旧采集端口再设置新端口
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "UPDATE device_interfaces SET monitored = FALSE WHERE device_id = $1 AND monitored",
+    )
+    .bind(device_id)
+    .execute(&mut *tx)
+    .await?;
+    if let Some(name) = wanted.as_deref() {
+        sqlx::query(
+            "UPDATE device_interfaces SET monitored = TRUE WHERE device_id = $1 AND name = $2",
+        )
+        .bind(device_id)
+        .bind(name)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    let (if_name, ports) = load_monitor_ports(&pool, device_id).await?;
+    Ok(foims_common::ok_json(
+        json!({ "device_id": device_id, "if_name": if_name, "ports": ports }),
+        msg("server.agent.monitor_port_saved"),
     ))
 }
 
@@ -448,6 +594,16 @@ pub async fn delete_agent<S: ConfigProvider>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 采集端口名_空白视为未指定() {
+        assert_eq!(normalize_monitor_if(None), None);
+        assert_eq!(normalize_monitor_if(Some("   ")), None);
+        assert_eq!(
+            normalize_monitor_if(Some(" Gi0/1 ")),
+            Some("Gi0/1".to_string())
+        );
+    }
 
     #[test]
     fn patch状态_白名单校验() {

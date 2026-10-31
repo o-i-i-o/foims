@@ -135,15 +135,13 @@ pub fn start_live_poller(
     tokio::spawn(run_supervisor(pool, config, registry, alerts, shutdown));
 }
 
-/// 事件循环状态：跨轮保留的会话、profile 与采样节奏。
+/// 事件循环状态：跨轮保留的会话、profile 与采样节拍。
 struct WorkerState {
     client: Option<Client<UdpHandle>>,
     collector: Option<LiveCollector>,
     last_probe: Option<Instant>,
-    last_resources: Option<Instant>,
     endpoint: String,
     timeout: Duration,
-    resource_interval: Duration,
 }
 
 /// 单个设备 worker 的不可变上下文。
@@ -153,6 +151,8 @@ struct WorkerContext {
     host_id: Uuid,
     device_name: String,
     ip: String,
+    /// 实时流量采集端口名（未配置时采集器回落首端口）
+    monitor_if: Option<String>,
     params: SnmpParamsLegacy,
     config: SnmpLiveConfig,
     registry: Arc<LiveRegistry>,
@@ -164,6 +164,7 @@ struct WorkerContext {
 /// 已启动 worker 的句柄：凭据/地址变化时用于比对与重启。
 struct WorkerHandle {
     params: SnmpParamsLegacy,
+    monitor_if: Option<String>,
     task: JoinHandle<()>,
 }
 
@@ -270,7 +271,7 @@ async fn reconcile(
 
         if workers
             .get(&device_id)
-            .is_some_and(|worker| worker.params == params)
+            .is_some_and(|worker| worker.params == params && worker.monitor_if == row.monitor_if)
         {
             continue;
         }
@@ -283,6 +284,7 @@ async fn reconcile(
             host_id,
             device_name: row.device.name.clone(),
             ip: row.ip.clone(),
+            monitor_if: row.monitor_if.clone(),
             params: params.clone(),
             config: config.clone(),
             registry: registry.clone(),
@@ -294,6 +296,7 @@ async fn reconcile(
             device_id,
             WorkerHandle {
                 params,
+                monitor_if: row.monitor_if.clone(),
                 task: tokio::spawn(run_device_worker(context)),
             },
         );
@@ -327,12 +330,6 @@ async fn run_device_worker(context: WorkerContext) {
 
     let interval = Duration::from_secs(context.config.interval_secs.max(1));
     let timeout = Duration::from_secs(context.config.timeout_secs.max(1));
-    let resource_interval = Duration::from_secs(
-        context
-            .config
-            .resource_interval_secs
-            .max(context.config.interval_secs.max(1)),
-    );
     let probe_interval = Duration::from_secs(
         context
             .config
@@ -345,10 +342,8 @@ async fn run_device_worker(context: WorkerContext) {
         client: None,
         collector: None,
         last_probe: None,
-        last_resources: None,
         endpoint: snmp_target(&context.ip, context.params.port),
         timeout,
-        resource_interval,
     };
     let mut backoff = interval;
 
@@ -422,7 +417,7 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
                     profile.temp.len(),
                     profile.use_hc
                 );
-                state.collector = Some(LiveCollector::new(profile));
+                state.collector = Some(LiveCollector::new(profile, context.monitor_if.as_deref()));
                 state.last_probe = Some(Instant::now());
             }
             Err(e) => {
@@ -437,15 +432,10 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
         }
     }
 
-    let include_resources = state
-        .last_resources
-        .is_none_or(|at| at.elapsed() >= state.resource_interval);
     let Some(collector) = state.collector.as_mut() else {
         return false;
     };
-    let snapshot = collector
-        .sample(client, Utc::now(), include_resources)
-        .await;
+    let snapshot = collector.sample(client, Utc::now()).await;
 
     if !snapshot.responded {
         tracing::debug!(
@@ -457,9 +447,6 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
         // 丢弃会话：下一轮重连，重新走 v3 引擎发现
         state.client = None;
         return false;
-    }
-    if include_resources {
-        state.last_resources = Some(Instant::now());
     }
     // 端口状态全缺说明探测期的 ifIndex 已失效，下一轮重建 profile
     if !snapshot.ports.is_empty()
@@ -544,6 +531,7 @@ mod tests {
                 mem_usage_pct: None,
                 temperature_c: None,
                 uptime_secs: Some(100),
+                monitor_if: None,
                 ports: Vec::new(),
                 rx_bps: None,
                 tx_bps: None,

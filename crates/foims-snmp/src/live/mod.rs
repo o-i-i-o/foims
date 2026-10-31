@@ -1,8 +1,9 @@
 //! SNMP 实时采集层：厂商 profile 探测 + 定向 OID GET，输出内存快照。
 //!
 //! 与 [`crate::collect::metrics`] 的全量 walk（5 分钟、落库）互补：本模块
-//! 只做「按设备已探测的索引精确 GET」，单轮请求量固定为
-//! `4×端口数 + 资源组`，不随 ifTable/存储表规模膨胀；结果仅供实时展示、
+//! 只做「按设备已探测的索引精确 GET」，单轮请求量为
+//! `2×端口数（运行状态）+ 2（采集端口计数器）+ 资源组 + 1（uptime）`，
+//! 不随 ifTable/存储表规模膨胀；结果仅供实时展示、
 //! Top 榜与告警实时评估，不写数据库（趋势仍由全量轮询落库）。
 //!
 //! 关键约束：
@@ -158,13 +159,6 @@ pub struct DeviceProfile {
     pub use_hc: bool,
 }
 
-impl DeviceProfile {
-    /// 单轮状态/流量组的 OID 数量（不含资源组），供容量评估与日志。
-    pub fn base_oid_count(&self) -> usize {
-        1 + self.ports.len() * 4
-    }
-}
-
 /// 单端口实时快照。
 #[derive(Debug, Clone, Serialize)]
 pub struct LivePortSnapshot {
@@ -189,8 +183,10 @@ pub struct LiveSnapshot {
     pub mem_usage_pct: Option<f64>,
     pub temperature_c: Option<f64>,
     pub uptime_secs: Option<i64>,
+    /// 本轮实际采集流量的端口名（配置端口未命中时回落探测结果首端口）。
+    pub monitor_if: Option<String>,
     pub ports: Vec<LivePortSnapshot>,
-    /// 全设备入/出向速率合计（bit/s）。
+    /// 采集端口的入/出向速率（bit/s），不再是全设备求和。
     pub rx_bps: Option<f64>,
     pub tx_bps: Option<f64>,
     /// 本轮是否收到过任何有效 varbind（全部分块失败时为 false，
