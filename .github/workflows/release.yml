@@ -1,11 +1,63 @@
 name: Release
 
+# 手动触发（workflow_dispatch）：任意分支均可在 Actions 页 "Run workflow"
+# 选择分支运行。tag 无需手动填写，由 prepare 任务从根 Cargo.toml 的
+# [package] version 自动推导（v<version>，与既有 tag 约定一致）
+on:
+  workflow_dispatch:
+
+concurrency:
+  # 同一分支的发布串行排队（不取消进行中的发布），避免并发触发
+  # 互相覆盖 tag 与 Release
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
+  # 版本推导任务（参考 docs/release.yml 的 prepare 任务）：tag 不再手动
+  # 填写，从根 Cargo.toml 自动推导并校验 tag 未被其他 commit 占用
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+
+    steps:
+      # 拉全量历史与 tag，供版本步骤用 git rev-parse 校验 tag 指向
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 校验并导出版本号
+        id: version
+        run: |
+          # 仅在 [package] 段内取 version，避免误读其他段的同名字段
+          app_version="$(awk -F '"' '/^\[/{in_package=($0=="[package]"); next} in_package && /^version = /{print $2; exit}' Cargo.toml)"
+
+          if [[ -z "$app_version" ]] || ! [[ "$app_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "无法从根 Cargo.toml 读取合法版本号（x.y.z）：${app_version}" >&2
+            exit 1
+          fi
+
+          tag_name="v${app_version}"
+
+          # tag 已存在且指向其他 commit：该版本号已发布过别的代码，必须
+          # 先 bump Cargo.toml 再发布；指向同一 commit 则放行（重跑覆盖旧产物）
+          if git rev-parse --verify --quiet "refs/tags/${tag_name}^{commit}" >/dev/null; then
+            tagged_commit="$(git rev-parse "refs/tags/${tag_name}^{commit}")"
+            if [[ "$tagged_commit" != "$GITHUB_SHA" ]]; then
+              echo "tag ${tag_name} 已指向 ${tagged_commit}；发布 ${GITHUB_SHA} 请先 bump 根 Cargo.toml version" >&2
+              exit 1
+            fi
+          fi
+
+          echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${tag_name}" >> "$GITHUB_OUTPUT"
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -45,8 +97,10 @@ jobs:
         run: npm run selfcheck:viz
 
   # 主程序任务：检查（fmt/clippy/test）→ 编译 → deb / rpm / zip 产物。
-  # 不再级联 agent（见 agent-build 任务），两任务并行互不等待。
+  # 不再级联 agent（见 agent-build 任务），两任务并行互不等待；
+  # 依赖 prepare 的版本门禁，tag 被占用时构建提前失败不白跑
   build:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -139,6 +193,7 @@ jobs:
   # 各目标的 rust-std 组件由 build-agent.sh 内部 rustup target add 安装
   # （zig 仅接管 C 编译/链接，std 仍来自 rustup），故此处无需预装 targets。
   agent-build:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -207,9 +262,9 @@ jobs:
           retention-days: 30
 
   # 发布物来自两个并行构建任务的 artifact（主程序 deb/rpm/zip + Agent 系统包），
-  # 本任务不重复构建
+  # 本任务不重复构建；tag 取 prepare 任务自动推导结果
   release:
-    needs: [build, agent-build]
+    needs: [prepare, build, agent-build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -230,9 +285,14 @@ jobs:
           name: agent-release
           path: release-assets/agent
 
+      # tag 来自 prepare 自动推导并已校验指向：不存在则随 Release 创建于
+      # 本次运行的 commit（target_commitish 固定 github.sha，避免新建 tag
+      # 默认落到 master HEAD）；已存在则更新 Release 并覆盖同名资产
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
           files: |
             release-assets/main/*
             release-assets/agent/*
