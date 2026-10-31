@@ -622,7 +622,9 @@ mod tests {
             "server.device.snmp.multicast_forbidden"
         );
         assert_eq!(
-            validation_key(guard_probe_ip("169.254.169.254".parse().expect("合法 IPv4"))),
+            validation_key(guard_probe_ip(
+                "169.254.169.254".parse().expect("合法 IPv4")
+            )),
             "server.device.snmp.link_local_forbidden"
         );
         assert_eq!(

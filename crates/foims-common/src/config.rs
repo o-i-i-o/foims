@@ -8,10 +8,7 @@ use std::path::Path;
 // 环境直接运行二进制时使用；systemd 单元不设工作目录，不会命中此项）
 //
 //前端资源落到 /usr/share/foims/web），配置只落在 /etc/foims 或开发工作目录。
-pub const CONFIG_PATHS: [&str; 2] = [
-    "/etc/foims/config", 
-    "config", 
-];
+pub const CONFIG_PATHS: [&str; 2] = ["/etc/foims/config", "config"];
 
 /// 命中的配置路径主干（不含 .toml 后缀，按 [`CONFIG_PATHS`] 优先级）；
 /// 全部候选不存在时回退系统配置目录默认值。
@@ -87,7 +84,7 @@ const fn default_health_check_interval() -> u64 {
 /// - axum 监听 Unix Domain Socket，使用 h2c (HTTP/2 cleartext) 协议
 /// - nginx 通过 `proxy_http_version 2.0` 以 h2c 反代到 axum
 /// - 静态文件由 nginx 直接托管，axum 仅服务 API
-/// - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive 
+/// - nginx 与 axum 通过 UDS + h2c 通信，多路复用 + keepalive
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ListenConfig {
     /// UDS socket 文件路径，默认 /run/foims/api.sock

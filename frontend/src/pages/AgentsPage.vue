@@ -22,6 +22,7 @@ import Pagination from "../components/Pagination.vue";
 import AgentDetailModal from "../components/agents/AgentDetailModal.vue";
 import AgentThresholdModal from "../components/agents/AgentThresholdModal.vue";
 import AgentUsageBar from "../components/agents/AgentUsageBar.vue";
+import DebugModal from "../components/agents/DebugModal.vue";
 import SnmpEventsModal from "../components/device/SnmpEventsModal.vue";
 import LocateModal from "../components/device/LocateModal.vue";
 import { useLiveAgents } from "../composables/useLiveAgents";
@@ -202,10 +203,11 @@ function handleDeleteConfirmed() {
   }
 }
 
-// SNMP 观测事件（不预填设备）与终端定位：均不依赖具体设备行，后端两接口
-// 为库内只读查询，与 SNMP 采集源同属本页职责，故由本页顶栏承载
+// SNMP 观测事件（不预填设备）、终端定位与网络调试：均不依赖具体设备行，后端
+// 接口为只读/无状态探测，与 SNMP 采集源同属本页职责，故由本页顶栏承载
 const eventsModal = reactive({ open: false });
 const locateModal = reactive({ open: false });
+const debugModal = reactive({ open: false });
 </script>
 
 <template>
@@ -230,6 +232,7 @@ const locateModal = reactive({ open: false });
       <button type="button" class="btn btn-secondary btn-sm" @click="showThreshold = true">{{ t("agents.alert_threshold") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="eventsModal.open = true">{{ t("device.snmp_events.title") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" @click="locateModal.open = true">{{ t("device.locate.title") }}</button>
+      <button type="button" class="btn btn-secondary btn-sm" @click="debugModal.open = true">{{ t("debug.title") }}</button>
       <span class="agent-live-state" :class="liveConnected ? 'is-on' : 'is-off'">
         <span class="agent-live-dot" aria-hidden="true"></span>
         {{ liveConnected ? t("agents.live_connected") : t("agents.live_disconnected") }}
@@ -343,6 +346,7 @@ const locateModal = reactive({ open: false });
     <AgentThresholdModal v-if="showThreshold" @close="showThreshold = false" />
     <SnmpEventsModal v-if="eventsModal.open" @close="eventsModal.open = false" />
     <LocateModal v-if="locateModal.open" @close="locateModal.open = false" />
+    <DebugModal v-if="debugModal.open" @close="debugModal.open = false" />
     <ConfirmModal
       v-if="deleteTarget"
       :message="t('agents.confirm_delete')"

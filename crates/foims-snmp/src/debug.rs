@@ -10,8 +10,8 @@ pub mod mib;
 use std::str::FromStr;
 use std::time::Duration;
 
-use axum::response::Response;
 use async_snmp::Client;
+use axum::response::Response;
 
 use foims_common::net::resolve_probe_ip;
 use foims_common::{AppError, AppJson, msg, ok_json};
@@ -32,9 +32,7 @@ const DEBUG_TIMEOUT_SECS: u64 = 5;
 ///
 /// `op=get` 对 `oids` 逐个取值；`op=walk` 以首个 OID 为基做有界 bulk 遍历。
 /// 目标解析失败/非法/组播/链路本地 400，OID 非法/为空 400，会话或采集失败 400。
-pub async fn debug_snmp(
-    AppJson(req): AppJson<SnmpDebugRequest>,
-) -> Result<Response, AppError> {
+pub async fn debug_snmp(AppJson(req): AppJson<SnmpDebugRequest>) -> Result<Response, AppError> {
     let ip = resolve_probe_ip(&req.target).await?;
 
     let op = req.op.trim().to_ascii_lowercase();
@@ -67,7 +65,8 @@ pub async fn debug_snmp(
         version = version
     );
 
-    let auth = build_auth(&params).map_err(|e| AppError::Snmp(msg("server.debug.snmp.failed").with("error", e)))?;
+    let auth = build_auth(&params)
+        .map_err(|e| AppError::Snmp(msg("server.debug.snmp.failed").with("error", e)))?;
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
     let client = Client::builder(&addr, auth)
@@ -132,11 +131,9 @@ async fn run_walk(
     client: &Client<async_snmp::transport::UdpHandle>,
     base: async_snmp::Oid,
 ) -> Result<Vec<SnmpDebugRow>, AppError> {
-    let mut stream = client
-        .bulk_walk(base, WALK_MAX_REPETITIONS)
-        .map_err(|e| {
-            AppError::Snmp(msg("server.debug.snmp.failed").with("error", format_snmp_error(e)))
-        })?;
+    let mut stream = client.bulk_walk(base, WALK_MAX_REPETITIONS).map_err(|e| {
+        AppError::Snmp(msg("server.debug.snmp.failed").with("error", format_snmp_error(e)))
+    })?;
     let mut rows = Vec::new();
     while let Some(item) = stream.next().await {
         match item {

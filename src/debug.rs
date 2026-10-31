@@ -50,7 +50,11 @@ pub async fn debug_ping(AppJson(req): AppJson<PingRequest>) -> Result<Response, 
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let text = if stdout.is_empty() { stderr.clone() } else { stdout };
+    let text = if stdout.is_empty() {
+        stderr.clone()
+    } else {
+        stdout
+    };
 
     let parsed = parse_ping_output(&text);
     Ok(ok_json(
@@ -79,9 +83,7 @@ pub async fn debug_dns(AppJson(req): AppJson<DnsRequest>) -> Result<Response, Ap
     let started = Instant::now();
     let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, 0))
         .await
-        .map_err(|_| {
-            AppError::Validation(msg("server.debug.host_unresolved").with("host", host))
-        })?
+        .map_err(|_| AppError::Validation(msg("server.debug.host_unresolved").with("host", host)))?
         .collect();
     let elapsed_ms = started.elapsed().as_millis() as u64;
 
@@ -103,7 +105,11 @@ pub async fn debug_port(AppJson(req): AppJson<PortRequest>) -> Result<Response, 
     }
     let ip = resolve_probe_ip(host).await?;
     let port = req.port;
-    let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(3).clamp(1, PORT_MAX_TIMEOUT_SECS));
+    let timeout = Duration::from_secs(
+        req.timeout_secs
+            .unwrap_or(3)
+            .clamp(1, PORT_MAX_TIMEOUT_SECS),
+    );
     let addr = SocketAddr::new(ip, port);
 
     let started = Instant::now();
@@ -168,12 +174,12 @@ fn parse_ping_output(text: &str) -> PingParsed {
                 parsed.received = rx;
                 parsed.loss_pct = loss;
             }
-        } else if lower.contains("min/avg/max") {
-            if let Some((min, avg, max)) = parse_rtt_line(line) {
-                parsed.min_ms = Some(min);
-                parsed.avg_ms = Some(avg);
-                parsed.max_ms = Some(max);
-            }
+        } else if lower.contains("min/avg/max")
+            && let Some((min, avg, max)) = parse_rtt_line(line)
+        {
+            parsed.min_ms = Some(min);
+            parsed.avg_ms = Some(avg);
+            parsed.max_ms = Some(max);
         }
     }
     parsed
@@ -208,14 +214,21 @@ fn parse_rtt_line(line: &str) -> Option<(f64, f64, f64)> {
 
 /// 在关键字之前定位最近的整数值（如 "4" transmitted）。
 fn find_number_before_keyword(tokens: &[String], keyword: &str) -> Option<u32> {
-    let pos = tokens.iter().position(|tk| tk.eq_ignore_ascii_case(keyword))?;
-    tokens[..pos].iter().rev().find_map(|tk| tk.parse::<u32>().ok())
+    let pos = tokens
+        .iter()
+        .position(|tk| tk.eq_ignore_ascii_case(keyword))?;
+    tokens[..pos]
+        .iter()
+        .rev()
+        .find_map(|tk| tk.parse::<u32>().ok())
 }
 
 /// 在关键字之前定位最近的百分比值（丢包率，如 "0" 对应 0%）。
 fn find_percent_before_keyword(tokens: &[String], keyword: &str) -> Option<f64> {
     // 统计行按 `,` 分段，百分号紧跟数字（"0%"）；去分隔后数字 token 即为百分比值
-    let pos = tokens.iter().position(|tk| tk.eq_ignore_ascii_case(keyword))?;
+    let pos = tokens
+        .iter()
+        .position(|tk| tk.eq_ignore_ascii_case(keyword))?;
     tokens[..pos]
         .iter()
         .rev()

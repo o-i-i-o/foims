@@ -945,26 +945,11 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 // 主机监控调试（手动输入目标、admin/secadmin）：ping/端口经系统
                 // 与 tokio 触网，SNMP GET/WALK 经 foims-snmp，MIB 为静态对照；
                 // 均随 nest 继承 agent_admin_guard
-                .route(
-                    "/debug/ping",
-                    post(crate::debug::debug_ping),
-                )
-                .route(
-                    "/debug/dns",
-                    post(crate::debug::debug_dns),
-                )
-                .route(
-                    "/debug/port",
-                    post(crate::debug::debug_port),
-                )
-                .route(
-                    "/debug/snmp",
-                    post(foims_snmp::debug::debug_snmp),
-                )
-                .route(
-                    "/debug/mib",
-                    post(foims_snmp::debug::debug_mib),
-                )
+                .route("/debug/ping", post(crate::debug::debug_ping))
+                .route("/debug/dns", post(crate::debug::debug_dns))
+                .route("/debug/port", post(crate::debug::debug_port))
+                .route("/debug/snmp", post(foims_snmp::debug::debug_snmp))
+                .route("/debug/mib", post(foims_snmp::debug::debug_mib))
                 .route_layer(middleware::from_fn(
                     foims_agent_service::api::agent_admin_guard,
                 )),

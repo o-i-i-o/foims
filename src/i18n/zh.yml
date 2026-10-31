@@ -113,6 +113,28 @@ log:
     pool_near_exhausted: "连接池接近耗尽，可能存在连接泄漏！活跃: {{active}}/{{total}}，利用率: {{utilization}}%，阈值: {{threshold}}%"
     pool_status: "连接池状态 - 活跃: {{active}}，空闲: {{idle}}，等待: {{waiting}}，池大小: {{size}}"
     system_time_abnormal: "系统时间异常: {{error}}，使用0作为时间戳"
+  debug:
+    target_required: "目标地址不能为空"
+    host_unresolved: "主机名解析失败: {{host}}"
+    ping_unavailable: "Ping 执行失败或系统缺少 ping 工具"
+    ping:
+      success: "Ping 探测完成"
+    dns:
+      success: "DNS 解析完成"
+    port_timeout: "端口连接超时"
+    port_refused: "端口不可达（连接被拒绝）"
+    port:
+      success: "端口探测完成"
+    mib:
+      success: "MIB 对照查询完成"
+    snmp:
+      success: "SNMP 查询完成"
+      failed: "SNMP 操作失败: {{error}}"
+      session_failed: "SNMP 会话建立失败: {{error}}"
+      op_invalid: "不支持的操作类型: {{op}}"
+      oids_empty: "OID 列表不能为空"
+      oids_too_many: "单次 GET 的 OID 数量过多（上限 {{max}}）"
+      oid_invalid: "OID 格式非法: {{oid}}"
   device:
     cdp:
       record_write_failed: "CDP邻居记录写入失败 (local_port={{port}}): {{error}}"
@@ -136,10 +158,12 @@ log:
       cdp_walk_failed: "SNMP walk CDP邻居表失败，相关字段留空"
       entity_walk_failed: "SNMP walk 实体表失败，相关字段留空"
       if_name_walk_failed: "SNMP walk 接口名称映射失败"
+      link_local_forbidden: "不允许连接链路本地地址"
       lag_walk_failed: "SNMP walk LAG聚合口表失败，相关字段留空"
       poe_walk_failed: "SNMP walk PoE供电端口表失败，相关字段留空"
       sensor_walk_failed: "SNMP walk 传感器表失败，相关字段留空"
       loopback_ip_allowed: "目标IP {{ip}} 为回环地址，允许连接"
+      multicast_forbidden: "不允许连接组播地址"
       ports_walk_failed: "SNMP walk 端口采集表失败，相关字段留空"
       private_ip_allowed: "目标IP {{ip}} 为私有地址，允许连接"
       test_connecting: "开始连接: {{addr}} (超时: {{timeout}}秒)"

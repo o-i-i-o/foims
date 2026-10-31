@@ -1188,6 +1188,61 @@
       "discards": "本轮丢弃"
     }
   },
+  "debug": {
+    "title": "主机调试工具",
+    "tab_ping": "Ping",
+    "tab_snmp": "SNMP",
+    "tab_mib": "MIB",
+    "tab_net": "端口 / DNS",
+    "run": "执行",
+    "query": "查询",
+    "target_required": "目标地址不能为空",
+    "ph_host": "主机名或 IP 地址",
+    "label_target": "目标",
+    "label_count": "次数",
+    "label_wait": "单包等待（秒）",
+    "label_op": "操作",
+    "label_port": "端口",
+    "label_mode": "模式",
+    "label_timeout": "超时（秒）",
+    "ping": {
+      "reachable": "可达",
+      "unreachable": "不可达",
+      "stat": "发送 {{transmitted}} / 接收 {{received}} / 丢包 {{loss}}%"
+    },
+    "snmp": {
+      "op_get": "GET",
+      "op_walk": "WALK",
+      "oids_required": "OID 列表不能为空",
+      "ph_oids": "多个 OID 用空格或换行分隔，如 1.3.6.1.2.1.1.1.0",
+      "ph_proto": "SHA / SHA256",
+      "label_base": "基 OID",
+      "label_oids": "OID 列表",
+      "label_version": "版本",
+      "label_community": "社区名",
+      "label_username": "用户名",
+      "label_auth_proto": "认证协议",
+      "label_auth_pass": "认证密码",
+      "label_priv_proto": "加密协议",
+      "label_priv_pass": "加密密码",
+      "col_oid": "OID",
+      "col_name": "名称",
+      "col_type": "类型",
+      "col_value": "值"
+    },
+    "mib": {
+      "label_query": "OID 或名称",
+      "ph_query": "如 sysDescr、ifTable、1.3.6.1.2.1.1",
+      "col_description": "说明",
+      "no_match": "未命中 MIB 对照条目"
+    },
+    "net": {
+      "mode_port": "端口探测",
+      "mode_dns": "DNS 解析",
+      "open": "开放",
+      "closed": "不可达"
+    }
+  },
   "logs": {
     "operation_logs": "操作日志",
     "login_logs": "登录日志",

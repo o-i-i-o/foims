@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 use foims_common::AppJson;
 use foims_common::DbProvider;
-use foims_common::{AppError, msg};
 use foims_common::log_info;
+use foims_common::{AppError, msg};
 use foims_models::SnmpTestRequest;
 
 use crate::collect::ports::get_device_ports_via_snmp;

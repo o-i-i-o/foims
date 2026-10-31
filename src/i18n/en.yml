@@ -113,6 +113,28 @@ log:
     pool_near_exhausted: "Pool nearly exhausted, possible leak! Active: {{active}}/{{total}}, utilization: {{utilization}}%, threshold: {{threshold}}%"
     pool_status: "Pool status - active: {{active}}, idle: {{idle}}, waiting: {{waiting}}, size: {{size}}"
     system_time_abnormal: "System clock abnormal: {{error}}, using 0 as timestamp"
+  debug:
+    target_required: "Target address is required"
+    host_unresolved: "Failed to resolve hostname: {{host}}"
+    ping_unavailable: "Ping failed to run or the ping tool is missing"
+    ping:
+      success: "Ping probe completed"
+    dns:
+      success: "DNS resolution completed"
+    port_timeout: "Port connection timed out"
+    port_refused: "Port unreachable (connection refused)"
+    port:
+      success: "Port probe completed"
+    mib:
+      success: "MIB lookup completed"
+    snmp:
+      success: "SNMP query completed"
+      failed: "SNMP operation failed: {{error}}"
+      session_failed: "Failed to establish SNMP session: {{error}}"
+      op_invalid: "Unsupported operation type: {{op}}"
+      oids_empty: "OID list is required"
+      oids_too_many: "Too many OIDs for a single GET (max {{max}})"
+      oid_invalid: "Invalid OID format: {{oid}}"
   device:
     cdp:
       record_write_failed: "CDP neighbor record write failed (local_port={{port}}): {{error}}"
@@ -136,10 +158,12 @@ log:
       cdp_walk_failed: "SNMP walk for CDP neighbor table failed, fields left empty"
       entity_walk_failed: "SNMP walk for entity table failed, fields left empty"
       if_name_walk_failed: "SNMP walk for interface name map failed"
+      link_local_forbidden: "Connecting to link-local addresses is not allowed"
       lag_walk_failed: "SNMP walk for LAG aggregate table failed, fields left empty"
       poe_walk_failed: "SNMP walk for PoE port table failed, fields left empty"
       sensor_walk_failed: "SNMP walk for sensor table failed, fields left empty"
       loopback_ip_allowed: "Target IP {{ip}} is loopback, connection allowed"
+      multicast_forbidden: "Connecting to multicast addresses is not allowed"
       ports_walk_failed: "SNMP walk for port collection table failed, fields left empty"
       private_ip_allowed: "Target IP {{ip}} is private, connection allowed"
       test_connecting: "Connecting: {{addr}} (timeout: {{timeout}}s)"

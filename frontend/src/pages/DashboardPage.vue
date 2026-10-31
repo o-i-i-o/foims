@@ -216,7 +216,7 @@ const SOURCE_RANK: Record<string, number> = { ipmi: 0, agent: 1, snmp: 2 };
 const liveByIp = computed(() => {
   const metric = hostMetricActive.value;
   const map = new Map<string, LiveSummaryRow>();
-  const rows = [...liveDevices.value].sort(
+  const rows = [...liveDevices.value].toSorted(
     (a, b) => (SOURCE_RANK[a.source] ?? 9) - (SOURCE_RANK[b.source] ?? 9),
   );
   for (const row of rows) {

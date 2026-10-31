@@ -1188,6 +1188,61 @@
       "discards": "Discards (delta)"
     }
   },
+  "debug": {
+    "title": "Host Debug Tools",
+    "tab_ping": "Ping",
+    "tab_snmp": "SNMP",
+    "tab_mib": "MIB",
+    "tab_net": "Port / DNS",
+    "run": "Run",
+    "query": "Query",
+    "target_required": "Target address is required",
+    "ph_host": "Hostname or IP address",
+    "label_target": "Target",
+    "label_count": "Count",
+    "label_wait": "Wait per packet (s)",
+    "label_op": "Operation",
+    "label_port": "Port",
+    "label_mode": "Mode",
+    "label_timeout": "Timeout (s)",
+    "ping": {
+      "reachable": "Reachable",
+      "unreachable": "Unreachable",
+      "stat": "Sent {{transmitted}} / Received {{received}} / Loss {{loss}}%"
+    },
+    "snmp": {
+      "op_get": "GET",
+      "op_walk": "WALK",
+      "oids_required": "OID list is required",
+      "ph_oids": "Separate multiple OIDs with spaces or newlines, e.g. 1.3.6.1.2.1.1.1.0",
+      "ph_proto": "SHA / SHA256",
+      "label_base": "Base OID",
+      "label_oids": "OID list",
+      "label_version": "Version",
+      "label_community": "Community",
+      "label_username": "Username",
+      "label_auth_proto": "Auth protocol",
+      "label_auth_pass": "Auth password",
+      "label_priv_proto": "Privacy protocol",
+      "label_priv_pass": "Privacy password",
+      "col_oid": "OID",
+      "col_name": "Name",
+      "col_type": "Type",
+      "col_value": "Value"
+    },
+    "mib": {
+      "label_query": "OID or name",
+      "ph_query": "e.g. sysDescr, ifTable, 1.3.6.1.2.1.1",
+      "col_description": "Description",
+      "no_match": "No matching MIB entries"
+    },
+    "net": {
+      "mode_port": "Port probe",
+      "mode_dns": "DNS resolve",
+      "open": "Open",
+      "closed": "Unreachable"
+    }
+  },
   "logs": {
     "operation_logs": "Operation Logs",
     "login_logs": "Login Logs",
