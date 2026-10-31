@@ -12,7 +12,7 @@ import type { CertificateInventory } from "../types/api/generated/CertificateInv
 import type { GenerateCaRequest } from "../types/api/generated/GenerateCaRequest";
 import type { GenerateCertRequest } from "../types/api/generated/GenerateCertRequest";
 import type { LdapConfigResponse } from "../types/api/generated/LdapConfigResponse";
-import type { NotificationSettings } from "../types/api/generated/NotificationSettings";
+import type { NotificationRecipients } from "../types/api/generated/NotificationRecipients";
 import type { PasswordPolicy } from "../types/api/generated/PasswordPolicy";
 import type { SsoConfigResponse } from "../types/api/generated/SsoConfigResponse";
 import type { SystemInfo } from "../types/api/generated/SystemInfo";
@@ -137,12 +137,12 @@ export function testSmtpConnection(): Promise<ApiResult<unknown>> {
   return apiPost("/api/system/smtp/test", {});
 }
 
-export function getNotificationSettings(): Promise<ApiResult<NotificationSettings>> {
-  return apiGet<NotificationSettings>("/api/system/notification/settings");
+export function getNotificationRecipients(): Promise<ApiResult<NotificationRecipients>> {
+  return apiGet<NotificationRecipients>("/api/system/notification/recipients");
 }
 
-export function updateNotificationSettings(payload: NotificationSettings): Promise<ApiResult<unknown>> {
-  return apiPut<unknown, NotificationSettings>("/api/system/notification/settings", payload);
+export function updateNotificationRecipients(payload: NotificationRecipients): Promise<ApiResult<unknown>> {
+  return apiPut<unknown, NotificationRecipients>("/api/system/notification/recipients", payload);
 }
 
 export function getWebhookConfig(): Promise<ApiResult<WebhookConfigResponse>> {
@@ -153,9 +153,9 @@ export function updateWebhookConfig(payload: UpdateWebhookConfigRequest): Promis
   return apiPut<unknown, UpdateWebhookConfigRequest>("/api/system/webhook/config", payload);
 }
 
-/** 向指定渠道发送测试消息（channel 取值由后端 WebhookChannel 约定） */
-export function testWebhookChannel(channel: TestWebhookRequest["channel"]): Promise<ApiResult<unknown>> {
-  const payload: TestWebhookRequest = { channel };
+/** 向指定 Webhook 目标发送测试消息（依赖已保存配置，target_id 由后端约定） */
+export function testWebhookTarget(targetId: string): Promise<ApiResult<unknown>> {
+  const payload: TestWebhookRequest = { target_id: targetId };
   return apiPost<unknown, TestWebhookRequest>("/api/system/webhook/test", payload);
 }
 

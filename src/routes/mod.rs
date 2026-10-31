@@ -23,11 +23,11 @@ use crate::log::{get_login_logs, get_operation_logs};
 use crate::system::certificate;
 use crate::system::config::{
     backup_config, disable_init_mode, get_dashboard_stats, get_enrollment_token,
-    get_notification_settings, get_page_timeout_config, get_password_policy,
+    get_notification_recipients, get_page_timeout_config, get_password_policy,
     get_session_timeout_config, get_smtp_config, get_supported_languages, get_system_config,
     get_system_info, get_webhook_config, regenerate_enrollment_token, restore_config,
     send_system_email, test_smtp_connection as test_smtp, test_webhook, update_language_setting,
-    update_notification_settings, update_page_timeout_config, update_password_policy,
+    update_notification_recipients, update_page_timeout_config, update_password_policy,
     update_session_timeout_config, update_smtp_config, update_system_config, update_webhook_config,
 };
 use crate::system::scheduled_task::{
@@ -828,8 +828,8 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(get_session_timeout_config).put(update_session_timeout_config),
         )
         .route(
-            "/api/system/notification/settings",
-            get(get_notification_settings).put(update_notification_settings),
+            "/api/system/notification/recipients",
+            get(get_notification_recipients).put(update_notification_recipients),
         )
         // 等保密码策略（安全管理员管辖）
         .route(

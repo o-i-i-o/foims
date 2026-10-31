@@ -111,29 +111,25 @@ pub async fn send_ip_change_notification(
         recipients = admin_ids.len()
     );
 
-    if foims_auth::smtp::load_notification_methods(pool)
-        .await
-        .ip_change
+    // 邮件渠道（发送内部按收件人订阅的 ip_change 类型过滤，无人订阅时静默跳过）
+    match foims_auth::smtp::send_ip_change_email(
+        pool,
+        source_device,
+        &workstation_name,
+        mac_address,
+        registered_ip,
+        observed_ip,
+    )
+    .await
     {
-        match foims_auth::smtp::send_ip_change_email(
-            pool,
-            source_device,
-            &workstation_name,
-            mac_address,
-            registered_ip,
-            observed_ip,
-        )
-        .await
-        {
-            Ok(()) => log_info!("log.ip_change.email_sent", workstation = workstation_name),
-            Err(e) => log_error!(
-                "log.ip_change.email_send_failed",
-                workstation = workstation_name,
-                error = e
-            ),
-        }
+        Ok(()) => log_info!("log.ip_change.email_sent", workstation = workstation_name),
+        Err(e) => log_error!(
+            "log.ip_change.email_send_failed",
+            workstation = workstation_name,
+            error = e
+        ),
     }
-    // Webhook 渠道（内部受 webhook_ip_change 开关门控，未配置渠道静默跳过）
+    // Webhook 渠道（内部按各目标订阅的 ip_change 类型过滤，未配置目标静默跳过）
     foims_auth::webhook::send_ip_change_webhook(
         pool,
         source_device,
@@ -188,32 +184,28 @@ pub async fn send_device_swap_notification(
         recipients = admin_ids.len()
     );
 
-    if foims_auth::smtp::load_notification_methods(pool)
-        .await
-        .ip_change
+    // 邮件渠道（发送内部按收件人订阅的 ip_change 类型过滤，无人订阅时静默跳过）
+    match foims_auth::smtp::send_device_swap_email(
+        pool,
+        source_device,
+        &workstation_name,
+        ip_address,
+        old_mac,
+        new_mac,
+    )
+    .await
     {
-        match foims_auth::smtp::send_device_swap_email(
-            pool,
-            source_device,
-            &workstation_name,
-            ip_address,
-            old_mac,
-            new_mac,
-        )
-        .await
-        {
-            Ok(()) => log_info!(
-                "log.ip_change.device_swap_email_sent",
-                workstation = workstation_name
-            ),
-            Err(e) => log_error!(
-                "log.ip_change.device_swap_email_failed",
-                workstation = workstation_name,
-                error = e
-            ),
-        }
+        Ok(()) => log_info!(
+            "log.ip_change.device_swap_email_sent",
+            workstation = workstation_name
+        ),
+        Err(e) => log_error!(
+            "log.ip_change.device_swap_email_failed",
+            workstation = workstation_name,
+            error = e
+        ),
     }
-    // Webhook 渠道（内部受 webhook_ip_change 开关门控，未配置渠道静默跳过）
+    // Webhook 渠道（内部按各目标订阅的 ip_change 类型过滤，未配置目标静默跳过）
     foims_auth::webhook::send_device_swap_webhook(
         pool,
         source_device,

@@ -1,6 +1,6 @@
 [package]
 name = "foims-snmp"
-version = "0.1.7"
+version = "0.1.8"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS SNMP 域：协议参数构造与鉴权、设备采集（系统信息/端口/LLDP/ARP/性能指标）、观测事件与站内通知"

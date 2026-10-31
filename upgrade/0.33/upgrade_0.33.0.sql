@@ -12,9 +12,18 @@
 --   3. devices_with_details 视图补 4 列（CREATE OR REPLACE，列顺序与建表一致）。
 --   4. users 新增可空列 phone VARCHAR(20)（用户手机号码，选填；口径同
 --      employees.phone：数字与 + - 空格，空串不入库）。
+--   5. 通知配置结构化（收件人按类型订阅 + Webhook 多目标，无 schema 变更，
+--      仅 system_configs 数据订正）：
+--      a) notification/email_recipients 由 UUID 字符串数组改为对象数组
+--         [{user_id, ip_change, agent_alert, snmp_event}]，存量收件人默认
+--         订阅全部通知类型（与旧全局开关缺省口径一致）；
+--      b) webhook 旧四键（generic_url/dingtalk_url/dingtalk_secret/wecom_key）
+--         合并为 webhook/targets 单行 JSON 数组（每条目标 id/name/channel/
+--         url/secret/订阅三开关），每渠道一条目标、默认订阅全部类型；
+--         dingtalk_secret 密文原样迁移，wecom_key 拼接为完整群机器人地址；
+--      c) 删除废弃的 notification/methods 通知方式矩阵与 webhook 旧四键。
 --   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs、
---   users.rs）与 check.rs 表/列/列宽清单已同步新增。存量数据无需订正
---  （新列均为可空/带默认）。
+--   users.rs）与 check.rs 表/列/列宽清单已同步新增。
 BEGIN;
 
 -- ===== 1. devices IPMI 凭据列 =====
@@ -74,5 +83,77 @@ LEFT JOIN device_templates dt ON d.template_id = dt.id;
 -- ===== 4. users 手机号码列 =====
 -- 用户手机号码（选填可空）：新增后即可入库，存量行保持 NULL 无需回填。
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+
+-- ===== 5. 通知配置结构化（system_configs 数据订正，无 schema 变更） =====
+
+-- 5.1 邮件收件人：UUID 字符串数组 → 对象数组（每收件人默认订阅全部通知类型，
+--     与旧全局开关缺省全启用口径一致）。正则门槛限定字符串数组形态，损坏
+--     数据不触碰（应用层读取失败会留痕提示重配）。
+UPDATE system_configs
+SET value = COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+               'user_id', r #>> '{}',
+               'ip_change', true, 'agent_alert', true, 'snmp_event', true
+           ) ORDER BY ord)::text
+    FROM jsonb_array_elements(value::jsonb) WITH ORDINALITY AS t(r, ord)
+), '[]')
+WHERE config_type = 'notification' AND key = 'email_recipients'
+  AND value ~ '^\s*\[\s*"';
+
+-- 5.2 Webhook 旧四键 → targets 单行 JSON 数组（每渠道一条目标，默认订阅全部
+--     类型）。三渠道各自只在其旧键有值时生成目标；dingtalk_secret 为 AES-GCM
+--     密文（应用层加密产物），原样嵌入由新代码按密文口径解密；wecom_key 拼
+--     接为完整群机器人地址。ON CONFLICT 幂等，重跑不重复生成。
+INSERT INTO system_configs (config_type, key, value)
+SELECT 'webhook', 'targets', COALESCE(jsonb_agg(t ORDER BY ord), '[]'::jsonb)::text
+FROM (
+    SELECT jsonb_build_object(
+               'id', gen_random_uuid()::text,
+               'name', '通用 Webhook',
+               'channel', 'generic',
+               'url', value,
+               'secret', '',
+               'ip_change', true, 'agent_alert', true, 'snmp_event', true
+           ) AS t, 1 AS ord
+    FROM system_configs
+    WHERE config_type = 'webhook' AND key = 'generic_url'
+      AND value IS NOT NULL AND value <> ''
+    UNION ALL
+    SELECT jsonb_build_object(
+               'id', gen_random_uuid()::text,
+               'name', '钉钉',
+               'channel', 'dingtalk',
+               'url', value,
+               'secret', COALESCE((
+                   SELECT s.value FROM system_configs s
+                   WHERE s.config_type = 'webhook' AND s.key = 'dingtalk_secret'
+               ), ''),
+               'ip_change', true, 'agent_alert', true, 'snmp_event', true
+           ), 2
+    FROM system_configs
+    WHERE config_type = 'webhook' AND key = 'dingtalk_url'
+      AND value IS NOT NULL AND value <> ''
+    UNION ALL
+    SELECT jsonb_build_object(
+               'id', gen_random_uuid()::text,
+               'name', '企业微信',
+               'channel', 'wecom',
+               'url', 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=' || value,
+               'secret', '',
+               'ip_change', true, 'agent_alert', true, 'snmp_event', true
+           ), 3
+    FROM system_configs
+    WHERE config_type = 'webhook' AND key = 'wecom_key'
+      AND value IS NOT NULL AND value <> ''
+) t
+ON CONFLICT (config_type, key) DO NOTHING;
+
+-- 5.3 删除废弃数据：webhook 旧四键（已并入 targets）与通知方式矩阵
+--     （每渠道/每收件人的订阅开关已取代全局矩阵）。
+DELETE FROM system_configs
+WHERE config_type = 'webhook'
+  AND key IN ('generic_url', 'dingtalk_url', 'dingtalk_secret', 'wecom_key');
+DELETE FROM system_configs
+WHERE config_type = 'notification' AND key = 'methods';
 
 COMMIT;

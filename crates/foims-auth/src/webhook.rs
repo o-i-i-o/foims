@@ -1,14 +1,18 @@
-//! Webhook 通知推送模块（通用 / 钉钉 / 企业微信）。
+//! Webhook 通知推送模块（通用 / 钉钉 / 企业微信，多目标）。
 //!
-//! 配置存于 `system_configs`（config_type='webhook'，key-value），钉钉加签
-//! 密钥以 AES-GCM 加密存储（与 SMTP 密码同口径）。发送受「通知配置」矩阵
-//! 的 webhook_* 开关门控，向全部已配置渠道尽力推送：单渠道失败仅记日志，
-//! 不影响其他渠道与业务结果（与邮件渠道降级口径一致）。
+//! 目标列表存于 `system_configs`（config_type='webhook'，key='targets'，
+//! JSON 对象数组）：每条目标独立指定渠道（generic/dingtalk/wecom）、接收
+//! 地址、备注名与订阅范围（`NotifyScope`），可同时配置多条、互不影响，
+//! 与邮件渠道（`crate::smtp`）彼此独立。钉钉加签密钥在 JSON 内以 AES-GCM
+//! 密文存储（与 SMTP 密码同口径）。
+//!
+//! 发送按各目标自身的订阅范围过滤，逐目标尽力推送：单目标失败仅记日志，
+//! 不影响其他目标与业务结果（与邮件渠道降级口径一致）。
 //!
 //! 协议口径（对齐各平台群机器人 Webhook）：
 //! - 钉钉：POST markdown 消息到机器人地址，配置加签密钥时追加
 //!   `timestamp` 与 HMAC-SHA256 签名（`"{timestamp}\n{secret}"` 后 Base64）
-//! - 企业微信：POST text 消息到 `qyapi.weixin.qq.com/cgi-bin/webhook/send?key=`
+//! - 企业微信：POST text 消息到群机器人完整 Webhook 地址
 //! - 通用：POST JSON `{"title", "message"}` 到自定义 URL
 
 use std::sync::OnceLock;
@@ -17,58 +21,46 @@ use std::time::Duration;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use hmac::{Hmac, KeyInit, Mac};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 
 use foims_common::AppError;
 use foims_common::crypto::{decrypt_password_async, encrypt_password_async};
 use foims_common::{log_error, log_info, msg};
 
+use crate::smtp::{NotifyKind, NotifyScope};
+
 const WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Webhook 配置在 system_configs 中的 config_type 与各渠道 key
+/// Webhook 目标列表在 system_configs 中的存储位置
 const WEBHOOK_CONFIG_TYPE: &str = "webhook";
-const GENERIC_URL_KEY: &str = "generic_url";
-const DINGTALK_URL_KEY: &str = "dingtalk_url";
-const DINGTALK_SECRET_KEY: &str = "dingtalk_secret";
-const WECOM_KEY_CONFIG_KEY: &str = "wecom_key";
+const WEBHOOK_TARGETS_KEY: &str = "targets";
 
-/// 三渠道 Webhook 配置（URL/key 为空串表示该渠道未配置）。
-#[derive(Debug, Clone, Default)]
-pub struct WebhookConfig {
-    /// 通用 Webhook 接收端完整 URL
-    pub generic_url: String,
-    /// 钉钉机器人 Webhook 地址（含 access_token）
-    pub dingtalk_url: String,
-    /// 钉钉加签密钥（落库前 AES-GCM 加密，读取时解密）
-    pub dingtalk_secret: String,
-    /// 企业微信群机器人 key（Webhook 地址的 key 参数）
-    pub wecom_key: String,
+/// 单条 Webhook 推送目标。
+///
+/// `secret` 按阶段承载不同形态：`load_webhook_targets_raw` /
+/// `save_webhook_targets` 中为 AES-GCM 密文，`load_webhook_targets`
+/// （发送/测试路径）中为明文。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookTarget {
+    /// 目标 ID（UUID，前端生成；测试端点据此定位已保存目标）
+    pub id: String,
+    /// 备注名（便于识别多条目标；空时日志退回渠道标识）
+    pub name: String,
+    pub channel: WebhookChannel,
+    /// 接收端完整 URL（通用/钉钉为机器人地址，企业微信为群机器人完整地址）
+    pub url: String,
+    /// 钉钉加签密钥（仅 dingtalk 渠道有效；非钉钉渠道为空）
+    #[serde(default)]
+    pub secret: String,
+    /// 订阅范围（flatten 平铺存储，与邮件收件人同构）
+    #[serde(flatten)]
+    pub scope: NotifyScope,
 }
 
-/// Webhook 通知的业务类型（对应通知矩阵的 webhook_* 开关列）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WebhookNotifyKind {
-    IpChange,
-    AgentAlert,
-    SnmpEvent,
-}
-
-impl WebhookNotifyKind {
-    /// 该业务类型的 Webhook 方式开关（与 smtp::NotificationMethods 的
-    /// webhook_* 字段一一对应）
-    fn enabled(self, methods: crate::smtp::NotificationMethods) -> bool {
-        match self {
-            Self::IpChange => methods.webhook_ip_change,
-            Self::AgentAlert => methods.webhook_agent_alert,
-            Self::SnmpEvent => methods.webhook_snmp_event,
-        }
-    }
-}
-
-/// 可单独测试的渠道标识（配置端点 `channel` 参数）。
-#[derive(Debug, Clone, Copy, Deserialize, ts_rs::TS)]
+/// Webhook 目标渠道。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub enum WebhookChannel {
     #[serde(rename = "generic")]
@@ -80,92 +72,119 @@ pub enum WebhookChannel {
 }
 
 impl WebhookChannel {
-    fn config_key(self) -> &'static str {
+    /// 日志与错误信息中的渠道标识
+    pub fn label(self) -> &'static str {
         match self {
-            Self::Generic => GENERIC_URL_KEY,
-            Self::DingTalk => DINGTALK_URL_KEY,
-            Self::Wecom => WECOM_KEY_CONFIG_KEY,
+            Self::Generic => "generic",
+            Self::DingTalk => "dingtalk",
+            Self::Wecom => "wecom",
         }
     }
 }
 
-/// 读取三渠道 Webhook 配置；查询失败或密钥解密失败时按全未配置降级并留痕
-/// （通知缺失的代价远小于阻塞业务，与 SMTP 读取降级口径一致）。
-pub async fn get_webhook_config_from_db(pool: &PgPool) -> WebhookConfig {
-    match get_webhook_config_inner(pool).await {
-        Ok(config) => config,
-        Err(e) => {
-            log_error!("log.webhook.config_query_failed", error = e);
-            WebhookConfig::default()
-        }
-    }
+/// 保存目标载荷：`secret` 为 `None`（或空串）表示按 id 保留已存密钥，
+/// 为 `Some(明文)` 表示加密覆盖（口径同 SMTP 密码留空保持）。
+pub struct WebhookTargetUpsert {
+    pub id: String,
+    pub name: String,
+    pub channel: WebhookChannel,
+    pub url: String,
+    pub secret: Option<String>,
+    pub scope: NotifyScope,
 }
 
-async fn get_webhook_config_inner(pool: &PgPool) -> Result<WebhookConfig, String> {
-    let rows = sqlx::query(
-        "SELECT key, value FROM system_configs WHERE config_type = $1 AND value IS NOT NULL",
+/// 读取目标列表（`secret` 保持密文形态，供保存合并与配置回显使用）。
+///
+/// 供配置端点使用：解析失败向上报错（配置展示不能降级为空列表，
+/// 否则管理员保存时会把全部目标覆盖丢失）。
+pub async fn load_webhook_targets_raw(pool: &PgPool) -> Result<Vec<WebhookTarget>, String> {
+    let value = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM system_configs WHERE config_type = $1 AND key = $2",
     )
     .bind(WEBHOOK_CONFIG_TYPE)
-    .fetch_all(pool)
+    .bind(WEBHOOK_TARGETS_KEY)
+    .fetch_optional(pool)
     .await
     .map_err(|e| format!("query failed: {e}"))?;
-
-    let mut config = WebhookConfig::default();
-    for row in rows {
-        let key: String = row.get("key");
-        let value: String = row.get("value");
-        match key.as_str() {
-            GENERIC_URL_KEY => config.generic_url = value,
-            DINGTALK_URL_KEY => config.dingtalk_url = value,
-            DINGTALK_SECRET_KEY => {
-                config.dingtalk_secret = decrypt_password_async(value)
-                    .await
-                    .map_err(|e| format!("secret decrypt failed: {e}"))?;
-            }
-            WECOM_KEY_CONFIG_KEY => config.wecom_key = value,
-            _ => {}
-        }
+    match value {
+        Some(value) => serde_json::from_str(&value).map_err(|e| format!("parse failed: {e}")),
+        None => Ok(Vec::new()),
     }
-    Ok(config)
 }
 
-/// 保存三渠道 Webhook 配置（加签密钥加密后逐 key 写入，与 SMTP 同口径）。
-pub async fn save_webhook_config_to_db(
-    pool: &PgPool,
-    config: &WebhookConfig,
-) -> Result<(), AppError> {
-    let encrypted_secret = if config.dingtalk_secret.is_empty() {
-        String::new()
-    } else {
-        encrypt_password_async(config.dingtalk_secret.clone())
-            .await
-            .map_err(|e| {
-                AppError::Internal(msg("server.webhook.secret_encrypt_failed").with("error", e))
-            })?
+/// 读取目标列表（加签密钥已解密为明文）；查询失败或密钥解密失败时按
+/// 无目标降级并留痕（通知缺失的代价远小于阻塞业务，与 SMTP 读取降级口径一致）。
+pub async fn load_webhook_targets(pool: &PgPool) -> Vec<WebhookTarget> {
+    let raw = match load_webhook_targets_raw(pool).await {
+        Ok(raw) => raw,
+        Err(e) => {
+            log_error!("log.webhook.config_query_failed", error = e);
+            return Vec::new();
+        }
     };
-
-    let entries = [
-        (GENERIC_URL_KEY, config.generic_url.trim().to_string()),
-        (DINGTALK_URL_KEY, config.dingtalk_url.trim().to_string()),
-        (DINGTALK_SECRET_KEY, encrypted_secret),
-        (WECOM_KEY_CONFIG_KEY, config.wecom_key.trim().to_string()),
-    ];
-
-    let mut tx = pool.begin().await?;
-    for (key, value) in entries {
-        sqlx::query(
-            "INSERT INTO system_configs (config_type, key, value)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (config_type, key)
-             DO UPDATE SET value = $3, updated_at = NOW()",
-        )
-        .bind(WEBHOOK_CONFIG_TYPE)
-        .bind(key)
-        .bind(value)
-        .execute(&mut *tx)
-        .await?;
+    let mut targets = Vec::with_capacity(raw.len());
+    for mut target in raw {
+        if !target.secret.is_empty() {
+            match decrypt_password_async(std::mem::take(&mut target.secret)).await {
+                Ok(plain) => target.secret = plain,
+                Err(e) => {
+                    log_error!("log.webhook.config_query_failed", error = e);
+                    return Vec::new();
+                }
+            }
+        }
+        targets.push(target);
     }
-    tx.commit().await?;
+    targets
+}
+
+/// 保存目标列表（全量替换）：合并「保留已存密钥」语义并加密后，整体
+/// 写入 targets 单行。
+pub async fn save_webhook_targets(
+    pool: &PgPool,
+    upserts: &[WebhookTargetUpsert],
+) -> Result<(), AppError> {
+    let existing = load_webhook_targets_raw(pool).await.map_err(|e| {
+        AppError::Internal(msg("server.webhook.config_query_failed").with("error", e))
+    })?;
+
+    let mut cipher_targets = Vec::with_capacity(upserts.len());
+    for upsert in upserts {
+        let secret = match upsert.secret.as_deref().map(str::trim) {
+            Some(plain) if !plain.is_empty() => encrypt_password_async(plain.to_string())
+                .await
+                .map_err(|e| {
+                    AppError::Internal(msg("server.webhook.secret_encrypt_failed").with("error", e))
+                })?,
+            // 留空 = 保留该 id 已存密钥；目标不存在则置空（新目标无密钥）
+            _ => existing
+                .iter()
+                .find(|t| t.id == upsert.id)
+                .map(|t| t.secret.clone())
+                .unwrap_or_default(),
+        };
+        cipher_targets.push(WebhookTarget {
+            id: upsert.id.clone(),
+            name: upsert.name.trim().to_string(),
+            channel: upsert.channel,
+            url: upsert.url.trim().to_string(),
+            secret,
+            scope: upsert.scope,
+        });
+    }
+
+    let value = serde_json::to_string(&cipher_targets)
+        .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
+    sqlx::query(
+        "INSERT INTO system_configs (config_type, key, value) VALUES ($1, $2, $3)
+         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+    )
+    .bind(WEBHOOK_CONFIG_TYPE)
+    .bind(WEBHOOK_TARGETS_KEY)
+    .bind(&value)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
     Ok(())
 }
 
@@ -248,17 +267,14 @@ async fn send_dingtalk(url: &str, secret: &str, title: &str, body: &str) -> Resu
     post_json(&target, &payload).await
 }
 
-/// 发送企业微信群机器人消息（text，标题与正文以换行拼接）。
-async fn send_wecom(key: &str, title: &str, body: &str) -> Result<(), AppError> {
-    let url = format!(
-        "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={}",
-        key.trim()
-    );
+/// 发送企业微信群机器人消息（text，标题与正文以换行拼接）；
+/// `url` 为群机器人完整 Webhook 地址。
+async fn send_wecom(url: &str, title: &str, body: &str) -> Result<(), AppError> {
     let payload = serde_json::json!({
         "msgtype": "text",
         "text": { "content": format!("{title}\n{body}") },
     });
-    post_json(&url, &payload).await
+    post_json(url, &payload).await
 }
 
 /// 钉钉加签：HMAC-SHA256（密钥为加签密钥，内容为 `"{timestamp}\n{secret}"`）
@@ -277,83 +293,63 @@ fn dingtalk_sign(timestamp_millis: i64, secret: &str) -> String {
         .replace('=', "%3D")
 }
 
-/// 发送单渠道并留痕（成功/失败均记日志，不向调用方传播错误）。
-async fn dispatch(channel: &str, send: impl std::future::Future<Output = Result<(), AppError>>) {
-    match send.await {
-        Ok(()) => log_info!("log.webhook.sent", channel = channel),
-        Err(e) => log_error!("log.webhook.send_failed", channel = channel, error = e),
+/// 日志中的目标标识：备注名优先，空时退回渠道标识。
+fn target_label(target: &WebhookTarget) -> String {
+    let name = target.name.trim();
+    if name.is_empty() {
+        target.channel.label().to_string()
+    } else {
+        name.to_string()
     }
 }
 
-/// 向全部已配置渠道推送业务通知（受矩阵 webhook_* 开关门控）。
+/// 记录单目标发送结果（成功/失败均记日志，不向调用方传播错误）。
+fn record_outcome(label: &str, outcome: Result<(), AppError>) {
+    match outcome {
+        Ok(()) => log_info!("log.webhook.sent", channel = label),
+        Err(e) => log_error!("log.webhook.send_failed", channel = label, error = e),
+    }
+}
+
+/// 向全部已保存且订阅了该类型的目标推送业务通知。
 ///
-/// 开关关闭或渠道未配置时静默跳过；单渠道失败仅记日志不影响其他渠道。
-pub async fn send_notification_webhook(
-    pool: &PgPool,
-    kind: WebhookNotifyKind,
-    title: &str,
-    body: &str,
-) {
-    if !kind.enabled(crate::smtp::load_notification_methods(pool).await) {
-        return;
-    }
-    let config = get_webhook_config_from_db(pool).await;
-
-    if !config.generic_url.trim().is_empty() {
-        let url = config.generic_url.clone();
-        let title = title.to_string();
-        let body = body.to_string();
-        dispatch("generic", send_generic(&url, &title, &body)).await;
-    }
-    if !config.dingtalk_url.trim().is_empty() {
-        let url = config.dingtalk_url.clone();
-        let secret = config.dingtalk_secret.clone();
-        let title = title.to_string();
-        let body = body.to_string();
-        dispatch("dingtalk", send_dingtalk(&url, &secret, &title, &body)).await;
-    }
-    if !config.wecom_key.trim().is_empty() {
-        let key = config.wecom_key.clone();
-        let title = title.to_string();
-        let body = body.to_string();
-        dispatch("wecom", send_wecom(&key, &title, &body)).await;
+/// 各目标按自身订阅范围过滤；单目标失败仅记日志不影响其他目标。
+pub async fn send_notification_webhook(pool: &PgPool, kind: NotifyKind, title: &str, body: &str) {
+    let targets = load_webhook_targets(pool).await;
+    for target in targets.iter().filter(|t| t.scope.allows(kind)) {
+        let label = target_label(target);
+        let outcome = match target.channel {
+            WebhookChannel::Generic => send_generic(&target.url, title, body).await,
+            WebhookChannel::DingTalk => {
+                send_dingtalk(&target.url, &target.secret, title, body).await
+            }
+            WebhookChannel::Wecom => send_wecom(&target.url, title, body).await,
+        };
+        record_outcome(&label, outcome);
     }
 }
 
-/// 向指定渠道发送测试消息（复用已保存配置；渠道未配置返回校验错误）。
-pub async fn test_webhook_channel(pool: &PgPool, channel: WebhookChannel) -> Result<(), AppError> {
-    let config = get_webhook_config_from_db(pool).await;
+/// 向指定目标发送测试消息（复用已保存配置；目标不存在返回校验错误）。
+pub async fn test_webhook_target(pool: &PgPool, target_id: &str) -> Result<(), AppError> {
+    let targets = load_webhook_targets(pool).await;
+    let target = targets
+        .into_iter()
+        .find(|t| t.id == target_id)
+        .ok_or_else(|| AppError::Validation(msg("server.webhook.target_not_found")))?;
+
     let title = "FOIMS Webhook 测试";
     let body = "这是一条 Webhook 连接测试消息，请忽略，无需回复。";
-
-    let configured = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM system_configs
-         WHERE config_type = $1 AND key = $2 AND value IS NOT NULL AND value <> ''",
-    )
-    .bind(WEBHOOK_CONFIG_TYPE)
-    .bind(channel.config_key())
-    .fetch_one(pool)
-    .await
-    .unwrap_or(0);
-    if configured == 0 {
-        return Err(AppError::Validation(msg(
-            "server.webhook.channel_not_configured",
-        )));
-    }
-
-    match channel {
-        WebhookChannel::Generic => send_generic(&config.generic_url, title, body).await,
-        WebhookChannel::DingTalk => {
-            send_dingtalk(&config.dingtalk_url, &config.dingtalk_secret, title, body).await
-        }
-        WebhookChannel::Wecom => send_wecom(&config.wecom_key, title, body).await,
+    match target.channel {
+        WebhookChannel::Generic => send_generic(&target.url, title, body).await,
+        WebhookChannel::DingTalk => send_dingtalk(&target.url, &target.secret, title, body).await,
+        WebhookChannel::Wecom => send_wecom(&target.url, title, body).await,
     }
 }
 
 // ---- 业务通知封装（与 smtp 侧发送函数一一对应，文案复用其 *_message 函数，
-// 内部完成 webhook_* 开关门控，调用点无需再读矩阵） ----
+// 内部完成目标订阅范围过滤，调用点无需再读配置） ----
 
-/// 发送 IP 地址变更 Webhook 通知（受 webhook_ip_change 开关门控）。
+/// 发送 IP 地址变更 Webhook 通知（仅推送给订阅 ip_change 类型的目标）。
 pub async fn send_ip_change_webhook(
     pool: &PgPool,
     source_device: &str,
@@ -369,10 +365,10 @@ pub async fn send_ip_change_webhook(
         registered_ip,
         observed_ip,
     );
-    send_notification_webhook(pool, WebhookNotifyKind::IpChange, &title, &body).await;
+    send_notification_webhook(pool, NotifyKind::IpChange, &title, &body).await;
 }
 
-/// 发送工位 IP 上设备更换 Webhook 通知（受 webhook_ip_change 开关门控）。
+/// 发送工位 IP 上设备更换 Webhook 通知（仅推送给订阅 ip_change 类型的目标）。
 pub async fn send_device_swap_webhook(
     pool: &PgPool,
     source_device: &str,
@@ -388,10 +384,10 @@ pub async fn send_device_swap_webhook(
         old_mac,
         new_mac,
     );
-    send_notification_webhook(pool, WebhookNotifyKind::IpChange, &title, &body).await;
+    send_notification_webhook(pool, NotifyKind::IpChange, &title, &body).await;
 }
 
-/// 发送主机资源告警 Webhook 通知（受 webhook_agent_alert 开关门控）。
+/// 发送主机资源告警 Webhook 通知（仅推送给订阅 agent_alert 类型的目标）。
 pub async fn send_host_alert_webhook(
     pool: &PgPool,
     hostname: &str,
@@ -402,10 +398,10 @@ pub async fn send_host_alert_webhook(
 ) {
     let (title, body) =
         crate::smtp::host_alert_message(hostname, ip_address, metric, value, threshold);
-    send_notification_webhook(pool, WebhookNotifyKind::AgentAlert, &title, &body).await;
+    send_notification_webhook(pool, NotifyKind::AgentAlert, &title, &body).await;
 }
 
-/// 发送未知设备接入 Webhook 通知（受 webhook_snmp_event 开关门控）。
+/// 发送未知设备接入 Webhook 通知（仅推送给订阅 snmp_event 类型的目标）。
 pub async fn send_unknown_device_webhook(
     pool: &PgPool,
     device_name: &str,
@@ -421,7 +417,7 @@ pub async fn send_unknown_device_webhook(
         ip_address,
         mac_address,
     );
-    send_notification_webhook(pool, WebhookNotifyKind::SnmpEvent, &title, &body).await;
+    send_notification_webhook(pool, NotifyKind::SnmpEvent, &title, &body).await;
 }
 
 #[cfg(test)]
@@ -447,24 +443,27 @@ mod tests {
     }
 
     #[test]
-    fn 通知业务类型映射矩阵开关() {
-        let methods = crate::smtp::NotificationMethods {
-            ip_change: true,
-            agent_alert: true,
-            snmp_event: true,
-            webhook_ip_change: false,
-            webhook_agent_alert: true,
-            webhook_snmp_event: false,
-        };
-        assert!(!WebhookNotifyKind::IpChange.enabled(methods));
-        assert!(WebhookNotifyKind::AgentAlert.enabled(methods));
-        assert!(!WebhookNotifyKind::SnmpEvent.enabled(methods));
+    fn 目标_json_平铺序列化往返() {
+        // scope 平铺存储（无嵌套对象），secret 缺省视为空
+        let json = r#"{"id":"t1","name":"运维群","channel":"dingtalk","url":"https://oapi.dingtalk.com/robot/send?access_token=x","secret":"cipher","ip_change":true,"agent_alert":false}"#;
+        let target: WebhookTarget =
+            serde_json::from_str(json).unwrap_or_else(|e| panic!("目标 JSON 应可读: {e}"));
+        assert_eq!(target.channel, WebhookChannel::DingTalk);
+        assert!(!target.scope.agent_alert);
+        assert!(target.scope.ip_change);
+        assert!(target.scope.snmp_event, "缺省字段按启用处理");
+
+        let encoded = serde_json::to_string(&target).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+        let back: WebhookTarget =
+            serde_json::from_str(&encoded).unwrap_or_else(|e| panic!("回读失败: {e}"));
+        assert_eq!(back.id, "t1");
+        assert_eq!(back.secret, "cipher");
     }
 
     #[test]
-    fn 渠道标识映射存储键() {
-        assert_eq!(WebhookChannel::Generic.config_key(), "generic_url");
-        assert_eq!(WebhookChannel::DingTalk.config_key(), "dingtalk_url");
-        assert_eq!(WebhookChannel::Wecom.config_key(), "wecom_key");
+    fn 渠道标识输出() {
+        assert_eq!(WebhookChannel::Generic.label(), "generic");
+        assert_eq!(WebhookChannel::DingTalk.label(), "dingtalk");
+        assert_eq!(WebhookChannel::Wecom.label(), "wecom");
     }
 }

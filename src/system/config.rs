@@ -829,16 +829,16 @@ pub async fn update_page_timeout_config(
     ))
 }
 
+/// 通知邮件收件人载荷（GET / PUT /api/system/notification/recipients 同构）。
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct NotificationSettings {
-    pub email_recipients: Vec<Uuid>,
-    /// 通知方式矩阵开关（类型 × 邮件，webhook 为前端占位待实现）
-    pub methods: foims_auth::smtp::NotificationMethods,
+pub struct NotificationRecipients {
+    /// 收件人及其订阅的通知类型（每收件人独立配置，与 Webhook 渠道互不影响）
+    pub recipients: Vec<foims_auth::smtp::MailRecipient>,
 }
 
-/// GET /api/system/notification/settings：读取邮件收件人与通知方式矩阵。
-pub async fn get_notification_settings(
+/// GET /api/system/notification/recipients：读取邮件收件人及其订阅的通知类型。
+pub async fn get_notification_recipients(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
@@ -850,7 +850,7 @@ pub async fn get_notification_settings(
         .await
         {
             Ok(Some(value)) => serde_json::from_str(&value).map_err(|e| {
-                // 存量数据损坏时不能静默清空收件人，否则 MAC 变更通知会失效
+                // 存量数据损坏时不能静默清空收件人，否则通知会失效
                 foims_common::log_error!("log.system.recipients_parse_failed", error = e);
                 AppError::Internal(
                     msg("server.notification.recipients_parse_failed").with("error", e),
@@ -866,38 +866,32 @@ pub async fn get_notification_settings(
         };
 
     Ok(foims_common::ok_json(
-        NotificationSettings {
-            email_recipients: recipients,
-            // 未配置时为全启用默认值，与发送侧口径一致
-            methods: foims_auth::smtp::load_notification_methods(&state.pool()?.get_conn()).await,
-        },
-        "server.notification.settings_retrieved",
+        NotificationRecipients { recipients },
+        "server.notification.recipients_retrieved",
     ))
 }
 
-/// PUT /api/system/notification/settings：保存收件人与通知方式矩阵。
-pub async fn update_notification_settings(
+/// PUT /api/system/notification/recipients：保存邮件收件人及其订阅（全量替换）。
+pub async fn update_notification_recipients(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
-    AppJson(req): AppJson<NotificationSettings>,
+    AppJson(req): AppJson<NotificationRecipients>,
 ) -> Result<Response, AppError> {
-    let value = serde_json::to_string(&req.email_recipients)
+    let value = serde_json::to_string(&req.recipients)
         .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
 
     sqlx::query(
         "INSERT INTO system_configs (config_type, key, value) VALUES ('notification', 'email_recipients', $1)
-         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value",
+         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
     )
     .bind(&value)
     .execute(&state.pool()?.get_conn())
     .await
     .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
 
-    foims_auth::smtp::save_notification_methods(&state.pool()?.get_conn(), &req.methods).await?;
-
     Ok(foims_common::ok_json(
         (),
-        "server.notification.settings_updated",
+        "server.notification.recipients_updated",
     ))
 }
 
@@ -1043,57 +1037,103 @@ pub async fn send_system_email(
     Ok(foims_common::ok_json((), "server.smtp.email_sent"))
 }
 
-// Webhook 通知配置（通用 / 钉钉 / 企业微信）
+// Webhook 通知目标（多目标，通用 / 钉钉 / 企业微信）
+
+/// Webhook 目标回显条目（GET /api/system/webhook/config）。
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct WebhookTargetView {
+    pub id: String,
+    pub name: String,
+    pub channel: foims_auth::webhook::WebhookChannel,
+    pub url: String,
+    /// 是否已配置钉钉加签密钥（密文不回传，口径同 SMTP has_password）
+    pub has_secret: bool,
+    pub ip_change: bool,
+    pub agent_alert: bool,
+    pub snmp_event: bool,
+}
 
 /// Webhook 配置响应载荷（GET /api/system/webhook/config）。
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct WebhookConfigResponse {
-    /// 通用 Webhook 接收端完整 URL
-    pub generic_url: String,
-    /// 钉钉机器人 Webhook 地址（含 access_token）
-    pub dingtalk_url: String,
-    /// 是否已配置钉钉加签密钥（密文不回传，口径同 SMTP has_password）
-    pub dingtalk_has_secret: bool,
-    /// 企业微信群机器人 key
-    pub wecom_key: String,
+    /// 目标列表（每条独立渠道与订阅范围）
+    pub targets: Vec<WebhookTargetView>,
 }
 
-/// GET /api/system/webhook/config：读取三渠道 Webhook 配置。
+/// GET /api/system/webhook/config：读取 Webhook 目标列表。
 pub async fn get_webhook_config(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
-    let config = foims_auth::webhook::get_webhook_config_from_db(&state.pool()?.get_conn()).await;
+    // 解析失败向上报错：配置展示若降级为空列表，管理员保存会把全部目标覆盖丢失
+    let targets = foims_auth::webhook::load_webhook_targets_raw(&state.pool()?.get_conn())
+        .await
+        .map_err(|e| {
+            AppError::Internal(msg("server.webhook.config_query_failed").with("error", e))
+        })?;
+
     Ok(foims_common::ok_json(
         WebhookConfigResponse {
-            generic_url: config.generic_url,
-            dingtalk_url: config.dingtalk_url,
-            dingtalk_has_secret: !config.dingtalk_secret.is_empty(),
-            wecom_key: config.wecom_key,
+            targets: targets
+                .into_iter()
+                .map(|t| WebhookTargetView {
+                    id: t.id,
+                    name: t.name,
+                    channel: t.channel,
+                    url: t.url,
+                    has_secret: !t.secret.is_empty(),
+                    ip_change: t.scope.ip_change,
+                    agent_alert: t.scope.agent_alert,
+                    snmp_event: t.scope.snmp_event,
+                })
+                .collect(),
         },
         "server.webhook.config_retrieved",
     ))
 }
 
+/// Webhook 目标保存载荷（PUT /api/system/webhook/config 的列表元素）。
+#[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
+#[ts(export)]
+pub struct WebhookTargetPayload {
+    #[validate(length(min = 1, max = 64, message = "server.webhook.validation.id_length"))]
+    pub id: String,
+    #[validate(length(max = 100, message = "server.webhook.validation.name_length"))]
+    pub name: String,
+    pub channel: foims_auth::webhook::WebhookChannel,
+    #[validate(length(min = 1, max = 2048, message = "server.webhook.validation.url_length"))]
+    pub url: String,
+    /// 空 = 保留已存加签密钥（口径同 SMTP 密码留空保持）
+    #[validate(length(max = 256, message = "server.webhook.validation.secret_length"))]
+    pub secret: String,
+    /// 订阅 IP 地址变更通知（含工位设备更换；缺省按启用处理）
+    #[serde(default = "notify_scope_default")]
+    pub ip_change: bool,
+    /// 订阅主机资源告警通知（缺省按启用处理）
+    #[serde(default = "notify_scope_default")]
+    pub agent_alert: bool,
+    /// 订阅 SNMP 观测事件通知（缺省按启用处理）
+    #[serde(default = "notify_scope_default")]
+    pub snmp_event: bool,
+}
+
+fn notify_scope_default() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct UpdateWebhookConfigRequest {
-    #[validate(length(max = 2048, message = "server.webhook.validation.url_length"))]
-    pub generic_url: String,
-    #[validate(length(max = 2048, message = "server.webhook.validation.url_length"))]
-    pub dingtalk_url: String,
-    /// 空 = 保留已存加签密钥（口径同 SMTP 密码留空保持）
-    #[validate(length(max = 256, message = "server.webhook.validation.secret_length"))]
-    pub dingtalk_secret: String,
-    #[validate(length(max = 128, message = "server.webhook.validation.key_length"))]
-    pub wecom_key: String,
+    #[validate(length(max = 20, message = "server.webhook.validation.targets_length"))]
+    pub targets: Vec<WebhookTargetPayload>,
 }
 
-/// 校验 Webhook URL：非空时必须为 http(s) 地址（空 = 未配置该渠道）。
+/// 校验 Webhook URL：必须为 http(s) 地址。
 fn validate_webhook_url(field: &str, raw: &str) -> Result<(), AppError> {
     let trimmed = raw.trim();
-    if trimmed.is_empty() || trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
         return Ok(());
     }
     Err(AppError::Validation(
@@ -1101,28 +1141,49 @@ fn validate_webhook_url(field: &str, raw: &str) -> Result<(), AppError> {
     ))
 }
 
-/// PUT /api/system/webhook/config：保存三渠道 Webhook 配置；加签密钥留空
-/// 表示保留已存密钥。
+/// PUT /api/system/webhook/config：保存 Webhook 目标列表（全量替换）；
+/// 加签密钥留空表示保留已存密钥，目标 ID 必须唯一。
 pub async fn update_webhook_config(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<UpdateWebhookConfigRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
-    validate_webhook_url("generic_url", &req.generic_url)?;
-    validate_webhook_url("dingtalk_url", &req.dingtalk_url)?;
-
-    // 密钥留空按「保留已存」处理：以磁盘配置为基底合并，避免覆盖丢失
-    let mut config =
-        foims_auth::webhook::get_webhook_config_from_db(&state.pool()?.get_conn()).await;
-    config.generic_url = req.generic_url.trim().to_string();
-    config.dingtalk_url = req.dingtalk_url.trim().to_string();
-    if !req.dingtalk_secret.is_empty() {
-        config.dingtalk_secret = req.dingtalk_secret;
+    // validator 不递归校验 Vec 内元素，逐条显式校验并检查 ID 唯一性
+    let mut seen_ids = std::collections::HashSet::with_capacity(req.targets.len());
+    for target in &req.targets {
+        target.validate()?;
+        if !seen_ids.insert(target.id.as_str()) {
+            return Err(AppError::Validation(
+                msg("server.webhook.validation.id_duplicated").with("id", &target.id),
+            ));
+        }
+        validate_webhook_url("url", &target.url)?;
     }
-    config.wecom_key = req.wecom_key.trim().to_string();
 
-    foims_auth::webhook::save_webhook_config_to_db(&state.pool()?.get_conn(), &config).await?;
+    let upserts = req
+        .targets
+        .iter()
+        .map(|t| foims_auth::webhook::WebhookTargetUpsert {
+            id: t.id.clone(),
+            name: t.name.clone(),
+            channel: t.channel,
+            url: t.url.clone(),
+            // 留空 = 保留已存密钥（由 save 内部按 id 合并）
+            secret: if t.secret.is_empty() {
+                None
+            } else {
+                Some(t.secret.clone())
+            },
+            scope: foims_auth::smtp::NotifyScope {
+                ip_change: t.ip_change,
+                agent_alert: t.agent_alert,
+                snmp_event: t.snmp_event,
+            },
+        })
+        .collect::<Vec<_>>();
+
+    foims_auth::webhook::save_webhook_targets(&state.pool()?.get_conn(), &upserts).await?;
 
     Ok(foims_common::ok_json((), "server.webhook.config_updated"))
 }
@@ -1130,16 +1191,18 @@ pub async fn update_webhook_config(
 #[derive(Debug, Deserialize, Validate, ts_rs::TS)]
 #[ts(export)]
 pub struct TestWebhookRequest {
-    pub channel: foims_auth::webhook::WebhookChannel,
+    #[validate(length(min = 1, max = 64, message = "server.webhook.validation.id_length"))]
+    pub target_id: String,
 }
 
-/// POST /api/system/webhook/test：向指定渠道发送测试消息（依赖已保存配置）。
+/// POST /api/system/webhook/test：向指定目标发送测试消息（依赖已保存配置）。
 pub async fn test_webhook(
     State(state): State<Arc<AppState>>,
     _sysadmin: foims_auth::extractor::SysAdminUser,
     AppJson(req): AppJson<TestWebhookRequest>,
 ) -> Result<Response, AppError> {
-    foims_auth::webhook::test_webhook_channel(&state.pool()?.get_conn(), req.channel).await?;
+    req.validate()?;
+    foims_auth::webhook::test_webhook_target(&state.pool()?.get_conn(), &req.target_id).await?;
     Ok(foims_common::ok_json((), "server.webhook.test_success"))
 }
 

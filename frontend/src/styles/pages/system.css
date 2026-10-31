@@ -606,33 +606,7 @@
     margin-top: 2rem;
   }
 
-  /* 通知方式矩阵：行=通知类型，列=邮件/Webhook 两种方式 */
-  .notification-matrix {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 1.5rem;
-  }
-
-  .notification-matrix th,
-  .notification-matrix td {
-    padding: 0.6rem 0.75rem;
-    border-bottom: 1px solid var(--color-border-light);
-    text-align: left;
-  }
-
-  .notification-matrix th {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-  }
-
-  .notification-matrix input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    vertical-align: middle;
-  }
-
-  /* Webhook 卡片：渠道说明文字与分渠道测试按钮组 */
+  /* Webhook 卡片：字段说明文字与空列表提示 */
   .system-config-section .form-hint {
     font-size: 0.8rem;
     color: var(--color-text-secondary);
@@ -640,10 +614,113 @@
     line-height: 1.4;
   }
 
-  .webhook-test-actions {
+  /* Webhook 目标表：行内编辑，fixed 布局按列宽分配，
+   防止 6 列行内输入控件以默认尺寸撑破卡片产生横向滚动 */
+  .webhook-table {
+    table-layout: fixed;
+  }
+
+  .webhook-table th:nth-child(1) {
+    width: 13%;
+  }
+
+  .webhook-table th:nth-child(2) {
+    width: 11%;
+  }
+
+  .webhook-table th:nth-child(3) {
+    width: 25%;
+  }
+
+  .webhook-table th:nth-child(4) {
+    width: 16%;
+  }
+
+  .webhook-table th:nth-child(5) {
+    width: 23%;
+  }
+
+  .webhook-table th:nth-child(6) {
+    width: 12%;
+  }
+
+  .webhook-table .cell-input {
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.85rem;
+  }
+
+  /* 非钉钉行密钥列占位符 */
+  .webhook-table .cell-muted {
+    color: var(--color-text-muted);
+  }
+
+  /* 操作列按钮横排不换行 */
+  .webhook-actions-cell {
+    display: flex;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  /* 接收内容 checkbox 组（Webhook 表接收内容列） */
+  .webhook-scope {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.5rem;
+  }
+
+  .webhook-scope-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--color-text);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .webhook-scope-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* 邮件收件人订阅表：每收件人独立勾选接收的通知类型 */
+  .recipients-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+
+  .recipients-table th,
+  .recipients-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-light);
+    text-align: left;
+  }
+
+  .recipients-table th {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .recipients-table input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+  }
+
+  .recipients-table .user-name {
+    display: block;
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  .recipients-table .user-email {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
   }
 
   .users-checkbox-list {

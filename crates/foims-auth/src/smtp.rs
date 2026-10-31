@@ -3,6 +3,11 @@
 //! 从 `system_configs` 表读取 SMTP 配置（密码以 AES-GCM 加密存储），
 //! 通过 lettre 发送系统通知邮件。所有函数统一返回 `Result<_, AppError>`，
 //! 与项目错误处理风格保持一致。
+//!
+//! 通知收件人存于 `system_configs`（config_type='notification'，
+//! key='email_recipients'，JSON 对象数组）：每个收件人（系统用户）以
+//! `NotifyScope` 独立订阅通知类型，发送时按类型过滤收件人，与 Webhook
+//! 渠道（`crate::webhook`）彼此独立、互不依赖。
 
 use std::time::Duration;
 
@@ -76,25 +81,32 @@ mod tests {
     }
 
     #[test]
-    fn 通知方式默认全启用() {
-        let m = NotificationMethods::default();
-        assert!(m.ip_change && m.agent_alert && m.snmp_event);
-        assert!(
-            m.webhook_ip_change && m.webhook_agent_alert && m.webhook_snmp_event,
-            "webhook 方式缺省同样全启用"
-        );
+    fn 订阅范围缺省全启用() {
+        let s = NotifyScope::default();
+        assert!(s.ip_change && s.agent_alert && s.snmp_event);
     }
 
     #[test]
-    fn 通知方式按规范键名读取() {
-        // 读取路径只认规范键名 ip_change（旧键名 mac_change 的重命名迁移由 upgrade SQL 负责，
-        // 无 serde alias 兼容层）
-        let m: NotificationMethods =
-            serde_json::from_str(r#"{"ip_change":false,"agent_alert":true}"#)
-                .unwrap_or_else(|e| panic!("规范键名应可读: {e}"));
-        assert!(!m.ip_change, "ip_change=false 应读入");
-        assert!(m.agent_alert);
-        assert!(m.snmp_event, "缺省字段按默认全启用");
+    fn 订阅范围按类型过滤() {
+        let scope = NotifyScope {
+            ip_change: false,
+            agent_alert: true,
+            snmp_event: false,
+        };
+        assert!(!scope.allows(NotifyKind::IpChange));
+        assert!(scope.allows(NotifyKind::AgentAlert));
+        assert!(!scope.allows(NotifyKind::SnmpEvent));
+    }
+
+    #[test]
+    fn 收件人_json_平铺解析与序列化() {
+        // scope 以 flatten 平铺存储（无嵌套 scope 对象），缺省字段按启用处理
+        let r: MailRecipient = serde_json::from_str(
+            r#"{"user_id":"0b9e6b5e-0f1e-4c2a-9d3b-1f2a3b4c5d6e","agent_alert":false}"#,
+        )
+        .unwrap_or_else(|e| panic!("平铺结构应可读: {e}"));
+        assert!(r.scope.ip_change && r.scope.snmp_event);
+        assert!(!r.scope.agent_alert);
     }
 }
 
@@ -376,108 +388,79 @@ pub async fn send_email_to_users(
     send_with_timeout(transport, email).await
 }
 
-/// 通知方式开关（存储于 system_configs：config_type='notification'，key='methods'）。
-///
-/// 按通知类型记录各方式（邮件 / Webhook）是否启用；前端「通知配置」卡片
-/// 矩阵逐格对应。未落该键（如全新部署）时按 default_true 全部视为启用；
-/// 存量 JSON 缺少 webhook_* 字段时同样按启用处理（发送侧对未配置渠道静默跳过）。
+/// 通知业务类型（三类固定通知，触发点各归属其一）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotifyKind {
+    /// IP 地址变更（含工位 IP 上设备更换）
+    IpChange,
+    /// 主机资源告警
+    AgentAlert,
+    /// SNMP 观测事件（未知终端接入等）
+    SnmpEvent,
+}
+
+/// 通知订阅范围：一个通知接收方（邮件收件人 / Webhook 目标）接收哪些
+/// 通知类型。邮件与 Webhook 渠道共用本结构，两渠道彼此独立配置。
+/// 未落字段（如存量 JSON 缺项）按启用处理：通知多发的代价远小于静默漏报。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct NotificationMethods {
-    /// IP 地址变更通知（含工位 IP 上设备更换）的邮件方式开关。
+pub struct NotifyScope {
+    /// IP 地址变更通知（含工位 IP 上设备更换）开关。
     /// 存量键名 mac_change → ip_change 的重命名迁移由 upgrade SQL 负责（见 upgrade/0.32），
     /// 读取路径只认规范键名，不设 alias 兼容旧键。
     #[serde(rename = "ip_change", default = "default_true")]
     pub ip_change: bool,
-    /// 主机资源告警通知的邮件方式开关
+    /// 主机资源告警通知开关
     #[serde(default = "default_true")]
     pub agent_alert: bool,
-    /// SNMP 观测事件（未知终端等）通知的邮件方式开关
+    /// SNMP 观测事件通知开关
     #[serde(default = "default_true")]
     pub snmp_event: bool,
-    /// IP 地址变更通知的 Webhook 方式开关（通用/钉钉/企业微信渠道共用）
-    #[serde(default = "default_true")]
-    pub webhook_ip_change: bool,
-    /// 主机资源告警通知的 Webhook 方式开关
-    #[serde(default = "default_true")]
-    pub webhook_agent_alert: bool,
-    /// SNMP 观测事件通知的 Webhook 方式开关
-    #[serde(default = "default_true")]
-    pub webhook_snmp_event: bool,
+}
+
+impl Default for NotifyScope {
+    fn default() -> Self {
+        Self {
+            ip_change: true,
+            agent_alert: true,
+            snmp_event: true,
+        }
+    }
+}
+
+impl NotifyScope {
+    /// 该订阅范围是否接收指定类型的通知
+    pub fn allows(self, kind: NotifyKind) -> bool {
+        match kind {
+            NotifyKind::IpChange => self.ip_change,
+            NotifyKind::AgentAlert => self.agent_alert,
+            NotifyKind::SnmpEvent => self.snmp_event,
+        }
+    }
 }
 
 fn default_true() -> bool {
     true
 }
 
-impl Default for NotificationMethods {
-    fn default() -> Self {
-        Self {
-            ip_change: true,
-            agent_alert: true,
-            snmp_event: true,
-            webhook_ip_change: true,
-            webhook_agent_alert: true,
-            webhook_snmp_event: true,
-        }
-    }
+/// 通知邮件收件人（系统用户 + 订阅范围）。
+///
+/// 存储为 `system_configs`（config_type='notification'，key='email_recipients'）
+/// JSON 对象数组的元素，scope 以 flatten 平铺存储（无嵌套对象）。
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct MailRecipient {
+    /// 收件人用户 ID（发送时经 users 表解析邮箱）
+    pub user_id: Uuid,
+    #[serde(flatten)]
+    pub scope: NotifyScope,
 }
 
-/// 通知方式开关在 system_configs 中的存储位置
-const NOTIFICATION_CONFIG_TYPE: &str = "notification";
-const NOTIFICATION_METHODS_KEY: &str = "methods";
-
-/// 读取通知方式开关：未配置返回全启用默认值；JSON 损坏时记错误日志并
-/// 按默认值处理（通知多发的代价远小于静默漏报）。
-pub async fn load_notification_methods(pool: &PgPool) -> NotificationMethods {
-    let row = sqlx::query_scalar::<_, String>(
-        "SELECT value FROM system_configs WHERE config_type = $1 AND key = $2",
-    )
-    .bind(NOTIFICATION_CONFIG_TYPE)
-    .bind(NOTIFICATION_METHODS_KEY)
-    .fetch_optional(pool)
-    .await;
-    match row {
-        Ok(Some(value)) => match serde_json::from_str(&value) {
-            Ok(methods) => methods,
-            Err(e) => {
-                log_error!("log.smtp.notification_methods_parse_failed", error = e);
-                NotificationMethods::default()
-            }
-        },
-        Ok(None) => NotificationMethods::default(),
-        Err(e) => {
-            log_error!("log.smtp.notification_methods_query_failed", error = e);
-            NotificationMethods::default()
-        }
-    }
-}
-
-/// 保存通知方式开关（供系统设置端点写入，与读取同键位）。
-pub async fn save_notification_methods(
-    pool: &PgPool,
-    methods: &NotificationMethods,
-) -> Result<(), AppError> {
-    let value = serde_json::to_string(methods)
-        .map_err(|e| AppError::Internal(msg("server.system.serialize_failed").with("error", e)))?;
-    sqlx::query(
-        "INSERT INTO system_configs (config_type, key, value) VALUES ($1, $2, $3)
-         ON CONFLICT (config_type, key) DO UPDATE SET value = EXCLUDED.value",
-    )
-    .bind(NOTIFICATION_CONFIG_TYPE)
-    .bind(NOTIFICATION_METHODS_KEY)
-    .bind(&value)
-    .execute(pool)
-    .await
-    .map_err(|e| AppError::Database(msg("server.db.operation_failed").with("error", e)))?;
-    Ok(())
-}
-
-/// 读取通知邮件收件人（system_configs 的 UUID 列表）。
+/// 读取通知邮件收件人及其订阅范围。
 ///
 /// 返回 None 表示「收件人未配置/读取失败，静默跳过发送」：配置缺失是正常
 /// 业务状态；配置损坏或查询失败降级为跳过但必须留痕，不得伪装成已发送。
-async fn notification_recipient_ids(pool: &PgPool) -> Option<Vec<Uuid>> {
+pub async fn load_mail_recipients(pool: &PgPool) -> Option<Vec<MailRecipient>> {
     let value = match sqlx::query_scalar::<_, String>(
         "SELECT value FROM system_configs WHERE config_type = 'notification' AND key = 'email_recipients'",
     )
@@ -494,8 +477,8 @@ async fn notification_recipient_ids(pool: &PgPool) -> Option<Vec<Uuid>> {
             return None;
         }
     };
-    match serde_json::from_str::<Vec<Uuid>>(&value) {
-        Ok(ids) if !ids.is_empty() => Some(ids),
+    match serde_json::from_str::<Vec<MailRecipient>>(&value) {
+        Ok(recipients) if !recipients.is_empty() => Some(recipients),
         Ok(_) => {
             log_warn!("log.smtp.recipients_empty");
             None
@@ -508,11 +491,25 @@ async fn notification_recipient_ids(pool: &PgPool) -> Option<Vec<Uuid>> {
     }
 }
 
-/// 向通知收件人发送一封邮件（收件人未配置时静默跳过）。
-async fn send_notification_email(pool: &PgPool, subject: &str, body: &str) -> Result<(), AppError> {
-    let Some(user_ids) = notification_recipient_ids(pool).await else {
+/// 按通知类型过滤收件人后发送一封邮件（无有效收件人时静默跳过）。
+async fn send_notification_email(
+    pool: &PgPool,
+    kind: NotifyKind,
+    subject: &str,
+    body: &str,
+) -> Result<(), AppError> {
+    let Some(recipients) = load_mail_recipients(pool).await else {
         return Ok(());
     };
+    let user_ids: Vec<Uuid> = recipients
+        .into_iter()
+        .filter(|r| r.scope.allows(kind))
+        .map(|r| r.user_id)
+        .collect();
+    if user_ids.is_empty() {
+        log_warn!("log.smtp.recipients_empty");
+        return Ok(());
+    }
     send_email_to_users(pool, &user_ids, subject, body).await
 }
 
@@ -547,8 +544,9 @@ pub fn ip_change_message(
 
 /// 发送 IP 地址变更告警邮件（同一物理设备 MAC 出现在非登记的 IP 上）。
 ///
-/// 收件人列表存于 `system_configs`（config_type='notification'，
-/// key='email_recipients'，JSON 数组），未配置时静默跳过。
+/// 收件人存于 `system_configs`（config_type='notification'，
+/// key='email_recipients'，JSON 对象数组），仅发送订阅了 ip_change 类型的
+/// 收件人；无人订阅或未配置时静默跳过。
 pub async fn send_ip_change_email(
     pool: &PgPool,
     source_device: &str,
@@ -564,7 +562,7 @@ pub async fn send_ip_change_email(
         registered_ip,
         observed_ip,
     );
-    send_notification_email(pool, &title, &body).await
+    send_notification_email(pool, NotifyKind::IpChange, &title, &body).await
 }
 
 /// 工位 IP 上设备更换通知文案（登记 IP 不变、学到新 MAC），邮件与 Webhook 渠道共用。
@@ -601,7 +599,7 @@ pub async fn send_device_swap_email(
         old_mac,
         new_mac,
     );
-    send_notification_email(pool, &title, &body).await
+    send_notification_email(pool, NotifyKind::IpChange, &title, &body).await
 }
 
 /// 主机资源告警通知文案，邮件与 Webhook 渠道共用。
@@ -633,7 +631,7 @@ pub async fn send_host_alert_email(
     threshold: u8,
 ) -> Result<(), AppError> {
     let (title, body) = host_alert_message(hostname, ip_address, metric, value, threshold);
-    send_notification_email(pool, &title, &body).await
+    send_notification_email(pool, NotifyKind::AgentAlert, &title, &body).await
 }
 
 /// 未知设备接入通知文案，邮件与 Webhook 渠道共用。
@@ -668,5 +666,5 @@ pub async fn send_unknown_device_email(
 ) -> Result<(), AppError> {
     let (title, body) =
         unknown_device_message(device_name, interface, vlan_id, ip_address, mac_address);
-    send_notification_email(pool, &title, &body).await
+    send_notification_email(pool, NotifyKind::SnmpEvent, &title, &body).await
 }
