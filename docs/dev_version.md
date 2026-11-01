@@ -129,3 +129,7 @@ v0.56.0
 v0.56.1
 2026110123022601
 调整系统页二级页签顺序（纯 UI 顺序变更）：系统设置（system-config）移至首位并成为默认页签，系统信息（system-info）移至末位；SystemPage.vue TABS 清单与模板 v-show 区块顺序同步调整，页签 id 未变、localStorage 记忆值与深链 query 均仍有效。验证：npm run typecheck 通过；仅 dev_version z+1，frontend/package.json 0.1.44→0.1.45，Cargo.toml 不联动
+
+v0.57.0
+2026110200124101
+移除系统信息页签「运行时长」展示（冗余字段清理，功能变更 y 段 +1）：该字段与「系统配置-服务管理」FOIMS 行运行时长同源同值（同一 START_TIME、同一 now−start 公式），且其唯一可见场景即服务运行中（页面渲染依赖登录态与后端实时 API，服务未运行时整个页签无法加载数据），信息量为零；接口瞬时失败时前端回退 formatUptime(0) 显示"0秒"误导，服务管理侧则对不可用有诚实的"不可用"占位。拆除完整链路：SystemInfo 结构体删 uptime_seconds 字段与 get_system_info 内 now−START_TIME 计算（config.rs），start_time()/START_TIME 保留（services.rs 服务管理口径仍在用）；SystemInfoTab.vue 删运行时长 dl 行、uptimeText computed 与 formatUptime 导入；i18n zh/en 删 system.uptime 键（uptime_days/hours/minutes/seconds 为 formatUptime 共用、ServicesCard 仍在用，保留）；gen-ts-types 再生成 SystemInfo.ts。验证：cargo fmt、cargo clippy --release -D warnings、gen-ts-types、npm run typecheck/build、biome、oxlint 均通过。y 段 +1，Cargo.toml 0.33.10→0.33.11、frontend/package.json 0.1.45→0.1.46 联动

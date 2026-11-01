@@ -4,7 +4,7 @@ import type { PoolMetricsSnapshot } from "./PoolMetricsSnapshot";
 /**
  * 系统信息响应载荷（GET /api/system/info）
  */
-export type SystemInfo = { name: string, version: string, database_status: string, uptime_seconds: number, 
+export type SystemInfo = { name: string, version: string, database_status: string, 
 /**
  * RFC3339 UTC 服务时间戳
  */

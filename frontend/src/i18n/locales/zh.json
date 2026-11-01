@@ -837,7 +837,6 @@
     "connected": "已连接",
     "disconnected": "已断开",
     "system_time": "系统时间",
-    "uptime": "运行时间",
     "scheduled_tasks": "定时任务",
     "security": "安全",
     "agent_config_card": "Agent 配置",

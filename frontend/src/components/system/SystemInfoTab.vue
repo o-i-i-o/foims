@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 系统信息页签：
- * 系统信息只读字段（名称/数据库状态/系统时间/运行时长）+ 商业许可占位卡
+ * 系统信息只读字段（名称/数据库状态/系统时间）+ 商业许可占位卡
  * （注册/购买入口暂未开放，不绑定任何真实连接）+ 关于卡
  * （版本/作者/联系方式/开源组件清单弹窗）。
  */
@@ -9,7 +9,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { getSystemInfo } from "../../api/system";
-import { formatDateTime, formatUptime } from "../../utils/formatter";
+import { formatDateTime } from "../../utils/formatter";
 import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 import OpenSourceModal from "./OpenSourceModal.vue";
 
@@ -57,8 +57,6 @@ const systemTimeText = computed(() =>
   formatDateTime(info.value.timestamp || new Date().toISOString())
 );
 
-const uptimeText = computed(() => formatUptime(info.value.uptime_seconds || 0));
-
 const showOpenSource = ref(false);
 </script>
 
@@ -85,10 +83,6 @@ const showOpenSource = ref(false);
           <dl class="config-field">
             <dt>{{ t("system.system_time") }}</dt>
             <dd class="field-value">{{ systemTimeText }}</dd>
-          </dl>
-          <dl class="config-field">
-            <dt>{{ t("system.uptime") }}</dt>
-            <dd class="field-value">{{ uptimeText }}</dd>
           </dl>
         </div>
       </section>

@@ -174,7 +174,7 @@ pub fn init_start_time() {
     record_start_time();
 }
 
-/// 本进程启动时刻（UNIX 秒），供系统信息与服务状态计算运行时长。
+/// 本进程启动时刻（UNIX 秒），供服务状态计算 FOIMS 运行时长。
 pub fn start_time() -> u64 {
     START_TIME.load(Ordering::SeqCst)
 }
@@ -245,13 +245,12 @@ pub struct SystemInfo {
     pub name: String,
     pub version: String,
     pub database_status: String,
-    pub uptime_seconds: u64,
     /// RFC3339 UTC 服务时间戳
     pub timestamp: String,
     pub pool_metrics: foims_common::db::PoolMetricsSnapshot,
 }
 
-/// GET /api/system/info：系统名称/版本/数据库连通性/运行时长与连接池指标。
+/// GET /api/system/info：系统名称/版本/数据库连通性与连接池指标。
 pub async fn get_system_info(
     State(state): State<Arc<AppState>>,
     _user: foims_auth::extractor::AuthUser,
@@ -268,18 +267,10 @@ pub async fn get_system_info(
         }
     };
 
-    // saturating_sub 防时钟回拨下溢（与服务状态 uptime 口径一致）
-    let uptime = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .saturating_sub(START_TIME.load(Ordering::SeqCst));
-
     let system_info = SystemInfo {
         name: "FOIMS".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         database_status,
-        uptime_seconds: uptime,
         timestamp: chrono::Utc::now().to_rfc3339(),
         pool_metrics: state.pool()?.get_metrics(),
     };
