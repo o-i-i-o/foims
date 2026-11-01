@@ -88,7 +88,8 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
         ));
     }
 
-    // Agent：监听主机与端口合法（绑定失败会令 QUIC 接收不启动）、上报间隔与
+    // Agent：监听主机与端口合法（端口仅非特权区间，与 Config::load 启动校验
+    // 同口径——服务以普通用户运行无特权端口绑定能力）、上报间隔与
     // 历史保留期在业务区间内（与 agent 端 clamp / 清理任务上限对齐）
     let agent = &config.agent;
     if agent.bind_addr.trim().is_empty() {
@@ -96,9 +97,16 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
             msg("server.common.invalid_param").with("param", "agent.bind_addr"),
         ));
     }
-    if agent.port == 0 {
+    if !foims_common::config::is_valid_agent_port(agent.port) {
         return Err(AppError::Validation(
-            msg("server.common.invalid_param").with("param", "agent.port (1-65535)"),
+            msg("server.common.invalid_param").with(
+                "param",
+                format!(
+                    "agent.port ({}-{})",
+                    foims_common::config::UNPRIVILEGED_PORT_MIN,
+                    foims_common::config::UNPRIVILEGED_PORT_MAX
+                ),
+            ),
         ));
     }
     if !(10..=3600).contains(&agent.report_interval_secs) {
@@ -134,6 +142,22 @@ fn validate_config_for_save(config: &Config) -> Result<(), AppError> {
     if agent.offline_factor < 2 {
         return Err(AppError::Validation(
             msg("server.common.invalid_param").with("param", "agent.offline_factor (at least 2)"),
+        ));
+    }
+
+    // SNMP Trap：端口仅标准 162（cap_net_bind_service 授权绑定）或非特权
+    // 区间，与 Config::load 启动校验同口径
+    if !foims_common::config::is_valid_trap_port(config.snmp.trap.port) {
+        return Err(AppError::Validation(
+            msg("server.common.invalid_param").with(
+                "param",
+                format!(
+                    "snmp.trap.port ({} or {}-{})",
+                    foims_common::config::SNMP_TRAP_STANDARD_PORT,
+                    foims_common::config::UNPRIVILEGED_PORT_MIN,
+                    foims_common::config::UNPRIVILEGED_PORT_MAX
+                ),
+            ),
         ));
     }
     // 注册令牌：空/非法值落盘会让 agent 上报鉴权整体失效（持久化自伤）。

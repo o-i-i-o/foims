@@ -221,13 +221,17 @@ async function saveSnmpTrapConfig(): Promise<void> {
   if (saving.value) {
     return;
   }
-  // 地址为 IPv4/主机名或方括号 IPv6；端口 1-65535
   const host = bindHost.value.trim();
   const port = Number.parseInt(bindPort.value, 10);
-  const hostValid = /^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(host);
-  const portValid = Number.isInteger(port) && port >= 1 && port <= 65535;
-  if (!hostValid || !portValid) {
-    showToast(t("snmp_trap.invalid_bind_addr"), "warning");
+  // 地址与端口分开校验、分别提示（先地址后端口，命中即提示并终止）
+  if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(host)) {
+    showToast(t("snmp_trap.invalid_bind_addr", { host }), "warning");
+    return;
+  }
+  // 端口仅标准 162（cap_net_bind_service 授权绑定）或非特权 1025-65534
+  // （与后端 Config::load / 保存校验同口径）
+  if (!Number.isInteger(port) || (port !== 162 && (port < 1025 || port > 65534))) {
+    showToast(t("snmp_trap.invalid_port", { port: bindPort.value.trim() }), "warning");
     return;
   }
 
@@ -295,7 +299,7 @@ async function saveSnmpTrapConfig(): Promise<void> {
       </div>
       <div class="form-group">
         <label for="snmp-trap-bind-port">{{ t("snmp_trap.bind_port") }}</label>
-        <input id="snmp-trap-bind-port" v-model="bindPort" type="number" min="1" max="65535" placeholder="162">
+        <input id="snmp-trap-bind-port" v-model="bindPort" type="number" min="162" max="65534" placeholder="162">
       </div>
       <div class="form-group">
         <label for="snmp-trap-cooldown">{{ t("snmp_trap.cooldown_secs") }}</label>

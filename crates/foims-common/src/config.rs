@@ -271,6 +271,29 @@ const fn default_trap_cooldown_secs() -> u64 {
     30
 }
 
+/// 监听端口合法域（服务以普通用户 foims 运行，进程仅 trap 标准端口具备
+/// systemd `AmbientCapabilities=cap_net_bind_service` 授权）：
+/// - 特权端口段 1-1024 除 SNMP Trap 标准端口 162 外一律禁止；
+/// - 非特权区间为 >1024 且 <65535（1025-65534）。
+pub const SNMP_TRAP_STANDARD_PORT: u16 = 162;
+pub const UNPRIVILEGED_PORT_MIN: u16 = 1025;
+pub const UNPRIVILEGED_PORT_MAX: u16 = 65534;
+
+/// SNMP Trap 监听端口合法性：标准端口 162（cap_net_bind_service 授权绑定）
+/// 或非特权区间（1025-65534）；其余特权端口无绑定能力，落盘即监听失败。
+#[must_use]
+pub fn is_valid_trap_port(port: u16) -> bool {
+    port == SNMP_TRAP_STANDARD_PORT
+        || (UNPRIVILEGED_PORT_MIN..=UNPRIVILEGED_PORT_MAX).contains(&port)
+}
+
+/// Agent 上报接收端（QUIC/UDP，默认 9100）监听端口合法性：
+/// 仅非特权区间 1025-65534，不涉及特权端口。
+#[must_use]
+pub fn is_valid_agent_port(port: u16) -> bool {
+    (UNPRIVILEGED_PORT_MIN..=UNPRIVILEGED_PORT_MAX).contains(&port)
+}
+
 impl SnmpTrapConfig {
     /// 监听端点（`host:port` 拼接，供 UDP 绑定与日志输出）。
     pub fn bind_endpoint(&self) -> String {
@@ -668,6 +691,25 @@ impl Config {
             ));
         }
 
+        // 监听端口与运行身份约束对齐（普通用户 foims 运行，仅 trap 标准端口
+        // 162 有 cap_net_bind_service 授权）：非法端口落盘会让对应监听
+        // 绑定失败静默失效，启动即拒绝以便及时发现
+        if !is_valid_trap_port(config.snmp.trap.port) {
+            return Err(config::ConfigError::Message(format!(
+                "SNMP trap port must be {} or in {}-{}, got {}",
+                SNMP_TRAP_STANDARD_PORT,
+                UNPRIVILEGED_PORT_MIN,
+                UNPRIVILEGED_PORT_MAX,
+                config.snmp.trap.port
+            )));
+        }
+        if !is_valid_agent_port(config.agent.port) {
+            return Err(config::ConfigError::Message(format!(
+                "Agent report port must be in {}-{} (non-privileged), got {}",
+                UNPRIVILEGED_PORT_MIN, UNPRIVILEGED_PORT_MAX, config.agent.port
+            )));
+        }
+
         Ok(config)
     }
 }
@@ -699,4 +741,39 @@ pub fn parse_duration(duration_str: &str) -> Result<u64, String> {
     value
         .checked_mul(unit_secs)
         .ok_or_else(|| "Invalid duration value".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        UNPRIVILEGED_PORT_MAX, UNPRIVILEGED_PORT_MIN, is_valid_agent_port, is_valid_trap_port,
+    };
+
+    #[test]
+    fn 监听端口合法域_特权段仅放行trap标准端口() {
+        // 非特权区间边界：>1024 且 <65535（1025-65534）
+        assert!(!is_valid_trap_port(UNPRIVILEGED_PORT_MIN - 1));
+        assert!(is_valid_trap_port(UNPRIVILEGED_PORT_MIN));
+        assert!(is_valid_trap_port(UNPRIVILEGED_PORT_MAX));
+        assert!(!is_valid_trap_port(UNPRIVILEGED_PORT_MAX + 1));
+        // 特权段仅 162 放行，其余（含 0/1/80/161/443）拒绝
+        assert!(is_valid_trap_port(162));
+        assert!(!is_valid_trap_port(0));
+        assert!(!is_valid_trap_port(161));
+        assert!(!is_valid_trap_port(443));
+    }
+
+    #[test]
+    fn agent端口合法域_仅非特权区间() {
+        assert!(is_valid_agent_port(9100));
+        assert!(
+            !is_valid_agent_port(UNPRIVILEGED_PORT_MIN - 1),
+            "特权端口无绑定能力"
+        );
+        assert!(is_valid_agent_port(UNPRIVILEGED_PORT_MIN));
+        assert!(is_valid_agent_port(UNPRIVILEGED_PORT_MAX));
+        assert!(!is_valid_agent_port(UNPRIVILEGED_PORT_MAX + 1));
+        // trap 合法域是 agent 合法域的超集：162 对 agent 不合法
+        assert!(!is_valid_agent_port(162));
+    }
 }

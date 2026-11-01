@@ -99,13 +99,17 @@ async function saveAgentConfig(): Promise<void> {
   if (savingAgent.value) {
     return;
   }
-  // 地址为 IPv4/主机名或方括号 IPv6；端口 1-65535
   const bindHost = agentBindHost.value.trim();
   const bindPort = Number.parseInt(agentBindPort.value, 10);
-  const bindHostValid = /^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(bindHost);
-  const bindPortValid = Number.isInteger(bindPort) && bindPort >= 1 && bindPort <= 65535;
-  if (!bindHostValid || !bindPortValid) {
-    showToast(t("agent_service.invalid_bind_addr"), "warning");
+  // 地址与端口分开校验、分别提示（先地址后端口，命中即提示并终止）
+  if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(bindHost)) {
+    showToast(t("agent_service.invalid_bind_addr", { host: bindHost }), "warning");
+    return;
+  }
+  // 端口仅非特权 1025-65534（服务以普通用户运行无特权端口绑定能力，
+  // 与后端 Config::load / 保存校验同口径）
+  if (!Number.isInteger(bindPort) || bindPort < 1025 || bindPort > 65534) {
+    showToast(t("agent_service.invalid_port", { port: agentBindPort.value.trim() }), "warning");
     return;
   }
   // 上报间隔 clamp 10-3600（与后端校验及 agent 端 clamp 对齐）
@@ -265,7 +269,7 @@ async function regenerateToken(): Promise<void> {
           </div>
           <div class="form-group">
             <label for="agent-service-bind-port">{{ t("agent_service.bind_port") }}</label>
-            <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1" max="65535" placeholder="9100" :aria-label="t('agent_service.bind_port')">
+            <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1025" max="65534" placeholder="9100" :aria-label="t('agent_service.bind_port')">
           </div>
           <div class="form-group">
             <label for="agent-service-interval">{{ t("agent_service.report_interval") }}</label>
