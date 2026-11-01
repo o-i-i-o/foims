@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 系统管理页（七页签壳）：
- * 系统信息 / 用户管理 / 系统配置 / SMTP 配置 / 导入导出 / 定时任务 / 安全。
+ * 系统配置 / 用户管理 / SMTP 配置 / 导入导出 / 定时任务 / 安全 / 系统信息。
  * 页签常驻挂载（v-show）以保证各子页签查询组件的 enabled 按需加载语义，
  * 页签记忆 + hash query 深链由 useSubTabs 统一承载（与日志/资源分区同机制）。
  */
@@ -19,13 +19,13 @@ const { t } = useI18n();
 
 // 页签元数据：id 为深链/记忆键，titleKey 为标题 i18n 键
 const TABS = [
-  { id: "system-info", titleKey: "system.info" },
-  { id: "users", titleKey: "system.users" },
   { id: "system-config", titleKey: "system.config" },
+  { id: "users", titleKey: "system.users" },
   { id: "system-notification", titleKey: "system.notification" },
   { id: "data-management", titleKey: "system.data-management" },
   { id: "scheduled-tasks", titleKey: "system.scheduled_tasks" },
-  { id: "security", titleKey: "system.security" }
+  { id: "security", titleKey: "system.security" },
+  { id: "system-info", titleKey: "system.info" }
 ] as const satisfies readonly [SubTabMeta, ...SubTabMeta[]];
 
 const { activeTab, switchTab } = useSubTabs({
@@ -54,12 +54,12 @@ const { activeTab, switchTab } = useSubTabs({
     </div>
 
     <!-- 页签常驻：子组件按 props.active 自行控制查询启停 -->
-    <SystemInfoTab v-show="activeTab === 'system-info'" :active="activeTab === 'system-info'" />
-    <UsersTab v-show="activeTab === 'users'" :active="activeTab === 'users'" />
     <SystemConfigTab v-show="activeTab === 'system-config'" :active="activeTab === 'system-config'" />
+    <UsersTab v-show="activeTab === 'users'" :active="activeTab === 'users'" />
     <NotificationTab v-show="activeTab === 'system-notification'" :active="activeTab === 'system-notification'" />
     <DataManagementTab v-show="activeTab === 'data-management'" :active="activeTab === 'data-management'" />
     <ScheduledTasksTab v-show="activeTab === 'scheduled-tasks'" :active="activeTab === 'scheduled-tasks'" />
     <SecurityTab v-show="activeTab === 'security'" :active="activeTab === 'security'" />
+    <SystemInfoTab v-show="activeTab === 'system-info'" :active="activeTab === 'system-info'" />
   </section>
 </template>

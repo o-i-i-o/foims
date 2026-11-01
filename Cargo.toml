@@ -84,11 +84,11 @@ hmac = "0.13.0"
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
-openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
+openidconnect = { version = "4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 rand = "0.10.3"
 
 # Webhook 通知推送（钉钉/企业微信/通用）
-reqwest = { version = "0.12.23", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
 
 # Serialization
 serde = { version = "1.0.229", features = ["derive"] }
@@ -140,7 +140,7 @@ uuid = { version = "1.29.0", features = ["v4", "serde"] }
 
 # Validation
 validator = { version = "0.21.0", features = ["derive"] }
-zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.2.0", default-features = false, features = ["deflate"] }
 
 # x509 证书解析（foims-common 证书剩余寿命辅助：agent 续期链路共用）
 x509-parser = "0.18.1"
