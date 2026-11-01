@@ -109,7 +109,9 @@ async function saveAgentConfig(): Promise<void> {
   // 端口仅非特权 1025-65534（服务以普通用户运行无特权端口绑定能力，
   // 与后端 Config::load / 保存校验同口径）
   if (!Number.isInteger(bindPort) || bindPort < 1025 || bindPort > 65534) {
-    showToast(t("agent_service.invalid_port", { port: agentBindPort.value.trim() }), "warning");
+    // v-model 对 type=number 输入自动 looseToNumber：合法输入为 number、
+    // 非法残留可能是 string，统一 String() 后再 trim 防止对 number 调字符串方法
+    showToast(t("agent_service.invalid_port", { port: String(agentBindPort.value).trim() }), "warning");
     return;
   }
   // 上报间隔 clamp 10-3600（与后端校验及 agent 端 clamp 对齐）

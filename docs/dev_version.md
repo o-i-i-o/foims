@@ -91,3 +91,7 @@ v0.52.0
 v0.52.1
 2026110116052901
 数据管理页监听配置提示细化（仅前端，z 段 +1）：AgentServiceCard 与 SnmpTrapCard 的保存前校验由「地址+端口混合一条 toast」拆分为独立校验、分别提示——先校验监听地址（不合法提示 snmp_trap/agent_service.invalid_bind_addr，带 {host} 实际输入值），再校验端口（不合法提示新增的 invalid_port，带 {port} 实际输入值，合法域文案与后端同口径：trap 仅标准 162 或非特权 1025-65534、agent 仅非特权 1025-65534），命中即提示并终止提交；i18n zh/en 每段由 1 键拆为 2 键（invalid_bind_addr 文案收敛为纯地址语义 + 新增 invalid_port）。验证：npm run typecheck/build、biome（0 警告）、oxlint（0 警告）均通过；pak.sh 部署后线上产物含两条校验分支与新文案。仅 dev_version z+1，Cargo.toml/package.json 不联动
+
+v0.52.2
+2026110116273001
+修复 v0.52.1 校验提示的 TypeError 回归（仅前端，z 段 +1）：v-model 对 `<input type="number">` 自动 looseToNumber，端口 ref 在合法输入时是 number（非法残留才是 string），v0.52.1 新增的 invalid_port 提示参数直接对 `.value` 调 `.trim()` 导致校验失败分支抛 `TypeError: ... .trim is not a function`——表现为填非法端口点保存时警告 toast 不弹且控制台报错。修复为 `String(...).trim()` 统一转字符串后再 trim（AgentServiceCard / SnmpTrapCard 两处），并补注释说明该隐式转换。验证：npm run typecheck/build、biome（0 警告）、oxlint（344 文件 0 警告）通过；pak.sh 部署后线上产物 SystemPage 确认两处 `String(...).trim()` 修复形态（浏览器自动化环境不可用，待用户界面复测）。仅 dev_version z+1，Cargo.toml/package.json 不联动

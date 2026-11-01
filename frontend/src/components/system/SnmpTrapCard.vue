@@ -231,7 +231,9 @@ async function saveSnmpTrapConfig(): Promise<void> {
   // 端口仅标准 162（cap_net_bind_service 授权绑定）或非特权 1025-65534
   // （与后端 Config::load / 保存校验同口径）
   if (!Number.isInteger(port) || (port !== 162 && (port < 1025 || port > 65534))) {
-    showToast(t("snmp_trap.invalid_port", { port: bindPort.value.trim() }), "warning");
+    // v-model 对 type=number 输入自动 looseToNumber：合法输入为 number、
+    // 非法残留可能是 string，统一 String() 后再 trim 防止对 number 调字符串方法
+    showToast(t("snmp_trap.invalid_port", { port: String(bindPort.value).trim() }), "warning");
     return;
   }
 
