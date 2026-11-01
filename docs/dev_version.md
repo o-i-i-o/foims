@@ -133,3 +133,7 @@ v0.56.1
 v0.57.0
 2026110200124101
 移除系统信息页签「运行时长」展示（冗余字段清理，功能变更 y 段 +1）：该字段与「系统配置-服务管理」FOIMS 行运行时长同源同值（同一 START_TIME、同一 now−start 公式），且其唯一可见场景即服务运行中（页面渲染依赖登录态与后端实时 API，服务未运行时整个页签无法加载数据），信息量为零；接口瞬时失败时前端回退 formatUptime(0) 显示"0秒"误导，服务管理侧则对不可用有诚实的"不可用"占位。拆除完整链路：SystemInfo 结构体删 uptime_seconds 字段与 get_system_info 内 now−START_TIME 计算（config.rs），start_time()/START_TIME 保留（services.rs 服务管理口径仍在用）；SystemInfoTab.vue 删运行时长 dl 行、uptimeText computed 与 formatUptime 导入；i18n zh/en 删 system.uptime 键（uptime_days/hours/minutes/seconds 为 formatUptime 共用、ServicesCard 仍在用，保留）；gen-ts-types 再生成 SystemInfo.ts。验证：cargo fmt、cargo clippy --release -D warnings、gen-ts-types、npm run typecheck/build、biome、oxlint 均通过。y 段 +1，Cargo.toml 0.33.10→0.33.11、frontend/package.json 0.1.45→0.1.46 联动
+
+v0.58.0
+2026110200201201
+快照型时间字段前端动态推进（功能优化 y 段 +1）：系统时间/运行时长此前为取数瞬间静态快照，页面停留期间数值冻结。新增共享秒级时钟 composable useNowTick（模块级单例 interval + 引用计数，首订阅启动、末卸载停止，取代每组件自挂 interval）；服务管理运行时长以最近一次成功取数时刻（useQuery dataUpdatedAt）为基准、每行 uptime_seconds + 流逝秒数逐秒推进（取数成功自动重置基准，用户点刷新即校准）；系统信息系统时间以服务端 timestamp 基准时刻 + 本地流逝毫秒推算服务端当前时刻（两端偏移取数瞬间一次折算不重复累积），后端未携带基准时回退本机时钟同样逐秒推进；AgentDetailModal 原组件级 nowTick/interval 收敛至 useNowTick（同功能去重，行为不变）。验证：npm run typecheck/build、biome、oxlint 均通过；仅前端修改，y 段 +1，frontend/package.json 0.1.46→0.1.47，Cargo.toml 不联动

@@ -10,6 +10,7 @@ import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { getSystemInfo } from "../../api/system";
 import { formatDateTime } from "../../utils/formatter";
+import { useNowTick } from "../../composables/useNowTick";
 import type { SystemInfo } from "../../types/api/generated/SystemInfo";
 import OpenSourceModal from "./OpenSourceModal.vue";
 
@@ -52,10 +53,19 @@ const databaseStatusText = computed<string>(() => {
   return status;
 });
 
-// 系统时间为即时快照：后端未携带时回退本机时间
-const systemTimeText = computed(() =>
-  formatDateTime(info.value.timestamp || new Date().toISOString())
-);
+// 系统时间前端推进：以服务端基准时刻（timestamp）加本地流逝毫秒推算服务端当前时刻，
+// 两端偏移在取数瞬间一次性折算（基准 epoch − 本地取数 epoch），逐秒推进不重复累积；
+// 后端未携带基准（取数失败/加载中）时回退本机时钟，同样逐秒推进
+const nowTick = useNowTick();
+const systemTimeText = computed(() => {
+  const baseMs = info.value.timestamp ? Date.parse(info.value.timestamp) : NaN;
+  const fetchedAt = infoQuery.dataUpdatedAt.value;
+  const nowMs = nowTick.value;
+  if (Number.isNaN(baseMs) || !fetchedAt) {
+    return formatDateTime(new Date(nowMs).toISOString());
+  }
+  return formatDateTime(new Date(baseMs + (nowMs - fetchedAt)).toISOString());
+});
 
 const showOpenSource = ref(false);
 </script>

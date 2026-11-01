@@ -4,12 +4,13 @@
  * 详情与历史各走一条 useQuery；曲线为声明式渲染，无延迟测量时序依赖
  * （SVG 按 viewBox 等比缩放，容器宽度不影响绘制）。
  */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
 import { useLiveAgents } from "../../composables/useLiveAgents";
+import { useNowTick } from "../../composables/useNowTick";
 import { formatBps, formatDateTime } from "../../utils/formatter";
 import ModalShell from "../ModalShell.vue";
 import AgentSparkline from "./AgentSparkline.vue";
@@ -182,26 +183,14 @@ const { devices: liveDevices, connected: liveConnected } = useLiveAgents();
 /** 快照新鲜窗口：采样与 SSE 节拍均为 1s，留 10s 容忍丢包/短暂重连 */
 const LIVE_FRESH_MS = 10_000;
 
-/** 秒级时钟：驱动新鲜度重算，SSE 断流后按时回落而非永久停留旧读数 */
-const nowTick = ref(Date.now());
-
 /**
  * 本端收到该设备新快照的本地时刻：不拿服务端 collected_at 和本地时钟做差，
  * 否则两端时钟不同步（偏快超过新鲜窗口）会把实时读数误判为陈旧。
  */
 const liveSeenAt = ref(0);
 
-let clock: number | undefined;
-onMounted(() => {
-  clock = window.setInterval(() => {
-    nowTick.value = Date.now();
-  }, 1000);
-});
-onUnmounted(() => {
-  if (clock !== undefined) {
-    window.clearInterval(clock);
-  }
-});
+// 秒级时钟（共享单例）：驱动新鲜度重算，SSE 断流后按时回落而非永久停留旧读数
+const nowTick = useNowTick();
 
 const live = computed(() => {
   const deviceId = agent.value?.device_id;

@@ -12,6 +12,7 @@ import { getSystemServices, runServiceOp, type ServiceStatusItem } from "../../a
 import { formatUptime } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
+import { useNowTick } from "../../composables/useNowTick";
 import ConfirmModal from "../ConfirmModal.vue";
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
@@ -36,6 +37,13 @@ const servicesQuery = useQuery({
 });
 
 const services = computed(() => (Array.isArray(servicesQuery.data.value) ? servicesQuery.data.value : []));
+
+// 运行时长前端推进：以最近一次成功取数时刻（dataUpdatedAt）为基准，
+// 共享秒级时钟补足两次取数之间的流逝秒数，取数成功即自动重置基准
+const nowTick = useNowTick();
+const uptimeElapsedSecs = computed(() =>
+  Math.max(0, Math.floor((nowTick.value - servicesQuery.dataUpdatedAt.value) / 1000))
+);
 
 // 状态徽章分级：未注册 / 运行中 / 失败 / 已停止，title 展示原始 state 与补充说明
 function badgeMeta(item: ServiceStatusItem): { cls: string; text: string; title: string } {
@@ -214,7 +222,7 @@ onUnmounted(() => {
               </span>
               <span v-else class="svc-unregistered-hint">{{ t("services.uptime_unavailable") }}</span>
             </td>
-            <td>{{ item.uptime_seconds != null ? formatUptime(item.uptime_seconds) : t("services.uptime_unavailable") }}</td>
+            <td>{{ item.uptime_seconds != null ? formatUptime(item.uptime_seconds + uptimeElapsedSecs) : t("services.uptime_unavailable") }}</td>
             <td class="svc-actions-cell">
               <span v-if="!item.registered" class="svc-unregistered-hint">{{ t("services.unregistered_hint") }}</span>
               <template v-else-if="!readonly">
