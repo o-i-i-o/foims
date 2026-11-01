@@ -4,8 +4,7 @@
 	"files": {
 		"includes": [
 			"frontend/src/styles/**",
-			"!web-archive",
-			"!foims-agent"
+			"!web-archive"
 		]
 	},
 	"linter": {

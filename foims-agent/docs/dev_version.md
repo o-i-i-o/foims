@@ -191,4 +191,11 @@
   cargo fmt --check 通过；cargo clippy --release --workspace --all-targets -- -D warnings
   0 告警（含 windows crate 在 Linux 宿主上的 cfg 外目标）；cargo test --release 全量 179 passed。
 
+# v0.5.4
+
+# 2026110117551801
+# 2026年11月1日17点55分18秒 第1次修改
+
+1.CI 随仓库拆分正式独立（构建链变更，agent 程序代码零改动）：主仓 ci.yml/release.yml 的 agent-build 任务（fmt/clippy/本机单测 + zig 0.13.0 与 llvm-mingw 20261020 交叉工具链 + AGENT_BACKEND=zigbuild build-agent.sh 多平台组包）整体迁入本仓自建的 .github/workflows/ci.yml（push 全分支 + tag v* 触发，tag 触发时产物随 CI 发布至本仓 Release）与 release.yml（workflow_dispatch 手动发布，prepare 任务从根 Cargo.toml [workspace.package] version 推导 v<version> tag 并校验指向，该 version 与 build-agent.sh 产物命名同源）。补记：v0.5.3（实时秒级采集上报推送通道的版本联动）由主仓 dev_version.md v0.54.0 条目承载，本仓记录此前漏登，自本条起恢复连续。验证：workflow 与原主仓 agent-build 任务逐步对齐复核；cargo 程序代码零改动，仅记录 z+1，Cargo.toml 0.5.3 不联动
+
 

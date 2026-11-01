@@ -58,10 +58,7 @@ foims（bin/lib）             应用组装层：路由装配/系统管理/日�
 ├── crates/foims-x509-management 证书管理
 ├── crates/foims-services        systemd 服务管理（foims/nginx）
 ├── crates/foims-scheduler       定时任务
-├── crates/foims-agent-service   Agent 服务端（zip-deb-rpm 动态组包/下载 API/上报接收）
-└── （原 crates/foims-agent 已拆出至主仓根下独立工作空间 foims-agent/
-    （独立 Cargo workspace，不进 members）：
-    foims-agent-core/foims-protocol/foims-agent/foims-agent-windows 四 crate）
+└──  crates/foims-agent-service   Agent 服务端（zip-deb-rpm 动态组包/下载 API/上报接收）
 ```
 
 - 依赖方向自上而下，禁止反向依赖与环。
@@ -365,7 +362,8 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
   - 后端 Rust 无 `latest` 语义（crates.io 只有具体版本号）：`Cargo.toml` 写具体
     版本、入库的 `Cargo.lock` 锁实际版本；升级 = 改版本串后跑
     `cargo check/clippy/test`，跨 major 需适配 API。
-  - 仓库有三棵独立依赖树：主 workspace、`foims-agent/Cargo.toml`（独立 workspace）、
+  - 仓库有三棵独立依赖树：主 workspace、`foims-agent/`（独立仓库 foims-agent
+    的 workspace，本地 clone 于主仓根、`.gitignore` 排除，CI 自建于该仓）、
     `foims-portal/`（`.gitignore` 排除，本地部署，升级后需单独 `cargo check`）。
 - 空跑防护：审计命令的“0 诊断”须先证明命令确实在执行——历史上 `npx biome`
   曾解析到 npm 上同名旧包 biome@0.3.3（无 check 子命令，静默 exit 0）；修改

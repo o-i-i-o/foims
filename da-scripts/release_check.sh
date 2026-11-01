@@ -6,8 +6,8 @@
 #   frontend job —— npm ci / vite build（SFC 编译与 import 解析阻断）/
 #                   Biome（CSS + 格式）/ Oxlint（JS 质量）
 #   build job    —— cargo fmt --check / clippy / test / build + build-pkgs.sh 打包
-#                   （deb/rpm/zip；agent 交叉编译在 CI 独立 agent-build job，
-#                   本地由下方 Agent 构建检查覆盖）
+#                   （deb/rpm/zip；Agent 已拆分至独立仓库 foims-agent，
+#                   其构建与检查由该仓自建 CI 负责，本脚本不再覆盖）
 #
 # 与 CI 的差异：
 #   - 本地执行前先 cargo fmt 自动修复（CI 仅 --check）
@@ -216,10 +216,9 @@ main() {
     run_check "Release 构建" "cargo build --release"
     echo ""
 
-    # 打包检查（对齐 CI build 与 agent-build 任务）
-    echo "──────── 打包检查（CI build / agent-build 步骤）────────"
+    # 打包检查（对齐 CI build 任务）
+    echo "──────── 打包检查（CI build 步骤）────────"
     run_check "主程序打包（deb/rpm/zip）" "bash scripts/build-pkgs.sh"
-    run_check "Agent 多平台安装包（deb/rpm/zip）" "bash foims-agent/scripts/build-agent.sh"
 
     summary
 }

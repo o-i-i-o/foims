@@ -103,3 +103,10 @@ v0.53.0
 v0.54.0
 2026110218000001
 agent 实时秒级采集上报推送通道（y 段 +1）：此前 agent 源实时性受制于批量攒批节拍（report_interval_secs 缺省 60、服务端下限 10s），显示延迟等于上报间隔。新增 `POST /agent/v1/realtime` 实时通道：agent 采集出帧即送（best-effort 不重试不排队，通道满/失败即弃帧，下一帧自然取代），服务端不入库、仅覆盖内存实时注册表——实时粒度即 agent 采集间隔 collect_interval_secs（缺省 5s，可配 1-60s），批量通道（攒批入库/频控/退避）节奏与语义完全不变。实现：reporter.rs 将 TLS 构建/建链/单请求交换抽为 build_client_tls_config、build_h3_transport、h3_post_once 自由函数（上报循环与实时通道共用同一建链与请求模板），新增 RealtimeChannel 独立复用连接任务（mpsc 容量 2，try_send 满即丢帧保最新帧语义），采集任务每帧同时入批量队列与实时通道，report_once/--once 冒烟路径不受影响；服务端 ingest.rs 新增 realtime 处理分支（与批量通道共用 bearer_token 鉴权与 validate_report 单帧校验口径，唯一库交互为 machine_id→id/status 只读 SELECT，未注册 404/已禁用 403/库错 500，成功回 {"ok":true}），快照构造抽 agent_live_snapshot 共用助手；AgentLiveRegistry.upsert 改 collected_at 单调合并（entry 原子写，实时帧先到、批量旧帧后到不回退快照，未更新不推进代数不触发 SSE 空推送）；report_server.rs handle_request 路由放行 REALTIME_PATH（body 上限沿用单帧 max_report_bytes）。前端零改动（注册表+SSE 链路复用）。验证：cargo fmt、双 workspace clippy --all-targets -D warnings、foims-agent-service 86 单测（含注册表旧帧不回退用例）、foims-agent workspace 179 单测。y 段 +1，Cargo.toml 0.33.7→0.33.8、foims-agent-service 0.1.27→0.1.28；foims-agent workspace 0.5.2→0.5.3；前端无改动不联动
+
+# v0.54.1
+
+# 2026110117551801
+# 2026年11月1日17点55分18秒 第1次修改
+
+1.foims-agent 正式拆分至独立仓库（CI 拆分，主程序代码零改动）：agent 交叉构建 job（fmt/clippy/本机单测 + zig 0.13.0/llvm-mingw 20261020 交叉工具链 + build-agent.sh 多平台组包）自 ci.yml/release.yml 整体迁至独立仓库（github.com/o-i-i-o/foims-agent）自建的 .github/workflows/ci.yml（push 全分支 + tag 触发，tag v<agent 版本> 随 CI 发布至该仓 Release）与 release.yml（workflow_dispatch 手动发布，prepare 任务从该仓根 Cargo.toml [workspace.package] version 推导 tag）；主仓 ci.yml/release.yml 删除 agent-build 任务与发布物中的 agent 系统包（release needs 收敛为 [build] / [prepare, build]，files 仅留主程序产物）——此前 agent 构建依赖主仓检出 foims-agent/ 目录，而该目录已被 .gitignore 排除，远端 checkout 后并不存在，拆分同时消除该断链；da-scripts/release_check.sh 摘除 Agent 多平台安装包检查（对齐 CI 口径）；biome.json 清理 !foims-agent 死排除项；code-style.md 工程结构与依赖树说明同步独立仓库口径。验证：agent 仓 workflow 与原主仓 agent-build 任务逐步对齐复核；主程序代码/Cargo.toml 零改动，仅 dev_version z+1，Cargo.toml/package.json 不联动
