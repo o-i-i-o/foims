@@ -16,6 +16,10 @@
 //! 快照语义：只在设备有响应时覆盖注册表；不可达期间保留最后一份成功快照，
 //! 消费方以 `snapshot.collected_at` 判断新鲜度（见
 //! [`LiveDeviceSnapshot::age_secs`]），不要仅凭条目存在判定在线。
+//!
+//! 文件末尾另承载 Agent 上报来源的实时注册表（[`AgentLiveRegistry`]）：
+//! 无采集 worker，写入方为 [`crate::ingest`]（合法上报入库成功即覆盖），
+//! 与 SNMP/IPMI 快照并入同一 SSE/列表载荷按 `source` 区分。
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -858,6 +862,102 @@ async fn run_ipmi_cycle(context: &IpmiWorkerContext) -> bool {
     true
 }
 
+// ============================ Agent 上报实时注册表 ============================
+//
+// Agent 主机无轮询 worker：上报到达即有新读数，ingest 入库成功后覆盖本注册表，
+// SSE 下一节拍推送。注册表以 machine_id 为键（而非 host_id）：删除主机后同机
+// 首报会以新 monitored_hosts.id 重新注册，同键覆盖使条目自愈，不残留旧 id 幽灵行。
+
+/// 单帧上报的实时读数（入库快照列同源：CPU/内存/磁盘/温度/运行时长/网卡流量合计）。
+#[derive(Debug, Clone)]
+pub struct AgentLiveSnapshot {
+    pub collected_at: DateTime<Utc>,
+    pub cpu_usage_pct: Option<f64>,
+    pub mem_used: Option<u64>,
+    pub mem_total: Option<u64>,
+    pub mem_usage_pct: Option<f64>,
+    pub disk_usage_pct: Option<f64>,
+    pub temperature_c: Option<f64>,
+    pub uptime_secs: Option<i64>,
+    pub rx_bps: Option<f64>,
+    pub tx_bps: Option<f64>,
+}
+
+/// 单主机 Agent 实时快照（主机身份 + 采集结果）。
+#[derive(Debug, Clone)]
+pub struct AgentLiveDeviceSnapshot {
+    /// 告警与列表行的主体（`monitored_hosts.id`），随每次成功上报刷新
+    pub host_id: Uuid,
+    pub machine_id: String,
+    pub device_name: String,
+    pub ip: String,
+    /// 操作系统名（摘要行 vendor 列的展示来源）
+    pub os: String,
+    pub snapshot: AgentLiveSnapshot,
+}
+
+impl AgentLiveDeviceSnapshot {
+    /// 快照年龄（秒，负值归零）：消费方据此过滤陈旧数据。
+    pub fn age_secs(&self, now: DateTime<Utc>) -> i64 {
+        (now - self.snapshot.collected_at).num_seconds().max(0)
+    }
+}
+
+/// Agent 实时快照注册表：machine_id → 最近一次成功上报的快照
+/// （结构对齐 [`LiveRegistry`]；主机删除后 agent 停报的残留条目由消费方
+/// 按 `collected_at` 新鲜度过滤，进程重启自然清空）。
+#[derive(Debug, Default)]
+pub struct AgentLiveRegistry {
+    hosts: DashMap<String, Arc<AgentLiveDeviceSnapshot>>,
+    /// 写入代数：每次 upsert/remove 自增，SSE 端按变化推送而非空转。
+    revision: AtomicU64,
+}
+
+impl AgentLiveRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn upsert(&self, snapshot: AgentLiveDeviceSnapshot) {
+        self.hosts
+            .insert(snapshot.machine_id.clone(), Arc::new(snapshot));
+        self.revision.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// 当前写入代数（只增不减，消费方比对前后值判断是否有更新）。
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Relaxed)
+    }
+
+    pub fn get(&self, machine_id: &str) -> Option<Arc<AgentLiveDeviceSnapshot>> {
+        self.hosts
+            .get(machine_id)
+            .map(|entry| entry.value().clone())
+    }
+
+    /// 当前全部快照（按 machine_id 无序）。
+    pub fn all(&self) -> Vec<Arc<AgentLiveDeviceSnapshot>> {
+        self.hosts
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+
+    pub fn remove(&self, machine_id: &str) {
+        if self.hosts.remove(machine_id).is_some() {
+            self.revision.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.hosts.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hosts.is_empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -909,5 +1009,44 @@ mod tests {
         registry.remove(id);
         assert!(registry.is_empty());
         assert!(registry.get(id).is_none());
+    }
+
+    /// Agent 注册表按 machine_id 覆盖：同机重注册（新 host_id）不残留旧条目
+    #[test]
+    fn agent注册表_同机覆盖且代数推进() {
+        let registry = AgentLiveRegistry::new();
+        let machine_id = "m-1234567890abcdef";
+        let mk = |host_id: Uuid| AgentLiveDeviceSnapshot {
+            host_id,
+            machine_id: machine_id.to_string(),
+            device_name: "web-01".to_string(),
+            ip: "192.0.2.20".to_string(),
+            os: "Ubuntu".to_string(),
+            snapshot: AgentLiveSnapshot {
+                collected_at: Utc::now(),
+                cpu_usage_pct: Some(12.5),
+                mem_used: Some(256),
+                mem_total: Some(1024),
+                mem_usage_pct: Some(25.0),
+                disk_usage_pct: Some(50.0),
+                temperature_c: Some(48.0),
+                uptime_secs: Some(3600),
+                rx_bps: None,
+                tx_bps: None,
+            },
+        };
+        assert!(registry.is_empty());
+        registry.upsert(mk(Uuid::new_v4()));
+        assert_eq!(registry.len(), 1);
+        assert!(registry.revision() >= 1);
+        // 删除主机后同机重注册：host_id 更新、条目数不变
+        let new_host = Uuid::new_v4();
+        registry.upsert(mk(new_host));
+        assert_eq!(registry.len(), 1);
+        let entry = registry.get(machine_id).expect("同键覆盖后应可读");
+        assert_eq!(entry.host_id, new_host);
+        assert_eq!(entry.age_secs(Utc::now()), 0);
+        registry.remove(machine_id);
+        assert!(registry.is_empty());
     }
 }

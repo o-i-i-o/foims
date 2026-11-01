@@ -5,6 +5,9 @@
 //! 400 请求非法、429 上报过于频繁、500 入库失败，体积超限的 413 由传输层
 //! [`crate::report_server`] 产生。
 //!
+//! 入库成功后同步覆盖 [`crate::live_poll::AgentLiveRegistry`]（内存实时
+//! 快照，不落库），供主机监控页秒级展示；429 频控/禁用/失败路径不覆盖。
+//!
 //! 认证模型（共享注册令牌）：所有 agent 使用配置文件中的同一注册令牌
 //! （`agent.enrollment_token`，经配置包分发）作 Bearer 凭据，服务端比对
 //! SHA-256 哈希。注册模型：首报自动注册（按 machine_id upsert，行初始
@@ -90,6 +93,14 @@ fn max_temp(sensors: &[foims_common::report::ReportSensor]) -> Option<f64> {
         .filter(|s| s.kind == "temp" && s.value.is_finite())
         .map(|s| s.value)
         .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m| m.max(v))))
+}
+
+/// 流量合计（bit/s）：各网卡求和，无网卡为 null（键名与 SNMP 轮询快照一致）。
+fn sum_net_bps(
+    nets: &[foims_common::report::ReportNet],
+    get: fn(&foims_common::report::ReportNet) -> f64,
+) -> Option<f64> {
+    (!nets.is_empty()).then(|| nets.iter().map(get).sum())
 }
 
 /// 校验采集时刻：RFC 3339 可解析；未来方向偏差 ≤5 分钟（时钟漂移防护），
@@ -295,7 +306,7 @@ pub async fn ingest(
 
     // 帧间机器标识一致性：正常批量各帧 machine_id 相同，不一致说明请求体
     // 被拼装篡改，整批拒绝
-    let Some((last_report, _, last_trimmed)) = valid.last() else {
+    let Some((last_report, last_collected_at, last_trimmed)) = valid.last() else {
         return error_json(StatusCode::BAD_REQUEST, "上报批次为空");
     };
     let machine_id = last_trimmed.machine_id.clone();
@@ -307,6 +318,7 @@ pub async fn ingest(
     let mem_pct = mem_usage_pct(last_report.memory.total, last_report.memory.used);
     let disk_pct = disk_usage_pct(&last_report.disks);
     let temp = max_temp(&last_report.sensors);
+    let uptime_secs = i64::try_from(last_report.system.uptime_secs).unwrap_or(i64::MAX);
     let raw_metrics = serde_json::to_value(last_report).unwrap_or(Value::Null);
     let ip = normalize_ipv4_address(peer_ip);
 
@@ -376,7 +388,7 @@ pub async fn ingest(
     .bind(mem_pct)
     .bind(disk_pct)
     .bind(temp)
-    .bind(i64::try_from(last_report.system.uptime_secs).unwrap_or(i64::MAX))
+    .bind(uptime_secs)
     .bind(&raw_metrics)
     .bind(min_gap_secs as f64)
     .fetch_optional(&mut *tx)
@@ -406,16 +418,13 @@ pub async fn ingest(
         let disk = disk_usage_pct(&report.disks);
         let frame_temp = max_temp(&report.sensors);
         // 流量合计（bit/s）：各网卡求和，无网卡为 null；键名与 SNMP 轮询快照一致
-        let sum_bps = |get: fn(&foims_common::report::ReportNet) -> f64| -> Option<f64> {
-            (!report.nets.is_empty()).then(|| report.nets.iter().map(get).sum())
-        };
         let snapshot = json!({
             "cpu": report.cpu.usage_pct,
             "mem": mem,
             "disk": disk,
             "temp": frame_temp,
-            "rx_bps": sum_bps(|n| n.rx_bps),
-            "tx_bps": sum_bps(|n| n.tx_bps),
+            "rx_bps": sum_net_bps(&report.nets, |n| n.rx_bps),
+            "tx_bps": sum_net_bps(&report.nets, |n| n.tx_bps),
         });
         let insert = sqlx::query(
             r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
@@ -438,6 +447,30 @@ pub async fn ingest(
         foims_common::log_error!("log.agent.ingest_db_error", error = e);
         return error_json(StatusCode::INTERNAL_SERVER_ERROR, "入库失败：事务提交出错");
     }
+
+    // 实时快照（不落库）：入库成功即覆盖内存注册表，SSE 下一节拍推送前端；
+    // 429 频控/禁用/入库失败路径不覆盖，注册表始终反映已接受的上报。
+    // machine_id 为键使删除主机后重注册（新 host_id）自动覆盖旧条目
+    ctx.agent_live
+        .upsert(crate::live_poll::AgentLiveDeviceSnapshot {
+            host_id: agent_id,
+            machine_id: machine_id.clone(),
+            device_name: last_trimmed.hostname.clone(),
+            ip: ip.clone(),
+            os: last_trimmed.os.clone(),
+            snapshot: crate::live_poll::AgentLiveSnapshot {
+                collected_at: *last_collected_at,
+                cpu_usage_pct: Some(last_report.cpu.usage_pct),
+                mem_used: Some(last_report.memory.used),
+                mem_total: Some(last_report.memory.total),
+                mem_usage_pct: mem_pct,
+                disk_usage_pct: disk_pct,
+                temperature_c: temp,
+                uptime_secs: Some(uptime_secs),
+                rx_bps: sum_net_bps(&last_report.nets, |n| n.rx_bps),
+                tx_bps: sum_net_bps(&last_report.nets, |n| n.tx_bps),
+            },
+        });
 
     // 批量观测日志：单帧上报不产生噪音，仅多帧或有丢弃时记录
     if valid.len() > 1 || dropped > 0 {

@@ -6,9 +6,14 @@ import type { LiveSensorRow } from "./LiveSensorRow";
  */
 export type LiveSummaryRow = { device_id: string, device_name: string, ip: string, collected_at: string, 
 /**
- * 采集来源：`snmp` | `ipmi`（前端徽标与展示板块据此区分）
+ * 采集来源：`snmp` | `ipmi` | `agent`（前端徽标与展示板块据此区分）
  */
-source: string, vendor: string, cpu_usage_pct: number | null, mem_usage_pct: number | null, mem_used: number | null, mem_total: number | null, temperature_c: number | null, uptime_secs: number | null, 
+source: string, vendor: string, cpu_usage_pct: number | null, mem_usage_pct: number | null, mem_used: number | null, mem_total: number | null, 
+/**
+ * 磁盘使用率（仅 agent 来源有实时读数；SNMP/IPMI 为 None，磁盘只有
+ * 5 分钟全量轮询有读数）
+ */
+disk_usage_pct: number | null, temperature_c: number | null, uptime_secs: number | null, 
 /**
  * 本轮流量采集端口名（未配置时为首端口）
  */

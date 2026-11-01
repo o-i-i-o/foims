@@ -111,6 +111,18 @@ const STATUS_META: Record<string, { dot: string; labelKey: string }> = {
   disabled: { dot: "agent-dot-disabled", labelKey: "agents.status_disabled" }
 };
 
+// 来源徽标：snmp/ipmi/agent 三路采集来源统一标注（未知来源不展示）
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  snmp: "agents.source_snmp",
+  ipmi: "agents.source_ipmi",
+  agent: "agents.source_agent"
+};
+
+function sourceBadgeText(source: string | null | undefined): string | null {
+  const key = source ? SOURCE_LABEL_KEYS[source] : undefined;
+  return key ? t(key) : null;
+}
+
 function statusMeta(agent: AgentListItem): { dot: string; labelKey: string } | undefined {
   return STATUS_META[agent.status];
 }
@@ -128,9 +140,9 @@ function formatTemp(temp: number | string | null): string {
   return `${Number(temp).toFixed(1)}℃`;
 }
 
-// SSE 推送的全部实时快照（source='snmp' 与 source='ipmi' 两路）：按
-// `source|device_id` 复合键覆盖当前页对应采集行（同设备 SNMP/IPMI 各自快照
-// 独立），列表结构（分页/状态/关键字）仍由 30s 轮询维护
+// SSE 推送的全部实时快照（source='snmp'/'ipmi'/'agent' 三路）：按
+// `source|device_id` 复合键索引，Agent 行 device_id 即 monitored_hosts.id；
+// 列表结构（分页/状态/关键字）仍由 30s 轮询维护
 const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
   !auth.hiddenSections.includes("agents")
 );
@@ -143,6 +155,10 @@ const liveBySourceDevice = computed(() => {
 });
 
 function liveRow(agent: AgentListItem): LiveSummaryRow | undefined {
+  // Agent 行无 device_id，按行 id（monitored_hosts.id）匹配实时快照
+  if (agent.source === "agent") {
+    return liveBySourceDevice.value.get(`agent|${agent.id}`);
+  }
   return agent.device_id ? liveBySourceDevice.value.get(`${agent.source}|${agent.device_id}`) : undefined;
 }
 
@@ -153,6 +169,10 @@ function liveCpu(agent: AgentListItem): number | string | null {
 
 function liveMem(agent: AgentListItem): number | string | null {
   return liveRow(agent)?.mem_usage_pct ?? agent.mem_usage_pct;
+}
+
+function liveDisk(agent: AgentListItem): number | string | null {
+  return liveRow(agent)?.disk_usage_pct ?? agent.disk_usage_pct;
 }
 
 function liveTempValue(agent: AgentListItem): number | string | null {
@@ -271,9 +291,9 @@ const debugModal = reactive({ open: false });
             </td>
             <td>
               {{ agent.hostname || "-" }}<span
-                v-if="agent.source === 'snmp' || agent.source === 'ipmi'"
+                v-if="sourceBadgeText(agent.source)"
                 class="agent-source-badge"
-              >{{ agent.source === "ipmi" ? t("agents.source_ipmi") : t("agents.source_snmp") }}</span><span
+              >{{ sourceBadgeText(agent.source) }}</span><span
                 v-if="liveRow(agent)"
                 class="agent-live-badge"
                 :title="t('agents.live_realtime')"
@@ -284,7 +304,7 @@ const debugModal = reactive({ open: false });
             <td class="col-center">{{ agent.arch || "-" }}</td>
             <td><AgentUsageBar :value="liveCpu(agent)" /></td>
             <td><AgentUsageBar :value="liveMem(agent)" /></td>
-            <td><AgentUsageBar :value="agent.disk_usage_pct" /></td>
+            <td><AgentUsageBar :value="liveDisk(agent)" /></td>
             <td class="col-center">{{ formatTemp(liveTempValue(agent)) }}</td>
             <td>{{ agent.agent_version || "-" }}</td>
             <td>{{ liveLastSeen(agent) ? formatTime(liveLastSeen(agent)) : "-" }}</td>

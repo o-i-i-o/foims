@@ -43,6 +43,8 @@ pub struct ReportContext {
     pub config: foims_common::config::SharedConfig,
     /// 告警 episode 运行时（与实时采集、兜底扫描共用同一实例）
     pub alerts: Arc<crate::alert_episode::AlertRuntime>,
+    /// Agent 实时快照注册表（ingest 入库成功后覆盖，live_api SSE 读取）
+    pub agent_live: Arc<crate::live_poll::AgentLiveRegistry>,
     /// 服务端版本（响应 latest_version 通告）
     pub server_version: String,
 }
@@ -65,6 +67,7 @@ pub fn spawn_report_server_task(
     pool: sqlx::PgPool,
     config: foims_common::config::SharedConfig,
     alerts: Arc<crate::alert_episode::AlertRuntime>,
+    agent_live: Arc<crate::live_poll::AgentLiveRegistry>,
     server_version: &'static str,
 ) {
     let agent_enabled = config.load().agent.enabled;
@@ -79,6 +82,7 @@ pub fn spawn_report_server_task(
             pool,
             config,
             alerts,
+            agent_live,
             server_version: server_version.to_string(),
         };
         // 证书物料缺失时拒绝启动监听（mTLS 无法建立），不 panic

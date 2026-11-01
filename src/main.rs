@@ -501,6 +501,10 @@ async fn main() -> std::io::Result<()> {
     let ipmi_live_registry = Arc::new(foims_agent_service::IpmiLiveRegistry::new());
     let ipmi_live_config = config.ipmi.live.clone().filter(|live| live.enabled);
 
+    // Agent 上报实时注册表：无 worker，ingest 入库成功后覆盖（不落库），
+    // 与 SNMP/IPMI 快照并入同一 SSE/列表载荷按 source 区分
+    let agent_live_registry = Arc::new(foims_agent_service::AgentLiveRegistry::new());
+
     // 告警 episode 运行时：实时采集、agent 上报、常驻兜底扫描三条路径共用的
     // 单实例（阈值缓存 + 状态机 + 落库与通知）。某来源实时采集开启时该来源
     // 主机的秒级读数归实时路径，兜底扫描不再包含，避免 5 分钟前的
@@ -746,6 +750,7 @@ async fn main() -> std::io::Result<()> {
             task_registry.clone(),
             live_registry,
             ipmi_live_registry,
+            agent_live_registry.clone(),
             alert_runtime.clone(),
             shutdown.clone(),
             rate_limiter.clone(),
@@ -768,6 +773,7 @@ async fn main() -> std::io::Result<()> {
             db_pool.get_conn(),
             app_state.config.clone(),
             runtime,
+            agent_live_registry,
             env!("CARGO_PKG_VERSION"),
         );
     }

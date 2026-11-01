@@ -19,7 +19,7 @@ import AgentUsageBar from "./AgentUsageBar.vue";
 interface AgentDetail {
   status: string;
   source: string | null;
-  /** SNMP 主机关联的设备 id（实时快照按此匹配；Agent 主机为 null） */
+  /** SNMP/IPMI 主机关联的设备 id（实时快照按此匹配；Agent 主机为 null，按行 id 匹配） */
   device_id: string | null;
   hostname: string | null;
   ip: string | null;
@@ -133,6 +133,18 @@ const STATUS_META: Record<string, { badge: string; labelKey: string }> = {
   disabled: { badge: "agent-badge-disabled", labelKey: "agents.status_disabled" }
 };
 
+// 来源徽标：snmp/ipmi/agent 三路采集来源统一标注（未知来源不展示）
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  snmp: "agents.source_snmp",
+  ipmi: "agents.source_ipmi",
+  agent: "agents.source_agent"
+};
+
+function sourceBadgeText(source: string | null | undefined): string | null {
+  const key = source ? SOURCE_LABEL_KEYS[source] : undefined;
+  return key ? t(key) : null;
+}
+
 const detailQuery = useQuery({
   queryKey: computed(() => ["agent-detail", props.agentId]),
   queryFn: async (): Promise<AgentDetail | null> => {
@@ -162,8 +174,9 @@ const agent = computed(() => detailQuery.data.value);
 
 const raw = computed<RawMetrics>(() => agent.value?.raw_metrics ?? {});
 
-// ===== SNMP 实时快照（秒级 CPU/内存/温度/流量）：只读内存注册表，不落库 =====
-// 弹窗自带一条 SSE 订阅：SNMP 主机按 device_id 匹配，Agent 主机按 IP 兜底
+// ===== 实时快照（秒级 CPU/内存/磁盘/温度/流量）：只读内存注册表，不落库 =====
+// 弹窗自带一条 SSE 订阅：SNMP/IPMI 主机按 device_id 匹配（同设备两路快照
+// 独立，按行来源优先），Agent 主机按 monitored_hosts.id 匹配
 const { devices: liveDevices, connected: liveConnected } = useLiveAgents();
 
 /** 快照新鲜窗口：采样与 SSE 节拍均为 1s，留 10s 容忍丢包/短暂重连 */
@@ -197,8 +210,10 @@ const live = computed(() => {
     const rows = liveDevices.value.filter((row) => row.device_id === deviceId);
     return rows.find((row) => row.source === agent.value?.source) ?? rows[0];
   }
-  const ip = agent.value?.ip;
-  return ip ? liveDevices.value.find((row) => row.ip === ip) : undefined;
+  // Agent 主机：实时行 device_id 即 monitored_hosts.id，按行 id 精确匹配
+  return liveDevices.value.find(
+    (row) => row.source === "agent" && row.device_id === String(props.agentId)
+  );
 });
 
 // 采集时间推进 = 新快照到手；离线设备保留的陈旧快照不会推进，自然过期
@@ -507,9 +522,9 @@ function formatUnit(unit: string): (value: number) => string {
       <div class="agent-detail-summary">
         <span class="status-badge agent-detail-badge" :class="statusMeta?.badge">{{ statusText }}</span>
         <span
-          v-if="agent.source === 'snmp' || agent.source === 'ipmi'"
+          v-if="sourceBadgeText(agent.source)"
           class="agent-source-badge"
-        >{{ agent.source === "ipmi" ? t("agents.source_ipmi") : t("agents.source_snmp") }}</span>
+        >{{ sourceBadgeText(agent.source) }}</span>
         <span class="agent-detail-ip">{{ agent.ip || "-" }}</span>
       </div>
 
@@ -602,7 +617,7 @@ function formatUnit(unit: string): (value: number) => string {
         </section>
 
         <section v-if="!isIpmi" class="agent-detail-card">
-          <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}<span v-if="liveFresh" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
+          <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}<span v-if="agent.source === 'snmp' && liveFresh" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
           <!-- SNMP：每台设备只采一个端口（默认首端口），速率取秒级实时快照 -->
           <template v-if="agent.source === 'snmp'">
             <dl class="agent-kv">

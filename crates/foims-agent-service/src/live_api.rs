@@ -26,7 +26,8 @@ use foims_common::{AppError, msg};
 
 use crate::agents_api::rfc3339;
 use crate::live_poll::{
-    IpmiLiveDeviceSnapshot, IpmiLiveRegistry, LiveDeviceSnapshot, LiveRegistry,
+    AgentLiveDeviceSnapshot, AgentLiveRegistry, IpmiLiveDeviceSnapshot, IpmiLiveRegistry,
+    LiveDeviceSnapshot, LiveRegistry,
 };
 
 /// SSE 推送节拍：与默认采样间隔（1s）对齐，注册表有写入时逐秒下发。
@@ -40,6 +41,9 @@ pub trait LiveProvider {
 
     /// IPMI 实时快照注册表（与 SNMP 同一 SSE/列表载荷中按 source 区分）。
     fn ipmi_live_registry(&self) -> Arc<IpmiLiveRegistry>;
+
+    /// Agent 上报实时快照注册表（ingest 入库成功后写入，按 machine_id 键）。
+    fn agent_live_registry(&self) -> Arc<AgentLiveRegistry>;
 
     /// 服务关闭信号：SSE 长连接需在退出时主动结束，否则会阻塞优雅关闭。
     fn live_shutdown(&self) -> tokio::sync::broadcast::Receiver<()>;
@@ -69,13 +73,16 @@ pub struct LiveSummaryRow {
     pub device_name: String,
     pub ip: String,
     pub collected_at: String,
-    /// 采集来源：`snmp` | `ipmi`（前端徽标与展示板块据此区分）
+    /// 采集来源：`snmp` | `ipmi` | `agent`（前端徽标与展示板块据此区分）
     pub source: String,
     pub vendor: String,
     pub cpu_usage_pct: Option<f64>,
     pub mem_usage_pct: Option<f64>,
     pub mem_used: Option<u64>,
     pub mem_total: Option<u64>,
+    /// 磁盘使用率（仅 agent 来源有实时读数；SNMP/IPMI 为 None，磁盘只有
+    /// 5 分钟全量轮询有读数）
+    pub disk_usage_pct: Option<f64>,
     pub temperature_c: Option<f64>,
     pub uptime_secs: Option<i64>,
     /// 本轮流量采集端口名（未配置时为首端口）
@@ -128,6 +135,7 @@ fn summary_row(device: &LiveDeviceSnapshot) -> LiveSummaryRow {
         mem_usage_pct: snapshot.mem_usage_pct,
         mem_used: snapshot.mem_used,
         mem_total: snapshot.mem_total,
+        disk_usage_pct: None,
         temperature_c: snapshot.temperature_c,
         uptime_secs: snapshot.uptime_secs,
         monitor_if: snapshot.monitor_if.clone(),
@@ -166,6 +174,7 @@ fn ipmi_summary_row(device: &IpmiLiveDeviceSnapshot) -> LiveSummaryRow {
         mem_usage_pct: None,
         mem_used: None,
         mem_total: None,
+        disk_usage_pct: None,
         temperature_c: snapshot.max_temp,
         uptime_secs: None,
         monitor_if: None,
@@ -180,13 +189,48 @@ fn ipmi_summary_row(device: &IpmiLiveDeviceSnapshot) -> LiveSummaryRow {
     }
 }
 
-/// 全量摘要（SNMP + IPMI）：按设备名/IP 排序，保证 SSE 与列表输出稳定可比。
-fn summary_rows(live: &LiveRegistry, ipmi: &IpmiLiveRegistry) -> Vec<LiveSummaryRow> {
+/// Agent 上报快照转摘要行：device_id 取 `monitored_hosts.id`（主机列表按行 id
+/// 匹配），vendor 展示操作系统名；流量为各网卡合计（与入库历史快照同口径）。
+fn agent_summary_row(host: &AgentLiveDeviceSnapshot) -> LiveSummaryRow {
+    let snapshot = &host.snapshot;
+    LiveSummaryRow {
+        device_id: host.host_id,
+        device_name: host.device_name.clone(),
+        ip: host.ip.clone(),
+        collected_at: rfc3339(snapshot.collected_at),
+        source: "agent".to_string(),
+        vendor: host.os.clone(),
+        cpu_usage_pct: snapshot.cpu_usage_pct,
+        mem_usage_pct: snapshot.mem_usage_pct,
+        mem_used: snapshot.mem_used,
+        mem_total: snapshot.mem_total,
+        disk_usage_pct: snapshot.disk_usage_pct,
+        temperature_c: snapshot.temperature_c,
+        uptime_secs: snapshot.uptime_secs,
+        monitor_if: None,
+        rx_bps: snapshot.rx_bps,
+        tx_bps: snapshot.tx_bps,
+        ports_up: 0,
+        ports_total: 0,
+        partial: false,
+        power_on: None,
+        fans: Vec::new(),
+        volts: Vec::new(),
+    }
+}
+
+/// 全量摘要（SNMP + IPMI + Agent）：按设备名/IP 排序，保证 SSE 与列表输出稳定可比。
+fn summary_rows(
+    live: &LiveRegistry,
+    ipmi: &IpmiLiveRegistry,
+    agent: &AgentLiveRegistry,
+) -> Vec<LiveSummaryRow> {
     let mut rows: Vec<LiveSummaryRow> = live
         .all()
         .iter()
         .map(|d| summary_row(d))
         .chain(ipmi.all().iter().map(|d| ipmi_summary_row(d)))
+        .chain(agent.all().iter().map(|d| agent_summary_row(d)))
         .collect();
     rows.sort_by(|a, b| {
         a.device_name
@@ -223,24 +267,26 @@ pub async fn list_live<S: LiveProvider>(
 ) -> Result<Response, AppError> {
     let live = state.live_registry();
     let ipmi = state.ipmi_live_registry();
-    let rows = summary_rows(&live, &ipmi);
+    let agent = state.agent_live_registry();
+    let rows = summary_rows(&live, &ipmi, &agent);
     Ok(foims_common::ok_json(
         rows,
         msg("server.agent.list_retrieved"),
     ))
 }
 
-/// SSE 流的去重状态：两个注册表代数 + 已推送的设备快照时间 + 关闭信号。
+/// SSE 流的去重状态：三个注册表代数 + 已推送的设备快照时间 + 关闭信号。
 struct StreamState {
     revision: u64,
     ipmi_revision: u64,
+    agent_revision: u64,
     collected_at: Option<DateTime<Utc>>,
     shutdown: tokio::sync::broadcast::Receiver<()>,
 }
 
 /// GET /api/agents/live/stream：SSE 变更推送。
 ///
-/// - `summary`：注册表有写入时下发全部设备摘要；
+/// - `summary`：任一注册表有写入时下发全部设备摘要；
 /// - `device`：仅当请求带 `device_id` 且该设备快照更新时下发端口明细。
 ///
 /// 设备不可达期间注册表保留最后一份成功快照（不推送空值），消费方按
@@ -252,11 +298,13 @@ pub async fn live_stream<S: LiveProvider>(
 ) -> Response {
     let registry = state.live_registry();
     let ipmi_registry = state.ipmi_live_registry();
+    let agent_registry = state.agent_live_registry();
     let device_id = query.device_id;
     let tick = IntervalStream::new(tokio::time::interval(Duration::from_secs(SSE_TICK_SECS)));
     let stream_state = StreamState {
         revision: u64::MAX,
         ipmi_revision: u64::MAX,
+        agent_revision: u64::MAX,
         collected_at: None,
         shutdown: state.live_shutdown(),
     };
@@ -271,10 +319,17 @@ pub async fn live_stream<S: LiveProvider>(
             let mut events: Vec<Result<Event, Infallible>> = Vec::new();
             let revision = registry.revision();
             let ipmi_revision = ipmi_registry.revision();
-            if revision != stream_state.revision || ipmi_revision != stream_state.ipmi_revision {
+            let agent_revision = agent_registry.revision();
+            if revision != stream_state.revision
+                || ipmi_revision != stream_state.ipmi_revision
+                || agent_revision != stream_state.agent_revision
+            {
                 stream_state.revision = revision;
                 stream_state.ipmi_revision = ipmi_revision;
-                if let Ok(data) = serde_json::to_string(&summary_rows(&registry, &ipmi_registry)) {
+                stream_state.agent_revision = agent_revision;
+                if let Ok(data) =
+                    serde_json::to_string(&summary_rows(&registry, &ipmi_registry, &agent_registry))
+                {
                     events.push(Ok(Event::default().event("summary").data(data)));
                 }
             }
@@ -309,9 +364,10 @@ pub async fn live_stream<S: LiveProvider>(
 
 #[cfg(test)]
 mod tests {
-    use super::{device_detail, ipmi_summary_row, summary_row, summary_rows};
+    use super::{agent_summary_row, device_detail, ipmi_summary_row, summary_row, summary_rows};
     use crate::live_poll::{
-        IpmiLiveDeviceSnapshot, IpmiLiveRegistry, LiveDeviceSnapshot, LiveRegistry,
+        AgentLiveDeviceSnapshot, AgentLiveRegistry, AgentLiveSnapshot, IpmiLiveDeviceSnapshot,
+        IpmiLiveRegistry, LiveDeviceSnapshot, LiveRegistry,
     };
     use chrono::Utc;
     use foims_ipmi::IpmiLiveSnapshot;
@@ -378,6 +434,28 @@ mod tests {
         }
     }
 
+    fn sample_agent_snapshot(name: &str) -> AgentLiveDeviceSnapshot {
+        AgentLiveDeviceSnapshot {
+            host_id: Uuid::new_v4(),
+            machine_id: "m-1234567890abcdef".to_string(),
+            device_name: name.to_string(),
+            ip: "203.0.113.7".to_string(),
+            os: "Ubuntu".to_string(),
+            snapshot: AgentLiveSnapshot {
+                collected_at: Utc::now(),
+                cpu_usage_pct: Some(30.0),
+                mem_used: Some(512),
+                mem_total: Some(2048),
+                mem_usage_pct: Some(25.0),
+                disk_usage_pct: Some(62.5),
+                temperature_c: Some(47.5),
+                uptime_secs: Some(7200),
+                rx_bps: Some(300.0),
+                tx_bps: Some(400.0),
+            },
+        }
+    }
+
     #[test]
     fn 摘要_统计端口与厂商() {
         let row = summary_row(&sample_snapshot("sw-1"));
@@ -403,17 +481,36 @@ mod tests {
     }
 
     #[test]
-    fn 摘要列表_合并snmp与ipmi并按设备名排序() {
+    fn agent摘要_资源与磁盘读数带主机id() {
+        let host = sample_agent_snapshot("web-01");
+        let row = agent_summary_row(&host);
+        assert_eq!(row.source, "agent");
+        assert_eq!(row.vendor, "Ubuntu");
+        // device_id 为 monitored_hosts.id，供主机列表按行 id 匹配
+        assert_eq!(row.device_id, host.host_id);
+        assert_eq!(row.cpu_usage_pct, Some(30.0));
+        assert_eq!(row.disk_usage_pct, Some(62.5));
+        assert_eq!(row.temperature_c, Some(47.5));
+        assert_eq!(row.rx_bps, Some(300.0));
+        // Agent 无端口/电源语义
+        assert_eq!(row.ports_total, 0);
+        assert_eq!(row.power_on, None);
+    }
+
+    #[test]
+    fn 摘要列表_合并三来源并按设备名排序() {
         let registry = LiveRegistry::new();
         registry.upsert(sample_snapshot("sw-b"));
         registry.upsert(sample_snapshot("sw-a"));
         let ipmi = IpmiLiveRegistry::new();
         ipmi.upsert(sample_ipmi_snapshot("bmc-m"));
-        let names: Vec<String> = summary_rows(&registry, &ipmi)
+        let agent = AgentLiveRegistry::new();
+        agent.upsert(sample_agent_snapshot("web-01"));
+        let names: Vec<String> = summary_rows(&registry, &ipmi, &agent)
             .into_iter()
             .map(|row| row.device_name)
             .collect();
-        assert_eq!(names, vec!["bmc-m", "sw-a", "sw-b"]);
+        assert_eq!(names, vec!["bmc-m", "sw-a", "sw-b", "web-01"]);
     }
 
     #[test]
