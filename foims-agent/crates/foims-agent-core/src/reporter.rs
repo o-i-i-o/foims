@@ -8,6 +8,10 @@
 //!   上报循环按上报间隔将队列整批打包为 [`AgentReportBatch`] 一次发送
 //!   （上限 120 帧 / 8 MiB，先到为准，满则弃最旧并累计 dropped），
 //!   大规模部署（如 1500 台）下显著降低 TLS/QUIC 握手与请求开销；
+//! - 实时通道：每帧采集后同时投递独立通道直发 `POST /agent/v1/realtime`
+//!   （服务端不入库、仅覆盖内存实时注册表，供主机监控页秒级展示），
+//!   best-effort 不重试不排队，失败帧由下一帧自然取代；批量通道（入库）
+//!   节奏与语义不变；
 //! - 链路：HTTP/3 mTLS 请求/应答（QUIC 连接复用，空闲 120s 主动关闭；
 //!   请求失败自动重建并重试一次；TLS 物料仅在重建时从磁盘读取，
 //!   续期换证后下一批自动生效）；
@@ -35,11 +39,15 @@ use foims_protocol::report::{
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
+use tokio::sync::mpsc;
 
 /// 上报路径（与服务端 `POST /agent/v1/report` 一致）
 pub const REPORT_PATH: &str = "/agent/v1/report";
 /// 证书续期路径（与服务端 `POST /agent/v1/renew` 一致）
 pub const RENEW_PATH: &str = "/agent/v1/renew";
+/// 实时通道路径（与服务端 `POST /agent/v1/realtime` 一致）：采集出帧即送，
+/// 服务端不入库、仅覆盖内存实时注册表（主机监控页秒级展示）
+pub const REALTIME_PATH: &str = "/agent/v1/realtime";
 /// 缺省上报间隔（秒）
 pub const DEFAULT_INTERVAL_SECS: u64 = 60;
 /// 服务端可下发的间隔上下限
@@ -433,10 +441,13 @@ impl<P: Platform> Reporter<P> {
         Ok(report)
     }
 
-    /// 采集一帧并入队（启动时用，保证首批不空）
-    async fn collect_into_queue(&self) {
+    /// 采集一帧并入队（启动时用，保证首批不空）；同时投递实时通道直发
+    async fn collect_into_queue(&self, realtime_tx: &mpsc::Sender<AgentReport>) {
         match self.collect_report().await {
             Ok(report) => {
+                if let Err(error) = realtime_tx.try_send(report.clone()) {
+                    tracing::debug!(%error, "实时通道拥塞，启动帧跳过实时直发");
+                }
                 let mut guard = self
                     .queue
                     .lock()
@@ -470,9 +481,19 @@ impl<P: Platform> Reporter<P> {
             version = %self.agent_version,
             "Agent 上报循环启动"
         );
+        // 实时通道：采集出帧即送（秒级展示用，best-effort 不重试），与批量
+        // 队列并行——批量通道仍按上报间隔组批入库，两路互不影响
+        let (realtime_tx, realtime_rx) = mpsc::channel::<AgentReport>(REALTIME_CHANNEL_CAP);
+        let realtime_channel = RealtimeChannel {
+            config: self.config.clone(),
+            agent_version: self.agent_version.clone(),
+            transport: None,
+        };
+        tokio::spawn(realtime_channel.run(realtime_rx));
         // 启动即采集一帧，保证首次上报不空跑
-        self.collect_into_queue().await;
-        // 采集任务：与上报解耦，按采集间隔持续产帧入队（失败仅记日志）
+        self.collect_into_queue(&realtime_tx).await;
+        // 采集任务：与上报解耦，按采集间隔持续产帧入队（失败仅记日志）；
+        // 每帧同时投递实时通道（通道满即丢帧，实时语义为最新帧胜出）
         let platform = Arc::clone(&self.platform);
         let queue = Arc::clone(&self.queue);
         let collect_interval = Duration::from_secs(self.config.collect_interval_secs);
@@ -490,6 +511,9 @@ impl<P: Platform> Reporter<P> {
                 .await;
                 match collected {
                     Ok(Ok(report)) => {
+                        if let Err(error) = realtime_tx.try_send(report.clone()) {
+                            tracing::debug!(%error, "实时通道拥塞，本帧跳过");
+                        }
                         let mut guard = queue
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -701,97 +725,12 @@ impl<P: Platform> Reporter<P> {
             Some(link) => link,
             None => return Err(ReporterError::Report("传输状态缺失".to_string())),
         };
-        let request = http::Request::builder()
-            .method(http::Method::POST)
-            .uri(request_uri(link.remote_addr, path))
-            .header("content-type", "application/json")
-            .header("authorization", format!("Bearer {}", self.config.token))
-            .header("user-agent", format!("foims-agent/{}", self.agent_version))
-            .body(())
-            .map_err(transport)?;
-        let mut stream = tokio::time::timeout(REQUEST_TIMEOUT, link.sender.send_request(request))
-            .await
-            .map_err(|_| ReporterError::Report("发送请求超时".to_string()))?
-            .map_err(transport)?;
-        stream
-            .send_data(Bytes::copy_from_slice(body))
-            .await
-            .map_err(transport)?;
-        stream.finish().await.map_err(transport)?;
-
-        let response = tokio::time::timeout(REQUEST_TIMEOUT, stream.recv_response())
-            .await
-            .map_err(|_| ReporterError::Report("等待响应超时".to_string()))?
-            .map_err(transport)?;
-        let mut resp_body: Vec<u8> = Vec::new();
-        loop {
-            let chunk = tokio::time::timeout(REQUEST_TIMEOUT, stream.recv_data())
-                .await
-                .map_err(|_| ReporterError::Report("读取响应超时".to_string()))?
-                .map_err(transport)?;
-            let Some(chunk) = chunk else { break };
-            // 服务端响应仅为控制面 JSON（回执/续期/自更新指令），
-            // 异常超大体视为链路异常，防止无界读取耗尽内存
-            if resp_body.len() + chunk.remaining() > MAX_RESPONSE_BYTES {
-                return Err(ReporterError::Report(format!(
-                    "响应体超过 {MAX_RESPONSE_BYTES} 字节上限"
-                )));
-            }
-            resp_body.extend_from_slice(chunk.chunk());
-        }
-        link.last_used = Instant::now();
-        tracing::debug!(bytes = resp_body.len(), "收到服务端响应");
-
-        Ok((response.status(), resp_body))
+        h3_post_once(link, &self.config.token, &self.agent_version, path, body).await
     }
 
     /// 建立新的复用传输：解析地址 → QUIC 握手 → h3 连接（驱动随连接后台运行）
     async fn build_transport(&self) -> Result<H3Transport, ReporterError> {
-        // 地址解析（域名/IPv4/IPv6 均可；IPv6 友好）
-        let addr: SocketAddr = tokio::net::lookup_host(self.config.server_addr.as_str())
-            .await
-            .map_err(|error| {
-                ReporterError::Report(format!("解析服务地址 {}: {error}", self.config.server_addr))
-            })?
-            .next()
-            .ok_or_else(|| ReporterError::Report("服务地址无可达地址".to_string()))?;
-
-        // TLS：信任 ca.pem，携带客户端证书，ALPN "h3"（IP 直连走 SAN IP 校验）
-        let tls = self.build_tls_config()?;
-        let client_config = quinn::ClientConfig::new(Arc::new(
-            quinn::crypto::rustls::QuicClientConfig::try_from(tls).map_err(transport)?,
-        ));
-        let local: SocketAddr = if addr.is_ipv4() {
-            "0.0.0.0:0".parse().map_err(transport)?
-        } else {
-            "[::]:0".parse().map_err(transport)?
-        };
-        let mut endpoint = quinn::Endpoint::client(local).map_err(transport)?;
-        endpoint.set_default_client_config(client_config);
-
-        // 连接：server 名传原始主机部分（pki-types 自动按 IP 字面量/DNS 处理）
-        let server_name = parse_host_port(&self.config.server_addr)
-            .map_err(|error| ReporterError::Config(format!("server_addr 失效: {error}")))?;
-        let connecting = endpoint.connect(addr, server_name).map_err(transport)?;
-        let connection = tokio::time::timeout(HANDSHAKE_TIMEOUT, connecting)
-            .await
-            .map_err(|_| ReporterError::Report(format!("连接 {addr} 超时")))?
-            .map_err(transport)?;
-
-        let (mut driver, sender) = h3::client::new(h3_quinn::Connection::new(connection))
-            .await
-            .map_err(transport)?;
-        tokio::spawn(async move {
-            let error = driver.wait_idle().await;
-            tracing::debug!(%error, "h3 驱动结束");
-        });
-        tracing::debug!(remote = %addr, "QUIC 复用连接已建立");
-        Ok(H3Transport {
-            endpoint,
-            sender,
-            remote_addr: addr,
-            last_used: Instant::now(),
-        })
+        build_h3_transport(&self.config.server_addr, &self.config.cert_dir).await
     }
 
     /// 经 HTTP/3 mTLS 上报一批并解析控制面响应
@@ -824,50 +763,221 @@ impl<P: Platform> Reporter<P> {
         }
         serde_json::from_slice(&resp_body).map_err(ReporterError::from)
     }
+}
 
-    /// 构建客户端 TLS 配置：ca.pem 信任锚 + 客户端证书/私钥 + ALPN h3
-    fn build_tls_config(&self) -> Result<rustls::ClientConfig, ReporterError> {
-        let ca_path = self.config.cert_dir.join("ca.pem");
-        let cert_path = self.config.cert_dir.join("client.pem");
-        let key_path = self.config.cert_dir.join("client.key");
+/// 构建客户端 TLS 配置：ca.pem 信任锚 + 客户端证书/私钥 + ALPN h3
+/// （上报循环与实时通道共用同一物料与建链口径）
+fn build_client_tls_config(cert_dir: &Path) -> Result<rustls::ClientConfig, ReporterError> {
+    let ca_path = cert_dir.join("ca.pem");
+    let cert_path = cert_dir.join("client.pem");
+    let key_path = cert_dir.join("client.key");
 
-        let mut roots = rustls::RootCertStore::empty();
-        for cert in CertificateDer::pem_file_iter(&ca_path).map_err(|error| {
-            ReporterError::Config(format!("打开 {} 失败: {error}", ca_path.display()))
-        })? {
-            let cert = cert.map_err(|error| {
-                ReporterError::Config(format!("解析 {}: {error}", ca_path.display()))
-            })?;
-            roots.add(cert).map_err(transport)?;
-        }
-        let verifier = rustls::client::WebPkiServerVerifier::builder(Arc::new(roots))
-            .build()
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in CertificateDer::pem_file_iter(&ca_path).map_err(|error| {
+        ReporterError::Config(format!("打开 {} 失败: {error}", ca_path.display()))
+    })? {
+        let cert = cert.map_err(|error| {
+            ReporterError::Config(format!("解析 {}: {error}", ca_path.display()))
+        })?;
+        roots.add(cert).map_err(transport)?;
+    }
+    let verifier = rustls::client::WebPkiServerVerifier::builder(Arc::new(roots))
+        .build()
+        .map_err(transport)?;
+    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(&cert_path)
+        .map_err(|error| {
+            ReporterError::Config(format!("打开 {} 失败: {error}", cert_path.display()))
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| ReporterError::Config(format!("解析 {}: {error}", cert_path.display())))?;
+    if certs.is_empty() {
+        return Err(ReporterError::Config(format!(
+            "客户端证书为空: {}",
+            cert_path.display()
+        )));
+    }
+    let key = PrivateKeyDer::from_pem_file(&key_path)
+        .map_err(|error| ReporterError::Config(format!("解析 {}: {error}", key_path.display())))?;
+
+    let mut tls = rustls::ClientConfig::builder()
+        .with_webpki_verifier(verifier)
+        .with_client_auth_cert(certs, key)
+        .map_err(|error| ReporterError::Config(format!("装载客户端证书/私钥: {error}")))?;
+    // HTTP/3 要求 ALPN 协议名 "h3"
+    tls.alpn_protocols = vec![b"h3".to_vec()];
+    Ok(tls)
+}
+
+/// 建立新的复用传输：解析地址 → QUIC 握手 → h3 连接（驱动随连接后台运行）。
+/// 上报循环与实时通道各自持有独立连接，共用本建链逻辑。
+async fn build_h3_transport(
+    server_addr: &str,
+    cert_dir: &Path,
+) -> Result<H3Transport, ReporterError> {
+    // 地址解析（域名/IPv4/IPv6 均可；IPv6 友好）
+    let addr: SocketAddr = tokio::net::lookup_host(server_addr)
+        .await
+        .map_err(|error| ReporterError::Report(format!("解析服务地址 {server_addr}: {error}")))?
+        .next()
+        .ok_or_else(|| ReporterError::Report("服务地址无可达地址".to_string()))?;
+
+    // TLS：信任 ca.pem，携带客户端证书，ALPN "h3"（IP 直连走 SAN IP 校验）
+    let tls = build_client_tls_config(cert_dir)?;
+    let client_config = quinn::ClientConfig::new(Arc::new(
+        quinn::crypto::rustls::QuicClientConfig::try_from(tls).map_err(transport)?,
+    ));
+    let local: SocketAddr = if addr.is_ipv4() {
+        "0.0.0.0:0".parse().map_err(transport)?
+    } else {
+        "[::]:0".parse().map_err(transport)?
+    };
+    let mut endpoint = quinn::Endpoint::client(local).map_err(transport)?;
+    endpoint.set_default_client_config(client_config);
+
+    // 连接：server 名传原始主机部分（pki-types 自动按 IP 字面量/DNS 处理）
+    let server_name = parse_host_port(server_addr)
+        .map_err(|error| ReporterError::Config(format!("server_addr 失效: {error}")))?;
+    let connecting = endpoint.connect(addr, server_name).map_err(transport)?;
+    let connection = tokio::time::timeout(HANDSHAKE_TIMEOUT, connecting)
+        .await
+        .map_err(|_| ReporterError::Report(format!("连接 {addr} 超时")))?
+        .map_err(transport)?;
+
+    let (mut driver, sender) = h3::client::new(h3_quinn::Connection::new(connection))
+        .await
+        .map_err(transport)?;
+    tokio::spawn(async move {
+        let error = driver.wait_idle().await;
+        tracing::debug!(%error, "h3 驱动结束");
+    });
+    tracing::debug!(remote = %addr, "QUIC 复用连接已建立");
+    Ok(H3Transport {
+        endpoint,
+        sender,
+        remote_addr: addr,
+        last_used: Instant::now(),
+    })
+}
+
+/// 单次 h3 POST JSON 请求/响应交换（上报与实时通道共用的请求模板）：
+/// 发送请求体并读取完整响应（响应体超限视为链路异常），更新连接最近使用时刻
+async fn h3_post_once(
+    link: &mut H3Transport,
+    token: &str,
+    agent_version: &str,
+    path: &str,
+    body: &[u8],
+) -> Result<(http::StatusCode, Vec<u8>), ReporterError> {
+    let request = http::Request::builder()
+        .method(http::Method::POST)
+        .uri(request_uri(link.remote_addr, path))
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {token}"))
+        .header("user-agent", format!("foims-agent/{agent_version}"))
+        .body(())
+        .map_err(transport)?;
+    let mut stream = tokio::time::timeout(REQUEST_TIMEOUT, link.sender.send_request(request))
+        .await
+        .map_err(|_| ReporterError::Report("发送请求超时".to_string()))?
+        .map_err(transport)?;
+    stream
+        .send_data(Bytes::copy_from_slice(body))
+        .await
+        .map_err(transport)?;
+    stream.finish().await.map_err(transport)?;
+
+    let response = tokio::time::timeout(REQUEST_TIMEOUT, stream.recv_response())
+        .await
+        .map_err(|_| ReporterError::Report("等待响应超时".to_string()))?
+        .map_err(transport)?;
+    let mut resp_body: Vec<u8> = Vec::new();
+    loop {
+        let chunk = tokio::time::timeout(REQUEST_TIMEOUT, stream.recv_data())
+            .await
+            .map_err(|_| ReporterError::Report("读取响应超时".to_string()))?
             .map_err(transport)?;
-        let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(&cert_path)
-            .map_err(|error| {
-                ReporterError::Config(format!("打开 {} 失败: {error}", cert_path.display()))
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| {
-                ReporterError::Config(format!("解析 {}: {error}", cert_path.display()))
-            })?;
-        if certs.is_empty() {
-            return Err(ReporterError::Config(format!(
-                "客户端证书为空: {}",
-                cert_path.display()
+        let Some(chunk) = chunk else { break };
+        // 服务端响应仅为控制面 JSON（回执/续期指令/实时回执），
+        // 异常超大体视为链路异常，防止无界读取耗尽内存
+        if resp_body.len() + chunk.remaining() > MAX_RESPONSE_BYTES {
+            return Err(ReporterError::Report(format!(
+                "响应体超过 {MAX_RESPONSE_BYTES} 字节上限"
             )));
         }
-        let key = PrivateKeyDer::from_pem_file(&key_path).map_err(|error| {
-            ReporterError::Config(format!("解析 {}: {error}", key_path.display()))
-        })?;
+        resp_body.extend_from_slice(chunk.chunk());
+    }
+    link.last_used = Instant::now();
+    tracing::debug!(bytes = resp_body.len(), "收到服务端响应");
 
-        let mut tls = rustls::ClientConfig::builder()
-            .with_webpki_verifier(verifier)
-            .with_client_auth_cert(certs, key)
-            .map_err(|error| ReporterError::Config(format!("装载客户端证书/私钥: {error}")))?;
-        // HTTP/3 要求 ALPN 协议名 "h3"
-        tls.alpn_protocols = vec![b"h3".to_vec()];
-        Ok(tls)
+    Ok((response.status(), resp_body))
+}
+
+/// 实时通道容量：同机采集帧逐个直发，通道满即丢帧（实时语义为最新帧胜出，
+/// 拥塞时保留较新帧）；容量 2 足以覆盖「上一帧在途 + 本帧到达」
+const REALTIME_CHANNEL_CAP: usize = 2;
+
+/// 实时通道：独立于上报循环的复用连接（同一 TLS 物料各自建链，互不阻塞），
+/// 采集出帧即送 `POST REALTIME_PATH`（服务端不入库、仅覆盖内存实时注册表）。
+/// best-effort 语义：失败不重试不排队，下一帧自然补上。
+struct RealtimeChannel {
+    config: ReporterConfig,
+    agent_version: String,
+    /// 复用传输（None 表示下一帧请求时重建）
+    transport: Option<H3Transport>,
+}
+
+impl RealtimeChannel {
+    /// 关闭并丢弃复用传输（下一帧请求时重建）
+    fn close_transport(&mut self) {
+        if let Some(transport) = self.transport.take() {
+            transport.endpoint.close(0u32.into(), b"done");
+        }
+    }
+
+    /// 实时帧 POST（单次尝试，失败即弃帧）
+    async fn post(&mut self, report: &AgentReport) -> Result<(), ReporterError> {
+        // 空闲超限：主动关闭，走下方重建路径
+        if self
+            .transport
+            .as_ref()
+            .is_some_and(|t| t.last_used.elapsed() >= Duration::from_secs(IDLE_CLOSE_SECS))
+        {
+            tracing::debug!(idle_secs = IDLE_CLOSE_SECS, "实时连接空闲超时，关闭重建");
+            self.close_transport();
+        }
+        if self.transport.is_none() {
+            self.transport =
+                Some(build_h3_transport(&self.config.server_addr, &self.config.cert_dir).await?);
+        }
+        let body = serde_json::to_vec(report)
+            .map_err(|error| ReporterError::Report(format!("序列化实时帧: {error}")))?;
+        let Some(link) = self.transport.as_mut() else {
+            return Err(ReporterError::Report("传输状态缺失".to_string()));
+        };
+        let (status, _) = h3_post_once(
+            link,
+            &self.config.token,
+            &self.agent_version,
+            REALTIME_PATH,
+            &body,
+        )
+        .await?;
+        if status != http::StatusCode::OK {
+            return Err(ReporterError::Report(format!(
+                "服务端返回 {status}（401 令牌无效 / 403 已禁用 / 404 未注册 / 413 超限）"
+            )));
+        }
+        Ok(())
+    }
+
+    /// 通道主循环：逐帧直发；请求失败关闭连接（下一帧重建），本帧不重试
+    async fn run(mut self, mut rx: mpsc::Receiver<AgentReport>) {
+        while let Some(report) = rx.recv().await {
+            if let Err(error) = self.post(&report).await {
+                tracing::debug!(%error, "实时帧上报失败，本帧跳过");
+                self.close_transport();
+            }
+        }
     }
 }
 

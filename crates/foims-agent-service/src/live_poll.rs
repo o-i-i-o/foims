@@ -918,10 +918,28 @@ impl AgentLiveRegistry {
         Self::default()
     }
 
+    /// 覆盖写入：仅当新快照采集时刻更新时生效（单调合并）。
+    ///
+    /// 批量入库路径与实时通道并发写同一注册表：实时帧先到、批量帧（同帧
+    /// 或更旧）后到的场景下，防止旧帧回退快照。未更新时静默跳过——代数
+    /// 不变，SSE 不产生空推送。
     pub fn upsert(&self, snapshot: AgentLiveDeviceSnapshot) {
+        let mut replaced = false;
         self.hosts
-            .insert(snapshot.machine_id.clone(), Arc::new(snapshot));
-        self.revision.fetch_add(1, Ordering::Relaxed);
+            .entry(snapshot.machine_id.clone())
+            .and_modify(|existing| {
+                if snapshot.snapshot.collected_at > existing.snapshot.collected_at {
+                    *existing = Arc::new(snapshot.clone());
+                    replaced = true;
+                }
+            })
+            .or_insert_with(|| {
+                replaced = true;
+                Arc::new(snapshot.clone())
+            });
+        if replaced {
+            self.revision.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     /// 当前写入代数（只增不减，消费方比对前后值判断是否有更新）。
@@ -1016,14 +1034,14 @@ mod tests {
     fn agent注册表_同机覆盖且代数推进() {
         let registry = AgentLiveRegistry::new();
         let machine_id = "m-1234567890abcdef";
-        let mk = |host_id: Uuid| AgentLiveDeviceSnapshot {
+        let mk = |host_id: Uuid, collected_at: DateTime<Utc>| AgentLiveDeviceSnapshot {
             host_id,
             machine_id: machine_id.to_string(),
             device_name: "web-01".to_string(),
             ip: "192.0.2.20".to_string(),
             os: "Ubuntu".to_string(),
             snapshot: AgentLiveSnapshot {
-                collected_at: Utc::now(),
+                collected_at,
                 cpu_usage_pct: Some(12.5),
                 mem_used: Some(256),
                 mem_total: Some(1024),
@@ -1036,16 +1054,25 @@ mod tests {
             },
         };
         assert!(registry.is_empty());
-        registry.upsert(mk(Uuid::new_v4()));
+        let base = Utc::now();
+        registry.upsert(mk(Uuid::new_v4(), base));
         assert_eq!(registry.len(), 1);
         assert!(registry.revision() >= 1);
         // 删除主机后同机重注册：host_id 更新、条目数不变
         let new_host = Uuid::new_v4();
-        registry.upsert(mk(new_host));
+        registry.upsert(mk(new_host, base + chrono::Duration::seconds(5)));
         assert_eq!(registry.len(), 1);
         let entry = registry.get(machine_id).expect("同键覆盖后应可读");
         assert_eq!(entry.host_id, new_host);
-        assert_eq!(entry.age_secs(Utc::now()), 0);
+        // 批量帧晚于实时帧到达（采集时刻更旧）：不得回退快照，也不推进代数
+        let revision = registry.revision();
+        registry.upsert(mk(new_host, base));
+        let entry = registry.get(machine_id).expect("旧帧不应删除条目");
+        assert_eq!(
+            entry.snapshot.collected_at,
+            base + chrono::Duration::seconds(5)
+        );
+        assert_eq!(registry.revision(), revision);
         registry.remove(machine_id);
         assert!(registry.is_empty());
     }

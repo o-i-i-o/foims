@@ -3,10 +3,13 @@
 //! 本模块面向 agent 的机器接口（QUIC/HTTP3，无 ApiResponse 信封），错误
 //! 以 `{"error": "..."}` 简单格式返回；`ingest` 产生 401 令牌无效、403 已禁用、
 //! 400 请求非法、429 上报过于频繁、500 入库失败，体积超限的 413 由传输层
-//! [`crate::report_server`] 产生。
+//! [`crate::report_server`] 产生；`realtime`（实时通道，不入库）产生
+//! 401/403/404 未注册/400/500。
 //!
 //! 入库成功后同步覆盖 [`crate::live_poll::AgentLiveRegistry`]（内存实时
 //! 快照，不落库），供主机监控页秒级展示；429 频控/禁用/失败路径不覆盖。
+//! 实时通道（[`realtime`]）不经批量攒批与频控，采集出帧即送，同样覆盖
+//! 注册表；注册表按 collected_at 单调合并，双路并发写不回退快照。
 //!
 //! 认证模型（共享注册令牌）：所有 agent 使用配置文件中的同一注册令牌
 //! （`agent.enrollment_token`，经配置包分发）作 Bearer 凭据，服务端比对
@@ -23,6 +26,10 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::report_server::ReportContext;
+
+/// 实时通道路径（与 agent 端 reporter.rs 的 REALTIME_PATH 常量一致）：
+/// 采集出帧即送的秒级通道，不入库，仅覆盖内存实时注册表
+pub const REALTIME_PATH: &str = "/agent/v1/realtime";
 
 /// 采集时刻超前服务端时钟允许的最大偏差（秒，设计 §3.3：时钟漂移防护）
 const MAX_CLOCK_SKEW_SECS: i64 = 300;
@@ -101,6 +108,38 @@ fn sum_net_bps(
     get: fn(&foims_common::report::ReportNet) -> f64,
 ) -> Option<f64> {
     (!nets.is_empty()).then(|| nets.iter().map(get).sum())
+}
+
+/// 由一次已接受的上报帧构造实时快照：批量入库路径与实时通道（[`realtime`]）
+/// 共用，保证快照读数口径一致（CPU/内存/磁盘/温度/运行时长/网卡流量合计）。
+fn agent_live_snapshot(
+    host_id: Uuid,
+    machine_id: String,
+    hostname: String,
+    ip: String,
+    os: String,
+    report: &AgentReport,
+    collected_at: DateTime<Utc>,
+) -> crate::live_poll::AgentLiveDeviceSnapshot {
+    crate::live_poll::AgentLiveDeviceSnapshot {
+        host_id,
+        machine_id,
+        device_name: hostname,
+        ip,
+        os,
+        snapshot: crate::live_poll::AgentLiveSnapshot {
+            collected_at,
+            cpu_usage_pct: Some(report.cpu.usage_pct),
+            mem_used: Some(report.memory.used),
+            mem_total: Some(report.memory.total),
+            mem_usage_pct: mem_usage_pct(report.memory.total, report.memory.used),
+            disk_usage_pct: disk_usage_pct(&report.disks),
+            temperature_c: max_temp(&report.sensors),
+            uptime_secs: Some(i64::try_from(report.system.uptime_secs).unwrap_or(i64::MAX)),
+            rx_bps: sum_net_bps(&report.nets, |n| n.rx_bps),
+            tx_bps: sum_net_bps(&report.nets, |n| n.tx_bps),
+        },
+    }
 }
 
 /// 校验采集时刻：RFC 3339 可解析；未来方向偏差 ≤5 分钟（时钟漂移防护），
@@ -451,26 +490,15 @@ pub async fn ingest(
     // 实时快照（不落库）：入库成功即覆盖内存注册表，SSE 下一节拍推送前端；
     // 429 频控/禁用/入库失败路径不覆盖，注册表始终反映已接受的上报。
     // machine_id 为键使删除主机后重注册（新 host_id）自动覆盖旧条目
-    ctx.agent_live
-        .upsert(crate::live_poll::AgentLiveDeviceSnapshot {
-            host_id: agent_id,
-            machine_id: machine_id.clone(),
-            device_name: last_trimmed.hostname.clone(),
-            ip: ip.clone(),
-            os: last_trimmed.os.clone(),
-            snapshot: crate::live_poll::AgentLiveSnapshot {
-                collected_at: *last_collected_at,
-                cpu_usage_pct: Some(last_report.cpu.usage_pct),
-                mem_used: Some(last_report.memory.used),
-                mem_total: Some(last_report.memory.total),
-                mem_usage_pct: mem_pct,
-                disk_usage_pct: disk_pct,
-                temperature_c: temp,
-                uptime_secs: Some(uptime_secs),
-                rx_bps: sum_net_bps(&last_report.nets, |n| n.rx_bps),
-                tx_bps: sum_net_bps(&last_report.nets, |n| n.tx_bps),
-            },
-        });
+    ctx.agent_live.upsert(agent_live_snapshot(
+        agent_id,
+        machine_id.clone(),
+        last_trimmed.hostname.clone(),
+        ip.clone(),
+        last_trimmed.os.clone(),
+        last_report,
+        *last_collected_at,
+    ));
 
     // 批量观测日志：单帧上报不产生噪音，仅多帧或有丢弃时记录
     if valid.len() > 1 || dropped > 0 {
@@ -506,6 +534,80 @@ pub async fn ingest(
             latest_version: ctx.server_version.clone(),
         })),
     )
+}
+
+/// 实时帧上报（`POST /agent/v1/realtime`，秒级通道，不入库）。
+///
+/// 与批量通道共用令牌鉴权与单帧校验（同一 [`validate_report`] 口径），
+/// 随后只读查询主机行（machine_id → monitored_hosts.id：未注册 404、
+/// 已禁用 403，唯一库交互、无写入），最后覆盖内存实时注册表（按
+/// collected_at 单调合并，慢到的旧帧不回退快照）。无 429 频控——不写库
+/// 即无写库压力，注册表覆盖本身幂等；失败帧不重试，下一帧自然补上。
+pub async fn realtime(
+    ctx: &ReportContext,
+    headers: &HeaderMap,
+    body: &[u8],
+    peer_ip: &str,
+) -> IngestResult {
+    // 鉴权与 ingest 同一口径：共享注册令牌 SHA-256 比对
+    let Some(token) = bearer_token(headers) else {
+        return error_json(StatusCode::UNAUTHORIZED, "认证失败：缺少合法的 Bearer 令牌");
+    };
+    let config = ctx.config.load();
+    let enrollment = config.agent.enrollment_token.trim();
+    if !valid_enrollment_token(enrollment) {
+        return error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "服务端注册令牌未配置，请在系统配置中生成后再上报",
+        );
+    }
+    if generate_token_hash(&token) != generate_token_hash(enrollment) {
+        return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效");
+    }
+    drop(config);
+
+    // 实时通道仅接受单帧（批量体在此解析失败，走批量端点）
+    let report: AgentReport = match serde_json::from_slice(body) {
+        Ok(parsed) => parsed,
+        Err(e) => return error_json(StatusCode::BAD_REQUEST, &format!("上报 JSON 解析失败: {e}")),
+    };
+    let (collected_at, trimmed) = match validate_report(&report, Utc::now()) {
+        Ok(parsed) => parsed,
+        Err(e) => return error_json(StatusCode::BAD_REQUEST, &e),
+    };
+
+    // 主机行只读映射（实时通道不自动注册）：未注册 404、已禁用 403
+    let host = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, status FROM monitored_hosts WHERE machine_id = $1",
+    )
+    .bind(&trimmed.machine_id)
+    .fetch_one(&ctx.pool)
+    .await;
+    let (host_id, status) = match host {
+        Ok(row) => row,
+        Err(sqlx::Error::RowNotFound) => {
+            return error_json(StatusCode::NOT_FOUND, "主机尚未注册（等待首次批量上报）");
+        }
+        Err(e) => {
+            foims_common::log_error!("log.agent.ingest_db_error", error = e);
+            return error_json(StatusCode::INTERNAL_SERVER_ERROR, "实时上报失败：查询出错");
+        }
+    };
+    if status == "disabled" {
+        return error_json(StatusCode::FORBIDDEN, "主机已被禁用");
+    }
+
+    // 覆盖实时注册表（单调合并）；SSE 下一节拍推送前端
+    ctx.agent_live.upsert(agent_live_snapshot(
+        host_id,
+        trimmed.machine_id.clone(),
+        trimmed.hostname.clone(),
+        normalize_ipv4_address(peer_ip),
+        trimmed.os.clone(),
+        &report,
+        collected_at,
+    ));
+    (StatusCode::OK, Json(json!({ "ok": true })))
 }
 
 #[cfg(test)]

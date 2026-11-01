@@ -250,7 +250,7 @@ async fn handle_request(
     let method = request.method().clone();
     let path = request.uri().path().to_string();
 
-    if path != REPORT_PATH && path != RENEW_PATH {
+    if path != REPORT_PATH && path != RENEW_PATH && path != ingest::REALTIME_PATH {
         return send_json(
             &mut stream,
             StatusCode::NOT_FOUND,
@@ -268,7 +268,7 @@ async fn handle_request(
     }
 
     // 读请求体（链路为 TLS 1.3 密文，此处为解密后明文），超限即拒绝；
-    // 上报路径放宽至批量上限（agent 单批 8 MiB），续期路径保持单条上限
+    // 上报路径放宽至批量上限（agent 单批 8 MiB），实时/续期路径保持单条上限
     let body_limit = if path == REPORT_PATH {
         ctx.max_report_bytes().max(BATCH_BODY_LIMIT_BYTES)
     } else {
@@ -294,6 +294,9 @@ async fn handle_request(
     let (status, payload) = if path == RENEW_PATH {
         let (status, Json(payload)) = renew::handle_renew(ctx, &body, peer_leaf_der).await;
         (status, payload)
+    } else if path == ingest::REALTIME_PATH {
+        let (status, payload) = ingest::realtime(ctx, request.headers(), &body, peer_ip).await;
+        (status, payload.0)
     } else {
         let (status, payload) = ingest::ingest(ctx, request.headers(), &body, peer_ip).await;
         (status, payload.0)
