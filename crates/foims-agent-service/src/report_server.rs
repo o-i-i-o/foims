@@ -50,11 +50,6 @@ pub struct ReportContext {
 }
 
 impl ReportContext {
-    /// 上报间隔下限（秒，响应控制面下发值不低于该值）。
-    pub fn report_interval_secs(&self) -> u64 {
-        self.config.load().agent.report_interval_secs
-    }
-
     /// 单条上报 payload 上限（字节，超出 413）。
     pub fn max_report_bytes(&self) -> usize {
         self.config.load().agent.max_report_bytes

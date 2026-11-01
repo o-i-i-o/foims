@@ -1,14 +1,15 @@
 <script setup lang="ts">
 /**
- * Agent 配置卡片：上报接收服务参数（监听地址/上报与
- * 采集间隔/上报地址模式）+ Agent 设置（版本/注册令牌/配置包分发）。
- * 与会话设置共用 ["system-config"]（保存仅替换 agent 段并带回其余字段）。
+ * Agent 配置卡片：上报接收服务参数（监听地址/上报地址模式）+
+ * Agent 设置（注册令牌/配置包分发）。采集与上报节奏由 agent 独立维护，
+ * 不在本卡片配置。与会话设置共用 ["system-config"]
+ * （保存仅替换 agent 段并带回其余字段）。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { downloadAgentConfigPackage, getEnrollmentToken, regenerateEnrollmentToken } from "../../api/agents";
-import { getSystemConfig, getSystemInfo, updateSystemConfig } from "../../api/system";
+import { getSystemConfig, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
@@ -20,8 +21,6 @@ interface AgentConfigSection {
   /** 监听地址主机部分（IPv4/主机名/方括号 IPv6），端口见 port */
   bind_addr: string;
   port: number;
-  report_interval_secs: number;
-  collect_interval_secs: number;
   use_public_url: boolean;
   report_url_override: string | null;
   /** 以下四项保存时原样带回（仅在配置加载后才有值） */
@@ -53,8 +52,6 @@ let agentBase: Pick<
 const agentEnabled = ref(false);
 const agentBindHost = ref("[::]");
 const agentBindPort = ref("9100");
-const agentInterval = ref("60");
-const agentCollectInterval = ref("5");
 const agentUsePublicUrl = ref(false);
 const agentReportOverride = ref("");
 
@@ -86,8 +83,6 @@ watch(
     agentEnabled.value = Boolean(agent.enabled);
     agentBindHost.value = agent.bind_addr || "[::]";
     agentBindPort.value = String(agent.port ?? 9100);
-    agentInterval.value = String(agent.report_interval_secs ?? 60);
-    agentCollectInterval.value = String(agent.collect_interval_secs ?? 5);
     agentUsePublicUrl.value = Boolean(agent.use_public_url);
     agentReportOverride.value = agent.report_url_override || "";
   }
@@ -114,10 +109,6 @@ async function saveAgentConfig(): Promise<void> {
     showToast(t("agent_service.invalid_port", { port: String(agentBindPort.value).trim() }), "warning");
     return;
   }
-  // 上报间隔 clamp 10-3600（与后端校验及 agent 端 clamp 对齐）
-  const interval = Math.min(Math.max(Number.parseInt(agentInterval.value, 10) || 0, 10), 3600);
-  // 采集间隔 clamp 1-60（与 agent 端 clamp 对齐）
-  const collectInterval = Math.min(Math.max(Number.parseInt(agentCollectInterval.value, 10) || 0, 1), 60);
   // 上报地址模式：开关关时允许手动覆盖（host:port，留空回退监听地址推导）
   const reportOverride = agentReportOverride.value.trim();
   if (
@@ -136,8 +127,6 @@ async function saveAgentConfig(): Promise<void> {
       enabled: agentEnabled.value,
       bind_addr: bindHost,
       port: bindPort,
-      report_interval_secs: interval,
-      collect_interval_secs: collectInterval,
       use_public_url: agentUsePublicUrl.value,
       report_url_override: reportOverride
     };
@@ -184,19 +173,6 @@ const tokenQuery = useQuery({
 });
 
 const enrollmentToken = computed(() => tokenQuery.data.value?.enrollment_token || "");
-
-// 版本与服务端一致，复用系统信息查询（SystemInfoTab 同键共享缓存）
-const infoQuery = useQuery({
-  queryKey: ["system-info"],
-  queryFn: async () => {
-    const result = await getSystemInfo();
-    if (!result.success) {
-      throw new Error(result.message || t("common.load_failed"));
-    }
-    return result.data;
-  },
-  enabled: computed(() => props.active)
-});
 
 const distDownloading = ref(false);
 
@@ -261,7 +237,8 @@ async function regenerateToken(): Promise<void> {
       </div>
     </header>
     <div class="data-management-container">
-      <!-- 上报接收服务参数：监听地址作为默认上报地址来源 -->
+      <!-- 上报接收服务参数：监听地址作为默认上报地址来源（采集/上报节奏
+           由 agent 独立维护，不在服务端配置） -->
       <section class="section">
         <h3>{{ t("agent_service.section_service") }}</h3>
         <div class="form-row form-row-2col">
@@ -273,17 +250,9 @@ async function regenerateToken(): Promise<void> {
             <label for="agent-service-bind-port">{{ t("agent_service.bind_port") }}</label>
             <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1025" max="65534" placeholder="9100" :aria-label="t('agent_service.bind_port')">
           </div>
-          <div class="form-group">
-            <label for="agent-service-interval">{{ t("agent_service.report_interval") }}</label>
-            <input id="agent-service-interval" v-model="agentInterval" type="number" min="10" max="3600" placeholder="60" :aria-label="t('agent_service.report_interval')">
-          </div>
-          <div class="form-group">
-            <label for="agent-service-collect-interval">{{ t("agent_service.collect_interval") }}</label>
-            <input id="agent-service-collect-interval" v-model="agentCollectInterval" type="number" min="1" max="60" placeholder="5" :aria-label="t('agent_service.collect_interval')">
-          </div>
         </div>
       </section>
-      <!-- Agent 客户端配置：上报地址模式 / 版本 / 分发下载 -->
+      <!-- Agent 客户端配置：上报地址模式 / 分发下载 -->
       <section class="section">
         <h3>{{ t("agent_service.section_agent") }}</h3>
         <div class="form-row">
@@ -324,13 +293,7 @@ async function regenerateToken(): Promise<void> {
               <option v-for="format in formats" :key="format" :value="format">{{ format.toUpperCase() }}</option>
             </select>
           </div>
-          <div class="form-row">
-          <dl class="config-field">
-            <dt>{{ t("system.agent_dist_version") }}</dt>
-            <dd class="field-value">{{ infoQuery.data.value?.version || "-" }}</dd>
-          </dl>
-          </div>
-          <div class="from-group">
+          <div class="form-group">
             <button type="button" class="btn btn-primary" :disabled="!formats.length || distDownloading" @click="downloadConfigPackage">
                {{ t("system.agent_download_config") }}
             </button>

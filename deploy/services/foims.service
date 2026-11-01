@@ -53,9 +53,11 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 # ReadWritePaths 逐项对应运行期写入点：/var/log/foims（日志）、/etc/foims
-# （config.toml 回写与加密密钥）、/usr/share/foims/backups（数据库备份）。
+# （config.toml 回写与加密密钥）、/usr/share/foims/backups（数据库备份）、
+# /etc/ssl/foims-certs（Agent QUIC 证书自动签发/重签：本机 IP 变化后需
+# 重写 server 证书 SAN，缺失该项会导致证书永不更新、agent 全部握手失败）。
 # 静态资源目录（/usr/share/foims/web）刻意不列入：服务进程不应能改写自身资源。
-ReadWritePaths=/var/log/foims /etc/foims /usr/share/foims/backups
+ReadWritePaths=/var/log/foims /etc/foims /usr/share/foims/backups /etc/ssl/foims-certs
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true

@@ -29,20 +29,25 @@ fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-/// Agent 离线判定任务执行器：last_seen 超过 上报间隔 × 倍数 的
+/// Agent 离线判定任务执行器：last_seen 超过 判定间隔 × 倍数 的
 /// active agent 置为 offline（disabled 不参与判定）。
 /// 仅对 source='agent' 生效：SNMP 采集行轮询间隔更长（默认 5 分钟），
 /// 由 snmp_poll 按自身间隔 × 2 独立判定离线。
 ///
-/// 判定参数与上报间隔同源（AgentConfig）：默认值在注册时由主程序从
-/// agent 配置段注入，避免「上报间隔已改而离线阈值仍用旧默认」的错判；
-/// 任务配置显式给出 interval_secs/factor 时仍以任务配置优先。
+/// 判定间隔与采集节奏解耦（agent 独立维护上报节奏，服务端不再可配），
+/// 固定基准 [`AGENT_OFFLINE_BASE_INTERVAL_SECS`]；离线敏感度倍数仍为
+/// AgentConfig.offline_factor；任务配置显式给出 interval_secs/factor 时
+/// 以任务配置优先。
 pub struct AgentOfflineTaskExecutor {
-    /// 默认判定间隔（秒），注册时取自 AgentConfig.report_interval_secs
+    /// 默认判定间隔（秒），固定基准常量
     default_interval_secs: u64,
     /// 默认离线倍数，注册时取自 AgentConfig.offline_factor
     default_factor: u64,
 }
+
+/// 离线判定间隔固定基准（秒）：agent 上报节奏 clamp 后下限 10s 批量，
+/// 60s 基准容忍连续丢批不误判，保持既有判定节奏不变。
+pub const AGENT_OFFLINE_BASE_INTERVAL_SECS: u64 = 60;
 
 impl AgentOfflineTaskExecutor {
     pub fn new(default_interval_secs: u64, default_factor: u64) -> Self {

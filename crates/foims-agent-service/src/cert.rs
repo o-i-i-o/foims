@@ -3,9 +3,11 @@
 //! 站点 CA（/etc/ssl/foims-ca/ca.pem + ca.key）存在时，为 QUIC 监听端签发
 //! server 证书（serverAuth EKU + 本机全部网卡 IP 的 SAN），为 agent 签发共享
 //! client 证书（clientAuth EKU，SAN 留空——上报身份仅由证书链保证，随下载包
-//! 分发）。四个物料文件齐备且 `agent_ca_fingerprint` 指纹文件与当前站点 CA
-//! 一致时直接复用，不重复签发；站点 CA 轮换（重新 init）后指纹不匹配，自动
-//! 重签全部物料并更新指纹文件，避免旧 CA 签发的证书导致 agent mTLS 握手失败。
+//! 分发）。四个物料文件齐备、`agent_ca_fingerprint` 指纹文件与当前站点 CA
+//! 一致、且 `agent_cert_sans` 记录的签发时 IP 覆盖当前本机全部非回环 IP 时
+//! 直接复用，不重复签发；站点 CA 轮换（重新 init）后指纹不匹配，或本机
+//! 新增网卡/IP 变更（agent 按 IP 连服务端，旧 SAN 不含新 IP 会导致 mTLS
+//! 握手失败），自动重签全部物料并更新记录文件，实现 IP 变更自愈。
 //!
 //! x509-management 的 `generate_certificate` 将 serverAuth EKU 硬编码
 //! （面向浏览器/服务端证书场景），无法签发 clientAuth 证书，故此处直接
@@ -32,6 +34,9 @@ pub const CLIENT_CERT: &str = "agent_client_cert.pem";
 pub const CLIENT_KEY: &str = "agent_client_cert.key";
 /// Agent 物料目录内记录签发时站点 CA 指纹的文件名（复用前校验 CA 未轮换）
 pub const AGENT_CA_FINGERPRINT_FILE: &str = "agent_ca_fingerprint";
+/// Agent 物料目录内记录签发时 server 证书 SAN 覆盖的本机 IP 列表（每行一个，
+/// 不含回环项；复用前校验当前 IP 仍被覆盖，IP 变更即重签自愈）
+pub const AGENT_CERT_SANS_FILE: &str = "agent_cert_sans";
 
 /// Agent 证书默认有效期（天，5 年）
 const AGENT_CERT_VALIDITY_DAYS: i64 = 1825;
@@ -238,11 +243,57 @@ fn fingerprint_matches(current: &str, stored: &str) -> bool {
     stored.trim().eq_ignore_ascii_case(current)
 }
 
-/// 复用判定：四个物料文件可读 + 指纹文件与当前 CA 指纹一致 + 两张证书 PEM
-/// 含证书起始头，全部满足才返回既有物料；任一不满足返回 None（走重签路径）。
+/// SAN 覆盖判定（纯函数）：当前本机全部非回环 IP 必须都在签发时记录的
+/// SAN 集合内（agent 按本机 IP 连服务端，任一 IP 不在 SAN 即握手失败）；
+/// 当前列表为空（网卡枚举失败）时不误杀，按覆盖处理。
+fn ips_covered(recorded: &std::collections::HashSet<IpAddr>, current: &[IpAddr]) -> bool {
+    current
+        .iter()
+        .filter(|ip| !ip.is_loopback())
+        .all(|ip| recorded.contains(ip))
+}
+
+/// 校验存量 server 证书的 SAN 是否仍覆盖当前本机 IP：读取签发时落盘的
+/// [`AGENT_CERT_SANS_FILE`] 与当前网卡枚举结果比对；文件缺失/无法解析
+/// 视为不覆盖（走重签路径自愈）。记录中多余的旧 IP（网卡移除）无害，
+/// 不影响复用。
+async fn sans_cover_current_ips(dir: &Path) -> bool {
+    let stored = match tokio::fs::read_to_string(dir.join(AGENT_CERT_SANS_FILE)).await {
+        Ok(text) => text,
+        Err(_) => {
+            foims_common::log_warn!(
+                "log.agent.certs_reuse_rejected",
+                detail = "cert_sans_missing"
+            );
+            return false;
+        }
+    };
+    let recorded: std::collections::HashSet<IpAddr> = stored
+        .lines()
+        .filter_map(|line| line.trim().parse::<IpAddr>().ok())
+        .collect();
+    let covered = if_addrs::get_if_addrs()
+        .map(|ifaces| {
+            ifaces
+                .into_iter()
+                .map(|iface| iface.ip())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if ips_covered(&recorded, &covered) {
+        true
+    } else {
+        foims_common::log_warn!("log.agent.certs_reuse_rejected", detail = "cert_sans_stale");
+        false
+    }
+}
+
+/// 复用判定：四个物料文件可读 + 指纹文件与当前 CA 指纹一致 + SAN 记录覆盖
+/// 当前本机 IP + 两张证书 PEM 含证书起始头，全部满足才返回既有物料；
+/// 任一不满足返回 None（走重签路径）。
 /// server 私钥只校验可读性（内容格式由 TLS 加载兜底）；指纹文件缺失或不匹配
-/// 一律重签，防止站点 CA 轮换后旧物料被复用；物料缺失是首次启动的常态，
-/// 不告警。
+/// 一律重签，防止站点 CA 轮换后旧物料被复用；SAN 记录不覆盖当前 IP（新增
+/// 网卡/IP 变更）同样重签；物料缺失是首次启动的常态，不告警。
 async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCertMaterial> {
     let server_cert_path = dir.join(SERVER_CERT);
     let server_key_path = dir.join(SERVER_KEY);
@@ -280,6 +331,12 @@ async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCer
         }
     }
 
+    // SAN 记录须覆盖当前本机全部非回环 IP：IP 变更后旧证书不含新 IP，
+    // agent 握手必失败，重签自愈
+    if !sans_cover_current_ips(dir).await {
+        return None;
+    }
+
     if !server_cert.contains(PEM_CERT_HEADER) || !client_cert.contains(PEM_CERT_HEADER) {
         foims_common::log_warn!(
             "log.agent.certs_reuse_rejected",
@@ -301,9 +358,10 @@ async fn try_reuse_material(dir: &Path, ca_fingerprint: &str) -> Option<AgentCer
 static ISSUE_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-/// 确保四份证书物料齐备并返回：物料齐备且与当前站点 CA 指纹一致时直接复用；
-/// 否则要求站点 CA 存在，经 rcgen 签发 server（SAN=本机全部 IP + localhost）
-/// 与 client 证书，连同 CA 指纹文件一并落盘。
+/// 确保四份证书物料齐备并返回：物料齐备、与当前站点 CA 指纹一致且 SAN
+/// 记录覆盖当前本机 IP 时直接复用；否则要求站点 CA 存在，经 rcgen 签发
+/// server（SAN=本机全部 IP + localhost）与 client 证书，连同 CA 指纹文件
+/// 与 SAN 记录文件一并落盘。
 ///
 /// 返回 Err 时调用方不应启动 QUIC 监听（cert 未就绪则 mTLS 无法建立）。
 pub async fn ensure_agent_certs() -> Result<AgentCertMaterial, String> {
@@ -334,12 +392,17 @@ async fn ensure_agent_certs_in(
     }
 
     let ca_key = read_pem(ca_key_path, "站点 CA 私钥").await?;
+    let local_ips = collect_local_sans();
+    let sans_text = local_ips
+        .iter()
+        .filter(|ip| !ip.is_loopback())
+        .map(|ip| ip.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
     let (server_pem, server_key_pem, client_pem, client_key_pem) =
-        tokio::task::spawn_blocking(move || {
-            issue_material(&ca_cert, &ca_key, collect_local_sans())
-        })
-        .await
-        .map_err(|e| format!("签发任务调度失败: {e}"))??;
+        tokio::task::spawn_blocking(move || issue_material(&ca_cert, &ca_key, local_ips))
+            .await
+            .map_err(|e| format!("签发任务调度失败: {e}"))??;
 
     tokio::fs::create_dir_all(dir)
         .await
@@ -348,6 +411,8 @@ async fn ensure_agent_certs_in(
     write_key_file(&dir.join(SERVER_KEY), &server_key_pem).await?;
     write_cert_file(&dir.join(CLIENT_CERT), &client_pem).await?;
     write_key_file(&dir.join(CLIENT_KEY), &client_key_pem).await?;
+    // 记录签发时 SAN 覆盖的本机 IP：复用校验据此发现 IP 变更并自动重签
+    write_cert_file(&dir.join(AGENT_CERT_SANS_FILE), &sans_text).await?;
     // 落 CA 指纹供下次启动复用校验；公开物料用 0644（区别于 0600 私钥）
     write_cert_file(&dir.join(AGENT_CA_FINGERPRINT_FILE), &ca_fingerprint).await?;
 
@@ -610,6 +675,77 @@ mod tests {
         );
         assert!(!fingerprint_matches("abc", "abd"), "内容不同应判不匹配");
         assert!(!fingerprint_matches("abc", ""), "空内容应判不匹配");
+    }
+
+    #[test]
+    fn san覆盖判定_非回环ip须全部覆盖() {
+        let recorded: std::collections::HashSet<IpAddr> =
+            ["10.0.0.2", "192.168.1.10"].iter().map(|s| ip(s)).collect();
+        // 当前 IP 全部在记录内（含回环项，回环恒在不算缺失）
+        assert!(ips_covered(
+            &recorded,
+            &[ip("10.0.0.2"), ip("192.168.1.10"), ip("127.0.0.1")]
+        ));
+        // 新增网卡/IP 不在记录内 → 不覆盖（重签自愈）
+        assert!(
+            !ips_covered(&recorded, &[ip("192.168.0.229")]),
+            "未覆盖的新 IP 应判不覆盖"
+        );
+        // 枚举失败（空列表）不误杀
+        assert!(ips_covered(&recorded, &[]));
+        // 记录中多余的旧 IP（网卡移除）无害
+        let removed: std::collections::HashSet<IpAddr> = recorded
+            .iter()
+            .copied()
+            .filter(|addr| *addr != ip("192.168.1.10"))
+            .collect();
+        assert!(
+            ips_covered(&removed, &[ip("10.0.0.2")]),
+            "旧 IP 残留不影响覆盖判定"
+        );
+    }
+
+    #[tokio::test]
+    async fn san记录文件缺失_应重签并补写() {
+        let material_dir = temp_dir("sans-mat");
+        let ca_dir = temp_dir("sans-ca");
+        let ca = test_ca("FOIMS Test CA Sans");
+        let (ca_cert_path, ca_key_path) = write_ca(&ca_dir, &ca);
+        let first = ensure_agent_certs_in(&material_dir, &ca_cert_path, &ca_key_path)
+            .await
+            .unwrap();
+        // 首次签发应落盘 SAN 记录，且与当前本机非回环 IP 枚举结果一致
+        // （同进程两次枚举结果一致；仅回环环境下两侧同为空集）
+        let stored = fs::read_to_string(material_dir.join(AGENT_CERT_SANS_FILE)).unwrap();
+        let recorded: std::collections::HashSet<IpAddr> = stored
+            .lines()
+            .filter_map(|line| line.trim().parse::<IpAddr>().ok())
+            .collect();
+        let current: std::collections::HashSet<IpAddr> = collect_local_sans()
+            .into_iter()
+            .filter(|ip| !ip.is_loopback())
+            .collect();
+        assert_eq!(
+            recorded, current,
+            "SAN 记录应等于当前本机非回环 IP 集合: {stored:?}"
+        );
+
+        // 删除 SAN 记录 → 复用被拒，走重签路径并补写
+        fs::remove_file(material_dir.join(AGENT_CERT_SANS_FILE)).unwrap();
+        let second = ensure_agent_certs_in(&material_dir, &ca_cert_path, &ca_key_path)
+            .await
+            .unwrap();
+        assert_ne!(
+            first.client_cert_pem, second.client_cert_pem,
+            "SAN 记录缺失应走重签路径"
+        );
+        assert!(
+            material_dir.join(AGENT_CERT_SANS_FILE).exists(),
+            "重签后应补写 SAN 记录"
+        );
+
+        let _ = fs::remove_dir_all(&material_dir);
+        let _ = fs::remove_dir_all(&ca_dir);
     }
 
     #[tokio::test]

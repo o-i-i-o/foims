@@ -539,13 +539,6 @@ pub struct AgentConfig {
     /// QUIC 监听端口（UDP，默认 9100）。
     #[serde(default = "default_agent_port")]
     pub port: u16,
-    /// 上报间隔下限（秒）：响应控制面下发的 report_interval 不低于该值。
-    #[serde(default = "default_agent_report_interval")]
-    pub report_interval_secs: u64,
-    /// 采集间隔（秒）：agent 本机高频采集节奏，与上报间隔解耦后帧先入
-    /// 本地队列，按上报间隔整批发送（生效时 clamp [1,60]）。
-    #[serde(default = "default_agent_collect_interval")]
-    pub collect_interval_secs: u64,
     /// 单条上报 payload 上限（字节），超出返回 413。
     #[serde(default = "default_agent_max_report_bytes")]
     pub max_report_bytes: usize,
@@ -555,7 +548,7 @@ pub struct AgentConfig {
     /// snmp_events 保留天数（同一清理任务按此删除旧事件）。
     #[serde(default = "default_agent_history_retention_days")]
     pub snmp_event_retention_days: u32,
-    /// 离线判定倍数：last_seen 超过上报间隔 × 该倍数置为 offline。
+    /// 离线判定倍数：last_seen 超过固定判定基准（60s）× 该倍数置为 offline。
     #[serde(default = "default_agent_offline_factor")]
     pub offline_factor: u32,
     /// 上报地址模式开关：开启后下载包内上报地址取系统配置 server.public_url
@@ -573,14 +566,6 @@ fn default_agent_bind_addr() -> String {
 
 const fn default_agent_port() -> u16 {
     9100
-}
-
-const fn default_agent_report_interval() -> u64 {
-    60
-}
-
-const fn default_agent_collect_interval() -> u64 {
-    5
 }
 
 const fn default_agent_max_report_bytes() -> usize {
@@ -609,8 +594,6 @@ impl Default for AgentConfig {
             enabled: false,
             bind_addr: default_agent_bind_addr(),
             port: default_agent_port(),
-            report_interval_secs: default_agent_report_interval(),
-            collect_interval_secs: default_agent_collect_interval(),
             max_report_bytes: default_agent_max_report_bytes(),
             history_retention_days: default_agent_history_retention_days(),
             snmp_event_retention_days: default_agent_history_retention_days(),

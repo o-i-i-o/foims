@@ -36,8 +36,10 @@ const MAX_CLOCK_SKEW_SECS: i64 = 300;
 /// 采集时刻允许的最大历史深度（秒）：断网恢复后批量补报的历史帧
 /// （agent 侧队列上限 120 帧，正常深度远小于该防御性上限）
 const MAX_PAST_AGE_SECS: i64 = 86_400;
-/// 生效上报间隔下限（秒）：频控闸门以间隔的一半作为最小上报间隔
-const MIN_REPORT_INTERVAL_SECS: u64 = 10;
+/// 生效上报间隔（秒，固定）：agent 独立维护采集/上报节奏（采集每秒、
+/// 批量上报 clamp 下限 10s），服务端按该值做响应下发与频控基准
+///（频控闸门以间隔的一半作为最小上报间隔）
+const REPORT_INTERVAL_SECS: u64 = 10;
 /// 温度读数业务范围（℃）：越界视为明显异常，且会溢出 max_temp 的 NUMERIC(5,1)
 const TEMP_MIN_C: f64 = -100.0;
 const TEMP_MAX_C: f64 = 250.0;
@@ -297,11 +299,7 @@ pub async fn ingest(
     // 高频写库。闸门内联在入库 upsert 的 WHERE 中原子判定，消除
     // 「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent 按
     // 下发间隔上报不受影响
-    let interval = config
-        .agent
-        .report_interval_secs
-        .max(MIN_REPORT_INTERVAL_SECS);
-    let min_gap_secs = i64::try_from(interval / 2).unwrap_or(i64::MAX);
+    let min_gap_secs = i64::try_from(REPORT_INTERVAL_SECS / 2).unwrap_or(i64::MAX);
     drop(config);
 
     let (frames, dropped) = match parse_frames(body) {
@@ -525,11 +523,11 @@ pub async fn ingest(
     };
     ctx.alerts.evaluate_host(&host, values).await;
 
-    // 响应控制面：回传当前配置的上报间隔（未做下限钳制）与最新版本通告
+    // 响应控制面：回传固定上报节奏（agent 端 clamp 保护生效）与最新版本通告
     (
         StatusCode::OK,
         Json(json!(foims_common::report::ReportResponse {
-            report_interval: ctx.report_interval_secs(),
+            report_interval: REPORT_INTERVAL_SECS,
             collectors: std::collections::BTreeMap::new(),
             latest_version: ctx.server_version.clone(),
         })),

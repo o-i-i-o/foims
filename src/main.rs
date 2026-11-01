@@ -25,8 +25,8 @@ use foims::system::task_executors::{
     PasswordExpirySyncTaskExecutor, TokenCleanupTaskExecutor,
 };
 use foims_agent_service::tasks::{
-    AgentHistoryCleanupTaskExecutor, AgentIpmiPollTaskExecutor, AgentOfflineTaskExecutor,
-    AgentSnmpPollTaskExecutor,
+    AGENT_OFFLINE_BASE_INTERVAL_SECS, AgentHistoryCleanupTaskExecutor, AgentIpmiPollTaskExecutor,
+    AgentOfflineTaskExecutor, AgentSnmpPollTaskExecutor,
 };
 use foims_common::config::Config;
 use foims_common::db::DbPool;
@@ -559,10 +559,10 @@ async fn main() -> std::io::Result<()> {
         registry.register(Box::new(MacSyncTaskExecutor));
         registry.register(Box::new(IpStatusSyncTaskExecutor));
         registry.register(Box::new(PasswordExpirySyncTaskExecutor));
-        // 离线判定参数与上报间隔同源：默认值取自 agent 配置段（前端可改，
-        // 重启后生效），任务配置显式覆盖时仍优先
+        // 离线判定：固定基准间隔 + 配置离线倍数（agent 上报节奏独立维护，
+        // 服务端不再可配），任务配置显式覆盖时仍优先
         registry.register(Box::new(AgentOfflineTaskExecutor::new(
-            config.agent.report_interval_secs,
+            AGENT_OFFLINE_BASE_INTERVAL_SECS,
             u64::from(config.agent.offline_factor),
         )));
         registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
@@ -612,13 +612,13 @@ async fn main() -> std::io::Result<()> {
                         "0 20 * * * *",
                         serde_json::json!({}),
                     ),
-                    // Agent 离线判定（每分钟）：last_seen 超过上报间隔 × 倍数置 offline
+                    // Agent 离线判定（每分钟）：last_seen 超过固定基准 × 倍数置 offline
                     (
                         "system_agent_offline",
                         "agent_offline",
                         "0 * * * * *",
                         serde_json::json!({
-                            "interval_secs": config.agent.report_interval_secs,
+                            "interval_secs": AGENT_OFFLINE_BASE_INTERVAL_SECS,
                             "factor": config.agent.offline_factor
                         }),
                     ),

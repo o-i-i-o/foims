@@ -25,13 +25,6 @@ use foims_common::{log_info, log_warn};
 
 use crate::packaging::{self, PackageInputs};
 
-/// agent.toml 采集间隔 clamp 范围（与 agent 侧 foims-agent-core 保持一致）
-const COLLECT_INTERVAL_MIN_SECS: u64 = 1;
-const COLLECT_INTERVAL_MAX_SECS: u64 = 60;
-/// agent.toml 上报间隔 clamp 范围（与 agent 侧控制面 clamp 保持一致）
-const REPORT_INTERVAL_MIN_SECS: u64 = 10;
-const REPORT_INTERVAL_MAX_SECS: u64 = 3600;
-
 /// 配置包下载参数（GET /api/agents/config-package）。
 #[derive(Debug, Deserialize)]
 pub struct ConfigPackageParams {
@@ -118,18 +111,14 @@ pub async fn download_config_package<S: ConfigProvider>(
         &uri,
     )?;
 
-    let collect_interval = agent
-        .collect_interval_secs
-        .clamp(COLLECT_INTERVAL_MIN_SECS, COLLECT_INTERVAL_MAX_SECS);
-    let report_interval = agent
-        .report_interval_secs
-        .clamp(REPORT_INTERVAL_MIN_SECS, REPORT_INTERVAL_MAX_SECS);
+    // 采集/上报节奏由 agent 独立维护，组包固定：采集每秒一帧入队，上报
+    // 按 10s 批量发送（agent 侧 clamp [1,60]/[10,3600] 兜底，取值即生效值）
     let agent_toml = format!(
         "# FOIMS Agent 配置（由 FOIMS 服务端下载时自动生成）\n\
          server_addr = \"{server_addr}\"\n\
          token = \"{enrollment_token}\"\n\
-         report_interval_secs = {report_interval}\n\
-         collect_interval_secs = {collect_interval}\n"
+         report_interval_secs = 10\n\
+         collect_interval_secs = 1\n"
     );
 
     // 配置包无架构维度：deb=all / rpm=noarch / zip 平铺

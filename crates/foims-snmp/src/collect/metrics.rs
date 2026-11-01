@@ -72,11 +72,15 @@ const CPU_RAW_IDLE_IDX: usize = 3;
 /// I/O 等待不算 CPU 使用率）
 const CPU_RAW_WAIT_IDX: usize = 4;
 
-/// total 计入口径下标（B5）：User/Nice/System/Idle/Wait/Interrupt/SoftIrq/Steal。
-/// 排除 Kernel（net-snmp 中 Kernel=System+Interrupt+SoftIrq 的重叠和，
-/// 一并求和会双倍计入内核时间）与 Guest/GuestNice（guest 时间已包含
-/// 在 User/Nice 内，另属虚拟化客户负载的重复计数）。
-const CPU_RAW_TOTAL_IDXS: [usize; 8] = [0, 1, 2, 3, 4, 6, 7, 8];
+/// total 计入口径下标：User/Nice/System/Idle/Wait/Interrupt 六列。
+/// 剔除 SoftIrq/Steal/Guest/GuestNice：实测（snmpd 5.9.5.2）这四列计数器
+/// 完全失真——SoftIrq/Steal 数值数千倍于 /proc/stat 真实值，Guest≈intr
+/// 中断总数，疑似读错 /proc/stat 行，计入会把使用率推高数十个百分点
+/// （实测 3% 被算成 37%）；保留的六列经多轮对照与 /proc/stat 一致。
+/// 另排除 Kernel（net-snmp 中 Kernel=System+Interrupt+SoftIrq 的重叠和，
+/// 一并求和会双倍计入内核时间）。剔除后 total 少计真实 softirq/steal
+/// 时间（通常 <5%），使用率略高估，属可接受误差。
+const CPU_RAW_TOTAL_IDXS: [usize; 6] = [0, 1, 2, 3, 4, 6];
 
 /// hrStorageType 取值：Ram（物理内存行）
 fn storage_type_ram() -> async_snmp::Oid {
@@ -94,8 +98,8 @@ const STORAGE_DESCR_AVAIL_MEM: &str = "Available memory";
 
 // 上一轮状态（raw_metrics 私有键 _snmp_state）
 
-/// CPU 计数器快照：ssCpuRaw* 按 B5 口径求和 + 非 busy（Idle+Wait）分量
-///（差值算使用率）
+/// CPU 计数器快照：ssCpuRaw* 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和 +
+/// 非 busy（Idle+Wait）分量（差值算使用率）
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CpuCounters {
     pub total: u64,
@@ -600,12 +604,29 @@ fn memory_from_storage(rows: &[StorageRow]) -> Option<(u64, u64)> {
     (total > 0).then_some((total, used))
 }
 
+/// 磁盘挂载点排除：/dev、/proc、/sys、/run 四个子树为伪文件系统/内存盘
+/// 挂载（tmpfs、devtmpfs、cgroup 等），与 agent 侧挂载点排除口径一致，
+/// 避免 tmpfs 噪音行混入磁盘列表（目录本身或子树命中，/data/run 这类
+/// 非整词前缀不命中）。
+fn is_excluded_disk_mount(mount: &str) -> bool {
+    for prefix in ["/dev", "/proc", "/sys", "/run"] {
+        if let Some(rest) = mount.strip_prefix(prefix)
+            && (rest.is_empty() || rest.starts_with('/'))
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// 磁盘：hrStorageTable 中 FixedDisk 行（本地固定盘）；size ≤ 0 跳过
 /// （32 位容量溢出），device/mount 同取 hrStorageDescr（挂载点）。
+/// /dev、/run 等伪文件系统挂载点（net-snmp 会为 tmpfs 建 FixedDisk 行）排除。
 fn disks_from_storage(rows: &[StorageRow]) -> Vec<DiskRow> {
     rows.iter()
         .filter(|r| r.row_type.as_ref() == Some(&storage_type_fixed_disk()))
         .filter(|r| r.units > 0 && r.size > 0 && !r.descr.is_empty())
+        .filter(|r| !is_excluded_disk_mount(&r.descr))
         .map(|r| {
             let total = (r.size as u64).saturating_mul(r.units as u64);
             let used = (r.used.max(0) as u64)
@@ -849,8 +870,9 @@ async fn collect_nets(
                 },
             );
         }
+        // RFC 2863：ifSpeed=0 表示链路速率未知/无意义，报 None 而非误导性的 0
         nets.push(NetRate {
-            speed_mbps: speed.map(|s| s / 1_000_000),
+            speed_mbps: speed.filter(|s| *s > 0).map(|s| s / 1_000_000),
             status: opers.get(&idx).map(|c| if_status_text(*c).to_string()),
             admin_status: admins.get(&idx).map(|c| if_admin_text(*c).to_string()),
             err_in_delta,
@@ -1205,6 +1227,56 @@ mod tests {
             ..Default::default()
         }];
         assert_eq!(net_sums(&empty), (None, None));
+    }
+
+    #[test]
+    fn 磁盘行_伪文件系统挂载点过滤() {
+        // 挂载点排除规则本身
+        assert!(is_excluded_disk_mount("/run"));
+        assert!(is_excluded_disk_mount("/run/user/1000"));
+        assert!(is_excluded_disk_mount("/dev/shm"));
+        assert!(is_excluded_disk_mount("/proc"));
+        assert!(is_excluded_disk_mount("/sys/fs/cgroup"));
+        assert!(!is_excluded_disk_mount("/"));
+        assert!(!is_excluded_disk_mount("/media/oi-io/data"));
+        assert!(!is_excluded_disk_mount("/data/run"), "非整词前缀不命中");
+
+        // hrStorageTable 过滤：FixedDisk 行保留真实盘，tmpfs 挂载点与
+        // 非 FixedDisk 行剔除
+        let rows = vec![
+            StorageRow {
+                row_type: Some(storage_type_fixed_disk()),
+                descr: "/".to_string(),
+                units: 4096,
+                size: 1000,
+                used: 100,
+            },
+            StorageRow {
+                row_type: Some(storage_type_fixed_disk()),
+                descr: "/run/user/1000".to_string(),
+                units: 1024,
+                size: 100,
+                used: 1,
+            },
+            StorageRow {
+                row_type: Some(storage_type_fixed_disk()),
+                descr: "/dev/shm".to_string(),
+                units: 1024,
+                size: 100,
+                used: 1,
+            },
+            StorageRow {
+                row_type: Some(storage_type_ram()),
+                descr: "/data".to_string(),
+                units: 4096,
+                size: 1000,
+                used: 1,
+            },
+        ];
+        let disks = disks_from_storage(&rows);
+        assert_eq!(disks.len(), 1, "tmpfs 挂载点与非 FixedDisk 行应被过滤");
+        assert_eq!(disks[0].mount, "/");
+        assert_eq!(disks[0].total, 1000 * 4096);
     }
 
     #[test]
