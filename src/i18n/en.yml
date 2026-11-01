@@ -49,6 +49,7 @@ log:
     ingest_db_error: "Failed to store agent report: {{error}}"
     ingest_invalid_frames: "Agent batch report contained invalid frames, dropped: invalid={{invalid}}, total={{total}}"
     package_failed: "Failed to build agent config package: {{detail}}"
+    package_material_read_failed: "Failed to read config package material: {{path}}: {{error}}"
     quic_connected: "Agent QUIC connection established: {{peer}}"
     renew_cert_mismatch: "Agent renewal request body certificate does not match the connection certificate, rejected"
     renew_conflict: "Certificate renewal already in progress, concurrent renewal rejected"

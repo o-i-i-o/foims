@@ -2003,6 +2003,7 @@
       "unknown_format": "不支持的包格式：{{format}}",
       "ca_missing": "站点根 CA 尚未生成，请先在「系统设置-证书管理」生成站点 CA 后再下载",
       "package_failed": "配置包生成失败，请联系管理员查看服务端日志",
+      "material_read_failed": "配置包物料读取失败（服务端文件权限或状态异常），请检查服务运行账户对 /etc/ssl/foims-ca 与 /etc/ssl/foims-certs 的读取权限",
       "cert_missing": "Agent 客户端证书尚未生成，请先在「系统设置-证书管理」生成站点 CA 并启用 Agent 采集",
       "not_found": "Agent 未找到",
       "updated": "Agent 更新成功",

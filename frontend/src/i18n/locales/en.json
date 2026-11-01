@@ -2003,6 +2003,7 @@
       "unknown_format": "Unsupported package format: {{format}}",
       "ca_missing": "Site root CA has not been generated yet; generate it in System Settings - Certificate Management before downloading",
       "package_failed": "Failed to build the config package; contact the administrator to check server logs",
+      "material_read_failed": "Failed to read config package material (server-side file permission or state issue); check the service account's read access to /etc/ssl/foims-ca and /etc/ssl/foims-certs",
       "cert_missing": "Agent client certificate not generated yet; generate the site CA in System Settings - Certificate Management and enable agent collection first",
       "not_found": "Agent not found",
       "updated": "Agent updated successfully",

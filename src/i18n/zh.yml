@@ -49,6 +49,7 @@ log:
     ingest_db_error: "Agent 上报入库失败: {{error}}"
     ingest_invalid_frames: "Agent 批量上报含非法帧已丢弃: 非法={{invalid}}, 总数={{total}}"
     package_failed: "Agent 配置包生成失败: {{detail}}"
+    package_material_read_failed: "读取配置包物料失败: {{path}}: {{error}}"
     quic_connected: "Agent QUIC 连接建立: {{peer}}"
     renew_cert_mismatch: "Agent 续期请求体证书与连接证书不一致，已拒绝"
     renew_conflict: "证书续期已在进行中，拒绝并发重复续期"

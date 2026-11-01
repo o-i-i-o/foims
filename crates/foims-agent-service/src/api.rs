@@ -9,6 +9,7 @@
 //! 注册令牌的查看/重新生成端点在主程序 src/system/config.rs（需配置写锁
 //! 与共享配置槽写权限，AppState 专属能力）。
 
+use std::path::Path;
 use std::sync::Arc;
 
 use axum::Json;
@@ -79,19 +80,23 @@ pub async fn download_config_package<S: ConfigProvider>(
         ));
     }
 
-    // 未生成站点 CA 时拒绝下载，提示先在证书管理页生成
-    let ca_pem = tokio::fs::read(crate::SITE_CA_PATH)
-        .await
-        .map_err(|_| AppError::Conflict(msg("server.agent.ca_missing")))?;
+    // 站点 CA 与客户端证书是组包必备物料：未生成时引导先生成；读取失败
+    //（权限不足/IO 故障）按内部错误留痕透出，不得与「未生成」混淆——
+    // 否则文件明明存在却被提示去生成，掩盖真实原因误导排查
+    let ca_pem = read_material(Path::new(crate::SITE_CA_PATH), "server.agent.ca_missing").await?;
 
     // 客户端证书是 mTLS 上报身份；未生成时提示先启用 Agent 采集
-    let certs_dir = std::path::Path::new(crate::cert::AGENT_CERT_DIR);
-    let client_cert_pem = tokio::fs::read_to_string(certs_dir.join(crate::cert::CLIENT_CERT))
-        .await
-        .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
-    let client_key_pem = tokio::fs::read_to_string(certs_dir.join(crate::cert::CLIENT_KEY))
-        .await
-        .map_err(|_| AppError::Conflict(msg("server.agent.cert_missing")))?;
+    let certs_dir = Path::new(crate::cert::AGENT_CERT_DIR);
+    let client_cert_pem = read_material(
+        &certs_dir.join(crate::cert::CLIENT_CERT),
+        "server.agent.cert_missing",
+    )
+    .await?;
+    let client_key_pem = read_material(
+        &certs_dir.join(crate::cert::CLIENT_KEY),
+        "server.agent.cert_missing",
+    )
+    .await?;
 
     let config = state.config();
     let enrollment_token = config.agent.enrollment_token.trim().to_string();
@@ -130,7 +135,7 @@ pub async fn download_config_package<S: ConfigProvider>(
     // 配置包无架构维度：deb=all / rpm=noarch / zip 平铺
     let inputs = PackageInputs {
         agent_toml: &agent_toml,
-        ca_pem: &ca_pem,
+        ca_pem: ca_pem.as_bytes(),
         client_cert_pem: &client_cert_pem,
         client_key_pem: &client_key_pem,
     };
@@ -180,6 +185,26 @@ pub async fn download_config_package<S: ConfigProvider>(
         package,
     )
         .into_response())
+}
+
+/// 读取配置包物料文件（PEM 文本）。
+///
+/// NotFound 视为「未生成」，返回缺失引导（Conflict）；其余 IO 错误
+///（权限不足、文件损坏等）记 warn 后按内部错误透出：把权限故障误报为
+///「未生成」会让用户对着已存在的文件反复重新生成，掩盖真实原因。
+async fn read_material(path: &Path, missing_key: &'static str) -> Result<String, AppError> {
+    tokio::fs::read_to_string(path).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AppError::Conflict(msg(missing_key))
+        } else {
+            log_warn!(
+                "log.agent.package_material_read_failed",
+                path = path.display(),
+                error = e
+            );
+            AppError::Internal(msg("server.agent.material_read_failed"))
+        }
+    })
 }
 
 /// 校验上报地址合法形式 host[:port]（白名单字符，防止注入配置文本）。
@@ -350,10 +375,40 @@ fn host_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        host_from_public_url, resolve_report_addr, resolve_server_addr, split_override_addr,
-        valid_override_addr, valid_server_addr,
+        host_from_public_url, read_material, resolve_report_addr, resolve_server_addr,
+        split_override_addr, valid_override_addr, valid_server_addr,
     };
     use axum::http::{HeaderMap, Uri};
+
+    #[tokio::test]
+    async fn 物料不存在_按未生成冲突处理() {
+        let missing =
+            std::env::temp_dir().join(format!("foims-material-missing-{}", std::process::id()));
+        let err = read_material(&missing, "server.agent.ca_missing")
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err.status_code(),
+            axum::http::StatusCode::CONFLICT,
+            "NotFound 应按「未生成」引导而非内部错误"
+        );
+    }
+
+    #[tokio::test]
+    async fn 物料读取失败_按内部错误处理() {
+        // 以目录冒充文件：read_to_string 产出非 NotFound 的 IO 错误，走内部错误分支
+        let dir = std::env::temp_dir().join(format!("foims-material-dir-{}", std::process::id()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let err = read_material(&dir, "server.agent.ca_missing")
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err.status_code(),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "读取失败（权限/IO）不得与「未生成」混淆"
+        );
+        let _ = tokio::fs::remove_dir(&dir).await;
+    }
 
     #[test]
     fn test_split_override_addr() {
