@@ -3,9 +3,12 @@
 //! 依赖，属各副本文件模块头「双副本同步义务」所声明的受控复制）。
 //!
 //! 同步义务此前仅靠注释约定，本测试将其固化：对受控副本逐一比对代码行
-//! （去注释、去空行，允许注释差异、禁止代码差异），不一致即失败；主仓
-//! `cargo test` 与 CI 自动拦截漂移。新增受控副本时在 `CONTROLLED_COPIES`
-//! 登记一对路径即可复用同一校验。
+//! （去注释、去空行，允许注释差异、禁止代码差异），不一致即失败。agent
+//! 已拆分至独立仓库：主仓根下的 `foims-agent/` 仅为本地联调 clone
+//! （`.gitignore` 排除，主仓 CI 检出后不存在），故 clone 存在时执行比对
+//! 拦截漂移（本地开发场景），缺席时跳过（CI 场景，主仓 CI 只管主仓，
+//! 两仓完全隔离）。新增受控副本时在 `CONTROLLED_COPIES` 登记一对路径
+//! 即可复用同一校验。
 
 // 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」），与各 crate
 // lib.rs 同款口径；生产代码仍由 workspace lints + CI `-D warnings` 强制禁止。
@@ -36,6 +39,12 @@ fn code_lines(path: &Path) -> Vec<String> {
 fn controlled_copies_in_sync() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let agent_root = manifest.join("../../foims-agent");
+    // agent 独立仓库的本地联调 clone（.gitignore 排除）：本地存在则执行
+    // 比对拦截漂移；主仓 CI 检出后该目录不存在，跳过（主仓 CI 只管主仓）
+    if !agent_root.is_dir() {
+        eprintln!("跳过双副本漂移校验：主仓根未检出 foims-agent（独立仓库，仅本地联调 clone）");
+        return;
+    }
     for (main_rel, agent_rel) in CONTROLLED_COPIES {
         let main = manifest.join(main_rel);
         let agent = agent_root.join(agent_rel);

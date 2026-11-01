@@ -110,3 +110,10 @@ agent 实时秒级采集上报推送通道（y 段 +1）：此前 agent 源实�
 # 2026年11月1日17点55分18秒 第1次修改
 
 1.foims-agent 正式拆分至独立仓库（CI 拆分，主程序代码零改动）：agent 交叉构建 job（fmt/clippy/本机单测 + zig 0.13.0/llvm-mingw 20261020 交叉工具链 + build-agent.sh 多平台组包）自 ci.yml/release.yml 整体迁至独立仓库（github.com/o-i-i-o/foims-agent）自建的 .github/workflows/ci.yml（push 全分支 + tag 触发，tag v<agent 版本> 随 CI 发布至该仓 Release）与 release.yml（workflow_dispatch 手动发布，prepare 任务从该仓根 Cargo.toml [workspace.package] version 推导 tag）；主仓 ci.yml/release.yml 删除 agent-build 任务与发布物中的 agent 系统包（release needs 收敛为 [build] / [prepare, build]，files 仅留主程序产物）——此前 agent 构建依赖主仓检出 foims-agent/ 目录，而该目录已被 .gitignore 排除，远端 checkout 后并不存在，拆分同时消除该断链；da-scripts/release_check.sh 摘除 Agent 多平台安装包检查（对齐 CI 口径）；biome.json 清理 !foims-agent 死排除项；code-style.md 工程结构与依赖树说明同步独立仓库口径。验证：agent 仓 workflow 与原主仓 agent-build 任务逐步对齐复核；主程序代码/Cargo.toml 零改动，仅 dev_version z+1，Cargo.toml/package.json 不联动
+
+# v0.54.2
+
+# 2026110120380001
+# 2026年11月1日20点38分00秒 第1次修改
+
+1.修复主仓 CI 单元测试失败（controlled_copies_in_sync，build 任务「运行测试」步骤 exit 101，本地通过仅因本地存在 foims-agent 联调 clone）：根因是拆分遗漏——双副本漂移校验测试 crates/foims-common/tests/protocol_copy_sync.rs 硬编码读取主仓根下 foims-agent/crates/foims-protocol/ 副本文件，该目录为 .gitignore 排除的本地联调 clone，主仓 CI 检出后不存在，读取即 panic（No such file or directory）。修复方案（跳过而非删除）：漂移自动检查确有必要保留，测试内检测主仓根 foims-agent/ 目录存在性——本地联调 clone 存在时执行比对拦截漂移，主仓 CI 检出后该目录不存在时 eprintln 提示并跳过（主仓 CI 只管主仓，两项目仅通过网络通信、代码完全隔离）；模块头注释同步更新跳过口径。验证：cargo fmt、cargo clippy -p foims-common --release --all-targets 0 警告；测试双分支实测——本地（clone 存在）1 passed（比对执行）、临时移走 foims-agent 模拟 CI 环境 1 passed（走跳过分支，未跳过则会因读文件 panic），移走目录已复原；仅 dev_version z+1，Cargo.toml/package.json 不联动
