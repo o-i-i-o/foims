@@ -106,10 +106,14 @@ echo "程序本体（foims-agent）请用系统包管理器卸载：apt remove f
 "#;
 
 /// deb 包控制文件 control 文本（配置包，Architecture: all）。
-fn deb_control(agent_version: &str) -> String {
+///
+/// Version 取签发服务端版本：配置包是服务端签发的配置物料，其版本号随
+/// 服务端演进单调递增；它不表示 foims-agent（client）本体版本——本体由
+/// 独立仓独立发版，经 deb Depends/rpm Requires 为 "foims-agent" 解析安装。
+fn deb_control(conf_version: &str) -> String {
     format!(
         "Package: foims-agent-config\n\
-         Version: {agent_version}\n\
+         Version: {conf_version}\n\
          Section: net\n\
          Priority: optional\n\
          Architecture: all\n\
@@ -263,14 +267,14 @@ pub fn build_zip(inputs: PackageInputs<'_>) -> Result<Vec<u8>, String> {
 /// data.tar.gz：/etc/foims-agent/ 四文件；control.tar.gz：control(0644) +
 /// postinst(0755，重启已装 agent)；ar 成员依次：debian-binary、
 /// control.tar.gz、data.tar.gz。
-pub fn build_deb(agent_version: &str, inputs: &PackageInputs<'_>) -> Result<Vec<u8>, String> {
+pub fn build_deb(conf_version: &str, inputs: &PackageInputs<'_>) -> Result<Vec<u8>, String> {
     let data_gz = data_tar(inputs)?;
 
     let control_gz = gzip_tar(|builder| {
         append_tar_entry(
             builder,
             "./control",
-            deb_control(agent_version).as_bytes(),
+            deb_control(conf_version).as_bytes(),
             0o644,
         )?;
         append_tar_entry(builder, "./postinst", RESTART_SNIPPET.as_bytes(), 0o755)?;
@@ -289,10 +293,10 @@ pub fn build_deb(agent_version: &str, inputs: &PackageInputs<'_>) -> Result<Vec<
 ///
 /// 安装文件与 deb 等价；agent.toml 标记 config；post scriptlet 与 deb
 /// postinst 同语义。
-pub fn build_rpm(agent_version: &str, inputs: &PackageInputs<'_>) -> Result<Vec<u8>, String> {
+pub fn build_rpm(conf_version: &str, inputs: &PackageInputs<'_>) -> Result<Vec<u8>, String> {
     let mut builder = rpm::PackageBuilder::new(
         "foims-agent-config",
-        agent_version,
+        conf_version,
         "GPL-3.0-or-later",
         "noarch",
         "FOIMS Agent configuration package",

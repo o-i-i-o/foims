@@ -137,3 +137,11 @@ v0.57.0
 v0.58.0
 2026110200201201
 快照型时间字段前端动态推进（功能优化 y 段 +1）：系统时间/运行时长此前为取数瞬间静态快照，页面停留期间数值冻结。新增共享秒级时钟 composable useNowTick（模块级单例 interval + 引用计数，首订阅启动、末卸载停止，取代每组件自挂 interval）；服务管理运行时长以最近一次成功取数时刻（useQuery dataUpdatedAt）为基准、每行 uptime_seconds + 流逝秒数逐秒推进（取数成功自动重置基准，用户点刷新即校准）；系统信息系统时间以服务端 timestamp 基准时刻 + 本地流逝毫秒推算服务端当前时刻（两端偏移取数瞬间一次折算不重复累积），后端未携带基准时回退本机时钟同样逐秒推进；AgentDetailModal 原组件级 nowTick/interval 收敛至 useNowTick（同功能去重，行为不变）。验证：npm run typecheck/build、biome、oxlint 均通过；仅前端修改，y 段 +1，frontend/package.json 0.1.46→0.1.47，Cargo.toml 不联动
+
+v0.58.1
+2026110209140101
+新增内部文档 docs/监控采集与通知模块架构.md：梳理主机监控、SNMP/Agent/IPMI 信息采集、日志-通知、通知推送六模块的业务逻辑、数据流 ASCII 图、关键文件清单、数据表与三源同构性对照表，并汇总 11 条后续演进关注点（收件人角色口径漂移、Trap 无持久化无外发、IP 变更 LIKE 去重脆弱、host_metrics_history 无分区等）。纯静态分析文档，无代码改动，行号基于撰写时 HEAD 注明会漂移。仅 dev_version z+1，Cargo.toml/package.json 不联动
+
+v0.59.0
+2026110209520101
+Agent 上报形态改为逐帧实时 + 主机监控版本语义修正（功能变更 y 段 +1，主仓与 agent 独立仓 v0.7.0 配套）：1) 逐帧实时上报（定案「逐帧直发+断网缓冲」）：采集与上报同拍（collect_interval_secs，组包固定 1s），常态单帧直发 POST /agent/v1/report 逐帧入库，快照与历史与服务端同步到秒级；积压（断网缓冲/采集波动）自动多帧组批，AgentReportBatch 降级为断网补传载体（120 帧/8MiB 与对半拆分重试口径不变）；整链移除 /agent/v1/realtime 旁路通道（服务端 ingest::realtime、report_server 路径放行、REALTIME_PATH 常量，agent 端 RealtimeChannel 与第二条 QUIC 连接，每机两连接收敛为一条），AgentLiveRegistry 改由 ingest 入库路径唯一喂养；服务端频控改 MIN_REPORT_GAP_SECS=0.5s 独立闸门（原 10s 间隔的一半 5s 会误杀逐帧节拍），下发 response.report_interval=1 仅留旧协议兼容（agent 新版不消费，退避基准改采集节拍、删除 ±10% 抖动与 rand 依赖），组包 agent.toml 不再写 report_interval_secs（旧键反序列化忽略，offline 基准 60s 不随上报间隔联动仍独立）；2) 版本语义修正（定案「UI 文案+协议版本语义」）：agents.col_version/agents.label_version zh「Agent 版本」→「Client 版本」、en →「Client Version」（数据字段 agent_version 与协议不动）；ReportResponse.latest_version 废止服务端版本占位、恒空串（旧版 agent 反序列化要求字段存在故保留），ReportContext.server_version 字段与 main.rs env! 传参删除；配置包 deb/rpm 版本戳参数改名 conf_version 并注明「配置包版本=签发端演进号，非 client 本体版本」；foims-common 与 foims-protocol 受控副本注释同步。注意事项：host_metrics_history 存储量级不变——批量补收期间本就逐帧入库（每批遍历全部帧），恒为每 host 约 86,400 行/天；本次降的是入库时延（批量滞后 ≤10s → 秒级直达）与连接数（每机 QUIC 双连接 → 单连接），滚动清理按规模收紧 retention_days 的既有建议照旧有效。验证：cargo fmt、workspace clippy --release -D warnings、foims-agent-service 88 + foims-common 154 单测、npm run typecheck/build 均通过；agent 独立仓 v0.7.0（fmt、clippy --all-targets -D warnings、test 11 项全绿）。y 段 +1，Cargo.toml 0.33.11→0.33.12、frontend/package.json 0.1.47→0.1.48；agent 独立仓 v0.6.0→0.7.0

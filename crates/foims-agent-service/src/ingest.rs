@@ -1,15 +1,15 @@
-//! Agent 上报入库（设计 docs/agent-design.md §3.3）。
+//! Agent 上报入库。
 //!
 //! 本模块面向 agent 的机器接口（QUIC/HTTP3，无 ApiResponse 信封），错误
 //! 以 `{"error": "..."}` 简单格式返回；`ingest` 产生 401 令牌无效、403 已禁用、
 //! 400 请求非法、429 上报过于频繁、500 入库失败，体积超限的 413 由传输层
-//! [`crate::report_server`] 产生；`realtime`（实时通道，不入库）产生
-//! 401/403/404 未注册/400/500。
+//! [`crate::report_server`] 产生。
 //!
+//! 上报语义：agent 逐帧实时上报（采集即发，脉宽内单帧为主），断网缓冲
+//! 以 [`AgentReportBatch`] 批次补报，`frames` 多帧时仍整批复用本入口。
 //! 入库成功后同步覆盖 [`crate::live_poll::AgentLiveRegistry`]（内存实时
 //! 快照，不落库），供主机监控页秒级展示；429 频控/禁用/失败路径不覆盖。
-//! 实时通道（[`realtime`]）不经批量攒批与频控，采集出帧即送，同样覆盖
-//! 注册表；注册表按 collected_at 单调合并，双路并发写不回退快照。
+//! 注册表按 collected_at 单调合并，旧帧不回退快照。
 //!
 //! 认证模型（共享注册令牌）：所有 agent 使用配置文件中的同一注册令牌
 //! （`agent.enrollment_token`，经配置包分发）作 Bearer 凭据，服务端比对
@@ -27,19 +27,18 @@ use uuid::Uuid;
 
 use crate::report_server::ReportContext;
 
-/// 实时通道路径（与 agent 端 reporter.rs 的 REALTIME_PATH 常量一致）：
-/// 采集出帧即送的秒级通道，不入库，仅覆盖内存实时注册表
-pub const REALTIME_PATH: &str = "/agent/v1/realtime";
-
-/// 采集时刻超前服务端时钟允许的最大偏差（秒，设计 §3.3：时钟漂移防护）
+/// 采集时刻超前服务端时钟允许的最大偏差（秒：时钟漂移防护）
 const MAX_CLOCK_SKEW_SECS: i64 = 300;
 /// 采集时刻允许的最大历史深度（秒）：断网恢复后批量补报的历史帧
 /// （agent 侧队列上限 120 帧，正常深度远小于该防御性上限）
 const MAX_PAST_AGE_SECS: i64 = 86_400;
-/// 生效上报间隔（秒，固定）：agent 独立维护采集/上报节奏（采集每秒、
-/// 批量上报 clamp 下限 10s），服务端按该值做响应下发与频控基准
-///（频控闸门以间隔的一半作为最小上报间隔）
-const REPORT_INTERVAL_SECS: u64 = 10;
+/// 下发给 agent 的上报节奏（秒）：逐帧实时上报，采集即发（1s 节拍）。
+/// agent 新版以采集节奏驱动上报、不再消费该值，字段仅为旧协议兼容保留；
+/// 服务端仍按下述频控闸门独立限流
+const REPORT_INTERVAL_SECS: u64 = 1;
+/// 最小上报间隔（秒，频控闸门）：实时逐帧节奏的一半，正常 agent 的
+/// 1s 节拍（含 ±10% 抖动）不会命中，仅在恶意高频写库时拒绝
+const MIN_REPORT_GAP_SECS: f64 = 0.5;
 /// 温度读数业务范围（℃）：越界视为明显异常，且会溢出 max_temp 的 NUMERIC(5,1)
 const TEMP_MIN_C: f64 = -100.0;
 const TEMP_MAX_C: f64 = 250.0;
@@ -112,8 +111,8 @@ fn sum_net_bps(
     (!nets.is_empty()).then(|| nets.iter().map(get).sum())
 }
 
-/// 由一次已接受的上报帧构造实时快照：批量入库路径与实时通道（[`realtime`]）
-/// 共用，保证快照读数口径一致（CPU/内存/磁盘/温度/运行时长/网卡流量合计）。
+/// 由一次已接受的上报帧构造实时快照：入库路径共用，保证快照读数口径一致
+/// （CPU/内存/磁盘/温度/运行时长/网卡流量合计）。
 fn agent_live_snapshot(
     host_id: Uuid,
     machine_id: String,
@@ -295,11 +294,11 @@ pub async fn ingest(
         return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效");
     }
 
-    // 上报频控：last_seen 距今小于生效间隔一半时拒绝（429），防止恶意 agent
-    // 高频写库。闸门内联在入库 upsert 的 WHERE 中原子判定，消除
-    // 「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent 按
-    // 下发间隔上报不受影响
-    let min_gap_secs = i64::try_from(REPORT_INTERVAL_SECS / 2).unwrap_or(i64::MAX);
+    // 上报频控：last_seen 距今小于最小上报间隔时拒绝（429），防止恶意
+    // agent 高频写库。闸门内联在入库 upsert 的 WHERE 中原子判定，消除
+    // 「查上次时间 → 判断 → 写」非原子形态的并发绕过窗口；正常 agent
+    // 逐帧 1s 节拍（含抖动）不会命中闸门
+    let min_gap_secs = MIN_REPORT_GAP_SECS;
     drop(config);
 
     let (frames, dropped) = match parse_frames(body) {
@@ -427,7 +426,7 @@ pub async fn ingest(
     .bind(temp)
     .bind(uptime_secs)
     .bind(&raw_metrics)
-    .bind(min_gap_secs as f64)
+    .bind(min_gap_secs)
     .fetch_optional(&mut *tx)
     .await;
     let (agent_id, status) = match upsert {
@@ -523,89 +522,18 @@ pub async fn ingest(
     };
     ctx.alerts.evaluate_host(&host, values).await;
 
-    // 响应控制面：回传固定上报节奏（agent 端 clamp 保护生效）与最新版本通告
+    // 响应控制面：字段为旧协议兼容保留整型下发（report_interval=1 逐帧
+    // 实时节拍、collectors 空集）。latest_version 不再回填服务端版本号占位
+    // ——client 版本独立自管理（agent 独立仓），服务端无权威来源，空值
+    // 即「无版本通告」；旧版 agent 反序列化要求字段存在，故不能整体移除
     (
         StatusCode::OK,
         Json(json!(foims_common::report::ReportResponse {
             report_interval: REPORT_INTERVAL_SECS,
             collectors: std::collections::BTreeMap::new(),
-            latest_version: ctx.server_version.clone(),
+            latest_version: String::new(),
         })),
     )
-}
-
-/// 实时帧上报（`POST /agent/v1/realtime`，秒级通道，不入库）。
-///
-/// 与批量通道共用令牌鉴权与单帧校验（同一 [`validate_report`] 口径），
-/// 随后只读查询主机行（machine_id → monitored_hosts.id：未注册 404、
-/// 已禁用 403，唯一库交互、无写入），最后覆盖内存实时注册表（按
-/// collected_at 单调合并，慢到的旧帧不回退快照）。无 429 频控——不写库
-/// 即无写库压力，注册表覆盖本身幂等；失败帧不重试，下一帧自然补上。
-pub async fn realtime(
-    ctx: &ReportContext,
-    headers: &HeaderMap,
-    body: &[u8],
-    peer_ip: &str,
-) -> IngestResult {
-    // 鉴权与 ingest 同一口径：共享注册令牌 SHA-256 比对
-    let Some(token) = bearer_token(headers) else {
-        return error_json(StatusCode::UNAUTHORIZED, "认证失败：缺少合法的 Bearer 令牌");
-    };
-    let config = ctx.config.load();
-    let enrollment = config.agent.enrollment_token.trim();
-    if !valid_enrollment_token(enrollment) {
-        return error_json(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "服务端注册令牌未配置，请在系统配置中生成后再上报",
-        );
-    }
-    if generate_token_hash(&token) != generate_token_hash(enrollment) {
-        return error_json(StatusCode::UNAUTHORIZED, "认证失败：令牌无效");
-    }
-    drop(config);
-
-    // 实时通道仅接受单帧（批量体在此解析失败，走批量端点）
-    let report: AgentReport = match serde_json::from_slice(body) {
-        Ok(parsed) => parsed,
-        Err(e) => return error_json(StatusCode::BAD_REQUEST, &format!("上报 JSON 解析失败: {e}")),
-    };
-    let (collected_at, trimmed) = match validate_report(&report, Utc::now()) {
-        Ok(parsed) => parsed,
-        Err(e) => return error_json(StatusCode::BAD_REQUEST, &e),
-    };
-
-    // 主机行只读映射（实时通道不自动注册）：未注册 404、已禁用 403
-    let host = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, status FROM monitored_hosts WHERE machine_id = $1",
-    )
-    .bind(&trimmed.machine_id)
-    .fetch_one(&ctx.pool)
-    .await;
-    let (host_id, status) = match host {
-        Ok(row) => row,
-        Err(sqlx::Error::RowNotFound) => {
-            return error_json(StatusCode::NOT_FOUND, "主机尚未注册（等待首次批量上报）");
-        }
-        Err(e) => {
-            foims_common::log_error!("log.agent.ingest_db_error", error = e);
-            return error_json(StatusCode::INTERNAL_SERVER_ERROR, "实时上报失败：查询出错");
-        }
-    };
-    if status == "disabled" {
-        return error_json(StatusCode::FORBIDDEN, "主机已被禁用");
-    }
-
-    // 覆盖实时注册表（单调合并）；SSE 下一节拍推送前端
-    ctx.agent_live.upsert(agent_live_snapshot(
-        host_id,
-        trimmed.machine_id.clone(),
-        trimmed.hostname.clone(),
-        normalize_ipv4_address(peer_ip),
-        trimmed.os.clone(),
-        &report,
-        collected_at,
-    ));
-    (StatusCode::OK, Json(json!({ "ok": true })))
 }
 
 #[cfg(test)]

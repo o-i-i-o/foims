@@ -181,7 +181,6 @@ mod tests {
             pool,
             config: std::sync::Arc::new(foims_common::config::ArcSwap::from_pointee(config)),
             agent_live: std::sync::Arc::new(crate::live_poll::AgentLiveRegistry::new()),
-            server_version: "0.0.0".to_string(),
         }
     }
 }

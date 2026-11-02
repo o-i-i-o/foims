@@ -774,7 +774,6 @@ async fn main() -> std::io::Result<()> {
             app_state.config.clone(),
             runtime,
             agent_live_registry,
-            env!("CARGO_PKG_VERSION"),
         );
     }
 

@@ -111,13 +111,13 @@ pub async fn download_config_package<S: ConfigProvider>(
         &uri,
     )?;
 
-    // 采集/上报节奏由 agent 独立维护，组包固定：采集每秒一帧入队，上报
-    // 按 10s 批量发送（agent 侧 clamp [1,60]/[10,3600] 兜底，取值即生效值）
+    // 采集与上报节奏由 agent 独立维护：逐帧实时上报（采集即发，每秒一帧
+    // 直接入库）；组包不再下发 report_interval —— 断网缓冲恢复后批量补报
+    // （agent.toml 不含 report_interval_secs，旧键会被新 agent 忽略）
     let agent_toml = format!(
         "# FOIMS Agent 配置（由 FOIMS 服务端下载时自动生成）\n\
          server_addr = \"{server_addr}\"\n\
          token = \"{enrollment_token}\"\n\
-         report_interval_secs = 10\n\
          collect_interval_secs = 1\n"
     );
 
