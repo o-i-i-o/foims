@@ -1,15 +1,21 @@
 //! Agent 监控闭环调度任务执行器（设计 docs/agent-design.md §5）：由主程序
-//! TaskRegistry 注册、系统级定时任务驱动的 agent 离线判定、历史指标清理、
-//! SNMP 与 IPMI 设备轮询四个执行器（采集细节见 [`crate::snmp_poll`] 与
-//! [`crate::ipmi_poll`]）。
+//! TaskRegistry 注册、系统级定时任务驱动的 agent 离线判定、历史指标分层清理、
+//! 1h 桶滚降、SNMP 与 IPMI 设备轮询执行器（采集细节见 [`crate::snmp_poll`]
+//! 与 [`crate::ipmi_poll`]）。
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use foims_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor};
-use serde_json::Value;
+use serde_json::{Value, json};
+use uuid::Uuid;
 
 use foims_common::{log_debug, msg};
 
 use crate::ipmi_poll;
+use crate::metrics_aggregator::{MetricsAggregator, round4};
 use crate::snmp_poll;
 
 /// SNMP 轮询间隔缺省值（秒，调度注册侧保持一致）
@@ -19,6 +25,14 @@ const DEFAULT_IPMI_POLL_INTERVAL_SECS: u64 = 300;
 /// 历史保留天数缺省值与上限（天数类清理任务共用口径）
 const DEFAULT_RETENTION_DAYS: i64 = 30;
 const MAX_RETENTION_DAYS: i64 = 3650;
+/// 原始层（granularity=0）保留天数缺省值：秒级数据量最大，短保留
+const DEFAULT_RAW_RETENTION_DAYS: i64 = 3;
+/// 5min 桶层（granularity=5）保留天数缺省值：趋势曲线主层
+const DEFAULT_ARCHIVE_RETENTION_DAYS: i64 = 30;
+/// 1h 桶层（granularity=60）保留天数缺省值：长期趋势层
+const DEFAULT_ROLLUP_RETENTION_DAYS: i64 = 365;
+/// 单轮滚降处理的小时桶数上限：每小时例行运行，积压断点顺延至下一轮
+const ROLLUP_HOURS_PER_RUN: i64 = 500;
 
 /// 从任务配置读取正整数参数（缺失、类型不符或 ≤0 时回落默认值）。
 fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
@@ -26,6 +40,15 @@ fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
         .get(key)
         .and_then(Value::as_u64)
         .filter(|v| *v > 0)
+        .unwrap_or(default)
+}
+
+/// 从任务配置读取保留天数（缺失/类型不符/越界回落默认值，范围 1-3650）。
+fn retention_days(config: &Value, key: &str, default: i64) -> i64 {
+    config
+        .get(key)
+        .and_then(Value::as_i64)
+        .filter(|d| (1..=MAX_RETENTION_DAYS).contains(d))
         .unwrap_or(default)
 }
 
@@ -96,8 +119,9 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
     }
 }
 
-/// Agent 历史指标清理任务执行器：删除 collected_at 超过保留期的
-/// host_metrics_history 行（曲线快照体积随时间增长，需滚动清理）。
+/// Agent 历史指标分层清理任务执行器：按 granularity 分层删除超过保留期的
+/// host_metrics_history 行（原始秒级/5min 桶/1h 桶保留期独立可配），并同轮
+/// 清理 snmp_events。
 pub struct AgentHistoryCleanupTaskExecutor;
 
 #[async_trait]
@@ -112,39 +136,42 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        let days = ctx
-            .config
-            .get("retention_days")
-            .and_then(Value::as_i64)
-            .filter(|d| (1..=MAX_RETENTION_DAYS).contains(d))
-            .unwrap_or(DEFAULT_RETENTION_DAYS);
-
-        let result = sqlx::query(
-            r"DELETE FROM host_metrics_history
-               WHERE collected_at < NOW() - make_interval(days => $1)",
-        )
-        .bind(i32::try_from(days).unwrap_or(i32::MAX))
-        .execute(&ctx.pool)
-        .await
-        .map_err(|e| {
-            SchedulerError::Execution(
-                msg("server.task.agent_history_cleanup_failed").with("error", e),
+        // 三层保留期：原始层（秒级，体积最大）默认 3 天、5min 桶层默认 30 天、
+        // 1h 桶层（长期趋势）默认 365 天，均 clamp 1-3650
+        let layers: [(&str, i64, i32); 3] = [
+            ("retention_days", DEFAULT_RAW_RETENTION_DAYS, 0),
+            ("archive_retention_days", DEFAULT_ARCHIVE_RETENTION_DAYS, 5),
+            ("rollup_retention_days", DEFAULT_ROLLUP_RETENTION_DAYS, 60),
+        ];
+        let mut total = 0u64;
+        for (key, default_days, granularity) in layers {
+            let days = retention_days(&ctx.config, key, default_days);
+            let result = sqlx::query(
+                r"DELETE FROM host_metrics_history
+                   WHERE granularity = $1
+                     AND collected_at < NOW() - make_interval(days => $2)",
             )
-        })?;
+            .bind(granularity)
+            .bind(i32::try_from(days).unwrap_or(i32::MAX))
+            .execute(&ctx.pool)
+            .await
+            .map_err(|e| {
+                SchedulerError::Execution(
+                    msg("server.task.agent_history_cleanup_failed").with("error", e),
+                )
+            })?;
+            total += result.rows_affected();
+        }
 
-        log_debug!(
-            "log.task.agent_history_cleanup_completed",
-            count = result.rows_affected()
+        log_debug!("log.task.agent_history_cleanup_completed", count = total);
+
+        // 同任务内追加清理 snmp_events：保留天数取任务 config（注册侧由 agent
+        // 配置段注入，缺省 30，范围 1-3650），与指标分层保留期独立
+        let snmp_days = retention_days(
+            &ctx.config,
+            "snmp_event_retention_days",
+            DEFAULT_RETENTION_DAYS,
         );
-
-        // 同任务内追加清理 snmp_events：保留天数与 host_metrics_history 同源，
-        // 均取任务 config（注册侧由 agent 配置段注入，缺省 30，范围 1-3650）
-        let snmp_days = ctx
-            .config
-            .get("snmp_event_retention_days")
-            .and_then(Value::as_i64)
-            .filter(|d| (1..=MAX_RETENTION_DAYS).contains(d))
-            .unwrap_or(DEFAULT_RETENTION_DAYS);
         let snmp_result = sqlx::query(
             r"DELETE FROM snmp_events
                WHERE occurred_at < NOW() - make_interval(days => $1)",
@@ -169,7 +196,17 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
 /// SNMP 设备轮询任务执行器：采集已配置 SNMP 的设备（MIB-II 系统组），
 /// 结果以 source='snmp' 的 monitored_hosts 行呈现于主机监控页，并按
 /// 轮询间隔 × 2 翻转连续失联设备为 offline。
-pub struct AgentSnmpPollTaskExecutor;
+pub struct AgentSnmpPollTaskExecutor {
+    /// 降采样聚合器喂料口（None = SNMP 实时采集开启，秒级样本已覆盖，
+    /// 由实时路径喂入；注册侧按 snmp.live.enabled 决定）
+    metrics: Option<Arc<MetricsAggregator>>,
+}
+
+impl AgentSnmpPollTaskExecutor {
+    pub fn new(metrics: Option<Arc<MetricsAggregator>>) -> Self {
+        Self { metrics }
+    }
+}
 
 #[async_trait]
 impl TaskExecutor for AgentSnmpPollTaskExecutor {
@@ -188,7 +225,7 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
             "interval_secs",
             DEFAULT_SNMP_POLL_INTERVAL_SECS,
         );
-        let (ok, fail) = snmp_poll::poll_all(&ctx.pool, interval_secs).await;
+        let (ok, fail) = snmp_poll::poll_all(&ctx.pool, interval_secs, self.metrics.clone()).await;
         log_debug!("log.task.agent_snmp_poll_completed", ok = ok, fail = fail);
         Ok("server.task.agent_snmp_poll_completed".to_string())
     }
@@ -198,7 +235,17 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
 /// Chassis Status + SDR 传感器），结果以 source='ipmi' 的 monitored_hosts 行
 /// 呈现于主机监控页，并按轮询间隔 × 2 翻转连续失联设备为 offline
 /// （采集细节见 [`crate::ipmi_poll`]）。
-pub struct AgentIpmiPollTaskExecutor;
+pub struct AgentIpmiPollTaskExecutor {
+    /// 降采样聚合器喂料口（None = IPMI 实时采集开启，秒级样本已覆盖，
+    /// 注册侧按 ipmi.live.enabled 决定）
+    metrics: Option<Arc<MetricsAggregator>>,
+}
+
+impl AgentIpmiPollTaskExecutor {
+    pub fn new(metrics: Option<Arc<MetricsAggregator>>) -> Self {
+        Self { metrics }
+    }
+}
 
 #[async_trait]
 impl TaskExecutor for AgentIpmiPollTaskExecutor {
@@ -217,10 +264,177 @@ impl TaskExecutor for AgentIpmiPollTaskExecutor {
             "interval_secs",
             DEFAULT_IPMI_POLL_INTERVAL_SECS,
         );
-        let (ok, fail) = ipmi_poll::poll_all(&ctx.pool, interval_secs).await;
+        let (ok, fail) = ipmi_poll::poll_all(&ctx.pool, interval_secs, self.metrics.clone()).await;
         log_debug!("log.task.agent_ipmi_poll_completed", ok = ok, fail = fail);
         Ok("server.task.agent_ipmi_poll_completed".to_string())
     }
+}
+
+/// 1h 桶滚降任务执行器：把已完结小时的 granularity=5 行按 (agent_id, 小时)
+/// 内存合并为 granularity=60 行（avg 按样本数 cnt 加权、min/max 取极值、
+/// last 取末桶、cnt 累加），每小时第 10 分运行补断点漏滚。
+pub struct AgentMetricsRollupTaskExecutor;
+
+#[async_trait]
+impl TaskExecutor for AgentMetricsRollupTaskExecutor {
+    fn task_type(&self) -> &str {
+        "agent_metrics_rollup"
+    }
+
+    /// 每小时例行运行，成功日志降为 debug 避免刷屏
+    fn debug_routine_logs(&self) -> bool {
+        true
+    }
+
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+        // 未滚降的完整小时：小时窗已结束且留足 5min 桶落库滞留（10min）余量，
+        // 且不存在同 (agent, 小时) 的 1h 桶行
+        let pending = sqlx::query_as::<_, (Uuid, DateTime<Utc>)>(
+            r"SELECT DISTINCT agent_id,
+                      to_timestamp(floor(extract(epoch FROM collected_at) / 3600) * 3600) AS hour_bucket
+               FROM host_metrics_history h1
+               WHERE granularity = 5
+                 AND to_timestamp(floor(extract(epoch FROM collected_at) / 3600) * 3600)
+                     + INTERVAL '1 hour' <= NOW() - INTERVAL '15 minutes'
+                 AND NOT EXISTS (
+                     SELECT 1 FROM host_metrics_history h2
+                     WHERE h2.agent_id = h1.agent_id
+                       AND h2.granularity = 60
+                       AND h2.collected_at =
+                           to_timestamp(floor(extract(epoch FROM h1.collected_at) / 3600) * 3600)
+                 )
+               ORDER BY hour_bucket
+               LIMIT $1",
+        )
+        .bind(ROLLUP_HOURS_PER_RUN)
+        .fetch_all(&ctx.pool)
+        .await
+        .map_err(|e| {
+            SchedulerError::Execution(msg("server.task.agent_metrics_rollup_failed").with("error", e))
+        })?;
+
+        let pending_count = pending.len();
+        for &(agent_id, hour) in &pending {
+            let hour_end = hour + chrono::Duration::hours(1);
+            let rows: Vec<Value> = sqlx::query_scalar(
+                r"SELECT metrics FROM host_metrics_history
+                   WHERE agent_id = $1 AND granularity = 5
+                     AND collected_at >= $2 AND collected_at < $3
+                   ORDER BY collected_at",
+            )
+            .bind(agent_id)
+            .bind(hour)
+            .bind(hour_end)
+            .fetch_all(&ctx.pool)
+            .await
+            .map_err(|e| {
+                SchedulerError::Execution(
+                    msg("server.task.agent_metrics_rollup_failed").with("error", e),
+                )
+            })?;
+            let metrics = rollup_metrics(&rows);
+            sqlx::query(
+                r"INSERT INTO host_metrics_history (agent_id, granularity, collected_at, metrics)
+                  VALUES ($1, 60, $2, $3)
+                  ON CONFLICT (agent_id, granularity, collected_at)
+                  DO UPDATE SET metrics = EXCLUDED.metrics",
+            )
+            .bind(agent_id)
+            .bind(hour)
+            .bind(&metrics)
+            .execute(&ctx.pool)
+            .await
+            .map_err(|e| {
+                SchedulerError::Execution(
+                    msg("server.task.agent_metrics_rollup_failed").with("error", e),
+                )
+            })?;
+        }
+
+        log_debug!(
+            "log.task.agent_metrics_rollup_completed",
+            count = pending_count
+        );
+        Ok("server.task.agent_metrics_rollup_completed".to_string())
+    }
+}
+
+/// 5min 桶指标展开（聚合层行内 JSONB 单键）。
+struct BucketSample {
+    avg: f64,
+    min: f64,
+    max: f64,
+    last: f64,
+    cnt: u64,
+}
+
+/// 5min 桶 JSONB 单键 → 指标展开（任一字段缺失/类型不符返回 None）。
+fn parse_bucket_sample(spec: &Value) -> Option<BucketSample> {
+    Some(BucketSample {
+        avg: spec.get("avg").and_then(Value::as_f64)?,
+        min: spec.get("min").and_then(Value::as_f64)?,
+        max: spec.get("max").and_then(Value::as_f64)?,
+        last: spec.get("last").and_then(Value::as_f64)?,
+        cnt: spec.get("cnt").and_then(Value::as_u64)?,
+    })
+}
+
+/// 1h 滚降累加器：avg 按 cnt 加权（Σ(avg×cnt)/Σcnt），min/max 取极值，
+/// last 逐桶覆盖（行按 collected_at 升序，后到即最新），cnt 累加。
+#[derive(Default)]
+struct RollupAcc {
+    sum_weighted: f64,
+    min: Option<f64>,
+    max: Option<f64>,
+    last: f64,
+    cnt: u64,
+}
+
+impl RollupAcc {
+    fn push(&mut self, s: &BucketSample) {
+        self.sum_weighted += s.avg * s.cnt as f64;
+        self.min = Some(self.min.map_or(s.min, |m| m.min(s.min)));
+        self.max = Some(self.max.map_or(s.max, |m| m.max(s.max)));
+        self.last = s.last;
+        self.cnt += s.cnt;
+    }
+}
+
+/// 5min 桶行 metrics 合并为 1h 桶 metrics：按键加权均值/极值/末值/计数重组
+/// （纯函数，便于单测）；结构不合法的键跳过。
+fn rollup_metrics(rows: &[Value]) -> Value {
+    let mut accs: BTreeMap<String, RollupAcc> = BTreeMap::new();
+    for row in rows {
+        let Some(obj) = row.as_object() else {
+            continue;
+        };
+        for (key, spec) in obj {
+            let Some(sample) = parse_bucket_sample(spec) else {
+                continue;
+            };
+            accs.entry(key.clone()).or_default().push(&sample);
+        }
+    }
+    let mut out = serde_json::Map::with_capacity(accs.len());
+    for (key, acc) in &accs {
+        if acc.cnt == 0 {
+            continue;
+        }
+        let (Some(min), Some(max)) = (acc.min, acc.max) else {
+            continue;
+        };
+        out.insert(
+            key.clone(),
+            json!({
+                "avg": round4(acc.sum_weighted / acc.cnt as f64),
+                "min": min,
+                "max": max,
+                "last": acc.last,
+                "cnt": acc.cnt,
+            }),
+        );
+    }
+    Value::Object(out)
 }
 
 #[cfg(test)]
@@ -238,5 +452,49 @@ mod tests {
         // 负数/非数字（as_u64 返回 None）→ 默认
         assert_eq!(config_u64(&cfg, "neg", 300), 300);
         assert_eq!(config_u64(&cfg, "text", 300), 300);
+    }
+
+    #[test]
+    fn 保留天数越界回落默认() {
+        let cfg = serde_json::json!({"retention_days": 7, "zero": 0, "big": 9999, "text": "x"});
+        assert_eq!(retention_days(&cfg, "retention_days", 3), 7);
+        // 缺失/0/超上限/非数字 → 默认
+        assert_eq!(retention_days(&cfg, "missing", 3), 3);
+        assert_eq!(retention_days(&cfg, "zero", 3), 3);
+        assert_eq!(retention_days(&cfg, "big", 3), 3);
+        assert_eq!(retention_days(&cfg, "text", 3), 3);
+    }
+
+    #[test]
+    fn 一小时滚降按键加权合并() {
+        // 两个 5min 桶：cpu 均值按 cnt 加权（(10×4 + 20×6)/10 = 16），
+        // min/max 取极值，last 取末桶，cnt 累加
+        let rows = vec![
+            json!({"cpu": {"avg": 10.0, "min": 8.0, "max": 12.0, "last": 11.0, "cnt": 4},
+                   "temp": {"avg": 30.0, "min": 30.0, "max": 30.0, "last": 30.0, "cnt": 4}}),
+            json!({"cpu": {"avg": 20.0, "min": 15.0, "max": 25.0, "last": 22.0, "cnt": 6}}),
+        ];
+        let out = rollup_metrics(&rows);
+        let cpu = out["cpu"].as_object().unwrap();
+        assert_eq!(cpu["avg"], json!(16.0));
+        assert_eq!(cpu["min"], json!(8.0));
+        assert_eq!(cpu["max"], json!(25.0));
+        assert_eq!(cpu["last"], json!(22.0));
+        assert_eq!(cpu["cnt"], json!(10));
+        // 仅首桶存在的键原样合并
+        assert_eq!(out["temp"]["cnt"], json!(4));
+    }
+
+    #[test]
+    fn 滚降跳过结构不合法的键() {
+        let rows = vec![json!({
+            "cpu": {"avg": 10.0, "min": 8.0, "max": 12.0, "last": 11.0, "cnt": 4},
+            "bad": {"avg": "x"},
+            "worse": "scalar",
+        })];
+        let out = rollup_metrics(&rows);
+        let obj = out.as_object().unwrap();
+        assert_eq!(obj.len(), 1);
+        assert!(obj.contains_key("cpu"));
     }
 }

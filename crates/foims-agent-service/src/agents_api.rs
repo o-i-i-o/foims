@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sqlx::Row;
 use uuid::Uuid;
 
@@ -22,7 +22,8 @@ use foims_common::provider::ConfigProvider;
 use foims_common::{ApiResponse, AppError, msg};
 
 /// 曲线数据抽样上限：超过该点数按均匀步长抽取，避免前端渲染卡顿
-const HISTORY_MAX_POINTS: usize = 200;
+///（8760h=1 年窗口的 1h 桶层最坏 8760 点，抽样后 600 点仍可分辨趋势）
+const HISTORY_MAX_POINTS: usize = 600;
 
 /// 采集端口名长度上限（与 device_interfaces.name VARCHAR(50) 对齐）
 const MAX_INTERFACE_NAME_LEN: usize = 50;
@@ -480,9 +481,14 @@ pub async fn put_monitor_port<S: ConfigProvider>(
     ))
 }
 
-/// GET /api/agents/{id}/history?hours=24：曲线数据，hours 合法区间 1..=168，
+/// GET /api/agents/{id}/history?hours=24：曲线数据，hours 合法区间 1..=8760，
 /// 返回 {items:[{t,cpu,mem,disk,temp,rx_bps,tx_bps}]}（非分页，超出上限
 /// 均匀抽样）。
+///
+/// 分层选层（三层降采样存储）：≤72h 读原始层（granularity=0，秒级标量）；
+/// ≤720h 读 5min 桶层（granularity=5）；更长读 1h 桶层（granularity=60）。
+/// 桶层行内为 {avg,min,max,last,cnt} 聚合对象：输出 avg 作主值并附
+/// *_min/*_max 供前端绘制波动带宽；原始层为标量，无极值后缀键。
 pub async fn get_agent_history<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -493,17 +499,25 @@ pub async fn get_agent_history<S: ConfigProvider>(
         .get("hours")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(24);
-    if !(1..=168).contains(&hours) {
+    if !(1..=8760).contains(&hours) {
         return Err(AppError::Validation(
-            msg("server.common.invalid_param").with("param", "hours (1-168)"),
+            msg("server.common.invalid_param").with("param", "hours (1-8760)"),
         ));
     }
+    // 分层选层：窗口越长取越粗粒度，控制扫描行数与响应点数
+    let granularity: i16 = if hours <= 72 {
+        0
+    } else if hours <= 720 {
+        5
+    } else {
+        60
+    };
     let pool = state.pool()?.get_conn();
     let since = Utc::now() - chrono::Duration::hours(hours);
     // 抽样下推：窗口函数计算行号 rn 与总行数 n，超上限时按 rn % ⌈n/上限⌉ = 1
-    // 在 SQL 内均匀抽取，避免 168h 最坏约 6 万行全量拉取后内存抽样
-    //（rn/n 为 bigint；内插值仅为 HISTORY_MAX_POINTS 编译期常量，
-    // 经 QueryBuilder push 拼接；id/时间走 push_bind）
+    // 在 SQL 内均匀抽取，避免原始层 72h 最坏约 26 万行全量拉取后内存抽样
+    //（rn/n 为 bigint；内插值仅为 HISTORY_MAX_POINTS 编译期常量与分层
+    // granularity 白名单值，经 QueryBuilder push 拼接；id/时间走 push_bind）
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         r#"SELECT collected_at, metrics FROM (
                SELECT collected_at, metrics,
@@ -513,6 +527,8 @@ pub async fn get_agent_history<S: ConfigProvider>(
                 WHERE agent_id = "#,
     );
     qb.push_bind(id)
+        .push(" AND granularity = ")
+        .push(granularity)
         .push(" AND collected_at >= ")
         .push_bind(since)
         .push(") sampled WHERE n <= ")
@@ -525,19 +541,44 @@ pub async fn get_agent_history<S: ConfigProvider>(
         .fetch_all(&pool)
         .await?;
 
+    // 曲线六键统一口径：缺失键（如 IPMI 主机无 cpu/mem）输出 null
+    const METRIC_KEYS: [&str; 6] = ["cpu", "mem", "disk", "temp", "rx_bps", "tx_bps"];
     let points: Vec<Value> = rows
         .into_iter()
         .map(|(t, metrics)| {
-            let pick = |key: &str| metrics.get(key).cloned().unwrap_or(Value::Null);
-            json!({
-                "t": rfc3339(t),
-                "cpu": pick("cpu"),
-                "mem": pick("mem"),
-                "disk": pick("disk"),
-                "temp": pick("temp"),
-                "rx_bps": pick("rx_bps"),
-                "tx_bps": pick("tx_bps"),
-            })
+            let mut point = Map::new();
+            point.insert("t".to_string(), json!(rfc3339(t)));
+            for key in METRIC_KEYS {
+                if granularity == 0 {
+                    // 原始层：标量直出
+                    point.insert(
+                        key.to_string(),
+                        metrics.get(key).cloned().unwrap_or(Value::Null),
+                    );
+                } else {
+                    // 桶层：avg 主值 + min/max 带宽（last/cnt 仅供内部校对，不下发）
+                    let spec = metrics.get(key);
+                    point.insert(
+                        key.to_string(),
+                        spec.and_then(|s| s.get("avg"))
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    );
+                    point.insert(
+                        format!("{key}_min"),
+                        spec.and_then(|s| s.get("min"))
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    );
+                    point.insert(
+                        format!("{key}_max"),
+                        spec.and_then(|s| s.get("max"))
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    );
+                }
+            }
+            Value::Object(point)
         })
         .collect();
     Ok(foims_common::ok_json(

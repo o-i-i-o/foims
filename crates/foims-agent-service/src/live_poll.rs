@@ -48,6 +48,7 @@ use crate::ipmi_poll::{
     IpmiDeviceRow, collect_device, ensure_ipmi_host_present, ipmi_machine_id, load_ipmi_devices,
     load_ipmi_host_id,
 };
+use crate::metrics_aggregator::MetricsAggregator;
 use crate::snmp_poll::{
     SnmpDeviceRow, ensure_snmp_host_present, load_snmp_devices, load_snmp_host_id, snmp_machine_id,
 };
@@ -137,12 +138,15 @@ pub fn start_live_poller(
     config: SnmpLiveConfig,
     registry: Arc<LiveRegistry>,
     alerts: Arc<AlertRuntime>,
+    metrics: Arc<MetricsAggregator>,
     shutdown: ShutdownReceiver<()>,
 ) {
     if !config.enabled {
         return;
     }
-    tokio::spawn(run_supervisor(pool, config, registry, alerts, shutdown));
+    tokio::spawn(run_supervisor(
+        pool, config, registry, alerts, metrics, shutdown,
+    ));
 }
 
 /// 事件循环状态：跨轮保留的会话、profile 与采样节拍。
@@ -167,6 +171,8 @@ struct WorkerContext {
     config: SnmpLiveConfig,
     registry: Arc<LiveRegistry>,
     alerts: Arc<AlertRuntime>,
+    /// 指标降采样聚合器（5min 桶中间层，秒级读数喂入）
+    metrics: Arc<MetricsAggregator>,
     semaphore: Arc<Semaphore>,
     initial_delay: Duration,
 }
@@ -184,6 +190,7 @@ async fn run_supervisor(
     config: SnmpLiveConfig,
     registry: Arc<LiveRegistry>,
     alerts: Arc<AlertRuntime>,
+    metrics: Arc<MetricsAggregator>,
     mut shutdown: ShutdownReceiver<()>,
 ) {
     let semaphore = Arc::new(Semaphore::new(config.max_concurrency.max(1)));
@@ -197,9 +204,12 @@ async fn run_supervisor(
                     &pool,
                     &rows,
                     &config,
-                    &registry,
-                    &alerts,
-                    &semaphore,
+                    &SnmpReconcileDeps {
+                        registry: &registry,
+                        alerts: &alerts,
+                        metrics: &metrics,
+                        semaphore: &semaphore,
+                    },
                     &mut workers,
                 )
                 .await;
@@ -229,14 +239,21 @@ async fn run_supervisor(
     foims_common::log_info!("system.snmp_live_stopped");
 }
 
+/// SNMP reconcile 依赖束：registry/告警运行时/聚合器/并发许可共享句柄，
+/// 收拢函数参数数量。
+struct SnmpReconcileDeps<'a> {
+    registry: &'a Arc<LiveRegistry>,
+    alerts: &'a Arc<AlertRuntime>,
+    metrics: &'a Arc<MetricsAggregator>,
+    semaphore: &'a Arc<Semaphore>,
+}
+
 /// 对比数据库设备清单与运行中的 worker：新增/变更重启，删除清理。
 async fn reconcile(
     pool: &PgPool,
     rows: &[SnmpDeviceRow],
     config: &SnmpLiveConfig,
-    registry: &Arc<LiveRegistry>,
-    alerts: &Arc<AlertRuntime>,
-    semaphore: &Arc<Semaphore>,
+    deps: &SnmpReconcileDeps<'_>,
     workers: &mut HashMap<Uuid, WorkerHandle>,
 ) {
     let total = rows.len();
@@ -297,9 +314,10 @@ async fn reconcile(
             monitor_if: row.monitor_if.clone(),
             params: params.clone(),
             config: config.clone(),
-            registry: registry.clone(),
-            alerts: alerts.clone(),
-            semaphore: semaphore.clone(),
+            registry: deps.registry.clone(),
+            alerts: deps.alerts.clone(),
+            metrics: deps.metrics.clone(),
+            semaphore: deps.semaphore.clone(),
             initial_delay: stagger_delay(config.interval_secs, index, total),
         };
         workers.insert(
@@ -317,7 +335,7 @@ async fn reconcile(
             true
         } else {
             worker.task.abort();
-            registry.remove(*device_id);
+            deps.registry.remove(*device_id);
             false
         }
     });
@@ -476,6 +494,19 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
     let cpu_pct = snapshot.cpu_usage_pct;
     let mem_pct = snapshot.mem_usage_pct;
     let temp_c = snapshot.temperature_c;
+    // 喂入降采样聚合器（5min 桶中间层）：秒级读数；实时路径无磁盘读数，
+    // 不落 disk 键（快照入注册表前完成，snapshot 随后 move）
+    context.metrics.ingest(
+        context.host_id,
+        snapshot.collected_at,
+        &serde_json::json!({
+            "cpu": cpu_pct,
+            "mem": mem_pct,
+            "temp": temp_c,
+            "rx_bps": snapshot.rx_bps,
+            "tx_bps": snapshot.tx_bps,
+        }),
+    );
     context.registry.upsert(LiveDeviceSnapshot {
         device_id: context.device_id,
         device_name: context.device_name.clone(),
@@ -607,6 +638,8 @@ struct IpmiWorkerContext {
     config: IpmiLiveConfig,
     registry: Arc<IpmiLiveRegistry>,
     alerts: Arc<AlertRuntime>,
+    /// 指标降采样聚合器（5min 桶中间层，秒级读数喂入）
+    metrics: Arc<MetricsAggregator>,
     semaphore: Arc<Semaphore>,
     initial_delay: Duration,
 }
@@ -623,13 +656,14 @@ pub fn start_ipmi_live_poller(
     config: IpmiLiveConfig,
     registry: Arc<IpmiLiveRegistry>,
     alerts: Arc<AlertRuntime>,
+    metrics: Arc<MetricsAggregator>,
     shutdown: ShutdownReceiver<()>,
 ) {
     if !config.enabled {
         return;
     }
     tokio::spawn(run_ipmi_supervisor(
-        pool, config, registry, alerts, shutdown,
+        pool, config, registry, alerts, metrics, shutdown,
     ));
 }
 
@@ -639,6 +673,7 @@ async fn run_ipmi_supervisor(
     config: IpmiLiveConfig,
     registry: Arc<IpmiLiveRegistry>,
     alerts: Arc<AlertRuntime>,
+    metrics: Arc<MetricsAggregator>,
     mut shutdown: ShutdownReceiver<()>,
 ) {
     let semaphore = Arc::new(Semaphore::new(config.max_concurrency.max(1)));
@@ -652,9 +687,12 @@ async fn run_ipmi_supervisor(
                     &pool,
                     &rows,
                     &config,
-                    &registry,
-                    &alerts,
-                    &semaphore,
+                    &IpmiReconcileDeps {
+                        registry: &registry,
+                        alerts: &alerts,
+                        metrics: &metrics,
+                        semaphore: &semaphore,
+                    },
                     &mut workers,
                 )
                 .await;
@@ -684,14 +722,21 @@ async fn run_ipmi_supervisor(
     foims_common::log_info!("system.ipmi_live_stopped");
 }
 
+/// IPMI reconcile 依赖束：registry/告警运行时/聚合器/并发许可共享句柄，
+/// 收拢函数参数数量。
+struct IpmiReconcileDeps<'a> {
+    registry: &'a Arc<IpmiLiveRegistry>,
+    alerts: &'a Arc<AlertRuntime>,
+    metrics: &'a Arc<MetricsAggregator>,
+    semaphore: &'a Arc<Semaphore>,
+}
+
 /// 对比数据库 IPMI 设备清单与运行中的 worker：新增/变更重启，删除清理。
 async fn reconcile_ipmi(
     pool: &PgPool,
     rows: &[IpmiDeviceRow],
     config: &IpmiLiveConfig,
-    registry: &Arc<IpmiLiveRegistry>,
-    alerts: &Arc<AlertRuntime>,
-    semaphore: &Arc<Semaphore>,
+    deps: &IpmiReconcileDeps<'_>,
     workers: &mut HashMap<Uuid, IpmiWorkerHandle>,
 ) {
     let total = rows.len();
@@ -724,7 +769,7 @@ async fn reconcile_ipmi(
         let params = match row.device.to_ipmi_params_async(&row.ip).await {
             Ok(Some(params)) => params,
             Ok(None) => {
-                registry.remove(device_id);
+                deps.registry.remove(device_id);
                 continue;
             }
             Err(e) => {
@@ -753,9 +798,10 @@ async fn reconcile_ipmi(
             ip: row.ip.clone(),
             params: params.clone(),
             config: config.clone(),
-            registry: registry.clone(),
-            alerts: alerts.clone(),
-            semaphore: semaphore.clone(),
+            registry: deps.registry.clone(),
+            alerts: deps.alerts.clone(),
+            metrics: deps.metrics.clone(),
+            semaphore: deps.semaphore.clone(),
             initial_delay: stagger_delay(config.interval_secs, index, total),
         };
         workers.insert(
@@ -772,7 +818,7 @@ async fn reconcile_ipmi(
             true
         } else {
             worker.task.abort();
-            registry.remove(*device_id);
+            deps.registry.remove(*device_id);
             false
         }
     });
@@ -835,6 +881,12 @@ async fn run_ipmi_cycle(context: &IpmiWorkerContext) -> bool {
 
     let temp_c = reading.max_temp;
     let snapshot = IpmiLiveSnapshot::from_reading(&reading, Utc::now());
+    // 喂入降采样聚合器（5min 桶中间层）：IPMI 仅温度读数
+    context.metrics.ingest(
+        context.host_id,
+        snapshot.collected_at,
+        &serde_json::json!({ "temp": temp_c }),
+    );
     context.registry.upsert(IpmiLiveDeviceSnapshot {
         device_id: context.device_id,
         device_name: context.device_name.clone(),

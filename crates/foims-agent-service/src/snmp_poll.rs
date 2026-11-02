@@ -26,6 +26,8 @@ use foims_snmp::core::{
 };
 use foims_snmp::events::record_events;
 
+use crate::metrics_aggregator::MetricsAggregator;
+
 /// 单轮轮询的最大并发设备数：避免大量离线设备同时超时拖垮运行时
 const POLL_CONCURRENCY: usize = 8;
 /// hostname/os 入库截断宽度（与 ingest 文本校验上限对齐）
@@ -58,7 +60,15 @@ struct SnmpSysInfo {
 
 /// 单轮 SNMP 轮询入口：采集全部已配置设备并 upsert `monitored_hosts`（source='snmp'）行，
 /// 返回 (成功台数, 失败台数)。
-pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
+///
+/// `metrics` 为降采样聚合器喂料口：实时采集关闭时传入 Some（秒级样本已停，
+/// 由本路径 5 分钟一次喂入中间层）；实时开启时传 None——秒级样本已覆盖，
+/// 且本路径快照含 disk 键、键集与实时路径不同，喂入会触发指纹切换拆桶。
+pub async fn poll_all(
+    pool: &PgPool,
+    interval_secs: u64,
+    metrics: Option<Arc<MetricsAggregator>>,
+) -> (usize, usize) {
     let devices = match load_snmp_devices(pool).await {
         Ok(d) => d,
         Err(e) => {
@@ -75,6 +85,7 @@ pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
     for row in devices {
         let semaphore = semaphore.clone();
         let pool = pool.clone();
+        let metrics = metrics.clone();
         tasks.spawn(async move {
             // 先取许可再采集，限制单轮并发；许可获取失败（信号量已关闭等
             // 运行时异常）记 warn 并跳过本轮采集
@@ -86,7 +97,7 @@ pub async fn poll_all(pool: &PgPool, interval_secs: u64) -> (usize, usize) {
                 }
             };
             let _permit = permit;
-            poll_and_upsert(&pool, &row).await
+            poll_and_upsert(&pool, &row, metrics.as_deref()).await
         });
     }
 
@@ -223,7 +234,11 @@ pub(crate) async fn ensure_snmp_host_present(
 /// [`ensure_snmp_host_present`] 先行保证存在，采集任一步失败仅记录日志并提前
 /// 返回（不标记 active、不刷新 last_seen，由调用方计入失败数，
 /// 行 last_seen 不随失败推进，累积触发离线翻转）。
-async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
+async fn poll_and_upsert(
+    pool: &PgPool,
+    row: &SnmpDeviceRow,
+    metrics: Option<&MetricsAggregator>,
+) -> Result<(), ()> {
     let device_id = row.device.id;
     let device_name = row.device.name.as_str();
     let ip = row.ip.as_str();
@@ -371,9 +386,13 @@ async fn poll_and_upsert(pool: &PgPool, row: &SnmpDeviceRow) -> Result<(), ()> {
         "rx_bps": rx_bps,
         "tx_bps": tx_bps,
     });
+    // 喂入降采样聚合器（5min 桶中间层）：仅实时采集关闭时喂（见 poll_all）
+    if let Some(metrics) = metrics {
+        metrics.ingest(agent_id, now, &history);
+    }
     let insert = sqlx::query(
         r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
-          VALUES ($1, $2, $3) ON CONFLICT (agent_id, collected_at) DO NOTHING",
+          VALUES ($1, $2, $3) ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
     )
     .bind(agent_id)
     .bind(now)

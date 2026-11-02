@@ -45,6 +45,8 @@ pub struct ReportContext {
     pub alerts: Arc<crate::alert_episode::AlertRuntime>,
     /// Agent 实时快照注册表（ingest 入库成功后覆盖，live_api SSE 读取）
     pub agent_live: Arc<crate::live_poll::AgentLiveRegistry>,
+    /// 指标降采样聚合器（5min 桶中间层，ingest 每帧喂入）
+    pub metrics: Arc<crate::metrics_aggregator::MetricsAggregator>,
 }
 
 impl ReportContext {
@@ -61,6 +63,7 @@ pub fn spawn_report_server_task(
     config: foims_common::config::SharedConfig,
     alerts: Arc<crate::alert_episode::AlertRuntime>,
     agent_live: Arc<crate::live_poll::AgentLiveRegistry>,
+    metrics: Arc<crate::metrics_aggregator::MetricsAggregator>,
 ) {
     let agent_enabled = config.load().agent.enabled;
     if !agent_enabled {
@@ -75,6 +78,7 @@ pub fn spawn_report_server_task(
             config,
             alerts,
             agent_live,
+            metrics,
         };
         // 证书物料缺失时拒绝启动监听（mTLS 无法建立），不 panic
         let material = match crate::cert::ensure_agent_certs().await {

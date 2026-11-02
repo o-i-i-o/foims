@@ -68,17 +68,20 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id BIGSERIAL PRIMARY KEY,
             agent_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
             collected_at TIMESTAMP WITH TIME ZONE NOT NULL,
+            granularity SMALLINT NOT NULL DEFAULT 0
+                CONSTRAINT chk_host_metrics_history_granularity CHECK (granularity IN (0, 5, 60)),
             metrics JSONB NOT NULL
         )",
     )
     .execute(pool)
     .await?;
 
-    // (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING 幂等去重，
-    // 防止 agent 重试/重放同一采集时刻重复写重；兼顾曲线查询范围扫描
+    // (agent_id, granularity, collected_at) 唯一：配合入库 ON CONFLICT 幂等去重，
+    // 防止 agent 重试/重放同一采集时刻重复写重（原始层 granularity=0 与
+    // 5min/1h 降采样桶层互不冲突）；兼顾曲线查询按层范围扫描
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS idx_host_metrics_history_agent_time
-            ON host_metrics_history (agent_id, collected_at)",
+            ON host_metrics_history (agent_id, granularity, collected_at)",
     )
     .execute(pool)
     .await?;

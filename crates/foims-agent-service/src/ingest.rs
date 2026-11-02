@@ -447,8 +447,8 @@ pub async fn ingest(
     if status == "disabled" {
         return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用，禁止上报");
     }
-    // 唯一索引 (agent_id, collected_at) 冲突时跳过：agent 重试/重放同一采集
-    // 时刻的幂等去重，避免重复上报写重
+    // 唯一索引 (agent_id, granularity, collected_at) 冲突时跳过：agent 重试/重放
+    // 同一采集时刻的幂等去重，避免重复上报写重
     for (report, collected_at, _) in &valid {
         let mem = mem_usage_pct(report.memory.total, report.memory.used);
         let disk = disk_usage_pct(&report.disks);
@@ -462,9 +462,11 @@ pub async fn ingest(
             "rx_bps": sum_net_bps(&report.nets, |n| n.rx_bps),
             "tx_bps": sum_net_bps(&report.nets, |n| n.tx_bps),
         });
+        // 同步喂入降采样聚合器（5min 桶中间层，纯内存无 IO）
+        ctx.metrics.ingest(agent_id, *collected_at, &snapshot);
         let insert = sqlx::query(
             r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
-              VALUES ($1, $2, $3) ON CONFLICT (agent_id, collected_at) DO NOTHING",
+              VALUES ($1, $2, $3) ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
         )
         .bind(agent_id)
         .bind(*collected_at)

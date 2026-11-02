@@ -542,9 +542,16 @@ pub struct AgentConfig {
     /// 单条上报 payload 上限（字节），超出返回 413。
     #[serde(default = "default_agent_max_report_bytes")]
     pub max_report_bytes: usize,
-    /// host_metrics_history 保留天数（清理任务按此删除旧行）。
+    /// host_metrics_history 原始层（granularity=0 秒级）保留天数（清理任务
+    /// 按此删除旧行）；5min/1h 桶层保留期见 archive/rollup_retention_days。
     #[serde(default = "default_agent_history_retention_days")]
     pub history_retention_days: u32,
+    /// host_metrics_history 5min 桶层（granularity=5）保留天数。
+    #[serde(default = "default_agent_archive_retention_days")]
+    pub archive_retention_days: u32,
+    /// host_metrics_history 1h 桶层（granularity=60）保留天数（长期趋势层）。
+    #[serde(default = "default_agent_rollup_retention_days")]
+    pub rollup_retention_days: u32,
     /// snmp_events 保留天数（同一清理任务按此删除旧事件）。
     #[serde(default = "default_agent_history_retention_days")]
     pub snmp_event_retention_days: u32,
@@ -572,8 +579,17 @@ const fn default_agent_max_report_bytes() -> usize {
     262_144
 }
 
+/// 原始层秒级数据量最大，短保留（5min/1h 桶层承接历史曲线）。
 const fn default_agent_history_retention_days() -> u32 {
+    3
+}
+
+const fn default_agent_archive_retention_days() -> u32 {
     30
+}
+
+const fn default_agent_rollup_retention_days() -> u32 {
+    365
 }
 
 const fn default_agent_offline_factor() -> u32 {
@@ -596,6 +612,8 @@ impl Default for AgentConfig {
             port: default_agent_port(),
             max_report_bytes: default_agent_max_report_bytes(),
             history_retention_days: default_agent_history_retention_days(),
+            archive_retention_days: default_agent_archive_retention_days(),
+            rollup_retention_days: default_agent_rollup_retention_days(),
             snmp_event_retention_days: default_agent_history_retention_days(),
             offline_factor: default_agent_offline_factor(),
             use_public_url: false,

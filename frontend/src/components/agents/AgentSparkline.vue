@@ -4,19 +4,23 @@
  * 固定 viewBox（0 0 320 96）自绘 polyline，每序列独立配色（lineClass）。
  * max/min 标注由 formatValue 人性化；null/缺失值视为断点（分段 polyline），
  * 孤立单点渲染为实心圆点；全部无数据时渲染"暂无历史数据"。
+ * 序列可携带波动带宽（band，min/max 包络多边形，半透明填充在主线下方），
+ * 仅降采样桶层数据有极值键；原始层不传 band，不渲染多边形。
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
-/** 单条曲线序列：values 为数值点（null 视为断点），lineClass 为配色类 */
+/** 单条曲线序列：values 为数值点（null 视为断点），lineClass 为配色类；
+ * band 为可选波动带宽（min/max 与 values 同长同 x 轴对齐） */
 interface SparkSeriesItem {
   values: Array<number | null>;
   lineClass: string;
+  band?: { min: Array<number | null>; max: Array<number | null> } | null;
 }
 
 const props = withDefaults(
   defineProps<{
-    /** 序列数组：每项 { values: (number|null)[], lineClass: string } */
+    /** 序列数组：每项 { values: (number|null)[], lineClass: string, band? } */
     series: SparkSeriesItem[];
     /** 数值标注格式化（max/min 标注） */
     formatValue: (value: number) => string;
@@ -34,7 +38,10 @@ const PAD = 6;
 
 const nums = computed(() =>
   props.series
-    .flatMap((item) => item.values)
+    .flatMap((item) => [
+      ...item.values,
+      ...(item.band ? [...item.band.min, ...item.band.max] : [])
+    ])
     .filter((v) => v != null && Number.isFinite(Number(v)))
     .map(Number)
 );
@@ -55,7 +62,8 @@ const scale = computed(() => {
 });
 
 // 连续非空点拼接 polyline：null 视为断点；孤立单点记录为圆点，
-// 避免序列仅 1 点时曲线空白
+// 避免序列仅 1 点时曲线空白。band 有效区间（min/max 均有值且连续）拼
+// 多边形：正向 max 边 + 反向 min 边闭合
 const groups = computed(() => {
   if (!scale.value) {
     return [];
@@ -85,7 +93,34 @@ const groups = computed(() => {
       current.push([Number((PAD + i * step).toFixed(1)), Number(toY(Number(v)).toFixed(1))]);
     });
     flush();
-    return { lineClass: item.lineClass, segments, singles };
+    const band = item.band;
+    const bandPolygons: string[] = [];
+    if (band) {
+      let maxs: Array<[number, number]> = [];
+      let mins: Array<[number, number]> = [];
+      const flushBand = () => {
+        if (maxs.length > 1) {
+          bandPolygons.push(
+            [...maxs, ...mins.toReversed()].map((p) => p.join(",")).join(" ")
+          );
+        }
+        maxs = [];
+        mins = [];
+      };
+      item.values.forEach((_, i) => {
+        const lo = band.min[i];
+        const hi = band.max[i];
+        if (lo == null || hi == null || !Number.isFinite(Number(lo)) || !Number.isFinite(Number(hi))) {
+          flushBand();
+          return;
+        }
+        const x = Number((PAD + i * step).toFixed(1));
+        maxs.push([x, Number(toY(Number(hi)).toFixed(1))]);
+        mins.push([x, Number(toY(Number(lo)).toFixed(1))]);
+      });
+      flushBand();
+    }
+    return { lineClass: item.lineClass, segments, singles, bandPolygons };
   });
 });
 </script>
@@ -97,6 +132,7 @@ const groups = computed(() => {
       <line class="agent-spark-gridline" :x1="PAD" :y1="HEIGHT / 3" :x2="WIDTH - PAD" :y2="HEIGHT / 3"></line>
       <line class="agent-spark-gridline" :x1="PAD" :y1="(HEIGHT / 3) * 2" :x2="WIDTH - PAD" :y2="(HEIGHT / 3) * 2"></line>
       <g v-for="(group, index) in groups" :key="index" class="agent-spark-line" :class="group.lineClass">
+        <polygon v-for="(poly, bi) in group.bandPolygons" :key="`b-${bi}`" :points="poly" />
         <polyline v-for="(points, pi) in group.segments" :key="pi" :points="points" />
         <circle v-for="(dot, di) in group.singles" :key="di" :cx="dot.cx" :cy="dot.cy" r="3" />
       </g>

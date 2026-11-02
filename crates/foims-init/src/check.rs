@@ -679,7 +679,7 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
     );
     columns.insert(
         "host_metrics_history",
-        vec!["id", "agent_id", "collected_at", "metrics"],
+        vec!["id", "agent_id", "collected_at", "granularity", "metrics"],
     );
     columns.insert(
         "host_alert_episodes",
@@ -968,9 +968,10 @@ pub fn get_required_not_null_columns() -> Vec<(&'static str, &'static str)> {
         ("monitored_hosts", "status"),
         // 数据来源（agent|snmp|ipmi）必须有值：区分 Agent 上报、SNMP 轮询与 IPMI 带外记录
         ("monitored_hosts", "source"),
-        // 指标历史必须归属 agent 且带采集时间与指标载荷
+        // 指标历史必须归属 agent 且带采集时间、降采样粒度与指标载荷
         ("host_metrics_history", "agent_id"),
         ("host_metrics_history", "collected_at"),
+        ("host_metrics_history", "granularity"),
         ("host_metrics_history", "metrics"),
         // 告警 episode 必须归属主机并带指标名/生命周期状态/起止计时与阈值，
         // 静默窗口内的累计次数与通知行 ID 是就地刷新文案的依据
@@ -1023,8 +1024,9 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ("idx_monitored_hosts_machine_id", "monitored_hosts"),
         // 一台设备每个来源至多一条采集记录（(device_id, source) 部分唯一索引）
         ("idx_monitored_hosts_device_id", "monitored_hosts"),
-        // 指标历史 (agent_id, collected_at) 唯一：配合入库 ON CONFLICT DO NOTHING
-        // 幂等去重，防重复上报写重（agents.rs 建表时创建）
+        // 指标历史 (agent_id, granularity, collected_at) 唯一：配合入库 ON CONFLICT
+        // 幂等去重，防重复上报写重；原始层与 5min/1h 降采样桶层互不冲突
+        //（agents.rs 建表时创建）
         (
             "idx_host_metrics_history_agent_time",
             "host_metrics_history",

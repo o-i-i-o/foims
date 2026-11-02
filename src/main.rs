@@ -26,7 +26,7 @@ use foims::system::task_executors::{
 };
 use foims_agent_service::tasks::{
     AGENT_OFFLINE_BASE_INTERVAL_SECS, AgentHistoryCleanupTaskExecutor, AgentIpmiPollTaskExecutor,
-    AgentOfflineTaskExecutor, AgentSnmpPollTaskExecutor,
+    AgentMetricsRollupTaskExecutor, AgentOfflineTaskExecutor, AgentSnmpPollTaskExecutor,
 };
 use foims_common::config::Config;
 use foims_common::db::DbPool;
@@ -517,6 +517,10 @@ async fn main() -> std::io::Result<()> {
     // 与 SNMP/IPMI 快照并入同一 SSE/列表载荷按 source 区分
     let agent_live_registry = Arc::new(foims_agent_service::AgentLiveRegistry::new());
 
+    // 指标降采样聚合器：三来源秒级读数内存分桶 → 5min 桶（granularity=5）
+    // 落库（flush 循环见数据库可用分支），1h 桶由定时任务滚降生成
+    let metrics_aggregator = Arc::new(foims_agent_service::MetricsAggregator::new());
+
     // 告警 episode 运行时：实时采集、agent 上报、常驻兜底扫描三条路径共用的
     // 单实例（阈值缓存 + 状态机 + 落库与通知）。某来源实时采集开启时该来源
     // 主机的秒级读数归实时路径，兜底扫描不再包含，避免 5 分钟前的
@@ -535,6 +539,11 @@ async fn main() -> std::io::Result<()> {
         Arc::clone(runtime).start_sweeper(shutdown.subscribe());
     }
 
+    // 轮询路径喂料口径：实时采集开启时秒级样本已覆盖，轮询路径不重复喂
+    //（在下方 if-let 消耗 live_config 前捕获，供任务注册处使用）
+    let snmp_live_enabled = live_config.is_some();
+    let ipmi_live_enabled = ipmi_live_config.is_some();
+
     if let Some(live) = live_config
         && let Some(db_pool) = pool.as_ref()
         && let Some(runtime) = alert_runtime.clone()
@@ -544,6 +553,7 @@ async fn main() -> std::io::Result<()> {
             live,
             live_registry.clone(),
             runtime,
+            metrics_aggregator.clone(),
             shutdown.subscribe(),
         );
     }
@@ -557,6 +567,7 @@ async fn main() -> std::io::Result<()> {
             live,
             ipmi_live_registry.clone(),
             runtime,
+            metrics_aggregator.clone(),
             shutdown.subscribe(),
         );
     }
@@ -578,8 +589,15 @@ async fn main() -> std::io::Result<()> {
             u64::from(config.agent.offline_factor),
         )));
         registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
-        registry.register(Box::new(AgentSnmpPollTaskExecutor));
-        registry.register(Box::new(AgentIpmiPollTaskExecutor));
+        // 轮询路径喂料口：仅对应实时采集关闭时喂降采样聚合器（开启时由
+        // 秒级实时路径喂入，见 start_live_poller/start_ipmi_live_poller）
+        registry.register(Box::new(AgentSnmpPollTaskExecutor::new(
+            (!snmp_live_enabled).then(|| metrics_aggregator.clone()),
+        )));
+        registry.register(Box::new(AgentIpmiPollTaskExecutor::new(
+            (!ipmi_live_enabled).then(|| metrics_aggregator.clone()),
+        )));
+        registry.register(Box::new(AgentMetricsRollupTaskExecutor));
         registry
     });
 
@@ -597,7 +615,7 @@ async fn main() -> std::io::Result<()> {
                 // 系统任务统一「启动播种 + 按库注册」：scheduled_tasks 中的
                 // is_system 行是当前代码与配置的投影（任务管理页只读展示），
                 // cron/config 每次启动重算回写，避免代码与 DB 两份定义漂移
-                let seeds: [SystemTaskSeed<'_>; 8] = [
+                let seeds: [SystemTaskSeed<'_>; 9] = [
                     (
                         "system_backup",
                         "backup",
@@ -634,14 +652,17 @@ async fn main() -> std::io::Result<()> {
                             "factor": config.agent.offline_factor
                         }),
                     ),
-                    // Agent 历史指标与 SNMP 事件清理（每日 03:40）：两项保留期同属
-                    // 本任务配置，清理量均随运行时长增长，故合并在同一轮执行
+                    // Agent 历史指标分层清理（每日 03:40）：原始秒级/5min 桶/1h 桶
+                    // 保留期与 SNMP 事件保留期同属本任务配置，清理量均随运行
+                    // 时长增长，故合并在同一轮执行
                     (
                         "system_agent_history_cleanup",
                         "agent_history_cleanup",
                         "0 40 3 * * *",
                         serde_json::json!({
                             "retention_days": config.agent.history_retention_days,
+                            "archive_retention_days": config.agent.archive_retention_days,
+                            "rollup_retention_days": config.agent.rollup_retention_days,
                             "snmp_event_retention_days": config.agent.snmp_event_retention_days
                         }),
                     ),
@@ -661,6 +682,14 @@ async fn main() -> std::io::Result<()> {
                         "agent_ipmi_poll",
                         "0 */5 * * * *",
                         serde_json::json!({ "interval_secs": 300 }),
+                    ),
+                    // 5min 桶 → 1h 桶滚降（每小时 10 分）：补断点漏滚，仅处理
+                    // 已完结且未滚降的小时桶
+                    (
+                        "system_agent_metrics_rollup",
+                        "agent_metrics_rollup",
+                        "0 10 * * * *",
+                        serde_json::json!({}),
                     ),
                 ];
 
@@ -786,7 +815,16 @@ async fn main() -> std::io::Result<()> {
             app_state.config.clone(),
             runtime,
             agent_live_registry,
+            metrics_aggregator.clone(),
         );
+
+        // 5min 桶降采样聚合器落库循环：30s 节拍冲刷到期桶，关闭信号到达时
+        // 先冲刷一次再退出
+        tokio::spawn(foims_agent_service::run_metrics_flush_loop(
+            metrics_aggregator,
+            db_pool.get_conn(),
+            shutdown.subscribe(),
+        ));
     }
 
     let rate_limit_state = RateLimitState::new(rate_limiter.clone(), rate_limit_enabled);

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
- * 主机详情弹窗：分组卡片（系统/CPU/内存/磁盘/网络/温度风扇）+ 近 24h SVG 迷你趋势五卡。
+ * 主机详情弹窗：分组卡片（系统/CPU/内存/磁盘/网络/温度风扇）+ 历史趋势
+ * SVG 迷你曲线五卡（时间范围可切换，24h 原始层 / 7d·30d 5min 桶层 /
+ * 1y 1h 桶层）。
  * 详情与历史各走一条 useQuery；曲线为声明式渲染，无延迟测量时序依赖
  * （SVG 按 viewBox 等比缩放，容器宽度不影响绘制）。
  */
@@ -106,7 +108,8 @@ interface RawMetrics {
   _ipmi_state?: IpmiState | null;
 }
 
-/** 24h 曲线点（后端补齐六键，缺值为 null） */
+/** 曲线点：后端补齐六键（缺值 null）；桶层点额外带 *_min/*_max 极值键
+ *（原始层无此后缀键，undefined），供绘制 avg 主线 + min/max 波动带宽 */
 interface AgentHistoryPoint {
   cpu: number | null;
   mem: number | null;
@@ -114,10 +117,33 @@ interface AgentHistoryPoint {
   temp: number | null;
   rx_bps: number | null;
   tx_bps: number | null;
+  cpu_min?: number | null;
+  cpu_max?: number | null;
+  mem_min?: number | null;
+  mem_max?: number | null;
+  disk_min?: number | null;
+  disk_max?: number | null;
+  temp_min?: number | null;
+  temp_max?: number | null;
+  rx_bps_min?: number | null;
+  rx_bps_max?: number | null;
+  tx_bps_min?: number | null;
+  tx_bps_max?: number | null;
 }
 
 /** 曲线序列键 */
 type HistoryKey = "cpu" | "mem" | "disk" | "temp" | "rx_bps" | "tx_bps";
+
+/** 曲线时间范围选项：hours 同时决定后端降采样层（≤72 原始秒级 / ≤720
+ * 5min 桶 / 更长 1h 桶），24h=原始层、7d/30d=5min 桶层、1y=1h 桶层 */
+const HISTORY_RANGES = [
+  { key: "24h", hours: 24 },
+  { key: "7d", hours: 168 },
+  { key: "30d", hours: 720 },
+  { key: "1y", hours: 8760 }
+] as const;
+
+type HistoryRangeKey = (typeof HISTORY_RANGES)[number]["key"];
 
 const props = defineProps<{
   agentId: number | string;
@@ -157,11 +183,18 @@ const detailQuery = useQuery({
   }
 });
 
+/** 当前选中的曲线时间范围（切换即重新查询对应降采样层） */
+const historyRange = ref<HistoryRangeKey>("24h");
+
+const historyHours = computed(
+  () => HISTORY_RANGES.find((range) => range.key === historyRange.value)?.hours ?? 24
+);
+
 const historyQuery = useQuery({
-  queryKey: computed(() => ["agent-history", props.agentId]),
+  queryKey: computed(() => ["agent-history", props.agentId, historyRange.value]),
   queryFn: async (): Promise<AgentHistoryPoint[]> => {
     const result = await apiGet<{ items?: AgentHistoryPoint[] }>(
-      `/api/agents/${props.agentId}/history?hours=24`
+      `/api/agents/${props.agentId}/history?hours=${historyHours.value}`
     );
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
@@ -476,18 +509,24 @@ function formatChartNum(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-/** 按指标拆分 24h 历史序列（cpu/mem/disk/temp/rx/tx 均可能为 null） */
+/** 按指标拆分历史序列（cpu/mem/disk/temp/rx/tx 均可能为 null）；
+ * 桶层点带 *_min/*_max 极值 → 附 band 波动带宽，原始层无极值键 →
+ * band 全 null，AgentSparkline 不渲染多边形 */
 const sparkSeries = computed(() => {
   const items = historyQuery.data.value ?? [];
   const column = (key: HistoryKey) => items.map((item) => item?.[key] ?? null);
+  const band = (key: HistoryKey) => ({
+    min: items.map((item) => item?.[`${key}_min`] ?? null),
+    max: items.map((item) => item?.[`${key}_max`] ?? null)
+  });
   return {
-    cpu: [{ values: column("cpu"), lineClass: "agent-chart-line-cpu" }],
-    memory: [{ values: column("mem"), lineClass: "agent-chart-line-memory" }],
-    disk: [{ values: column("disk"), lineClass: "agent-chart-line-disk" }],
-    temp: [{ values: column("temp"), lineClass: "agent-chart-line-temp" }],
+    cpu: [{ values: column("cpu"), lineClass: "agent-chart-line-cpu", band: band("cpu") }],
+    memory: [{ values: column("mem"), lineClass: "agent-chart-line-memory", band: band("mem") }],
+    disk: [{ values: column("disk"), lineClass: "agent-chart-line-disk", band: band("disk") }],
+    temp: [{ values: column("temp"), lineClass: "agent-chart-line-temp", band: band("temp") }],
     net: [
-      { values: column("rx_bps"), lineClass: "agent-chart-line-rx" },
-      { values: column("tx_bps"), lineClass: "agent-chart-line-tx" }
+      { values: column("rx_bps"), lineClass: "agent-chart-line-rx", band: band("rx_bps") },
+      { values: column("tx_bps"), lineClass: "agent-chart-line-tx", band: band("tx_bps") }
     ]
   };
 });
@@ -694,8 +733,20 @@ function formatUnit(unit: string): (value: number) => string {
         </section>
       </div>
 
-      <!-- 近 24 小时迷你曲线（2×2，SVG 自绘） -->
-      <h4 class="agent-spark-heading">{{ t("agents.chart_heading") }}</h4>
+      <!-- 历史迷你曲线（2×2，SVG 自绘；时间范围切换对应不同降采样层） -->
+      <h4 class="agent-spark-heading">
+        <span>{{ t("agents.chart_heading") }}</span>
+        <span class="agent-chart-ranges" role="group" :aria-label="t('agents.chart_range_label')">
+          <button
+            v-for="range in HISTORY_RANGES"
+            :key="range.key"
+            type="button"
+            class="agent-chart-range-btn"
+            :class="{ active: historyRange === range.key }"
+            @click="historyRange = range.key"
+          >{{ t(`agents.range_${range.key}`) }}</button>
+        </span>
+      </h4>
       <div class="agent-spark-grid">
         <div v-if="!isIpmi" class="agent-spark-card">
           <h5>{{ t("agents.chart_cpu") }}</h5>

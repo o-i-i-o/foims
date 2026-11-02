@@ -359,12 +359,47 @@
     color: var(--color-text-muted);
   }
 
-  /* ===== 24h 迷你曲线（2×2） ===== */
+  /* ===== 历史迷你曲线（2×2，时间范围可切换） ===== */
   .agent-spark-heading {
     margin: 0.25rem 0 0.5rem;
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  /* 曲线时间范围切换：24h 原始层 / 7d·30d 5min 桶层 / 1y 1h 桶层 */
+  .agent-chart-ranges {
+    display: inline-flex;
+    gap: 0.25rem;
+  }
+
+  .agent-chart-range-btn {
+    border: 1px solid var(--color-border-light);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition:
+      color 0.12s ease,
+      border-color 0.12s ease,
+      background 0.12s ease;
+  }
+
+  .agent-chart-range-btn:hover {
+    color: var(--color-text);
+  }
+
+  .agent-chart-range-btn.active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 600;
   }
 
   .agent-spark-grid {
@@ -406,6 +441,13 @@
     stroke-linecap: round;
   }
 
+  /* 波动带宽（降采样桶层 min/max 包络）：半透明填充铺在主线下方，
+   * 填充色跟随各指标折线颜色（原始层无 band，不渲染 polygon） */
+  .agent-spark-line polygon {
+    stroke: none;
+    opacity: 0.15;
+  }
+
   /* 单点序列渲染为实心圆点：无描边，填充色跟随各指标折线颜色 */
   .agent-spark-line circle {
     stroke: none;
@@ -415,7 +457,8 @@
     stroke: var(--color-info);
   }
 
-  .agent-chart-line-cpu circle {
+  .agent-chart-line-cpu circle,
+  .agent-chart-line-cpu polygon {
     fill: var(--color-info);
   }
 
@@ -423,7 +466,8 @@
     stroke: var(--color-primary);
   }
 
-  .agent-chart-line-memory circle {
+  .agent-chart-line-memory circle,
+  .agent-chart-line-memory polygon {
     fill: var(--color-primary);
   }
 
@@ -431,7 +475,8 @@
     stroke: var(--color-warning-dark);
   }
 
-  .agent-chart-line-disk circle {
+  .agent-chart-line-disk circle,
+  .agent-chart-line-disk polygon {
     fill: var(--color-warning-dark);
   }
 
@@ -439,7 +484,8 @@
     stroke: var(--color-danger);
   }
 
-  .agent-chart-line-temp circle {
+  .agent-chart-line-temp circle,
+  .agent-chart-line-temp polygon {
     fill: var(--color-danger);
   }
 
@@ -448,7 +494,8 @@
     stroke: var(--color-success);
   }
 
-  .agent-chart-line-rx circle {
+  .agent-chart-line-rx circle,
+  .agent-chart-line-rx polygon {
     fill: var(--color-success);
   }
 
@@ -456,7 +503,8 @@
     stroke: var(--color-orange);
   }
 
-  .agent-chart-line-tx circle {
+  .agent-chart-line-tx circle,
+  .agent-chart-line-tx polygon {
     fill: var(--color-orange);
   }
 

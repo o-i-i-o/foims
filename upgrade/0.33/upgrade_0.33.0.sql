@@ -22,6 +22,11 @@
 --         url/secret/订阅三开关），每渠道一条目标、默认订阅全部类型；
 --         dingtalk_secret 密文原样迁移，wecom_key 拼接为完整群机器人地址；
 --      c) 删除废弃的 notification/methods 通知方式矩阵与 webhook 旧四键。
+--   6. host_metrics_history 降采样分层：新增 granularity 列（0=原始秒级 /
+--      5=5min 桶 / 60=1h 桶），唯一索引扩为 (agent_id, granularity,
+--      collected_at)（原始层与降采样桶层互不冲突）；存量原始层数据一次性
+--      回填 5min 桶层（数值键聚合 avg/min/max/last/cnt），1h 桶层由服务端
+--      定时任务从 5min 桶滚降生成，不做历史回填。
 --   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs、
 --   users.rs）与 check.rs 表/列/列宽清单已同步新增。
 BEGIN;
@@ -155,5 +160,59 @@ WHERE config_type = 'webhook'
   AND key IN ('generic_url', 'dingtalk_url', 'dingtalk_secret', 'wecom_key');
 DELETE FROM system_configs
 WHERE config_type = 'notification' AND key = 'methods';
+
+-- ===== 6. host_metrics_history 降采样分层 =====
+-- granularity：降采样粒度（0=原始秒级 / 5=5min 桶 / 60=1h 桶）。
+-- 存量行均为原始层，默认 0 即正确语义，无需回填该列。
+ALTER TABLE host_metrics_history
+    ADD COLUMN IF NOT EXISTS granularity SMALLINT NOT NULL DEFAULT 0;
+
+-- 幂等重建粒度白名单约束（ADD CONSTRAINT 无 IF NOT EXISTS）
+ALTER TABLE host_metrics_history
+    DROP CONSTRAINT IF EXISTS chk_host_metrics_history_granularity;
+ALTER TABLE host_metrics_history ADD CONSTRAINT chk_host_metrics_history_granularity
+    CHECK (granularity IN (0, 5, 60));
+
+-- 唯一索引由 (agent_id, collected_at) 改为 (agent_id, granularity, collected_at)：
+-- 原始层与降采样桶层互不冲突。旧索引会拒绝同 (agent_id, collected_at) 的
+-- 分层行，必须先 DROP 再按新键重建；存量仅原始层一行，重建不会冲突。
+DROP INDEX IF EXISTS idx_host_metrics_history_agent_time;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_host_metrics_history_agent_time
+    ON host_metrics_history (agent_id, granularity, collected_at);
+
+-- 存量原始层数据一次性回填 5min 桶层：jsonb_each 展开数值型指标键，按
+-- (agent_id, 300s 桶, 键) 聚合 avg/min/max/last（last 取桶内最新样本值）
+-- 与样本数 cnt，再按 (agent_id, 桶) 重组为 {"key":{"avg","min","max","last",
+-- "cnt"}}，与服务端 MetricsAggregator 落库格式一致。ON CONFLICT DO NOTHING
+-- 幂等，重跑不覆盖已有桶（含服务端已聚合的桶）。
+INSERT INTO host_metrics_history (agent_id, granularity, collected_at, metrics)
+SELECT agent_id, 5, bucket,
+       jsonb_object_agg(k, jsonb_build_object(
+           'avg', round((sum_v / cnt)::numeric, 4),
+           'min', min_v, 'max', max_v, 'last', last_v, 'cnt', cnt
+       ))
+FROM (
+    SELECT agent_id, bucket, k,
+           sum(nv) AS sum_v,
+           min(nv) AS min_v,
+           max(nv) AS max_v,
+           (array_agg(nv ORDER BY collected_at DESC))[1] AS last_v,
+           count(*) AS cnt
+    FROM (
+        SELECT h.agent_id,
+               to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300) AS bucket,
+               e.k,
+               (e.v #>> '{}')::double precision AS nv,
+               h.collected_at
+        FROM host_metrics_history h
+        CROSS JOIN LATERAL jsonb_each(h.metrics) AS e(k, v)
+        WHERE h.granularity = 0
+          AND jsonb_typeof(h.metrics) = 'object'
+          AND jsonb_typeof(e.v) = 'number'
+    ) samples
+    GROUP BY agent_id, bucket, k
+) key_stats
+GROUP BY agent_id, bucket
+ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING;
 
 COMMIT;
