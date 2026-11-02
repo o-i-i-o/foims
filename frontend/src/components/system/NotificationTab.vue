@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * 通知配置页签：SMTP 服务器卡片（未配置属正常业务态）+ 邮件通知卡片
- * （每收件人独立订阅通知类型）+ Webhook 通知卡片（多目标表格行内编辑，
- * 每条独立渠道/地址/加签密钥/订阅范围）。两渠道彼此独立、互不依赖。
+ * （每收件人独立订阅通知类型）+ Webhook 通知卡片（多目标表格仅展示，
+ * 新增/编辑走 WebhookTargetModal 弹窗，统一落库由"保存"承担）。
+ * 两渠道彼此独立、互不依赖。
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -20,9 +21,10 @@ import {
 import { listUsersForPicker } from "../../api/users";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
+import WebhookTargetModal from "./WebhookTargetModal.vue";
+import type { WebhookTargetDraft, WebhookTargetFormResult } from "./WebhookTargetModal.vue";
 import type { UpdateSmtpConfigRequest } from "../../types/api/generated/UpdateSmtpConfigRequest";
 import type { UpdateWebhookConfigRequest } from "../../types/api/generated/UpdateWebhookConfigRequest";
-import type { WebhookChannel } from "../../types/api/generated/WebhookChannel";
 import type { NotificationRecipients } from "../../types/api/generated/NotificationRecipients";
 import type { MailRecipient } from "../../types/api/generated/MailRecipient";
 import type { User } from "../../types/api/generated/User";
@@ -130,20 +132,6 @@ async function testSmtpConnection(): Promise<void> {
 
 // ---- Webhook 通知（多目标：每条独立渠道 / 地址 / 加签密钥 / 订阅范围） ----
 
-/** Webhook 目标编辑态草稿（saved 标记是否已落库，未保存目标不可测试） */
-interface WebhookTargetDraft {
-  id: string;
-  name: string;
-  channel: WebhookChannel;
-  url: string;
-  secret: string;
-  hasSecret: boolean;
-  saved: boolean;
-  ipChange: boolean;
-  agentAlert: boolean;
-  snmpEvent: boolean;
-}
-
 const webhookTargets = ref<WebhookTargetDraft[]>([]);
 
 const webhookQuery = useQuery({
@@ -179,23 +167,68 @@ watch(
   }
 );
 
-function addWebhookTarget(): void {
-  webhookTargets.value.push({
-    id: crypto.randomUUID(),
-    name: "",
-    channel: "generic",
-    url: "",
-    secret: "",
-    hasSecret: false,
-    saved: false,
-    ipChange: true,
-    agentAlert: true,
-    snmpEvent: true
-  });
+// 新增/编辑弹窗：editingIndex = -1 表示新增，>=0 表示编辑对应行草稿
+const showTargetModal = ref(false);
+const editingTargetIndex = ref(-1);
+
+function openAddTarget(): void {
+  editingTargetIndex.value = -1;
+  showTargetModal.value = true;
+}
+
+function openEditTarget(index: number): void {
+  editingTargetIndex.value = index;
+  showTargetModal.value = true;
+}
+
+/** 弹窗确认：写回目标草稿（未落库目标保存后才有 saved 标记，方可测试） */
+function handleTargetConfirm(result: WebhookTargetFormResult): void {
+  showTargetModal.value = false;
+  const index = editingTargetIndex.value;
+  if (index < 0) {
+    webhookTargets.value.push({
+      id: crypto.randomUUID(),
+      ...result,
+      hasSecret: result.secret !== "",
+      saved: false
+    });
+    return;
+  }
+  const draft = webhookTargets.value[index];
+  if (!draft) {
+    return;
+  }
+  webhookTargets.value[index] = {
+    ...draft,
+    name: result.name,
+    channel: result.channel,
+    url: result.url,
+    // 密钥留空表示保留已存密钥（与 SMTP 密码同口径）
+    secret: result.secret !== "" ? result.secret : draft.secret,
+    hasSecret: draft.hasSecret || result.secret !== "",
+    ipChange: result.ipChange,
+    agentAlert: result.agentAlert,
+    snmpEvent: result.snmpEvent
+  };
 }
 
 function removeWebhookTarget(index: number): void {
   webhookTargets.value.splice(index, 1);
+}
+
+/** 接收内容列展示文本（未勾选任何类型显示占位符） */
+function scopeText(target: WebhookTargetDraft): string {
+  const parts: string[] = [];
+  if (target.ipChange) {
+    parts.push(t("notification.type_ip_change"));
+  }
+  if (target.agentAlert) {
+    parts.push(t("notification.type_agent_alert"));
+  }
+  if (target.snmpEvent) {
+    parts.push(t("notification.type_snmp_event"));
+  }
+  return parts.join(", ");
 }
 
 const savingWebhook = ref(false);
@@ -469,7 +502,7 @@ async function saveRecipients(): Promise<void> {
         <div class="form-hint">{{ t("notification.recipients_hint") }}</div>
       </section>
 
-      <!-- Webhook 通知设置（多目标表格行内编辑，每条独立渠道/地址/订阅） -->
+      <!-- Webhook 通知设置（多目标：表格仅展示，新增/编辑走弹窗） -->
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
@@ -477,7 +510,7 @@ async function saveRecipients(): Promise<void> {
             <span>{{ t("webhook.settings") }}</span>
           </div>
           <div v-if="!readonly" class="card-header-actions">
-            <button type="button" class="btn btn-secondary" @click="addWebhookTarget">
+            <button type="button" class="btn btn-secondary" @click="openAddTarget">
               {{ t("webhook.add_target") }}
             </button>
             <button type="button" class="btn btn-primary" :disabled="savingWebhook" @click="saveWebhookConfig">
@@ -485,81 +518,40 @@ async function saveRecipients(): Promise<void> {
             </button>
           </div>
         </header>
-        <div class="form-hint">{{ t("webhook.url_hint") }}</div>
         <table class="data-table webhook-table">
           <thead>
             <tr>
               <th>{{ t("webhook.target_name") }}</th>
               <th>{{ t("webhook.channel") }}</th>
-              <th>{{ t("webhook.url") }}</th>
-              <th>{{ t("webhook.dingtalk_secret") }}</th>
               <th>{{ t("webhook.scope_label") }}</th>
               <th>{{ t("common.actions") }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="webhookTargets.length === 0">
-              <td colspan="6">{{ t("webhook.empty") }}</td>
+              <td colspan="4">{{ t("webhook.empty") }}</td>
             </tr>
             <tr v-for="(target, index) in webhookTargets" v-else :key="target.id">
               <td>
-                <input
-                  v-model="target.name"
-                  type="text"
-                  class="cell-input"
-                  :placeholder="t('webhook.target_name_placeholder')"
-                  :aria-label="t('webhook.target_name')"
-                  :disabled="readonly"
-                >
-              </td>
-              <td>
-                <select v-model="target.channel" class="cell-input" :aria-label="t('webhook.channel')" :disabled="readonly">
-                  <option value="generic">{{ t("webhook.channel_generic") }}</option>
-                  <option value="dingtalk">{{ t("webhook.channel_dingtalk") }}</option>
-                  <option value="wecom">{{ t("webhook.channel_wecom") }}</option>
-                </select>
-              </td>
-              <td>
-                <input
-                  v-model="target.url"
-                  type="url"
-                  class="cell-input"
-                  :placeholder="t(target.channel === 'wecom' ? 'webhook.url_placeholder_wecom' : 'webhook.url_placeholder_generic')"
-                  :aria-label="t('webhook.url')"
-                  :disabled="readonly"
-                  autocomplete="off"
-                >
-              </td>
-              <td>
-                <input
-                  v-if="target.channel === 'dingtalk'"
-                  v-model="target.secret"
-                  type="password"
-                  class="cell-input"
-                  autocomplete="new-password"
-                  :placeholder="t(target.hasSecret ? 'webhook.dingtalk_secret_configured' : 'webhook.dingtalk_secret_input')"
-                  :aria-label="t('webhook.dingtalk_secret')"
-                  :disabled="readonly"
-                >
+                <span v-if="target.name" class="webhook-target-name">{{ target.name }}</span>
                 <span v-else class="cell-muted">—</span>
               </td>
+              <td>{{ t(`webhook.channel_${target.channel}`) }}</td>
               <td>
-                <div class="webhook-scope">
-                  <label class="webhook-scope-item">
-                    <input v-model="target.ipChange" type="checkbox" :disabled="readonly">
-                    {{ t("notification.type_ip_change") }}
-                  </label>
-                  <label class="webhook-scope-item">
-                    <input v-model="target.agentAlert" type="checkbox" :disabled="readonly">
-                    {{ t("notification.type_agent_alert") }}
-                  </label>
-                  <label class="webhook-scope-item">
-                    <input v-model="target.snmpEvent" type="checkbox" :disabled="readonly">
-                    {{ t("notification.type_snmp_event") }}
-                  </label>
-                </div>
+                <span v-if="target.ipChange || target.agentAlert || target.snmpEvent" class="webhook-scope-text">
+                  {{ scopeText(target) }}
+                </span>
+                <span v-else class="cell-muted">—</span>
               </td>
               <td class="webhook-actions-cell">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  :disabled="readonly"
+                  @click="openEditTarget(index)"
+                >
+                  {{ t("common.edit") }}
+                </button>
                 <button
                   type="button"
                   class="btn btn-secondary btn-sm"
@@ -582,6 +574,14 @@ async function saveRecipients(): Promise<void> {
           </tbody>
         </table>
       </section>
+
+      <!-- Webhook 目标新增/编辑弹窗（确认仅写回草稿，统一落库由"保存"承担） -->
+      <WebhookTargetModal
+        v-if="showTargetModal"
+        :target="editingTargetIndex >= 0 ? webhookTargets[editingTargetIndex] ?? null : null"
+        @confirm="handleTargetConfirm"
+        @close="showTargetModal = false"
+      />
     </div>
   </div>
 </template>

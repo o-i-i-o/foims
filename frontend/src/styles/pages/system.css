@@ -614,40 +614,25 @@
     line-height: 1.4;
   }
 
-  /* Webhook 目标表：行内编辑，fixed 布局按列宽分配，
-   防止 6 列行内输入控件以默认尺寸撑破卡片产生横向滚动 */
+  /* Webhook 目标表：仅展示列（编辑走弹窗），fixed 布局按列宽分配 */
   .webhook-table {
     table-layout: fixed;
   }
 
   .webhook-table th:nth-child(1) {
-    width: 13%;
+    width: 20%;
   }
 
   .webhook-table th:nth-child(2) {
-    width: 11%;
-  }
-
-  .webhook-table th:nth-child(3) {
-    width: 25%;
-  }
-
-  .webhook-table th:nth-child(4) {
     width: 16%;
   }
 
-  .webhook-table th:nth-child(5) {
-    width: 23%;
+  .webhook-table th:nth-child(3) {
+    width: 42%;
   }
 
-  .webhook-table th:nth-child(6) {
-    width: 12%;
-  }
-
-  .webhook-table .cell-input {
-    width: 100%;
-    padding: 0.45rem 0.55rem;
-    font-size: 0.85rem;
+  .webhook-table th:nth-child(4) {
+    width: 22%;
   }
 
   /* 非钉钉行密钥列占位符 */
@@ -662,7 +647,7 @@
     white-space: nowrap;
   }
 
-  /* 接收内容 checkbox 组（Webhook 表接收内容列） */
+  /* 接收内容 checkbox 组（Webhook 目标弹窗内订阅范围） */
   .webhook-scope {
     display: flex;
     flex-wrap: wrap;

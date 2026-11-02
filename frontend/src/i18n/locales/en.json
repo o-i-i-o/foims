@@ -1009,6 +1009,7 @@
   "webhook": {
     "settings": "Webhook Notifications",
     "add_target": "Add Target",
+    "edit_target": "Edit Target",
     "empty": "No push targets configured yet. Click 'Add Target' to create one",
     "target_name": "Target Name",
     "target_name_placeholder": "A recognizable name (optional)",

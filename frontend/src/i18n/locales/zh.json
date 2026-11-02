@@ -1009,6 +1009,7 @@
   "webhook": {
     "settings": "Webhook 通知",
     "add_target": "添加目标",
+    "edit_target": "编辑目标",
     "empty": "尚未配置推送目标，点击「添加目标」创建",
     "target_name": "目标名称",
     "target_name_placeholder": "便于识别的名称（可选）",
