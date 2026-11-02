@@ -209,3 +209,7 @@ v0.66.0
 v0.66.1
 2026110221191401
 运行日志窗格改为铺满视口、内容框内滚动（仅前端布局调整，z 段 +1）：LogsPage.vue 在运行日志页签激活时给区块挂 runtime-fill 类，#logs.runtime-fill 自带弹性列布局并锁定一屏高（height:100vh/100dvh 双声明 + min-height:0，与可视化页同一套路但不再依赖 main-content.css 的 :has(.pagination-container) 间接获得 display:flex），#runtime-tab.tab-content.active 改为 flex:1 + min-height:0 向下传递剩余高度，.live-wrap/.live-pane 以 flex:1 + min-height:0 吃满剩余空间，日志内容只在深色窗格内部滚动、整页不再滚动；其他页签（操作/登录/通知）不挂该类，保持原整页滚动与分页贴底行为。验证：npm run typecheck/build、biome、oxlint 通过，fpak.sh 部署后浏览器实测——#logs clientHeight=607=innerHeight（无页面滚动），.live-pane clientHeight=489 < scrollHeight=3087（窗格内部滚动生效），切到操作日志页签表格与分页正常（883 条 18 页）、切回运行日志铺满状态保持
+
+v0.66.2
+2026110221262701
+终端定位弹窗工具栏两行布局（仅前端布局调整，z 段 +1）：LocateModal.vue 工具栏由单行（MAC/IP 切换 + 输入框 + 查询按钮挤在一行）改为两行——第一行放按钮（tab-buttons 与查询 icon-btn 同行，新增 .locate-toolbar-row 水平 flex 承载），第二行放输入框（.locate-input 由 flex:1 改 width:100% 占满整行），.locate-toolbar 改纵向 flex + 12px 间距；主机监控页与 ARP 弹窗两处入口共用该组件，同步生效。验证：npm run typecheck/build、biome（23 文件 0 警告）、oxlint（347 文件 0 警告）均通过；仅 dev_version z+1，frontend/package.json 0.1.59→0.1.60，Cargo.toml 不联动

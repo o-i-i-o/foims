@@ -80,26 +80,31 @@ onMounted(() => {
     <template #title>{{ t("device.locate.title") }}</template>
     <div class="modal-body-scroll">
       <div class="locate-toolbar">
-        <div class="tab-buttons" role="tablist">
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ active: mode === 'mac' }"
-            role="tab"
-            :aria-selected="mode === 'mac'"
-            @click="switchMode('mac')"
-          >
-            {{ t("device.locate.by_mac") }}
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ active: mode === 'ip' }"
-            role="tab"
-            :aria-selected="mode === 'ip'"
-            @click="switchMode('ip')"
-          >
-            {{ t("device.locate.by_ip") }}
+        <div class="locate-toolbar-row">
+          <div class="tab-buttons" role="tablist">
+            <button
+              type="button"
+              class="tab-btn"
+              :class="{ active: mode === 'mac' }"
+              role="tab"
+              :aria-selected="mode === 'mac'"
+              @click="switchMode('mac')"
+            >
+              {{ t("device.locate.by_mac") }}
+            </button>
+            <button
+              type="button"
+              class="tab-btn"
+              :class="{ active: mode === 'ip' }"
+              role="tab"
+              :aria-selected="mode === 'ip'"
+              @click="switchMode('ip')"
+            >
+              {{ t("device.locate.by_ip") }}
+            </button>
+          </div>
+          <button type="button" class="icon-btn btn-primary" :disabled="!keyword.trim() || phase === 'loading'" :title="t('device.locate.search')" @click="query">
+            <NavIcon name="eye" />
           </button>
         </div>
         <input
@@ -110,9 +115,6 @@ onMounted(() => {
           :aria-label="mode === 'mac' ? t('device.mac_address') : t('device.ip_address')"
           @keydown.enter.prevent="query"
         >
-        <button type="button" class="icon-btn btn-primary" :disabled="!keyword.trim() || phase === 'loading'" :title="t('device.locate.search')" @click="query">
-          <NavIcon name="eye" />
-        </button>
       </div>
 
       <div v-if="phase === 'loading'" class="modal-loading" role="status" aria-live="polite">
@@ -163,12 +165,17 @@ onMounted(() => {
 <style scoped>
 .locate-toolbar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
   margin-bottom: 12px;
 }
+.locate-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .locate-input {
-  flex: 1;
+  width: 100%;
 }
 .locate-text-error {
   color: var(--danger, #d33);
