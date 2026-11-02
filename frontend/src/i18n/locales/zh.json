@@ -518,6 +518,7 @@
   "login": {
     "welcome": "欢迎回来",
     "subtitle": "请输入您的账号信息",
+    "brand_name": "F - 组织基础设施管理系统",
     "form_title": "登录表单",
     "password_auth": "密码认证",
     "email_auth": "邮箱认证",

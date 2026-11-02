@@ -518,6 +518,7 @@
   "login": {
     "welcome": "Welcome back",
     "subtitle": "Please enter your account details",
+    "brand_name": "F - Organization Infrastructure Management System",
     "form_title": "Login form",
     "password_auth": "Password",
     "email_auth": "Email",

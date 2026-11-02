@@ -1055,7 +1055,7 @@ onUnmounted(() => {
               <option value="en">English</option>
             </select>
           </div>
-          <div class="brand-name">FOIMS</div>
+          <div class="brand-name">{{ t("login.brand_name") }}</div>
           <div class="form-header">
             <h1>{{ t("login.welcome") }}</h1>
             <p>{{ t("login.subtitle") }}</p>
