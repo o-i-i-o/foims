@@ -12,7 +12,11 @@
 
 // 测试代码允许 unwrap/expect（AGENTS.md「测试代码除外」），与各 crate
 // lib.rs 同款口径；生产代码仍由 workspace lints + CI `-D warnings` 强制禁止。
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+// print_stderr 例外仅服务于跳过分支的可见提示（CI 环境无 tracing 订阅器）。
+#![cfg_attr(
+    test,
+    allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stderr)
+)]
 
 use std::path::Path;
 use std::path::PathBuf;
