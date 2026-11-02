@@ -182,8 +182,7 @@ pub async fn get_device_ports_snmp<P: DbProvider>(
             "server.device.snmp.ports_retrieved",
         )),
         Err(e) => Err(AppError::Snmp(
-            msg("server.device.snmp.switch_ports_fetch_failed")
-                .with("error", e.message().log_string()),
+            msg("server.device.snmp.switch_ports_fetch_failed").with("error", e.message().log_string()),
         )),
     }
 }

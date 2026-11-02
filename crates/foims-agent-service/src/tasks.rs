@@ -231,9 +231,7 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
         );
         let (ok, fail) = snmp_poll::poll_all(&ctx.pool, interval_secs, self.metrics.clone()).await;
         log_debug!("log.task.agent_snmp_poll_completed", ok = ok, fail = fail);
-        Ok(msg("server.task.agent_snmp_poll_completed")
-            .with("ok", ok)
-            .with("fail", fail))
+        Ok(msg("server.task.agent_snmp_poll_completed").with("ok", ok).with("fail", fail))
     }
 }
 
@@ -272,9 +270,7 @@ impl TaskExecutor for AgentIpmiPollTaskExecutor {
         );
         let (ok, fail) = ipmi_poll::poll_all(&ctx.pool, interval_secs, self.metrics.clone()).await;
         log_debug!("log.task.agent_ipmi_poll_completed", ok = ok, fail = fail);
-        Ok(msg("server.task.agent_ipmi_poll_completed")
-            .with("ok", ok)
-            .with("fail", fail))
+        Ok(msg("server.task.agent_ipmi_poll_completed").with("ok", ok).with("fail", fail))
     }
 }
 
@@ -431,9 +427,11 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
             count = pending_count,
             healed = healed
         );
-        Ok(msg("server.task.agent_metrics_rollup_completed")
-            .with("count", pending_count)
-            .with("healed", healed))
+        Ok(
+            msg("server.task.agent_metrics_rollup_completed")
+                .with("count", pending_count)
+                .with("healed", healed),
+        )
     }
 }
 

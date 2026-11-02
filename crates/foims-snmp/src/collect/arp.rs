@@ -174,7 +174,8 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
         .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
+        let vb = result
+            .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -230,7 +231,8 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
         .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
+        let vb = result
+            .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {

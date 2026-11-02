@@ -128,10 +128,7 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
         ),
     };
     let title = LocalizedText {
-        zh: format!(
-            "设备 IP 通知 - {}（工位: {}）",
-            info.device_name, info.workstation_name
-        ),
+        zh: format!("设备 IP 通知 - {}（工位: {}）", info.device_name, info.workstation_name),
         en: format!(
             "Device IP Notice - {} (Workstation: {})",
             info.device_name, info.workstation_name

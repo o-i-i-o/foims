@@ -459,8 +459,8 @@ pub(crate) async fn send_notification_email(
             continue;
         }
         subscribed += user_ids.len();
-        if let Err(e) =
-            send_email_to_users(pool, &user_ids, title.pick(lang), body.pick(lang)).await
+        if let Err(e) = send_email_to_users(pool, &user_ids, title.pick(lang), body.pick(lang))
+            .await
         {
             log_error!("log.smtp.group_send_failed", lang = lang.label(), error = e);
             failed = true;

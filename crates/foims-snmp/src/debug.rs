@@ -123,9 +123,7 @@ async fn run_get(
     oids: &[async_snmp::Oid],
 ) -> Result<Vec<SnmpDebugRow>, AppError> {
     let resp = client.get_many(oids).await.map_err(|e| {
-        AppError::Snmp(
-            msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()),
-        )
+        AppError::Snmp(msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()))
     })?;
     Ok(resp.varbinds.iter().map(row_of).collect())
 }
@@ -136,9 +134,7 @@ async fn run_walk(
     base: async_snmp::Oid,
 ) -> Result<Vec<SnmpDebugRow>, AppError> {
     let mut stream = client.bulk_walk(base, WALK_MAX_REPETITIONS).map_err(|e| {
-        AppError::Snmp(
-            msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()),
-        )
+        AppError::Snmp(msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()))
     })?;
     let mut rows = Vec::new();
     while let Some(item) = stream.next().await {

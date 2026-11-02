@@ -13,11 +13,7 @@ use crate::core::{
 
 /// walk 单个 OID 并对每个变量调用 `process`：遇 `EndOfMibView` 正常终止，
 /// 其余异常值跳过，迭代错误冒泡。
-async fn snmp_walk<F>(
-    client: &Client,
-    oid: async_snmp::Oid,
-    mut process: F,
-) -> Result<(), SnmpError>
+async fn snmp_walk<F>(client: &Client, oid: async_snmp::Oid, mut process: F) -> Result<(), SnmpError>
 where
     F: FnMut(&VarBind) -> Result<(), SnmpError>,
 {
@@ -26,7 +22,8 @@ where
         .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
+        let vb = result
+            .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -86,20 +83,21 @@ pub async fn get_lldp_neighbors_via_snmp(
     let mut loc_port_subtype_map: HashMap<String, u8> = HashMap::new();
 
     snmp_walk(&client, lldp_loc_port_subtype, |vb| {
-        let oid_parts = vb.oid.arcs();
-        if oid_parts.len() >= 12 {
-            let port_num = oid_parts[11].to_string();
-            let subtype = if let Some(s) = vb.value.as_u32() {
-                s as u8
-            } else if let Some(bytes) = vb.value.as_bytes() {
-                if bytes.is_empty() { 0 } else { bytes[0] }
-            } else {
-                0
-            };
-            loc_port_subtype_map.insert(port_num, subtype);
-        }
-        Ok(())
-    })
+            let oid_parts = vb.oid.arcs();
+            if oid_parts.len() >= 12 {
+                let port_num = oid_parts[11].to_string();
+                let subtype = if let Some(s) = vb.value.as_u32() {
+                    s as u8
+                } else if let Some(bytes) = vb.value.as_bytes() {
+                    if bytes.is_empty() { 0 } else { bytes[0] }
+                } else {
+                    0
+                };
+                loc_port_subtype_map.insert(port_num, subtype);
+            }
+            Ok(())
+        },
+    )
     .await?;
 
     let lldp_loc_port_id = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 3);
@@ -123,23 +121,24 @@ pub async fn get_lldp_neighbors_via_snmp(
     let mut port_desc_map: HashMap<String, String> = HashMap::new();
 
     snmp_walk(&client, lldp_loc_port_desc, |vb| {
-        let oid_parts = vb.oid.arcs();
-        if oid_parts.len() >= 12 {
-            let port_num = oid_parts[11].to_string();
-            if let Some(port_desc) = vb.value.as_str() {
-                let desc = port_desc.trim();
-                if !desc.is_empty() && desc != "NULL" {
-                    port_desc_map.insert(port_num, desc.to_string());
-                }
-            } else if let Some(port_desc) = vb.value.as_bytes() {
-                let desc = String::from_utf8_lossy(port_desc).trim().to_string();
-                if !desc.is_empty() && desc != "NULL" {
-                    port_desc_map.insert(port_num, desc);
+            let oid_parts = vb.oid.arcs();
+            if oid_parts.len() >= 12 {
+                let port_num = oid_parts[11].to_string();
+                if let Some(port_desc) = vb.value.as_str() {
+                    let desc = port_desc.trim();
+                    if !desc.is_empty() && desc != "NULL" {
+                        port_desc_map.insert(port_num, desc.to_string());
+                    }
+                } else if let Some(port_desc) = vb.value.as_bytes() {
+                    let desc = String::from_utf8_lossy(port_desc).trim().to_string();
+                    if !desc.is_empty() && desc != "NULL" {
+                        port_desc_map.insert(port_num, desc);
+                    }
                 }
             }
-        }
-        Ok(())
-    })
+            Ok(())
+        },
+    )
     .await?;
 
     let lldp_rem_table = oid!(1, 0, 8802, 1, 1, 2, 1, 4, 1, 1);
