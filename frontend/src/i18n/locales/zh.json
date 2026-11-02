@@ -675,7 +675,7 @@
     "type": "组织类型",
     "select_type": "请选择类型",
     "parent": "上级组织",
-    "add_node": "新增节点",
+    "add_node": "新增根节点",
     "add_child": "新增下级",
     "no_child_allowed": "不允许添加下级节点",
     "expand_all": "全部展开",

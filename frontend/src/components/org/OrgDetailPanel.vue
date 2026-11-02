@@ -31,12 +31,11 @@ const typeLabel = computed(() => (props.node ? getOrgTypeLabel(props.node.org_ty
       <div class="org-detail-header">
         <span class="org-detail-header-icon"><OrgIcon :icon="icon" /></span>
         <div class="org-detail-header-info">
+          <!-- 名称/类型/备注同行展示，备注空间不足时省略号截断（title 保留全文） -->
           <div class="org-detail-header-name">
             <span class="org-detail-header-title">{{ node.name }}</span>
             <span class="org-node-type-badge" :data-type="node.org_type">{{ typeLabel }}</span>
-          </div>
-          <div v-if="node.description" class="org-detail-header-desc" :title="node.description">
-            {{ node.description }}
+            <span v-if="node.description" class="org-detail-header-desc" :title="node.description">{{ node.description }}</span>
           </div>
         </div>
       </div>

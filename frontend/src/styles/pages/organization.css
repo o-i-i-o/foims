@@ -25,11 +25,11 @@
     flex-wrap: wrap;
   }
 
-  /* ==================== 两栏布局：左栏组织树 + 右栏详情面板（等宽） ==================== */
+  /* ==================== 两栏布局：左栏组织树 + 右栏详情面板（4:6） ==================== */
 
   .org-page-layout {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
     align-items: stretch;
     gap: var(--space-md);
   }
@@ -89,7 +89,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    flex-wrap: wrap;
+    min-width: 0;
   }
 
   .org-detail-header-title {
@@ -101,8 +101,10 @@
     white-space: nowrap;
   }
 
+  /* 备注与名称/类型同行：占剩余宽度，不足时省略号截断 */
   .org-detail-header-desc {
-    margin-top: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
     overflow: hidden;

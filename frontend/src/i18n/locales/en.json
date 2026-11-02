@@ -675,7 +675,7 @@
     "type": "Organization Type",
     "select_type": "Select Type",
     "parent": "Parent",
-    "add_node": "Add Node",
+    "add_node": "Add Root Node",
     "add_child": "Add Child",
     "no_child_allowed": "No child node allowed",
     "expand_all": "Expand All",
