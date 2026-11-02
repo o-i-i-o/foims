@@ -1,4 +1,8 @@
 //! 证书生成（rcgen）：强制由所选 CA（站点根 CA 或导入 CA）签发叶子证书。
+//!
+//! 证书用途（[`CertPurpose`]）决定文件名前缀（nginx_ / agent_，列表据此
+//! 回读用途）与 EKU：nginx → ServerAuth（站点 HTTPS），agent → ClientAuth
+//! （agent mTLS 及后续客户端接入）。
 
 use std::path::PathBuf;
 
@@ -9,8 +13,8 @@ use rcgen::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::GENERATED_CERTS_DIR;
-use crate::error::CertManagerError;
+use crate::listing::CertPurpose;
+use crate::{GENERATED_CERTS_DIR, error::CertManagerError};
 
 const DEFAULT_VALIDITY_DAYS: i64 = 3650;
 const MAX_VALIDITY_DAYS: i64 = 36500;
@@ -32,6 +36,10 @@ pub struct GenerateCertRequest {
     /// 证书强制由所选 CA 签发，不再提供自签名回退。
     #[serde(default)]
     pub ca_id: Option<String>,
+    /// 证书用途：nginx（站点 HTTPS，缺省）/ agent（agent mTLS 客户端接入）。
+    /// 用途决定文件名前缀与 EKU，见模块头。
+    #[serde(default)]
+    pub purpose: CertPurpose,
 }
 
 /// 解析 SAN 条目：IP 地址优先，否则按 DNS 名称
@@ -149,6 +157,8 @@ pub async fn generate_certificate(
             )
         })?;
 
+    // 用途在闭包 move req 之前取出（文件名前缀与 EKU 共同由其决定）
+    let purpose = req.purpose;
     let generation = tokio::task::spawn_blocking(move || {
         build_leaf_cert(&common_name, &req, validity_days, extra_sans, ca_material)
     })
@@ -160,10 +170,11 @@ pub async fn generate_certificate(
     })??;
 
     // 毫秒时间戳候选名 + create_new 独占创建：并发抢占以 AlreadyExists
-    // 递增序号重试（有界）并清理半成品，杜绝"证书 A + 私钥 B"的错配对
+    // 递增序号重试（有界）并清理半成品，杜绝"证书 A + 私钥 B"的错配对；
+    // 文件名前缀即用途载体（nginx_ / agent_），列表据此回读用途
     let cert_path = write_cert_pair_exclusive(
         GENERATED_CERTS_DIR,
-        "create_",
+        purpose.stem_prefix(),
         &generation.cert_pem,
         &generation.key_pem,
     )
@@ -348,10 +359,14 @@ fn build_leaf_cert(
     params.subject_alt_names = sans;
 
     // x509v3 扩展：显式 CA:FALSE（叶子证书最佳实践）、
-    // EKU 仅 ServerAuth（同时覆盖 TLS TCP 与 QUIC/HTTP3 的服务器认证）、
-    // KeyUsage DigitalSignature（ECDSA P-256 密钥协商仅依赖签名）
+    // KeyUsage DigitalSignature（ECDSA P-256 密钥协商仅依赖签名）、
+    // EKU 按用途：nginx → ServerAuth（覆盖 TLS TCP 与 QUIC/HTTP3 的服务器认证），
+    // agent → ClientAuth（agent mTLS 客户端接入，与 agent 系统物料同构）
     params.is_ca = IsCa::ExplicitNoCa;
-    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    params.extended_key_usages = match req.purpose {
+        CertPurpose::Nginx => vec![ExtendedKeyUsagePurpose::ServerAuth],
+        CertPurpose::Agent => vec![ExtendedKeyUsagePurpose::ClientAuth],
+    };
     params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
 
     // 强制 CA 签发（物料已在异步层校验存在）
@@ -535,6 +550,7 @@ mod tests {
             validity_days: None,
             subject_alt_names: None,
             ca_id: None,
+            purpose: CertPurpose::Nginx,
         }
     }
 
@@ -861,6 +877,42 @@ mod tests {
         assert!(req.validity_days.is_none());
         assert!(req.subject_alt_names.is_none());
         assert!(req.ca_id.is_none(), "ca_id 缺省为 None");
+        assert_eq!(req.purpose, CertPurpose::Nginx, "purpose 缺省为 nginx");
+    }
+
+    /// EKU 按用途签发：nginx → ServerAuth，agent → ClientAuth
+    #[test]
+    fn 构建证书_eku随用途变化() {
+        let extract_eku = |cert_pem: &str| -> (bool, bool) {
+            let pems = pem::parse_many(cert_pem.as_bytes()).unwrap_or_default();
+            let block = pems
+                .iter()
+                .find(|p| p.tag() == "CERTIFICATE")
+                .unwrap_or_else(|| panic!("应包含证书块"));
+            let (_, cert) = x509_parser::parse_x509_certificate(block.contents())
+                .unwrap_or_else(|e| panic!("证书解析失败: {e}"));
+            let eku = cert
+                .extended_key_usage()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| panic!("应含 EKU 扩展"));
+            (eku.value.server_auth, eku.value.client_auth)
+        };
+
+        let req = minimal_request("web.example.com");
+        let out = build_leaf_cert("web.example.com", &req, 365, vec![], test_ca_material())
+            .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
+        let (server_auth, client_auth) = extract_eku(&out.cert_pem);
+        assert!(server_auth, "nginx 用途应含 ServerAuth EKU");
+        assert!(!client_auth, "nginx 用途不应含 ClientAuth EKU");
+
+        let mut req = minimal_request("agent.example.com");
+        req.purpose = CertPurpose::Agent;
+        let out = build_leaf_cert("agent.example.com", &req, 365, vec![], test_ca_material())
+            .unwrap_or_else(|e| panic!("构建证书失败: {e}"));
+        let (server_auth, client_auth) = extract_eku(&out.cert_pem);
+        assert!(!server_auth, "agent 用途不应含 ServerAuth EKU");
+        assert!(client_auth, "agent 用途应含 ClientAuth EKU");
     }
 
     /// CA 签发路径：叶子证书的签发者应为 CA 的 CN

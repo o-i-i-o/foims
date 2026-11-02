@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use foims_common::msg;
 
 use crate::error::CertManagerError;
-use crate::listing::CertKind;
+use crate::listing::{CertKind, CertPurpose};
 
 /// nginx 配置目录下的目标文件名
 const NGINX_CONF_NAME: &str = "foims.conf";
@@ -85,14 +85,23 @@ async fn write_conf_atomic(conf: &Path, content: &str) -> Result<(), CertManager
 
 /// 将证书对（{stem}.pem + {stem}.key）的路径整体替换进候选 foims.conf。
 ///
-/// 证书与私钥文件必须同时存在（nginx 两者都需要）；候选文件仅存在其一
-/// 时只处理该文件；替换计数为 0（文件均不含证书指令）时返回验证错误，
-/// 避免"应用成功"却什么都没改。
+/// 仅 nginx 用途证书可应用（agent 用途证书不参与 nginx 配置，用途由
+/// 文件名前缀派生）；证书与私钥文件必须同时存在（nginx 两者都需要）；
+/// 候选文件仅存在其一时只处理该文件；替换计数为 0（文件均不含证书指令）
+/// 时返回验证错误，避免"应用成功"却什么都没改。
 pub async fn apply_certificate_to_nginx(
     kind: CertKind,
     file_stem: &str,
 ) -> Result<NginxApplyResult, CertManagerError> {
     crate::transfer::validate_stem(file_stem)?;
+
+    // 用途守卫：非 nginx 用途（含 agent 系统物料）拒绝应用
+    let (purpose, _) = crate::listing::purpose_from_stem(file_stem);
+    if purpose != CertPurpose::Nginx {
+        return Err(CertManagerError::Validation(msg(
+            "server.certificate.apply_not_applicable",
+        )));
+    }
 
     let cert_path = Path::new(kind.dir()).join(format!("{file_stem}.pem"));
     let key_path = Path::new(kind.dir()).join(format!("{file_stem}.key"));
@@ -184,6 +193,31 @@ mod tests {
 
     const CERT: &str = "/etc/ssl/foims-certs/a.pem";
     const KEY: &str = "/etc/ssl/foims-certs/a.key";
+
+    /// 构造单线程 tokio 运行时（本 crate 的 tokio 未启用 macros 特性）
+    fn with_runtime<F: std::future::Future>(fut: F) -> F::Output {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap_or_else(|e| panic!("构造测试运行时失败: {e}"));
+        rt.block_on(fut)
+    }
+
+    /// agent 用途证书（含系统物料）拒绝应用到 nginx（用途守卫先于文件访问）
+    #[test]
+    fn 应用_非nginx用途被拒绝() {
+        for stem in ["agent_1761234567890_cert", "agent_cert"] {
+            let err = with_runtime(apply_certificate_to_nginx(CertKind::Generated, stem))
+                .err()
+                .unwrap_or_else(|| panic!("{stem} 应被拒绝应用"));
+            match err {
+                CertManagerError::Validation(m) => {
+                    assert_eq!(m.key(), "server.certificate.apply_not_applicable")
+                }
+                other => panic!("应为校验错误，实际 {other}"),
+            }
+        }
+    }
 
     #[test]
     fn 替换_证书与私钥路径整体更新() {

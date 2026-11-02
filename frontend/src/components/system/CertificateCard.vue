@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
  * 证书管理卡片：站点根 CA 池 +
- * 自生成/导入证书合并清单；应用 = 将证书/私钥整体替换进 nginx 配置，
- * 删除直接操作服务器文件，两者均需确认。CA 生成前需确认（覆盖风险）。
+ * 自生成/导入证书合并清单。证书用途（nginx / agent，agent 含系统物料）
+ * 在生成/导入时声明：仅 nginx 用途提供「应用」（替换进 nginx
+ * 配置），agent 用途与系统物料不提供应用、系统物料不可删除。删除直接操作
+ * 服务器文件，需确认。CA 生成前需确认（覆盖风险）。
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -225,6 +227,7 @@ function downloadCa(): void {
             <tr>
               <th>{{ t("cert.col_file") }}</th>
               <th>{{ t("cert.col_type") }}</th>
+              <th>{{ t("cert.col_purpose") }}</th>
               <th>{{ t("cert.col_subject") }}</th>
               <th>{{ t("cert.col_validity") }}</th>
               <th>{{ t("cert.col_remaining") }}</th>
@@ -233,10 +236,10 @@ function downloadCa(): void {
           </thead>
           <tbody>
             <tr v-if="certsQuery.isError.value" class="empty-row">
-              <td colspan="6" class="text-center">{{ certsQuery.error.value?.message || t("common.load_failed") }}</td>
+              <td colspan="7" class="text-center">{{ certsQuery.error.value?.message || t("common.load_failed") }}</td>
             </tr>
             <tr v-else-if="mergedCerts.length === 0" class="empty-row">
-              <td colspan="6" class="text-center">{{ t("common.no_data") }}</td>
+              <td colspan="7" class="text-center">{{ t("common.no_data") }}</td>
             </tr>
             <tr v-for="info in mergedCerts" v-else :key="`${info.kind}-${info.file_stem}`">
               <td :title="info.cert_filename">{{ info.file_stem }}</td>
@@ -245,14 +248,21 @@ function downloadCa(): void {
                   {{ info.kind === "generated" ? t("cert.type_generated") : t("cert.type_imported") }}
                 </span>
               </td>
+              <td>
+                <span class="cert-type-badge" :class="info.system_managed ? 'cert-type-imported' : info.purpose === 'nginx' ? 'cert-type-generated' : 'cert-type-imported'">
+                  {{ info.system_managed ? t("cert.purpose_system") : info.purpose === "nginx" ? t("cert.purpose_nginx") : t("cert.purpose_agent") }}
+                </span>
+              </td>
               <td>{{ info.subject_cn || "-" }}</td>
               <td>{{ formatCertValidity(info) }}</td>
               <td :class="certDaysClass(info.days_remaining)">{{ certDaysText(info.days_remaining) }}</td>
               <td v-if="!readonly" class="cert-actions-cell">
-                <button type="button" class="btn btn-primary btn-sm" @click="confirmAction = { type: 'apply', item: info }">
+                <!-- 应用仅对 nginx 用途有意义；agent 用途与系统物料不提供 -->
+                <button v-if="info.purpose === 'nginx'" type="button" class="btn btn-primary btn-sm" @click="confirmAction = { type: 'apply', item: info }">
                   {{ t("cert.apply_title") }}
                 </button>
-                <button type="button" class="btn btn-danger btn-sm" @click="confirmAction = { type: 'delete', item: info }">
+                <!-- 系统物料由 agent 服务自动签发维护，禁止删除 -->
+                <button v-if="!info.system_managed" type="button" class="btn btn-danger btn-sm" @click="confirmAction = { type: 'delete', item: info }">
                   {{ t("common.delete") }}
                 </button>
               </td>

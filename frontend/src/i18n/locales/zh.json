@@ -1535,6 +1535,11 @@
     "col_type": "证书类型",
     "type_generated": "自生成",
     "type_imported": "导入",
+    "col_purpose": "用途",
+    "purpose": "证书用途",
+    "purpose_nginx": "站点 HTTPS（nginx）",
+    "purpose_agent": "Agent mTLS",
+    "purpose_system": "系统物料",
     "col_subject": "主题(CN)",
     "col_validity": "有效期",
     "col_remaining": "剩余天数",
@@ -2100,7 +2105,10 @@
       "ca_expired": "签发 CA 已过期或剩余有效期不足，无法签发新证书",
       "organizational_unit_length": "组织单位（OU）长度不能超过 64 字符",
       "state_length": "州/省长度不能超过 64 字符",
-      "locality_length": "城市长度不能超过 64 字符"
+      "locality_length": "城市长度不能超过 64 字符",
+      "purpose_invalid": "无效的证书用途：{{purpose}}（支持 nginx / agent）",
+      "apply_not_applicable": "该证书用途不是站点 HTTPS（nginx），不支持应用到 nginx 配置",
+      "delete_system_managed": "该证书为系统物料（agent mTLS，系统自动签发维护），禁止删除"
     },
     "common": {
       "cipher_init_failed": "创建加密器失败",

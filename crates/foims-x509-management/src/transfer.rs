@@ -27,9 +27,19 @@ pub(crate) fn validate_stem(stem: &str) -> Result<(), CertManagerError> {
     }
 }
 
-/// 删除证书对（{stem}.pem 与 {stem}.key），文件不存在视为未找到
+/// 删除证书对（{stem}.pem 与 {stem}.key），文件不存在视为未找到。
+///
+/// agent 系统物料（agent_cert / agent_client_cert，由 agent 服务自动签发
+/// 与自愈维护）禁止删除——误删会导致 agent mTLS 永久失效。
 pub async fn delete_certificate(kind: CertKind, file_stem: &str) -> Result<(), CertManagerError> {
     validate_stem(file_stem)?;
+
+    let (_, system_managed) = crate::listing::purpose_from_stem(file_stem);
+    if system_managed {
+        return Err(CertManagerError::Validation(msg(
+            "server.certificate.delete_system_managed",
+        )));
+    }
 
     let cert_path = std::path::Path::new(kind.dir()).join(format!("{file_stem}.pem"));
     let key_path = std::path::Path::new(kind.dir()).join(format!("{file_stem}.key"));
@@ -105,6 +115,20 @@ mod tests {
             .err()
             .unwrap_or_else(|| panic!("含点号的 stem 应被拒绝"));
         assert!(matches!(err, CertManagerError::Validation(_)));
+    }
+
+    /// agent 系统物料禁止删除（守卫先于文件系统访问）
+    #[test]
+    fn 删除证书_系统物料被拒绝() {
+        let err = with_runtime(delete_certificate(CertKind::Generated, "agent_cert"))
+            .err()
+            .unwrap_or_else(|| panic!("系统物料应被拒绝删除"));
+        match err {
+            CertManagerError::Validation(m) => {
+                assert_eq!(m.key(), "server.certificate.delete_system_managed")
+            }
+            other => panic!("应为校验错误，实际 {other}"),
+        }
     }
 
     /// 不存在的 stem（时间戳保证唯一）在两个目录均不存在时报未找到

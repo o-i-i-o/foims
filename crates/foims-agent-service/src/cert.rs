@@ -9,9 +9,10 @@
 //! 新增网卡/IP 变更（agent 按 IP 连服务端，旧 SAN 不含新 IP 会导致 mTLS
 //! 握手失败），自动重签全部物料并更新记录文件，实现 IP 变更自愈。
 //!
-//! x509-management 的 `generate_certificate` 将 serverAuth EKU 硬编码
-//! （面向浏览器/服务端证书场景），无法签发 clientAuth 证书，故此处直接
-//! 用 rcgen 手写签发，不改共享 crate。
+//! x509-management 的 `generate_certificate` 面向用户在 UI 手动签发的场景
+//! （毫秒时间戳随机文件名、无复用/自愈语义）；agent 物料需要固定文件名、
+//! 指纹/SAN 记录与变更自愈，故此处直接用 rcgen 手写签发，复用其用途约定
+//! （agent 用途 = ClientAuth EKU）。
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};

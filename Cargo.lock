@@ -1663,7 +1663,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.33.13"
+version = "0.33.15"
 dependencies = [
  "async-trait",
  "axum",
@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "foims-services"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "foims-common",
@@ -2004,7 +2004,7 @@ dependencies = [
 
 [[package]]
 name = "foims-x509-management"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "foims-common",

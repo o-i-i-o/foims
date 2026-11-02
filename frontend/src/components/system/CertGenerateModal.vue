@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * 证书签发弹窗：签发 CA 下拉
- * （无私钥的 CA 仅供信任导出不可签发，默认选站点根 CA）+ CN/主体/
- * 有效期/SAN。SAN 逗号分隔，空转 null。
+ * 证书签发弹窗：用途下拉（nginx 站点 HTTPS / agent mTLS，决定 EKU 与
+ * 可用操作）+ 签发 CA 下拉（无私钥的 CA 仅供信任导出不可签发，默认选
+ * 站点根 CA）+ CN/主体/有效期/SAN。SAN 逗号分隔，空转 null。
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { generateCertificate } from "../../api/system";
 import { showToast } from "../../composables/useToast";
 import type { CaInfo } from "../../types/api/generated/CaInfo";
+import type { CertPurpose } from "../../types/api/generated/CertPurpose";
 import type { GenerateCertRequest } from "../../types/api/generated/GenerateCertRequest";
 import CertSubjectFields from "./CertSubjectFields.vue";
 import ModalShell from "../ModalShell.vue";
@@ -49,6 +50,7 @@ const defaultCaId = computed<string>(() => {
   return usable.find((ca) => ca.source === "root")?.id || usable[0]?.id || "";
 });
 
+const purpose = ref<CertPurpose>("nginx");
 const caId = ref(defaultCaId.value);
 const commonName = ref("");
 const validityDays = ref("3650");
@@ -96,7 +98,8 @@ async function handleSubmit(): Promise<void> {
     locality: optionalField(subject.value.locality),
     validity_days: Number.parseInt(validityDays.value, 10) || null,
     subject_alt_names: sans.length > 0 ? sans : null,
-    ca_id: selectedCa
+    ca_id: selectedCa,
+    purpose: purpose.value
   };
   saving.value = true;
   try {
@@ -119,6 +122,13 @@ async function handleSubmit(): Promise<void> {
   <ModalShell size="md" @close="emit('close')">
     <template #title>{{ t("cert.generate_title") }}</template>
     <form ref="formRef" @submit.prevent="handleSubmit">
+      <div class="form-group">
+        <label for="cert-purpose-select">{{ t("cert.purpose") }}<span class="required">*</span></label>
+        <select id="cert-purpose-select" v-model="purpose" required>
+          <option value="nginx">{{ t("cert.purpose_nginx") }}</option>
+          <option value="agent">{{ t("cert.purpose_agent") }}</option>
+        </select>
+      </div>
       <div class="form-group">
         <label for="cert-ca-select">{{ t("cert.ca_select") }}<span class="required">*</span></label>
         <select id="cert-ca-select" v-model="caId" required>

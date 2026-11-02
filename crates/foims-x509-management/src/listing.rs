@@ -34,10 +34,64 @@ impl CertKind {
     }
 }
 
+/// 证书用途：决定签发时的 EKU 与可用操作（应用/删除口径见各自函数）。
+///
+/// 用途随文件名前缀持久化（nginx_{ts}_cert / agent_{ts}_cert），无独立
+/// 元数据文件；历史命名（create_ / import_ 前缀）与无法识别前缀一律按
+/// nginx 处理——用途功能引入前的证书均为站点 HTTPS 证书。
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ts_rs::TS)]
+#[serde(rename_all = "lowercase")]
+pub enum CertPurpose {
+    /// Web 站点 HTTPS（nginx）：ServerAuth EKU，可应用到 nginx 配置
+    #[default]
+    Nginx,
+    /// foims-agent mTLS 及后续客户端接入：ClientAuth EKU，不参与 nginx 配置
+    Agent,
+}
+
+impl CertPurpose {
+    /// 从路径参数/请求值解析（nginx / agent）
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "nginx" => Some(Self::Nginx),
+            "agent" => Some(Self::Agent),
+            _ => None,
+        }
+    }
+
+    /// 证书文件名前缀（生成/导入写入与列表用途派生共用）
+    pub fn stem_prefix(self) -> &'static str {
+        match self {
+            Self::Nginx => "nginx_",
+            Self::Agent => "agent_",
+        }
+    }
+}
+
+/// agent 系统物料固定文件基础名（与 foims-agent-service::cert.rs 的
+/// SERVER_CERT/CLIENT_CERT 对应，存于生成目录）：系统自动签发并自愈维护，
+/// 删除/应用操作一律拒绝，防止误删导致 agent mTLS 永久失效。
+const AGENT_SYSTEM_STEMS: [&str; 2] = ["agent_cert", "agent_client_cert"];
+
+/// 从文件基础名派生用途，并判定是否为 agent 系统物料。
+///
+/// 判定顺序：系统物料精确匹配 → 用途前缀 → 历史/未知前缀按 nginx 兜底。
+pub(crate) fn purpose_from_stem(stem: &str) -> (CertPurpose, bool) {
+    if AGENT_SYSTEM_STEMS.contains(&stem) {
+        return (CertPurpose::Agent, true);
+    }
+    for purpose in [CertPurpose::Nginx, CertPurpose::Agent] {
+        if stem.starts_with(purpose.stem_prefix()) {
+            return (purpose, false);
+        }
+    }
+    (CertPurpose::Nginx, false)
+}
+
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct CertFileInfo {
-    /// 文件基础名（如 create_1761234567890_cert，毫秒时间戳）
+    /// 文件基础名（如 nginx_1761234567890_cert，毫秒时间戳）
     pub file_stem: String,
     pub cert_filename: String,
     pub key_filename: Option<String>,
@@ -46,6 +100,10 @@ pub struct CertFileInfo {
     pub not_before: Option<DateTime<Utc>>,
     pub not_after: Option<DateTime<Utc>>,
     pub days_remaining: Option<i64>,
+    /// 证书用途（nginx / agent，由文件名前缀派生）
+    pub purpose: CertPurpose,
+    /// 是否 agent 系统物料（系统自动签发维护，删除/应用被拒绝）
+    pub system_managed: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -175,6 +233,8 @@ async fn scan_dir(dir: &str) -> Result<Vec<CertFileInfo>, CertManagerError> {
             (na - now).num_days()
         });
 
+        // 用途与系统物料标记随文件名前缀派生（历史命名按 nginx 兜底）
+        let (purpose, system_managed) = purpose_from_stem(&stem);
         infos.push(CertFileInfo {
             file_stem: stem,
             cert_filename,
@@ -184,6 +244,8 @@ async fn scan_dir(dir: &str) -> Result<Vec<CertFileInfo>, CertManagerError> {
             not_before: metadata.not_before,
             not_after: metadata.not_after,
             days_remaining,
+            purpose,
+            system_managed,
         });
     }
 
@@ -235,6 +297,51 @@ mod tests {
         }
         // 非法值反序列化失败
         assert!(serde_json::from_str::<CertKind>("\"unknown\"").is_err());
+    }
+
+    #[test]
+    fn 用途解析_小写往返() {
+        for (purpose, text) in [
+            (CertPurpose::Nginx, "\"nginx\""),
+            (CertPurpose::Agent, "\"agent\""),
+        ] {
+            let json =
+                serde_json::to_string(&purpose).unwrap_or_else(|e| panic!("序列化失败: {e}"));
+            assert_eq!(json, text);
+            let back: CertPurpose =
+                serde_json::from_str(&json).unwrap_or_else(|e| panic!("反序列化失败: {e}"));
+            assert_eq!(back, purpose);
+        }
+        assert!(serde_json::from_str::<CertPurpose>("\"other\"").is_err());
+        // 缺省为 nginx（历史请求体不带 purpose 字段时按 Default 兜底）
+        assert_eq!(CertPurpose::default(), CertPurpose::Nginx);
+    }
+
+    #[test]
+    fn 用途派生_前缀与系统物料() {
+        assert_eq!(
+            purpose_from_stem("nginx_1761234567890_cert"),
+            (CertPurpose::Nginx, false)
+        );
+        assert_eq!(
+            purpose_from_stem("agent_1761234567890_cert"),
+            (CertPurpose::Agent, false)
+        );
+        // agent 系统物料精确匹配（用途前缀判定之前）
+        assert_eq!(purpose_from_stem("agent_cert"), (CertPurpose::Agent, true));
+        assert_eq!(
+            purpose_from_stem("agent_client_cert"),
+            (CertPurpose::Agent, true)
+        );
+        // 历史命名与未知前缀按 nginx 兜底
+        assert_eq!(
+            purpose_from_stem("create_1761234567890_cert"),
+            (CertPurpose::Nginx, false)
+        );
+        assert_eq!(
+            purpose_from_stem("import_1761234567890_cert"),
+            (CertPurpose::Nginx, false)
+        );
     }
 
     /// 用 rcgen 在内存中生成一张自签名证书（不触碰文件系统）

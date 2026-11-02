@@ -1,13 +1,14 @@
 <script setup lang="ts">
 /**
- * 证书导入弹窗：证书与私钥必选、
- * 附带 CA 可选（仅供终端导出信任，不参与校验）。
+ * 证书导入弹窗：用途下拉（nginx / agent）+
+ * 证书与私钥必选、附带 CA 可选（仅供终端导出信任，不参与校验）。
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import { importCertificate } from "../../api/system";
 import { showToast } from "../../composables/useToast";
+import type { CertPurpose } from "../../types/api/generated/CertPurpose";
 import ModalShell from "../ModalShell.vue";
 
 const emit = defineEmits<{ close: []; saved: [] }>();
@@ -15,6 +16,7 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const { t } = useI18n();
 const queryClient = useQueryClient();
 
+const purpose = ref<CertPurpose>("nginx");
 const certInput = ref<HTMLInputElement | null>(null);
 const keyInput = ref<HTMLInputElement | null>(null);
 const caInput = ref<HTMLInputElement | null>(null);
@@ -31,6 +33,7 @@ async function handleSubmit(): Promise<void> {
     return;
   }
   const fd = new FormData();
+  fd.append("purpose", purpose.value);
   fd.append("cert", certFile);
   fd.append("key", keyFile);
   const caFile = caInput.value?.files?.[0];
@@ -59,6 +62,13 @@ async function handleSubmit(): Promise<void> {
   <ModalShell size="sm" @close="emit('close')">
     <template #title>{{ t("cert.import_title") }}</template>
     <form @submit.prevent="handleSubmit">
+      <div class="form-group">
+        <label for="cert-import-purpose">{{ t("cert.purpose") }}<span class="required">*</span></label>
+        <select id="cert-import-purpose" v-model="purpose" required>
+          <option value="nginx">{{ t("cert.purpose_nginx") }}</option>
+          <option value="agent">{{ t("cert.purpose_agent") }}</option>
+        </select>
+      </div>
       <div class="form-group">
         <label for="cert-file">{{ t("cert.cert_file") }}<span class="required">*</span></label>
         <input id="cert-file" ref="certInput" type="file" accept=".pem,.crt" required>

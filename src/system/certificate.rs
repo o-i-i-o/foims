@@ -4,11 +4,15 @@
 //! /etc/ssl/foims-import-certs/，站点根 CA 存于 /etc/ssl/foims-ca/，
 //! 导入 CA 池存于 /etc/ssl/foims-import-cas/{id}/。
 //!
+//! 证书用途（nginx / agent，随文件名前缀持久化）在生成/导入时声明，
+//! 决定后续可用操作：仅 nginx 用途可应用到 nginx 配置，agent 用途
+//! （含 agent 系统物料）的应用/删除被拒绝（见 crate 内守卫）。
+//!
 //! 权限约定：
 //! - 管理端点（生成/导入/删除/CA 管理）仅管理员可用；
 //! - CA 证书是公开数据，info/download 端点公开（登录页提供下载入口），
 //!   下载仅提供 PEM 格式；
-//! - 证书仅用于程序运行（HTTPS/nginx），不提供证书下载端点；
+//! - 证书仅用于程序运行（HTTPS/nginx、agent mTLS），不提供证书下载端点；
 //! - 私钥仅保存在服务器文件系统上，任何端点都不得下发私钥。
 
 use std::sync::Arc;
@@ -19,9 +23,9 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use foims_common::msg;
 use foims_x509_management::{
-    CaStatus, CertKind, GenerateCaRequest, GenerateCertRequest, apply_certificate_to_nginx,
-    ca_status, delete_certificate, generate_ca, generate_certificate, import_ca,
-    import_certificate, list_certificates, read_ca_cert_pem, set_ca_cert_only,
+    CaStatus, CertKind, CertPurpose, GenerateCaRequest, GenerateCertRequest,
+    apply_certificate_to_nginx, ca_status, delete_certificate, generate_ca, generate_certificate,
+    import_ca, import_certificate, list_certificates, read_ca_cert_pem, set_ca_cert_only,
 };
 
 use crate::app_state::AppState;
@@ -40,40 +44,48 @@ pub async fn list(_user: foims_auth::extractor::AuthUser) -> Result<Response, Ap
     ))
 }
 
-/// POST /api/system/certificate/generate：生成证书（系统管理员；public_url
-/// 主机名自动并入 SAN）。
+/// POST /api/system/certificate/generate：生成证书（系统管理员；purpose
+/// 声明用途，nginx / agent；public_url 主机名仅对 nginx 用途并入 SAN）。
 pub async fn generate(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
     _sysadmin: SysAdminUser,
     AppJson(req): AppJson<GenerateCertRequest>,
 ) -> Result<Response, AppError> {
+    let purpose = req.purpose;
     let mut extra_sans = Vec::new();
-    let config = state.config_snapshot();
-    let public_url = config.server.public_url.trim();
-    if !public_url.is_empty() {
-        let host_part = public_url
-            .trim_start_matches("https://")
-            .trim_start_matches("http://")
-            .split('/')
-            .next()
-            .unwrap_or_default();
-        // IPv6 字面量以 [] 包裹：取到 ] 之间的地址并校验合法后作为 IP SAN；
-        // 裸冒号形式（如 2001:db8::1:443）直接按 split(':') 会截断出非法 SAN
-        let host = if host_part.starts_with('[') {
-            let close = host_part.find(']').ok_or_else(|| {
-                AppError::Validation(msg("server.common.invalid_param").with("param", "public_url"))
-            })?;
-            let ipv6 = &host_part[1..close];
-            ipv6.parse::<std::net::Ipv6Addr>().map_err(|_| {
-                AppError::Validation(msg("server.common.invalid_param").with("param", "public_url"))
-            })?;
-            ipv6
-        } else {
-            host_part.split(':').next().unwrap_or_default()
-        };
-        if !host.is_empty() {
-            extra_sans.push(host.to_string());
+    // public_url 是 Web 站点访问地址，仅对站点 HTTPS（nginx 用途）有意义
+    if purpose == CertPurpose::Nginx {
+        let config = state.config_snapshot();
+        let public_url = config.server.public_url.trim();
+        if !public_url.is_empty() {
+            let host_part = public_url
+                .trim_start_matches("https://")
+                .trim_start_matches("http://")
+                .split('/')
+                .next()
+                .unwrap_or_default();
+            // IPv6 字面量以 [] 包裹：取到 ] 之间的地址并校验合法后作为 IP SAN；
+            // 裸冒号形式（如 2001:db8::1:443）直接按 split(':') 会截断出非法 SAN
+            let host = if host_part.starts_with('[') {
+                let close = host_part.find(']').ok_or_else(|| {
+                    AppError::Validation(
+                        msg("server.common.invalid_param").with("param", "public_url"),
+                    )
+                })?;
+                let ipv6 = &host_part[1..close];
+                ipv6.parse::<std::net::Ipv6Addr>().map_err(|_| {
+                    AppError::Validation(
+                        msg("server.common.invalid_param").with("param", "public_url"),
+                    )
+                })?;
+                ipv6
+            } else {
+                host_part.split(':').next().unwrap_or_default()
+            };
+            if !host.is_empty() {
+                extra_sans.push(host.to_string());
+            }
         }
     }
 
@@ -82,6 +94,7 @@ pub async fn generate(
 
     let details = serde_json::json!({
         "common_name": common_name,
+        "purpose": purpose,
         "path": cert.cert_path.to_string_lossy(),
     });
     log_op_best_effort(
@@ -220,7 +233,8 @@ fn serve_file(content: Vec<u8>, filename: &str, content_type: &str) -> Result<Re
 }
 
 /// POST /api/system/certificate/import：导入证书对（系统管理员；multipart
-/// 字段 cert/key 必填、ca 可选且仅供导出终端根证书使用；缺失或格式非法 400）。
+/// 字段 cert/key 必填、ca 可选且仅供导出终端根证书使用、purpose 可选声明
+/// 用途（缺省 nginx，非法值 400）；缺失或格式非法 400）。
 pub async fn import(
     State(state): State<Arc<AppState>>,
     meta: RequestMeta,
@@ -230,6 +244,7 @@ pub async fn import(
     let mut cert_data: Option<Vec<u8>> = None;
     let mut key_data: Option<Vec<u8>> = None;
     let mut ca_data: Option<Vec<u8>> = None;
+    let mut purpose_text: Option<String> = None;
 
     while let Some(field) = multipart
         .next_field()
@@ -244,6 +259,8 @@ pub async fn import(
             "cert" => cert_data = Some(data.to_vec()),
             "key" => key_data = Some(data.to_vec()),
             "ca" => ca_data = Some(data.to_vec()),
+            // 用途为文本字段（nginx / agent，缺省 nginx）
+            "purpose" => purpose_text = Some(String::from_utf8_lossy(&data).trim().to_string()),
             _ => {}
         }
     }
@@ -253,14 +270,24 @@ pub async fn import(
     let key_data = key_data
         .ok_or_else(|| AppError::Validation(msg("server.certificate.cert_file_missing")))?;
 
+    let purpose = match purpose_text.as_deref() {
+        None | Some("") => CertPurpose::default(),
+        Some(text) => CertPurpose::parse(text).ok_or_else(|| {
+            AppError::Validation(msg("server.certificate.purpose_invalid").with("purpose", text))
+        })?,
+    };
+
     // 附带的 CA（可选）仅供导出终端根证书使用，不参与证书/私钥校验
     if let Some(ca) = ca_data {
         set_ca_cert_only(ca).await?;
     }
 
-    let cert_path = import_certificate(cert_data, key_data).await?;
+    let cert_path = import_certificate(cert_data, key_data, purpose).await?;
 
-    let details = serde_json::json!({ "path": cert_path.to_string_lossy() });
+    let details = serde_json::json!({
+        "purpose": purpose,
+        "path": cert_path.to_string_lossy(),
+    });
     log_op_best_effort(
         &state.pool()?.get_conn(),
         &meta,

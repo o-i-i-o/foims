@@ -1535,6 +1535,11 @@
     "col_type": "Certificate Type",
     "type_generated": "Self-generated",
     "type_imported": "Imported",
+    "col_purpose": "Purpose",
+    "purpose": "Certificate purpose",
+    "purpose_nginx": "Site HTTPS (nginx)",
+    "purpose_agent": "Agent mTLS",
+    "purpose_system": "System material",
     "col_subject": "Subject (CN)",
     "col_validity": "Validity",
     "col_remaining": "Days Remaining",
@@ -2100,7 +2105,10 @@
       "ca_expired": "The issuing CA has expired or has less than one day of validity; cannot issue new certificates",
       "organizational_unit_length": "Organizational unit (OU) must not exceed 64 characters",
       "state_length": "State/province must not exceed 64 characters",
-      "locality_length": "City/locality must not exceed 64 characters"
+      "locality_length": "City/locality must not exceed 64 characters",
+      "purpose_invalid": "Invalid certificate purpose: {{purpose}} (supported: nginx / agent)",
+      "apply_not_applicable": "This certificate is not for site HTTPS (nginx) and cannot be applied to the nginx configuration",
+      "delete_system_managed": "This certificate is system material (agent mTLS, automatically issued and maintained); deletion is forbidden"
     },
     "common": {
       "cipher_init_failed": "Failed to create cipher",

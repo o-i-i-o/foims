@@ -1,4 +1,5 @@
-//! 证书导入（PEM 校验后写入导入目录）。
+//! 证书导入（PEM 校验后写入导入目录）。用途（nginx / agent）决定
+//! 文件名前缀，与生成路径同一套用途载体约定（见 listing::CertPurpose）。
 
 use std::path::PathBuf;
 
@@ -24,13 +25,14 @@ fn is_private_key_tag(tag: &str) -> bool {
     tag.contains("PRIVATE KEY")
 }
 
-/// 导入证书与私钥（PEM），写入导入目录并返回证书文件路径。
+/// 导入证书与私钥（PEM），按用途写入导入目录并返回证书文件路径。
 ///
 /// 校验：证书可被 X.509 解析、私钥可解析（KeyPair）且公钥与证书公钥
 /// 匹配——内容为 "Hello" 的假私钥或错配对在此即被拒绝。
 pub async fn import_certificate(
     cert_pem: Vec<u8>,
     key_pem: Vec<u8>,
+    purpose: crate::listing::CertPurpose,
 ) -> Result<PathBuf, CertManagerError> {
     if cert_pem.is_empty() || key_pem.is_empty() {
         return Err(CertManagerError::Validation(msg(
@@ -70,11 +72,11 @@ pub async fn import_certificate(
     // 证书/私钥成对独占写入（与生成路径共用 write_cert_pair_exclusive）：
     // 私钥先 create_new(0600)、证书再 create_new，同名冲突（AlreadyExists）
     // 换下一序号重试并清理半成品，杜绝预检-写入间隙被并发导入抢占后
-    // 留下"证书 A + 私钥 B"的错配对
+    // 留下"证书 A + 私钥 B"的错配对；前缀即用途载体
     let key_pem_str = String::from_utf8_lossy(&key_pem).to_string();
     let cert_path = write_cert_pair_exclusive(
         IMPORTED_CERTS_DIR,
-        "import_",
+        purpose.stem_prefix(),
         &String::from_utf8_lossy(&cert_pem),
         &key_pem_str,
     )
@@ -86,6 +88,7 @@ pub async fn import_certificate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::listing::CertPurpose;
 
     /// 构造仅含指定标签 PEM 块的字节流（内容不要求为真实 DER）
     fn pem_bytes(tag: &str) -> Vec<u8> {
@@ -137,7 +140,7 @@ mod tests {
     /// 空输入在校验阶段即被拒绝，不触碰文件系统
     #[test]
     fn 导入_空输入返回校验错误() {
-        let err = with_runtime(import_certificate(vec![], vec![]))
+        let err = with_runtime(import_certificate(vec![], vec![], CertPurpose::Nginx))
             .err()
             .unwrap_or_else(|| panic!("空输入应被拒绝"));
         match err {
@@ -153,7 +156,7 @@ mod tests {
     fn 导入_私钥格式非法返回校验错误() {
         let cert = pem_bytes("CERTIFICATE");
         let bad_key = pem_bytes("NOTE");
-        let err = with_runtime(import_certificate(cert, bad_key))
+        let err = with_runtime(import_certificate(cert, bad_key, CertPurpose::Nginx))
             .err()
             .unwrap_or_else(|| panic!("非法私钥应被拒绝"));
         match err {
@@ -169,7 +172,7 @@ mod tests {
     fn 导入_证书不可解析返回校验错误() {
         let cert = pem_bytes("CERTIFICATE"); // 内容为 "Hello"，非 DER
         let key = pem_bytes("PRIVATE KEY");
-        let err = with_runtime(import_certificate(cert, key))
+        let err = with_runtime(import_certificate(cert, key, CertPurpose::Nginx))
             .err()
             .unwrap_or_else(|| panic!("不可解析证书应被拒绝"));
         match err {
@@ -198,7 +201,7 @@ mod tests {
     fn 导入_假私钥被拒绝() {
         let cert = real_cert_pem().into_bytes();
         let fake_key = pem_bytes("PRIVATE KEY"); // 内容非真实密钥
-        let err = with_runtime(import_certificate(cert, fake_key))
+        let err = with_runtime(import_certificate(cert, fake_key, CertPurpose::Nginx))
             .err()
             .unwrap_or_else(|| panic!("假私钥应被拒绝"));
         match err {
@@ -215,7 +218,7 @@ mod tests {
         let cert = real_cert_pem().into_bytes();
         let other_key = rcgen::KeyPair::generate().unwrap_or_else(|e| panic!("生成密钥失败: {e}"));
         let mismatched_key = other_key.serialize_pem().into_bytes();
-        let err = with_runtime(import_certificate(cert, mismatched_key))
+        let err = with_runtime(import_certificate(cert, mismatched_key, CertPurpose::Nginx))
             .err()
             .unwrap_or_else(|| panic!("错配私钥应被拒绝"));
         match err {
