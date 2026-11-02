@@ -1,0 +1,45 @@
+[package]
+name = "foims-notify"
+version = "0.1.0"
+edition.workspace = true
+authors = ["oi-io <boss@oi-io.cc>"]
+description = "FOIMS 通知-推送域：站内通知原语、SMTP 邮件与 Webhook（通用/钉钉/企业微信）渠道、订阅范围过滤与双渠道外发门面"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# SQLx（站内通知落库、SMTP/Webhook/订阅配置只读查询）
+sqlx = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# TS 类型导出（NotifyScope / WebhookChannel 随 API 载荷暴露给前端）
+ts-rs = { workspace = true }
+
+# Async（SMTP 阻塞发送 spawn_blocking、超时控制）
+tokio = { workspace = true }
+
+# Date/Time（通知落库时间戳、钉钉加签时间戳）
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# 邮件发送（SMTP 渠道）
+lettre = { workspace = true }
+
+# Webhook 通知推送（钉钉加签 / 企业微信 / 通用）
+hmac = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+base64 = { workspace = true }
+
+# 日志
+tracing = { workspace = true }
+
+# Workspace crates（依赖方向：业务域 crate → 本 crate，本 crate 仅依赖 foims-common）
+foims-common = { path = "../foims-common" }
+
+[lints]
+workspace = true

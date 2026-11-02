@@ -61,14 +61,15 @@ pub async fn forgot_password<P: AuthProvider>(
             {
                 foims_common::log_error!("log.auth.save_reset_token_failed", error = e);
             } else {
-                let smtp_config = crate::smtp::get_smtp_config_from_db(&conn).await;
+                let smtp_config = foims_notify::smtp::get_smtp_config_from_db(&conn).await;
                 if let Some(ref _config) = smtp_config {
                     // 使用应用公共URL（而非SMTP主机名）构建重置链接
                     let base_url = state.config().server.public_url.trim_end_matches('/');
                     let reset_link = format!("{base_url}/reset-password?token={reset_token}");
                     let email_body = format!("请点击以下链接重置密码：{reset_link}");
                     if let Err(e) =
-                        crate::smtp::send_email_async(&conn, email, "密码重置", &email_body).await
+                        foims_notify::smtp::send_email_async(&conn, email, "密码重置", &email_body)
+                            .await
                     {
                         foims_common::log_error!("log.auth.send_reset_email_failed", error = e);
                     }

@@ -1,6 +1,6 @@
 [package]
 name = "foims-resource"
-version = "0.1.20"
+version = "0.1.21"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Resource - networks, rooms, cabinets, workstations, devices, IPs, cable links"
@@ -11,6 +11,8 @@ license = "GPL-3.0-or-later"
 foims-common = { path = "../foims-common" }
 foims-models = { path = "../foims-models" }
 foims-auth = { path = "../foims-auth" }
+# 工位异动告警的站内通知原语与邮件/Webhook 渠道外发
+foims-notify = { path = "../foims-notify" }
 # SNMP 域（协议层/采集/事件通知），依赖方向：本 crate → foims-snmp
 foims-snmp = { path = "../foims-snmp" }
 

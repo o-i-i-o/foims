@@ -1,7 +1,9 @@
 //! 观测事件模块（snmp_events 落库、站内通知、查询与定位）。
+//!
+//! 站内通知原语与邮件/Webhook 渠道外发由 foims-notify 提供；本模块仅保留
+//! SNMP 事件自身的业务逻辑（抑制窗口、模板插值、unknown_device 文案）。
 
 pub mod api;
-pub mod notify;
 
 use std::collections::HashSet;
 
@@ -13,14 +15,13 @@ use foims_models::{
     SNMP_EVENT_ARP_CONFLICT, SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP, SNMP_EVENT_POE_OFF,
     SNMP_EVENT_UNKNOWN_DEVICE,
 };
+use foims_notify::{
+    NotifyKind, active_admin_ids, create_notification, encode_notification_content,
+};
 
 use crate::core::truncate_to_column_width;
 
 pub use api::{list_snmp_events, locate_device};
-pub use notify::{
-    create_notification, encode_notification_content, send_device_swap_notification,
-    send_ip_change_notification,
-};
 
 /// 观测事件载体：检测/比对纯函数产出，[`record_events`] 落库并按需通知。
 ///
@@ -205,11 +206,7 @@ pub async fn record_events(
 
     // 通知只发抑制后的集合，逐条降级不回滚已落库事件
     if pending.iter().any(|e| should_notify(e.event_type)) {
-        let admin_ids: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM users WHERE enabled = TRUE AND role IN ('admin', 'secadmin')",
-        )
-        .fetch_all(pool)
-        .await?;
+        let admin_ids = active_admin_ids(pool).await?;
         for ev in pending.iter().filter(|e| should_notify(e.event_type)) {
             notify_event(pool, &device_name, ev, &admin_ids).await;
         }
@@ -290,32 +287,38 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
             .get("vlan_id")
             .and_then(|v| v.as_i64())
             .map(|v| v as i32);
-        let ip = ev.str_field("ip");
-        let mac = ev.str_field("mac");
-        // 邮件渠道（发送内部按收件人订阅的 snmp_event 类型过滤，无人订阅时静默跳过）
-        if let Err(e) = foims_auth::smtp::send_unknown_device_email(
-            pool,
+        let (title, body) = unknown_device_message(
             device_name,
             &iface,
             vlan_id,
-            &ip,
-            &mac,
-        )
-        .await
-        {
+            &ev.str_field("ip"),
+            &ev.str_field("mac"),
+        );
+        // 邮件 + Webhook 双渠道按订阅过滤外发：邮件结果记日志（无人订阅时
+        // 静默跳过），Webhook 内部按各目标订阅过滤逐条尽力推送
+        if let Err(e) = foims_notify::push(pool, NotifyKind::SnmpEvent, &title, &body).await {
             log_warn!("log.snmp.unknown_device_email_failed", error = e);
         }
-        // Webhook 渠道（内部按各目标订阅的 snmp_event 类型过滤，未配置目标静默跳过）
-        foims_auth::webhook::send_unknown_device_webhook(
-            pool,
-            device_name,
-            &iface,
-            vlan_id,
-            &ip,
-            &mac,
-        )
-        .await;
     }
+}
+
+/// 未知设备接入通知文案，邮件与 Webhook 渠道共用。
+///
+/// MAC 为物理实体，未知判定基于 MAC 未登记于任何设备网口；`ip`/`interface`/
+/// `device_name` 仅为发现位置（在哪个设备端口、哪个 IP 上学到）。
+fn unknown_device_message(
+    device_name: &str,
+    interface: &str,
+    vlan_id: Option<i32>,
+    ip_address: &str,
+    mac_address: &str,
+) -> (String, String) {
+    let vlan_text = vlan_id.map_or_else(|| "-".to_string(), |v| v.to_string());
+    let title = format!("未知设备接入通知 - {device_name}/{interface}");
+    let body = format!(
+        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的设备，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nMAC地址：{mac_address}\n发现位 IP：{ip_address}\n\n请确认该设备是否授权接入。\n\n此致，\nFOIMS系统"
+    );
+    (title, body)
 }
 
 #[cfg(test)]

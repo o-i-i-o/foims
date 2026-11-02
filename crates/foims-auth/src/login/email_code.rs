@@ -418,7 +418,7 @@ pub async fn send_login_code<P: AuthProvider>(
         .bind(&code).bind(expiry).bind(id).execute(&conn).await?;
 
     let email_body = format!("您的登录验证码是：{code}");
-    crate::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
+    foims_notify::smtp::send_email_async(&conn, email, "登录验证码", &email_body).await?;
 
     Ok(foims_common::ok_json((), "server.auth.code_sent"))
 }

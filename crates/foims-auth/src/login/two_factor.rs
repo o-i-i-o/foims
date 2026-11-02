@@ -568,7 +568,7 @@ pub async fn send_two_factor_code<P: AuthProvider>(
         .bind(&code).bind(expiry).bind(id).execute(&conn).await?;
 
     let email_body = format!("您的两步验证码是：{code}");
-    crate::smtp::send_email_async(&conn, &email, "两步验证码", &email_body).await?;
+    foims_notify::smtp::send_email_async(&conn, &email, "两步验证码", &email_body).await?;
 
     Ok(foims_common::ok_json((), "server.auth.code_sent"))
 }

@@ -617,7 +617,7 @@ pub async fn get_auth_methods<P: AuthProvider>(
 
     let ldap_enabled = get_ldap_config_enabled(&conn, "ldap").await;
     let sso_enabled = get_ldap_config_enabled(&conn, "sso").await;
-    let email_enabled = crate::smtp::smtp_configured(&conn).await;
+    let email_enabled = foims_notify::smtp::smtp_configured(&conn).await;
 
     Ok(foims_common::ok_json(
         serde_json::json!({

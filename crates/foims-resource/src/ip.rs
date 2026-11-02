@@ -817,7 +817,7 @@ async fn sync_switch_macs(
     tx.commit().await?;
 
     for notice in pending_notifications {
-        match foims_snmp::events::send_device_swap_notification(
+        match crate::workstation_notify::send_device_swap_notification(
             pool,
             &notice.workstation_id,
             &notice.ips,
@@ -955,7 +955,7 @@ async fn dispatch_ip_change_notices(pool: &sqlx::PgPool, notices: Vec<IpChangeNo
             continue;
         }
 
-        match foims_snmp::events::send_ip_change_notification(
+        match crate::workstation_notify::send_ip_change_notification(
             pool,
             &notice.workstation_id,
             &notice.mac,

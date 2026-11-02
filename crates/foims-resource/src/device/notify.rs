@@ -114,7 +114,7 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
     // SMTP 未配置属于业务状态：静默跳过，不产生错误日志刷屏；
     // 其余发送失败需以 warn 呈现，便于排查通知未送达问题
     if let Err(e) =
-        foims_auth::smtp::send_email_async(pool, &info.manager_email, &subject, &body).await
+        foims_notify::smtp::send_email_async(pool, &info.manager_email, &subject, &body).await
     {
         if matches!(&e, AppError::Validation(m) if m.key() == "server.smtp.not_configured") {
             log_debug!(

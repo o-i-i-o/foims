@@ -1,13 +1,14 @@
-//! Webhook 通知推送模块（通用 / 钉钉 / 企业微信，多目标）。
+//! Webhook 通知渠道（通用 / 钉钉 / 企业微信，多目标）。
 //!
 //! 目标列表存于 `system_configs`（config_type='webhook'，key='targets'，
 //! JSON 对象数组）：每条目标独立指定渠道（generic/dingtalk/wecom）、接收
 //! 地址、备注名与订阅范围（`NotifyScope`），可同时配置多条、互不影响，
-//! 与邮件渠道（`crate::smtp`）彼此独立。钉钉加签密钥在 JSON 内以 AES-GCM
+//! 与邮件渠道（[`crate::smtp`]）彼此独立。钉钉加签密钥在 JSON 内以 AES-GCM
 //! 密文存储（与 SMTP 密码同口径）。
 //!
 //! 发送按各目标自身的订阅范围过滤，逐目标尽力推送：单目标失败仅记日志，
-//! 不影响其他目标与业务结果（与邮件渠道降级口径一致）。
+//! 不影响其他目标与业务结果（与邮件渠道降级口径一致）。业务事件的文案
+//! 组装（标题/正文）留在各生产方 crate，本模块只按 `(title, body)` 推送。
 //!
 //! 协议口径（对齐各平台群机器人 Webhook）：
 //! - 钉钉：POST markdown 消息到机器人地址，配置加签密钥时追加
@@ -29,7 +30,7 @@ use foims_common::AppError;
 use foims_common::crypto::{decrypt_password_async, encrypt_password_async};
 use foims_common::{log_error, log_info, msg};
 
-use crate::smtp::{NotifyKind, NotifyScope};
+use crate::kind::{NotifyKind, NotifyScope};
 
 const WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -344,80 +345,6 @@ pub async fn test_webhook_target(pool: &PgPool, target_id: &str) -> Result<(), A
         WebhookChannel::DingTalk => send_dingtalk(&target.url, &target.secret, title, body).await,
         WebhookChannel::Wecom => send_wecom(&target.url, title, body).await,
     }
-}
-
-// ---- 业务通知封装（与 smtp 侧发送函数一一对应，文案复用其 *_message 函数，
-// 内部完成目标订阅范围过滤，调用点无需再读配置） ----
-
-/// 发送 IP 地址变更 Webhook 通知（仅推送给订阅 ip_change 类型的目标）。
-pub async fn send_ip_change_webhook(
-    pool: &PgPool,
-    source_device: &str,
-    workstation_name: &str,
-    mac_address: &str,
-    registered_ip: &str,
-    observed_ip: &str,
-) {
-    let (title, body) = crate::smtp::ip_change_message(
-        source_device,
-        workstation_name,
-        mac_address,
-        registered_ip,
-        observed_ip,
-    );
-    send_notification_webhook(pool, NotifyKind::IpChange, &title, &body).await;
-}
-
-/// 发送工位 IP 上设备更换 Webhook 通知（仅推送给订阅 ip_change 类型的目标）。
-pub async fn send_device_swap_webhook(
-    pool: &PgPool,
-    source_device: &str,
-    workstation_name: &str,
-    ip_address: &str,
-    old_mac: &str,
-    new_mac: &str,
-) {
-    let (title, body) = crate::smtp::device_swap_message(
-        source_device,
-        workstation_name,
-        ip_address,
-        old_mac,
-        new_mac,
-    );
-    send_notification_webhook(pool, NotifyKind::IpChange, &title, &body).await;
-}
-
-/// 发送主机资源告警 Webhook 通知（仅推送给订阅 agent_alert 类型的目标）。
-pub async fn send_host_alert_webhook(
-    pool: &PgPool,
-    hostname: &str,
-    ip_address: &str,
-    metric: &str,
-    value: f64,
-    threshold: u8,
-) {
-    let (title, body) =
-        crate::smtp::host_alert_message(hostname, ip_address, metric, value, threshold);
-    send_notification_webhook(pool, NotifyKind::AgentAlert, &title, &body).await;
-}
-
-/// 发送未知设备接入 Webhook 通知（仅推送给订阅 snmp_event 类型的目标）。
-pub async fn send_unknown_device_webhook(
-    pool: &PgPool,
-    device_name: &str,
-    interface: &str,
-    vlan_id: Option<i32>,
-    ip_address: &str,
-    mac_address: &str,
-) {
-    let (title, body) = crate::smtp::unknown_device_message(
-        device_name,
-        interface,
-        vlan_id,
-        ip_address,
-        mac_address,
-    );
-    send_notification_webhook(pool, NotifyKind::SnmpEvent, &title, &body).await;
 }
 
 #[cfg(test)]

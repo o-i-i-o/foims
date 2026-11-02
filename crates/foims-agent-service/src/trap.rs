@@ -26,7 +26,7 @@ use foims_common::{log_error, log_info, log_warn};
 use tokio::sync::broadcast::Receiver as ShutdownReceiver;
 use uuid::Uuid;
 
-use foims_snmp::events::create_notification;
+use foims_notify::create_notification;
 
 /// 站内通知类型标识（notifications.notification_type 列）
 const NOTIFICATION_TYPE_SNMP_TRAP: &str = "snmp_trap";

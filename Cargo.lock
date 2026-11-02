@@ -1677,6 +1677,7 @@ dependencies = [
  "foims-init",
  "foims-ipmi",
  "foims-models",
+ "foims-notify",
  "foims-organization",
  "foims-resource",
  "foims-scheduler",
@@ -1704,7 +1705,7 @@ dependencies = [
 
 [[package]]
 name = "foims-agent-service"
-version = "0.1.30"
+version = "0.1.31"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -1716,6 +1717,7 @@ dependencies = [
  "foims-auth",
  "foims-common",
  "foims-ipmi",
+ "foims-notify",
  "foims-scheduler",
  "foims-snmp",
  "futures-util",
@@ -1745,7 +1747,7 @@ dependencies = [
 
 [[package]]
 name = "foims-auth"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "axum",
  "axum-extra",
@@ -1755,14 +1757,12 @@ dependencies = [
  "dashmap",
  "foims-common",
  "foims-models",
+ "foims-notify",
  "hex",
- "hmac 0.13.0",
  "jsonwebtoken",
  "ldap3",
- "lettre",
  "openidconnect",
  "rand 0.10.3",
- "reqwest 0.13.5",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -1878,6 +1878,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "foims-notify"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "chrono",
+ "foims-common",
+ "hmac 0.13.0",
+ "lettre",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "ts-rs",
+ "uuid",
+]
+
+[[package]]
 name = "foims-organization"
 version = "0.1.5"
 dependencies = [
@@ -1894,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "foims-resource"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "axum",
  "chrono",
@@ -1902,6 +1922,7 @@ dependencies = [
  "foims-auth",
  "foims-common",
  "foims-models",
+ "foims-notify",
  "foims-snmp",
  "ipnetwork",
  "serde",
@@ -1945,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "foims-snmp"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "async-snmp",
  "axum",
@@ -1953,6 +1974,7 @@ dependencies = [
  "foims-auth",
  "foims-common",
  "foims-models",
+ "foims-notify",
  "futures-util",
  "serde",
  "serde_json",

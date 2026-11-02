@@ -1,6 +1,6 @@
 [package]
 name = "foims"
-version = "0.33.12"
+version = "0.33.13"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -14,6 +14,7 @@ members = [
     "crates/foims-data-management",
     "crates/foims-init",
     "crates/foims-models",
+    "crates/foims-notify",
     "crates/foims-organization",
     "crates/foims-ipmi",
     "crates/foims-resource",
@@ -164,6 +165,7 @@ foims-common = { path = "crates/foims-common" }
 foims-data-management = { path = "crates/foims-data-management" }
 foims-init = { path = "crates/foims-init" }
 foims-models = { path = "crates/foims-models" }
+foims-notify = { path = "crates/foims-notify" }
 foims-organization = { path = "crates/foims-organization" }
 foims-ipmi = { path = "crates/foims-ipmi" }
 foims-resource = { path = "crates/foims-resource" }

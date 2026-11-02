@@ -1,9 +1,9 @@
 [package]
 name = "foims-snmp"
-version = "0.1.9"
+version = "0.1.10"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
-description = "FOIMS SNMP 域：协议参数构造与鉴权、设备采集（系统信息/端口/LLDP/ARP/性能指标）、观测事件与站内通知"
+description = "FOIMS SNMP 域：协议参数构造与鉴权、设备采集（系统信息/端口/LLDP/ARP/性能指标）、观测事件与业务文案构造"
 license = "GPL-3.0-or-later"
 
 [dependencies]
@@ -40,7 +40,10 @@ tracing = { workspace = true }
 # Workspace crates（依赖方向：foims-resource / foims-agent-service → 本 crate，本 crate 不依赖二者）
 foims-common = { path = "../foims-common" }
 foims-models = { path = "../foims-models" }
+# 鉴权提取器（events API 的 AuthUser）
 foims-auth = { path = "../foims-auth" }
+# 站内通知原语与邮件/Webhook 渠道外发门面
+foims-notify = { path = "../foims-notify" }
 
 [lints]
 workspace = true

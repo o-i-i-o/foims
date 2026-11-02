@@ -13,6 +13,7 @@ pub mod patch_panel;
 pub mod position;
 pub mod room;
 pub mod workstation;
+pub mod workstation_notify;
 
 pub use cabinets::*;
 pub use cable_link::*;

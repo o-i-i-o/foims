@@ -761,7 +761,7 @@ impl AlertRuntime {
         let mut ids = Vec::with_capacity(recipients.len());
         for recipient in recipients {
             ids.push(
-                foims_snmp::events::create_notification(
+                foims_notify::create_notification(
                     &self.pool,
                     NOTIFICATION_TITLE_KEY,
                     content,
@@ -778,37 +778,32 @@ impl AlertRuntime {
             recipients = recipients.len()
         );
 
-        // 邮件渠道：发送内部按收件人订阅的 agent_alert 类型过滤，无人订阅时静默跳过；
-        // 发送失败只记日志——邮件丢失可接受，站内通知失败才保持未通知态重试
-        if let Some(email) = &email
-            && let Err(e) = foims_auth::smtp::send_host_alert_email(
-                &self.pool,
+        // 邮件 + Webhook 双渠道按订阅过滤外发：邮件发送失败只记日志——邮件
+        // 丢失可接受，站内通知失败才保持未通知态重试；Webhook 内部按各目标
+        // 订阅过滤逐条尽力推送
+        if let Some(email) = &email {
+            let (title, body) = host_alert_message(
                 &host.hostname,
                 &host.ip,
                 email.metric,
                 email.value,
                 email.threshold,
+            );
+            if let Err(e) = foims_notify::push(
+                &self.pool,
+                foims_notify::NotifyKind::AgentAlert,
+                &title,
+                &body,
             )
             .await
-        {
-            foims_common::log_error!(
-                "log.agent.alert_email_send_failed",
-                hostname = host.hostname.as_str(),
-                metric = email.metric,
-                error = e
-            );
-        }
-        // Webhook 渠道（内部按各目标订阅的 agent_alert 类型过滤，未配置目标静默跳过）
-        if let Some(email) = &email {
-            foims_auth::webhook::send_host_alert_webhook(
-                &self.pool,
-                &host.hostname,
-                &host.ip,
-                email.metric,
-                email.value,
-                email.threshold,
-            )
-            .await;
+            {
+                foims_common::log_error!(
+                    "log.agent.alert_email_send_failed",
+                    hostname = host.hostname.as_str(),
+                    metric = email.metric,
+                    error = e
+                );
+            }
         }
         Ok(ids)
     }
@@ -1018,6 +1013,36 @@ impl AlertRuntime {
             foims_common::log_info!("log.agent.episode_sweeper_stopped");
         })
     }
+}
+
+/// 主机告警指标的中文名与单位（邮件与 Webhook 文案共用）。
+fn host_alert_metric_label(metric: &str) -> (&'static str, &'static str) {
+    match metric {
+        "cpu" => ("CPU使用率", "%"),
+        "mem" => ("内存使用率", "%"),
+        "disk" => ("磁盘使用率", "%"),
+        "temp" => ("温度", "℃"),
+        _ => ("指标", ""),
+    }
+}
+
+/// 主机资源告警通知文案，邮件与 Webhook 渠道共用。
+///
+/// `metric` 为 host_alert_episodes 的指标名（cpu/mem/disk/temp），
+/// 值与阈值单位随指标变化（温度 ℃，其余 %）。
+fn host_alert_message(
+    hostname: &str,
+    ip_address: &str,
+    metric: &str,
+    value: f64,
+    threshold: u8,
+) -> (String, String) {
+    let (label, unit) = host_alert_metric_label(metric);
+    let title = format!("主机资源告警 - {hostname}: {label}超标");
+    let body = format!(
+        "尊敬的管理员：\n\n主机 {hostname} 触发资源告警，详情如下：\n主机名称：{hostname}\nIP地址：{ip_address}\n告警指标：{label}\n当前值：{value:.1}{unit}\n告警阈值：{threshold}{unit}\n\n请及时确认处理。\n\n此致，\nFOIMS系统"
+    );
+    (title, body)
 }
 
 #[cfg(test)]

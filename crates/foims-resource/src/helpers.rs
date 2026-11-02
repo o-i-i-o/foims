@@ -1,7 +1,7 @@
 //! 资源域内部辅助：子网查询、房间校验。
 //!
 //! 仅由本 crate 的各资源模块使用；不对外再导出。
-//! 站内通知与 MAC 变更告警已下放 foims-snmp::events::notify。
+//! 工位 MAC/IP 异动告警见 workstation_notify 模块。
 
 use uuid::Uuid;
 

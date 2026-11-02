@@ -15,13 +15,14 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::system::services::trigger_service_restart;
-use foims_auth::smtp::{
-    SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
-};
 use foims_common::AppError;
 use foims_common::AppJson;
 use foims_common::config::{Config, I18nConfig, ServerConfig, SnmpTrapUsmUser};
 use foims_common::{log_error, log_info, log_warn, msg};
+use foims_notify::smtp::{
+    SmtpConfig, get_smtp_config_from_db, save_smtp_config_to_db, send_email_to_users,
+};
+use foims_notify::webhook;
 
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
@@ -838,7 +839,7 @@ pub async fn update_page_timeout_config(
 #[ts(export)]
 pub struct NotificationRecipients {
     /// 收件人及其订阅的通知类型（每收件人独立配置，与 Webhook 渠道互不影响）
-    pub recipients: Vec<foims_auth::smtp::MailRecipient>,
+    pub recipients: Vec<foims_notify::smtp::MailRecipient>,
 }
 
 /// GET /api/system/notification/recipients：读取邮件收件人及其订阅的通知类型。
@@ -1006,7 +1007,7 @@ pub async fn test_smtp_connection(
         }
     };
 
-    foims_auth::smtp::test_smtp_connection(&config).await?;
+    foims_notify::smtp::test_smtp_connection(&config).await?;
 
     Ok(foims_common::ok_json((), "server.smtp.test_success"))
 }
@@ -1049,7 +1050,7 @@ pub async fn send_system_email(
 pub struct WebhookTargetView {
     pub id: String,
     pub name: String,
-    pub channel: foims_auth::webhook::WebhookChannel,
+    pub channel: webhook::WebhookChannel,
     pub url: String,
     /// 是否已配置钉钉加签密钥（密文不回传，口径同 SMTP has_password）
     pub has_secret: bool,
@@ -1072,7 +1073,7 @@ pub async fn get_webhook_config(
     _user: foims_auth::extractor::AuthUser,
 ) -> Result<Response, AppError> {
     // 解析失败向上报错：配置展示若降级为空列表，管理员保存会把全部目标覆盖丢失
-    let targets = foims_auth::webhook::load_webhook_targets_raw(&state.pool()?.get_conn())
+    let targets = webhook::load_webhook_targets_raw(&state.pool()?.get_conn())
         .await
         .map_err(|e| {
             AppError::Internal(msg("server.webhook.config_query_failed").with("error", e))
@@ -1106,7 +1107,7 @@ pub struct WebhookTargetPayload {
     pub id: String,
     #[validate(length(max = 100, message = "server.webhook.validation.name_length"))]
     pub name: String,
-    pub channel: foims_auth::webhook::WebhookChannel,
+    pub channel: webhook::WebhookChannel,
     #[validate(length(min = 1, max = 2048, message = "server.webhook.validation.url_length"))]
     pub url: String,
     /// 空 = 保留已存加签密钥（口径同 SMTP 密码留空保持）
@@ -1168,7 +1169,7 @@ pub async fn update_webhook_config(
     let upserts = req
         .targets
         .iter()
-        .map(|t| foims_auth::webhook::WebhookTargetUpsert {
+        .map(|t| webhook::WebhookTargetUpsert {
             id: t.id.clone(),
             name: t.name.clone(),
             channel: t.channel,
@@ -1179,7 +1180,7 @@ pub async fn update_webhook_config(
             } else {
                 Some(t.secret.clone())
             },
-            scope: foims_auth::smtp::NotifyScope {
+            scope: foims_notify::NotifyScope {
                 ip_change: t.ip_change,
                 agent_alert: t.agent_alert,
                 snmp_event: t.snmp_event,
@@ -1187,7 +1188,7 @@ pub async fn update_webhook_config(
         })
         .collect::<Vec<_>>();
 
-    foims_auth::webhook::save_webhook_targets(&state.pool()?.get_conn(), &upserts).await?;
+    webhook::save_webhook_targets(&state.pool()?.get_conn(), &upserts).await?;
 
     Ok(foims_common::ok_json((), "server.webhook.config_updated"))
 }
@@ -1206,7 +1207,7 @@ pub async fn test_webhook(
     AppJson(req): AppJson<TestWebhookRequest>,
 ) -> Result<Response, AppError> {
     req.validate()?;
-    foims_auth::webhook::test_webhook_target(&state.pool()?.get_conn(), &req.target_id).await?;
+    webhook::test_webhook_target(&state.pool()?.get_conn(), &req.target_id).await?;
     Ok(foims_common::ok_json((), "server.webhook.test_success"))
 }
 
