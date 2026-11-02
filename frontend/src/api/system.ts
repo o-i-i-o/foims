@@ -236,7 +236,7 @@ export function getSystemServices(): Promise<ApiResult<ServiceStatusItem[]>> {
   return apiGet<ServiceStatusItem[]>("/api/system/services");
 }
 
-/** 服务操作：stop / restart / start / reload（后端先响应后延迟执行） */
+/** 服务操作：restart / reload / enable（后端不提供 start/stop/disable；restart 先响应后延迟执行） */
 export function runServiceOp(service: string, op: string): Promise<ApiResult<unknown>> {
   return apiPost(`/api/system/services/${encodeURIComponent(service)}/${encodeURIComponent(op)}`, {});
 }

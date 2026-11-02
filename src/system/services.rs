@@ -3,11 +3,15 @@
 //! 统一管理 foims 与 nginx 两个 systemd 服务：
 //! - 状态查询：`GET /api/system/services`
 //! - 管理操作：`POST /api/system/services/{service}/{op}`
-//!   （service ∈ {foims, nginx}，op ∈ {start, stop, restart, reload, enable, disable}）
+//!   （service ∈ {foims, nginx}，op ∈ {restart, reload, enable}）
+//!
+//! 刻意不提供 start / stop / disable：两个服务任一停止都会使 Web 管理界面
+//! 不可达且无法经程序自身恢复（理由详见 foims-services 模块头），启停与
+//! 自启开关由运维在服务器上直接执行 systemctl 完成。
 //!
 //! 服务注册不由本程序完成（DEB 包安装或运维手动部署单元文件）；
 //! 未注册的服务操作一律返回「未注册服务」错误，不做回退。
-//! stop / restart 会切断当前请求的响应通道（foims 进程退出、nginx 断开
+//! restart 会切断当前请求的响应通道（foims 进程退出、nginx 断开
 //! 经其代理的连接），统一先返回响应再由后台延迟执行。
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -64,7 +68,7 @@ pub async fn get_services_status(
 }
 
 /// POST /api/system/services/{service}/{op}：执行服务管理操作（系统管理员；
-/// service 与 op 按白名单校验，非法 400；stop/restart 由后台延迟下发、
+/// service 与 op 按白名单校验，非法 400；restart 由后台延迟下发、
 /// 响应先行返回，响应通道问题见模块头）。
 pub async fn service_operation(
     _sysadmin: foims_auth::extractor::SysAdminUser,
@@ -76,12 +80,12 @@ pub async fn service_operation(
     let op = ServiceOp::parse(&op)
         .ok_or_else(|| AppError::Validation(msg("server.services.unknown_op").with("op", op)))?;
 
-    // foims 重启走自重启特例入口，其余 stop / restart 走通用延迟执行入口
+    // foims 重启走自重启特例入口，nginx 重启走通用延迟执行入口
     if svc == ManagedService::Foims && op == ServiceOp::Restart {
         return trigger_service_restart().await;
     }
 
-    if matches!(op, ServiceOp::Stop | ServiceOp::Restart) {
+    if op == ServiceOp::Restart {
         return trigger_deferred_service_op(svc, op).await;
     }
 
@@ -191,8 +195,9 @@ pub async fn trigger_service_restart() -> Result<Response, AppError> {
     ))
 }
 
-/// 延迟执行 foims / nginx 的 stop 与 restart：预检注册状态后交由后台任务，
-/// 响应立即返回「命令已发送」（响应通道为何会被切断见模块头）。
+/// 延迟执行 nginx 的 restart：预检注册状态后交由后台任务，
+/// 响应立即返回「命令已发送」（响应通道为何会被切断见模块头；
+/// foims 重启走自重启特例入口，不经本函数）。
 async fn trigger_deferred_service_op(
     svc: ManagedService,
     op: ServiceOp,

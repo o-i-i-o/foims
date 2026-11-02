@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /**
  * 服务管理卡片：foims / nginx 双行
- * 状态表（systemd 注册态/运行态/自启/运行时长），操作按钮按当前状态禁用
- * 无意义项。后端对 stop/restart 先响应后延迟执行：重启由前端轮询确认
- * 恢复（foims 恢复后整页刷新，nginx 仅刷新状态表），停止仅提示恢复方式。
+ * 状态表（systemd 注册态/运行态/自启/运行时长）。仅提供重启、重载与启用自启：
+ * 启动/停止/禁用自启会导致服务停止后 Web 界面不可达且无法经程序自身恢复，
+ * 故全链路不提供，启停与自启开关由运维在服务器上执行 systemctl 完成。
+ * 后端对 restart 先响应后延迟执行：重启由前端轮询确认恢复（foims 恢复后
+ * 整页刷新，nginx 仅刷新状态表）。
  */
 import { computed, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -17,8 +19,8 @@ import ConfirmModal from "../ConfirmModal.vue";
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
-/** 服务操作类型（与后端路由段一致） */
-type ServiceOp = "start" | "stop" | "restart" | "reload" | "enable" | "disable";
+/** 服务操作类型（与后端路由段一致；后端不提供 start/stop/disable） */
+type ServiceOp = "restart" | "reload" | "enable";
 
 const { t } = useI18n();
 
@@ -74,7 +76,7 @@ function requestOp(service: string, op: ServiceOp): void {
   if (opInFlight.value) {
     return;
   }
-  if (op === "stop" || op === "restart") {
+  if (op === "restart") {
     confirmOp.value = { service, op };
     return;
   }
@@ -88,10 +90,6 @@ function confirmMessage(): string {
   }
   const name = t(`services.name_${target.service}`);
   const unit = unitName(target.service);
-  if (target.op === "stop") {
-    const extraKey = target.service === "foims" ? "services.confirm_stop_foims_extra" : "services.confirm_stop_nginx_extra";
-    return t("services.confirm_stop", { name, unit, extra: t(extraKey) });
-  }
   return t("services.confirm_restart", { name, unit });
 }
 
@@ -118,11 +116,6 @@ async function runOp(service: string, op: ServiceOp): Promise<void> {
       // 命令已送达、后台延迟执行：轮询等待服务恢复
       showToast(t("services.restart_sent"), "info");
       waitForServiceRecovery(service);
-      return;
-    }
-    if (op === "stop") {
-      // 服务即将停止，状态刷新必然失败：仅提示服务器侧恢复方式
-      showToast(service === "foims" ? t("services.stop_done_foims") : t("services.stop_sent_nginx"), "warning");
       return;
     }
     showToast(t("services.op_done", { name: t(`services.name_${service}`), op: t(`services.op_${op}`) }), "success");
@@ -226,23 +219,20 @@ onUnmounted(() => {
             <td class="svc-actions-cell">
               <span v-if="!item.registered" class="svc-unregistered-hint">{{ t("services.unregistered_hint") }}</span>
               <template v-else-if="!readonly">
-                <button type="button" class="btn btn-primary btn-sm" :disabled="item.active" @click="requestOp(item.name, 'start')">
-                  {{ t("services.op_start") }}
-                </button>
-                <button type="button" class="btn btn-danger btn-sm" :disabled="!item.active" @click="requestOp(item.name, 'stop')">
-                  {{ t("services.op_stop") }}
-                </button>
                 <button type="button" class="btn btn-secondary btn-sm" @click="requestOp(item.name, 'restart')">
                   {{ t("services.op_restart") }}
                 </button>
                 <button v-if="item.reload_supported" type="button" class="btn btn-secondary btn-sm" :disabled="!item.active" @click="requestOp(item.name, 'reload')">
                   {{ t("services.op_reload") }}
                 </button>
-                <button type="button" class="btn btn-secondary btn-sm" :disabled="item.enabled" @click="requestOp(item.name, 'enable')">
+                <!-- 启用自启：已启用时不可点击（无禁用自启入口，避免服务脱离自启保障后停机无法经程序恢复） -->
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  :disabled="item.enabled"
+                  @click="requestOp(item.name, 'enable')"
+                >
                   {{ t("services.op_enable") }}
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" :disabled="!item.enabled" @click="requestOp(item.name, 'disable')">
-                  {{ t("services.op_disable") }}
                 </button>
               </template>
             </td>
@@ -254,7 +244,6 @@ onUnmounted(() => {
     <ConfirmModal
       v-if="confirmOp"
       :message="confirmMessage()"
-      :danger="confirmOp.op === 'stop'"
       @confirm="onOpConfirmed"
       @cancel="confirmOp = null"
     />

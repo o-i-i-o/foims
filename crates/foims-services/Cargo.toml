@@ -1,6 +1,6 @@
 [package]
 name = "foims-services"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS Services - systemd 服务管理（foims / nginx）"

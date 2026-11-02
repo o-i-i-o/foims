@@ -1,13 +1,16 @@
 //! FOIMS 服务管理：统一管理 foims 与 nginx 两个 systemd 服务。
 //!
-//! 管理操作（[`start`](ManagedService::start) / [`stop`](ManagedService::stop) /
-//! [`restart`](ManagedService::restart) / [`reload`](ManagedService::reload) /
-//! [`enable`](ManagedService::enable) / [`disable`](ManagedService::disable) /
-//! [`status`](ManagedService::status)，或经 [`execute`](ManagedService::execute)
-//! 以 [`ServiceOp`] 分发）一律先校验单元文件已在标准 systemd 目录注册
-//! （[`SYSTEMD_UNIT_DIRS`]）；未注册直接返回
+//! 管理操作（[`restart`](ManagedService::restart) / [`reload`](ManagedService::reload) /
+//! [`enable`](ManagedService::enable) / [`status`](ManagedService::status)，
+//! 或经 [`execute`](ManagedService::execute) 以 [`ServiceOp`] 分发）一律先校验
+//! 单元文件已在标准 systemd 目录注册（[`SYSTEMD_UNIT_DIRS`]）；未注册直接返回
 //! [`ServicesError::NotRegistered`]（「未注册服务」），不做任何
 //! 「直接拉起二进制 / pkill / 降级轮询」等不当回退。
+//!
+//! 刻意不提供 start / stop / disable：两个服务任一停止都会使 Web 管理界面
+//! 不可达且无法经程序自身恢复，暴露此类操作只会有自伤风险，启停与自启开关
+//! 由运维在服务器上直接执行 systemctl 完成。restart 由 systemd Restart=always
+//! 语义兜底（服务退出后自动拉起），不会造成永久停机。
 //!
 //! 服务注册不由本程序完成：foims 单元文件随 DEB 包安装
 //! （scripts/build-pkgs.sh）或由运维手动部署，nginx 单元文件由发行版包提供。
@@ -84,12 +87,9 @@ impl ManagedService {
     /// 按操作类型分发执行（未注册即报错）。
     pub async fn execute(self, op: ServiceOp) -> ServicesResult<()> {
         match op {
-            ServiceOp::Start => self.start().await,
-            ServiceOp::Stop => self.stop().await,
             ServiceOp::Restart => self.restart().await,
             ServiceOp::Reload => self.reload().await,
             ServiceOp::Enable => self.enable().await,
-            ServiceOp::Disable => self.disable().await,
         }
     }
 
@@ -108,18 +108,6 @@ impl ManagedService {
         )
         .await?;
         Ok(ServiceStatus::from_show_output(&output))
-    }
-
-    /// 启动服务（未注册即报错，下同）。
-    pub async fn start(self) -> ServicesResult<()> {
-        self.require_unit_file().await?;
-        systemd::systemctl_op("start", self.unit_name()).await
-    }
-
-    /// 停止服务。
-    pub async fn stop(self) -> ServicesResult<()> {
-        self.require_unit_file().await?;
-        systemd::systemctl_op("stop", self.unit_name()).await
     }
 
     /// 重启服务。
@@ -149,45 +137,29 @@ impl ManagedService {
         self.require_unit_file().await?;
         systemd::systemctl_op("enable", self.unit_name()).await
     }
-
-    /// 取消开机自启。
-    pub async fn disable(self) -> ServicesResult<()> {
-        self.require_unit_file().await?;
-        systemd::systemctl_op("disable", self.unit_name()).await
-    }
 }
 
 /// 服务管理操作（API 路径 `{service}/{op}` 中的 op 段）。
+///
+/// 刻意不含 Start / Stop / Disable（理由见模块头）：本程序无法在服务停止后
+/// 通过自身 API 将其拉起。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServiceOp {
-    Start,
-    Stop,
     Restart,
     Reload,
     Enable,
-    Disable,
 }
 
 impl ServiceOp {
     /// 全部受支持的操作。
-    pub const ALL: [ServiceOp; 6] = [
-        ServiceOp::Start,
-        ServiceOp::Stop,
-        ServiceOp::Restart,
-        ServiceOp::Reload,
-        ServiceOp::Enable,
-        ServiceOp::Disable,
-    ];
+    pub const ALL: [ServiceOp; 3] = [ServiceOp::Restart, ServiceOp::Reload, ServiceOp::Enable];
 
     /// 操作名（API 路径参数与日志用）。
     pub fn as_str(self) -> &'static str {
         match self {
-            ServiceOp::Start => "start",
-            ServiceOp::Stop => "stop",
             ServiceOp::Restart => "restart",
             ServiceOp::Reload => "reload",
             ServiceOp::Enable => "enable",
-            ServiceOp::Disable => "disable",
         }
     }
 
@@ -309,6 +281,10 @@ mod tests {
         }
         assert_eq!(ServiceOp::parse("status"), None);
         assert_eq!(ServiceOp::parse("restart --force"), None);
+        // 自伤风险操作不提供：服务停止后无法经程序自身恢复
+        assert_eq!(ServiceOp::parse("start"), None);
+        assert_eq!(ServiceOp::parse("stop"), None);
+        assert_eq!(ServiceOp::parse("disable"), None);
     }
 
     #[test]

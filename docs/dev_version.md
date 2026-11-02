@@ -173,3 +173,7 @@ v0.61.3
 v0.61.4
 2026110216000201
 组织管理页默认选中首个组织（v0.61.x 体验增强，仅前端，z 段 +1）：页面监听树数据（OrganizationPage watch treeData），选中态为空且存在根节点时自动选中首个根节点，右栏详情面板加载后即有内容、免空占位；已有选中态（含删除后失效 id）不劫持、搜索过滤变化不静默改选。验证：npm run typecheck/build、biome（0 警告）、oxlint（346 文件 0 警告）均通过；仅 dev_version z+1，frontend/package.json 0.1.53→0.1.54，Cargo.toml 不联动
+
+v0.62.0
+2026110216160001
+服务管理全链路移除自伤风险操作（功能变更 y 段 +1）：foims 与 nginx 任一停止都会使 Web 管理界面不可达且无法经程序自身拉起，暴露启动/停止/禁用自启只会有自伤风险，全链路收敛为仅重启/重载/启用自启——foims-services 删除 start/stop/disable 方法与 ServiceOp::Start/Stop/Disable 变体（ALL 收敛为 [Restart, Reload, Enable]，模块头记录设计依据：restart 由 systemd Restart=always 兜底不会永久停机，启停与自启开关由运维在服务器上执行 systemctl），parse 对 start/stop/disable 一律 None 并补断言用例；主 crate service_operation 分发简化（Stop 分支删除，restart 延迟执行路径仅剩 nginx，foims restart 仍走自重启特例），模块头同步口径；前端 ServicesCard 删除启动/停止/禁用自启按钮（会话内先行的「启停/自启合并为单按钮」方案一并废弃），仅保留重启/重载/启用自启三按钮，启用自启在 item.enabled 时置灰不可点，ConfirmModal 仅剩 restart 确认（danger 标记随 stop 删除），ServiceOp 类型收敛为 restart|reload|enable；i18n zh/en 删 services.op_start/op_stop/op_disable/confirm_stop/confirm_stop_*/stop_done_foims/stop_sent_nginx 八键，help.card.services 文案改为「可执行重启、重载与启用自启，启停与自启开关由运维执行 systemctl」；api/system.ts runServiceOp 注释同步。验证：cargo fmt、cargo clippy -p foims-services -p foims --release --all-targets 0 警告、foims-services 12 单测（含 start/stop/disable 拒绝断言）、npm run typecheck/build、biome、oxlint 均通过。y 段 +1，Cargo.toml 0.33.13→0.33.14、foims-services 0.1.0→0.2.0、frontend/package.json 0.1.54→0.1.55 联动
