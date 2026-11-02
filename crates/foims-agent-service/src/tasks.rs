@@ -33,6 +33,10 @@ const DEFAULT_ARCHIVE_RETENTION_DAYS: i64 = 30;
 const DEFAULT_ROLLUP_RETENTION_DAYS: i64 = 365;
 /// 单轮滚降处理的小时桶数上限：每小时例行运行，积压断点顺延至下一轮
 const ROLLUP_HOURS_PER_RUN: i64 = 500;
+/// 原始层→5min 桶补聚合回看窗口（小时）：覆盖进程重启/落库瞬断造成的近期
+/// 桶层缺口（原始层默认保留 3 天，每小时自愈一次，26h 留足整天余量）；
+/// i32 对应 make_interval(hours => int) 签名
+const RECONCILE_LOOKBACK_HOURS: i32 = 26;
 
 /// 从任务配置读取正整数参数（缺失、类型不符或 ≤0 时回落默认值）。
 fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
@@ -270,9 +274,11 @@ impl TaskExecutor for AgentIpmiPollTaskExecutor {
     }
 }
 
-/// 1h 桶滚降任务执行器：把已完结小时的 granularity=5 行按 (agent_id, 小时)
-/// 内存合并为 granularity=60 行（avg 按样本数 cnt 加权、min/max 取极值、
-/// last 取末桶、cnt 累加），每小时第 10 分运行补断点漏滚。
+/// 1h 桶滚降任务执行器：先做原始层→5min 桶补聚合（自愈重启/落库瞬断造成的
+/// 桶层缺口），再把已完结小时的 granularity=5 行按 (agent_id, 小时) 内存合并为
+/// granularity=60 行（avg 按样本数 cnt 加权、min/max 取极值、last 取末桶、cnt
+/// 累加），每小时第 10 分运行补断点漏滚；1h 行内嵌 `_src_max_id`（滚降时源行
+/// 最大 id），源层数据后到时据此重滚。
 pub struct AgentMetricsRollupTaskExecutor;
 
 #[async_trait]
@@ -287,8 +293,64 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-        // 未滚降的完整小时：小时窗已结束且留足 5min 桶落库滞留（10min）余量，
-        // 且不存在同 (agent, 小时) 的 1h 桶行
+        // 第一步：原始层→5min 桶补聚合。仅聚合「5min 层整桶缺失」的桶（NOT
+        // EXISTS 防与已有半截桶混口径），且桶窗结束已超过 flush 滞留期
+        //（≤ NOW()-15min）防与聚合器在途桶竞争——与聚合器落库同为
+        // ON CONFLICT DO NOTHING，先到者胜、口径一致，无重复计数。
+        // 与 upgrade 回填脚本同一聚合口径（avg 4 位小数、last 取最新样本）。
+        let healed = sqlx::query(
+            r"INSERT INTO host_metrics_history (agent_id, granularity, collected_at, metrics)
+              SELECT agent_id, 5, bucket,
+                     jsonb_object_agg(k, jsonb_build_object(
+                         'avg', round((sum_v / cnt)::numeric, 4),
+                         'min', min_v, 'max', max_v, 'last', last_v, 'cnt', cnt))
+              FROM (
+                  SELECT agent_id, bucket, k,
+                         sum(nv) AS sum_v,
+                         min(nv) AS min_v,
+                         max(nv) AS max_v,
+                         (array_agg(nv ORDER BY collected_at DESC))[1] AS last_v,
+                         count(*) AS cnt
+                  FROM (
+                      SELECT s.agent_id, s.bucket, s.collected_at, e.k,
+                             (e.v #>> '{}')::double precision AS nv
+                      FROM (
+                          SELECT h.agent_id, h.collected_at, h.metrics,
+                                 to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300)
+                                     AS bucket
+                          FROM host_metrics_history h
+                          WHERE h.granularity = 0
+                            AND h.collected_at >= NOW() - make_interval(hours => $1)
+                            AND to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300)
+                                <= NOW() - INTERVAL '15 minutes'
+                            AND jsonb_typeof(h.metrics) = 'object'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM host_metrics_history h5
+                                WHERE h5.agent_id = h.agent_id
+                                  AND h5.granularity = 5
+                                  AND h5.collected_at =
+                                      to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300)
+                            )
+                      ) s
+                      CROSS JOIN LATERAL jsonb_each(s.metrics) AS e(k, v)
+                      WHERE jsonb_typeof(e.v) = 'number'
+                  ) samples
+                  GROUP BY agent_id, bucket, k
+              ) key_stats
+              GROUP BY agent_id, bucket
+              ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
+        )
+        .bind(RECONCILE_LOOKBACK_HOURS)
+        .execute(&ctx.pool)
+        .await
+        .map_err(|e| {
+            SchedulerError::Execution(msg("server.task.agent_metrics_rollup_failed").with("error", e))
+        })?
+        .rows_affected();
+
+        // 第二步：选待滚降小时——无 1h 桶行，或已有行落后于本小时 5min 数据
+        //（_src_max_id 记录滚降时源行最大 id，小于当前最大 id 即补聚合/迟到
+        // 桶已到，需重滚）。小时窗已结束且留足 5min 桶落库滞留（10min）余量。
         let pending = sqlx::query_as::<_, (Uuid, DateTime<Utc>)>(
             r"SELECT DISTINCT agent_id,
                       to_timestamp(floor(extract(epoch FROM collected_at) / 3600) * 3600) AS hour_bucket
@@ -302,6 +364,15 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
                        AND h2.granularity = 60
                        AND h2.collected_at =
                            to_timestamp(floor(extract(epoch FROM h1.collected_at) / 3600) * 3600)
+                       AND (h2.metrics ->> '_src_max_id')::bigint =
+                           (SELECT max(h3.id) FROM host_metrics_history h3
+                            WHERE h3.agent_id = h1.agent_id
+                              AND h3.granularity = 5
+                              AND h3.collected_at >=
+                                  to_timestamp(floor(extract(epoch FROM h1.collected_at) / 3600) * 3600)
+                              AND h3.collected_at <
+                                  to_timestamp(floor(extract(epoch FROM h1.collected_at) / 3600) * 3600)
+                                      + INTERVAL '1 hour')
                  )
                ORDER BY hour_bucket
                LIMIT $1",
@@ -316,8 +387,8 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
         let pending_count = pending.len();
         for &(agent_id, hour) in &pending {
             let hour_end = hour + chrono::Duration::hours(1);
-            let rows: Vec<Value> = sqlx::query_scalar(
-                r"SELECT metrics FROM host_metrics_history
+            let rows: Vec<(i64, Value)> = sqlx::query_as(
+                r"SELECT id, metrics FROM host_metrics_history
                    WHERE agent_id = $1 AND granularity = 5
                      AND collected_at >= $2 AND collected_at < $3
                    ORDER BY collected_at",
@@ -353,7 +424,8 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
 
         log_debug!(
             "log.task.agent_metrics_rollup_completed",
-            count = pending_count
+            count = pending_count,
+            healed = healed
         );
         Ok("server.task.agent_metrics_rollup_completed".to_string())
     }
@@ -400,11 +472,14 @@ impl RollupAcc {
     }
 }
 
-/// 5min 桶行 metrics 合并为 1h 桶 metrics：按键加权均值/极值/末值/计数重组
-/// （纯函数，便于单测）；结构不合法的键跳过。
-fn rollup_metrics(rows: &[Value]) -> Value {
+/// 5min 桶行 (id, metrics) 合并为 1h 桶 metrics：按键加权均值/极值/末值/计数
+/// 重组（纯函数，便于单测），并内嵌 `_src_max_id`（源行最大 id，滚降任务据此
+/// 判断 1h 桶是否落后于补聚合/迟到的 5min 数据）；结构不合法的键跳过。
+fn rollup_metrics(rows: &[(i64, Value)]) -> Value {
     let mut accs: BTreeMap<String, RollupAcc> = BTreeMap::new();
-    for row in rows {
+    let mut src_max_id = 0i64;
+    for (row_id, row) in rows {
+        src_max_id = src_max_id.max(*row_id);
         let Some(obj) = row.as_object() else {
             continue;
         };
@@ -415,7 +490,7 @@ fn rollup_metrics(rows: &[Value]) -> Value {
             accs.entry(key.clone()).or_default().push(&sample);
         }
     }
-    let mut out = serde_json::Map::with_capacity(accs.len());
+    let mut out = serde_json::Map::with_capacity(accs.len() + 1);
     for (key, acc) in &accs {
         if acc.cnt == 0 {
             continue;
@@ -434,6 +509,7 @@ fn rollup_metrics(rows: &[Value]) -> Value {
             }),
         );
     }
+    out.insert("_src_max_id".to_string(), json!(src_max_id));
     Value::Object(out)
 }
 
@@ -470,9 +546,15 @@ mod tests {
         // 两个 5min 桶：cpu 均值按 cnt 加权（(10×4 + 20×6)/10 = 16），
         // min/max 取极值，last 取末桶，cnt 累加
         let rows = vec![
-            json!({"cpu": {"avg": 10.0, "min": 8.0, "max": 12.0, "last": 11.0, "cnt": 4},
-                   "temp": {"avg": 30.0, "min": 30.0, "max": 30.0, "last": 30.0, "cnt": 4}}),
-            json!({"cpu": {"avg": 20.0, "min": 15.0, "max": 25.0, "last": 22.0, "cnt": 6}}),
+            (
+                11i64,
+                json!({"cpu": {"avg": 10.0, "min": 8.0, "max": 12.0, "last": 11.0, "cnt": 4},
+                       "temp": {"avg": 30.0, "min": 30.0, "max": 30.0, "last": 30.0, "cnt": 4}}),
+            ),
+            (
+                12i64,
+                json!({"cpu": {"avg": 20.0, "min": 15.0, "max": 25.0, "last": 22.0, "cnt": 6}}),
+            ),
         ];
         let out = rollup_metrics(&rows);
         let cpu = out["cpu"].as_object().unwrap();
@@ -483,18 +565,24 @@ mod tests {
         assert_eq!(cpu["cnt"], json!(10));
         // 仅首桶存在的键原样合并
         assert_eq!(out["temp"]["cnt"], json!(4));
+        // 内嵌源行最大 id，供滚降新鲜度判断
+        assert_eq!(out["_src_max_id"], json!(12));
     }
 
     #[test]
     fn 滚降跳过结构不合法的键() {
-        let rows = vec![json!({
-            "cpu": {"avg": 10.0, "min": 8.0, "max": 12.0, "last": 11.0, "cnt": 4},
-            "bad": {"avg": "x"},
-            "worse": "scalar",
-        })];
+        let rows = vec![(
+            7i64,
+            json!({
+                "cpu": {"avg": 10.0, "min": 8.0, "max": 12.0, "last": 11.0, "cnt": 4},
+                "bad": {"avg": "x"},
+                "worse": "scalar",
+            }),
+        )];
         let out = rollup_metrics(&rows);
         let obj = out.as_object().unwrap();
-        assert_eq!(obj.len(), 1);
+        assert_eq!(obj.len(), 2);
         assert!(obj.contains_key("cpu"));
+        assert_eq!(out["_src_max_id"], json!(7));
     }
 }

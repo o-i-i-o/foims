@@ -1625,7 +1625,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.33.18"
+version = "0.33.19"
 dependencies = [
  "async-trait",
  "axum",
@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "foims-agent-service"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "async-snmp",
  "async-trait",
@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "foims-init"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "axum",
  "bcrypt",

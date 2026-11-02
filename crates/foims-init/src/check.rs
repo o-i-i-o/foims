@@ -1031,5 +1031,12 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
             "idx_host_metrics_history_agent_time",
             "host_metrics_history",
         ),
+        // 指标历史 (granularity, collected_at) 复合：分层清理 DELETE、1h 滚降
+        // pending 扫描与原始层补聚合扫描按「层 + 时间」过滤无 agent_id 前导列
+        //（agents.rs 建表时创建）
+        (
+            "idx_host_metrics_history_granularity_time",
+            "host_metrics_history",
+        ),
     ]
 }

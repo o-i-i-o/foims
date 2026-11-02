@@ -27,6 +27,9 @@
 --      collected_at)（原始层与降采样桶层互不冲突）；存量原始层数据一次性
 --      回填 5min 桶层（数值键聚合 avg/min/max/last/cnt），1h 桶层由服务端
 --      定时任务从 5min 桶滚降生成，不做历史回填。
+--   7. host_metrics_history 新增 (granularity, collected_at) 复合索引：
+--      分层清理 DELETE、1h 滚降 pending 扫描与原始层补聚合扫描均按
+--      「层 + 时间」过滤而无 agent_id 前导列，唯一索引无法服务。
 --   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs、
 --   users.rs）与 check.rs 表/列/列宽清单已同步新增。
 BEGIN;
@@ -214,5 +217,13 @@ FROM (
 ) key_stats
 GROUP BY agent_id, bucket
 ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING;
+
+-- ===== 7. host_metrics_history 层 + 时间复合索引 =====
+-- 分层清理 DELETE（WHERE granularity = $1 AND collected_at < ...）、1h 滚降
+-- pending 扫描（WHERE granularity = 5 AND 小时窗已完结）与原始层补聚合扫描
+-- （WHERE granularity = 0 AND collected_at >= ...）均无 agent_id 前导列可用
+-- 唯一索引，补建复合索引避免例行任务全表扫描。
+CREATE INDEX IF NOT EXISTS idx_host_metrics_history_granularity_time
+    ON host_metrics_history (granularity, collected_at);
 
 COMMIT;

@@ -86,6 +86,16 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // (granularity, collected_at) 复合索引：分层清理 DELETE、1h 滚降 pending
+    // 扫描与原始层补聚合扫描均按「层 + 时间」过滤而无 agent_id 前导列，
+    // 唯一索引无法服务，避免每次例行任务全表扫描
+    sqlx::query(
+        r"CREATE INDEX IF NOT EXISTS idx_host_metrics_history_granularity_time
+            ON host_metrics_history (granularity, collected_at)",
+    )
+    .execute(pool)
+    .await?;
+
     // 告警 episode 表：一台主机一个指标的一次「持续超标」过程（pending/active/
     // resolved）落库一行，是告警状态的事实源（内存态为工作副本，重启据此恢复）；
     // 累计次数与通知行 ID 供静默窗口内就地刷新文案，主机删除级联清理

@@ -14,8 +14,12 @@
 //!   半截桶移入 stale 原样落库——不同口径数据不混桶、不丢数据；
 //! - 迟到吸收：桶时间窗结束后再滞留 [`BUCKET_LINGER_SECS`] 才落库，
 //!   窗口边缘的迟到样本仍能进桶；
+//! - 失败重试：落库失败的桶回推 stale，下一节拍重试——DB 瞬断不永久丢桶
+//!   （近期缺口由滚降任务的原始层补聚合自愈）；
 //! - 冲突丢弃：落库 ON CONFLICT DO NOTHING——进程重启后重新累积的半截桶
-//!   不得覆盖重启前已落库的完整桶（完整桶胜出）。
+//!   不得覆盖重启前已落库的完整桶（完整桶胜出）；
+//! - 关闭冲刷：关闭信号到达后全量写出（含在途半截桶），重启后同桶尾部样本
+//!   被 DO NOTHING 丢弃——以尾部几个样本换取停机窗口不留桶层空洞。
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -128,9 +132,21 @@ impl MetricsAggregator {
         }
     }
 
-    /// 落库到期桶与 stale 半截桶（flush 循环节拍与进程退出前调用）。
+    /// 落库到期桶与 stale 半截桶（flush 循环节拍调用，滞留期内桶不动）。
     pub async fn flush(&self, pool: &PgPool, now: DateTime<Utc>) {
-        let cutoff = now.timestamp() - BUCKET_LINGER_SECS;
+        self.flush_cutoff(pool, now.timestamp() - BUCKET_LINGER_SECS)
+            .await;
+    }
+
+    /// 全量落库（进程关闭前调用）：不判到期，连同在途半截桶一并写出，
+    /// 消除停机窗口的桶层空洞（重启后同桶尾部样本被 DO NOTHING 丢弃，
+    /// 完整桶优先于尾部样本）。
+    pub async fn flush_all(&self, pool: &PgPool, now: DateTime<Utc>) {
+        self.flush_cutoff(pool, now.timestamp()).await;
+    }
+
+    /// 按 cutoff 取桶落库；失败桶回推 stale 下一节拍重试。
+    async fn flush_cutoff(&self, pool: &PgPool, cutoff: i64) {
         let mut writes: Vec<(Uuid, i64, BTreeMap<String, MetricAcc>)> = Vec::new();
         for mut hb in self.hosts.iter_mut() {
             let expired = take_expired(&mut hb, cutoff);
@@ -155,6 +171,10 @@ impl MetricsAggregator {
             .await;
             if let Err(e) = result {
                 log_error!("log.agent.metrics_flush_failed", error = e);
+                // 回推 stale：下一节拍重新落库（stale 桶每节拍无条件取出重试）
+                if let Some(mut hb) = self.hosts.get_mut(&host_id) {
+                    hb.stale.push((bucket_ts, accs));
+                }
             }
         }
     }
@@ -200,8 +220,8 @@ pub(crate) fn round4(v: f64) -> f64 {
     (v * 10_000.0).round() / 10_000.0
 }
 
-/// flush 常驻循环：每 30s 落库一次到期桶；关闭信号到达后先冲刷一次再退出，
-/// 尽量减少重启窗口内的桶丢失。
+/// flush 常驻循环：每 30s 落库一次到期桶；关闭信号到达后全量冲刷（含在途
+/// 半截桶）再退出，消除停机窗口的桶层空洞。
 pub async fn run_metrics_flush_loop(
     aggregator: Arc<MetricsAggregator>,
     pool: PgPool,
@@ -215,7 +235,7 @@ pub async fn run_metrics_flush_loop(
             _ = tick.tick() => aggregator.flush(&pool, Utc::now()).await,
         }
     }
-    aggregator.flush(&pool, Utc::now()).await;
+    aggregator.flush_all(&pool, Utc::now()).await;
 }
 
 #[cfg(test)]

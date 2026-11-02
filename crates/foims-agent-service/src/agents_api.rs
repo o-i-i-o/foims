@@ -514,8 +514,9 @@ pub async fn get_agent_history<S: ConfigProvider>(
     };
     let pool = state.pool()?.get_conn();
     let since = Utc::now() - chrono::Duration::hours(hours);
-    // 抽样下推：窗口函数计算行号 rn 与总行数 n，超上限时按 rn % ⌈n/上限⌉ = 1
-    // 在 SQL 内均匀抽取，避免原始层 72h 最坏约 26 万行全量拉取后内存抽样
+    // 抽样下推：窗口函数计算行号 rn 与总行数 n，超上限时按「600/n 分桶取每桶
+    // 首行」在 SQL 内均匀抽取（ceil(rn·K/n) 值变化处即桶首），避免原始层 72h
+    // 最坏约 26 万行全量拉取后内存抽样；n 略超上限（如 601）时仍保留 ~600 点
     //（rn/n 为 bigint；内插值仅为 HISTORY_MAX_POINTS 编译期常量与分层
     // granularity 白名单值，经 QueryBuilder push 拼接；id/时间走 push_bind）
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
@@ -533,9 +534,11 @@ pub async fn get_agent_history<S: ConfigProvider>(
         .push_bind(since)
         .push(") sampled WHERE n <= ")
         .push(HISTORY_MAX_POINTS)
-        .push(" OR rn % ceil(n::float / ")
+        .push(" OR ceil(rn * ")
         .push(HISTORY_MAX_POINTS)
-        .push(")::int = 1 ORDER BY collected_at");
+        .push(".0 / n) <> ceil((rn - 1) * ")
+        .push(HISTORY_MAX_POINTS)
+        .push(".0 / n) ORDER BY collected_at");
     let rows = qb
         .build_query_as::<(DateTime<Utc>, Value)>()
         .fetch_all(&pool)
