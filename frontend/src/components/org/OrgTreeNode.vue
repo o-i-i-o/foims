@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
  * 组织树节点（递归组件）：展开/折叠（展开/收起全部按钮经全局展开态联动）、搜索
- * 过滤（子树命中才可见，纯祖先命中强制展开）、行内操作按钮（悬停显形）。
- * 操作经注入的 orgTreeCtx.onAction 上抛页面处理；图标经注入的
- * orgTreeCtx.resolveIcon 按所属模板优先解析。
+ * 过滤（子树命中才可见，纯祖先命中强制展开）、行内操作按钮（悬停显形）、
+ * 点击行选中（右栏详情面板联动，选中行高亮）。操作经注入的 orgTreeCtx.onAction
+ * 上抛页面处理；图标经注入的 orgTreeCtx.resolveIcon 按所属模板优先解析。
  */
 import { computed, inject, ref, watch } from "vue";
 import type { Ref } from "vue";
@@ -24,7 +24,9 @@ interface OrgTreeCtx {
   keyword: Ref<string>;
   allExpanded: Ref<boolean>;
   search: Ref<OrgTreeSearchState | null>;
+  selectedId: Ref<string>;
   resolveIcon: (orgType: unknown, templateId: string | null) => string;
+  onSelect: (node: OrganizationTreeNode) => void;
   onAction: (node: OrganizationTreeNode, action: string) => void;
 }
 
@@ -74,7 +76,7 @@ function dispatch(action: string): void {
 
 <template>
   <div v-show="visible" class="org-node-wrapper">
-    <div class="org-node">
+    <div class="org-node" :class="{ selected: ctx.selectedId.value === node.id }" @click="ctx.onSelect(node)">
       <span
         v-if="hasChildren"
         class="org-toggle"
@@ -97,7 +99,8 @@ function dispatch(action: string): void {
       <span class="org-node-type-badge" :data-type="node.org_type">{{ typeLabel }}</span>
       <span v-if="node.description" class="org-node-desc" :title="node.description">{{ node.description }}</span>
 
-      <span class="org-node-actions">
+      <!-- 操作按钮阻止冒泡：删除等动作不应顺带改变选中节点 -->
+      <span class="org-node-actions" @click.stop>
         <button type="button" class="icon-btn btn-add-child" :title="t('organization.add_child')" :aria-label="t('organization.add_child')" @click="dispatch('add-child')">
           <NavIcon name="plusCircle" />
         </button>

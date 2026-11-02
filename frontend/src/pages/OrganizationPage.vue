@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * 组织管理页：组织树（展开/折叠/搜索过滤）+ 节点 CRUD +
- * 人员管理 + 房间查看 + 层级模板管理。数据层为 TanStack Query：树/模板/可用类型
- * 三查询（可用类型元数据基本不变，staleTime Infinity 仅首次请求），写操作经
- * useMutation 后失效缓存。搜索为客户端过滤：命中节点显示并强制展开其祖先链。
+ * 组织管理页：两栏布局——左栏组织树（展开/折叠/搜索过滤 + 节点 CRUD + 层级模板
+ * 管理），右栏选中节点的详情面板（人员/房间两视图切换）。数据层为 TanStack
+ * Query：树/模板/可用类型三查询（可用类型元数据基本不变，staleTime Infinity
+ * 仅首次请求），写操作经 useMutation 后失效缓存。搜索为客户端过滤：命中节点
+ * 显示并强制展开其祖先链。
  */
 import { computed, provide, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -15,9 +16,8 @@ import type { Paged } from "../types/api";
 import type { OrganizationTreeNode } from "../types/api/generated/OrganizationTreeNode";
 import type { OrgTemplate } from "../types/api/generated/OrgTemplate";
 import ConfirmModal from "../components/ConfirmModal.vue";
-import EmployeeModal from "../components/org/EmployeeModal.vue";
+import OrgDetailPanel from "../components/org/OrgDetailPanel.vue";
 import OrgNodeModal from "../components/org/OrgNodeModal.vue";
-import OrgRoomsModal from "../components/org/OrgRoomsModal.vue";
 import OrgTreeNode from "../components/org/OrgTreeNode.vue";
 import TemplateModal from "../components/org/TemplateModal.vue";
 import { queryKeys } from "../utils/queryKeys";
@@ -142,15 +142,42 @@ function toggleAll() {
   allExpanded.value = !allExpanded.value;
 }
 
+// 选中节点与右栏视图：选中按 id 存储（树刷新后经查找派生节点对象，
+// 重命名/删除自动跟随）；树节点行内「人员/房间」按钮直接切到对应视图
+const selectedOrgId = ref("");
+const detailTab = ref<"employees" | "rooms">("employees");
+
+function findNode(nodes: OrganizationTreeNode[], id: string): OrganizationTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node;
+    }
+    const found = findNode(node.children ?? [], id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+const selectedNode = computed(() =>
+  selectedOrgId.value ? findNode(treeData.value, selectedOrgId.value) : null
+);
+
+const selectedIcon = computed(() =>
+  selectedNode.value ? resolveIcon(selectedNode.value.org_type, selectedNode.value.template_id) : ""
+);
+
+function selectOrg(node: OrganizationTreeNode): void {
+  selectedOrgId.value = node.id;
+}
+
 const orgModal = reactive<{ open: boolean; mode: string; node: OrganizationTreeNode | null; parentId: string }>({
   open: false,
   mode: "add-root",
   node: null,
   parentId: ""
 });
-const employeeModal = reactive({ open: false, orgId: "", orgName: "" });
-// 房间查看弹窗：只读列出节点子树的房间（房间增删改在资源页完成）
-const roomsModal = reactive({ open: false, orgId: "", orgName: "" });
 const templateModalOpen = ref(false);
 const deletingOrg = ref<OrganizationTreeNode | null>(null);
 
@@ -158,7 +185,9 @@ provide("orgTreeCtx", {
   keyword: searchKeyword,
   allExpanded,
   search: searchState,
+  selectedId: selectedOrgId,
   resolveIcon,
+  onSelect: selectOrg,
   onAction
 });
 
@@ -174,13 +203,11 @@ function onAction(node: OrganizationTreeNode, action: string): void {
     orgModal.parentId = "";
     orgModal.open = true;
   } else if (action === "employees") {
-    employeeModal.orgId = node.id;
-    employeeModal.orgName = node.name;
-    employeeModal.open = true;
+    selectOrg(node);
+    detailTab.value = "employees";
   } else if (action === "rooms") {
-    roomsModal.orgId = node.id;
-    roomsModal.orgName = node.name;
-    roomsModal.open = true;
+    selectOrg(node);
+    detailTab.value = "rooms";
   } else if (action === "delete") {
     deletingOrg.value = node;
   }
@@ -219,38 +246,50 @@ function handleOrgSaved() {
 
 <template>
   <section id="organization" class="content-section active" :aria-label="t('nav.organization')">
-    <div class="org-toolbar">
-      <div class="org-actions">
-        <button type="button" class="btn btn-secondary btn-sm" @click="toggleAll">
-          {{ t(allExpanded ? "organization.collapse_all" : "organization.expand_all") }}
-        </button>
-        <input
-          v-model="searchInput"
-          type="text"
-          class="form-control org-search-input"
-          :placeholder="t('organization.search_placeholder')"
-          :aria-label="t('organization.search_placeholder')"
-        >
-      </div>
-      <div class="org-actions">
-        <button type="button" class="btn btn-primary btn-sm" @click="templateModalOpen = true">
-          {{ t("org_template.management") }}
-        </button>
-        <button type="button" class="btn btn-primary btn-sm" @click="orgModal.mode = 'add-root'; orgModal.node = null; orgModal.parentId = ''; orgModal.open = true">
-          {{ t("organization.add_node") }}
-        </button>
-      </div>
-    </div>
+    <div class="org-page-layout">
+      <div class="org-tree-panel">
+        <div class="org-toolbar">
+          <div class="org-actions">
+            <button type="button" class="btn btn-secondary btn-sm" @click="toggleAll">
+              {{ t(allExpanded ? "organization.collapse_all" : "organization.expand_all") }}
+            </button>
+            <input
+              v-model="searchInput"
+              type="text"
+              class="form-control org-search-input"
+              :placeholder="t('organization.search_placeholder')"
+              :aria-label="t('organization.search_placeholder')"
+            >
+          </div>
+          <div class="org-actions">
+            <button type="button" class="btn btn-primary btn-sm" @click="templateModalOpen = true">
+              {{ t("org_template.management") }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" @click="orgModal.mode = 'add-root'; orgModal.node = null; orgModal.parentId = ''; orgModal.open = true">
+              {{ t("organization.add_node") }}
+            </button>
+          </div>
+        </div>
 
-    <div class="org-tree-container" role="tree" :aria-label="t('nav.organization')">
-      <div v-if="treeQuery.isError.value" class="org-empty-state">{{ treeQuery.error.value?.message }}</div>
-      <div v-else-if="treeData.length === 0 && !treeQuery.isLoading.value" class="org-empty-state">
-        {{ t("organization.empty") }}
+        <div class="org-tree-container" role="tree" :aria-label="t('nav.organization')">
+          <div v-if="treeQuery.isError.value" class="org-empty-state">{{ treeQuery.error.value?.message }}</div>
+          <div v-else-if="treeData.length === 0 && !treeQuery.isLoading.value" class="org-empty-state">
+            {{ t("organization.empty") }}
+          </div>
+          <!-- key 为渲染代际：数据变化/清空搜索时整树重挂载还原展开态 -->
+          <div v-else :key="renderEpoch">
+            <OrgTreeNode v-for="root in treeData" :key="root.id" :node="root" />
+          </div>
+        </div>
       </div>
-      <!-- key 为渲染代际：数据变化/清空搜索时整树重挂载还原展开态 -->
-      <div v-else :key="renderEpoch">
-        <OrgTreeNode v-for="root in treeData" :key="root.id" :node="root" />
-      </div>
+
+      <!-- 右栏：选中组织的人员/房间详情 -->
+      <OrgDetailPanel
+        :node="selectedNode"
+        :icon="selectedIcon"
+        :tab="detailTab"
+        @switch="detailTab = $event"
+      />
     </div>
 
     <!-- 组织节点新增/编辑 -->
@@ -261,22 +300,6 @@ function handleOrgSaved() {
       :parent-id="orgModal.parentId"
       @close="orgModal.open = false"
       @saved="handleOrgSaved"
-    />
-
-    <!-- 人员管理 -->
-    <EmployeeModal
-      :open="employeeModal.open"
-      :org-id="employeeModal.orgId"
-      :org-name="employeeModal.orgName"
-      @close="employeeModal.open = false"
-    />
-
-    <!-- 房间查看（子树口径） -->
-    <OrgRoomsModal
-      :open="roomsModal.open"
-      :org-id="roomsModal.orgId"
-      :org-name="roomsModal.orgName"
-      @close="roomsModal.open = false"
     />
 
     <!-- 层级模板管理 -->

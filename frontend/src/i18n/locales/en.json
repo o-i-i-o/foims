@@ -706,7 +706,13 @@
     "manage_employees": "Employees",
     "view_rooms": "Rooms",
     "rooms_title": "Rooms",
-    "room_cabinet_count": "Cabinets"
+    "room_cabinet_count": "Cabinets",
+    "detail_title": "Organization Details",
+    "detail_empty": "Click an organization node on the left to view its employees and rooms",
+    "tab_employees": "Employees",
+    "tab_rooms": "Rooms",
+    "stat_workstations": "{n} workstations",
+    "stat_cabinets": "{n} cabinets"
   },
   "org_template": {
     "management": "Template Management",

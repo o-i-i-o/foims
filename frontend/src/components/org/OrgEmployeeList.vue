@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 人员管理弹窗：
- * 列出组织节点下的员工，支持新增/编辑/删除（工位管理人的员工引用由后端
- * 自动解绑）。员工列表接口返回普通数组（非分页）。
+ * 组织详情面板-人员列表（内联）：列出选中组织节点下的员工，支持新增/编辑/删除
+ * （工位管理人的员工引用由后端自动解绑）。员工列表接口返回普通数组（非分页）。
+ * 编辑表单复用小号弹窗；切换组织节点时关闭未完成的编辑/删除确认防串数据。
  */
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api/client";
@@ -16,16 +16,9 @@ import type { Employee } from "../../types/api/generated/Employee";
 import type { EmployeeCreate } from "../../types/api/generated/EmployeeCreate";
 import type { EmployeeUpdate } from "../../types/api/generated/EmployeeUpdate";
 
-const props = withDefaults(
-  defineProps<{
-    open?: boolean;
-    orgId?: string;
-    orgName?: string;
-  }>(),
-  { open: false, orgId: "", orgName: "" }
-);
-
-const emit = defineEmits<{ close: [] }>();
+const props = defineProps<{
+  orgId: string;
+}>();
 
 const { t } = useI18n();
 const queryClient = useQueryClient();
@@ -42,11 +35,20 @@ const employeesQuery = useQuery({
     // 员工列表接口返回普通数组（非分页），非数组响应按空列表兜底
     return Array.isArray(result.data) ? result.data : [];
   },
-  enabled: computed(() => props.open && Boolean(props.orgId))
+  enabled: computed(() => Boolean(props.orgId))
 });
 
 const employees = computed(() =>
   employeesQuery.isError.value ? [] : (employeesQuery.data.value ?? [])
+);
+
+// 切换组织节点时丢弃上一个节点残留的编辑/确认状态
+watch(
+  () => props.orgId,
+  () => {
+    editOpen.value = false;
+    deletingEmployee.value = null;
+  }
 );
 
 function genderText(gender: string): string {
@@ -57,6 +59,13 @@ function genderText(gender: string): string {
     return t("employee.gender_female");
   }
   return t("employee.gender_unknown");
+}
+
+/** 次要信息行：电话/邮箱/入职日期仅展示非空项，" · " 连接 */
+function metaText(employee: Employee): string {
+  return [employee.phone, employee.email, employee.hire_date]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
 }
 
 /** 编辑表单状态（gender 保持 string：select v-model 会回写 string 值） */
@@ -166,59 +175,37 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
 </script>
 
 <template>
-  <ModalShell v-if="open" size="lg" @close="emit('close')">
-    <template #title>
-      <span>{{ t("employee.manager_title") }}</span>
-      <span v-if="orgName" class="employee-modal-org"> - {{ orgName }}</span>
-    </template>
-    <div class="modal-toolbar">
-      <button type="button" class="icon-btn btn-success" :title="t('employee.add')" :aria-label="t('employee.add')" @click="openCreate">
-        <NavIcon name="plus" />
+  <div class="org-detail-list">
+    <div class="org-detail-list-toolbar">
+      <button type="button" class="btn btn-primary btn-sm" @click="openCreate">
+        {{ t("employee.add") }}
       </button>
     </div>
 
-    <div class="table-container employee-table-container">
-      <table class="data-table" :aria-label="t('employee.manager_title')">
-        <thead>
-          <tr>
-            <th>{{ t("employee.col_name") }}</th>
-            <th>{{ t("employee.col_gender") }}</th>
-            <th>{{ t("employee.col_phone") }}</th>
-            <th>{{ t("employee.col_email") }}</th>
-            <th>{{ t("employee.col_hire_date") }}</th>
-            <th class="col-center">{{ t("common.actions") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="employeesQuery.isLoading.value || employeesQuery.isError.value">
-            <td colspan="6" class="text-center">
-              {{ employeesQuery.isError.value ? employeesQuery.error.value?.message : t("common.no_data") }}
-            </td>
-          </tr>
-          <tr v-else-if="employees.length === 0">
-            <td colspan="6" class="text-center">{{ t("common.no_data") }}</td>
-          </tr>
-          <template v-else>
-            <tr v-for="employee in employees" :key="employee.id">
-              <td>{{ employee.name || "-" }}</td>
-              <td>{{ genderText(employee.gender) }}</td>
-              <td>{{ employee.phone || "-" }}</td>
-              <td>{{ employee.email || "-" }}</td>
-              <td>{{ employee.hire_date || "-" }}</td>
-              <td class="col-center">
-                <span class="employee-actions-cell">
-                  <button type="button" class="icon-btn btn-edit" :title="t('common.edit')" :aria-label="t('common.edit')" @click="openEdit(employee)">
-                    <NavIcon name="edit" />
-                  </button>
-                  <button type="button" class="icon-btn btn-delete" :title="t('common.delete')" :aria-label="t('common.delete')" @click="deletingEmployee = employee">
-                    <NavIcon name="trash" />
-                  </button>
-                </span>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+    <div class="org-detail-list-body">
+      <div v-if="employeesQuery.isError.value" class="org-empty-state">
+        {{ employeesQuery.error.value?.message }}
+      </div>
+      <div v-else-if="employees.length === 0" class="org-empty-state">
+        {{ t("common.no_data") }}
+      </div>
+      <template v-else>
+        <div v-for="employee in employees" :key="employee.id" class="org-detail-row">
+          <div class="org-detail-row-main">
+            <span class="org-detail-row-title">{{ employee.name || "-" }}</span>
+            <span class="org-detail-row-tag">{{ genderText(employee.gender) }}</span>
+          </div>
+          <div v-if="metaText(employee)" class="org-detail-row-meta">{{ metaText(employee) }}</div>
+          <span class="org-detail-row-actions">
+            <button type="button" class="icon-btn btn-edit" :title="t('common.edit')" :aria-label="t('common.edit')" @click="openEdit(employee)">
+              <NavIcon name="edit" />
+            </button>
+            <button type="button" class="icon-btn btn-delete" :title="t('common.delete')" :aria-label="t('common.delete')" @click="deletingEmployee = employee">
+              <NavIcon name="trash" />
+            </button>
+          </span>
+        </div>
+      </template>
     </div>
 
     <ModalShell v-if="editOpen" :title="editTitle" size="sm" @close="editOpen = false">
@@ -268,5 +255,5 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
       @confirm="handleDeleteConfirmed"
       @cancel="deletingEmployee = null"
     />
-  </ModalShell>
+  </div>
 </template>

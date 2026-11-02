@@ -706,7 +706,13 @@
     "manage_employees": "人员管理",
     "view_rooms": "房间列表",
     "rooms_title": "房间列表",
-    "room_cabinet_count": "机柜数量"
+    "room_cabinet_count": "机柜数量",
+    "detail_title": "组织详情",
+    "detail_empty": "点击左侧组织节点查看人员与房间",
+    "tab_employees": "人员",
+    "tab_rooms": "房间",
+    "stat_workstations": "工位 {n}",
+    "stat_cabinets": "机柜 {n}"
   },
   "org_template": {
     "management": "模板管理",

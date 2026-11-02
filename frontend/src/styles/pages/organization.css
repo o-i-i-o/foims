@@ -1,6 +1,6 @@
 /* 组织管理页专属样式（自 OrganizationPage.vue 非 scoped 块上收）：
    组织树节点/徽章配色/模板编辑器/图标选择面板被页面、递归节点组件
-   （OrgTreeNode/TemplateTypeNode）与人员弹窗共用，scoped 无法跨组件命中，
+   （OrgTreeNode/TemplateTypeNode）与详情面板组件共用，scoped 无法跨组件命中，
    按归属进 pages 层全局加载（类名 org-* 前缀无全局冲突） */
 @layer pages {
   .org-toolbar {
@@ -25,12 +25,214 @@
     flex-wrap: wrap;
   }
 
+  /* ==================== 两栏布局：左栏组织树 + 右栏详情面板 ==================== */
+
+  .org-page-layout {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-md);
+  }
+
+  .org-tree-panel {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .org-detail-panel {
+    width: 380px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    min-height: 400px;
+  }
+
+  .org-detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .org-detail-header-icon {
+    font-size: 1.2rem;
+    color: var(--color-text);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .org-detail-header-icon .org-icon,
+  .org-detail-header-icon .org-icon-legacy {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  .org-detail-header-icon .org-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .org-detail-header-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .org-detail-header-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .org-detail-header-title {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: var(--font-size-base);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .org-detail-header-desc {
+    margin-top: 2px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 人员/房间切换：分段按钮 */
+  .org-detail-tabs {
+    display: flex;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .org-detail-tab {
+    flex: 1;
+    padding: 6px 12px;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    background: transparent;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    transition:
+      color var(--transition-fast),
+      background-color var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .org-detail-tab:hover {
+    color: var(--color-primary);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  }
+
+  .org-detail-tab.active {
+    background: var(--color-primary-light);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  /* 详情面板列表（人员增删改 / 房间只读共用行样式） */
+  .org-detail-list {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .org-detail-list-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--space-sm) var(--space-md) 0;
+  }
+
+  .org-detail-list-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-sm);
+  }
+
+  /* 行右侧预留操作按钮槽位，避免悬停显形时遮挡文字 */
+  .org-detail-row {
+    position: relative;
+    padding: var(--space-sm) 72px var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast);
+  }
+
+  .org-detail-row:hover {
+    background: var(--color-bg-hover);
+  }
+
+  .org-detail-row-main {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+  }
+
+  .org-detail-row-title {
+    font-weight: 500;
+    color: var(--color-text);
+    font-size: var(--font-size-base);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .org-detail-row-tag {
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .org-detail-row-meta {
+    margin-top: 2px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .org-detail-row-actions {
+    position: absolute;
+    right: var(--space-sm);
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .org-detail-row:hover .org-detail-row-actions {
+    opacity: 1;
+  }
+
   .org-tree-container {
     background: var(--color-bg-white);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     min-height: 400px;
     overflow-x: auto;
+    /* 左栏 flex 列内撑满剩余高度，与右栏详情面板等高 */
+    flex: 1;
   }
 
   .org-empty-state {
@@ -66,7 +268,7 @@
     padding: var(--space-sm) var(--space-md);
     border-radius: var(--radius-md);
     transition: background-color var(--transition-fast);
-    cursor: default;
+    cursor: pointer;
     border: 1px solid transparent;
     white-space: nowrap;
   }
@@ -74,6 +276,13 @@
   .org-node:hover {
     background-color: var(--color-bg-hover);
     border-color: var(--color-border-light);
+  }
+
+  /* 选中节点：与右栏详情面板联动的高亮态 */
+  .org-node.selected,
+  .org-node.selected:hover {
+    background: var(--color-primary-light);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
   }
 
   /* 展开/折叠按钮 */
@@ -252,40 +461,6 @@
     bottom: 0;
     width: 1px;
     background: var(--color-border-light);
-  }
-
-  /* ==================== 人员/房间列表弹窗 ==================== */
-
-  /* 弹窗标题后的组织名后缀（人员管理、房间列表共用） */
-  .employee-modal-org,
-  .org-room-modal-org {
-    color: var(--color-text-secondary);
-    font-weight: 400;
-    font-size: 0.9em;
-    margin-left: 6px;
-  }
-
-  .employee-table-container {
-    max-height: 380px;
-    overflow: auto;
-  }
-
-  .org-room-table-container {
-    max-height: 420px;
-    overflow: auto;
-  }
-
-  .employee-actions-cell {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-xs);
-  }
-
-  .modal-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 8px;
   }
 
   /* 父级信息 */
@@ -547,6 +722,14 @@
   /* ==================== 响应式 ==================== */
 
   @media (width <= 768px) {
+    .org-page-layout {
+      flex-direction: column;
+    }
+
+    .org-detail-panel {
+      width: auto;
+    }
+
     .org-toolbar {
       flex-direction: column;
       align-items: stretch;
@@ -561,7 +744,8 @@
       padding: var(--space-xs) var(--space-sm);
     }
 
-    .org-node-actions {
+    .org-node-actions,
+    .org-detail-row-actions {
       opacity: 1;
       flex-wrap: wrap;
     }
