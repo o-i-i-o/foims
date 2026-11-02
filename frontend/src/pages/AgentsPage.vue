@@ -132,7 +132,7 @@ function statusText(agent: AgentListItem): string {
   return meta ? t(meta.labelKey) : String(agent.status ?? "-");
 }
 
-/** 最高温度单元格：未上报显示 "-" */
+/** 温度单元格（实时快照优先，缺实时回退最近上报值）：未上报显示 "-" */
 function formatTemp(temp: number | string | null): string {
   if (temp == null || !Number.isFinite(Number(temp))) {
     return "-";

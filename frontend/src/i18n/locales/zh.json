@@ -1112,7 +1112,7 @@
     "col_cpu": "CPU",
     "col_memory": "内存",
     "col_disk": "磁盘",
-    "col_temp": "最高温度",
+    "col_temp": "温度",
     "col_version": "Agent 版本",
     "col_last_seen": "最近上报",
     "source_snmp": "SNMP",
@@ -1183,7 +1183,7 @@
     "alert_cpu": "CPU 使用率阈值 (%)",
     "alert_mem": "内存使用率阈值 (%)",
     "alert_disk": "磁盘使用率阈值 (%)",
-    "alert_temp": "最高温度阈值 (℃)",
+    "alert_temp": "温度阈值 (℃)",
     "alert_placeholder_pct": "留空不监控",
     "alert_placeholder_temp": "留空不监控",
     "alert_invalid_range": "阈值必须是 {{min}}-{{max}} 之间的整数，或留空不监控",
@@ -2570,11 +2570,11 @@
         "body_cpu": "主机 {{hostname}}（{{ip}}）CPU 使用率 {{value}}%，超过告警阈值 {{threshold}}%，累计超标 {{count}} 次",
         "body_mem": "主机 {{hostname}}（{{ip}}）内存使用率 {{value}}%，超过告警阈值 {{threshold}}%，累计超标 {{count}} 次",
         "body_disk": "主机 {{hostname}}（{{ip}}）磁盘使用率 {{value}}%，超过告警阈值 {{threshold}}%，累计超标 {{count}} 次",
-        "body_temp": "主机 {{hostname}}（{{ip}}）最高温度 {{value}}℃，超过告警阈值 {{threshold}}℃，累计超标 {{count}} 次",
+        "body_temp": "主机 {{hostname}}（{{ip}}）温度 {{value}}℃，超过告警阈值 {{threshold}}℃，累计超标 {{count}} 次",
         "resolved_cpu": "主机 {{hostname}}（{{ip}}）CPU 使用率回落至 {{value}}%（告警阈值 {{threshold}}%），本轮累计超标 {{count}} 次，告警已恢复",
         "resolved_mem": "主机 {{hostname}}（{{ip}}）内存使用率回落至 {{value}}%（告警阈值 {{threshold}}%），本轮累计超标 {{count}} 次，告警已恢复",
         "resolved_disk": "主机 {{hostname}}（{{ip}}）磁盘使用率回落至 {{value}}%（告警阈值 {{threshold}}%），本轮累计超标 {{count}} 次，告警已恢复",
-        "resolved_temp": "主机 {{hostname}}（{{ip}}）最高温度回落至 {{value}}℃（告警阈值 {{threshold}}℃），本轮累计超标 {{count}} 次，告警已恢复"
+        "resolved_temp": "主机 {{hostname}}（{{ip}}）温度回落至 {{value}}℃（告警阈值 {{threshold}}℃），本轮累计超标 {{count}} 次，告警已恢复"
       },
       "snmp_event": {
         "title": "SNMP 观测事件",

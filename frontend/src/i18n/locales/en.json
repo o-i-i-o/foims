@@ -1112,7 +1112,7 @@
     "col_cpu": "CPU",
     "col_memory": "Memory",
     "col_disk": "Disk",
-    "col_temp": "Max Temp",
+    "col_temp": "Temperature",
     "col_version": "Agent Version",
     "col_last_seen": "Last Seen",
     "source_snmp": "SNMP",
@@ -1183,7 +1183,7 @@
     "alert_cpu": "CPU usage threshold (%)",
     "alert_mem": "Memory usage threshold (%)",
     "alert_disk": "Disk usage threshold (%)",
-    "alert_temp": "Max temperature threshold (°C)",
+    "alert_temp": "Temperature threshold (°C)",
     "alert_placeholder_pct": "Leave empty to skip",
     "alert_placeholder_temp": "Leave empty to skip",
     "alert_invalid_range": "Threshold must be an integer between {{min}} and {{max}}, or left empty to skip",
@@ -2570,11 +2570,11 @@
         "body_cpu": "Host {{hostname}} ({{ip}}) CPU usage {{value}}% exceeds the alert threshold {{threshold}}% ({{count}} exceedances so far)",
         "body_mem": "Host {{hostname}} ({{ip}}) memory usage {{value}}% exceeds the alert threshold {{threshold}}% ({{count}} exceedances so far)",
         "body_disk": "Host {{hostname}} ({{ip}}) disk usage {{value}}% exceeds the alert threshold {{threshold}}% ({{count}} exceedances so far)",
-        "body_temp": "Host {{hostname}} ({{ip}}) max temperature {{value}}°C exceeds the alert threshold {{threshold}}°C ({{count}} exceedances so far)",
+        "body_temp": "Host {{hostname}} ({{ip}}) temperature {{value}}°C exceeds the alert threshold {{threshold}}°C ({{count}} exceedances so far)",
         "resolved_cpu": "Host {{hostname}} ({{ip}}) CPU usage fell back to {{value}}% (alert threshold {{threshold}}%); {{count}} exceedances in this episode, alert resolved",
         "resolved_mem": "Host {{hostname}} ({{ip}}) memory usage fell back to {{value}}% (alert threshold {{threshold}}%); {{count}} exceedances in this episode, alert resolved",
         "resolved_disk": "Host {{hostname}} ({{ip}}) disk usage fell back to {{value}}% (alert threshold {{threshold}}%); {{count}} exceedances in this episode, alert resolved",
-        "resolved_temp": "Host {{hostname}} ({{ip}}) max temperature fell back to {{value}}°C (alert threshold {{threshold}}°C); {{count}} exceedances in this episode, alert resolved"
+        "resolved_temp": "Host {{hostname}} ({{ip}}) temperature fell back to {{value}}°C (alert threshold {{threshold}}°C); {{count}} exceedances in this episode, alert resolved"
       },
       "snmp_event": {
         "title": "SNMP Observation Event",
