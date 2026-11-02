@@ -53,5 +53,5 @@
 - 前端 SFC 一律 `<script setup lang="ts">`；新增前端代码一律 TypeScript，
   禁止 any（用 unknown + 收窄）；API 载荷类型优先取
   `frontend/src/types/api/generated/` 生成物，手写类型只放前端自有契约。
-- 开发直接测试：`./da-scripts/pak.sh`；
+- 开发直接测试：`./da-scripts/pak.sh`（全量），`./da-scripts/fpak.sh`（仅前端）。
 - 测试用户 admin / admin123。
