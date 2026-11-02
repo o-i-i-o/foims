@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * 日志管理页：操作日志 / 登录日志 / 运行日志 / 通知四个页签，
- * 排序 + 分页 + 操作日志搜索；运行日志经 SSE 实时推送（不走分页查询）。
+ * 排序 + 分页 + 操作日志搜索；运行日志读取本轮日志文件尾部、
+ * SSE 通知驱动自动刷新（不走分页查询）。
  * 数据层为 TanStack Query 首次实战接线：queryFn 内对归一化失败（success:false）
  * 抛出以进入 error 态；通知已读操作经 useMutation + 失效缓存刷新。
  */
@@ -78,13 +79,20 @@ const login = usePagedList<LoginLog>({
   buildUrl: (page, pageSize, sortBy, sortOrder) => loginLogsUrl({ page, pageSize, sortBy, sortOrder })
 });
 
-// 运行日志：页签激活时建 SSE 连接，切离即断开（连接内只推新增日志）
+// 运行日志：页签激活时拉取本轮日志文件尾部并建 SSE 通知流，
+// 收到「有新日志」通知后防抖刷新；切离页签即断开
 const {
   logs: liveLogs,
   connected: liveConnected,
   paused: livePaused,
   clear: clearLiveLogs
 } = useLiveLogs(computed(() => activeTab.value === "runtime"));
+
+// 从文件日志行提取级别类名（tracing 输出级别右对齐带空格），未识别回落 info
+function logLevelClass(line: string): string {
+  const match = /\s(ERROR|WARN|INFO|DEBUG|TRACE)\s/.exec(line);
+  return (match?.[1] ?? "info").toLowerCase();
+}
 
 // 跟随滚动：仅在用户本就停在底部时跟随新日志下滚，上翻查看历史不抢滚动条
 const livePane = ref<HTMLElement | null>(null);
@@ -356,18 +364,12 @@ const detailsLog = ref<OperationLog | null>(null);
         <p v-if="liveLogs.length === 0" class="live-empty">{{ t("logs.live_empty") }}</p>
         <template v-else>
           <p
-            v-for="(entry, index) in liveLogs"
+            v-for="(line, index) in liveLogs"
             :key="index"
             class="live-line"
-            :class="`live-${entry.level.toLowerCase()}`"
+            :class="`live-${logLevelClass(line)}`"
           >
-            <template v-if="entry.skipped">{{ t("logs.live_skipped", { n: entry.skipped }) }}</template>
-            <template v-else>
-              <span class="live-ts">{{ entry.ts }}</span>
-              <span class="live-level">{{ entry.level }}</span>
-              <span class="live-target">{{ entry.target }}</span>
-              <span class="live-msg">{{ entry.message }}</span>
-            </template>
+            {{ line }}
           </p>
         </template>
       </div>
@@ -551,43 +553,16 @@ const detailsLog = ref<OperationLog | null>(null);
   color: #dee2e6;
 }
 
-.live-ts,
-.live-target {
-  color: #adb5bd;
-  margin-right: 8px;
-}
-
-.live-level {
-  display: inline-block;
-  min-width: 44px;
-  margin-right: 8px;
-  font-weight: 600;
-  color: #8ce99a;
-}
-
 .live-line.live-warn {
   color: #ffec99;
-}
-
-.live-line.live-warn .live-level {
-  color: #ffd43b;
 }
 
 .live-line.live-error {
   color: #ffc9c9;
 }
 
-.live-line.live-error .live-level {
-  color: #ff8787;
-}
-
 .live-line.live-debug,
 .live-line.live-trace {
   color: #868e96;
-}
-
-.live-line.live-debug .live-level,
-.live-line.live-trace .live-level {
-  color: #adb5bd;
 }
 </style>

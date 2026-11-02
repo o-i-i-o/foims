@@ -17,10 +17,11 @@ pub mod login;
 pub mod notification;
 pub mod operation;
 
-pub use live::get_live_logs;
+pub use live::{get_live_logs, get_run_logs};
 pub use login::get_login_logs;
 pub use operation::get_operation_logs;
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -248,6 +249,15 @@ pub fn setup_logging(i18n: Option<&I18nConfig>) -> Vec<String> {
         warnings.extend(file_warnings);
         appenders.push((file, path, lang.clone()));
     }
+
+    // 登记本轮各语言日志文件路径：运行日志读取接口（/api/logs/run）按
+    // 语言定位文件，文件名含启动时间故路径即标识「本轮」日志
+    let run_files: HashMap<String, String> = appenders
+        .iter()
+        .filter(|(file, _, _)| file.is_some())
+        .map(|(_, path, lang)| (lang.clone(), path.clone()))
+        .collect();
+    live::set_run_log_files(run_files);
 
     let all_langs = active.clone();
     let log_files: Vec<String> = appenders.iter().map(|(_, path, _)| path.clone()).collect();

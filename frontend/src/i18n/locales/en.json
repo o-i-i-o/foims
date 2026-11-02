@@ -1291,9 +1291,8 @@
     "live_pause": "Pause",
     "live_resume": "Resume",
     "live_clear": "Clear",
-    "live_paused_hint": "Paused: view frozen, new logs are not shown",
-    "live_empty": "No runtime logs yet, waiting for live push...",
-    "live_skipped": "Consumed too slowly, {{n}} log entries skipped",
+    "live_paused_hint": "Paused: view frozen, new logs are not refreshed",
+    "live_empty": "No runtime logs yet",
     "operation_types": {
       "create": "Create",
       "update": "Update",
@@ -2487,6 +2486,7 @@
       "forwarding_disabled": "Log forwarding is not enabled",
       "forwarding_test_failed": "Failed to send test message",
       "forwarding_test_sent": "Test message sent, verify on the collector side",
+      "run_retrieved": "Runtime logs retrieved",
       "live_unavailable": "Live log stream unavailable (logging system not ready)"
     },
     "net_outlet": {

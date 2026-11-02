@@ -1291,9 +1291,8 @@
     "live_pause": "暂停",
     "live_resume": "继续",
     "live_clear": "清空",
-    "live_paused_hint": "已暂停接收：画面已冻结，新日志暂不显示",
-    "live_empty": "暂无运行日志，等待实时推送...",
-    "live_skipped": "接收过慢，已跳过 {{n}} 条日志",
+    "live_paused_hint": "已暂停：画面已冻结，新日志暂不刷新",
+    "live_empty": "暂无运行日志",
     "operation_types": {
       "create": "创建",
       "update": "更新",
@@ -2487,6 +2486,7 @@
       "forwarding_disabled": "日志外发未启用，请先启用并保存",
       "forwarding_test_failed": "测试报文发送失败",
       "forwarding_test_sent": "测试报文已发送，请在采集端确认",
+      "run_retrieved": "运行日志获取成功",
       "live_unavailable": "运行日志推送不可用（日志系统未就绪）"
     },
     "net_outlet": {

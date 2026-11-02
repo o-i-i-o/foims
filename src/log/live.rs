@@ -1,16 +1,23 @@
-//! 运行日志实时推送（SSE）。
+//! 运行日志：文件读取 + SSE 新日志通知。
 //!
-//! 架构与多语言日志一致：`LiveLogLayer` 挂在订阅器链上，捕获所有放行到
-//! 该层的事件（多语言事件按 target `foims_log::{lang}` 携带语言标记，
-//! 普通 tracing 事件不带语言、对所有语言可见），序列化后投入进程级
-//! broadcast 通道；SSE 端点为每条连接订阅通道并按请求语言过滤下发。
+//! 架构：`setup_logging` 为每种文件语言打开「本轮」日志文件（文件名含启动
+//! 时间，每次启动新建），路径登记到进程级注册表；`LiveLogLayer` 挂在订阅
+//! 器链上，捕获放行事件后仅向 broadcast 通道发送一个「有新日志」信号
+//! （不携带日志内容）。日志内容以文件为权威数据源：
 //!
-//! 无订阅者时广播发送立即失败返回，日志路径零额外开销；慢消费者落后
-//! 超过通道容量时由 `RecvError::Lagged` 感知，向前端下发跳过提示而非
-//! 断流静默丢数据。
+//! - `GET /api/logs/run?lang=xx` 返回本轮日志文件尾部（行对齐截尾），
+//!   因此页面刷新、连接建立之前的启动日志都不会丢失；
+//! - SSE `GET /api/logs/live` 只推送轻量 `notify` 事件，前端收到后防抖
+//!   拉取 `/api/logs/run` 自动刷新。
+//!
+//! 无订阅者时广播发送立即失败返回，日志路径零额外开销；慢消费者落后超过
+//! 通道容量时同样映射为 `notify`（文件是权威源，下一条新日志会再次通知，
+//! 不存在静默丢数据）。
 
+use std::collections::HashMap;
 use std::convert::Infallible;
-use std::fmt;
+use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -22,73 +29,32 @@ use tokio::sync::broadcast;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
-use tracing::field::{Field, Visit};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 
 use crate::app_state::AppState;
 use foims_auth::AdminOrAuditorUser;
-use foims_common::{AppError, msg};
+use foims_common::{AppError, msg, ok_json};
 
-/// 单条运行日志事件（SSE `log` 事件载荷）。
-///
-/// `lang` 为多语言事件的语言标记；普通 tracing 事件为 None（对所有
-/// 语言连接可见）。`skipped` 非 None 时表示该事件为「接收端落后跳过」
-/// 占位通知，前端按条数渲染提示文案。
-#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
-#[ts(export)]
-pub struct LiveLogEvent {
-    pub ts: String,
-    pub level: String,
-    pub target: String,
-    pub lang: Option<String>,
-    pub message: String,
-    pub skipped: Option<u64>,
-}
-
-/// 广播通道容量：落后超过该条数的连接收到「跳过 N 条」提示（不重放历史）。
+/// 广播通道容量：落后超过该条数的连接收到 Lagged，同样映射为 notify。
 const LIVE_LOG_CAPACITY: usize = 512;
 
-/// 运行日志广播通道发送端（`setup_logging` 时创建，进程级单例）。
-static LIVE_LOG_TX: OnceLock<broadcast::Sender<Arc<LiveLogEvent>>> = OnceLock::new();
+/// 新日志通知广播通道发送端（`setup_logging` 时创建，进程级单例）。
+static LIVE_LOG_TX: OnceLock<broadcast::Sender<()>> = OnceLock::new();
 
-/// 订阅运行日志广播；日志系统尚未初始化时返回 None。
-pub fn subscribe_live_logs() -> Option<broadcast::Receiver<Arc<LiveLogEvent>>> {
+/// 本轮各语言日志文件路径注册表（`setup_logging` 时登记，语言 → 路径）。
+static RUN_LOG_FILES: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+/// 登记本轮各语言日志文件路径（仅 `setup_logging` 调用一次）。
+pub fn set_run_log_files(files: HashMap<String, String>) {
+    let _ = RUN_LOG_FILES.set(files);
+}
+
+/// 订阅新日志通知广播；日志系统尚未初始化时返回 None。
+fn subscribe_live_logs() -> Option<broadcast::Receiver<()>> {
     LIVE_LOG_TX.get().map(|tx| tx.subscribe())
 }
 
-/// 当前时间戳（本地时区，毫秒精度）。
-fn now_ts() -> String {
-    chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S%.3f")
-        .to_string()
-}
-
-/// 事件字段收集器：`message` 字段为主文案，其余字段以 `k=v` 追加。
-#[derive(Default)]
-struct FieldCollector {
-    message: Option<String>,
-    fields: Vec<String>,
-}
-
-impl Visit for FieldCollector {
-    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        if field.name() == "message" {
-            self.message = Some(format!("{value:?}"));
-        } else {
-            self.fields.push(format!("{}={value:?}", field.name()));
-        }
-    }
-
-    fn record_str(&mut self, field: &Field, value: &str) {
-        if field.name() == "message" {
-            self.message = Some(value.to_string());
-        } else {
-            self.fields.push(format!("{}={value}", field.name()));
-        }
-    }
-}
-
-/// 运行日志捕获层：把经过过滤链放行的事件转为 [`LiveLogEvent`] 广播。
+/// 运行日志捕获层：把经过过滤链放行的事件折叠为「有新日志」信号。
 #[derive(Clone, Copy, Default)]
 pub struct LiveLogLayer;
 
@@ -98,46 +64,25 @@ where
 {
     fn on_event(
         &self,
-        event: &tracing::Event<'_>,
+        _event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        let mut collector = FieldCollector::default();
-        event.record(&mut collector);
-
-        let message = match collector.message {
-            Some(message) if collector.fields.is_empty() => message,
-            Some(message) => format!("{} {}", message, collector.fields.join(" ")),
-            None => collector.fields.join(" "),
-        };
-
-        let event = LiveLogEvent {
-            ts: now_ts(),
-            level: event.metadata().level().as_str().to_string(),
-            target: event.metadata().target().to_string(),
-            lang: event
-                .metadata()
-                .target()
-                .strip_prefix("foims_log::")
-                .map(str::to_string),
-            message,
-            skipped: None,
-        };
-
+        // 仅作通知信号，日志内容以文件为准；无订阅者时发送立即失败返回
         if let Some(tx) = LIVE_LOG_TX.get() {
-            let _ = tx.send(Arc::new(event));
+            let _ = tx.send(());
         }
     }
 }
 
-/// 创建运行日志层并初始化广播通道（仅 `setup_logging` 调用一次）。
+/// 创建运行日志层并初始化通知通道（仅 `setup_logging` 调用一次）。
 pub fn live_log_layer() -> LiveLogLayer {
     let (tx, _) = broadcast::channel(LIVE_LOG_CAPACITY);
     let _ = LIVE_LOG_TX.set(tx);
     LiveLogLayer
 }
 
-/// 运行日志层过滤规则：所有激活语言的多语言事件都放行（语言过滤推迟到
-/// SSE 连接侧），普通业务事件与依赖库事件的口径与控制台层一致。
+/// 运行日志层过滤规则：所有激活语言的多语言事件都放行（语言由读取接口
+/// 的 lang 参数选择），普通事件与依赖库事件的口径与控制台层一致。
 pub fn build_live_filter(all_langs: &[String], i18n_level: LevelFilter) -> Targets {
     let mut targets = Targets::new()
         .with_target("foims", LevelFilter::INFO)
@@ -148,9 +93,9 @@ pub fn build_live_filter(all_langs: &[String], i18n_level: LevelFilter) -> Targe
     targets.with_default(LevelFilter::WARN)
 }
 
-/// 解析 SSE 连接的日志语言：仅接受激活语言集合内的取值，缺省/非法时
-/// 回落为集合首项（即控制台语言），保证 EventSource 不因参数问题断开。
-fn resolve_stream_lang(query: &Query<std::collections::HashMap<String, String>>) -> String {
+/// 解析请求的日志语言：仅接受激活语言集合内的取值，缺省/非法时回落为
+/// 集合首项（即控制台语言），保证接口不因参数问题失败。
+fn resolve_log_lang(query: &Query<std::collections::HashMap<String, String>>) -> String {
     let active = foims_common::active_log_langs();
     let requested = query.get("lang").map(|lang| lang.trim().to_lowercase());
     match requested {
@@ -159,55 +104,84 @@ fn resolve_stream_lang(query: &Query<std::collections::HashMap<String, String>>)
     }
 }
 
-/// 广播项转 SSE 事件：语言不匹配的返回 None 过滤掉。
-fn sse_event(
-    item: Result<Arc<LiveLogEvent>, BroadcastStreamRecvError>,
-    lang: &str,
-) -> Option<Result<Event, Infallible>> {
-    match item {
-        Ok(event) => {
-            if event
-                .lang
-                .as_deref()
-                .is_none_or(|event_lang| event_lang == lang)
-                && let Ok(data) = serde_json::to_string(event.as_ref())
-            {
-                return Some(Ok(Event::default().event("log").data(data)));
-            }
-            None
-        }
-        // 慢消费者：以占位事件告知跳过条数，保持连接继续
-        Err(BroadcastStreamRecvError::Lagged(n)) => {
-            let event = LiveLogEvent {
-                ts: now_ts(),
-                level: "WARN".to_string(),
-                target: "foims_live".to_string(),
-                lang: None,
-                message: String::new(),
-                skipped: Some(n),
-            };
-            serde_json::to_string(&event)
-                .ok()
-                .map(|data| Ok(Event::default().event("log").data(data)))
-        }
+/// 读取本轮日志文件的尾部行（最多 [`RUN_LOG_TAIL_BYTES`] 字节，起点对齐
+/// 到行首防止截断出半行）。文件未登记（该语言降级到控制台）或尚未产生
+/// 内容时返回空列表，属正常状态；读错误由调用方转为接口错误。
+fn read_run_log_tail(path: &str) -> Vec<String> {
+    const RUN_LOG_TAIL_BYTES: u64 = 256 * 1024;
+
+    let Ok(mut file) = fs::File::open(path) else {
+        return Vec::new();
+    };
+    let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let mut bytes = Vec::new();
+    if len > RUN_LOG_TAIL_BYTES
+        && file
+            .seek(SeekFrom::Start(len - RUN_LOG_TAIL_BYTES))
+            .is_err()
+    {
+        return Vec::new();
     }
+    if file.read_to_end(&mut bytes).is_err() {
+        return Vec::new();
+    }
+
+    // 从文件中间截断时丢弃首个不完整行（对齐到下一个换行符）
+    let start = if len > RUN_LOG_TAIL_BYTES {
+        bytes
+            .iter()
+            .position(|&b| b == b'\n')
+            .map_or(bytes.len(), |pos| pos + 1)
+    } else {
+        0
+    };
+    let text = String::from_utf8_lossy(&bytes[start..]);
+    text.lines().map(str::to_string).collect()
 }
 
-/// GET /api/logs/live?lang=zh：SSE 实时推送运行日志。
+/// GET /api/logs/run?lang=zh：读取本轮运行日志文件尾部。
 ///
 /// 角色由 admin_guard_middleware 的 /api/logs/** 矩阵约束（admin 或
-/// auditor），提取器二次校验；连接只接收建立之后产生的新日志。
-pub async fn get_live_logs(
+/// auditor），提取器二次校验；文件不存在视为无日志（空列表）而非错误。
+pub async fn get_run_logs(
     State(_state): State<Arc<AppState>>,
     _viewer: AdminOrAuditorUser,
     query: Query<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let lang = resolve_stream_lang(&query);
+    let lang = resolve_log_lang(&query);
+    let lines = RUN_LOG_FILES
+        .get()
+        .and_then(|files| files.get(&lang))
+        .map(|path| read_run_log_tail(path))
+        .unwrap_or_default();
+
+    Ok(ok_json(
+        serde_json::json!({ "lines": lines }),
+        "server.logs.run_retrieved",
+    ))
+}
+
+/// 广播项转 SSE 事件：新日志通知统一折叠为轻量 `notify` 事件。
+fn notify_event(item: Result<(), BroadcastStreamRecvError>) -> Option<Result<Event, Infallible>> {
+    // Lagged（消费过慢）同样映射为 notify：文件是权威源，刷新即补齐
+    let _ = item;
+    Some(Ok(Event::default().event("notify").data("")))
+}
+
+/// GET /api/logs/live：SSE 推送「有新日志」通知。
+///
+/// 角色由 admin_guard_middleware 的 /api/logs/** 矩阵约束（admin 或
+/// auditor），提取器二次校验；连接只通知建立之后产生的新日志，日志内容
+/// 由前端拉取 /api/logs/run 获得（语言由读取接口的 lang 参数决定）。
+pub async fn get_live_logs(
+    State(_state): State<Arc<AppState>>,
+    _viewer: AdminOrAuditorUser,
+) -> Result<Response, AppError> {
     let Some(rx) = subscribe_live_logs() else {
         return Err(AppError::Internal(msg("server.logs.live_unavailable")));
     };
 
-    let stream = BroadcastStream::new(rx).filter_map(move |item| sse_event(item, &lang));
+    let stream = BroadcastStream::new(rx).filter_map(notify_event);
 
     let sse = Sse::new(stream).keep_alive(
         KeepAlive::new()

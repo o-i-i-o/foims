@@ -67,9 +67,24 @@ export function loginLogsUrl(query: PagedQuery): string {
   return buildPagedUrl("/api/logs/login", query);
 }
 
-/** 运行日志 SSE 流 URL（EventSource 建连用，lang 为期望的日志语言） */
-export function runtimeLogsUrl(lang: string): string {
-  return `/api/logs/live?lang=${encodeURIComponent(lang)}`;
+/** GET /api/logs/run 响应：本轮运行日志文件尾部文本行 */
+export interface RunLogsResponse {
+  lines?: string[];
+}
+
+/** 运行日志文件读取 URL（lang 为期望的日志语言，取值同控制台语言白名单） */
+export function runLogsUrl(lang: string): string {
+  return `/api/logs/run?lang=${encodeURIComponent(lang)}`;
+}
+
+/** 运行日志 SSE 通知流 URL（EventSource 建连用，仅推「有新日志」信号） */
+export function runtimeLogsUrl(): string {
+  return "/api/logs/live";
+}
+
+/** 读取本轮运行日志文件尾部（服务端行对齐截尾，最多 256KB） */
+export function getRunLogs(lang: string): Promise<ApiResult<RunLogsResponse>> {
+  return apiGet<RunLogsResponse>(runLogsUrl(lang));
 }
 
 /** 通知列表分页 URL */
