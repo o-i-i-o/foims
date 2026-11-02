@@ -89,7 +89,11 @@ openidconnect = { version = "4.1.0", default-features = false, features = ["reqw
 rand = "0.10.3"
 
 # Webhook 通知推送（钉钉/企业微信/通用）
-reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
+# reqwest 0.13 的 rustls feature 硬绑 aws-lc-rs（无 ring 对应项），经弱依赖
+# quinn?/rustls-aws-lc-rs 会把 aws-lc-rs 混入共享 quinn/rustls，与 ring 并存
+# 后 rustls 自动判定 CryptoProvider 直接 panic；rustls-no-provider 不注入任何
+# 提供者，由进程启动时显式安装 ring（见 src/main.rs）
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls-no-provider"] }
 
 # Serialization
 serde = { version = "1.0.229", features = ["derive"] }
@@ -176,6 +180,7 @@ foims-visualization = { path = "crates/foims-visualization" }
 foims-x509-management = { path = "crates/foims-x509-management" }
 
 rust-i18n = "4.2.4"
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }

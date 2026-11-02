@@ -416,6 +416,18 @@ async fn main() -> std::io::Result<()> {
     foims_common::log_info!("log.output_to", path = log_files.join(", "));
     foims_common::log_info!("system.start");
 
+    // rustls 进程级 CryptoProvider 必须在任何 TLS 配置构建（ServerConfig::builder
+    // / ClientConfig::builder）之前确定：若依赖图同时启用 ring 与 aws-lc-rs 两个
+    // 特性，builder 的自动判定会直接 panic（Agent QUIC mTLS 报告服务曾因此启动
+    // 即崩）。启动早期显式安装 ring 提供者，QUIC mTLS/sqlx/LDAP/reqwest 等全部
+    // TLS 消费方统一走 ring；已被抢先安装时保留既有提供者，不阻断启动
+    if rustls::crypto::ring::default_provider()
+        .install_default()
+        .is_err()
+    {
+        tracing::warn!("rustls CryptoProvider 已被抢先安装，沿用既有提供者");
+    }
+
     foims_common::log_info!("system.config_loaded");
 
     // Agent 注册令牌引导：为空或格式非法（存量配置缺字段）时自动生成并写回
