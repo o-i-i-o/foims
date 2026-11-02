@@ -250,7 +250,7 @@ pub async fn is_expired(pool: &PgPool, user_id: Uuid) -> Result<bool, AppError> 
 async fn disable_user(pool: &PgPool, user_id: Uuid) -> Result<(), AppError> {
     let result = sqlx::query(
         "UPDATE users SET enabled = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
-         WHERE id = $1 AND status = TRUE",
+         WHERE id = $1 AND enabled = TRUE",
     )
     .bind(user_id)
     .execute(pool)
@@ -266,7 +266,7 @@ async fn disable_user(pool: &PgPool, user_id: Uuid) -> Result<(), AppError> {
 pub async fn disable_expired(pool: &PgPool) -> Result<u64, AppError> {
     let result = sqlx::query(
         "UPDATE users SET enabled = FALSE, tokens_invalidated_at = NOW(), updated_at = NOW()
-         WHERE status = TRUE AND password_expiry_days > 0
+         WHERE enabled = TRUE AND password_expiry_days > 0
            AND NOW() > password_changed_at + make_interval(days => password_expiry_days)",
     )
     .execute(pool)
