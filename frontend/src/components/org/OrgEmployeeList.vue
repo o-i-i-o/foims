@@ -218,13 +218,13 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
 
     <ModalShell v-if="editOpen" :title="editTitle" size="sm" @close="editOpen = false">
       <form @submit.prevent="handleSubmit">
-        <div class="form-group">
+        <div class="form-row">
+         <div class="form-group">
           <label for="employee-edit-name">
             <span>{{ t("employee.name") }}</span><span class="required">*</span>
           </label>
           <input id="employee-edit-name" v-model="editForm.name" type="text" maxlength="50" required autocomplete="off">
-        </div>
-        <div class="form-row">
+         </div>
           <div class="form-group">
             <label for="employee-edit-gender">{{ t("employee.gender") }}</label>
             <select id="employee-edit-gender" v-model="editForm.gender">
@@ -237,8 +237,6 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
             <label for="employee-edit-phone">{{ t("employee.phone") }}</label>
             <input id="employee-edit-phone" v-model="editForm.phone" type="tel" maxlength="20" autocomplete="off">
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label for="employee-edit-email">{{ t("employee.email") }}</label>
             <input id="employee-edit-email" v-model="editForm.email" type="email" maxlength="100" autocomplete="off">
