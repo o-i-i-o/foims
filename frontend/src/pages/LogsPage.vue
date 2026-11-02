@@ -254,7 +254,7 @@ const detailsLog = ref<OperationLog | null>(null);
 </script>
 
 <template>
-  <section id="logs" class="content-section active" :aria-label="t('nav.logs')">
+  <section id="logs" class="content-section active" :class="{ 'runtime-fill': activeTab === 'runtime' }" :aria-label="t('nav.logs')">
     <div class="tabs" role="tablist">
       <button
         v-for="tab in TABS"
@@ -762,12 +762,44 @@ const detailsLog = ref<OperationLog | null>(null);
   width: 160px;
 }
 
+/* 运行日志页签激活：区块锁定一屏高并自带弹性列布局（与可视化页同一套路，
+   不依赖 main-content.css 的 :has 分页规则；其他页签仍保持整页滚动），
+   标签栏与工具栏占固定高度，日志窗格吃满剩余空间，
+   滚动只发生在窗格内部而不是整页 */
+#logs.runtime-fill {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+#logs.runtime-fill > .tabs {
+  flex-shrink: 0;
+}
+
+#runtime-tab.tab-content.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#runtime-tab.tab-content.active > .live-toolbar {
+  flex-shrink: 0;
+}
+
 .live-wrap {
   position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .live-pane {
-  height: clamp(360px, calc(100vh - 300px), 680px);
+  flex: 1;
+  min-height: 360px;
   overflow: auto;
   padding: 10px 14px;
   background: #212529;
