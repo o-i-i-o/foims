@@ -169,3 +169,7 @@ v0.61.2
 v0.61.3
 2026110215463801
 组织管理页渲染反馈三处微调（v0.61.x 视觉细化，仅前端，z 段 +1）：两栏比例由等宽改 4:6（grid-template-columns minmax(0,4fr)/minmax(0,6fr)，左树 4 右详情 6）；「新增节点」按钮文案改「新增根节点」（organization.add_node zh/en 同步，OrgNodeModal add-root 模式弹窗标题随键值一并生效）；详情面板头部备注由名称行下第二行改为与名称/类型徽章同行展示（org-detail-header-desc 移入 org-detail-header-name 行内，flex 占剩余宽度、省略号截断，title 保留全文；header-name 去 flex-wrap）。验证：npm run typecheck/build、biome（0 警告）、oxlint（346 文件 0 警告）均通过；仅 dev_version z+1，frontend/package.json 0.1.52→0.1.53，Cargo.toml 不联动
+
+v0.61.4
+2026110216000201
+组织管理页默认选中首个组织（v0.61.x 体验增强，仅前端，z 段 +1）：页面监听树数据（OrganizationPage watch treeData），选中态为空且存在根节点时自动选中首个根节点，右栏详情面板加载后即有内容、免空占位；已有选中态（含删除后失效 id）不劫持、搜索过滤变化不静默改选。验证：npm run typecheck/build、biome（0 警告）、oxlint（346 文件 0 警告）均通过；仅 dev_version z+1，frontend/package.json 0.1.53→0.1.54，Cargo.toml 不联动

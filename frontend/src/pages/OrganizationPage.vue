@@ -167,6 +167,15 @@ const selectedIcon = computed(() =>
   selectedNode.value ? resolveIcon(selectedNode.value.org_type, selectedNode.value.template_id) : ""
 );
 
+// 默认选中首个根节点：树数据就绪后右栏立即有内容；已有选中态（含删除后的
+// 失效 id）不劫持，避免搜索过滤变化时静默改选
+watch(treeData, (nodes) => {
+  const first = nodes[0];
+  if (!selectedOrgId.value && first) {
+    selectedOrgId.value = first.id;
+  }
+});
+
 function selectOrg(node: OrganizationTreeNode): void {
   selectedOrgId.value = node.id;
 }
