@@ -88,10 +88,96 @@ const {
   clear: clearLiveLogs
 } = useLiveLogs(computed(() => activeTab.value === "runtime"));
 
-// 从文件日志行提取级别类名（tracing 输出级别右对齐带空格），未识别回落 info
-function logLevelClass(line: string): string {
-  const match = /\s(ERROR|WARN|INFO|DEBUG|TRACE)\s/.exec(line);
-  return (match?.[1] ?? "info").toLowerCase();
+/** 解析后的日志行：raw 保留原文兜底，其余字段供结构化渲染（空串表示该行缺失此段） */
+interface ParsedLogLine {
+  raw: string;
+  time: string;
+  level: string;
+  target: string;
+  message: string;
+}
+
+// tracing fmt 文件行格式：`2026-11-02T19:30:45.123456  INFO 目标: 消息 k=v`
+// （级别右对齐 5 列，故级别前为多个空格）
+const LOG_LINE_PATTERN = /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+(ERROR|WARN|INFO|DEBUG|TRACE)\s+(\S+):\s?(.*)$/;
+
+// 解析单行日志；不符合格式（如多行消息的续行）时字段留空、按原文渲染
+function parseLogLine(raw: string): ParsedLogLine {
+  const match = LOG_LINE_PATTERN.exec(raw);
+  if (!match) {
+    return { raw, time: "", level: "", target: "", message: raw };
+  }
+  return {
+    raw,
+    time: match[1] ?? "",
+    level: match[2] ?? "",
+    target: match[3] ?? "",
+    message: match[4] ?? ""
+  };
+}
+
+// 时间列只显示时刻部分（本轮日志同属一天），微秒截断到毫秒降噪
+function formatLogTime(time: string): string {
+  const clock = /\d{2}:\d{2}:\d{2}(?:\.\d+)?/.exec(time)?.[0] ?? time;
+  const dot = clock.indexOf(".");
+  return dot === -1 ? clock : clock.slice(0, dot + 4);
+}
+
+// 级别筛选键：TRACE 归入 DEBUG；无级别行不参与级别过滤（各级别下都保留）
+type LiveLevelKey = "error" | "warn" | "info" | "debug";
+const LIVE_LEVELS: { key: LiveLevelKey; label: string; titleKey: string }[] = [
+  { key: "error", label: "ERROR", titleKey: "logs.live_level_error" },
+  { key: "warn", label: "WARN", titleKey: "logs.live_level_warn" },
+  { key: "info", label: "INFO", titleKey: "logs.live_level_info" },
+  { key: "debug", label: "DEBUG", titleKey: "logs.live_level_debug" }
+];
+
+const parsedLogs = computed(() => liveLogs.value.map(parseLogLine));
+
+function levelKeyOf(line: ParsedLogLine): LiveLevelKey | null {
+  if (!line.level) {
+    return null;
+  }
+  const level = line.level.toLowerCase();
+  return level === "trace" ? "debug" : (level as LiveLevelKey);
+}
+
+const levelFilter = ref<"all" | LiveLevelKey>("all");
+const liveFilter = ref("");
+
+// 各级行数（级别筛选 chips 计数），all 为总行数
+const levelCounts = computed<Record<"all" | LiveLevelKey, number>>(() => {
+  const counts: Record<"all" | LiveLevelKey, number> = {
+    all: parsedLogs.value.length,
+    error: 0,
+    warn: 0,
+    info: 0,
+    debug: 0
+  };
+  for (const line of parsedLogs.value) {
+    const key = levelKeyOf(line);
+    if (key) {
+      counts[key] += 1;
+    }
+  }
+  return counts;
+});
+
+// 显示行 = 级别筛选 + 关键字子串过滤（大小写不敏感，作用于原文）
+const visibleLogs = computed(() => {
+  const keyword = liveFilter.value.trim().toLowerCase();
+  return parsedLogs.value.filter((line) => {
+    const key = levelKeyOf(line);
+    if (levelFilter.value !== "all" && key !== null && key !== levelFilter.value) {
+      return false;
+    }
+    return !keyword || line.raw.toLowerCase().includes(keyword);
+  });
+});
+
+// 再次点击已选级别回到「全部」
+function toggleLevelFilter(key: LiveLevelKey): void {
+  levelFilter.value = levelFilter.value === key ? "all" : key;
 }
 
 // 跟随滚动：仅在用户本就停在底部时跟随新日志下滚，上翻查看历史不抢滚动条
@@ -105,19 +191,27 @@ function onLiveScroll(): void {
   }
 }
 
-watch(
-  () => liveLogs.value.length,
-  async () => {
-    if (!livePinned.value || livePaused.value) {
-      return;
-    }
-    await nextTick();
-    const pane = livePane.value;
-    if (pane) {
-      pane.scrollTop = pane.scrollHeight;
-    }
+async function scrollLiveToBottom(): Promise<void> {
+  await nextTick();
+  const pane = livePane.value;
+  if (pane) {
+    pane.scrollTop = pane.scrollHeight;
   }
-);
+}
+
+// 上翻后一键回到底部并恢复跟随
+async function jumpToLatest(): Promise<void> {
+  livePinned.value = true;
+  await scrollLiveToBottom();
+}
+
+// 新日志到达、筛选变化或回到底部时，处于跟随态即滚到底
+watch([visibleLogs, livePinned], async () => {
+  if (!livePinned.value || livePaused.value) {
+    return;
+  }
+  await scrollLiveToBottom();
+});
 
 const notifications = usePagedList<Notification>({
   tag: queryKeys.notifications,
@@ -351,7 +445,40 @@ const detailsLog = ref<OperationLog | null>(null);
           {{ liveConnected ? t("logs.live_connected") : t("logs.live_disconnected") }}
         </span>
         <span v-if="livePaused" class="live-paused-hint">{{ t("logs.live_paused_hint") }}</span>
+        <div class="live-levels" role="group" :aria-label="t('logs.live_levels')">
+          <button
+            type="button"
+            class="live-chip"
+            :class="{ active: levelFilter === 'all' }"
+            :aria-pressed="levelFilter === 'all'"
+            @click="levelFilter = 'all'"
+          >
+            {{ t("logs.live_level_all") }}
+            <span class="chip-count">{{ levelCounts.all }}</span>
+          </button>
+          <button
+            v-for="level in LIVE_LEVELS"
+            :key="level.key"
+            type="button"
+            class="live-chip"
+            :class="{ active: levelFilter === level.key }"
+            :title="t(level.titleKey)"
+            :aria-pressed="levelFilter === level.key"
+            @click="toggleLevelFilter(level.key)"
+          >
+            <span class="chip-dot" :class="`chip-dot-${level.key}`" aria-hidden="true"></span>
+            {{ level.label }}
+            <span class="chip-count">{{ levelCounts[level.key] }}</span>
+          </button>
+        </div>
         <div class="live-actions">
+          <input
+            v-model="liveFilter"
+            type="text"
+            class="form-control form-control-sm live-filter-input"
+            :placeholder="t('logs.live_filter_placeholder')"
+            :aria-label="t('logs.live_filter_placeholder')"
+          >
           <button type="button" class="btn btn-secondary btn-sm" @click="livePaused = !livePaused">
             {{ livePaused ? t("logs.live_resume") : t("logs.live_pause") }}
           </button>
@@ -360,18 +487,34 @@ const detailsLog = ref<OperationLog | null>(null);
           </button>
         </div>
       </div>
-      <div ref="livePane" class="live-pane" @scroll="onLiveScroll">
-        <p v-if="liveLogs.length === 0" class="live-empty">{{ t("logs.live_empty") }}</p>
-        <template v-else>
-          <p
-            v-for="(line, index) in liveLogs"
-            :key="index"
-            class="live-line"
-            :class="`live-${logLevelClass(line)}`"
-          >
-            {{ line }}
-          </p>
-        </template>
+      <div class="live-wrap">
+        <div ref="livePane" class="live-pane" @scroll="onLiveScroll">
+          <div v-if="liveLogs.length === 0" class="live-empty">
+            <p class="live-empty-title">{{ t("logs.live_empty") }}</p>
+            <p v-if="liveConnected && !livePaused" class="live-empty-hint">{{ t("logs.live_empty_hint") }}</p>
+          </div>
+          <p v-else-if="visibleLogs.length === 0" class="live-filter-empty">{{ t("logs.live_filter_empty") }}</p>
+          <template v-else>
+            <p
+              v-for="(line, index) in visibleLogs"
+              :key="index"
+              class="live-line"
+              :class="line.level ? `live-${line.level.toLowerCase()}` : undefined"
+            >
+              <span v-if="line.time" class="live-time">{{ formatLogTime(line.time) }}</span>
+              <span
+                v-if="line.level"
+                class="live-level-badge"
+                :class="`badge-${line.level.toLowerCase()}`"
+              >{{ line.level }}</span>
+              <span v-if="line.target" class="live-target">{{ line.target }}</span>
+              <span class="live-message">{{ line.message }}</span>
+            </p>
+          </template>
+        </div>
+        <button v-if="!livePinned" type="button" class="live-jump" @click="jumpToLatest">
+          {{ t("logs.live_follow") }}
+        </button>
       </div>
     </div>
 
@@ -492,11 +635,11 @@ const detailsLog = ref<OperationLog | null>(null);
   flex-wrap: wrap;
 }
 
-/* 运行日志：终端风格滚动窗（非表格），工具栏挂连接状态与暂停/清空 */
+/* 运行日志：工具栏（状态/级别筛选/过滤/操作）+ 终端风格滚动窗（结构化行渲染） */
 .live-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
@@ -507,6 +650,7 @@ const detailsLog = ref<OperationLog | null>(null);
   gap: 6px;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 .live-dot {
@@ -520,49 +664,251 @@ const detailsLog = ref<OperationLog | null>(null);
   background: var(--color-success);
 }
 
+/* 连接正常时状态点呼吸闪烁；用户偏好减少动效时不启用 */
+@media (prefers-reduced-motion: no-preference) {
+  .live-status.connected .live-dot {
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
 .live-paused-hint {
   font-size: var(--font-size-sm);
   color: var(--color-warning-text);
 }
 
+.live-levels {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--control-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.live-chip:hover {
+  border-color: var(--control-border-hover);
+  background: var(--color-bg-hover);
+}
+
+.live-chip.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  font-weight: 600;
+}
+
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.chip-dot-error {
+  background: var(--color-danger);
+}
+
+.chip-dot-warn {
+  background: var(--color-warning);
+}
+
+.chip-dot-info {
+  background: var(--color-success);
+}
+
+.chip-dot-debug {
+  background: var(--color-text-muted);
+}
+
+.chip-count {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.live-chip.active .chip-count {
+  color: var(--color-primary-hover);
+}
+
 .live-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-left: auto;
 }
 
+.live-filter-input {
+  width: 160px;
+}
+
+.live-wrap {
+  position: relative;
+}
+
 .live-pane {
-  height: 480px;
+  height: clamp(360px, calc(100vh - 300px), 680px);
   overflow: auto;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: #212529;
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  line-height: 1.7;
+  line-height: 1.8;
 }
 
 .live-pane .live-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.live-empty-title {
+  margin: 0;
+  color: #adb5bd;
+}
+
+.live-empty-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: #868e96;
+}
+
+.live-pane .live-filter-empty {
   margin: 16px 0;
   color: #adb5bd;
   text-align: center;
 }
 
 .live-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   margin: 0;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
   color: #dee2e6;
 }
 
-.live-line.live-warn {
+.live-line:hover {
+  background: rgb(255 255 255 / 4%);
+}
+
+.live-time {
+  flex-shrink: 0;
+  color: #868e96;
+}
+
+.live-level-badge {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.5;
+}
+
+.badge-error {
+  color: #ffa8a8;
+  background: rgb(240 62 62 / 20%);
+}
+
+.badge-warn {
+  color: #ffec99;
+  background: rgb(250 176 5 / 22%);
+}
+
+.badge-info {
+  color: #8ce99a;
+  background: rgb(47 158 68 / 24%);
+}
+
+.badge-debug,
+.badge-trace {
+  color: #adb5bd;
+  background: rgb(173 181 189 / 18%);
+}
+
+.live-target {
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #909296;
+}
+
+.live-message {
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.live-line.live-warn .live-message {
   color: #ffec99;
 }
 
-.live-line.live-error {
+.live-line.live-error .live-message {
   color: #ffc9c9;
 }
 
-.live-line.live-debug,
-.live-line.live-trace {
+.live-line.live-debug .live-message,
+.live-line.live-trace .live-message {
   color: #868e96;
+}
+
+/* 上翻查看历史时悬浮的「回到最新」按钮 */
+.live-jump {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  padding: 6px 14px;
+  border: 1px solid #495057;
+  border-radius: 999px;
+  background: #343a40;
+  color: #dee2e6;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: var(--transition-fast);
+}
+
+.live-jump:hover {
+  background: #495057;
+}
+
+@media (max-width: 768px) {
+  .live-target {
+    display: none;
+  }
+
+  .live-filter-input {
+    width: 120px;
+  }
 }
 </style>

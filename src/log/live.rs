@@ -163,9 +163,12 @@ pub async fn get_run_logs(
 
 /// 广播项转 SSE 事件：新日志通知统一折叠为轻量 `notify` 事件。
 fn notify_event(item: Result<(), BroadcastStreamRecvError>) -> Option<Result<Event, Infallible>> {
-    // Lagged（消费过慢）同样映射为 notify：文件是权威源，刷新即补齐
+    // Lagged（消费过慢）同样映射为 notify：文件是权威源，刷新即补齐。
+    // data 必须携带非空载荷：SSE 规范规定 data 缓冲为空时事件整体丢弃
+    // 不派发，而 axum 对空字符串不写 data 字段，`data("")` 会导致前端
+    // EventSource 永远收不到 notify、日志页不自动刷新。
     let _ = item;
-    Some(Ok(Event::default().event("notify").data("")))
+    Some(Ok(Event::default().event("notify").data("1")))
 }
 
 /// GET /api/logs/live：SSE 推送「有新日志」通知。
