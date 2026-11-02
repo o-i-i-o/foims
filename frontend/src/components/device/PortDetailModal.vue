@@ -225,7 +225,7 @@ const deleteMutation = useMutation({
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label for="device-port-vlan">{{ t("device.vlan_id") }}</label>
+          <label for="device-port-vlan">VLAN ID</label>
           <input id="device-port-vlan" v-model="form.vlanId" type="number" min="1" max="4094" autocomplete="off" />
         </div>
         <div class="form-group">

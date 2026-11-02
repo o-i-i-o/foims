@@ -226,7 +226,7 @@ onBeforeUnmount(useModalStack(() => emit("close")));
                 <th>{{ t("visualization.port_number") }}</th>
                 <th>{{ t("visualization.port_name") }}</th>
                 <th>{{ t("visualization.port_status") }}</th>
-                <th>{{ t("device.vlan_id") }}</th>
+                <th>VLAN ID</th>
                 <th>{{ t("device.speed") }}</th>
               </tr>
             </thead>

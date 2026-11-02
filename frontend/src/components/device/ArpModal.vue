@@ -267,7 +267,7 @@ loadData();
                   <tr>
                     <th>{{ t("device.ip_address") }}</th>
                     <th>{{ t("device.mac_address") }}</th>
-                    <th>{{ t("device.vlan_id") }}</th>
+                    <th>VLAN ID</th>
                     <th>{{ t("device.locate.title") }}</th>
                   </tr>
                   <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
@@ -305,7 +305,7 @@ loadData();
                   <tr>
                     <th>{{ t("device.ip_address") }}</th>
                     <th>{{ t("device.mac_address") }}</th>
-                    <th>{{ t("device.vlan_id") }}</th>
+                    <th>VLAN ID</th>
                     <th>{{ t("device.locate.title") }}</th>
                   </tr>
                   <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">

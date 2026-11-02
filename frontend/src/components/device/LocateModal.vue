@@ -131,7 +131,7 @@ onMounted(() => {
             <tr>
               <th>{{ t("device.locate.col_device") }}</th>
               <th>{{ t("device.locate.col_interface") }}</th>
-              <th class="col-center">{{ t("device.vlan_id") }}</th>
+              <th class="col-center">VLAN ID</th>
               <th>{{ t("device.ip_address") }}</th>
               <th>{{ t("device.mac_address") }}</th>
               <th class="col-center">{{ t("device.locate.col_registered") }}</th>
