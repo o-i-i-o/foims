@@ -157,3 +157,11 @@ v0.60.0
 v0.61.0
 2026110215230601
 组织管理页两栏布局重构（仅前端，功能优化 y 段 +1）：页面改为左右两栏——左栏保留原组织树（展开/折叠/搜索过滤 + 节点 CRUD + 模板管理入口），右栏新增 OrgDetailPanel 详情面板展示选中组织的详情；点击树节点行即选中（选中行高亮，OrgTreeNode 注入上下文新增 selectedId/onSelect），树节点行内「人员管理/房间列表」按钮改为选中该节点并直接切换右栏对应视图，人员与房间两个视图经右栏分段按钮切换、同时只显示一个。原 EmployeeModal/OrgRoomsModal 两个弹窗拆除，逻辑迁移为内联组件 OrgEmployeeList（人员增删改，编辑表单保留小号弹窗；切换组织节点自动丢弃残留编辑/确认状态）与 OrgRoomList（房间只读，展示直属组织与工位/机柜计数）；选中态按节点 id 存储、经树数据查找派生节点对象（重命名/删除自动跟随，删除后右栏回落占位提示）。organization.css 新增两栏布局/详情面板/分段页签/列表行样式，删除废弃弹窗样式（employee-modal-org/employee-table-container/org-room-table-container/modal-toolbar/employee-actions-cell），树节点 cursor 改 pointer 并补 selected 高亮，≤768px 两栏纵向堆叠；i18n zh/en 新增 organization.detail_title/detail_empty/tab_employees/tab_rooms/stat_workstations/stat_cabinets 六键。验证：npm run typecheck/build、biome（0 警告）、oxlint（346 文件 0 警告）均通过。y 段 +1，frontend/package.json 0.1.49→0.1.50，Cargo.toml 不联动
+
+v0.61.1
+2026110215535301
+组织管理页两栏等宽 + 右栏表格化展示（v0.61.0 布局细化，仅前端，z 段 +1）：org-page-layout 由 flex（右栏固定 380px）改为 grid 两栏等分（repeat(2, minmax(0,1fr))，≤768px 单列堆叠）；右栏人员/房间由自定义列表行改回全局 data-table 表格口径——OrgEmployeeList 恢复姓名/性别/电话/邮箱/入职日期/操作六列（错误行 table-error-cell、空行 empty-row、操作列 org-detail-actions-cell 图标组），OrgRoomList 恢复序号/房间名称/类型/所属组织/工位数量/机柜数量六列；organization.css 删除 org-detail-row* 列表行样式系列，org-detail-list-body 改表格滚动容器，新增 org-detail-actions-cell；i18n zh/en 删不再引用的 organization.stat_workstations/stat_cabinets 两键。验证：npm run typecheck/build、biome（0 警告）、oxlint（346 文件 0 警告）均通过；仅 dev_version z+1，frontend/package.json 0.1.50→0.1.51，Cargo.toml 不联动
+
+v0.61.2
+2026110215391801
+组织管理页入口收敛与人员表新增入口前移（v0.61.x 交互细化，仅前端，z 段 +1）：组织树节点行内删除「人员管理/房间列表」两个悬停按钮（右栏详情面板常驻展示，入口冗余），行内操作仅保留新增下级/编辑/删除，OrganizationPage onAction 同步移除 employees/rooms 分支；人员/房间视图切换状态由页面持有改为 OrgDetailPanel 内聚（tab ref 内部化，删除 tab prop 与 switch 事件）；人员表格末列表头由「操作」文案改为「新增员工」按钮（对齐 UsersTab 管理口径：th 内嵌 btn btn-primary btn-sm，行内保留编辑/删除），删除表格上方独立新增工具条。清理：organization.css 删 org-detail-list-toolbar 与 icon-btn.btn-employees 样式，i18n zh/en 删 organization.manage_employees/view_rooms 两键。验证：npm run typecheck/build、biome（0 警告）、oxlint（346 文件 0 警告）均通过；仅 dev_version z+1，frontend/package.json 0.1.51→0.1.52，Cargo.toml 不联动

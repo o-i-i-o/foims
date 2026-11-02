@@ -61,13 +61,6 @@ function genderText(gender: string): string {
   return t("employee.gender_unknown");
 }
 
-/** 次要信息行：电话/邮箱/入职日期仅展示非空项，" · " 连接 */
-function metaText(employee: Employee): string {
-  return [employee.phone, employee.email, employee.hire_date]
-    .filter((value): value is string => Boolean(value))
-    .join(" · ");
-}
-
 /** 编辑表单状态（gender 保持 string：select v-model 会回写 string 值） */
 interface EmployeeFormState {
   id: string;
@@ -176,36 +169,51 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
 
 <template>
   <div class="org-detail-list">
-    <div class="org-detail-list-toolbar">
-      <button type="button" class="btn btn-primary btn-sm" @click="openCreate">
-        {{ t("employee.add") }}
-      </button>
-    </div>
-
     <div class="org-detail-list-body">
-      <div v-if="employeesQuery.isError.value" class="org-empty-state">
-        {{ employeesQuery.error.value?.message }}
-      </div>
-      <div v-else-if="employees.length === 0" class="org-empty-state">
-        {{ t("common.no_data") }}
-      </div>
-      <template v-else>
-        <div v-for="employee in employees" :key="employee.id" class="org-detail-row">
-          <div class="org-detail-row-main">
-            <span class="org-detail-row-title">{{ employee.name || "-" }}</span>
-            <span class="org-detail-row-tag">{{ genderText(employee.gender) }}</span>
-          </div>
-          <div v-if="metaText(employee)" class="org-detail-row-meta">{{ metaText(employee) }}</div>
-          <span class="org-detail-row-actions">
-            <button type="button" class="icon-btn btn-edit" :title="t('common.edit')" :aria-label="t('common.edit')" @click="openEdit(employee)">
-              <NavIcon name="edit" />
-            </button>
-            <button type="button" class="icon-btn btn-delete" :title="t('common.delete')" :aria-label="t('common.delete')" @click="deletingEmployee = employee">
-              <NavIcon name="trash" />
-            </button>
-          </span>
-        </div>
-      </template>
+      <table class="data-table" :aria-label="t('employee.manager_title')">
+        <thead>
+          <tr>
+            <th>{{ t("employee.col_name") }}</th>
+            <th>{{ t("employee.col_gender") }}</th>
+            <th>{{ t("employee.col_phone") }}</th>
+            <th>{{ t("employee.col_email") }}</th>
+            <th>{{ t("employee.col_hire_date") }}</th>
+            <!-- 末列表头即新增入口（同 UsersTab 管理口径），行内为编辑/删除 -->
+            <th>
+              <button type="button" class="btn btn-primary btn-sm" @click="openCreate">
+                {{ t("employee.add") }}
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="employeesQuery.isError.value">
+            <td colspan="6" class="table-error-cell">{{ employeesQuery.error.value?.message }}</td>
+          </tr>
+          <tr v-else-if="employees.length === 0" class="empty-row">
+            <td colspan="6">{{ t("common.no_data") }}</td>
+          </tr>
+          <template v-else>
+            <tr v-for="employee in employees" :key="employee.id">
+              <td>{{ employee.name || "-" }}</td>
+              <td>{{ genderText(employee.gender) }}</td>
+              <td>{{ employee.phone || "-" }}</td>
+              <td>{{ employee.email || "-" }}</td>
+              <td>{{ employee.hire_date || "-" }}</td>
+              <td class="col-center">
+                <span class="org-detail-actions-cell">
+                  <button type="button" class="icon-btn btn-edit" :title="t('common.edit')" :aria-label="t('common.edit')" @click="openEdit(employee)">
+                    <NavIcon name="edit" />
+                  </button>
+                  <button type="button" class="icon-btn btn-delete" :title="t('common.delete')" :aria-label="t('common.delete')" @click="deletingEmployee = employee">
+                    <NavIcon name="trash" />
+                  </button>
+                </span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </div>
 
     <ModalShell v-if="editOpen" :title="editTitle" size="sm" @close="editOpen = false">

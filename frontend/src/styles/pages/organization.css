@@ -25,24 +25,23 @@
     flex-wrap: wrap;
   }
 
-  /* ==================== 两栏布局：左栏组织树 + 右栏详情面板 ==================== */
+  /* ==================== 两栏布局：左栏组织树 + 右栏详情面板（等宽） ==================== */
 
   .org-page-layout {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
     gap: var(--space-md);
   }
 
   .org-tree-panel {
-    flex: 1 1 auto;
     min-width: 0;
     display: flex;
     flex-direction: column;
   }
 
   .org-detail-panel {
-    width: 380px;
-    flex-shrink: 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     background: var(--color-bg-white);
@@ -146,7 +145,7 @@
     font-weight: 600;
   }
 
-  /* 详情面板列表（人员增删改 / 房间只读共用行样式） */
+  /* 详情面板内容区：人员/房间表格共用的滚动容器与操作列 */
   .org-detail-list {
     display: flex;
     flex-direction: column;
@@ -154,75 +153,19 @@
     min-height: 0;
   }
 
-  .org-detail-list-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--space-sm) var(--space-md) 0;
-  }
-
   .org-detail-list-body {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    padding: var(--space-sm);
+    overflow: auto;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
   }
 
-  /* 行右侧预留操作按钮槽位，避免悬停显形时遮挡文字 */
-  .org-detail-row {
-    position: relative;
-    padding: var(--space-sm) 72px var(--space-sm) var(--space-md);
-    border-radius: var(--radius-md);
-    transition: background-color var(--transition-fast);
-  }
-
-  .org-detail-row:hover {
-    background: var(--color-bg-hover);
-  }
-
-  .org-detail-row-main {
-    display: flex;
+  /* 表格操作列图标组（横向排布、居中） */
+  .org-detail-actions-cell {
+    display: inline-flex;
     align-items: center;
-    gap: var(--space-sm);
-    min-width: 0;
-  }
-
-  .org-detail-row-title {
-    font-weight: 500;
-    color: var(--color-text);
-    font-size: var(--font-size-base);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .org-detail-row-tag {
-    flex-shrink: 0;
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-  }
-
-  .org-detail-row-meta {
-    margin-top: 2px;
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .org-detail-row-actions {
-    position: absolute;
-    right: var(--space-sm);
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-  }
-
-  .org-detail-row:hover .org-detail-row-actions {
-    opacity: 1;
+    justify-content: center;
+    gap: var(--space-xs);
   }
 
   .org-tree-container {
@@ -435,16 +378,6 @@
   .icon-btn.btn-add-child {
     background: transparent;
     border: none;
-  }
-
-  .icon-btn.btn-employees {
-    background: transparent;
-    border: none;
-    color: var(--color-primary);
-  }
-
-  .icon-btn.btn-employees:hover {
-    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   }
 
   /* 子节点容器：嵌套 padding-left 逐层缩进 + 竖向引导线 */
@@ -723,11 +656,7 @@
 
   @media (width <= 768px) {
     .org-page-layout {
-      flex-direction: column;
-    }
-
-    .org-detail-panel {
-      width: auto;
+      grid-template-columns: 1fr;
     }
 
     .org-toolbar {
@@ -744,8 +673,7 @@
       padding: var(--space-xs) var(--space-sm);
     }
 
-    .org-node-actions,
-    .org-detail-row-actions {
+    .org-node-actions {
       opacity: 1;
       flex-wrap: wrap;
     }

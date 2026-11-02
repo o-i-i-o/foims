@@ -40,25 +40,36 @@ const rooms = computed(() =>
 <template>
   <div class="org-detail-list">
     <div class="org-detail-list-body">
-      <div v-if="roomsQuery.isError.value" class="org-empty-state">
-        {{ roomsQuery.error.value?.message }}
-      </div>
-      <div v-else-if="rooms.length === 0" class="org-empty-state">
-        {{ t("common.no_data") }}
-      </div>
-      <template v-else>
-        <div v-for="room in rooms" :key="room.id" class="org-detail-row">
-          <div class="org-detail-row-main">
-            <span class="org-detail-row-title">{{ room.name }}</span>
-            <span class="org-detail-row-tag">{{ getRoomTypeName(room.room_type) }}</span>
-          </div>
-          <div class="org-detail-row-meta">
-            {{ room.org_name }} ·
-            {{ t("organization.stat_workstations", { n: room.workstation_count }) }} ·
-            {{ t("organization.stat_cabinets", { n: room.cabinet_count }) }}
-          </div>
-        </div>
-      </template>
+      <table class="data-table" :aria-label="t('organization.rooms_title')">
+        <thead>
+          <tr>
+            <th>{{ t("common.index") }}</th>
+            <th>{{ t("room.name") }}</th>
+            <th>{{ t("room.type") }}</th>
+            <th>{{ t("room.org") }}</th>
+            <th class="col-center">{{ t("room.workstation_count") }}</th>
+            <th class="col-center">{{ t("organization.room_cabinet_count") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="roomsQuery.isError.value">
+            <td colspan="6" class="table-error-cell">{{ roomsQuery.error.value?.message }}</td>
+          </tr>
+          <tr v-else-if="rooms.length === 0" class="empty-row">
+            <td colspan="6">{{ t("common.no_data") }}</td>
+          </tr>
+          <template v-else>
+            <tr v-for="(room, index) in rooms" :key="room.id">
+              <td class="index-column">{{ index + 1 }}</td>
+              <td>{{ room.name }}</td>
+              <td>{{ getRoomTypeName(room.room_type) }}</td>
+              <td>{{ room.org_name }}</td>
+              <td class="col-center">{{ room.workstation_count }}</td>
+              <td class="col-center">{{ room.cabinet_count }}</td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>

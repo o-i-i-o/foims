@@ -142,10 +142,9 @@ function toggleAll() {
   allExpanded.value = !allExpanded.value;
 }
 
-// 选中节点与右栏视图：选中按 id 存储（树刷新后经查找派生节点对象，
-// 重命名/删除自动跟随）；树节点行内「人员/房间」按钮直接切到对应视图
+// 选中节点：选中按 id 存储（树刷新后经查找派生节点对象，
+// 重命名/删除自动跟随），右栏详情面板随之联动
 const selectedOrgId = ref("");
-const detailTab = ref<"employees" | "rooms">("employees");
 
 function findNode(nodes: OrganizationTreeNode[], id: string): OrganizationTreeNode | null {
   for (const node of nodes) {
@@ -202,12 +201,6 @@ function onAction(node: OrganizationTreeNode, action: string): void {
     orgModal.node = node;
     orgModal.parentId = "";
     orgModal.open = true;
-  } else if (action === "employees") {
-    selectOrg(node);
-    detailTab.value = "employees";
-  } else if (action === "rooms") {
-    selectOrg(node);
-    detailTab.value = "rooms";
   } else if (action === "delete") {
     deletingOrg.value = node;
   }
@@ -284,12 +277,7 @@ function handleOrgSaved() {
       </div>
 
       <!-- 右栏：选中组织的人员/房间详情 -->
-      <OrgDetailPanel
-        :node="selectedNode"
-        :icon="selectedIcon"
-        :tab="detailTab"
-        @switch="detailTab = $event"
-      />
+      <OrgDetailPanel :node="selectedNode" :icon="selectedIcon" />
     </div>
 
     <!-- 组织节点新增/编辑 -->
