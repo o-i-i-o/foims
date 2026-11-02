@@ -232,14 +232,13 @@ pub async fn create_cabinet_position<P: DbProvider>(
     .await
     .map_err(|e| {
         // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409；
-        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 400）
+        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底
+        // （自定义 SQLSTATE P0401 → 400，按错误码匹配不依赖消息文本）
         if let sqlx::Error::Database(ref db_err) = e {
             if db_err.is_unique_violation() {
                 return AppError::Conflict(msg("server.position.name_exists"));
             }
-            if db_err.code().as_deref() == Some("P0001")
-                && db_err.message().contains("U位范围重叠")
-            {
+            if db_err.code().as_deref() == Some("P0401") {
                 return AppError::Validation(msg("server.position.u_range_overlap"));
             }
         }
@@ -505,13 +504,13 @@ pub async fn update_cabinet_position<P: DbProvider>(
     .await
     .map_err(|e| {
         // 并发写入竞态兜底：uq_positions_cabinet_name 冲突映射为 409；
-        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 400）
+        // 重叠预检的并发窗口由 trg_check_position_overlap 兜底
+        // （自定义 SQLSTATE P0401 → 400，按错误码匹配不依赖消息文本）
         if let sqlx::Error::Database(ref db_err) = e {
             if db_err.is_unique_violation() {
                 return AppError::Conflict(msg("server.position.name_exists"));
             }
-            if db_err.code().as_deref() == Some("P0001") && db_err.message().contains("U位范围重叠")
-            {
+            if db_err.code().as_deref() == Some("P0401") {
                 return AppError::Validation(msg("server.position.u_range_overlap"));
             }
         }

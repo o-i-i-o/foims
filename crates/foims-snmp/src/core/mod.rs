@@ -13,8 +13,10 @@ use tracing::debug;
 use uuid::Uuid;
 
 use foims_common::AppError;
+use foims_common::AppMessage;
 use foims_common::crypto::decrypt_credential_async;
 use foims_common::log_info;
+use foims_common::msg;
 
 pub use config::{SwitchConfigError, get_device_ip_address, get_device_snmp_config};
 
@@ -95,16 +97,38 @@ impl DecryptedSnmpCredentials {
     }
 }
 
+/// SNMP 域错误：内层 [`AppMessage`]（i18n key + 参数），Display 仅输出 key。
+///
+/// 严禁以中文字符串构造本类型——面向用户文案一律由前端按 key 渲染，
+/// 服务端日志诊断用 [`AppMessage::log_string`]。
 #[derive(Error, Debug)]
 pub enum SnmpError {
     #[error("{0}")]
-    Message(String),
+    Message(AppMessage),
+}
+
+impl SnmpError {
+    /// 取内层 i18n 消息（handler 注入 `error` 参数与日志诊断统一入口）。
+    pub fn message(&self) -> &AppMessage {
+        match self {
+            SnmpError::Message(m) => m,
+        }
+    }
 }
 
 impl From<AppError> for SnmpError {
     fn from(e: AppError) -> Self {
-        SnmpError::Message(e.to_string())
+        // 保留原 AppError 内的 AppMessage（key + 参数），不降级为字符串
+        SnmpError::Message(e.message().clone())
     }
+}
+
+/// 把 `async_snmp` 错误包装为「主 key + detail 诊断串」的 SNMP 错误。
+///
+/// detail 取 [`format_snmp_error`] 结果的 `log_string()`（key(k=v) 形式），
+/// 属诊断串而非文案，与会话/请求失败键的参数口径保持一致。
+pub(crate) fn wrap_snmp_error(key: &'static str, e: Box<Error>) -> SnmpError {
+    SnmpError::Message(msg(key).with("detail", format_snmp_error(e).log_string()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,12 +145,12 @@ pub struct SnmpParamsLegacy {
     pub timeout_secs: u64,
 }
 
-/// 解析 SNMPv3 认证协议（复用库内 FromStr 别名表，错误文案保持中文）。
+/// 解析 SNMPv3 认证协议（复用库内 FromStr 别名表，错误为 i18n key）。
 /// SNMP 域内唯一定义，agent-service 的 trap 接收器 USM 用户构建同样复用
-pub fn parse_auth_protocol(proto: &str) -> Result<AuthProtocol, String> {
+pub fn parse_auth_protocol(proto: &str) -> Result<AuthProtocol, AppMessage> {
     proto
         .parse()
-        .map_err(|_| format!("不支持的认证协议: {proto}"))
+        .map_err(|_| msg("server.snmp.auth.unsupported_protocol").with("proto", proto))
 }
 
 /// 解析 SNMPv3 隐私协议。
@@ -135,25 +159,25 @@ pub fn parse_auth_protocol(proto: &str) -> Result<AuthProtocol, String> {
 /// 旧别名 AES-192/AES192、AES-256/AES256 沿用 0.17 的 Blumenthal 扩展
 /// 语义，保证存量配置行为不变；新别名（如 AES-256-CISCO）交给库解析。
 /// SNMP 域内唯一定义，agent-service 的 trap 接收器 USM 用户构建同样复用
-pub fn parse_priv_protocol(proto: &str) -> Result<PrivProtocol, String> {
+pub fn parse_priv_protocol(proto: &str) -> Result<PrivProtocol, AppMessage> {
     match proto.to_ascii_uppercase().as_str() {
         "AES-192" | "AES192" => Ok(PrivProtocol::Aes192Blumenthal),
         "AES-256" | "AES256" => Ok(PrivProtocol::Aes256Blumenthal),
         _ => proto
             .parse()
-            .map_err(|_| format!("不支持的隐私协议: {proto}")),
+            .map_err(|_| msg("server.snmp.priv.unsupported_protocol").with("proto", proto)),
     }
 }
 
-/// 按 `params.version` 构造 v1/v2c/v3 鉴权配置，错误为中文文案串。
+/// 按 `params.version` 构造 v1/v2c/v3 鉴权配置，错误为 i18n key。
 /// v3 凭据半配置组合（协议与密码缺一）显式报错，不静默降级安全级别。
-pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
+pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, AppMessage> {
     match params.version.as_str() {
         "v1" => {
             let community = params
                 .community
                 .as_deref()
-                .ok_or_else(|| "SNMP v1/v2c 需要配置 community 字符串".to_string())?;
+                .ok_or_else(|| msg("server.snmp.auth.community_required"))?;
             // v1 必须用 Auth::v1 构造，复用 v2c 会让 v1 选项形同虚设（S-4）
             Ok(Auth::v1(community))
         }
@@ -161,14 +185,14 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
             let community = params
                 .community
                 .as_deref()
-                .ok_or_else(|| "SNMP v1/v2c 需要配置 community 字符串".to_string())?;
+                .ok_or_else(|| msg("server.snmp.auth.community_required"))?;
             Ok(Auth::v2c(community))
         }
         "v3" => {
             let username = params
                 .username
                 .as_deref()
-                .ok_or_else(|| "SNMPv3需要用户名".to_string())?;
+                .ok_or_else(|| msg("server.snmp.auth.username_required"))?;
             // 0.18 起 UsmConfig 的 auth/auth_priv 在构造时即校验协议
             // 支持性与密码长度
             let usm = UsmConfig::new(username.to_string());
@@ -176,13 +200,13 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
             // 协议在而密码缺失多为解密失败/存量脏数据，降级发包会以明文
             // 绕过设备侧 USM；noAuthNoPriv 仅限四项全缺省
             match (params.auth_proto.as_deref(), params.auth_pass.as_deref()) {
-                (Some(_), None) => return Err("SNMPv3认证协议已配置但认证密码缺失".to_string()),
-                (None, Some(_)) => return Err("SNMPv3认证密码已配置但认证协议缺失".to_string()),
+                (Some(_), None) => return Err(msg("server.snmp.auth.auth_proto_without_password")),
+                (None, Some(_)) => return Err(msg("server.snmp.auth.password_without_auth_proto")),
                 _ => {}
             }
             match (params.priv_proto.as_deref(), params.priv_pass.as_deref()) {
-                (Some(_), None) => return Err("SNMPv3隐私协议已配置但隐私密码缺失".to_string()),
-                (None, Some(_)) => return Err("SNMPv3隐私密码已配置但隐私协议缺失".to_string()),
+                (Some(_), None) => return Err(msg("server.snmp.auth.priv_proto_without_password")),
+                (None, Some(_)) => return Err(msg("server.snmp.auth.password_without_priv_proto")),
                 _ => {}
             }
 
@@ -199,16 +223,17 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
                             parse_priv_protocol(priv_proto)?,
                             priv_pass,
                         )
-                        .map_err(|e| format!("SNMPv3隐私配置无效: {e}"))?
+                        .map_err(|e| msg("server.snmp.auth.usm_priv_invalid").with("detail", e))?
                     } else {
-                        usm.auth(auth_protocol, auth_pass)
-                            .map_err(|e| format!("SNMPv3认证配置无效: {e}"))?
+                        usm.auth(auth_protocol, auth_pass).map_err(|e| {
+                            msg("server.snmp.auth.usm_auth_invalid").with("detail", e)
+                        })?
                     }
                 }
                 // 隐私已配置而认证整体缺省：authPriv 必须建立在认证
                 // 之上，禁止静默丢弃隐私配置降级 noAuthNoPriv（B1）
                 (None, None) if params.priv_proto.is_some() => {
-                    return Err("SNMPv3隐私已配置但认证协议缺失".to_string());
+                    return Err(msg("server.snmp.auth.priv_without_auth"));
                 }
                 // 四项全缺省：noAuthNoPriv（显式配置的空密文已被
                 // normalize_blank 归一为缺失，进入本分支即真实未配置）
@@ -217,46 +242,30 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, String> {
 
             Ok(Auth::from(usm))
         }
-        _ => Err(format!("不支持的SNMP版本: {}", params.version)),
+        _ => Err(msg("server.snmp.auth.unsupported_version").with("version", &params.version)),
     }
 }
 
-/// `async_snmp` 错误 → 面向用户的中文文案（未列出的变体归「未知错误」兜底）。
+/// `async_snmp` 错误 → i18n 消息（未列出的变体归 `unknown` 兜底，
+/// 原始调试信息进 `detail` 参数，不生成用户可见文案）。
 #[must_use]
-pub fn format_snmp_error(e: Box<Error>) -> String {
+pub fn format_snmp_error(e: Box<Error>) -> AppMessage {
     match *e {
-        Error::Timeout {
-            target, retries, ..
-        } => {
-            format!("连接超时 (目标: {target}, 重试次数: {retries})")
-        }
+        Error::Timeout { .. } => msg("server.snmp.error.timeout"),
         Error::Network { target, source } => {
-            format!("网络错误 (目标: {target}): {source}")
+            msg("server.snmp.error.network").with("detail", format!("{target}: {source}"))
         }
-        Error::Snmp {
-            target,
-            status,
-            index,
-            ..
-        } => {
-            format!("SNMP错误 (目标: {target}, 状态: {status:?}, 索引: {index})")
+        Error::Snmp { target, status, .. } => {
+            msg("server.snmp.error.protocol").with("detail", format!("{target}: {status:?}"))
         }
-        Error::Auth { target } => {
-            format!("认证失败 (目标: {target})")
+        Error::Auth { .. } => msg("server.snmp.error.auth_failed"),
+        Error::MalformedResponse { .. } => msg("server.snmp.error.response_malformed"),
+        Error::WalkAborted { reason, .. } => {
+            msg("server.snmp.error.walk_aborted").with("detail", format!("{reason:?}"))
         }
-        Error::MalformedResponse { target } => {
-            format!("响应格式错误 (目标: {target})")
-        }
-        Error::WalkAborted { target, reason } => {
-            format!("Walk中断 (目标: {target}, 原因: {reason:?})")
-        }
-        Error::Config(msg) => {
-            format!("配置错误: {msg}")
-        }
-        Error::InvalidOid(oid) => {
-            format!("无效OID: {oid}")
-        }
-        _ => format!("未知错误: {e:?}"),
+        Error::Config(detail) => msg("server.snmp.error.config").with("detail", detail),
+        Error::InvalidOid(oid) => msg("server.snmp.error.invalid_oid").with("detail", oid),
+        _ => msg("server.snmp.error.unknown").with("detail", format!("{e:?}")),
     }
 }
 
@@ -349,19 +358,19 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let result = client
         .get(&oid!(1, 3, 6, 1, 2, 1, 1, 1, 0))
         .await
-        .map_err(|e| SnmpError::Message(format!("SNMP请求失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.request_failed", e))?;
 
     // 0.18 起单 OID GET 返回变量绑定列表
     let value = result
         .varbinds
         .first()
         .map(|vb| &vb.value)
-        .ok_or_else(|| SnmpError::Message("响应不包含任何变量绑定".to_string()))?;
+        .ok_or_else(|| SnmpError::Message(msg("server.snmp.error.empty_response")))?;
 
     if value.is_exception() {
         match value {
@@ -386,14 +395,16 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
                     params.ip, params.port
                 ))
             }
-            _ => Err(SnmpError::Message("响应为异常值".to_string())),
+            _ => Err(SnmpError::Message(
+                msg("server.snmp.error.abnormal_value").with("detail", format!("{value:?}")),
+            )),
         }
     } else if let Some(s) = value.as_str() {
         Ok(s.to_string())
     } else {
-        Err(SnmpError::Message(
-            "响应格式不正确: 期望字符串类型".to_string(),
-        ))
+        Err(SnmpError::Message(msg(
+            "server.snmp.error.response_malformed",
+        )))
     }
 }
 
@@ -474,27 +485,32 @@ mod tests {
 
     #[test]
     fn test_build_auth_v2c_requires_community() {
-        let err = build_auth(&v2c_params(None)).err().unwrap_or_default();
-        assert!(
-            err.contains("community"),
-            "错误信息应说明缺少 community: {err}"
-        );
+        let err = build_auth(&v2c_params(None))
+            .err()
+            .unwrap_or_else(|| panic!("缺 community 应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.community_required");
     }
 
     #[test]
     fn test_build_auth_unknown_version_rejected() {
         let mut params = v2c_params(Some("public"));
         params.version = "v4".to_string();
-        let err = build_auth(&params).err().unwrap_or_default();
-        assert!(err.contains("版本"), "错误信息应说明版本不支持: {err}");
+        let err = build_auth(&params)
+            .err()
+            .unwrap_or_else(|| panic!("未知版本应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.unsupported_version");
+        assert_eq!(
+            err.params().first().map(|(k, v)| (k.as_str(), v.as_str())),
+            Some(("version", "v4"))
+        );
     }
 
     #[test]
     fn test_build_auth_v3_requires_username() {
         let err = build_auth(&v3_params(None, None, None))
             .err()
-            .unwrap_or_default();
-        assert!(err.contains("用户名"), "错误信息应说明缺少用户名: {err}");
+            .unwrap_or_else(|| panic!("缺用户名应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.username_required");
     }
 
     #[test]
@@ -568,18 +584,20 @@ mod tests {
     fn test_build_auth_v3_rejects_unsupported_protocols() {
         let err = build_auth(&v3_params(Some("admin"), Some("RC4"), None))
             .err()
-            .unwrap_or_default();
-        assert!(
-            err.contains("认证协议"),
-            "错误信息应指明认证协议不支持: {err}"
+            .unwrap_or_else(|| panic!("不支持的认证协议应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.unsupported_protocol");
+        assert_eq!(
+            err.params().first().map(|(k, v)| (k.as_str(), v.as_str())),
+            Some(("proto", "RC4"))
         );
         // 不支持的隐私协议（需同时给出认证协议与密码才进入隐私分支）
         let err = build_auth(&v3_params(Some("admin"), Some("SHA"), Some("RC4")))
             .err()
-            .unwrap_or_default();
-        assert!(
-            err.contains("隐私协议"),
-            "错误信息应指明隐私协议不支持: {err}"
+            .unwrap_or_else(|| panic!("不支持的隐私协议应报错"));
+        assert_eq!(err.key(), "server.snmp.priv.unsupported_protocol");
+        assert_eq!(
+            err.params().first().map(|(k, v)| (k.as_str(), v.as_str())),
+            Some(("proto", "RC4"))
         );
     }
 
@@ -588,18 +606,24 @@ mod tests {
         // 认证协议在而密码缺失
         let mut params = v3_params(Some("admin"), Some("SHA-256"), None);
         params.auth_pass = None;
-        let err = build_auth(&params).err().unwrap_or_default();
-        assert!(err.contains("认证密码缺失"), "应报认证密码缺失: {err}");
+        let err = build_auth(&params)
+            .err()
+            .unwrap_or_else(|| panic!("认证密码缺失应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.auth_proto_without_password");
         // 隐私协议在而隐私密码缺失
         let mut params = v3_params(Some("admin"), Some("SHA-256"), Some("AES-128"));
         params.priv_pass = None;
-        let err = build_auth(&params).err().unwrap_or_default();
-        assert!(err.contains("隐私密码缺失"), "应报隐私密码缺失: {err}");
+        let err = build_auth(&params)
+            .err()
+            .unwrap_or_else(|| panic!("隐私密码缺失应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.priv_proto_without_password");
         // 隐私两项齐但认证两项齐缺：不支持的降级组合报错
         let mut params = v3_params(Some("admin"), None, Some("AES-128"));
         params.auth_pass = None;
-        let err = build_auth(&params).err().unwrap_or_default();
-        assert!(err.contains("认证协议缺失"), "应报认证协议缺失: {err}");
+        let err = build_auth(&params)
+            .err()
+            .unwrap_or_else(|| panic!("隐私已配置而认证缺省应报错"));
+        assert_eq!(err.key(), "server.snmp.auth.priv_without_auth");
     }
 
     #[test]
@@ -650,16 +674,20 @@ mod tests {
             elapsed: Duration::from_secs(5),
             retries: 3,
         };
-        let text = format_snmp_error(Box::new(timeout));
-        assert!(text.contains("连接超时"), "超时错误文案: {text}");
-        assert!(text.contains("192.0.2.10:161"), "应包含目标地址: {text}");
+        let m = format_snmp_error(Box::new(timeout));
+        assert_eq!(m.key(), "server.snmp.error.timeout");
+        assert!(m.params().is_empty(), "timeout 无参数");
 
         let network = Error::Network {
             target: test_target(),
             source: std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused"),
         };
-        let text = format_snmp_error(Box::new(network));
-        assert!(text.contains("网络错误"), "网络错误文案: {text}");
+        let m = format_snmp_error(Box::new(network));
+        assert_eq!(m.key(), "server.snmp.error.network");
+        assert!(
+            m.log_string().contains("192.0.2.10:161"),
+            "detail 应含目标地址: {m:?}"
+        );
 
         let snmp_err = Error::Snmp {
             target: test_target(),
@@ -668,36 +696,59 @@ mod tests {
             oid: None,
             metadata: Box::new(ResponseMetadata::default()),
         };
-        let text = format_snmp_error(Box::new(snmp_err));
-        assert!(text.contains("SNMP错误"), "协议错误文案: {text}");
-        assert!(text.contains("NoSuchName"), "应包含错误状态: {text}");
+        let m = format_snmp_error(Box::new(snmp_err));
+        assert_eq!(m.key(), "server.snmp.error.protocol");
+        assert!(
+            m.log_string().contains("NoSuchName"),
+            "detail 应含错误状态: {m:?}"
+        );
 
         let auth_err = Error::Auth {
             target: test_target(),
         };
-        assert!(format_snmp_error(Box::new(auth_err)).contains("认证失败"));
+        assert_eq!(
+            format_snmp_error(Box::new(auth_err)).key(),
+            "server.snmp.error.auth_failed"
+        );
 
         let malformed = Error::MalformedResponse {
             target: test_target(),
         };
-        assert!(format_snmp_error(Box::new(malformed)).contains("响应格式错误"));
+        assert_eq!(
+            format_snmp_error(Box::new(malformed)).key(),
+            "server.snmp.error.response_malformed"
+        );
 
         let aborted = Error::WalkAborted {
             target: test_target(),
             reason: WalkAbortReason::Cycle,
         };
-        let text = format_snmp_error(Box::new(aborted));
-        assert!(text.contains("Walk中断"), "Walk 中断文案: {text}");
+        let m = format_snmp_error(Box::new(aborted));
+        assert_eq!(m.key(), "server.snmp.error.walk_aborted");
+        assert!(
+            m.log_string().contains("Cycle"),
+            "detail 应含中断原因: {m:?}"
+        );
 
         let config = Error::Config("bad config".into());
-        assert_eq!(format_snmp_error(Box::new(config)), "配置错误: bad config");
+        let m = format_snmp_error(Box::new(config));
+        assert_eq!(m.key(), "server.snmp.error.config");
+        assert_eq!(
+            m.params().first().map(|(_, v)| v.as_str()),
+            Some("bad config")
+        );
 
         let invalid_oid = Error::InvalidOid("1.2.x".into());
-        assert_eq!(format_snmp_error(Box::new(invalid_oid)), "无效OID: 1.2.x");
+        let m = format_snmp_error(Box::new(invalid_oid));
+        assert_eq!(m.key(), "server.snmp.error.invalid_oid");
+        assert_eq!(m.params().first().map(|(_, v)| v.as_str()), Some("1.2.x"));
 
         let closed = Error::Closed {
             target: test_target(),
         };
-        assert!(format_snmp_error(Box::new(closed)).contains("未知错误"));
+        assert_eq!(
+            format_snmp_error(Box::new(closed)).key(),
+            "server.snmp.error.unknown"
+        );
     }
 }

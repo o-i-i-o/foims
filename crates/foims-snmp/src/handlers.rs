@@ -127,7 +127,7 @@ pub async fn test_snmp_connection<P: DbProvider>(
             "server.device.snmp.test_success",
         )),
         Err(e) => Err(AppError::Snmp(
-            msg("server.device.snmp.test_failed").with("error", e),
+            msg("server.device.snmp.test_failed").with("error", e.message().log_string()),
         )),
     }
 }
@@ -156,7 +156,7 @@ pub async fn get_device_info_snmp<P: DbProvider>(
             "server.device.snmp.info_retrieved",
         )),
         Err(e) => Err(AppError::Snmp(
-            msg("server.device.snmp.info_fetch_failed").with("error", e),
+            msg("server.device.snmp.info_fetch_failed").with("error", e.message().log_string()),
         )),
     }
 }
@@ -182,7 +182,8 @@ pub async fn get_device_ports_snmp<P: DbProvider>(
             "server.device.snmp.ports_retrieved",
         )),
         Err(e) => Err(AppError::Snmp(
-            msg("server.device.snmp.switch_ports_fetch_failed").with("error", e),
+            msg("server.device.snmp.switch_ports_fetch_failed")
+                .with("error", e.message().log_string()),
         )),
     }
 }

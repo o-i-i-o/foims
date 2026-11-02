@@ -29,7 +29,7 @@ impl From<SwitchConfigError> for super::SnmpError {
     fn from(e: SwitchConfigError) -> Self {
         match e {
             SwitchConfigError::NotFound(m) | SwitchConfigError::Database(m) => {
-                super::SnmpError::Message(m.log_string())
+                super::SnmpError::Message(m)
             }
         }
     }

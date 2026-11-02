@@ -9,8 +9,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use foims_common::AppError;
+use foims_common::AppMessage;
 use foims_common::crypto::decrypt_credential_async;
 use foims_common::log_info;
+use foims_common::msg;
 
 pub use config::{IpmiConfigError, get_device_ip_address, get_device_ipmi_config};
 
@@ -86,15 +88,29 @@ fn normalize_blank(value: Option<String>) -> Option<String> {
     value.filter(|v| !v.trim().is_empty())
 }
 
+/// IPMI 域错误：内层 [`AppMessage`]（i18n key + 参数），Display 仅输出 key。
+///
+/// 严禁以中文字符串构造本类型——面向用户文案一律由前端按 key 渲染，
+/// 服务端日志诊断用 [`AppMessage::log_string`]。
 #[derive(Error, Debug)]
 pub enum IpmiErrorExt {
     #[error("{0}")]
-    Message(String),
+    Message(AppMessage),
+}
+
+impl IpmiErrorExt {
+    /// 取内层 i18n 消息（handler 注入 `error` 参数与日志诊断统一入口）。
+    pub fn message(&self) -> &AppMessage {
+        match self {
+            IpmiErrorExt::Message(m) => m,
+        }
+    }
 }
 
 impl From<AppError> for IpmiErrorExt {
     fn from(e: AppError) -> Self {
-        IpmiErrorExt::Message(e.to_string())
+        // 保留原 AppError 内的 AppMessage（key + 参数），不降级为字符串
+        IpmiErrorExt::Message(e.message().clone())
     }
 }
 
@@ -136,17 +152,20 @@ impl IpmiParams {
     }
 }
 
-/// `ruipmi` 错误 → 面向用户的中文文案（未列出的变体归「未知错误」兜底）。
+/// `ruipmi` 错误 → i18n 消息（变体payload 进 `detail`/`code` 参数，
+/// 不生成用户可见文案）。
 #[must_use]
-pub fn format_ipmi_error(e: &IpmiError) -> String {
+pub fn format_ipmi_error(e: &IpmiError) -> AppMessage {
     match e {
-        IpmiError::Socket(msg) => format!("网络/套接字错误: {msg}"),
-        IpmiError::Timeout => "连接超时（BMC 无响应或会话端口不可达）".to_string(),
-        IpmiError::BadResponse => "响应格式错误".to_string(),
-        IpmiError::CipherMismatch => "密码套件不匹配（尝试切换认证算法 sha1/sha256）".to_string(),
-        IpmiError::AuthFailed => "认证失败（用户名或口令错误，特权级别不足）".to_string(),
-        IpmiError::DecryptFailed => "解密失败（会话加密不一致）".to_string(),
-        IpmiError::InvalidState(state) => format!("会话状态无效: {state}"),
+        IpmiError::Socket(detail) => msg("server.ipmi.error.network").with("detail", detail),
+        IpmiError::Timeout => msg("server.ipmi.error.timeout"),
+        IpmiError::BadResponse => msg("server.ipmi.error.response_malformed"),
+        IpmiError::CipherMismatch => msg("server.ipmi.error.cipher_suite_mismatch"),
+        IpmiError::AuthFailed => msg("server.ipmi.error.auth_failed"),
+        IpmiError::DecryptFailed => msg("server.ipmi.error.decrypt_failed"),
+        IpmiError::InvalidState(state) => {
+            msg("server.ipmi.error.session_state_invalid").with("detail", state)
+        }
     }
 }
 
@@ -181,13 +200,15 @@ pub fn truncate_ipmi_text(value: &str, max_chars: usize) -> String {
 }
 
 /// 剥离 IPMI 响应帧的完成码：`request()` 返回 `[cc, data...]`，
-/// 完成码非 0 视为设备侧错误，返回可阅读文案；成功返回 data 切片。
+/// 完成码非 0 视为设备侧错误，返回 i18n 消息；成功返回 data 切片。
 pub fn take_response(resp: &[u8]) -> Result<&[u8], IpmiErrorExt> {
     let cc = resp
         .first()
-        .ok_or_else(|| IpmiErrorExt::Message("空响应".to_string()))?;
+        .ok_or_else(|| IpmiErrorExt::Message(msg("server.ipmi.error.empty_response")))?;
     if *cc != 0 {
-        return Err(IpmiErrorExt::Message(format!("设备返回完成码 0x{cc:02X}")));
+        return Err(IpmiErrorExt::Message(
+            msg("server.ipmi.error.completion_code").with("code", format!("0x{cc:02X}")),
+        ));
     }
     Ok(&resp[1..])
 }
@@ -245,7 +266,13 @@ pub async fn test_ipmi(params: &IpmiParams) -> Result<String, IpmiErrorExt> {
         ip = params.ip.clone(),
         auth_algo = params.auth_algo.clone()
     );
-    let mut client = open_session(params).await?;
+    // 会话建立失败统一包为 session_create_failed，原始变体进 detail 诊断串
+    let mut client = open_session(params).await.map_err(|e| {
+        IpmiErrorExt::Message(
+            msg("server.ipmi.error.session_create_failed")
+                .with("detail", format_ipmi_error(&e).log_string()),
+        )
+    })?;
     let result = async {
         let resp = client.get_device_id().await?;
         let data = take_response(&resp)?.to_vec();
@@ -318,6 +345,14 @@ mod tests {
         assert!(
             matches!(err, IpmiErrorExt::Message(_)),
             "应返回 Message 错误，实际: {err:?}"
+        );
+        assert_eq!(err.message().key(), "server.ipmi.error.completion_code");
+        assert_eq!(
+            err.message()
+                .params()
+                .first()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
+            Some(("code", "0xC1"))
         );
     }
 

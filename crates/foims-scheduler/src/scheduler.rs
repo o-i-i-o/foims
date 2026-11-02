@@ -11,7 +11,7 @@ use crate::cron::calculate_next_run;
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::executor::TaskRegistryRef;
 use crate::models::{DatabaseConfig, TaskContext};
-use crate::task_log::{log_task_execution, sync_user_tasks_from_db};
+use crate::task_log::{log_task_execution, message_payload, sync_user_tasks_from_db};
 
 /// 提取错误内部的 i18n 消息（避免拼接中文前缀导致文案泄漏到日志/数据库）
 pub fn error_message(e: &SchedulerError) -> AppMessage {
@@ -178,10 +178,14 @@ impl SchedulerState {
                         .await;
                     }
                     Err(e) => {
-                        // 失败原因以 i18n key 形式写入日志与任务日志表，由前端翻译
-                        let error_text = error_message(e).log_string();
-                        log_error!("log.task.failed", name = task_name, error = error_text);
-                        log_task_execution(&pool, &task_name, "failed", &error_text, started_at)
+                        // 失败原因以 i18n key+params 形式写入日志与任务日志表，由前端翻译
+                        let error_msg = error_message(e);
+                        log_error!(
+                            "log.task.failed",
+                            name = task_name,
+                            error = error_msg.log_string()
+                        );
+                        log_task_execution(&pool, &task_name, "failed", &error_msg, started_at)
                             .await;
                     }
                 }
@@ -427,18 +431,26 @@ async fn dispatch_single_task(
     let result = registry.execute(&task.task_type, &ctx).await;
     let end_time = Utc::now();
     let duration = i32::try_from((end_time - started_at).num_milliseconds()).unwrap_or(i32::MAX);
-    let (status, details) = match &result {
+    let (status, details, result_text) = match &result {
         Ok(message) => (
             "success",
-            serde_json::json!({ "message": message, "task_type": task.task_type }),
-        ),
-        Err(e) => (
-            "failed",
             serde_json::json!({
-                "error": error_message(e).log_string(),
+                "message": message_payload(message),
                 "task_type": task.task_type
             }),
+            message.log_string(),
         ),
+        Err(e) => {
+            let error_msg = error_message(e);
+            (
+                "failed",
+                serde_json::json!({
+                    "error": message_payload(&error_msg),
+                    "task_type": task.task_type
+                }),
+                error_msg.log_string(),
+            )
+        }
     };
 
     // 第三段：短事务写回结果
@@ -469,17 +481,9 @@ async fn dispatch_single_task(
     write_tx.commit().await?;
 
     if status == "success" {
-        log_info!(
-            "log.task.completed",
-            name = task.name,
-            result = details["message"].as_str().unwrap_or_default()
-        );
+        log_info!("log.task.completed", name = task.name, result = result_text);
     } else {
-        log_error!(
-            "log.task.failed",
-            name = task.name,
-            error = details["error"].as_str().unwrap_or_default()
-        );
+        log_error!("log.task.failed", name = task.name, error = result_text);
     }
     Ok(())
 }

@@ -1036,6 +1036,9 @@
   "notification": {
     "settings": "Email Notifications",
     "col_user": "User",
+    "language_label": "Notification Language",
+    "lang_zh": "中文",
+    "lang_en": "English",
     "type_ip_change": "IP Address Change",
     "type_agent_alert": "Host Alert",
     "type_snmp_event": "SNMP Observation Event",
@@ -2122,7 +2125,6 @@
       "organizational_unit_length": "Organizational unit (OU) must not exceed 64 characters",
       "state_length": "State/province must not exceed 64 characters",
       "locality_length": "City/locality must not exceed 64 characters",
-      "purpose_invalid": "Invalid certificate purpose: {{purpose}} (supported: nginx / agent)",
       "apply_not_applicable": "This certificate is not for site HTTPS (nginx) and cannot be applied to the nginx configuration",
       "delete_system_managed": "This certificate is system material (agent mTLS, automatically issued and maintained); deletion is forbidden"
     },
@@ -2347,9 +2349,6 @@
       },
       "disabled_ban_rejected": "fail2ban is disabled; manual bans would not take effect. Enable it first"
     },
-    "data-management": {
-      "field_invalid": "Invalid value for {{column}} in table {{table}} row {{row}} ({{value}}): {{reason}}"
-    },
     "init": {
       "admin_create_failed": "Failed to create the admin user",
       "completed": "System initialized successfully",
@@ -2486,8 +2485,6 @@
       "cleared": "Successfully cleared {{count}} log records",
       "days_invalid": "Retention days cannot be negative",
       "days_required": "Retention days must be specified explicitly (0 means delete all)",
-      "invalid_resource_id": "Invalid resource_id: {{value}}",
-      "invalid_user_id": "Invalid user_id: {{value}}",
       "login_retrieved": "Login logs retrieved",
       "operation_retrieved": "Operation logs retrieved",
       "stats_retrieved": "Log statistics retrieved",
@@ -2741,11 +2738,7 @@
       "not_registered": "Service not registered: {{unit}} not found in system service directories",
       "op_failed": "Service operation failed: {{unit}} {{op}}: {{detail}}",
       "systemctl_missing": "systemctl is not installed; cannot manage system services",
-      "status_retrieved": "Service status retrieved",
-      "op_success": "Service operation executed: {{unit}} {{op}}",
-      "op_deferred": "Service operation command sent, running in background: {{unit}} {{op}}",
-      "unknown_service": "Unknown service: {{service}}",
-      "unknown_op": "Unsupported service operation: {{op}}"
+      "status_retrieved": "Service status retrieved"
     },
     "smtp": {
       "build_failed": "Failed to build email",
@@ -2753,6 +2746,7 @@
       "config_updated": "SMTP configuration updated",
       "connect_failed": "Failed to connect to mail server",
       "email_sent": "Email sent successfully",
+      "group_send_failed": "Some notification email language groups failed to send",
       "invalid_address": "Invalid email address: {{address}}",
       "not_configured": "SMTP configuration not set",
       "not_configured_password": "SMTP configuration not set, please enter the password",
@@ -2785,13 +2779,11 @@
       "test_success": "Webhook test message sent successfully",
       "url_required": "Webhook URL is not set",
       "validation": {
-        "id_duplicated": "Duplicate webhook target ID: {{id}}",
         "id_length": "Target ID must be 1 to 64 characters",
         "name_length": "Target name must not exceed 100 characters",
         "secret_length": "DingTalk sign secret must not exceed 256 characters",
         "targets_length": "Number of webhook targets must not exceed 20",
-        "url_length": "Webhook URL must not exceed 2048 characters",
-        "url_scheme": "{{field}} must be an http:// or https:// URL"
+        "url_length": "Webhook URL must not exceed 2048 characters"
       }
     },
     "system": {
@@ -2844,7 +2836,6 @@
       "logs_retrieved": "Task logs retrieved",
       "mac_sync_completed": "MAC sync completed",
       "mac_sync_missing_config": "MAC sync task requires device_ids list (subnet optional; defaults to all subnets)",
-      "mac_sync_invalid_config": "Invalid MAC sync task config: {{error}}",
       "next_run_calc_task_failed": "Failed to spawn next-run calculation task",
       "next_run_update_failed": "Failed to update next run time",
       "not_found": "Scheduled task not found",
@@ -2868,10 +2859,12 @@
       "agent_offline_failed": "Agent offline check failed: {{error}}",
       "agent_snmp_poll_completed": "SNMP device polling completed: {{ok}} succeeded, {{fail}} failed",
       "agent_snmp_poll_failed": "SNMP device polling failed: {{error}}",
+      "agent_ipmi_poll_completed": "IPMI device polling completed: {{ok}} succeeded, {{fail}} failed",
       "agent_history_cleanup_completed": "Agent metrics history cleanup completed: {{count}} expired row(s) deleted",
       "agent_history_cleanup_failed": "Agent metrics history cleanup failed: {{error}}",
+      "agent_metrics_rollup_completed": "Host metrics rollup completed: {{count}} hour bucket(s) rolled up, {{healed}} 5-minute bucket(s) backfilled",
+      "agent_metrics_rollup_failed": "Host metrics rollup failed: {{error}}",
       "type_unknown": "Unknown task type: {{task_type}}",
-      "type_unsupported": "Unsupported task type: {{task_type}} (allowed: {{allowed}})",
       "system_readonly": "Built-in system tasks are generated from code and configuration at startup; editing, deleting or toggling them is not supported",
       "updated": "Scheduled task updated",
       "validation": {
@@ -2979,7 +2972,7 @@
         "password_length": "Invalid password length",
         "base_dn_length": "Base DN is required (max 255 characters)",
         "filter_length": "Invalid user filter length",
-        "filter_placeholder": "The user filter must contain a %s or {username} placeholder"
+        "filter_placeholder": "The user filter must contain a %s or {'{'}username{'}'} placeholder"
       }
     },
     "sso": {
@@ -3032,7 +3025,18 @@
       "csv_parse_failed": "Failed to parse CSV",
       "duplicate_key": "Duplicate business key",
       "duplicate_table": "The same table appears multiple times",
-      "field_invalid": "Invalid field value",
+      "credential_too_long": "Field {{column}} in table {{table}} row {{row}}: encrypted credential exceeds the {{max_len}}-character column limit; please shorten the plaintext",
+      "field_invalid_array": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a valid array (e.g. {'{'}a,b{'}'})",
+      "field_invalid_bool": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: expected true or false",
+      "field_invalid_cidr": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a valid CIDR (e.g. 10.0.0.0/24)",
+      "field_invalid_integer": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a valid integer",
+      "field_invalid_ip": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a valid IP address",
+      "field_invalid_json": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not valid JSON",
+      "field_invalid_json_detail": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not valid JSON: {{detail}}",
+      "field_invalid_number": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a valid number",
+      "field_invalid_smallint": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a valid small integer",
+      "field_not_allowed": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: must be one of {{allowed}}",
+      "field_value_too_long": "Value for {{column}} in table {{table}} row {{row}} exceeds the {{max_len}}-character limit",
       "file_read_failed": "Failed to read uploaded file",
       "file_too_large": "File exceeds size limit",
       "header_mismatch": "Header does not match the template",
@@ -3048,16 +3052,63 @@
       "ref_not_found": "Referenced record not found",
       "required_field_missing": "Required field missing",
       "spec_missing": "Import specification missing",
+      "template_unresolved": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: cannot be resolved by any organization template",
+      "type_path_not_direct_child": "Invalid value \"{{value}}\" for {{column}} in table {{table}} row {{row}}: not a direct child of parent_path",
       "unknown_endpoint_type": "Unknown endpoint type",
       "unknown_export_type": "Unknown export type",
       "unrecognized_header": "Unrecognized header",
+      "workstation_position_conflict": "Table {{table}} row {{row}}: workstation and position are mutually exclusive; specify at most one",
       "zip_create_failed": "Failed to create archive",
       "zip_entry_read_failed": "Failed to read archive entry",
       "zip_finish_failed": "Failed to finalize archive",
       "zip_write_failed": "Failed to write archive",
       "import_success": "Data imported successfully"
     },
+    "ipmi": {
+      "error": {
+        "auth_failed": "IPMI authentication failed (wrong username or password, insufficient privilege level)",
+        "cipher_suite_mismatch": "IPMI cipher suite mismatch (try switching the auth algorithm sha1/sha256)",
+        "completion_code": "IPMI device returned completion code {{code}}",
+        "decrypt_failed": "IPMI decryption failed (session encryption mismatch)",
+        "empty_response": "IPMI response is empty",
+        "network": "IPMI network/socket error: {{detail}}",
+        "response_malformed": "IPMI response is malformed",
+        "sensor_empty_response": "Sensor reading response is empty",
+        "session_create_failed": "Failed to establish IPMI session: {{detail}}",
+        "session_state_invalid": "IPMI session state is invalid: {{detail}}",
+        "timeout": "IPMI connection timed out (no response from BMC or session port unreachable)"
+      }
+    },
     "snmp": {
+      "auth": {
+        "auth_proto_without_password": "Auth protocol is configured but the auth password is missing",
+        "community_required": "SNMP v1/v2c requires a community string",
+        "password_without_auth_proto": "Auth password is configured but the auth protocol is missing",
+        "password_without_priv_proto": "Priv password is configured but the priv protocol is missing",
+        "priv_proto_without_password": "Priv protocol is configured but the priv password is missing",
+        "priv_without_auth": "Priv protocol is configured but auth is missing",
+        "unsupported_protocol": "Unsupported auth protocol: {{proto}}",
+        "unsupported_version": "Unsupported SNMP version: {{version}}",
+        "usm_auth_invalid": "Invalid SNMPv3 auth configuration: {{detail}}",
+        "usm_priv_invalid": "Invalid SNMPv3 priv configuration: {{detail}}",
+        "username_required": "SNMPv3 requires a username"
+      },
+      "error": {
+        "abnormal_value": "SNMP response is an abnormal value: {{detail}}",
+        "auth_failed": "SNMP authentication failed",
+        "config": "SNMP configuration error: {{detail}}",
+        "empty_response": "SNMP response is empty",
+        "invalid_oid": "Invalid OID: {{detail}}",
+        "network": "SNMP network error: {{detail}}",
+        "protocol": "SNMP protocol error: {{detail}}",
+        "request_failed": "SNMP request failed: {{detail}}",
+        "response_malformed": "SNMP response is malformed",
+        "session_create_failed": "Failed to create SNMP session: {{detail}}",
+        "timeout": "SNMP connection timed out",
+        "unknown": "Unknown SNMP error: {{detail}}",
+        "walk_aborted": "SNMP walk aborted: {{detail}}",
+        "walk_failed": "SNMP walk failed: {{detail}}"
+      },
       "events_retrieved": "SNMP observation events retrieved",
       "located": "Located {{count}} record(s)",
       "invalid_locator": "Invalid locator (provide a valid MAC or IP)",

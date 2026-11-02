@@ -8,7 +8,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
-use foims_scheduler::{TaskContext, calculate_next_run};
+use foims_scheduler::{TaskContext, calculate_next_run, message_payload};
 use serde_json;
 use uuid::Uuid;
 use validator::Validate;
@@ -394,15 +394,21 @@ pub async fn run_scheduled_task_now(
     let (status, details) = match &result {
         Ok(message) => (
             "success",
-            serde_json::json!({ "message": message, "task_type": task_type }),
-        ),
-        Err(e) => (
-            "failed",
             serde_json::json!({
-                "error": foims_scheduler::error_message(e).log_string(),
+                "message": message_payload(message),
                 "task_type": task_type
             }),
         ),
+        Err(e) => {
+            let error_msg = foims_scheduler::error_message(e);
+            (
+                "failed",
+                serde_json::json!({
+                    "error": message_payload(&error_msg),
+                    "task_type": task_type
+                }),
+            )
+        }
     };
 
     let cron_expr = task.cron_expression.clone();
@@ -450,7 +456,9 @@ pub async fn run_scheduled_task_now(
         )
         .bind(start_time)
         .bind(effective_next_run)
-        .bind(result.as_ref().ok())
+        // last_result 与到期派发路径同口径存执行状态（success/failed），
+        // 任务结果消息仅进 task_logs.details 由前端按 key+params 翻译
+        .bind(status)
         .bind(id)
         .execute(&mut *lock_tx)
         .await
@@ -472,12 +480,15 @@ pub async fn run_scheduled_task_now(
         }
     }
 
+    // 立即执行响应：result 载荷为 {"ok"|"err": {"key","params"?}}，由前端翻译；
+    // 与 task_logs.details 的消息结构一致
+    let result_payload = match &result {
+        Ok(message) => serde_json::json!({ "ok": message_payload(message) }),
+        Err(e) => serde_json::json!({ "err": message_payload(&foims_scheduler::error_message(e)) }),
+    };
+
     Ok(foims_common::ok_json(
-        serde_json::json!({
-            "result": result.map_err(|e| {
-                foims_scheduler::error_message(&e).key().to_string()
-            })
-        }),
+        serde_json::json!({ "result": result_payload }),
         "server.task.executed",
     ))
 }

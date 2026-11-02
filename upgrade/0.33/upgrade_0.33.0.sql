@@ -226,4 +226,27 @@ ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_host_metrics_history_granularity_time
     ON host_metrics_history (granularity, collected_at);
 
+-- ===== 8. check_position_overlap 自定义 SQLSTATE P0401 =====
+-- U 位重叠由「默认 P0001 + 中文消息文本匹配」改为自定义错误码 P0401，
+-- 应用层（cabinets/position 预检兜底）按错误码匹配，跨语言/客户端稳定。
+-- 重复执行安全（CREATE OR REPLACE）。
+CREATE OR REPLACE FUNCTION check_position_overlap() RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM positions
+        WHERE cabinet_id = NEW.cabinet_id
+        AND id != NEW.id
+        AND (
+            (NEW.start_u BETWEEN start_u AND end_u)
+            OR (NEW.end_u BETWEEN start_u AND end_u)
+            OR (start_u BETWEEN NEW.start_u AND NEW.end_u)
+            OR (end_u BETWEEN NEW.start_u AND NEW.end_u)
+        )
+    ) THEN
+        RAISE EXCEPTION '机位U位范围重叠' USING ERRCODE = 'P0401';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 COMMIT;

@@ -16,7 +16,7 @@ use foims_models::{EntityRecord, SensorRecord};
 
 use super::ports::{value_as_i32, walk_index_value_map};
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
 /// entPhysicalClass 数值 → 可读类别名（未知值回退 `class<N>`）。
@@ -68,7 +68,7 @@ pub async fn get_entities_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let descr = walk_index_value_map(
         &client,
@@ -185,7 +185,7 @@ pub async fn get_sensors_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let mut by_key: HashMap<(i32, u32), SensorRecord> = HashMap::new();
 

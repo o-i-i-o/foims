@@ -1,6 +1,6 @@
 [package]
 name = "foims-notify"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS 通知-推送域：站内通知原语、SMTP 邮件与 Webhook（通用/钉钉/企业微信）渠道、订阅范围过滤与双渠道外发门面"

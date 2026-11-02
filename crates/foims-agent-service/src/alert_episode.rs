@@ -1015,18 +1015,24 @@ impl AlertRuntime {
     }
 }
 
-/// 主机告警指标的中文名与单位（邮件与 Webhook 文案共用）。
-fn host_alert_metric_label(metric: &str) -> (&'static str, &'static str) {
+/// 主机告警指标的双语名与单位（邮件与 Webhook 文案共用，渠道按接收方
+/// 设置的语言取值）。
+fn host_alert_metric_label(metric: &str) -> (foims_notify::LocalizedText, &'static str) {
+    let label = |zh: &'static str, en: &'static str| foims_notify::LocalizedText {
+        zh: zh.to_string(),
+        en: en.to_string(),
+    };
     match metric {
-        "cpu" => ("CPU使用率", "%"),
-        "mem" => ("内存使用率", "%"),
-        "disk" => ("磁盘使用率", "%"),
-        "temp" => ("温度", "℃"),
-        _ => ("指标", ""),
+        "cpu" => (label("CPU使用率", "CPU usage"), "%"),
+        "mem" => (label("内存使用率", "Memory usage"), "%"),
+        "disk" => (label("磁盘使用率", "Disk usage"), "%"),
+        "temp" => (label("温度", "Temperature"), "℃"),
+        _ => (label("指标", "Metric"), ""),
     }
 }
 
-/// 主机资源告警通知文案，邮件与 Webhook 渠道共用。
+/// 主机资源告警通知双语文案，邮件与 Webhook 渠道共用，渠道按接收方设置的
+/// 语言取值。
 ///
 /// `metric` 为 host_alert_episodes 的指标名（cpu/mem/disk/temp），
 /// 值与阈值单位随指标变化（温度 ℃，其余 %）。
@@ -1036,12 +1042,25 @@ fn host_alert_message(
     metric: &str,
     value: f64,
     threshold: u8,
-) -> (String, String) {
+) -> (foims_notify::LocalizedText, foims_notify::LocalizedText) {
     let (label, unit) = host_alert_metric_label(metric);
-    let title = format!("主机资源告警 - {hostname}: {label}超标");
-    let body = format!(
-        "尊敬的管理员：\n\n主机 {hostname} 触发资源告警，详情如下：\n主机名称：{hostname}\nIP地址：{ip_address}\n告警指标：{label}\n当前值：{value:.1}{unit}\n告警阈值：{threshold}{unit}\n\n请及时确认处理。\n\n此致，\nFOIMS系统"
-    );
+    let title = foims_notify::LocalizedText {
+        zh: format!("主机资源告警 - {hostname}: {}超标", label.zh),
+        en: format!(
+            "Host Resource Alert - {hostname}: {} over threshold",
+            label.en
+        ),
+    };
+    let body = foims_notify::LocalizedText {
+        zh: format!(
+            "尊敬的管理员：\n\n主机 {hostname} 触发资源告警，详情如下：\n主机名称：{hostname}\nIP地址：{ip_address}\n告警指标：{}\n当前值：{value:.1}{unit}\n告警阈值：{threshold}{unit}\n\n请及时确认处理。\n\n此致，\nFOIMS系统",
+            label.zh
+        ),
+        en: format!(
+            "Dear Administrator,\n\nHost {hostname} has triggered a resource alert. Details:\nHost name: {hostname}\nIP address: {ip_address}\nAlert metric: {}\nCurrent value: {value:.1}{unit}\nAlert threshold: {threshold}{unit}\n\nPlease confirm and handle it promptly.\n\nBest regards,\nFOIMS System",
+            label.en
+        ),
+    };
     (title, body)
 }
 

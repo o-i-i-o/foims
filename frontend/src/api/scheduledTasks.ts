@@ -9,9 +9,15 @@ import type { ScheduledTask } from "../types/api/generated/ScheduledTask";
 import type { ScheduledTaskCreate } from "../types/api/generated/ScheduledTaskCreate";
 import type { TaskLog } from "../types/api/generated/TaskLog";
 
+/** 任务结果消息载荷（key+params，与 task_logs.details 的消息结构一致） */
+export interface TaskMessagePayload {
+  key: string;
+  params?: Record<string, string>;
+}
+
 /** 任务立即执行响应载荷（后端 json! 动态构造，未生成 ts-rs 类型） */
 export interface TaskRunResponse {
-  result?: { ok?: string; err?: string } | null;
+  result?: { ok?: TaskMessagePayload; err?: TaskMessagePayload } | null;
 }
 
 /** 任务列表地址（无分页，仅服务端排序） */

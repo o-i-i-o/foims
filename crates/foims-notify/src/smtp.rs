@@ -23,6 +23,7 @@ use foims_common::crypto::{decrypt_password_async, encrypt_password_async};
 use foims_common::{log_error, log_warn, msg};
 
 use crate::kind::{NotifyKind, NotifyScope};
+use crate::lang::{LocalizedText, NotifyLang};
 
 const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
 const SPAWN_BLOCKING_TIMEOUT: Duration = Duration::from_secs(60);
@@ -92,6 +93,8 @@ mod tests {
         .unwrap_or_else(|e| panic!("平铺结构应可读: {e}"));
         assert!(r.scope.ip_change && r.scope.snmp_event);
         assert!(!r.scope.agent_alert);
+        // 存量 JSON 无 language 字段：按中文回落处理
+        assert_eq!(r.language, NotifyLang::Zh);
     }
 }
 
@@ -288,12 +291,18 @@ pub async fn save_smtp_config_to_db(pool: &PgPool, config: &SmtpConfig) -> Resul
 }
 
 /// 向配置的发件人自发自收一封测试邮件，验证 SMTP 连通性。
+///
+/// 测试邮件收件人即配置的发件人自身，无通知卡片语言设置来源，
+/// 故主题与正文以中英双语并列呈现。
 pub async fn test_smtp_connection(config: &SmtpConfig) -> Result<(), AppError> {
     let email = Message::builder()
         .from(parse_address(&config.from)?.into())
         .to(parse_address(&config.from)?.into())
-        .subject("SMTP连接测试")
-        .body("这是一封SMTP连接测试邮件，无需回复".to_string())
+        .subject("SMTP连接测试 / SMTP Connection Test")
+        .body(
+            "这是一封SMTP连接测试邮件，无需回复。\nThis is an SMTP connection test email, no reply is needed."
+                .to_string(),
+        )
         .map_err(|e| AppError::Internal(msg("server.smtp.build_failed").with("error", e)))?;
 
     let transport = build_smtp_transport(config)?;
@@ -382,6 +391,9 @@ pub async fn send_email_to_users(
 pub struct MailRecipient {
     /// 收件人用户 ID（发送时经 users 表解析邮箱）
     pub user_id: Uuid,
+    /// 通知语言（存量 JSON 无该字段按中文处理）
+    #[serde(default)]
+    pub language: NotifyLang,
     #[serde(flatten)]
     pub scope: NotifyScope,
 }
@@ -421,24 +433,45 @@ pub async fn load_mail_recipients(pool: &PgPool) -> Option<Vec<MailRecipient>> {
     }
 }
 
-/// 按通知类型过滤收件人后发送一封邮件（无有效收件人时静默跳过）。
+/// 按通知类型过滤收件人后按语言分组发送邮件（无有效收件人时静默跳过）。
+///
+/// 收件人按各自设置的 `language` 分为 zh/en 两组（最多两封 BCC 邮件），
+/// 每组文案取该组语言；单组发送失败仅 log_error 留痕并继续另一组，
+/// 任一组失败即向上报错由调用方按业务语境留痕（沿用尽力发送语义）。
 pub(crate) async fn send_notification_email(
     pool: &PgPool,
     kind: NotifyKind,
-    subject: &str,
-    body: &str,
+    title: &LocalizedText,
+    body: &LocalizedText,
 ) -> Result<(), AppError> {
     let Some(recipients) = load_mail_recipients(pool).await else {
         return Ok(());
     };
-    let user_ids: Vec<Uuid> = recipients
-        .into_iter()
-        .filter(|r| r.scope.allows(kind))
-        .map(|r| r.user_id)
-        .collect();
-    if user_ids.is_empty() {
+    let mut subscribed = 0usize;
+    let mut failed = false;
+    for lang in [NotifyLang::Zh, NotifyLang::En] {
+        let user_ids: Vec<Uuid> = recipients
+            .iter()
+            .filter(|r| r.language == lang && r.scope.allows(kind))
+            .map(|r| r.user_id)
+            .collect();
+        if user_ids.is_empty() {
+            continue;
+        }
+        subscribed += user_ids.len();
+        if let Err(e) =
+            send_email_to_users(pool, &user_ids, title.pick(lang), body.pick(lang)).await
+        {
+            log_error!("log.smtp.group_send_failed", lang = lang.label(), error = e);
+            failed = true;
+        }
+    }
+    if subscribed == 0 {
         log_warn!("log.smtp.recipients_empty");
         return Ok(());
     }
-    send_email_to_users(pool, &user_ids, subject, body).await
+    if failed {
+        return Err(AppError::Internal(msg("server.smtp.group_send_failed")));
+    }
+    Ok(())
 }

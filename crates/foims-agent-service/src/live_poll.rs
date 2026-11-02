@@ -542,7 +542,7 @@ async fn connect_live(
     params: &SnmpParamsLegacy,
     timeout: Duration,
 ) -> Result<Client<UdpHandle>, String> {
-    let auth = build_auth(params)?;
+    let auth = build_auth(params).map_err(|m| m.log_string())?;
     Client::builder(endpoint, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
@@ -550,7 +550,12 @@ async fn connect_live(
         .max_oids_per_request(MAX_OIDS_PER_REQUEST)
         .connect()
         .await
-        .map_err(|e| format!("创建SNMP实时会话失败: {}", format_snmp_error(e)))
+        .map_err(|e| {
+            format!(
+                "创建SNMP实时会话失败: {}",
+                format_snmp_error(e).log_string()
+            )
+        })
 }
 
 // ============================ IPMI 实时采集 ============================

@@ -31,6 +31,7 @@ use foims_common::crypto::{decrypt_password_async, encrypt_password_async};
 use foims_common::{log_error, log_info, msg};
 
 use crate::kind::{NotifyKind, NotifyScope};
+use crate::lang::{LocalizedText, NotifyLang};
 
 const WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -55,6 +56,9 @@ pub struct WebhookTarget {
     /// 钉钉加签密钥（仅 dingtalk 渠道有效；非钉钉渠道为空）
     #[serde(default)]
     pub secret: String,
+    /// 通知语言（存量 JSON 无该字段按中文处理）
+    #[serde(default)]
+    pub language: NotifyLang,
     /// 订阅范围（flatten 平铺存储，与邮件收件人同构）
     #[serde(flatten)]
     pub scope: NotifyScope,
@@ -91,6 +95,7 @@ pub struct WebhookTargetUpsert {
     pub channel: WebhookChannel,
     pub url: String,
     pub secret: Option<String>,
+    pub language: NotifyLang,
     pub scope: NotifyScope,
 }
 
@@ -170,6 +175,7 @@ pub async fn save_webhook_targets(
             channel: upsert.channel,
             url: upsert.url.trim().to_string(),
             secret,
+            language: upsert.language,
             scope: upsert.scope,
         });
     }
@@ -314,23 +320,32 @@ fn record_outcome(label: &str, outcome: Result<(), AppError>) {
 
 /// 向全部已保存且订阅了该类型的目标推送业务通知。
 ///
-/// 各目标按自身订阅范围过滤；单目标失败仅记日志不影响其他目标。
-pub async fn send_notification_webhook(pool: &PgPool, kind: NotifyKind, title: &str, body: &str) {
+/// 各目标按自身订阅范围过滤，文案按目标设置的 `language` 取值；
+/// 单目标失败仅记日志不影响其他目标。
+pub async fn send_notification_webhook(
+    pool: &PgPool,
+    kind: NotifyKind,
+    title: &LocalizedText,
+    body: &LocalizedText,
+) {
     let targets = load_webhook_targets(pool).await;
     for target in targets.iter().filter(|t| t.scope.allows(kind)) {
         let label = target_label(target);
+        let title_text = title.pick(target.language);
+        let body_text = body.pick(target.language);
         let outcome = match target.channel {
-            WebhookChannel::Generic => send_generic(&target.url, title, body).await,
+            WebhookChannel::Generic => send_generic(&target.url, title_text, body_text).await,
             WebhookChannel::DingTalk => {
-                send_dingtalk(&target.url, &target.secret, title, body).await
+                send_dingtalk(&target.url, &target.secret, title_text, body_text).await
             }
-            WebhookChannel::Wecom => send_wecom(&target.url, title, body).await,
+            WebhookChannel::Wecom => send_wecom(&target.url, title_text, body_text).await,
         };
         record_outcome(&label, outcome);
     }
 }
 
 /// 向指定目标发送测试消息（复用已保存配置；目标不存在返回校验错误）。
+/// 测试文案按目标设置的 `language` 取值。
 pub async fn test_webhook_target(pool: &PgPool, target_id: &str) -> Result<(), AppError> {
     let targets = load_webhook_targets(pool).await;
     let target = targets
@@ -338,8 +353,17 @@ pub async fn test_webhook_target(pool: &PgPool, target_id: &str) -> Result<(), A
         .find(|t| t.id == target_id)
         .ok_or_else(|| AppError::Validation(msg("server.webhook.target_not_found")))?;
 
-    let title = "FOIMS Webhook 测试";
-    let body = "这是一条 Webhook 连接测试消息，请忽略，无需回复。";
+    let message = LocalizedText {
+        zh: "FOIMS Webhook 测试".to_string(),
+        en: "FOIMS Webhook Test".to_string(),
+    };
+    let detail = LocalizedText {
+        zh: "这是一条 Webhook 连接测试消息，请忽略，无需回复。".to_string(),
+        en: "This is a Webhook connection test message, please ignore it. No reply is needed."
+            .to_string(),
+    };
+    let title = message.pick(target.language);
+    let body = detail.pick(target.language);
     match target.channel {
         WebhookChannel::Generic => send_generic(&target.url, title, body).await,
         WebhookChannel::DingTalk => send_dingtalk(&target.url, &target.secret, title, body).await,
@@ -379,6 +403,8 @@ mod tests {
         assert!(!target.scope.agent_alert);
         assert!(target.scope.ip_change);
         assert!(target.scope.snmp_event, "缺省字段按启用处理");
+        // 存量 JSON 无 language 字段：按中文回落处理
+        assert_eq!(target.language, NotifyLang::Zh);
 
         let encoded = serde_json::to_string(&target).unwrap_or_else(|e| panic!("序列化失败: {e}"));
         let back: WebhookTarget =

@@ -8,15 +8,14 @@ use async_snmp::{Client, VarBind, oid};
 use tracing::debug;
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
-/// walk 单个 OID 并对每个变量调用 `process`：`error_msg` 是建表与迭代两类
-/// 错误的统一前缀；遇 `EndOfMibView` 正常终止，其余异常值跳过，迭代错误冒泡。
+/// walk 单个 OID 并对每个变量调用 `process`：遇 `EndOfMibView` 正常终止，
+/// 其余异常值跳过，迭代错误冒泡。
 async fn snmp_walk<F>(
     client: &Client,
     oid: async_snmp::Oid,
-    error_msg: &str,
     mut process: F,
 ) -> Result<(), SnmpError>
 where
@@ -24,11 +23,10 @@ where
 {
     let mut walk = client
         .walk(oid)
-        .map_err(|e| SnmpError::Message(format!("{}: {}", error_msg, format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result
-            .map_err(|e| SnmpError::Message(format!("{}: {}", error_msg, format_snmp_error(e))))?;
+        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -60,14 +58,14 @@ pub async fn get_lldp_neighbors_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     debug!("开始获取LLDP邻居信息");
 
     let if_name_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2);
     let mut if_name_map: HashMap<String, String> = HashMap::new();
 
-    snmp_walk(&client, if_name_oid, "接口名称表walk失败", |vb| {
+    snmp_walk(&client, if_name_oid, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 11 {
             let if_index = oid_parts[10].to_string();
@@ -87,32 +85,27 @@ pub async fn get_lldp_neighbors_via_snmp(
     let lldp_loc_port_subtype = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 2);
     let mut loc_port_subtype_map: HashMap<String, u8> = HashMap::new();
 
-    snmp_walk(
-        &client,
-        lldp_loc_port_subtype,
-        "LLDP端口子类型表walk失败",
-        |vb| {
-            let oid_parts = vb.oid.arcs();
-            if oid_parts.len() >= 12 {
-                let port_num = oid_parts[11].to_string();
-                let subtype = if let Some(s) = vb.value.as_u32() {
-                    s as u8
-                } else if let Some(bytes) = vb.value.as_bytes() {
-                    if bytes.is_empty() { 0 } else { bytes[0] }
-                } else {
-                    0
-                };
-                loc_port_subtype_map.insert(port_num, subtype);
-            }
-            Ok(())
-        },
-    )
+    snmp_walk(&client, lldp_loc_port_subtype, |vb| {
+        let oid_parts = vb.oid.arcs();
+        if oid_parts.len() >= 12 {
+            let port_num = oid_parts[11].to_string();
+            let subtype = if let Some(s) = vb.value.as_u32() {
+                s as u8
+            } else if let Some(bytes) = vb.value.as_bytes() {
+                if bytes.is_empty() { 0 } else { bytes[0] }
+            } else {
+                0
+            };
+            loc_port_subtype_map.insert(port_num, subtype);
+        }
+        Ok(())
+    })
     .await?;
 
     let lldp_loc_port_id = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 3);
     let mut port_id_map: HashMap<String, String> = HashMap::new();
 
-    snmp_walk(&client, lldp_loc_port_id, "LLDP端口表walk失败", |vb| {
+    snmp_walk(&client, lldp_loc_port_id, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 12 {
             let port_num = oid_parts[11].to_string();
@@ -129,29 +122,24 @@ pub async fn get_lldp_neighbors_via_snmp(
     let lldp_loc_port_desc = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 4);
     let mut port_desc_map: HashMap<String, String> = HashMap::new();
 
-    snmp_walk(
-        &client,
-        lldp_loc_port_desc,
-        "LLDP端口描述表walk失败",
-        |vb| {
-            let oid_parts = vb.oid.arcs();
-            if oid_parts.len() >= 12 {
-                let port_num = oid_parts[11].to_string();
-                if let Some(port_desc) = vb.value.as_str() {
-                    let desc = port_desc.trim();
-                    if !desc.is_empty() && desc != "NULL" {
-                        port_desc_map.insert(port_num, desc.to_string());
-                    }
-                } else if let Some(port_desc) = vb.value.as_bytes() {
-                    let desc = String::from_utf8_lossy(port_desc).trim().to_string();
-                    if !desc.is_empty() && desc != "NULL" {
-                        port_desc_map.insert(port_num, desc);
-                    }
+    snmp_walk(&client, lldp_loc_port_desc, |vb| {
+        let oid_parts = vb.oid.arcs();
+        if oid_parts.len() >= 12 {
+            let port_num = oid_parts[11].to_string();
+            if let Some(port_desc) = vb.value.as_str() {
+                let desc = port_desc.trim();
+                if !desc.is_empty() && desc != "NULL" {
+                    port_desc_map.insert(port_num, desc.to_string());
+                }
+            } else if let Some(port_desc) = vb.value.as_bytes() {
+                let desc = String::from_utf8_lossy(port_desc).trim().to_string();
+                if !desc.is_empty() && desc != "NULL" {
+                    port_desc_map.insert(port_num, desc);
                 }
             }
-            Ok(())
-        },
-    )
+        }
+        Ok(())
+    })
     .await?;
 
     let lldp_rem_table = oid!(1, 0, 8802, 1, 1, 2, 1, 4, 1, 1);
@@ -159,7 +147,7 @@ pub async fn get_lldp_neighbors_via_snmp(
     let mut chassis_subtype_map: HashMap<(String, String), u8> = HashMap::new();
     let mut port_subtype_map: HashMap<(String, String), u8> = HashMap::new();
 
-    snmp_walk(&client, lldp_rem_table, "LLDP邻居表walk失败", |vb| {
+    snmp_walk(&client, lldp_rem_table, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 14 {
             let field_type = oid_parts[10];

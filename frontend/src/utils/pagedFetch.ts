@@ -29,7 +29,7 @@ export interface FetchAllPagesDeps<T> {
   showToast: ShowToastFn;
   /** 不含分页参数的接口路径 */
   path: string;
-  /** 失败提示中的用途描述（中文） */
+  /** 失败日志中的用途描述（仅进 console.error，不上屏） */
   what: string;
 }
 

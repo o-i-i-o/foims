@@ -776,10 +776,10 @@ pub async fn sync_cabinet_positions<P: DbProvider>(
             .execute(&mut *tx)
             .await
             .map_err(|e| {
-                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底（P0001 → 400）
+                // 重叠预检的并发窗口由 trg_check_position_overlap 兜底
+                // （自定义 SQLSTATE P0401 → 400）
                 if let sqlx::Error::Database(ref db_err) = e
-                    && db_err.code().as_deref() == Some("P0001")
-                    && db_err.message().contains("U位范围重叠")
+                    && db_err.code().as_deref() == Some("P0401")
                 {
                     return AppError::Validation(msg("server.position.u_range_overlap"));
                 }

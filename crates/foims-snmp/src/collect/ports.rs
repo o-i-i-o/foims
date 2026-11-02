@@ -10,7 +10,7 @@ use foims_common::log_warn;
 use foims_models::SnmpPort;
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
 /// walk 单弧索引标量表：返回（实例尾弧 → 值）映射。
@@ -160,7 +160,7 @@ pub async fn get_device_ports_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     // IF-MIB 基础表：名称/管理态/运营态/高速率/速率
     let if_descr = walk_index_value_map(

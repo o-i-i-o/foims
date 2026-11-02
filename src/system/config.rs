@@ -1054,6 +1054,8 @@ pub struct WebhookTargetView {
     pub url: String,
     /// 是否已配置钉钉加签密钥（密文不回传，口径同 SMTP has_password）
     pub has_secret: bool,
+    /// 通知语言（存量配置无该字段按中文处理）
+    pub language: foims_notify::NotifyLang,
     pub ip_change: bool,
     pub agent_alert: bool,
     pub snmp_event: bool,
@@ -1089,6 +1091,7 @@ pub async fn get_webhook_config(
                     channel: t.channel,
                     url: t.url,
                     has_secret: !t.secret.is_empty(),
+                    language: t.language,
                     ip_change: t.scope.ip_change,
                     agent_alert: t.scope.agent_alert,
                     snmp_event: t.scope.snmp_event,
@@ -1113,6 +1116,9 @@ pub struct WebhookTargetPayload {
     /// 空 = 保留已存加签密钥（口径同 SMTP 密码留空保持）
     #[validate(length(max = 256, message = "server.webhook.validation.secret_length"))]
     pub secret: String,
+    /// 通知语言（缺省按中文处理）
+    #[serde(default)]
+    pub language: foims_notify::NotifyLang,
     /// 订阅 IP 地址变更通知（含工位设备更换；缺省按启用处理）
     #[serde(default = "notify_scope_default")]
     pub ip_change: bool,
@@ -1180,6 +1186,7 @@ pub async fn update_webhook_config(
             } else {
                 Some(t.secret.clone())
             },
+            language: t.language,
             scope: foims_notify::NotifyScope {
                 ip_change: t.ip_change,
                 agent_alert: t.agent_alert,

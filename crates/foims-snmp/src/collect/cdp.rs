@@ -14,8 +14,8 @@ use foims_common::log_warn;
 use foims_models::{CdpRecord, DeviceCdp, SNMP_EVENT_CDP_ADDED, SNMP_EVENT_CDP_REMOVED};
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error,
-    is_exception_literal, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, is_exception_literal, snmp_target,
+    wrap_snmp_error,
 };
 use crate::events::ObsEvent;
 
@@ -87,7 +87,7 @@ pub async fn get_cdp_neighbors_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     // 本地端口名（ifDescr：1.3.6.1.2.1.2.2.1.2，单弧索引 ifIndex）
     let if_descr = super::ports::walk_index_value_map(

@@ -696,6 +696,11 @@
     vertical-align: middle;
   }
 
+  /* 收件人通知语言下拉：限制宽度避免撑宽表格列 */
+  .recipients-table td select.recipient-lang-select {
+    max-width: 9rem;
+  }
+
   .recipients-table .user-name {
     display: block;
     font-weight: 500;

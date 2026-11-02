@@ -16,7 +16,7 @@ use foims_models::{
     SNMP_EVENT_UNKNOWN_DEVICE,
 };
 use foims_notify::{
-    NotifyKind, active_admin_ids, create_notification, encode_notification_content,
+    LocalizedText, NotifyKind, active_admin_ids, create_notification, encode_notification_content,
 };
 
 use crate::core::truncate_to_column_width;
@@ -302,7 +302,8 @@ async fn notify_event(pool: &PgPool, device_name: &str, ev: &ObsEvent, admin_ids
     }
 }
 
-/// 未知设备接入通知文案，邮件与 Webhook 渠道共用。
+/// 未知设备接入通知双语文案，邮件与 Webhook 渠道共用，渠道按接收方设置的
+/// 语言取值。
 ///
 /// MAC 为物理实体，未知判定基于 MAC 未登记于任何设备网口；`ip`/`interface`/
 /// `device_name` 仅为发现位置（在哪个设备端口、哪个 IP 上学到）。
@@ -312,12 +313,20 @@ fn unknown_device_message(
     vlan_id: Option<i32>,
     ip_address: &str,
     mac_address: &str,
-) -> (String, String) {
+) -> (LocalizedText, LocalizedText) {
     let vlan_text = vlan_id.map_or_else(|| "-".to_string(), |v| v.to_string());
-    let title = format!("未知设备接入通知 - {device_name}/{interface}");
-    let body = format!(
-        "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的设备，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nMAC地址：{mac_address}\n发现位 IP：{ip_address}\n\n请确认该设备是否授权接入。\n\n此致，\nFOIMS系统"
-    );
+    let title = LocalizedText {
+        zh: format!("未知设备接入通知 - {device_name}/{interface}"),
+        en: format!("Unknown Device Access Notice - {device_name}/{interface}"),
+    };
+    let body = LocalizedText {
+        zh: format!(
+            "尊敬的管理员：\n\n在设备 {device_name} 的端口 {interface} 上学到一个未登记的设备，详情如下：\n来源设备：{device_name}\n端口：{interface}\nVLAN：{vlan_text}\nMAC地址：{mac_address}\n发现位 IP：{ip_address}\n\n请确认该设备是否授权接入。\n\n此致，\nFOIMS系统"
+        ),
+        en: format!(
+            "Dear Administrator,\n\nAn unregistered device was learned on port {interface} of device {device_name}. Details:\nSource device: {device_name}\nPort: {interface}\nVLAN: {vlan_text}\nMAC address: {mac_address}\nDiscovered IP: {ip_address}\n\nPlease confirm whether this device is authorized for access.\n\nBest regards,\nFOIMS System"
+        ),
+    };
     (title, body)
 }
 

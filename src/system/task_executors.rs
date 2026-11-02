@@ -51,7 +51,7 @@ impl TaskExecutor for BackupTaskExecutor {
         "backup"
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let db_config = ctx.db_config.clone();
 
         let result = tokio::task::spawn_blocking(move || {
@@ -72,7 +72,7 @@ impl TaskExecutor for BackupTaskExecutor {
             // 备份路径与体积写入运维日志，任务结果仅保留消息 key
             Ok(Ok((path, size_mb))) => {
                 log_info!("log.task.backup_completed", path = path, size_mb = size_mb);
-                Ok("server.task.backup_completed".to_string())
+                Ok(msg("server.task.backup_completed"))
             }
             Ok(Err(e)) => Err(SchedulerError::Execution(data_error_message(e))),
             Err(e) => Err(SchedulerError::Execution(
@@ -95,14 +95,14 @@ impl TaskExecutor for TokenCleanupTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let count = foims_auth::jwt::cleanup_expired_revoked_tokens(&ctx.pool)
             .await
             .map_err(|e| {
                 SchedulerError::Execution(msg("server.task.token_cleanup_failed").with("error", e))
             })?;
         log_debug!("log.task.token_cleanup_completed", count = count);
-        Ok("server.task.token_cleanup_completed".to_string())
+        Ok(msg("server.task.token_cleanup_completed"))
     }
 }
 
@@ -114,7 +114,7 @@ impl TaskExecutor for LogCleanupTaskExecutor {
         "log_cleanup"
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let days = parse_days_config(&ctx.config)?;
 
         let deleted = foims_data_management::clear_logs_core(&ctx.pool, days, "all")
@@ -126,7 +126,7 @@ impl TaskExecutor for LogCleanupTaskExecutor {
             count = deleted,
             days = days
         );
-        Ok("server.task.log_cleanup_completed".to_string())
+        Ok(msg("server.task.log_cleanup_completed"))
     }
 }
 
@@ -138,7 +138,7 @@ impl TaskExecutor for MacSyncTaskExecutor {
         "mac_sync"
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         // 设备集合：任务自身 config 持久化的 device_ids 数组（1..=100），
         // 依次同步、后设备观测覆盖先设备写入；子网缺省同步全部子网
         let device_ids: Vec<Uuid> = ctx
@@ -169,7 +169,7 @@ impl TaskExecutor for MacSyncTaskExecutor {
                 .await
                 .map_err(|e| SchedulerError::Execution(foims_common::AppMessage::new(e)))?;
         }
-        Ok("server.task.mac_sync_completed".to_string())
+        Ok(msg("server.task.mac_sync_completed"))
     }
 }
 
@@ -188,7 +188,7 @@ impl TaskExecutor for IpStatusSyncTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let days = parse_days_config(&ctx.config)?;
 
         let stale = foims_resource::ip::sync_ip_status_by_staleness(&ctx.pool, days)
@@ -202,7 +202,7 @@ impl TaskExecutor for IpStatusSyncTaskExecutor {
             stale = stale,
             days = days
         );
-        Ok("server.task.ip_status_sync_completed".to_string())
+        Ok(msg("server.task.ip_status_sync_completed"))
     }
 }
 
@@ -221,7 +221,7 @@ impl TaskExecutor for PasswordExpirySyncTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let count = foims_auth::password_policy::disable_expired(&ctx.pool)
             .await
             .map_err(|e| {
@@ -230,7 +230,7 @@ impl TaskExecutor for PasswordExpirySyncTaskExecutor {
                 )
             })?;
         log_debug!("log.task.password_expiry_sync_completed", count = count);
-        Ok("server.task.password_expiry_sync_completed".to_string())
+        Ok(msg("server.task.password_expiry_sync_completed"))
     }
 }
 

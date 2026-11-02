@@ -395,7 +395,7 @@ async fn fetch(
                 failed += 1;
                 tracing::debug!(
                     "SNMP 实时分块 GET 失败（{len} 个 OID）: {}",
-                    crate::core::format_snmp_error(e)
+                    crate::core::format_snmp_error(e).log_string()
                 );
             }
         }

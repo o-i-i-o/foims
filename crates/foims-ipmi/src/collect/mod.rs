@@ -7,6 +7,8 @@
 use ruipmi::{IpmiClient, SdrRecord, calc_sensor_reading, parse_sdr_header, parse_sdr_record};
 use serde::Serialize;
 
+use foims_common::msg;
+
 use crate::core::{DeviceIdInfo, IpmiErrorExt, read_device_id, take_response};
 
 /// Storage netfn（0x0A）与关键命令码（IPMI 规范 §33/§42）。
@@ -251,7 +253,7 @@ async fn read_sensor_value(client: &mut IpmiClient, sensor_number: u8) -> Result
     let data = take_response(&resp)?;
     data.first()
         .copied()
-        .ok_or_else(|| crate::core::IpmiErrorExt::Message("传感器读数响应为空".to_string()))
+        .ok_or_else(|| IpmiErrorExt::Message(msg("server.ipmi.error.sensor_empty_response")))
 }
 
 #[cfg(test)]

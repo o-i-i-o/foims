@@ -27,6 +27,7 @@ import type { UpdateSmtpConfigRequest } from "../../types/api/generated/UpdateSm
 import type { UpdateWebhookConfigRequest } from "../../types/api/generated/UpdateWebhookConfigRequest";
 import type { NotificationRecipients } from "../../types/api/generated/NotificationRecipients";
 import type { MailRecipient } from "../../types/api/generated/MailRecipient";
+import type { NotifyLang } from "../../types/api/generated/NotifyLang";
 import type { User } from "../../types/api/generated/User";
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
@@ -160,6 +161,7 @@ watch(
       secret: "",
       hasSecret: Boolean(target.has_secret),
       saved: true,
+      language: target.language,
       ipChange: target.ip_change !== false,
       agentAlert: target.agent_alert !== false,
       snmpEvent: target.snmp_event !== false
@@ -206,6 +208,7 @@ function handleTargetConfirm(result: WebhookTargetFormResult): void {
     // 密钥留空表示保留已存密钥（与 SMTP 密码同口径）
     secret: result.secret !== "" ? result.secret : draft.secret,
     hasSecret: draft.hasSecret || result.secret !== "",
+    language: result.language,
     ipChange: result.ipChange,
     agentAlert: result.agentAlert,
     snmpEvent: result.snmpEvent
@@ -247,6 +250,7 @@ async function saveWebhookConfig(): Promise<void> {
         url: target.url,
         // 加签密钥留空表示保留已存密钥（与 SMTP 密码同口径）
         secret: target.secret,
+        language: target.language,
         ip_change: target.ipChange,
         agent_alert: target.agentAlert,
         snmp_event: target.snmpEvent
@@ -328,11 +332,12 @@ const notifyUsers = computed<User[]>(() => {
   return Array.isArray(data?.items) ? data.items : [];
 });
 
-/** 用户的订阅范围：未出现在收件人列表中视为全不订阅（不接收） */
+/** 用户的订阅范围：未出现在收件人列表中视为全不订阅（不接收），语言按中文起底 */
 function scopeOf(userId: string): MailRecipient {
   return (
     recipients.value.find((r) => r.user_id === userId) ?? {
       user_id: userId,
+      language: "zh",
       ip_change: false,
       agent_alert: false,
       snmp_event: false
@@ -340,19 +345,27 @@ function scopeOf(userId: string): MailRecipient {
   );
 }
 
-function setScope(userId: string, field: ScopeField, value: boolean): void {
+/** 更新用户收件人行（不存在时以「全不订阅」行起底后套用补丁） */
+function updateRecipient(userId: string, patch: Partial<MailRecipient>): void {
   const list = recipients.value.slice();
   const existing = list.find((r) => r.user_id === userId);
   const next: MailRecipient = existing
-    ? { ...existing }
-    : { user_id: userId, ip_change: false, agent_alert: false, snmp_event: false };
-  next[field] = value;
+    ? { ...existing, ...patch }
+    : { ...scopeOf(userId), ...patch };
   if (existing) {
     list[list.indexOf(existing)] = next;
   } else {
     list.push(next);
   }
   recipients.value = list;
+}
+
+function setScope(userId: string, field: ScopeField, value: boolean): void {
+  updateRecipient(userId, { [field]: value });
+}
+
+function setLanguage(userId: string, value: NotifyLang): void {
+  updateRecipient(userId, { language: value });
 }
 
 const savingRecipients = ref(false);
@@ -455,6 +468,7 @@ async function saveRecipients(): Promise<void> {
           <thead>
             <tr>
               <th>{{ t("notification.col_user") }}</th>
+              <th>{{ t("notification.language_label") }}</th>
               <th>{{ t("notification.type_ip_change") }}</th>
               <th>{{ t("notification.type_agent_alert") }}</th>
               <th>{{ t("notification.type_snmp_event") }}</th>
@@ -462,12 +476,24 @@ async function saveRecipients(): Promise<void> {
           </thead>
           <tbody>
             <tr v-if="notifyUsers.length === 0">
-              <td colspan="4">{{ t("common.no_data") }}</td>
+              <td colspan="5">{{ t("common.no_data") }}</td>
             </tr>
             <tr v-for="user in notifyUsers" v-else :key="user.id">
               <td>
                 <span class="user-name">{{ user.username }}</span>
                 <span class="user-email">{{ user.email }}</span>
+              </td>
+              <td>
+                <select
+                  :value="scopeOf(user.id).language"
+                  class="recipient-lang-select"
+                  :disabled="readonly"
+                  :aria-label="`${user.username} ${t('notification.language_label')}`"
+                  @change="setLanguage(user.id, ($event.target as HTMLSelectElement).value as NotifyLang)"
+                >
+                  <option value="zh">{{ t("notification.lang_zh") }}</option>
+                  <option value="en">{{ t("notification.lang_en") }}</option>
+                </select>
               </td>
               <td>
                 <input
@@ -523,13 +549,14 @@ async function saveRecipients(): Promise<void> {
             <tr>
               <th>{{ t("webhook.target_name") }}</th>
               <th>{{ t("webhook.channel") }}</th>
+              <th>{{ t("notification.language_label") }}</th>
               <th>{{ t("webhook.scope_label") }}</th>
               <th>{{ t("common.actions") }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="webhookTargets.length === 0">
-              <td colspan="4">{{ t("webhook.empty") }}</td>
+              <td colspan="5">{{ t("webhook.empty") }}</td>
             </tr>
             <tr v-for="(target, index) in webhookTargets" v-else :key="target.id">
               <td>
@@ -537,6 +564,7 @@ async function saveRecipients(): Promise<void> {
                 <span v-else class="cell-muted">—</span>
               </td>
               <td>{{ t(`webhook.channel_${target.channel}`) }}</td>
+              <td>{{ t(`notification.lang_${target.language}`) }}</td>
               <td>
                 <span v-if="target.ipChange || target.agentAlert || target.snmpEvent" class="webhook-scope-text">
                   {{ scopeText(target) }}

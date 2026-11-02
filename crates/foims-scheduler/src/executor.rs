@@ -3,7 +3,7 @@
 use crate::error::{SchedulerError, SchedulerResult};
 use crate::models::TaskContext;
 use async_trait::async_trait;
-use foims_common::msg;
+use foims_common::{AppMessage, msg};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[async_trait]
 pub trait TaskExecutor: Send + Sync {
     fn task_type(&self) -> &str;
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String>;
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage>;
 
     /// 例行成功日志（任务开始/完成）是否降为 debug 级别。
     /// 高频维护型任务应返回 true，避免例行成功日志刷屏；失败日志仍为 error，不受影响。
@@ -43,7 +43,7 @@ impl TaskRegistry {
             .insert(executor.task_type().to_string(), executor);
     }
 
-    pub async fn execute(&self, task_type: &str, ctx: &TaskContext) -> SchedulerResult<String> {
+    pub async fn execute(&self, task_type: &str, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         match self.executors.get(task_type) {
             Some(executor) => executor.execute(ctx).await,
             None => Err(SchedulerError::TaskNotFound(
@@ -80,8 +80,8 @@ mod tests {
             self.task_type
         }
 
-        async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
-            Ok(format!("server.task.echo:{}", ctx.config))
+        async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
+            Ok(AppMessage::new(format!("server.task.echo:{}", ctx.config)))
         }
 
         fn debug_routine_logs(&self) -> bool {
@@ -126,7 +126,7 @@ mod tests {
             panic!("已注册任务应执行成功");
         };
         assert!(
-            result.starts_with("server.task.echo:"),
+            result.key().starts_with("server.task.echo:"),
             "执行结果: {result}"
         );
     }
@@ -162,9 +162,9 @@ mod tests {
                 "count"
             }
 
-            async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+            async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
                 CALLS.fetch_add(1, Ordering::SeqCst);
-                Ok(format!("{}:{}", self.tag, ctx.config))
+                Ok(AppMessage::new(format!("{}:{}", self.tag, ctx.config)))
             }
         }
 
@@ -177,7 +177,7 @@ mod tests {
             .await
             .unwrap_or_else(|e| panic!("执行失败: {e}"));
         assert!(
-            result.starts_with("second:"),
+            result.key().starts_with("second:"),
             "后注册者应覆盖前者: {result}"
         );
         assert_eq!(CALLS.fetch_add(0, Ordering::SeqCst), 1);

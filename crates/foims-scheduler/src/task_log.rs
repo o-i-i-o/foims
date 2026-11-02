@@ -1,7 +1,7 @@
 //! 任务执行日志记录。
 
 use chrono::Utc;
-use foims_common::{log_debug, log_error, log_warn, msg};
+use foims_common::{AppMessage, log_debug, log_error, log_warn, msg};
 use uuid::Uuid;
 
 use crate::cron::calculate_next_run;
@@ -9,19 +9,30 @@ use crate::error::{SchedulerError, SchedulerResult};
 use crate::models::ScheduledTask;
 use crate::scheduler::error_message;
 
+/// AppMessage → 任务日志 details 载荷：`{"key", "params"?}`。
+///
+/// 与通知 content 的 key+params 结构对齐：前端按 key 翻译、params 插值；
+/// 无参数时省略 params 字段。
+pub fn message_payload(m: &AppMessage) -> serde_json::Value {
+    match m.params_map() {
+        Some(params) => serde_json::json!({ "key": m.key(), "params": params }),
+        None => serde_json::json!({ "key": m.key() }),
+    }
+}
+
 /// 记录任务执行日志
 ///
 /// `started_at` 为执行器开始执行的真实时刻（调用方在执行前取
 /// `Utc::now()`），结束时刻与耗时在本函数内按当前时间计算，
 /// 保证审计数据（start_time/end_time/duration）真实反映执行区间。
 ///
-/// `details` 为 i18n key（成功时为执行器返回的结果 key，失败时为
-/// `key(params)` 形式的诊断串），由前端负责翻译展示。
+/// `details` 为 [`AppMessage`]（成功时为执行器返回的结果消息，失败时为
+/// 错误消息），以 key+params 结构落库，由前端负责翻译展示。
 pub async fn log_task_execution(
     pool: &sqlx::PgPool,
     task_name: &str,
     status: &str,
-    details: &str,
+    details: &AppMessage,
     started_at: chrono::DateTime<Utc>,
 ) {
     let end_time = Utc::now();
@@ -37,7 +48,9 @@ pub async fn log_task_execution(
     .bind(Uuid::new_v4())
     .bind(task_name)
     .bind(status)
-    .bind(sqlx::types::Json(serde_json::json!({ "message": details })))
+    .bind(sqlx::types::Json(
+        serde_json::json!({ "message": message_payload(details) }),
+    ))
     .bind(started_at)
     .bind(end_time)
     .bind(duration)

@@ -12,7 +12,7 @@ use foims_scheduler::{SchedulerError, SchedulerResult, TaskContext, TaskExecutor
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use foims_common::{log_debug, msg};
+use foims_common::{AppMessage, log_debug, msg};
 
 use crate::ipmi_poll;
 use crate::metrics_aggregator::{MetricsAggregator, round4};
@@ -96,7 +96,7 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let interval_secs = config_u64(&ctx.config, "interval_secs", self.default_interval_secs);
         let factor = config_u64(&ctx.config, "factor", self.default_factor);
         let seconds = interval_secs.saturating_mul(factor);
@@ -119,7 +119,7 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
             "log.task.agent_offline_completed",
             count = result.rows_affected()
         );
-        Ok("server.task.agent_offline_completed".to_string())
+        Ok(msg("server.task.agent_offline_completed").with("count", result.rows_affected()))
     }
 }
 
@@ -139,7 +139,7 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         // 三层保留期：原始层（秒级，体积最大）默认 3 天、5min 桶层默认 30 天、
         // 1h 桶层（长期趋势）默认 365 天，均 clamp 1-3650
         let layers: [(&str, i64, i32); 3] = [
@@ -193,7 +193,7 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
             count = snmp_result.rows_affected()
         );
 
-        Ok("server.task.agent_history_cleanup_completed".to_string())
+        Ok(msg("server.task.agent_history_cleanup_completed").with("count", total))
     }
 }
 
@@ -223,7 +223,7 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let interval_secs = config_u64(
             &ctx.config,
             "interval_secs",
@@ -231,7 +231,9 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
         );
         let (ok, fail) = snmp_poll::poll_all(&ctx.pool, interval_secs, self.metrics.clone()).await;
         log_debug!("log.task.agent_snmp_poll_completed", ok = ok, fail = fail);
-        Ok("server.task.agent_snmp_poll_completed".to_string())
+        Ok(msg("server.task.agent_snmp_poll_completed")
+            .with("ok", ok)
+            .with("fail", fail))
     }
 }
 
@@ -262,7 +264,7 @@ impl TaskExecutor for AgentIpmiPollTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         let interval_secs = config_u64(
             &ctx.config,
             "interval_secs",
@@ -270,7 +272,9 @@ impl TaskExecutor for AgentIpmiPollTaskExecutor {
         );
         let (ok, fail) = ipmi_poll::poll_all(&ctx.pool, interval_secs, self.metrics.clone()).await;
         log_debug!("log.task.agent_ipmi_poll_completed", ok = ok, fail = fail);
-        Ok("server.task.agent_ipmi_poll_completed".to_string())
+        Ok(msg("server.task.agent_ipmi_poll_completed")
+            .with("ok", ok)
+            .with("fail", fail))
     }
 }
 
@@ -292,7 +296,7 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
         true
     }
 
-    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<String> {
+    async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
         // 第一步：原始层→5min 桶补聚合。仅聚合「5min 层整桶缺失」的桶（NOT
         // EXISTS 防与已有半截桶混口径），且桶窗结束已超过 flush 滞留期
         //（≤ NOW()-15min）防与聚合器在途桶竞争——与聚合器落库同为
@@ -427,7 +431,9 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
             count = pending_count,
             healed = healed
         );
-        Ok("server.task.agent_metrics_rollup_completed".to_string())
+        Ok(msg("server.task.agent_metrics_rollup_completed")
+            .with("count", pending_count)
+            .with("healed", healed))
     }
 }
 

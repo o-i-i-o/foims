@@ -155,7 +155,7 @@ pub async fn probe(client: &Client<UdpHandle>) -> Result<DeviceProfile, ProbeErr
     let response = client
         .get_many(&[sys_object_id(), sys_descr()])
         .await
-        .map_err(|e| ProbeError::SystemGroup(format_snmp_error(e)))?;
+        .map_err(|e| ProbeError::SystemGroup(format_snmp_error(e).log_string()))?;
     let object_id = response
         .varbinds
         .iter()

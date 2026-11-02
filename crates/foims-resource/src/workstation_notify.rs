@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use foims_common::{log_error, log_info, log_warn};
 use foims_notify::{
-    NotifyKind, active_admin_ids, create_notification, encode_notification_content,
+    LocalizedText, NotifyKind, active_admin_ids, create_notification, encode_notification_content,
 };
 
 /// 解析工位名（站内通知与邮件文案用）；查询失败/缺行降级为 UUID 字符串。
@@ -29,7 +29,8 @@ async fn resolve_workstation_name(pool: &sqlx::PgPool, workstation_id: &Uuid) ->
     }
 }
 
-/// IP 地址变更通知文案（标题, 正文），邮件与 Webhook 渠道共用。
+/// IP 地址变更通知双语文案（标题, 正文），邮件与 Webhook 渠道共用，
+/// 渠道按接收方设置的语言取值。
 ///
 /// MAC 为物理实体、IP 为虚拟实体：本通知表达“设备（{mac}）从登记 IP
 /// 移动到了新的观测 IP”，`source_device` 为拉取到该观测的来源设备名。
@@ -39,15 +40,24 @@ fn ip_change_message(
     mac_address: &str,
     registered_ip: &str,
     observed_ip: &str,
-) -> (String, String) {
-    let title = format!("IP地址变更通知 - 工位: {workstation_name}");
-    let body = format!(
-        "尊敬的管理员：\n\n工位 {workstation_name} 的设备 IP 地址发生变更，详情如下：\n工位名称：{workstation_name}\n设备MAC：{mac_address}\n登记 IP：{registered_ip}\n观测 IP：{observed_ip}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
-    );
+) -> (LocalizedText, LocalizedText) {
+    let title = LocalizedText {
+        zh: format!("IP地址变更通知 - 工位: {workstation_name}"),
+        en: format!("IP Address Change Notice - Workstation: {workstation_name}"),
+    };
+    let body = LocalizedText {
+        zh: format!(
+            "尊敬的管理员：\n\n工位 {workstation_name} 的设备 IP 地址发生变更，详情如下：\n工位名称：{workstation_name}\n设备MAC：{mac_address}\n登记 IP：{registered_ip}\n观测 IP：{observed_ip}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+        ),
+        en: format!(
+            "Dear Administrator,\n\nThe IP address of the device on workstation {workstation_name} has changed. Details:\nWorkstation: {workstation_name}\nDevice MAC: {mac_address}\nRegistered IP: {registered_ip}\nObserved IP: {observed_ip}\nSource device: {source_device}\n\nPlease confirm whether this change is authorized.\n\nBest regards,\nFOIMS System"
+        ),
+    };
     (title, body)
 }
 
-/// 工位 IP 上设备更换通知文案（登记 IP 不变、学到新 MAC），邮件与 Webhook 渠道共用。
+/// 工位 IP 上设备更换通知双语文案（登记 IP 不变、学到新 MAC），邮件与
+/// Webhook 渠道共用，渠道按接收方设置的语言取值。
 ///
 /// 与 IP 变更通知同属“MAC/IP 对应关系异动”类，受 ip_change 开关门控；
 /// `source_device` 为拉取到该观测的来源设备名。
@@ -57,11 +67,19 @@ fn device_swap_message(
     ip_address: &str,
     old_mac: &str,
     new_mac: &str,
-) -> (String, String) {
-    let title = format!("工位设备更换通知 - 工位: {workstation_name}");
-    let body = format!(
-        "尊敬的管理员：\n\n工位 {workstation_name} 的 IP {ip_address} 上设备更换，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
-    );
+) -> (LocalizedText, LocalizedText) {
+    let title = LocalizedText {
+        zh: format!("工位设备更换通知 - 工位: {workstation_name}"),
+        en: format!("Workstation Device Swap Notice - Workstation: {workstation_name}"),
+    };
+    let body = LocalizedText {
+        zh: format!(
+            "尊敬的管理员：\n\n工位 {workstation_name} 的 IP {ip_address} 上设备更换，详情如下：\n工位名称：{workstation_name}\nIP地址：{ip_address}\n旧MAC地址：{old_mac}\n新MAC地址：{new_mac}\n数据来源设备：{source_device}\n\n请确认此变更是否为授权操作。\n\n此致，\nFOIMS系统"
+        ),
+        en: format!(
+            "Dear Administrator,\n\nThe device on IP {ip_address} of workstation {workstation_name} has been swapped. Details:\nWorkstation: {workstation_name}\nIP address: {ip_address}\nOld MAC address: {old_mac}\nNew MAC address: {new_mac}\nSource device: {source_device}\n\nPlease confirm whether this change is authorized.\n\nBest regards,\nFOIMS System"
+        ),
+    };
     (title, body)
 }
 

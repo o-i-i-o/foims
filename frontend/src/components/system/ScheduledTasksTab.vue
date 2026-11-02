@@ -12,9 +12,10 @@ import {
   getScheduledTask,
   listScheduledTasks,
   runScheduledTask,
-  toggleScheduledTask
+  toggleScheduledTask,
+  type TaskMessagePayload
 } from "../../api/scheduledTasks";
-import { formatDateTime } from "../../utils/formatter";
+import { formatDateTime, translateServerKey } from "../../utils/formatter";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import { onThSort, sortClass, type SortableTable } from "../../composables/usePagedList";
@@ -106,9 +107,9 @@ async function doRun(task: ScheduledTask): Promise<void> {
     if (result.success) {
       const runResult = result.data?.result;
       if (runResult?.ok) {
-        showToast(`${t("scheduled_tasks.run_success")}: ${runResult.ok}`, "success");
+        showToast(`${t("scheduled_tasks.run_success")}: ${translateTaskMessage(runResult.ok)}`, "success");
       } else if (runResult?.err) {
-        showToast(`${t("scheduled_tasks.run_failed")}: ${runResult.err}`, "error");
+        showToast(`${t("scheduled_tasks.run_failed")}: ${translateTaskMessage(runResult.err)}`, "error");
       } else {
         showToast(t("scheduled_tasks.run_success"), "success");
       }
@@ -119,6 +120,29 @@ async function doRun(task: ScheduledTask): Promise<void> {
   } finally {
     runningId.value = null;
   }
+}
+
+// 任务结果消息翻译：新格式 {"key","params"?} 按 key+params 翻译；
+// 防御性兜底：历史/异常形态的纯字符串经 translateServerKey 处理
+function translateTaskMessage(payload: TaskMessagePayload | string): string {
+  if (typeof payload === "string") {
+    return translateServerKey(payload);
+  }
+  return t(payload.key, payload.params ?? {});
+}
+
+// last_result 存执行状态（success/failed）；历史残留 key 值经 translateServerKey 兜底
+function lastResultText(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  if (value === "success") {
+    return t("common.success");
+  }
+  if (value === "failed") {
+    return t("common.failed");
+  }
+  return translateServerKey(value);
 }
 
 // 启停切换：处理期间防抖，连点会在请求返回前再次切换，最终状态被切回原样
@@ -223,7 +247,7 @@ function openCreate(): void {
               </span>
             </td>
             <td class="col-center">{{ formatDateTime(task.last_run_at) }}</td>
-            <td class="col-center">{{ task.last_result || "-" }}</td>
+            <td class="col-center">{{ lastResultText(task.last_result) }}</td>
             <td v-if="!readonly" class="col-center">
               <button
                 type="button"

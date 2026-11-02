@@ -1036,6 +1036,9 @@
   "notification": {
     "settings": "邮件通知",
     "col_user": "用户",
+    "language_label": "通知语言",
+    "lang_zh": "中文",
+    "lang_en": "English",
     "type_ip_change": "IP地址变更",
     "type_agent_alert": "主机告警",
     "type_snmp_event": "SNMP 观测事件",
@@ -2122,7 +2125,6 @@
       "organizational_unit_length": "组织单位（OU）长度不能超过 64 字符",
       "state_length": "州/省长度不能超过 64 字符",
       "locality_length": "城市长度不能超过 64 字符",
-      "purpose_invalid": "无效的证书用途：{{purpose}}（支持 nginx / agent）",
       "apply_not_applicable": "该证书用途不是站点 HTTPS（nginx），不支持应用到 nginx 配置",
       "delete_system_managed": "该证书为系统物料（agent mTLS，系统自动签发维护），禁止删除"
     },
@@ -2347,9 +2349,6 @@
       },
       "disabled_ban_rejected": "fail2ban 未启用，手动封禁不会生效，请先启用"
     },
-    "data-management": {
-      "field_invalid": "表 {{table}} 第 {{row}} 行的 {{column}} 值无效（{{value}}）: {{reason}}"
-    },
     "init": {
       "admin_create_failed": "创建管理员用户失败",
       "completed": "系统初始化成功",
@@ -2486,8 +2485,6 @@
       "cleared": "成功清理 {{count}} 条日志记录",
       "days_invalid": "保留天数不能为负数",
       "days_required": "必须显式指定保留天数（0 表示删除全部）",
-      "invalid_resource_id": "resource_id格式无效: {{value}}",
-      "invalid_user_id": "user_id格式无效: {{value}}",
       "login_retrieved": "登录日志获取成功",
       "operation_retrieved": "操作日志获取成功",
       "stats_retrieved": "日志统计获取成功",
@@ -2741,11 +2738,7 @@
       "not_registered": "未注册服务：系统服务目录中未找到 {{unit}}",
       "op_failed": "服务操作失败：{{unit}} {{op}}：{{detail}}",
       "systemctl_missing": "系统未安装 systemctl，无法管理系统服务",
-      "status_retrieved": "服务状态获取成功",
-      "op_success": "服务操作已执行：{{unit}} {{op}}",
-      "op_deferred": "服务操作命令已发送，后台执行中：{{unit}} {{op}}",
-      "unknown_service": "未知的服务：{{service}}",
-      "unknown_op": "不支持的服务操作：{{op}}"
+      "status_retrieved": "服务状态获取成功"
     },
     "smtp": {
       "build_failed": "邮件构建失败",
@@ -2753,6 +2746,7 @@
       "config_updated": "SMTP配置更新成功",
       "connect_failed": "邮件服务连接失败",
       "email_sent": "邮件发送成功",
+      "group_send_failed": "按语言分组的通知邮件存在发送失败",
       "invalid_address": "邮箱地址无效: {{address}}",
       "not_configured": "SMTP配置未设置",
       "not_configured_password": "SMTP配置未设置，请填写密码",
@@ -2785,13 +2779,11 @@
       "test_success": "Webhook测试消息发送成功",
       "url_required": "Webhook URL 未设置",
       "validation": {
-        "id_duplicated": "Webhook 目标 ID 重复: {{id}}",
         "id_length": "目标 ID 长度必须在1到64个字符之间",
         "name_length": "目标名称长度不能超过100个字符",
         "secret_length": "钉钉加签密钥长度不能超过256个字符",
         "targets_length": "Webhook 目标数量不能超过20条",
-        "url_length": "Webhook URL 长度不能超过2048个字符",
-        "url_scheme": "{{field}} 必须为 http:// 或 https:// 地址"
+        "url_length": "Webhook URL 长度不能超过2048个字符"
       }
     },
     "system": {
@@ -2844,7 +2836,6 @@
       "logs_retrieved": "获取任务日志成功",
       "mac_sync_completed": "MAC同步成功",
       "mac_sync_missing_config": "MAC同步任务需要配置设备列表device_ids（子网可选，缺省同步全部子网）",
-      "mac_sync_invalid_config": "MAC同步任务配置无效: {{error}}",
       "next_run_calc_task_failed": "计算下次执行时间任务失败",
       "next_run_update_failed": "更新下次执行时间失败",
       "not_found": "定时任务不存在",
@@ -2868,10 +2859,12 @@
       "agent_offline_failed": "Agent 离线判定失败: {{error}}",
       "agent_snmp_poll_completed": "SNMP 设备轮询完成：成功 {{ok}} 台，失败 {{fail}} 台",
       "agent_snmp_poll_failed": "SNMP 设备轮询失败: {{error}}",
+      "agent_ipmi_poll_completed": "IPMI 设备轮询完成：成功 {{ok}} 台，失败 {{fail}} 台",
       "agent_history_cleanup_completed": "Agent 历史指标清理完成：删除 {{count}} 条过期记录",
       "agent_history_cleanup_failed": "Agent 历史指标清理失败: {{error}}",
+      "agent_metrics_rollup_completed": "主机指标滚降完成：滚降 {{count}} 个小时桶，补聚合 {{healed}} 个5分钟桶",
+      "agent_metrics_rollup_failed": "主机指标滚降失败: {{error}}",
       "type_unknown": "未知的任务类型: {{task_type}}",
-      "type_unsupported": "不支持的任务类型: {{task_type}}（允许: {{allowed}}）",
       "system_readonly": "系统内置任务由服务启动时按代码与配置生成，不支持修改、删除或启停",
       "updated": "更新定时任务成功",
       "validation": {
@@ -2979,7 +2972,7 @@
         "password_length": "密码长度不合法",
         "base_dn_length": "Base DN不能为空且长度不超过255",
         "filter_length": "用户过滤器长度不合法",
-        "filter_placeholder": "用户过滤器必须包含 %s 或 {username} 占位符"
+        "filter_placeholder": "用户过滤器必须包含 %s 或 {'{'}username{'}'} 占位符"
       }
     },
     "sso": {
@@ -3032,7 +3025,18 @@
       "csv_parse_failed": "CSV 解析失败",
       "duplicate_key": "业务键重复",
       "duplicate_table": "同一数据表出现多次",
-      "field_invalid": "字段值非法",
+      "credential_too_long": "表 {{table}} 第 {{row}} 行字段 {{column}}：凭据加密后超过 {{max_len}} 列宽上限，请缩短明文长度",
+      "field_invalid_array": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的数组（形如 {'{'}a,b{'}'}）",
+      "field_invalid_bool": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」应为 true 或 false",
+      "field_invalid_cidr": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的网段（如 10.0.0.0/24）",
+      "field_invalid_integer": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的整数",
+      "field_invalid_ip": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的 IP 地址",
+      "field_invalid_json": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的 JSON",
+      "field_invalid_json_detail": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的 JSON: {{detail}}",
+      "field_invalid_number": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的数值",
+      "field_invalid_smallint": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是有效的小整数",
+      "field_not_allowed": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」取值必须是 {{allowed}}",
+      "field_value_too_long": "表 {{table}} 第 {{row}} 行字段 {{column}}：值超过 {{max_len}} 字符上限",
       "file_read_failed": "读取上传文件失败",
       "file_too_large": "文件大小超出限制",
       "header_mismatch": "表头与模板不一致",
@@ -3048,16 +3052,63 @@
       "ref_not_found": "引用的记录不存在",
       "required_field_missing": "必填字段缺失",
       "spec_missing": "导入规格缺失",
+      "template_unresolved": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」无法被任何组织模板解析",
+      "type_path_not_direct_child": "表 {{table}} 第 {{row}} 行字段 {{column}}：值「{{value}}」不是 parent_path 的直属子路径",
       "unknown_endpoint_type": "未知端点类型",
       "unknown_export_type": "未知导出类型",
       "unrecognized_header": "无法识别的表头",
+      "workstation_position_conflict": "表 {{table}} 第 {{row}} 行：工位与机位互斥，不能同时指定",
       "zip_create_failed": "创建压缩包失败",
       "zip_entry_read_failed": "读取压缩包条目失败",
       "zip_finish_failed": "压缩包收尾失败",
       "zip_write_failed": "写入压缩包失败",
       "import_success": "数据导入成功"
     },
+    "ipmi": {
+      "error": {
+        "auth_failed": "IPMI 认证失败（用户名或口令错误，特权级别不足）",
+        "cipher_suite_mismatch": "IPMI 密码套件不匹配（尝试切换认证算法 sha1/sha256）",
+        "completion_code": "IPMI 设备返回完成码 {{code}}",
+        "decrypt_failed": "IPMI 解密失败（会话加密不一致）",
+        "empty_response": "IPMI 响应为空",
+        "network": "IPMI 网络/套接字错误: {{detail}}",
+        "response_malformed": "IPMI 响应格式错误",
+        "sensor_empty_response": "传感器读数响应为空",
+        "session_create_failed": "IPMI 会话建立失败: {{detail}}",
+        "session_state_invalid": "IPMI 会话状态无效: {{detail}}",
+        "timeout": "IPMI 连接超时（BMC 无响应或会话端口不可达）"
+      }
+    },
     "snmp": {
+      "auth": {
+        "auth_proto_without_password": "已配置认证协议但认证密码缺失",
+        "community_required": "SNMP v1/v2c 需要配置 community 字符串",
+        "password_without_auth_proto": "已配置认证密码但认证协议缺失",
+        "password_without_priv_proto": "已配置隐私密码但隐私协议缺失",
+        "priv_proto_without_password": "已配置隐私协议但隐私密码缺失",
+        "priv_without_auth": "已配置隐私协议但认证配置缺失",
+        "unsupported_protocol": "不支持的认证协议: {{proto}}",
+        "unsupported_version": "不支持的SNMP版本: {{version}}",
+        "usm_auth_invalid": "SNMPv3 认证配置无效: {{detail}}",
+        "usm_priv_invalid": "SNMPv3 隐私配置无效: {{detail}}",
+        "username_required": "SNMPv3 需要配置用户名"
+      },
+      "error": {
+        "abnormal_value": "SNMP 响应为异常值: {{detail}}",
+        "auth_failed": "SNMP 认证失败",
+        "config": "SNMP 配置错误: {{detail}}",
+        "empty_response": "SNMP 响应为空",
+        "invalid_oid": "无效 OID: {{detail}}",
+        "network": "SNMP 网络错误: {{detail}}",
+        "protocol": "SNMP 协议错误: {{detail}}",
+        "request_failed": "SNMP 请求失败: {{detail}}",
+        "response_malformed": "SNMP 响应格式错误",
+        "session_create_failed": "创建 SNMP 会话失败: {{detail}}",
+        "timeout": "SNMP 连接超时",
+        "unknown": "SNMP 未知错误: {{detail}}",
+        "walk_aborted": "SNMP Walk 中断: {{detail}}",
+        "walk_failed": "SNMP Walk 失败: {{detail}}"
+      },
       "events_retrieved": "获取 SNMP 观测事件成功",
       "located": "定位到 {{count}} 条记录",
       "invalid_locator": "定位参数非法（MAC/IP 至少给一个且格式正确）",

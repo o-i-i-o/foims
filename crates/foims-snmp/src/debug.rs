@@ -65,8 +65,9 @@ pub async fn debug_snmp(AppJson(req): AppJson<SnmpDebugRequest>) -> Result<Respo
         version = version
     );
 
-    let auth = build_auth(&params)
-        .map_err(|e| AppError::Snmp(msg("server.debug.snmp.failed").with("error", e)))?;
+    let auth = build_auth(&params).map_err(|e| {
+        AppError::Snmp(msg("server.debug.snmp.failed").with("error", e.log_string()))
+    })?;
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(params.timeout_secs);
     let client = Client::builder(&addr, auth)
@@ -76,7 +77,8 @@ pub async fn debug_snmp(AppJson(req): AppJson<SnmpDebugRequest>) -> Result<Respo
         .await
         .map_err(|e| {
             AppError::Snmp(
-                msg("server.debug.snmp.session_failed").with("error", format_snmp_error(e)),
+                msg("server.debug.snmp.session_failed")
+                    .with("error", format_snmp_error(e).log_string()),
             )
         })?;
 
@@ -121,7 +123,9 @@ async fn run_get(
     oids: &[async_snmp::Oid],
 ) -> Result<Vec<SnmpDebugRow>, AppError> {
     let resp = client.get_many(oids).await.map_err(|e| {
-        AppError::Snmp(msg("server.debug.snmp.failed").with("error", format_snmp_error(e)))
+        AppError::Snmp(
+            msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()),
+        )
     })?;
     Ok(resp.varbinds.iter().map(row_of).collect())
 }
@@ -132,7 +136,9 @@ async fn run_walk(
     base: async_snmp::Oid,
 ) -> Result<Vec<SnmpDebugRow>, AppError> {
     let mut stream = client.bulk_walk(base, WALK_MAX_REPETITIONS).map_err(|e| {
-        AppError::Snmp(msg("server.debug.snmp.failed").with("error", format_snmp_error(e)))
+        AppError::Snmp(
+            msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()),
+        )
     })?;
     let mut rows = Vec::new();
     while let Some(item) = stream.next().await {

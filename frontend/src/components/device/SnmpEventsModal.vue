@@ -138,16 +138,17 @@ function detailText(event: SnmpEvent): string {
     return "";
   }
   const parts: string[] = [];
-  const push = (labelKey: string, value: unknown) => {
+  // label 为最终展示文案：i18n 文案由调用方 t() 提供，专业名词（如 VLAN ID）直接传字面量
+  const push = (label: string, value: unknown) => {
     if (value != null && value !== "") {
-      parts.push(`${t(labelKey)}: ${String(value)}`);
+      parts.push(`${label}: ${String(value)}`);
     }
   };
-  push("device.direction", detail.direction);
-  push("device.downtime", detail.downtime);
-  push("device.ip_address", detail.ip);
-  push("device.mac_address", detail.mac);
-  push("device.vlan_id", detail.vlan_id);
+  push(t("device.direction"), detail.direction);
+  push(t("device.downtime"), detail.downtime);
+  push(t("device.ip_address"), detail.ip);
+  push(t("device.mac_address"), detail.mac);
+  push("VLAN ID", detail.vlan_id);
   return parts.join(" · ");
 }
 

@@ -145,12 +145,13 @@ fn build_usm_user(config: &SnmpTrapUsmUser) -> Result<UsmUser, String> {
     let auth = if config.auth_protocol.is_empty() {
         None
     } else {
-        Some(parse_auth_protocol(&config.auth_protocol)?)
+        // 协议解析错误为 AppMessage（i18n key），本模块仅进日志，取诊断串
+        Some(parse_auth_protocol(&config.auth_protocol).map_err(|m| m.log_string())?)
     };
     let privacy = if config.priv_protocol.is_empty() {
         None
     } else {
-        Some(parse_priv_protocol(&config.priv_protocol)?)
+        Some(parse_priv_protocol(&config.priv_protocol).map_err(|m| m.log_string())?)
     };
 
     let user = UsmUser::new(config.username.clone());

@@ -14,7 +14,7 @@ use foims_models::LagRecord;
 
 use super::ports::{value_as_i32, walk_index_value_map};
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
 /// ifType 常量：ieee8023adLap（LACP 链路聚合口）。
@@ -33,7 +33,7 @@ pub async fn get_lags_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<LagRecor
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let if_descr = walk_index_value_map(
         &client,

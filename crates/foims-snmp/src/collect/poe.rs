@@ -16,7 +16,7 @@ use foims_models::{DevicePoePort, PoeRecord, SNMP_EVENT_POE_OFF, SNMP_SEVERITY_W
 
 use super::ports::value_as_i32;
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 use crate::events::ObsEvent;
 
@@ -104,7 +104,7 @@ pub async fn get_poe_ports_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let if_descr = super::ports::walk_index_value_map(
         &client,

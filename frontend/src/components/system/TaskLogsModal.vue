@@ -6,7 +6,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { getScheduledTaskLogs } from "../../api/scheduledTasks";
-import { formatDateTime } from "../../utils/formatter";
+import { formatDateTime, translateServerKey } from "../../utils/formatter";
 import type { TaskLog } from "../../types/api/generated/TaskLog";
 import ModalShell from "../ModalShell.vue";
 
@@ -36,12 +36,27 @@ function statusClass(status: string): string {
   return status === "success" ? "status-active" : "status-inactive";
 }
 
-// TaskLog.details 为 JsonValue：仅 plain object 时读取 message/error 文案
+// TaskLog.details 为 JsonValue：仅 plain object 时读取 message/error 文案。
+// 新格式为 {"key","params"?} 对象（key 翻译、params 插值）；历史数据为
+// 纯文本/裸 key（server.* 前缀经 translateServerKey 翻译，其余原样）。
 function detailText(log: TaskLog): string {
   const details = log.details;
   if (details !== null && typeof details === "object" && !Array.isArray(details)) {
     const value = details.message || details.error;
-    return typeof value === "string" ? value : "";
+    if (typeof value === "string") {
+      return translateServerKey(value);
+    }
+    if (value !== null && typeof value === "object") {
+      const payload = value as { key?: unknown; params?: unknown };
+      if (typeof payload.key === "string") {
+        const params =
+          payload.params !== null && typeof payload.params === "object"
+            ? (payload.params as Record<string, string>)
+            : {};
+        return t(payload.key, params);
+      }
+    }
+    return "";
   }
   return "";
 }

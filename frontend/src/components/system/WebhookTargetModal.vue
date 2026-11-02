@@ -2,12 +2,14 @@
 /**
  * Webhook 目标新增/编辑弹窗：名称（可选）+ 渠道类型 + 推送地址（必填，
  * 原生表单校验）+ 钉钉加签密钥（仅钉钉渠道展示，留空保留已存密钥）+
- * 接收内容订阅范围。确认仅回写页面草稿，统一落库由通知页"保存"承担。
+ * 通知语言（推送文案按目标设置的语言取值）+ 接收内容订阅范围。
+ * 确认仅回写页面草稿，统一落库由通知页"保存"承担。
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import ModalShell from "../ModalShell.vue";
 import type { WebhookChannel } from "../../types/api/generated/WebhookChannel";
+import type { NotifyLang } from "../../types/api/generated/NotifyLang";
 
 export interface WebhookTargetDraft {
   id: string;
@@ -20,6 +22,8 @@ export interface WebhookTargetDraft {
   hasSecret: boolean;
   /** 是否已随配置落库（未保存目标不可测试） */
   saved: boolean;
+  /** 通知语言（推送文案按目标设置的语言取值） */
+  language: NotifyLang;
   ipChange: boolean;
   agentAlert: boolean;
   snmpEvent: boolean;
@@ -31,6 +35,7 @@ export interface WebhookTargetFormResult {
   channel: WebhookChannel;
   url: string;
   secret: string;
+  language: NotifyLang;
   ipChange: boolean;
   agentAlert: boolean;
   snmpEvent: boolean;
@@ -49,6 +54,7 @@ const name = ref(props.target?.name ?? "");
 const channel = ref<WebhookChannel>(props.target?.channel ?? "generic");
 const url = ref(props.target?.url ?? "");
 const secret = ref("");
+const language = ref<NotifyLang>(props.target?.language ?? "zh");
 const ipChange = ref(props.target?.ipChange ?? true);
 const agentAlert = ref(props.target?.agentAlert ?? true);
 const snmpEvent = ref(props.target?.snmpEvent ?? true);
@@ -65,6 +71,7 @@ function handleConfirm(): void {
     channel: channel.value,
     url: url.value,
     secret: secret.value,
+    language: language.value,
     ipChange: ipChange.value,
     agentAlert: agentAlert.value,
     snmpEvent: snmpEvent.value
@@ -124,6 +131,13 @@ function handleConfirm(): void {
           :placeholder="t(props.target?.hasSecret ? 'webhook.dingtalk_secret_configured' : 'webhook.dingtalk_secret_input')"
           :aria-label="t('webhook.dingtalk_secret')"
         >
+      </div>
+      <div class="form-group">
+        <label for="webhook-target-language">{{ t("notification.language_label") }}</label>
+        <select id="webhook-target-language" v-model="language" :aria-label="t('notification.language_label')">
+          <option value="zh">{{ t("notification.lang_zh") }}</option>
+          <option value="en">{{ t("notification.lang_en") }}</option>
+        </select>
       </div>
       <div class="form-group">
         <label>{{ t("webhook.scope_label") }}</label>

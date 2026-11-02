@@ -136,7 +136,7 @@ function portTooltip(iface: NicPort): string {
     parts.push(`IP: ${ipList.join(", ")}`);
   }
   if (iface.vlan_id) {
-    parts.push(`${t("device.vlan_id")}: ${iface.vlan_id}`);
+    parts.push(`VLAN ID: ${iface.vlan_id}`);
   }
   if (iface.port_type) {
     const typeKey = `device.port_type_${iface.port_type}`;

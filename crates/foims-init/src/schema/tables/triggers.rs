@@ -87,7 +87,9 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
                     OR (end_u BETWEEN NEW.start_u AND NEW.end_u)
                 )
             ) THEN
-                RAISE EXCEPTION '机位U位范围重叠';
+                -- 自定义 SQLSTATE P0401 标识 U 位重叠：应用层按错误码匹配，
+                -- 不依赖中文消息文本（跨语言/客户端稳定）
+                RAISE EXCEPTION '机位U位范围重叠' USING ERRCODE = 'P0401';
             END IF;
             RETURN NEW;
         END;

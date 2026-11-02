@@ -308,6 +308,7 @@ log:
   smtp:
     device_notify_failed: "Device IP notification query failed: {{error}}"
     device_notify_skipped: "Skipping device IP email (no workstation match / manager email / SMTP not configured)"
+    group_send_failed: "Failed to send email for a language group (lang: {{lang}}): {{error}}"
     incomplete: "SMTP configuration incomplete, required fields missing"
     insecure_connection: "Sending email over unencrypted SMTP, credentials may be transmitted in plaintext (host: {{host}})"
     no_recipients_configured: "No email recipients configured, skipping MAC change email"

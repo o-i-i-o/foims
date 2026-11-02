@@ -7,6 +7,7 @@
 
 use foims_common::AppError;
 use foims_common::{log_debug, log_warn};
+use foims_notify::LocalizedText;
 use sqlx::Row;
 use uuid::Uuid;
 
@@ -81,35 +82,64 @@ async fn notify_device_ips(pool: &sqlx::PgPool, device_id: Uuid) -> Result<(), S
         return Ok(());
     }
 
-    let ip_lines: Vec<String> = ip_rows
-        .iter()
-        .map(|row| {
-            let ip: String = row.get("ip");
-            let network: String = row.get("network");
-            if network.is_empty() {
-                format!("IP 地址：{ip}")
-            } else {
-                format!("IP 地址：{ip}（网段：{network}）")
-            }
-        })
-        .collect();
+    // 中英双语文案：收件人为工位管理人，不参与「通知配置」卡片上的语言
+    // 设置（该设置仅作用于通知邮件收件人与 Webhook 目标），收件人语言不可
+    // 知，故正文以中英双语并列呈现，标题同口径
+    let ip_lines = |label_ip: &str, label_subnet: &str, subnet_end: &str| -> Vec<String> {
+        ip_rows
+            .iter()
+            .map(|row| {
+                let ip: String = row.get("ip");
+                let network: String = row.get("network");
+                if network.is_empty() {
+                    format!("{label_ip}{ip}")
+                } else {
+                    format!("{label_ip}{ip}{label_subnet}{network}{subnet_end}")
+                }
+            })
+            .collect()
+    };
+    let zh_lines = ip_lines("IP 地址：", "（网段：", "）");
+    let en_lines = ip_lines("IP address: ", " (subnet: ", ")");
 
-    let manager_greeting = info
-        .manager_name
-        .map(|name| format!("{name}，您好："))
-        .unwrap_or_else(|| "您好：".to_string());
+    let greeting = |name: &Option<String>, zh: bool| -> String {
+        match (zh, name) {
+            (true, Some(name)) => format!("{name}，您好："),
+            (true, None) => "您好：".to_string(),
+            (false, Some(name)) => format!("Dear {name},"),
+            (false, None) => "Hello,".to_string(),
+        }
+    };
 
-    let body = format!(
-        "{manager_greeting}\n\n设备已登记到您负责的工位，IP 信息如下：\n设备名称：{}\n所属工位：{}\n{}\n\n此邮件由 FOIMS 系统自动发送，请勿回复。\n",
-        info.device_name,
-        info.workstation_name,
-        ip_lines.join("\n")
-    );
+    let message = LocalizedText {
+        zh: format!(
+            "{}\n\n设备已登记到您负责的工位，IP 信息如下：\n设备名称：{}\n所属工位：{}\n{}\n\n此邮件由 FOIMS 系统自动发送，请勿回复。\n",
+            greeting(&info.manager_name, true),
+            info.device_name,
+            info.workstation_name,
+            zh_lines.join("\n")
+        ),
+        en: format!(
+            "{}\n\nThe device has been registered to the workstation you manage. IP information:\nDevice name: {}\nWorkstation: {}\n{}\n\nThis email was sent automatically by the FOIMS system, please do not reply.\n",
+            greeting(&info.manager_name, false),
+            info.device_name,
+            info.workstation_name,
+            en_lines.join("\n")
+        ),
+    };
+    let title = LocalizedText {
+        zh: format!(
+            "设备 IP 通知 - {}（工位: {}）",
+            info.device_name, info.workstation_name
+        ),
+        en: format!(
+            "Device IP Notice - {} (Workstation: {})",
+            info.device_name, info.workstation_name
+        ),
+    };
 
-    let subject = format!(
-        "设备 IP 通知 - {}（工位: {}）",
-        info.device_name, info.workstation_name
-    );
+    let subject = format!("{} / {}", title.zh, title.en);
+    let body = format!("{}\n\n----------\n\n{}", message.zh, message.en);
 
     // SMTP 未配置属于业务状态：静默跳过，不产生错误日志刷屏；
     // 其余发送失败需以 warn 呈现，便于排查通知未送达问题

@@ -435,25 +435,9 @@ function resetToInitState(): void {
   clearError();
 }
 
+// 后端消息已由 client.ts 按 key+params 统一翻译，此处仅做空消息兜底
 function formatErrorMessage(message: string): string {
-  if (!message) {
-    return t("api.failed");
-  }
-
-  if (message.includes("账户已禁用")) {
-    return t("api.account_disabled");
-  }
-  if (message.includes("失败次数过多")) {
-    return t("login.too_many_attempts");
-  }
-  if (message.includes("系统未初始化")) {
-    return t("login.system_not_init");
-  }
-  if (message.includes("SMTP未配置")) {
-    return t("login.email_service_not_configed");
-  }
-
-  return message;
+  return message || t("api.failed");
 }
 
 // 图形验证码

@@ -4,8 +4,10 @@ use std::time::Duration;
 
 use async_snmp::{Client, oid};
 
+use foims_common::msg;
+
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
 /// 经 SNMP 获取的设备识别信息（sysDescr 推导 + sysName 主机名）。
@@ -32,18 +34,18 @@ pub async fn get_device_info_via_snmp(
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let sys_descr_result = client
         .get(&oid!(1, 3, 6, 1, 2, 1, 1, 1, 0))
         .await
-        .map_err(|e| SnmpError::Message(format!("SNMP请求失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.request_failed", e))?;
     let sys_descr = sys_descr_result
         .varbinds
         .first()
         .and_then(|vb| vb.value.as_str())
         .map(str::to_string)
-        .ok_or_else(|| SnmpError::Message("响应格式不正确: 期望字符串类型".to_string()))?;
+        .ok_or_else(|| SnmpError::Message(msg("server.snmp.error.response_malformed")))?;
 
     // sysName（1.3.6.1.2.1.1.5.0）：部分设备不实现，异常响应时容忍为 None
     let hostname = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 5, 0)).await {

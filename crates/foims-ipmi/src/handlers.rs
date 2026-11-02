@@ -134,7 +134,7 @@ pub async fn test_ipmi_connection<P: DbProvider>(
             "server.device.ipmi.test_success",
         )),
         Err(e) => Err(AppError::Ipmi(
-            msg("server.device.ipmi.test_failed").with("error", e.to_string()),
+            msg("server.device.ipmi.test_failed").with("error", e.message().log_string()),
         )),
     }
 }

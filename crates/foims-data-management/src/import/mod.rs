@@ -485,12 +485,11 @@ async fn resolve_row<P: DataProvider>(
                 }
                 if let Err(reason) = validate_value(column_meta, &raw) {
                     return Err(DataError::Validation(
-                        msg("server.import_export.field_invalid")
+                        reason
                             .with("table", spec.table)
                             .with("row", row.row_no)
                             .with("column", db_col)
-                            .with("value", &raw)
-                            .with("reason", reason),
+                            .with("value", &raw),
                     ));
                 }
                 // 枚举白名单：按列拦截非法取值（大小写不敏感列先规范化）
@@ -505,12 +504,12 @@ async fn resolve_row<P: DataProvider>(
                     };
                     if !allowed.contains(&normalized.as_str()) {
                         return Err(DataError::Validation(
-                            msg("server.import_export.field_invalid")
+                            msg("server.import_export.field_not_allowed")
                                 .with("table", spec.table)
                                 .with("row", row.row_no)
                                 .with("column", db_col)
                                 .with("value", &raw)
-                                .with("reason", format!("取值必须是 {}", allowed.join("/"))),
+                                .with("allowed", allowed.join("/")),
                         ));
                     }
                     values.insert(db_col.to_string(), Some(normalized));
@@ -615,14 +614,11 @@ async fn resolve_row<P: DataProvider>(
                     && encrypted.chars().count() > len as usize
                 {
                     return Err(DataError::Validation(
-                        msg("server.import_export.field_invalid")
+                        msg("server.import_export.credential_too_long")
                             .with("table", spec.table)
                             .with("row", row.row_no)
                             .with("column", *col)
-                            .with(
-                                "reason",
-                                format!("凭据加密后超过列宽 {len}，请缩短明文长度"),
-                            ),
+                            .with("max_len", len),
                     ));
                 }
                 values.insert(col.to_string(), Some(encrypted));
@@ -654,12 +650,11 @@ async fn validate_ip_in_room(
         .unwrap_or_default();
     let Some(ip) = crate::names::parse_inet(&ip_str) else {
         return Err(DataError::Validation(
-            msg("server.import_export.field_invalid")
+            msg("server.import_export.field_invalid_ip")
                 .with("table", "interface_ips")
                 .with("row", row.row_no)
                 .with("column", "ip_address")
-                .with("value", &ip_str)
-                .with("reason", "不是有效的 IP 地址"),
+                .with("value", &ip_str),
         ));
     };
 
@@ -758,11 +753,10 @@ async fn validate_device_location(
 
     if !workstation_id.is_empty() && !position_id.is_empty() {
         return Err(DataError::Validation(
-            msg("server.import_export.field_invalid")
+            msg("server.import_export.workstation_position_conflict")
                 .with("table", "devices")
                 .with("row", row.row_no)
-                .with("column", "position")
-                .with("reason", "工位与机位互斥，不能同时指定"),
+                .with("column", "position"),
         ));
     }
 
@@ -800,11 +794,10 @@ async fn validate_device_location(
         // 引用不存在时留给外键报错（与其它 Ref 列的语义一致）
         None => Ok(()),
         Some(true) => Err(DataError::Validation(
-            msg("server.import_export.field_invalid")
+            msg("server.import_export.room_mismatch")
                 .with("table", "devices")
                 .with("row", row.row_no)
-                .with("column", "room_name")
-                .with("reason", "工位/机位所属房间与 room_name 不一致"),
+                .with("column", "room_name"),
         )),
         Some(false) => Ok(()),
     }
@@ -981,12 +974,12 @@ fn validate_template_levels(values: &ResolvedValues, row: &CsvRow) -> DataResult
     };
     let levels: serde_json::Value = serde_json::from_str(levels_text).map_err(|e| {
         DataError::Validation(
-            msg("server.data-management.field_invalid")
+            msg("server.import_export.field_invalid_json_detail")
                 .with("table", "org_templates")
                 .with("row", row.row_no)
                 .with("column", "levels")
                 .with("value", levels_text)
-                .with("reason", format!("不是有效的 JSON: {e}")),
+                .with("detail", e.to_string()),
         )
     })?;
     // 返回值（根类型名）仅供 API 端消费，导入路径只判定合法性
@@ -1022,12 +1015,11 @@ async fn validate_org_type_path(
     });
     if !resolvable {
         return Err(DataError::Validation(
-            msg("server.data-management.field_invalid")
+            msg("server.import_export.template_unresolved")
                 .with("table", "organizations")
                 .with("row", row.row_no)
                 .with("column", "type_path")
-                .with("value", type_path)
-                .with("reason", "无法被任何组织模板解析"),
+                .with("value", type_path),
         ));
     }
 
@@ -1060,12 +1052,11 @@ async fn validate_org_type_path(
     };
     if !is_direct_child {
         return Err(DataError::Validation(
-            msg("server.data-management.field_invalid")
+            msg("server.import_export.type_path_not_direct_child")
                 .with("table", "organizations")
                 .with("row", row.row_no)
                 .with("column", "type_path")
-                .with("value", type_path)
-                .with("reason", "type_path 不是 parent_path 的直属子路径"),
+                .with("value", type_path),
         ));
     }
     Ok(())

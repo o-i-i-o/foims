@@ -1,6 +1,6 @@
 [package]
 name = "foims-ipmi"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS IPMI 域：BMC RMCP+ 会话、传感器采集（SDR/读数）、连通性探测与实时快照"

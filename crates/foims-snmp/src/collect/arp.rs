@@ -11,7 +11,7 @@ use foims_common::log_warn;
 use foims_models::ArpEntry;
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 use crate::events::ObsEvent;
 
@@ -156,7 +156,7 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
         .request_timeout(timeout)
         .connect()
         .await
-        .map_err(|e| SnmpError::Message(format!("创建SNMP会话失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let if_name_map = walk_if_name_map(&client).await;
     let vlan_map = walk_vlan_map(&client).await;
@@ -171,11 +171,10 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
 
     let mut walk = client
         .walk(arp_oid)
-        .map_err(|e| SnmpError::Message(format!("创建SNMP walk失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result
-            .map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
+        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -228,11 +227,10 @@ pub async fn get_arp_table_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<Arp
 
     let mut walk = client
         .walk(ip_mib_oid)
-        .map_err(|e| SnmpError::Message(format!("创建SNMP walk失败: {}", format_snmp_error(e))))?;
+        .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
     while let Some(result) = walk.next().await {
-        let vb = result
-            .map_err(|e| SnmpError::Message(format!("SNMP walk失败: {}", format_snmp_error(e))))?;
+        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {

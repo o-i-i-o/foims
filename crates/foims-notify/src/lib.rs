@@ -11,9 +11,11 @@
 pub mod dispatch;
 pub mod in_site;
 pub mod kind;
+pub mod lang;
 pub mod smtp;
 pub mod webhook;
 
 pub use dispatch::push;
 pub use in_site::{active_admin_ids, create_notification, encode_notification_content};
 pub use kind::{NotifyKind, NotifyScope};
+pub use lang::{LocalizedText, NotifyLang};

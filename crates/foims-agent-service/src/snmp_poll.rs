@@ -433,14 +433,14 @@ async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics
 async fn connect_snmp(params: &foims_snmp::SnmpParamsLegacy) -> Result<Client<UdpHandle>, String> {
     let addr = snmp_target(&params.ip, params.port);
     let timeout = Duration::from_secs(SNMP_TIMEOUT_SECS);
-    let auth = build_auth(params)?;
+    let auth = build_auth(params).map_err(|m| m.log_string())?;
     Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
         .retry(Retry::none())
         .connect()
         .await
-        .map_err(|e| format!("创建SNMP会话失败: {}", format_snmp_error(e)))
+        .map_err(|e| format!("创建SNMP会话失败: {}", format_snmp_error(e).log_string()))
 }
 
 /// 读取系统组三个 OID（同一会话顺序请求，一期语义：缺失容忍）。
@@ -455,7 +455,10 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
         Err(e) => {
-            tracing::debug!("sysName 读取失败（容忍缺失）: {}", format_snmp_error(e));
+            tracing::debug!(
+                "sysName 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
             None
         }
     };
@@ -470,7 +473,10 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
         Err(e) => {
-            tracing::debug!("sysDescr 读取失败（容忍缺失）: {}", format_snmp_error(e));
+            tracing::debug!(
+                "sysDescr 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
             None
         }
     };
@@ -484,7 +490,10 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
             .and_then(|vb| vb.value.as_u32())
             .map(|ticks| i64::from(ticks) / 100),
         Err(e) => {
-            tracing::debug!("sysUpTime 读取失败（容忍缺失）: {}", format_snmp_error(e));
+            tracing::debug!(
+                "sysUpTime 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
             None
         }
     };

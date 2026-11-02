@@ -5,7 +5,7 @@
 
 use crate::spec::{TableSpec, spec_by_header};
 use crate::types::{DataError, DataResult};
-use foims_common::msg;
+use foims_common::{AppMessage, msg};
 use sqlx::PgConnection;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -175,40 +175,41 @@ pub fn ensure_header_matches(headers: &[String], spec: &TableSpec) -> DataResult
     }
 }
 
-/// 字段值类型校验（入库前的用户输入校验，失败返回原因描述）。
-/// 返回 Err(原因) 时调用方补充表/行/列上下文生成校验错误。
-pub fn validate_value(meta: &ColumnMeta, value: &str) -> Result<(), String> {
+/// 字段值类型校验（入库前的用户输入校验，失败返回专属校验消息 key）。
+/// 返回 Err 时调用方补充 table/row/column/value 上下文参数，
+/// 语言包文案携带完整占位符由前端翻译展示。
+pub fn validate_value(meta: &ColumnMeta, value: &str) -> Result<(), AppMessage> {
     let udt = meta.udt.as_str();
     match udt {
         "int2" => value
             .parse::<i16>()
             .map(|_| ())
-            .map_err(|_| "不是有效的小整数".to_string()),
+            .map_err(|_| msg("server.import_export.field_invalid_smallint")),
         "int4" => value
             .parse::<i32>()
             .map(|_| ())
-            .map_err(|_| "不是有效的整数".to_string()),
+            .map_err(|_| msg("server.import_export.field_invalid_integer")),
         "int8" => value
             .parse::<i64>()
             .map(|_| ())
-            .map_err(|_| "不是有效的整数".to_string()),
+            .map_err(|_| msg("server.import_export.field_invalid_integer")),
         "float4" | "float8" | "numeric" => value
             .parse::<f64>()
             .map(|_| ())
-            .map_err(|_| "不是有效的数值".to_string()),
+            .map_err(|_| msg("server.import_export.field_invalid_number")),
         "bool" => match value.to_ascii_lowercase().as_str() {
             "true" | "false" => Ok(()),
-            _ => Err("应为 true 或 false".to_string()),
+            _ => Err(msg("server.import_export.field_invalid_bool")),
         },
         "inet" => crate::names::parse_inet(value)
             .map(|_| ())
-            .ok_or_else(|| "不是有效的 IP 地址".to_string()),
+            .ok_or_else(|| msg("server.import_export.field_invalid_ip")),
         "cidr" => crate::names::parse_cidr(value)
             .map(|_| ())
-            .ok_or_else(|| "不是有效的网段（如 10.0.0.0/24）".to_string()),
+            .ok_or_else(|| msg("server.import_export.field_invalid_cidr")),
         "_inet" | "_cidr" => {
-            let elements =
-                parse_pg_array(value).ok_or_else(|| "不是有效的数组（形如 {a,b}）".to_string())?;
+            let elements = parse_pg_array(value)
+                .ok_or_else(|| msg("server.import_export.field_invalid_array"))?;
             let elem_udt = &udt[1..];
             for element in elements {
                 let elem_meta = ColumnMeta {
@@ -223,12 +224,12 @@ pub fn validate_value(meta: &ColumnMeta, value: &str) -> Result<(), String> {
         }
         "json" | "jsonb" => serde_json::from_str::<serde_json::Value>(value)
             .map(|_| ())
-            .map_err(|_| "不是有效的 JSON".to_string()),
+            .map_err(|_| msg("server.import_export.field_invalid_json")),
         "varchar" | "bpchar" => {
             if let Some(len) = meta.char_len
                 && value.chars().count() > len as usize
             {
-                return Err(format!("超过 {len} 字符上限"));
+                return Err(msg("server.import_export.field_value_too_long").with("max_len", len));
             }
             Ok(())
         }
