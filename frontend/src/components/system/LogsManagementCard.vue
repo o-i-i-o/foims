@@ -51,7 +51,9 @@ function oldestText(value: string | null | undefined): string {
 }
 
 const clearType = ref("operation");
-const clearDays = ref("30");
+// type="number" 的 v-model 会在输入后把值转换为 number，故类型为 string | number，
+// 解析时统一经 String() 归一（直接对 number 调 trim 会抛 TypeError）
+const clearDays = ref<string | number>("30");
 const showClearConfirm = ref(false);
 const clearConfirmMessage = ref("");
 const clearing = ref(false);
@@ -64,7 +66,8 @@ const MAX_KEEP_DAYS = 3650;
 
 /** 解析保留天数输入：空/非数字返回 null（未填写），否则钳制到 0..=3650 */
 function parseClearDays(): number | null {
-  const daysInput = (clearDays.value || "").trim();
+  // v-model(type="number") 输入后值为 number、清空后为 ""，统一转字符串处理
+  const daysInput = String(clearDays.value ?? "").trim();
   const parsedDays = Number.parseInt(daysInput, 10);
   // 空或非数字视为未填写：直接提示，不按 0（清空全部）处理，
   // 避免误触不可逆的全量清理，也避免确认文案与请求体出现 NaN/null
