@@ -117,10 +117,6 @@
     transform: rotate(180deg);
   }
 
-  .sidebar-menu li {
-    margin-bottom: var(--space-sm);
-  }
-
   .sidebar-menu li a {
     display: flex;
     align-items: center;
