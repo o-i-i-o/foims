@@ -25,7 +25,9 @@
     --color-secondary-hover: #343a40;
     --color-success: #2f9e44;
     --color-success-bg: #d3f9d8;
-    --color-success-text: #2b8a3e;
+    /* 状态文字色按 AA 4.5:1 加深（Open Color green-9/yellow-9 已是最深档，
+     徽章底/白底均不达标，故取自定义加深档） */
+    --color-success-text: #24702e;
     --color-success-border: #b2f2bb;
     --color-danger: #c92a2a;
     --color-danger-hover: #a61e1e;
@@ -34,7 +36,7 @@
     --color-danger-border: #ffc9c9;
     --color-warning: #fab005;
     --color-warning-bg: #fff3bf;
-    --color-warning-text: #e67700;
+    --color-warning-text: #9a5200;
     --color-warning-border: #ffec99;
     /* 图标级 warning 用色（白底 ≥3:1 图形对比度；#e67700 仅 2.99 差一线） */
     --color-warning-deep: #e8590c;
@@ -102,10 +104,11 @@
     --z-tooltip: 3000;
     --z-toast: 9999;
     --color-warning-dark: #e67700;
-    --color-status-success-text: #2b8a3e;
-    --color-status-info-text: #1c7ed6;
+    /* status-* 文字色与徽章底（同 token 12% 自混）配对按 AA 4.5:1 加深 */
+    --color-status-success-text: #24702e;
+    --color-status-info-text: #1864ab;
     --color-status-danger-text: #c92a2a;
-    --color-status-warning-text: #e8590c;
+    --color-status-warning-text: #b24000;
     --color-status-neutral-text: #626b73;
     --color-orange: #fd7e14;
     --color-bg-hover: #f1f3f5;
