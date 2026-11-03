@@ -455,7 +455,10 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
         Err(e) => {
-            tracing::debug!("sysName 读取失败（容忍缺失）: {}", format_snmp_error(e).log_string());
+            tracing::debug!(
+                "sysName 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
             None
         }
     };
@@ -470,7 +473,10 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
         Err(e) => {
-            tracing::debug!("sysDescr 读取失败（容忍缺失）: {}", format_snmp_error(e).log_string());
+            tracing::debug!(
+                "sysDescr 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
             None
         }
     };
@@ -484,7 +490,10 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
             .and_then(|vb| vb.value.as_u32())
             .map(|ticks| i64::from(ticks) / 100),
         Err(e) => {
-            tracing::debug!("sysUpTime 读取失败（容忍缺失）: {}", format_snmp_error(e).log_string());
+            tracing::debug!(
+                "sysUpTime 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
             None
         }
     };

@@ -348,7 +348,10 @@ mod tests {
         );
         assert_eq!(err.message().key(), "server.ipmi.error.completion_code");
         assert_eq!(
-            err.message().params().first().map(|(k, v)| (k.as_str(), v.as_str())),
+            err.message()
+                .params()
+                .first()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
             Some(("code", "0xC1"))
         );
     }

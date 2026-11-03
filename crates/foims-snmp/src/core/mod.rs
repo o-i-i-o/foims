@@ -223,12 +223,11 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, AppMessage> {
                             parse_priv_protocol(priv_proto)?,
                             priv_pass,
                         )
-                        .map_err(|e| {
-                            msg("server.snmp.auth.usm_priv_invalid").with("detail", e)
-                        })?
+                        .map_err(|e| msg("server.snmp.auth.usm_priv_invalid").with("detail", e))?
                     } else {
-                        usm.auth(auth_protocol, auth_pass)
-                            .map_err(|e| msg("server.snmp.auth.usm_auth_invalid").with("detail", e))?
+                        usm.auth(auth_protocol, auth_pass).map_err(|e| {
+                            msg("server.snmp.auth.usm_auth_invalid").with("detail", e)
+                        })?
                     }
                 }
                 // 隐私已配置而认证整体缺省：authPriv 必须建立在认证
@@ -243,9 +242,7 @@ pub fn build_auth(params: &SnmpParamsLegacy) -> Result<Auth, AppMessage> {
 
             Ok(Auth::from(usm))
         }
-        _ => Err(
-            msg("server.snmp.auth.unsupported_version").with("version", &params.version),
-        ),
+        _ => Err(msg("server.snmp.auth.unsupported_version").with("version", &params.version)),
     }
 }
 
@@ -258,9 +255,7 @@ pub fn format_snmp_error(e: Box<Error>) -> AppMessage {
         Error::Network { target, source } => {
             msg("server.snmp.error.network").with("detail", format!("{target}: {source}"))
         }
-        Error::Snmp {
-            target, status, ..
-        } => {
+        Error::Snmp { target, status, .. } => {
             msg("server.snmp.error.protocol").with("detail", format!("{target}: {status:?}"))
         }
         Error::Auth { .. } => msg("server.snmp.error.auth_failed"),
@@ -703,7 +698,10 @@ mod tests {
         };
         let m = format_snmp_error(Box::new(snmp_err));
         assert_eq!(m.key(), "server.snmp.error.protocol");
-        assert!(m.log_string().contains("NoSuchName"), "detail 应含错误状态: {m:?}");
+        assert!(
+            m.log_string().contains("NoSuchName"),
+            "detail 应含错误状态: {m:?}"
+        );
 
         let auth_err = Error::Auth {
             target: test_target(),
@@ -727,7 +725,10 @@ mod tests {
         };
         let m = format_snmp_error(Box::new(aborted));
         assert_eq!(m.key(), "server.snmp.error.walk_aborted");
-        assert!(m.log_string().contains("Cycle"), "detail 应含中断原因: {m:?}");
+        assert!(
+            m.log_string().contains("Cycle"),
+            "detail 应含中断原因: {m:?}"
+        );
 
         let config = Error::Config("bad config".into());
         let m = format_snmp_error(Box::new(config));

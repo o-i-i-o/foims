@@ -112,6 +112,23 @@ export function clearLogs(payload: ClearLogsRequest): Promise<ApiResult<unknown>
   return apiPost("/api/system/logs/clear", payload);
 }
 
+/** 清理预览单项：log_type 与将被删除的条数（后端 json! 动态构造，未生成 ts-rs 类型） */
+export interface LogClearPreviewItem {
+  log_type?: string;
+  count?: number;
+}
+
+/** POST /api/system/logs/clear/preview 响应：items 仅含本次清理涉及的目标 */
+export interface LogClearPreview {
+  items?: LogClearPreviewItem[];
+  total?: number;
+}
+
+/** 预览按条件将删除的日志条数（与清理同参同校验口径，不执行删除） */
+export function previewLogsClear(payload: ClearLogsRequest): Promise<ApiResult<LogClearPreview>> {
+  return apiPost("/api/system/logs/clear/preview", payload);
+}
+
 /** 读取日志外发配置 */
 export function getLogForwarding(): Promise<ApiResult<LogForwarding>> {
   return apiGet<LogForwarding>("/api/system/logs/forwarding");

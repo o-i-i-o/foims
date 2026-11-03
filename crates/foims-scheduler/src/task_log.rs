@@ -48,7 +48,9 @@ pub async fn log_task_execution(
     .bind(Uuid::new_v4())
     .bind(task_name)
     .bind(status)
-    .bind(sqlx::types::Json(serde_json::json!({ "message": message_payload(details) })))
+    .bind(sqlx::types::Json(
+        serde_json::json!({ "message": message_payload(details) }),
+    ))
     .bind(started_at)
     .bind(end_time)
     .bind(duration)

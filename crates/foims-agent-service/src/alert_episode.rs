@@ -1046,7 +1046,10 @@ fn host_alert_message(
     let (label, unit) = host_alert_metric_label(metric);
     let title = foims_notify::LocalizedText {
         zh: format!("主机资源告警 - {hostname}: {}超标", label.zh),
-        en: format!("Host Resource Alert - {hostname}: {} over threshold", label.en),
+        en: format!(
+            "Host Resource Alert - {hostname}: {} over threshold",
+            label.en
+        ),
     };
     let body = foims_notify::LocalizedText {
         zh: format!(

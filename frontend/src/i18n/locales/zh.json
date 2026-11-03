@@ -1294,6 +1294,8 @@
     "clear": "清理",
     "clear_all_confirm": "确定要删除全部日志吗？此操作不可撤销。",
     "clear_days_confirm": "确定要清理 {{days}} 天前的日志吗？此操作不可撤销。",
+    "clear_all_confirm_count": "确定要删除全部日志吗？将删除 {{count}} 条记录，此操作不可撤销。",
+    "clear_days_confirm_count": "确定要清理 {{days}} 天前的日志吗？将删除 {{count}} 条记录，此操作不可撤销。",
     "clear_failed": "清理日志失败",
     "live_connected": "已连接",
     "live_disconnected": "未连接",
@@ -1366,6 +1368,7 @@
       "sync_net_outlets": "同步信息点",
       "sync_patch_panels": "同步配线架",
       "sync_positions": "同步机位",
+      "clear": "清理",
       "change_password": "修改密码"
     },
     "resource_types": {
@@ -1395,6 +1398,7 @@
       "organization": "组织",
       "certificate": "证书",
       "certificate_ca": "根 CA",
+      "log": "日志",
       "employee": "员工"
     },
     "view_detail_failed": "查看详情失败",
@@ -2483,8 +2487,9 @@
     },
     "logs": {
       "cleared": "成功清理 {{count}} 条日志记录",
-      "days_invalid": "保留天数不能为负数",
+      "days_invalid": "保留天数必须在 0 到 3650 之间（0 表示删除全部）",
       "days_required": "必须显式指定保留天数（0 表示删除全部）",
+      "preview_retrieved": "日志清理预览获取成功",
       "login_retrieved": "登录日志获取成功",
       "operation_retrieved": "操作日志获取成功",
       "stats_retrieved": "日志统计获取成功",

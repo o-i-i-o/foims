@@ -78,10 +78,38 @@ async fn data_export_database(
 
 async fn data_clear_logs(
     _admin: foims_auth::extractor::AdminUser,
+    meta: foims_auth::meta::RequestMeta,
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<foims_data_management::ClearLogsRequest>,
 ) -> Result<Response, AppError> {
-    foims_data_management::clear_logs(state.as_ref().clone(), req)
+    // 请求参数先行留档：清理范围（类型/保留天数）与删除行数一并写入审计
+    let log_type = req.log_type.clone();
+    let days = req.days;
+    let (deleted, response) = foims_data_management::clear_logs(state.as_ref().clone(), req)
+        .await
+        .map_err(AppError::from)?;
+
+    // 审计留痕（尽力而为）：清理对象是审计日志本身，必须在删除完成之后
+    // 写入，否则该记录会被本次清理一并删除
+    foims_auth::meta::log_op_best_effort(
+        &state.pool()?.get_conn(),
+        &meta,
+        "clear",
+        "log",
+        None,
+        &serde_json::json!({ "log_type": log_type, "days": days, "deleted": deleted }),
+    )
+    .await;
+
+    Ok(response)
+}
+
+async fn data_preview_logs_clear(
+    _admin: foims_auth::extractor::AdminUser,
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<foims_data_management::ClearLogsRequest>,
+) -> Result<Response, AppError> {
+    foims_data_management::preview_logs_clear(state.as_ref().clone(), req)
         .await
         .map_err(AppError::from)
 }
@@ -853,6 +881,10 @@ pub fn init_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/api/system/logs/stats", get(data_get_logs_stats))
         .route("/api/system/logs/clear", post(data_clear_logs))
+        .route(
+            "/api/system/logs/clear/preview",
+            post(data_preview_logs_clear),
+        )
         // 日志外发（syslog，安全管理员管辖）
         .route(
             "/api/system/logs/forwarding",

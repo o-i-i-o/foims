@@ -1294,6 +1294,8 @@
     "clear": "Clear",
     "clear_all_confirm": "Are you sure you want to delete all logs? This action cannot be undone.",
     "clear_days_confirm": "Are you sure you want to delete logs older than {{days}} days? This action cannot be undone.",
+    "clear_all_confirm_count": "Are you sure you want to delete all logs? {{count}} records will be removed. This action cannot be undone.",
+    "clear_days_confirm_count": "Are you sure you want to delete logs older than {{days}} days? {{count}} records will be removed. This action cannot be undone.",
     "clear_failed": "Failed to clear logs",
     "live_connected": "Connected",
     "live_disconnected": "Disconnected",
@@ -1366,6 +1368,7 @@
       "sync_net_outlets": "Sync Network Outlets",
       "sync_patch_panels": "Sync Patch Panels",
       "sync_positions": "Sync Positions",
+      "clear": "Clear",
       "change_password": "Change Password"
     },
     "resource_types": {
@@ -1395,6 +1398,7 @@
       "organization": "Organization",
       "certificate": "Certificate",
       "certificate_ca": "Root CA",
+      "log": "Log",
       "employee": "Employee"
     },
     "view_detail_failed": "Failed to view details",
@@ -2483,8 +2487,9 @@
     },
     "logs": {
       "cleared": "Successfully cleared {{count}} log records",
-      "days_invalid": "Retention days cannot be negative",
+      "days_invalid": "Retention days must be between 0 and 3650 (0 means delete all)",
       "days_required": "Retention days must be specified explicitly (0 means delete all)",
+      "preview_retrieved": "Log cleanup preview retrieved",
       "login_retrieved": "Login logs retrieved",
       "operation_retrieved": "Operation logs retrieved",
       "stats_retrieved": "Log statistics retrieved",

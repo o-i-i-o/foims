@@ -10,6 +10,7 @@ import {
   clearLogs,
   getLogForwarding,
   getLogStats,
+  previewLogsClear,
   saveLogForwarding as saveLogForwardingConfig,
   testLogForwarding as sendLogForwardingTest
 } from "../../api/logs";
@@ -54,20 +55,53 @@ const clearDays = ref("30");
 const showClearConfirm = ref(false);
 const clearConfirmMessage = ref("");
 const clearing = ref(false);
+// 确认通过后实际提交的保留天数：requestClearLogs 解析并钳制后暂存，
+// doClearLogs 直接使用，避免二次解析时输入被清空导致误按 0（删除全部）处理
+const pendingClearDays = ref(0);
 
-function requestClearLogs(): void {
+// 与后端 clear_logs_core 的 MAX_KEEP_DAYS 同口径的保留天数上限（约 10 年）
+const MAX_KEEP_DAYS = 3650;
+
+/** 解析保留天数输入：空/非数字返回 null（未填写），否则钳制到 0..=3650 */
+function parseClearDays(): number | null {
   const daysInput = (clearDays.value || "").trim();
   const parsedDays = Number.parseInt(daysInput, 10);
   // 空或非数字视为未填写：直接提示，不按 0（清空全部）处理，
   // 避免误触不可逆的全量清理，也避免确认文案与请求体出现 NaN/null
   if (daysInput === "" || Number.isNaN(parsedDays)) {
+    return null;
+  }
+  // 数值钳制到合法范围：负数归 0（0 表示删除全部）
+  return Math.min(Math.max(parsedDays, 0), MAX_KEEP_DAYS);
+}
+
+async function requestClearLogs(): Promise<void> {
+  const days = parseClearDays();
+  if (days === null) {
     showToast(t("logs.days_required"), "warning");
     return;
   }
-  // 数值钳制到合法范围：负数归 0（0 表示删除全部），上限 36500 天（约百年）
-  const days = Math.min(Math.max(parsedDays, 0), 36500);
-  clearConfirmMessage.value = days === 0 ? t("logs.clear_all_confirm") : t("logs.clear_days_confirm", { days });
-  showClearConfirm.value = true;
+  pendingClearDays.value = days;
+  clearing.value = true;
+  try {
+    // 预览将删除的条数供确认弹窗展示（与清理同参同口径）；统计失败时
+    // 降级为不带数量的既有文案，清理主流程不因预览接口受阻
+    const payload: ClearLogsRequest = { log_type: clearType.value, days };
+    const result = await previewLogsClear(payload);
+    const count = result.success ? result.data?.total : undefined;
+    if (days === 0) {
+      clearConfirmMessage.value =
+        typeof count === "number" ? t("logs.clear_all_confirm_count", { count }) : t("logs.clear_all_confirm");
+    } else {
+      clearConfirmMessage.value =
+        typeof count === "number"
+          ? t("logs.clear_days_confirm_count", { days, count })
+          : t("logs.clear_days_confirm", { days });
+    }
+    showClearConfirm.value = true;
+  } finally {
+    clearing.value = false;
+  }
 }
 
 async function doClearLogs(): Promise<void> {
@@ -79,7 +113,7 @@ async function doClearLogs(): Promise<void> {
   try {
     const payload: ClearLogsRequest = {
       log_type: clearType.value,
-      days: Math.min(Math.max(Number.parseInt(clearDays.value, 10) || 0, 0), 36500)
+      days: pendingClearDays.value
     };
     const result = await clearLogs(payload);
     if (result.success) {
@@ -187,6 +221,7 @@ async function testLogForwarding(): Promise<void> {
           <div class="log-stat-card">
             <div class="log-stat-title">{{ t("logs.notifications") }}</div>
             <div class="log-stat-value">{{ stats.notifications?.count ?? 0 }}</div>
+            <div class="log-stat-info">{{ oldestText(stats.notifications?.oldest) }}</div>
           </div>
         </div>
         <div class="section-title-row">
@@ -208,7 +243,7 @@ async function testLogForwarding(): Promise<void> {
             </div>
             <div class="form-group">
               <label for="clear-log-days">{{ t("logs.keep_days") }}</label>
-              <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="365" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
+              <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="3650" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
             </div>
           </div>
         </div>
