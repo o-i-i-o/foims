@@ -15,7 +15,6 @@
 
   .content-section.active {
     display: block;
-    padding: var(--space-lg);
   }
 
   /* 可视化页为满幅画布（自管高度与滚动），不吃全局留白 */
