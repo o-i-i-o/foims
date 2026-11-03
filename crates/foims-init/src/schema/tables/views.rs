@@ -59,7 +59,7 @@ const VIEWS: &[(&str, &str)] = &[
         SELECT
             d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
             d.workstation_id, d.position_id, d.room_id,
-            d.template_id, d.seller, d.location,
+            d.template_id, d.seller,
             d.snmp_version, d.snmp_community, d.snmp_username,
             d.snmp_auth_protocol, d.snmp_auth_password,
             d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,

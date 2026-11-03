@@ -1625,7 +1625,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foims"
-version = "0.33.21"
+version = "0.33.22"
 dependencies = [
  "async-trait",
  "axum",
@@ -1768,7 +1768,7 @@ dependencies = [
 
 [[package]]
 name = "foims-data-management"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "async-trait",
  "axum",
@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "foims-init"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "axum",
  "bcrypt",
@@ -1828,7 +1828,7 @@ dependencies = [
 
 [[package]]
 name = "foims-models"
-version = "0.2.22"
+version = "0.2.23"
 dependencies = [
  "chrono",
  "foims-common",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "foims-resource"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "axum",
  "chrono",
@@ -1950,7 +1950,7 @@ dependencies = [
 
 [[package]]
 name = "foims-visualization"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "axum",
  "foims-auth",

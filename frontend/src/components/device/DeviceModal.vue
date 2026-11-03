@@ -113,7 +113,6 @@ interface DeviceFormState {
   brand: string;
   model: string;
   seller: string;
-  location: string;
   powerWatts: number | "";
   powerUnit: string;
   orgId: string;
@@ -148,7 +147,6 @@ const form = reactive<DeviceFormState>({
   brand: "",
   model: "",
   seller: "",
-  location: "",
   powerWatts: "",
   powerUnit: "W",
   orgId: "",
@@ -426,7 +424,6 @@ async function fillDeviceFormForEdit(
   form.brand = device.brand || "";
   form.model = device.model || "";
   form.seller = device.seller || "";
-  form.location = device.location || "";
   form.powerWatts = device.power_watts ?? "";
   form.powerUnit = "W";
   form.serialNumber = device.serial_number || "";
@@ -662,7 +659,6 @@ const saveMutation = useMutation({
       brand: form.brand.trim() || null,
       model: form.model.trim() || null,
       seller: form.seller.trim() || null,
-      location: form.location.trim() || null,
       serial_number: form.serialNumber.trim() || null,
       template_id: form.templateId || null,
       workstation_id: form.workstationId || null,
@@ -851,10 +847,6 @@ onMounted(async () => {
         <div class="form-group">
           <label for="device-seller">{{ t("device.seller") }}</label>
           <input id="device-seller" v-model="form.seller" type="text" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label for="device-location">{{ t("device.location") }}</label>
-          <input id="device-location" v-model="form.location" type="text" autocomplete="off">
         </div>
         <div class="form-group power-inline">
           <label for="device-power-watts">{{ t("device.power_input") }}</label>

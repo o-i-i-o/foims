@@ -131,7 +131,6 @@
     "workstation": "Workstation",
     "position": "Cabinet Position",
     "room": "Room",
-    "location": "Location",
     "power_watts": "Power (W)",
     "power_input": "Power",
     "power_watts_invalid": "Power must be a non-negative integer",
@@ -2293,7 +2292,6 @@
       "validation": {
         "hostname_length": "Hostname must not exceed 100 characters",
         "interface_name_length": "Interface name must be 1 to 50 characters",
-        "location_length": "Location must not exceed 100 characters",
         "mac_length": "MAC address must not exceed 20 characters",
         "name_length": "Device name must be 1 to 100 characters",
         "nic_name_length": "Network card name must be 1 to 50 characters",

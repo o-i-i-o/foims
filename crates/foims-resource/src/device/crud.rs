@@ -122,7 +122,7 @@ pub async fn get_devices<P: DbProvider>(
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
-                d.template_id, d.seller, d.location,
+                d.template_id, d.seller,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
@@ -364,8 +364,8 @@ pub async fn create_device<P: DbProvider>(
     let snmp_port = req.snmp_port.unwrap_or(161);
 
     sqlx::query(
-        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, location, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, ipmi_username, ipmi_password, ipmi_port, ipmi_auth_algo, power_watts, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)",
+        "INSERT INTO devices (id, name, hostname, device_type, brand, model, serial_number, workstation_id, position_id, room_id, template_id, seller, snmp_version, snmp_community, snmp_username, snmp_auth_protocol, snmp_auth_password, snmp_priv_protocol, snmp_priv_password, snmp_port, ipmi_username, ipmi_password, ipmi_port, ipmi_auth_algo, power_watts, description, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)",
     )
     .bind(id)
     .bind(&req.name)
@@ -379,7 +379,6 @@ pub async fn create_device<P: DbProvider>(
     .bind(req.room_id)
     .bind(req.template_id)
     .bind(&req.seller)
-    .bind(&req.location)
     .bind(&snmp_version)
     .bind(&encrypted_community)
     .bind(&req.snmp_username)
@@ -474,7 +473,6 @@ pub async fn create_device<P: DbProvider>(
         room_id: req.room_id,
         template_id: req.template_id,
         seller: req.seller,
-        location: req.location,
         snmp_version: Some(snmp_version),
         snmp_community: encrypted_community,
         snmp_username: req.snmp_username,
@@ -532,7 +530,7 @@ pub async fn get_device<P: DbProvider>(
         sqlx::query_as::<_, DeviceWithDetails>(
             "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                     d.workstation_id, d.position_id, d.room_id,
-                    d.template_id, d.seller, d.location,
+                    d.template_id, d.seller,
                     d.snmp_version, d.snmp_community, d.snmp_username,
                     d.snmp_auth_protocol, d.snmp_auth_password,
                     d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
@@ -756,23 +754,22 @@ pub async fn update_device<P: DbProvider>(
          position_id = CASE WHEN $10::boolean THEN $11 ELSE position_id END,
          room_id = COALESCE($12, room_id),
          seller = COALESCE($13, seller),
-         location = COALESCE($14, location),
-         snmp_version = COALESCE($15, snmp_version),
-         snmp_community = CASE WHEN $16::boolean THEN $17 ELSE snmp_community END,
-         snmp_username = CASE WHEN $18::boolean THEN $19 ELSE snmp_username END,
-         snmp_auth_protocol = CASE WHEN $20::boolean THEN $21 ELSE snmp_auth_protocol END,
-         snmp_auth_password = CASE WHEN $22::boolean THEN $23 ELSE snmp_auth_password END,
-         snmp_priv_protocol = CASE WHEN $24::boolean THEN $25 ELSE snmp_priv_protocol END,
-         snmp_priv_password = CASE WHEN $26::boolean THEN $27 ELSE snmp_priv_password END,
-         snmp_port = COALESCE($28, snmp_port),
-         ipmi_username = CASE WHEN $29::boolean THEN $30 ELSE ipmi_username END,
-         ipmi_password = CASE WHEN $31::boolean THEN $32 ELSE ipmi_password END,
-         ipmi_port = CASE WHEN $33::boolean THEN $34 ELSE ipmi_port END,
-         ipmi_auth_algo = CASE WHEN $35::boolean THEN $36 ELSE ipmi_auth_algo END,
-         power_watts = CASE WHEN $37::boolean THEN $38 ELSE power_watts END,
-         description = CASE WHEN $39::boolean THEN $40 ELSE description END,
-         updated_at = $41
-         WHERE id = $42",
+         snmp_version = COALESCE($14, snmp_version),
+         snmp_community = CASE WHEN $15::boolean THEN $16 ELSE snmp_community END,
+         snmp_username = CASE WHEN $17::boolean THEN $18 ELSE snmp_username END,
+         snmp_auth_protocol = CASE WHEN $19::boolean THEN $20 ELSE snmp_auth_protocol END,
+         snmp_auth_password = CASE WHEN $21::boolean THEN $22 ELSE snmp_auth_password END,
+         snmp_priv_protocol = CASE WHEN $23::boolean THEN $24 ELSE snmp_priv_protocol END,
+         snmp_priv_password = CASE WHEN $25::boolean THEN $26 ELSE snmp_priv_password END,
+         snmp_port = COALESCE($27, snmp_port),
+         ipmi_username = CASE WHEN $28::boolean THEN $29 ELSE ipmi_username END,
+         ipmi_password = CASE WHEN $30::boolean THEN $31 ELSE ipmi_password END,
+         ipmi_port = CASE WHEN $32::boolean THEN $33 ELSE ipmi_port END,
+         ipmi_auth_algo = CASE WHEN $34::boolean THEN $35 ELSE ipmi_auth_algo END,
+         power_watts = CASE WHEN $36::boolean THEN $37 ELSE power_watts END,
+         description = CASE WHEN $38::boolean THEN $39 ELSE description END,
+         updated_at = $40
+         WHERE id = $41",
     )
     .bind(&req.name)
     // 双层 Option：Some(_) 时 SET（Some(None) 绑定 NULL 即清空），None 不进 SET
@@ -788,7 +785,6 @@ pub async fn update_device<P: DbProvider>(
     .bind(resolved_position_id)
     .bind(req.room_id)
     .bind(&req.seller)
-    .bind(&req.location)
     .bind(&req.snmp_version)
     .bind(req.snmp_community.is_some())
     .bind(&encrypted_community)
@@ -906,7 +902,7 @@ pub async fn update_device<P: DbProvider>(
     let updated_device = sqlx::query_as::<_, DeviceWithDetails>(
         "SELECT d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
                 d.workstation_id, d.position_id, d.room_id,
-                d.template_id, d.seller, d.location,
+                d.template_id, d.seller,
                 d.snmp_version, d.snmp_community, d.snmp_username,
                 d.snmp_auth_protocol, d.snmp_auth_password,
                 d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,

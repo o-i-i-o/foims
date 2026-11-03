@@ -15,7 +15,6 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE RESTRICT,
             template_id UUID REFERENCES device_templates(id) ON DELETE SET NULL,
             seller VARCHAR(50), -- 销售商（采购渠道）
-            location VARCHAR(100),
             snmp_version VARCHAR(3) DEFAULT 'v2c'
                 CONSTRAINT chk_devices_snmp_version CHECK (snmp_version IN ('v1', 'v2c', 'v3')),
             -- SNMP 凭据列以密文落库（AES-GCM + base64：明文 +28 字节再编码），

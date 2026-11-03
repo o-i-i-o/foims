@@ -131,7 +131,6 @@
     "workstation": "工位",
     "position": "机位",
     "room": "房间",
-    "location": "位置",
     "power_watts": "功耗（瓦）",
     "power_input": "功耗",
     "power_watts_invalid": "功耗必须是非负整数",
@@ -2293,7 +2292,6 @@
       "validation": {
         "hostname_length": "主机名长度不能超过100个字符",
         "interface_name_length": "接口名称长度必须在1到50个字符之间",
-        "location_length": "位置长度不能超过100个字符",
         "mac_length": "MAC地址长度不能超过20个字符",
         "name_length": "设备名称长度必须在1到100个字符之间",
         "nic_name_length": "网卡名称长度必须在1到50个字符之间",

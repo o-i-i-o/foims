@@ -30,6 +30,8 @@
 --   7. host_metrics_history 新增 (granularity, collected_at) 复合索引：
 --      分层清理 DELETE、1h 滚降 pending 扫描与原始层补聚合扫描均按
 --      「层 + 时间」过滤而无 agent_id 前导列，唯一索引无法服务。
+--   8. devices 删除 location 自由文本列：空间归属已由房间/工位/机柜/机位
+--      结构化字段承载，该列全站无展示出口，属冗余备注（存量值随删列丢弃）。
 --   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs、
 --   users.rs）与 check.rs 表/列/列宽清单已同步新增。
 BEGIN;
@@ -67,7 +69,7 @@ CREATE VIEW devices_with_details AS
 SELECT
     d.id, d.name, d.hostname, d.device_type, d.brand, d.model, d.serial_number,
     d.workstation_id, d.position_id, d.room_id,
-    d.template_id, d.seller, d.location,
+    d.template_id, d.seller,
     d.snmp_version, d.snmp_community, d.snmp_username,
     d.snmp_auth_protocol, d.snmp_auth_password,
     d.snmp_priv_protocol, d.snmp_priv_password, d.snmp_port,
@@ -248,5 +250,14 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ===== 9. devices 删除 location 自由文本列 =====
+-- 空间归属由房间/工位/机柜/机位结构化字段承载，location 为全站无展示出口的
+-- 冗余备注列。依赖顺序：第 3 节已按新结构重建 devices_with_details 视图
+-- （不含该列），此处删列不再受视图依赖阻断；存量 location 值随删列丢弃。
+-- 注意：数据管理导入按 spec 表头精确匹配（ensure_header_matches），升级前
+-- 导出的 devices CSV 含 location 列，升级后导入将报 header_mismatch——
+-- 存量数据应在升级前完成导入，或升级后从旧版本导出文件中手工剔除该列。
+ALTER TABLE devices DROP COLUMN IF EXISTS location;
 
 COMMIT;

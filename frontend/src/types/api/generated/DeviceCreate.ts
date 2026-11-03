@@ -6,7 +6,7 @@ export type DeviceCreate = { name: string, hostname: string | null,
  * 白名单 desktop/laptop/printer/server/network_device/switch/camera/phone/other；
  * template_id 命中时以模板的类型/品牌/型号为准
  */
-device_type: string | null, brand: string | null, model: string | null, serial_number: string | null, workstation_id: string | null, position_id: string | null, room_id: string, template_id: string | null, seller: string | null, location: string | null, 
+device_type: string | null, brand: string | null, model: string | null, serial_number: string | null, workstation_id: string | null, position_id: string | null, room_id: string, template_id: string | null, seller: string | null, 
 /**
  * SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version 兜底）
  */

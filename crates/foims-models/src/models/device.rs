@@ -431,8 +431,6 @@ pub struct Device {
     pub room_id: Uuid,
     pub template_id: Option<Uuid>,
     pub seller: Option<String>,
-    /// 自由文本位置备注（区别于 room/position 的结构化归属）
-    pub location: Option<String>,
     // snmp_version/snmp_port 数据库列为可空（仅带 DEFAULT）：
     // 应用路径恒写值，但模型按可空声明避免外部写入 NULL 时解码失败（M-1）
     /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
@@ -487,7 +485,6 @@ pub struct DeviceWithDetails {
     pub template_id: Option<Uuid>,
     pub template_name: Option<String>,
     pub seller: Option<String>,
-    pub location: Option<String>,
     /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
     pub snmp_version: Option<String>,
     pub snmp_community: Option<String>,
@@ -534,8 +531,6 @@ pub struct DeviceCreate {
     pub template_id: Option<Uuid>,
     #[validate(length(max = 50, message = "server.device.validation.seller_length"))]
     pub seller: Option<String>,
-    #[validate(length(max = 100, message = "server.device.validation.location_length"))]
-    pub location: Option<String>,
     /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version 兜底）
     #[validate(custom(
         function = "crate::models::validate_snmp_version_option",
@@ -641,8 +636,6 @@ pub struct DeviceUpdate {
     pub room_id: Option<Uuid>,
     #[validate(length(max = 50, message = "server.device.validation.seller_length"))]
     pub seller: Option<String>,
-    #[validate(length(max = 100, message = "server.device.validation.location_length"))]
-    pub location: Option<String>,
     /// SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
     #[validate(custom(
         function = "crate::models::validate_snmp_version_option",
@@ -949,7 +942,6 @@ mod tests {
             "brand": "H3C",
             "model": "S6520",
             "seller": "代理商",
-            "location": "A 机柜",
             "snmp_version": "v2c",
             "snmp_community": "public",
             "snmp_port": 161,
@@ -1336,7 +1328,6 @@ mod tests {
             room_id: Uuid::new_v4(),
             template_id: None,
             seller: None,
-            location: None,
             snmp_version: Some("2c".to_string()),
             snmp_community: Some("public".to_string()),
             snmp_username: None,
@@ -1383,7 +1374,6 @@ mod tests {
             template_id: None,
             template_name: None,
             seller: None,
-            location: None,
             snmp_version: None,
             snmp_community: None,
             snmp_username: None,

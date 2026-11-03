@@ -257,7 +257,6 @@ pub fn get_table_columns() -> HashMap<&'static str, Vec<&'static str>> {
             "room_id",
             "template_id",
             "seller",
-            "location",
             "snmp_version",
             "snmp_community",
             "snmp_username",

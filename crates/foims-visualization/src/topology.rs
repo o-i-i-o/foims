@@ -155,7 +155,6 @@ pub struct TopologyNodeWithDevice {
     pub seller: Option<String>,
     pub snmp_version: Option<String>,
     pub snmp_port: Option<i32>,
-    pub location: Option<String>,
     pub workstation_name: Option<String>,
     /// 设备必须归房间（devices.room_id NOT NULL），房间必须归组织
     /// （rooms.org_id NOT NULL），故房间与组织四个字段恒有值，不做空值回退
@@ -174,7 +173,7 @@ pub async fn get_topology_nodes(pool: &PgPool) -> Result<Response, Visualization
     let nodes = sqlx::query_as::<_, TopologyNodeWithDevice>(
         r"SELECT tn.id, tn.device_id, tn.x, tn.y, tn.width, tn.height,
                  d.name AS device_name, d.device_type, d.brand, d.model,
-                 d.seller, d.snmp_version, d.snmp_port, d.location,
+                 d.seller, d.snmp_version, d.snmp_port,
                  w.name AS workstation_name,
                  r.id AS room_id, r.name AS room_name,
                  o.id AS org_id, o.name AS org_name,
@@ -1127,7 +1126,6 @@ mod tests {
             seller: None,
             snmp_version: None,
             snmp_port: None,
-            location: None,
             workstation_name: None,
             room_id: uuid(3),
             room_name: "机房".to_string(),

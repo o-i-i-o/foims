@@ -10,10 +10,6 @@ device_type: string, brand: string | null, model: string | null, serial_number: 
  */
 position_id: string | null, room_id: string, template_id: string | null, seller: string | null, 
 /**
- * 自由文本位置备注（区别于 room/position 的结构化归属）
- */
-location: string | null, 
-/**
  * SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
  */
 snmp_version: string | null, 

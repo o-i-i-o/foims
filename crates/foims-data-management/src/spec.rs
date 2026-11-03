@@ -335,7 +335,6 @@ pub const TABLE_SPECS: &[TableSpec] = &[
                 },
             },
             Col::Plain("seller"),
-            Col::Plain("location"),
             Col::Plain("snmp_version"),
             Col::Plain("snmp_community"),
             Col::Plain("snmp_username"),

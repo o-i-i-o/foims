@@ -8,7 +8,7 @@ export type DeviceWithDetails = { id: string, name: string, hostname: string | n
 /**
  * 机位 U 区间（起止均含、start_u ≤ end_u；未入柜为 null）
  */
-start_u: number | null, end_u: number | null, template_id: string | null, template_name: string | null, seller: string | null, location: string | null, 
+start_u: number | null, end_u: number | null, template_id: string | null, template_name: string | null, seller: string | null, 
 /**
  * SNMP 版本白名单：v1/v2c/v3（DB CHECK chk_devices_snmp_version）
  */
