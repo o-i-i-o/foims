@@ -19,9 +19,8 @@ import { DEVICE_TYPE_OPTIONS } from "../../config/deviceOptions";
 import { readPowerWattsInput } from "../../utils/power";
 import { invalidateDeviceWrite } from "../../utils/queryKeys";
 import ModalShell from "../ModalShell.vue";
-import NavIcon from "../NavIcon.vue";
-import NetworkCardEditor from "./NetworkCardEditor.vue";
 import DeviceTemplateModal from "./DeviceTemplateModal.vue";
+import NetworkCardEditor from "./NetworkCardEditor.vue";
 import type { ApiResult, Paged } from "../../types/api";
 import type { CabinetPosition } from "../../types/api/generated/CabinetPosition";
 import type { DeviceInterface } from "../../types/api/generated/DeviceInterface";
@@ -107,7 +106,6 @@ interface DeviceFormState {
   hostname: string;
   deviceType: string;
   templateId: string;
-  saveAsTemplate: boolean;
   templateName: string;
   serialNumber: string;
   brand: string;
@@ -141,7 +139,6 @@ const form = reactive<DeviceFormState>({
   hostname: "",
   deviceType: "desktop",
   templateId: "",
-  saveAsTemplate: false,
   templateName: "",
   serialNumber: "",
   brand: "",
@@ -665,8 +662,9 @@ const saveMutation = useMutation({
       position_id: form.positionId || null,
       room_id: form.roomId || null,
       description: form.description.trim() || null,
-      save_as_template: form.saveAsTemplate,
-      template_name: form.saveAsTemplate ? form.templateName.trim() || form.name.trim() : null,
+      // 模板名称非空即随本次保存落模板；save_as_template=true 时名称恒有值
+      save_as_template: form.templateName.trim() !== "",
+      template_name: form.templateName.trim() || null,
       snmp_version: form.snmpVersion || "v2c",
       snmp_port: Number.parseInt(String(form.snmpPort), 10) || 161,
       power_watts: powerWatts,
@@ -783,18 +781,15 @@ onMounted(async () => {
             </option>
           </select>
         </div>
-        <div class="form-group form-group-inline">
-          <label for="device-save-as-template">{{ t("device.save_as_template") }}</label>
-          <input id="device-save-as-template" v-model="form.saveAsTemplate" type="checkbox" class="form-checkbox">
-          <button
-            type="button"
-            class="icon-btn btn-secondary btn-gap-left"
-            :data-tooltip="t('device_template.manage')"
-            :aria-label="t('device_template.manage')"
-            @click="templateModalOpen = true"
+        <div class="form-group">
+          <label for="device-template-name">{{ t("device.template_name") }}</label>
+          <input
+            id="device-template-name"
+            v-model="form.templateName"
+            type="text"
+            autocomplete="off"
+            :placeholder="t('device.template_name_placeholder')"
           >
-            <NavIcon name="list" />
-          </button>
         </div>
       </div>
       <div class="form-row">
@@ -817,19 +812,6 @@ onMounted(async () => {
             autocomplete="off"
             readonly
             :placeholder="t('device.hostname_placeholder')"
-          >
-        </div>
-      </div>
-      <!-- 模板名称独占整行：勾选"保存为模板"时显示 -->
-      <div class="form-row" :class="{ hidden: !form.saveAsTemplate }">
-        <div class="form-group">
-          <label for="device-template-name">{{ t("device.template_name") }}</label>
-          <input
-            id="device-template-name"
-            v-model="form.templateName"
-            type="text"
-            autocomplete="off"
-            :placeholder="t('device.template_name_placeholder')"
           >
         </div>
       </div>
@@ -1045,6 +1027,9 @@ onMounted(async () => {
     </form>
 
     <template #footer>
+      <button type="button" class="btn-secondary" @click="templateModalOpen = true">
+        {{ t("device_template.manage") }}
+      </button>
       <button type="button" class="btn-secondary" :disabled="testingSnmp" @click="testSnmpConnection">
         {{ testingSnmp ? t("common.testing") : t("device.test_snmp") }}
       </button>
