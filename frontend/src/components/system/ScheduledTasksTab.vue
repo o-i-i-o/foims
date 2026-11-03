@@ -217,7 +217,7 @@ function openCreate(): void {
             <th class="col-center" :class="sortClass(sortList, 'enabled')" @click="onThSort($event, sortList, 'enabled')">{{ t("scheduled_tasks.status") }}</th>
             <th class="col-center" :class="sortClass(sortList, 'last_run_at')" @click="onThSort($event, sortList, 'last_run_at')">{{ t("scheduled_tasks.last_run") }}</th>
             <th class="col-center" :class="sortClass(sortList, 'last_result')" @click="onThSort($event, sortList, 'last_result')">{{ t("scheduled_tasks.last_result") }}</th>
-            <th>
+            <th class="col-center">
               <button v-if="!readonly" type="button" class="btn btn-primary" @click="openCreate">
                 {{ t("scheduled_tasks.create") }}
               </button>

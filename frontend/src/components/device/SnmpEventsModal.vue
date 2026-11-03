@@ -215,9 +215,9 @@ onMounted(() => {
         <thead>
           <tr>
             <th class="index-column">#</th>
-            <th>{{ t("device.snmp_events.col_time") }}</th>
+            <th class="col-center">{{ t("device.snmp_events.col_time") }}</th>
             <th>{{ t("device.snmp_events.col_device") }}</th>
-            <th>{{ t("device.snmp_events.col_type") }}</th>
+            <th class="col-center">{{ t("device.snmp_events.col_type") }}</th>
             <th>{{ t("device.snmp_events.col_interface") }}</th>
             <th class="col-center">{{ t("device.snmp_events.col_severity") }}</th>
             <th>{{ t("device.snmp_events.col_detail") }}</th>
@@ -229,9 +229,9 @@ onMounted(() => {
           </tr>
           <tr v-for="(event, index) in list.items" v-else :key="event.id">
             <td class="index-column">{{ seqIndex(list, index) }}</td>
-            <td>{{ new Date(event.occurred_at).toLocaleString() }}</td>
+            <td class="col-center">{{ new Date(event.occurred_at).toLocaleString() }}</td>
             <td>{{ deviceName(event.device_id) }}</td>
-            <td>{{ eventTypeLabel(event.event_type) }}</td>
+            <td class="col-center">{{ eventTypeLabel(event.event_type) }}</td>
             <td>{{ event.interface || "-" }}</td>
             <td class="col-center">
               <span class="status-badge" :class="severityClass(event.severity)">

@@ -264,22 +264,26 @@ loadData();
               </div>
               <div v-show="expandedGroups.has(group.network)" class="network-group-content">
                 <table class="mac-group-table">
-                  <tr>
-                    <th>{{ t("device.ip_address") }}</th>
-                    <th>{{ t("device.mac_address") }}</th>
-                    <th>VLAN ID</th>
-                    <th>{{ t("device.locate.title") }}</th>
-                  </tr>
-                  <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
-                    <td>{{ entry.ip_address }}</td>
-                    <td>{{ entry.mac_address }}</td>
-                    <td>{{ entry.vlan_id != null ? String(entry.vlan_id) : "-" }}</td>
-                    <td>
-                      <button type="button" class="btn btn-secondary btn-sm" @click="openLocate(entry.mac_address)">
-                        {{ t("device.locate.entry") }}
-                      </button>
-                    </td>
-                  </tr>
+                  <thead>
+                    <tr>
+                      <th>{{ t("device.ip_address") }}</th>
+                      <th>{{ t("device.mac_address") }}</th>
+                      <th>VLAN ID</th>
+                      <th>{{ t("device.locate.title") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
+                      <td>{{ entry.ip_address }}</td>
+                      <td>{{ entry.mac_address }}</td>
+                      <td>{{ entry.vlan_id != null ? String(entry.vlan_id) : "-" }}</td>
+                      <td>
+                        <button type="button" class="btn btn-secondary btn-sm" @click="openLocate(entry.mac_address)">
+                          {{ t("device.locate.entry") }}
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -302,22 +306,26 @@ loadData();
               </div>
               <div v-show="expandedGroups.has(group.network)" class="network-group-content">
                 <table class="mac-group-table">
-                  <tr>
-                    <th>{{ t("device.ip_address") }}</th>
-                    <th>{{ t("device.mac_address") }}</th>
-                    <th>VLAN ID</th>
-                    <th>{{ t("device.locate.title") }}</th>
-                  </tr>
-                  <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
-                    <td>{{ entry.ip_address }}</td>
-                    <td>{{ entry.mac_address }}</td>
-                    <td>{{ entry.vlan_id != null ? String(entry.vlan_id) : "-" }}</td>
-                    <td>
-                      <button type="button" class="btn btn-secondary btn-sm" @click="openLocate(entry.mac_address)">
-                        {{ t("device.locate.entry") }}
-                      </button>
-                    </td>
-                  </tr>
+                  <thead>
+                    <tr>
+                      <th>{{ t("device.ip_address") }}</th>
+                      <th>{{ t("device.mac_address") }}</th>
+                      <th>VLAN ID</th>
+                      <th>{{ t("device.locate.title") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="entry in group.items" :key="entry.ip_address + entry.mac_address">
+                      <td>{{ entry.ip_address }}</td>
+                      <td>{{ entry.mac_address }}</td>
+                      <td>{{ entry.vlan_id != null ? String(entry.vlan_id) : "-" }}</td>
+                      <td>
+                        <button type="button" class="btn btn-secondary btn-sm" @click="openLocate(entry.mac_address)">
+                          {{ t("device.locate.entry") }}
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
                 </table>
               </div>
             </div>

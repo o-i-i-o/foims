@@ -86,6 +86,14 @@
     box-shadow: 0 0 0 3px rgb(255 255 255 / 40%);
   }
 
+  /* 触屏设备（粗指针）：收起按钮放大到 44px 触摸目标 */
+  @media (pointer: coarse) {
+    .sidebar-toggle {
+      width: 44px;
+      height: 44px;
+    }
+  }
+
   .sidebar-toggle svg {
     width: 18px;
     height: 18px;

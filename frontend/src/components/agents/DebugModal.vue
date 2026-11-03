@@ -448,20 +448,23 @@ function splitOids(text: string): string[] {
 .debug-tabs {
   display: flex;
   gap: 6px;
-  border-bottom: 1px solid var(--border-color, #ddd);
+  border-bottom: 1px solid var(--color-border);
 }
+/* 颜色一律引用全局 token（variables.css 随入口加载，无需回退值）：
+   原写法 var(--border-color, #ddd)、var(--text-muted, #666)、
+   var(--bg-subtle, #f6f6f6) 引用的变量并不存在，回退色一直在生效 */
 .debug-tab {
   padding: 6px 14px;
   border: none;
   background: transparent;
   cursor: pointer;
   font-size: 0.9rem;
-  color: var(--text-muted, #666);
+  color: var(--color-text-muted);
   border-bottom: 2px solid transparent;
 }
 .debug-tab.active {
-  color: var(--color-primary, #2563eb);
-  border-bottom-color: var(--color-primary, #2563eb);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 .debug-panel {
   display: flex;
@@ -481,7 +484,7 @@ function splitOids(text: string): string[] {
   font-size: 12px;
 }
 .debug-field span {
-  color: var(--text-muted, #888);
+  color: var(--color-text-muted);
 }
 .debug-field.grow {
   flex: 1 1 220px;
@@ -502,12 +505,12 @@ function splitOids(text: string): string[] {
 .debug-field textarea {
   width: 100%;
   padding: 5px 8px;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 13px;
 }
 .debug-result {
-  border-top: 1px solid var(--border-color, #eee);
+  border-top: 1px solid var(--color-border-light);
   padding-top: 8px;
 }
 .debug-summary {
@@ -517,23 +520,23 @@ function splitOids(text: string): string[] {
 .debug-rtt {
   margin: 0 0 6px;
   font-size: 13px;
-  color: var(--text-muted, #666);
+  color: var(--color-text-muted);
 }
 .debug-raw {
   max-height: 160px;
   overflow: auto;
-  background: var(--bg-subtle, #f6f6f6);
+  background: var(--color-bg-secondary);
   padding: 8px;
   border-radius: 4px;
   font-size: 12px;
   white-space: pre-wrap;
 }
 .debug-mono {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 .debug-error {
-  color: var(--color-danger, #d33);
+  color: var(--color-danger);
 }
 .debug-list {
   margin: 0;

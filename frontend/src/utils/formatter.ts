@@ -142,30 +142,6 @@ export function formatPowerValue(watts: number | null | undefined, unit: string)
   return `${watts} W`;
 }
 
-/** 操作类型图标：按 action 关键词匹配 emoji */
-export function getActionIcon(action: string | null | undefined): string {
-  if (!action) {
-    return "📋";
-  }
-  const actionLower = action.toLowerCase();
-  if (actionLower.includes("create") || actionLower.includes("add")) {
-    return "➕";
-  }
-  if (actionLower.includes("update") || actionLower.includes("edit")) {
-    return "✏️";
-  }
-  if (actionLower.includes("delete") || actionLower.includes("remove")) {
-    return "🗑️";
-  }
-  if (actionLower.includes("login")) {
-    return "🔐";
-  }
-  if (actionLower.includes("logout")) {
-    return "🚪";
-  }
-  return "📋";
-}
-
 /** 相对时间：一分钟内刚刚，一小时内 N 分钟前，一天内 N 小时前，其余按日期展示 */
 export function formatTime(timestamp: string | number | null | undefined): string {
   if (!timestamp) {

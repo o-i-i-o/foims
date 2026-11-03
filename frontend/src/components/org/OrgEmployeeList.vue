@@ -174,12 +174,12 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
         <thead>
           <tr>
             <th>{{ t("employee.col_name") }}</th>
-            <th>{{ t("employee.col_gender") }}</th>
+            <th class="col-center">{{ t("employee.col_gender") }}</th>
             <th>{{ t("employee.col_phone") }}</th>
             <th>{{ t("employee.col_email") }}</th>
-            <th>{{ t("employee.col_hire_date") }}</th>
+            <th class="col-center">{{ t("employee.col_hire_date") }}</th>
             <!-- 末列表头即新增入口（同 UsersTab 管理口径），行内为编辑/删除 -->
-            <th>
+            <th class="col-center">
               <button type="button" class="btn btn-primary btn-sm" @click="openCreate">
                 {{ t("employee.add") }}
               </button>
@@ -196,10 +196,10 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
           <template v-else>
             <tr v-for="employee in employees" :key="employee.id">
               <td>{{ employee.name || "-" }}</td>
-              <td>{{ genderText(employee.gender) }}</td>
+              <td class="col-center">{{ genderText(employee.gender) }}</td>
               <td>{{ employee.phone || "-" }}</td>
               <td>{{ employee.email || "-" }}</td>
-              <td>{{ employee.hire_date || "-" }}</td>
+              <td class="col-center">{{ employee.hire_date || "-" }}</td>
               <td class="col-center">
                 <span class="org-detail-actions-cell">
                   <button type="button" class="icon-btn btn-edit" :title="t('common.edit')" :aria-label="t('common.edit')" @click="openEdit(employee)">

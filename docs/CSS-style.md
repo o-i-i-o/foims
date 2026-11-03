@@ -61,7 +61,8 @@ frontend/src/styles/
 ├── reset.css            # 重置样式（项目统一基础，勿在别处重复 reset）
 ├── components/          # 跨页面复用组件（buttons/forms/tables/badges/device-modals…）
 ├── layouts/             # 布局框架（sidebar/main-content…）
-├── pages/               # 分区页面专属样式（agents/system/visualization/organization）
+├── pages/               # 分区页面专属样式（agents/system/visualization/organization，
+│                        # 由对应页面 SFC `<style src>` 引入，随路由懒加载）
 ├── login.css            # 登录页专属（@layer pages）
 ├── init.css             # 初始化向导专属（@layer reset + @layer pages）
 └── toasts.css           # 全局通知（@layer components）
@@ -74,9 +75,11 @@ frontend/src/styles/
 
 ### 1.2 加载方式与 @layer 层序
 
-- 全局样式经入口 JS 静态引入（`src/entries/*.js`，variables 先行建立
-  @layer 层序），由 Vite 打包合并、内容指纹化；**禁止**手写 `<link>`
-  引内部样式，新增页面样式在对应入口的导入链或组件 `<style scoped>` 中落位。
+- **装载分两条链**：跨页共享样式（variables/reset/components/layouts/toasts）
+  经入口 JS 静态引入（`src/entries/*.ts`，variables 先行建立 @layer 层序）；
+  分区页样式（`styles/pages/*.css`）由**对应页面 SFC 以 `<style src>` 引入**，
+  随路由懒加载（仍是无 scoped 的全局规则，仅装载时机跟随页面 chunk），
+  禁止把 pages 层文件加回入口导入链。**禁止**手写 `<link>` 引内部样式。
 - **@layer 层序全局固定**（`variables.css` 头部声明，Biome
   `useLayeredStyles` 强制）：
   `variables → reset → components → modals → layouts → pages → responsive`；
@@ -86,8 +89,22 @@ frontend/src/styles/
 - 组件特有样式写 SFC `<style scoped>`（unlayered，优先级高于所有 layer，
   语义等同"pages 层之上的本组件覆盖"，范本：`pages/DashboardPage.vue`）；
   跨组件复用的样式禁止写进 scoped 块。
-- 归属判断：跨页面复用进 `styles/components/`，仅单页使用进
-  `styles/pages/` 或组件 scoped；拿不准时看同类先例。
+  ⚠️ "高于所有 layer"**包含 `responsive` 层**：scoped 规则会压过全局
+  `@layer responsive` 对同一元素的窄屏覆盖（静默失效）。需要移动端适配的
+  元素，媒体查询要么写进同一 scoped 块，要么把基础样式让渡给全局层
+  （范本：`LogsPage.vue` scoped 自带媒体查询；`tables.css` responsive 段
+  只覆盖未进 scoped 的全局表格样式）。
+- **样式归属判定（先 scoped、后全局豁免）**：页面/组件专属样式默认写
+  SFC `<style scoped>`（与组件同文件、有编译期隔离、改类名不静默失效）；
+  仅当满足以下豁免条件之一才落全局层——
+  1. 样式需命中 **v-html 注入 DOM**（拿不到 scoped 属性）；
+  2. 需**跨组件命中**（递归子组件、弹窗壳层、body 直挂浮层等）；
+  3. **跨页面复用**（进 `styles/components/`，经入口导入链装载）；
+  4. **独立 MPA 入口页**（login/init 这类无 RouterView 的单页入口）：样式落
+     `styles/` 根目录专属文件（`login.css`/`init.css`），经本入口 `entries/*.ts`
+     静态引入——入口即作用域，无需 pages/ 懒加载机制，也不新增第五种落位。
+  豁免文件须在文件头注释写明豁免原因（范本见 `styles/pages/visualization.css`
+  与 `pages/VisualizationPage.vue` 的 `<style src>` 注释）；拿不准时看同类先例。
 - scoped 块内**禁止使用 `@layer`**：unlayered 才享有"高于所有层"的覆盖
   语义，一旦包进 `@layer` 即回到层序规则、覆盖失效；Biome 检查范围不
   含 `.vue` 文件，此禁令靠评审保障（见顶部优先级声明）。
@@ -111,11 +128,18 @@ frontend/src/styles/
 
 | 前缀 | 用途 |
 |------|------|
-| `--color-*` | 色彩（含语义态 `-bg`/`-text`/`-border` 三件套） |
+| `--color-*` | 色彩（含语义态 `-bg`/`-text`/`-border` 三件套；`--color-status-*-text` 为状态文字子族） |
 | `--control-*` | 表单控件（背景/边框/高度/圆角/焦点环） |
-| `--chart-*` | 图表配色 |
-| `--status-*` | 状态色 |
+| `--btn-*` | 按钮几何（`--btn-height` 基准档与 `pointer: coarse` 触屏档） |
+| `--sidebar-*` | 侧边栏几何与动画（展开/收起宽度） |
+| `--font-*` | 字号阶梯与等宽字体栈（`--font-mono`） |
+| `--port-*` | 端口方块状态色 |
+| `--chart-*` | 可视化画布/图表配色 |
+| `--log-term-*` | 实时日志终端深色面板色板 |
+| `--z-*` | 浮层层级分配（用法见 §7.1） |
 | `--space-*` / `--radius-*` / `--shadow-*` / `--transition-*` | 几何与动效 |
+
+> 上表为注册表索引，token 取值与档位以 `variables.css` 注释为准；新增前缀须先在本表登记，禁止绕开命名空间裸造变量。
 
 ### 2.3 命名禁忌
 
@@ -259,14 +283,25 @@ transition: box-shadow var(--transition-normal);
 透明度用 CSS Color 4 空格分隔记法：`rgb(102 168 15 / 10%)`
 （见 `variables.css` 惯例），不用 `rgba()` 旧式；禁止在业务样式里新增裸 hex 色值。
 
+### 7.1 层级（z-index）治理
+
+浮层层级一律走 `--z-*` token，全部分配集中在 `variables.css`
+（modal 1050 / popover 1060 / tooltip 3000 / toast 9999 /
+visualization 8999~9000 / select-panel 9500）；新增浮层先在
+`variables.css` 登记新档位并注明与相邻档位的关系，禁止裸写数字
+z-index。唯一例外是**局部堆叠上下文**——父级已建立 `position` +
+层级、只需 1~10 小值排内部次序的场景（如卡片内徽章压角），就地写
+小数字即可，跨浮层的比较一律交给 token。
+
 ### 断点约定（与媒体查询配合）
 
 | 名称 | 宽度 | 场景 |
 |------|------|------|
-| xs | 480px | 竖屏手机 |
+| xl | 1400px | 宽屏（config-card 表单列数回落阶梯） |
+| lg | 992px | 大屏（登录页两栏收合、表单列数回落） |
+| md | 768px | 平板（移动端抽屉、布局单列化） |
 | sm | 576px | 横屏手机 |
-| md | 768px | 平板 |
-| lg | 992px | 大屏（侧栏收窄） |
+| xs | 480px | 竖屏手机 |
 
 断点数值以 `variables.css` 头部注释为准，不要随手造新断点。
 **媒体查询条件中必须硬编码与上表一致的 px 数值**：CSS 变量不能用于
@@ -286,7 +321,11 @@ transition: box-shadow var(--transition-normal);
    表格横滚），无独立 responsive.css，也不新建；
 3. **条件用现代范围语法**：`@media (width <= 768px)`，
    不写 `max-width: 768px` 旧式；断点 px 值一律硬编码（见上节，
-   媒体查询无法消费 CSS 变量）。
+   媒体查询无法消费 CSS 变量）；
+4. **特征查询不受断点表约束**：`prefers-reduced-motion`、
+   `pointer: coarse` 等能力/偏好查询不属宽度断点体系，按需就近书写
+   （范本：`variables.css` 触屏档 `--btn-height`、`toasts.css` 的
+   reduced-motion 降级）。
 
 ```css
 /* 组件文件 @layer responsive 段中的写法 */
@@ -306,8 +345,10 @@ transition: box-shadow var(--transition-normal);
   而非复述代码。
 - **只用 `/* */`**：项目无 PostCSS 构建链，`//` 在原生 CSS 中是非法语法
   （会被浏览器当选择器解析报错），一律禁止。
-- 注释写在目标规则**上方**，避免行尾长注释（工具行内豁免
-  注释除外——机制要求紧跟声明行尾）。
+- 长解释写在目标规则**上方**；行尾注释仅限**一行内放得下的短注**
+  （`variables.css` 的 token 档位注释即此式：`#adb5bd; /* gray-5 */`），
+  超长会被 formatter 折行、不可读；工具豁免注释（机制要求紧跟声明
+  行尾）为既定例外。
 
 ```css
 /* 状态徽章：形状类 + 颜色类组合使用（如 class="status-badge status-active"）
@@ -336,7 +377,10 @@ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 
 ## 十一、禁止清单
 
-- ❌ 行内样式 `style="..."`（微布局抽公共类或组件 scoped 类，缺类先补类）
+- ❌ 静态行内样式 `style="..."`（微布局抽公共类或组件 scoped 类，缺类先补类）；
+  动态 `:style` 绑定（画布定位等运行时计算值）不受此限
+- ❌ 裸数字 z-index（浮层层级一律 `var(--z-*)`，见 §7.1；局部堆叠上下文
+  1~10 小值除外）
 - ❌ `!important`（约定禁止；确需压制按第五节约定评审豁免）
 - ❌ 命名色 `red`/`blue`（颜色一律 `var(--color-*)`）
 - ❌ 零散硬编码颜色、尺寸魔数

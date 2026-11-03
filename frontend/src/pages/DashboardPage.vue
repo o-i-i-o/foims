@@ -14,7 +14,6 @@ import { useQuery } from "@tanstack/vue-query";
 import { apiGet } from "../api/client";
 import { useAuthStore } from "../stores/auth";
 import {
-  getActionIcon,
   getOperationTypeText,
   getRoomTypeName,
   getResourceTypeText,
@@ -23,6 +22,7 @@ import {
   formatTime
 } from "../utils/formatter";
 import { useLiveAgents } from "../composables/useLiveAgents";
+import NavIcon from "../components/NavIcon.vue";
 import type { AlertThresholds } from "../types/api/generated/AlertThresholds";
 import type { LiveSummaryRow } from "../types/api/generated/LiveSummaryRow";
 import type { Paged } from "../types/api";
@@ -99,6 +99,30 @@ const logsQuery = useTopList<OperationLog>("dashboard-top-logs", "/api/logs/oper
 /** IP 榜单条目的归属行：区域 / 子网 */
 function ipRegionText(ip: IpDetailWithNames): string {
   return [ip.network_region, ip.network_name].filter(Boolean).join(" / ") || "-";
+}
+
+/** 操作类型 → 线稿图标名（与侧边栏 NavIcon 体系统一，config/icons 提供） */
+function actionIconName(action: string | null | undefined): string {
+  if (!action) {
+    return "logs";
+  }
+  const actionLower = action.toLowerCase();
+  if (actionLower.includes("create") || actionLower.includes("add")) {
+    return "plus";
+  }
+  if (actionLower.includes("update") || actionLower.includes("edit")) {
+    return "edit";
+  }
+  if (actionLower.includes("delete") || actionLower.includes("remove")) {
+    return "trash";
+  }
+  if (actionLower.includes("login")) {
+    return "lock";
+  }
+  if (actionLower.includes("logout")) {
+    return "logout";
+  }
+  return "logs";
 }
 
 /** 最近动态条目的操作人行 */
@@ -400,14 +424,14 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   <section id="dashboard" class="content-section active" :aria-label="t('nav.dashboard')">
     <div class="dashboard-stats" role="status" aria-live="polite">
       <article class="stat-card clickable" @click="openSection($event, 'resources', 'networks')">
-        <div class="stat-icon">🌐</div>
+        <div class="stat-icon"><NavIcon name="resources" /></div>
         <div class="stat-content">
           <h3>{{ t("dashboard.total_networks") }}</h3>
           <div class="stat-value">{{ statValues.networks }}</div>
         </div>
       </article>
       <article class="stat-card clickable" @click="openSection($event, 'resources', 'network-regions')">
-        <div class="stat-icon">📍</div>
+        <div class="stat-icon"><NavIcon name="organization" /></div>
         <div class="stat-content">
           <h3>{{ t("dashboard.total_network_types") }}</h3>
           <div class="stat-value">{{ statValues.regions }}</div>
@@ -415,21 +439,21 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
       </article>
       <!-- ip 区无页签结构，点击直接跳转设备详情页 -->
       <article class="stat-card clickable" @click="openSection($event, 'ip')">
-        <div class="stat-icon">🔗</div>
+        <div class="stat-icon"><NavIcon name="ip" /></div>
         <div class="stat-content">
           <h3>{{ t("dashboard.total_ip_addresses") }}</h3>
           <div class="stat-value">{{ statValues.ips }}</div>
         </div>
       </article>
       <article class="stat-card stat-success clickable" @click="openSection($event, 'ip')">
-        <div class="stat-icon">✅</div>
+        <div class="stat-icon"><NavIcon name="check" /></div>
         <div class="stat-content">
           <h3>{{ t("dashboard.active_ips") }}</h3>
           <div class="stat-value">{{ statValues.active }}</div>
         </div>
       </article>
       <article class="stat-card stat-info clickable" @click="openSection($event, 'logs')">
-        <div class="stat-icon">📊</div>
+        <div class="stat-icon"><NavIcon name="chart" /></div>
         <div class="stat-content">
           <h3>{{ t("dashboard.today_operations") }}</h3>
           <div class="stat-value">{{ statValues.ops }}</div>
@@ -448,7 +472,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
         @mouseleave="onCardMouseLeave"
       >
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">🖥️</span><span>{{ t("dashboard.host_metrics") }}</span></h3>
+          <h3><span class="card-icon"><NavIcon name="agents" /></span><span>{{ t("dashboard.host_metrics") }}</span></h3>
           <span class="live-stream-state" :class="{ on: liveConnected }">
             {{ liveConnected ? t("dashboard.live_on") : t("dashboard.live_off") }}
           </span>
@@ -514,7 +538,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
       <article class="dashboard-card" @click="openSection($event, 'ip')">
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">🔗</span><span>{{ t("dashboard.recent_ips") }}</span></h3>
+          <h3><span class="card-icon"><NavIcon name="ip" /></span><span>{{ t("dashboard.recent_ips") }}</span></h3>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -526,7 +550,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
             <template v-else>
               <li v-for="ip in ipsQuery.data.value" :key="ip.ip_address">
                 <div class="item-name">
-                  <span class="item-icon">🔗</span>
+                  <span class="item-icon"><NavIcon name="ip" /></span>
                   <div>
                     <div>{{ ip.ip_address || "-" }}</div>
                     <div class="item-meta">{{ ip.hostname || ip.device_name || "-" }}</div>
@@ -542,7 +566,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
       <article class="dashboard-card" @click="openSection($event, 'logs')">
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">📋</span><span>{{ t("dashboard.recent_logs") }}</span></h3>
+          <h3><span class="card-icon"><NavIcon name="logs" /></span><span>{{ t("dashboard.recent_logs") }}</span></h3>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -554,7 +578,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
             <template v-else>
               <li v-for="(log, index) in logsQuery.data.value" :key="log.id ?? index">
                 <div class="item-name">
-                  <span class="item-icon">{{ getActionIcon(log.action) }}</span>
+                  <span class="item-icon"><NavIcon :name="actionIconName(log.action)" /></span>
                   <div>
                     <div>{{ getOperationTypeText(log.action) }}</div>
                     <div class="item-meta">{{ logMetaText(log) }}</div>
@@ -569,7 +593,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
       <article class="dashboard-card" @click="openSection($event, 'resources', 'networks')">
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">🌐</span><span>{{ t("dashboard.top_networks") }}</span></h3>
+          <h3><span class="card-icon"><NavIcon name="resources" /></span><span>{{ t("dashboard.top_networks") }}</span></h3>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -581,7 +605,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
             <template v-else>
               <li v-for="network in networksQuery.data.value" :key="network.name">
                 <div class="item-name">
-                  <span class="item-icon">🌐</span>
+                  <span class="item-icon"><NavIcon name="resources" /></span>
                   <div>
                     <div>{{ network.name || "-" }}</div>
                     <div class="item-meta">{{ network.ipv4_cidr || network.ipv6_cidr || "-" }}</div>
@@ -596,7 +620,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
       <article class="dashboard-card" @click="openSection($event, 'resources', 'rooms')">
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">🏠</span><span>{{ t("dashboard.top_rooms") }}</span></h3>
+          <h3><span class="card-icon"><NavIcon name="rooms" /></span><span>{{ t("dashboard.top_rooms") }}</span></h3>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -608,7 +632,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
             <template v-else>
               <li v-for="room in roomsQuery.data.value" :key="room.name">
                 <div class="item-name">
-                  <span class="item-icon">🏠</span>
+                  <span class="item-icon"><NavIcon name="rooms" /></span>
                   <div>
                     <div>{{ room.name || "-" }}</div>
                     <div class="item-meta">{{ getRoomTypeName(room.room_type) }}</div>
@@ -623,7 +647,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 
       <article class="dashboard-card" @click="openSection($event, 'resources', 'cabinets')">
         <header class="dashboard-card-header">
-          <h3><span class="card-icon">🗄️</span><span>{{ t("dashboard.top_cabinets") }}</span></h3>
+          <h3><span class="card-icon"><NavIcon name="cabinets" /></span><span>{{ t("dashboard.top_cabinets") }}</span></h3>
         </header>
         <div class="dashboard-card-body">
           <ul class="top-list">
@@ -635,7 +659,7 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
             <template v-else>
               <li v-for="cabinet in cabinetsQuery.data.value" :key="cabinet.name">
                 <div class="item-name">
-                  <span class="item-icon">🗄️</span>
+                  <span class="item-icon"><NavIcon name="cabinets" /></span>
                   <div>
                     <div>{{ cabinet.name || "-" }}</div>
                     <div class="item-meta">{{ cabinet.room_name || "-" }}</div>
@@ -708,7 +732,13 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
 }
 
 .card-icon {
-  font-size: 1.1rem;
+  display: inline-flex;
+  color: var(--color-primary);
+}
+
+.card-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .dashboard-card-body {
@@ -761,8 +791,12 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
   color: var(--color-primary);
+}
+
+.top-list .item-name .item-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .top-list .item-meta {
@@ -969,7 +1003,13 @@ function openSection(event: MouseEvent, name: string, tab?: string): void {
   }
 
   .stat-card .stat-icon {
-    font-size: 2rem;
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-card .stat-icon svg {
+    width: 20px;
+    height: 20px;
   }
 }
 

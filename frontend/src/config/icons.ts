@@ -80,6 +80,13 @@ export const ICONS: Record<string, IconShape[]> = {
     { tag: "path", d: "M3 12h18" },
     { tag: "path", d: "M12 3v18" }
   ),
+  /* 机柜：双层抽屉式机架，对应资源管理的机柜页签与仪表盘机柜榜 */
+  cabinets: icon(
+    { tag: "rect", x: "3", y: "3", width: "18", height: "8", rx: "1.5" },
+    { tag: "rect", x: "3", y: "13", width: "18", height: "8", rx: "1.5" },
+    { tag: "line", x1: "7", y1: "7", x2: "7.01", y2: "7" },
+    { tag: "line", x1: "7", y1: "17", x2: "7.01", y2: "17" }
+  ),
   ip: icon(
     { tag: "circle", cx: "11", cy: "11", r: "8" },
     { tag: "line", x1: "21", y1: "21", x2: "16.65", y2: "16.65" }
@@ -202,6 +209,26 @@ export const ICONS: Record<string, IconShape[]> = {
   zap: icon({ tag: "polygon", points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2" }),
   // 设备 SNMP 汇聚入口（activity 脉搏线，语义为轮询/监测）
   snmp: icon({ tag: "polyline", points: "22 12 18 12 15 21 9 3 6 12 2 12" }),
+  // 邮件（SMTP 服务器设置）
+  mail: icon(
+    { tag: "rect", x: "2", y: "4", width: "20", height: "16", rx: "2" },
+    { tag: "path", d: "m2 6 10 7L22 6" }
+  ),
+  // 铃铛（通知设置）
+  bell: icon(
+    { tag: "path", d: "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" },
+    { tag: "path", d: "M13.7 21a2 2 0 0 1-3.4 0" }
+  ),
+  // 链接（Webhook 回调地址）
+  link: icon(
+    { tag: "path", d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" },
+    { tag: "path", d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" }
+  ),
+  // 盾牌（安全防护，如 fail2ban）
+  shield: icon({
+    tag: "path",
+    d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  }),
   // 打印（打印机，线缆标签打印）
   printer: icon(
     { tag: "polyline", points: "6 9 6 2 18 2 18 9" },

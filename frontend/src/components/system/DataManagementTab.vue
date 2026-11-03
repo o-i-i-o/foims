@@ -6,6 +6,7 @@
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import {
   backupSystemConfig,
   downloadCsvExport,
@@ -246,7 +247,7 @@ async function confirmRestoreConfig(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🗃️</span>
+            <span class="icon"><NavIcon name="resources" /></span>
             <span>{{ t("data-management.data_management") }}</span>
           </div>
         </header>

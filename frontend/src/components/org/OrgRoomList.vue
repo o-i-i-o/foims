@@ -43,9 +43,9 @@ const rooms = computed(() =>
       <table class="data-table" :aria-label="t('organization.rooms_title')">
         <thead>
           <tr>
-            <th>{{ t("common.index") }}</th>
+            <th class="index-column">{{ t("common.index") }}</th>
             <th>{{ t("room.name") }}</th>
-            <th>{{ t("room.type") }}</th>
+            <th class="col-center">{{ t("room.type") }}</th>
             <th>{{ t("room.org") }}</th>
             <th class="col-center">{{ t("room.workstation_count") }}</th>
             <th class="col-center">{{ t("organization.room_cabinet_count") }}</th>
@@ -62,7 +62,7 @@ const rooms = computed(() =>
             <tr v-for="(room, index) in rooms" :key="room.id">
               <td class="index-column">{{ index + 1 }}</td>
               <td>{{ room.name }}</td>
-              <td>{{ getRoomTypeName(room.room_type) }}</td>
+              <td class="col-center">{{ getRoomTypeName(room.room_type) }}</td>
               <td>{{ room.org_name }}</td>
               <td class="col-center">{{ room.workstation_count }}</td>
               <td class="col-center">{{ room.cabinet_count }}</td>

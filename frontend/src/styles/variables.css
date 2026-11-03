@@ -10,6 +10,7 @@
    * - 辅助 green/red/yellow/cyan/blue（语义状态与图表）
    *
    * Responsive Breakpoints (use in media queries):
+   * - xl: 1400px (wide desktop / form density ladder)
    * - lg: 992px (large screens)
    * - md: 768px (tablets)
    * - sm: 576px (landscape phones)
@@ -156,6 +157,24 @@
     --chart-position-bg-hover: #228be6; /* 机柜位节点悬停填充 blue-6 */
     --chart-link: #868e96; /* 连线基色 gray-6 */
 
+    /* 实时日志终端深色面板色板（LogsPage 运行日志窗格，Open Color 括号内为档位） */
+    --log-term-bg: #212529; /* 窗格底 gray-9 */
+    --log-term-btn-bg: #343a40; /* 「回到最新」悬浮按钮底 gray-8 */
+    --log-term-border: #495057; /* 悬浮按钮描边/悬停底 gray-7 */
+    --log-term-text: #dee2e6; /* 日志正文 gray-4 */
+    --log-term-muted: #adb5bd; /* 空态标题/过滤空态/debug·trace 徽章文字 gray-5 */
+    --log-term-faint: #909296; /* 来源/目标弱化文字 gray-5/6 之间 */
+    --log-term-hover: rgb(255 255 255 / 4%); /* 行悬停 */
+    --log-term-warn-text: #ffec99; /* warning 级文字 yellow-1 */
+    --log-term-info-text: #8ce99a; /* info 级文字 green-2 */
+    --log-term-error-text: #ffa8a8; /* error 级徽章文字 red-2 */
+    --log-term-error-soft: #ffc9c9; /* error 级消息正文 red-1 */
+    /* 级别徽章底：与文字色对应的色档按透明度淡化 */
+    --log-term-warn-badge-bg: rgb(250 176 5 / 22%); /* yellow-5 透明底 */
+    --log-term-info-badge-bg: rgb(47 158 68 / 24%); /* green-8 透明底 */
+    --log-term-error-badge-bg: rgb(240 62 62 / 20%); /* red-6 透明底 */
+    --log-term-muted-badge-bg: rgb(173 181 189 / 18%); /* gray-5 透明底 */
+
     /* 拓扑弹窗层级：高于普通模态区间（1050/1100+），低于 toast */
     --z-visualization-overlay: 8999;
     --z-visualization-modal: 9000;
@@ -163,5 +182,13 @@
     /* 全局下拉筛选面板（body 直挂的 fixed 浮层）：须盖住任何模态（含 9000 拓扑弹窗），
      仅低于 toast（9999），保证面板展开时 toast 反馈仍可见 */
     --z-select-panel: 9500;
+  }
+
+  /* 触屏设备（粗指针）：按钮抬高到 44px 触摸目标（WCAG 2.5.8），
+   桌面鼠标/触控板（细指针）维持紧凑密度不变 */
+  @media (pointer: coarse) {
+    :root {
+      --btn-height: 44px;
+    }
   }
 }

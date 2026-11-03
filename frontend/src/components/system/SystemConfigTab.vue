@@ -7,6 +7,7 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
   getLdapConfig,
@@ -280,7 +281,7 @@ async function testSsoConnection(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">⏱️</span>
+            <span class="icon"><NavIcon name="lock" /></span>
             <span>{{ t("config.session_settings") }}</span>
           </div>
           <button v-if="!readonly" type="button" class="btn btn-primary" :disabled="savingConfig" @click="saveSystemConfig">
@@ -306,7 +307,7 @@ async function testSsoConnection(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🗂️</span>
+            <span class="icon"><NavIcon name="users" /></span>
             <span>{{ t("ldap.title") }}</span>
           </div>
           <div v-if="!readonly" class="config-switch">
@@ -364,7 +365,7 @@ async function testSsoConnection(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🔐</span>
+            <span class="icon"><NavIcon name="unlock" /></span>
             <span>{{ t("sso.title") }}</span>
           </div>
           <div v-if="!readonly" class="config-switch">

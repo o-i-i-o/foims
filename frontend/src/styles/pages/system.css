@@ -76,7 +76,11 @@
     background: var(--color-primary-light);
     border-radius: 50%;
     color: var(--color-primary);
-    font-size: 0.75rem;
+  }
+
+  .config-card-title .icon svg {
+    width: 12px;
+    height: 12px;
   }
 
   /* 字段行已换用页面表单家族 form-row/form-group（label 定宽居中、控件同行撑满，

@@ -21,6 +21,8 @@ export const MAX_ZOOM_SCALE = 8;
 /** 缩放的视野宽度闸门：超出即忽略，避免一次缩放把画布缩成不可用状态 */
 export const MIN_ZOOM_WIDTH = 300;
 export const MAX_ZOOM_WIDTH = 30000;
+/** 网格坐标标注的最小可读屏幕字号（px）：低于该值只保留主网格线 */
+const MIN_READABLE_LABEL_SCREEN_PX = 8;
 
 /** 容器可视尺寸（隐藏页签下为 0，覆盖矩形此时退化为 viewBox 本身） */
 export interface CanvasSize {
@@ -77,9 +79,25 @@ export function useCanvasViewport(options: CanvasViewportOptions): CanvasViewpor
   const coverRect = computed(() =>
     computeCoverRect(viewBox.value, containerSize.value, options.preserveAspectRatio),
   );
-  const ruler = computed(() =>
-    buildGridRuler(coverRect.value, { gridSize: GRID_SIZE, fontDivisor: rulerFontDivisor }),
-  );
+  const ruler = computed<GridRulerData | null>(() => {
+    const data = buildGridRuler(coverRect.value, {
+      gridSize: GRID_SIZE,
+      fontDivisor: rulerFontDivisor,
+    });
+    if (!data) {
+      return null;
+    }
+    // 极端缩小（如最小缩放 0.05）下 buildGridRuler 的字号钳制失效，
+    // 标注屏幕尺寸低于可读阈值：只保留主网格线（线条任意比例下仍是空间参照）
+    const firstLabel = data.labels[0];
+    if (firstLabel && containerSize.value.width > 0) {
+      const screenScale = containerSize.value.width / coverRect.value.width;
+      if (firstLabel.fontSize * screenScale < MIN_READABLE_LABEL_SCREEN_PX) {
+        return { lines: data.lines, labels: [] };
+      }
+    }
+    return data;
+  });
   const zoomScale = computed(() => {
     const width = containerSize.value.width;
     return width && viewBox.value.width ? width / viewBox.value.width : 1;

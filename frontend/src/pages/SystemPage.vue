@@ -63,3 +63,8 @@ const { activeTab, switchTab } = useSubTabs({
     <SystemInfoTab v-show="activeTab === 'system-info'" :active="activeTab === 'system-info'" />
   </section>
 </template>
+
+<!-- 页面级样式（@layer pages/responsive）：七个子页签组件共用，
+ 豁免 scoped 走全局层（规则见 docs/CSS-style.md §一）；经 <style src> 随本页路由懒加载 -->
+<style src="../styles/pages/system.css"></style>
+

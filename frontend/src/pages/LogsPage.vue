@@ -60,7 +60,7 @@ const operation = usePagedList<OperationLog>({
   buildUrl: (page, pageSize, sortBy, sortOrder) => operationLogsUrl({ page, pageSize, sortBy, sortOrder }, operationSearch.value)
 });
 
-// 搜索框位于操作日志表头：防抖 500ms，搜索词变化重置页码
+// 搜索框位于操作日志页签工具栏：防抖 500ms，搜索词变化重置页码
 const searchInput = ref("");
 let searchTimer: number | undefined;
 
@@ -273,6 +273,16 @@ const detailsLog = ref<OperationLog | null>(null);
     </div>
 
     <div id="operation-tab" v-show="activeTab === 'operation'" class="tab-content" :class="{ active: activeTab === 'operation' }" role="tabpanel">
+      <!-- 筛选工具栏：全局关键字搜索（服务端过滤，防抖 500ms），与全站工具栏筛选范式统一 -->
+      <div class="toolbar">
+        <input
+          v-model="searchInput"
+          type="text"
+          class="form-control form-control-sm w-auto"
+          :placeholder="t('logs.search_placeholder')"
+          :aria-label="t('logs.search_placeholder')"
+        >
+      </div>
       <div class="table-container">
         <table id="operation-logs-table" class="data-table" :aria-label="t('logs.operation_logs')">
           <thead>
@@ -320,15 +330,7 @@ const detailsLog = ref<OperationLog | null>(null);
               >
                 {{ t("logs.ip_address") }}
               </th>
-              <th>
-                <input
-                  v-model="searchInput"
-                  type="text"
-                  class="form-control form-control-sm w-auto"
-                  :placeholder="t('logs.search_placeholder')"
-                  :aria-label="t('logs.search_placeholder')"
-                >
-              </th>
+              <th class="col-center">{{ t("common.actions") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -546,7 +548,7 @@ const detailsLog = ref<OperationLog | null>(null);
               >
                 {{ t("notifications.status") }}
               </th>
-              <th>
+              <th class="col-center">
                 <div class="notifications-toolbar">
                   <button type="button" class="btn btn-secondary btn-sm" @click="showMarkAllConfirm = true">
                     {{ t("notifications.mark_all_read") }}
@@ -609,8 +611,9 @@ const detailsLog = ref<OperationLog | null>(null);
 </template>
 
 <style scoped>
-/* 操作日志表：搜索框取代原操作列表头，收窄时间/操作人/结果列，
- 让出宽度给含按钮与搜索框的最后一列 */
+/* 操作日志表：搜索框已迁至页签工具栏，这里保留时间/操作人/结果列的
+ 不折行约束（列宽由 tables.css 的 th 百分比分配，table-layout:fixed 下
+ td 宽度声明无效，white-space 仍按 td 生效） */
 #operation-logs-table td.col-time {
   width: 170px;
   white-space: nowrap;
@@ -802,7 +805,7 @@ const detailsLog = ref<OperationLog | null>(null);
   min-height: 360px;
   overflow: auto;
   padding: 10px 14px;
-  background: #212529;
+  background: var(--log-term-bg);
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
@@ -821,7 +824,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
 .live-empty-title {
   margin: 0;
-  color: #adb5bd;
+  color: var(--log-term-muted);
 }
 
 .live-empty-hint {
@@ -832,7 +835,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
 .live-pane .live-filter-empty {
   margin: 16px 0;
-  color: #adb5bd;
+  color: var(--log-term-muted);
   text-align: center;
 }
 
@@ -843,11 +846,11 @@ const detailsLog = ref<OperationLog | null>(null);
   margin: 0;
   padding: 0 6px;
   border-radius: var(--radius-sm);
-  color: #dee2e6;
+  color: var(--log-term-text);
 }
 
 .live-line:hover {
-  background: rgb(255 255 255 / 4%);
+  background: var(--log-term-hover);
 }
 
 .live-time {
@@ -867,24 +870,24 @@ const detailsLog = ref<OperationLog | null>(null);
 }
 
 .badge-error {
-  color: #ffa8a8;
-  background: rgb(240 62 62 / 20%);
+  color: var(--log-term-error-text);
+  background: var(--log-term-error-badge-bg);
 }
 
 .badge-warn {
-  color: #ffec99;
-  background: rgb(250 176 5 / 22%);
+  color: var(--log-term-warn-text);
+  background: var(--log-term-warn-badge-bg);
 }
 
 .badge-info {
-  color: #8ce99a;
-  background: rgb(47 158 68 / 24%);
+  color: var(--log-term-info-text);
+  background: var(--log-term-info-badge-bg);
 }
 
 .badge-debug,
 .badge-trace {
-  color: #adb5bd;
-  background: rgb(173 181 189 / 18%);
+  color: var(--log-term-muted);
+  background: var(--log-term-muted-badge-bg);
 }
 
 .live-target {
@@ -893,7 +896,7 @@ const detailsLog = ref<OperationLog | null>(null);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #909296;
+  color: var(--log-term-faint);
 }
 
 .live-message {
@@ -902,11 +905,11 @@ const detailsLog = ref<OperationLog | null>(null);
 }
 
 .live-line.live-warn .live-message {
-  color: #ffec99;
+  color: var(--log-term-warn-text);
 }
 
 .live-line.live-error .live-message {
-  color: #ffc9c9;
+  color: var(--log-term-error-soft);
 }
 
 .live-line.live-debug .live-message,
@@ -920,10 +923,10 @@ const detailsLog = ref<OperationLog | null>(null);
   right: 16px;
   bottom: 16px;
   padding: 6px 14px;
-  border: 1px solid #495057;
+  border: 1px solid var(--log-term-border);
   border-radius: 999px;
-  background: #343a40;
-  color: #dee2e6;
+  background: var(--log-term-btn-bg);
+  color: var(--log-term-text);
   font-size: var(--font-size-xs);
   cursor: pointer;
   box-shadow: var(--shadow-md);
@@ -931,10 +934,10 @@ const detailsLog = ref<OperationLog | null>(null);
 }
 
 .live-jump:hover {
-  background: #495057;
+  background: var(--log-term-border);
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .live-target {
     display: none;
   }

@@ -232,7 +232,7 @@ const debugModal = reactive({ open: false });
 
 <template>
   <section id="agents" class="content-section active" :aria-label="t('nav.agents')">
-    <div class="agents-toolbar">
+    <div class="toolbar">
       <select v-model="status" class="form-control form-control-sm w-auto" :aria-label="t('agents.filter_status')" @change="applyFilters">
         <option value="">{{ t("common.all") }}</option>
         <option value="active">{{ t("agents.status_active") }}</option>
@@ -267,12 +267,12 @@ const debugModal = reactive({ open: false });
             <th>{{ t("agents.col_ip") }}</th>
             <th>{{ t("agents.col_os") }}</th>
             <th class="col-center">{{ t("agents.col_arch") }}</th>
-            <th>{{ t("agents.col_cpu") }}</th>
-            <th>{{ t("agents.col_memory") }}</th>
-            <th>{{ t("agents.col_disk") }}</th>
+            <th class="col-center">{{ t("agents.col_cpu") }}</th>
+            <th class="col-center">{{ t("agents.col_memory") }}</th>
+            <th class="col-center">{{ t("agents.col_disk") }}</th>
             <th class="col-center">{{ t("agents.col_temp") }}</th>
             <th>{{ t("agents.col_version") }}</th>
-            <th>{{ t("agents.col_last_seen") }}</th>
+            <th class="col-center">{{ t("agents.col_last_seen") }}</th>
             <th class="col-center">{{ t("common.actions") }}</th>
           </tr>
         </thead>
@@ -307,7 +307,7 @@ const debugModal = reactive({ open: false });
             <td><AgentUsageBar :value="liveDisk(agent)" /></td>
             <td class="col-center">{{ formatTemp(liveTempValue(agent)) }}</td>
             <td>{{ agent.agent_version || "-" }}</td>
-            <td>{{ liveLastSeen(agent) ? formatTime(liveLastSeen(agent)) : "-" }}</td>
+            <td class="col-center">{{ liveLastSeen(agent) ? formatTime(liveLastSeen(agent)) : "-" }}</td>
             <td class="col-center">
               <button
                 type="button"
@@ -377,3 +377,8 @@ const debugModal = reactive({ open: false });
     />
   </section>
 </template>
+
+<!-- 页面级样式（@layer pages/responsive）：详情/阈值弹窗等跨组件命中，
+ 豁免 scoped 走全局层（规则见 docs/CSS-style.md §一）；经 <style src> 随本页路由懒加载 -->
+<style src="../styles/pages/agents.css"></style>
+

@@ -1080,7 +1080,8 @@
   }
 
   /* ============ 响应式 ============ */
-  @media (width <= 900px) {
+  /* ≤lg(992)：两栏收合为单栏，装饰性左侧品牌面板隐藏（窄屏保可读性优先） */
+  @media (width <= 992px) {
     #login-page {
       grid-template-columns: 1fr;
     }

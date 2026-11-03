@@ -26,7 +26,7 @@ const { t } = useI18n();
       <table class="data-table">
         <thead>
           <tr>
-            <th>{{ t("common.index") }}</th>
+            <th class="index-column">{{ t("common.index") }}</th>
             <th v-for="column in columns" :key="column">{{ column }}</th>
           </tr>
         </thead>

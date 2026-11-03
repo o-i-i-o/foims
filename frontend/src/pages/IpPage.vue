@@ -126,21 +126,21 @@ function onPullSaved() {
               <span>{{ t("common.type") }}</span>
               <ThSearch v-model="ipFilters.device_type" :aria-label="t('common.type')" />
             </th>
-            <th class="sortable th-searchable" :class="sortClass(ipList, 'network_name')" @click="onThSort($event, ipList, 'network_name')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'network_name')">
+            <th class="sortable th-searchable" :class="sortClass(ipList, 'network_name')" @click="onThSort($event, ipList, 'network_name')" tabindex="0" :aria-sort="sortAria(ipList, 'network_name')" @keydown="onThSortKeydown($event, ipList, 'network_name')">
               <span>{{ t("ip.network") }}</span>
               <ThSearch v-model="ipFilters.network" :aria-label="t('ip.network')" />
             </th>
-            <th class="sortable th-searchable" :class="sortClass(ipList, 'ip_address')" @click="onThSort($event, ipList, 'ip_address')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'ip_address')">
+            <th class="sortable th-searchable" :class="sortClass(ipList, 'ip_address')" @click="onThSort($event, ipList, 'ip_address')" tabindex="0" :aria-sort="sortAria(ipList, 'ip_address')" @keydown="onThSortKeydown($event, ipList, 'ip_address')">
               <span>{{ t("ip.ip_address") }}</span>
               <ThSearch v-model="ipFilters.ip_address" :aria-label="t('ip.ip_address')" />
             </th>
-            <th class="sortable th-inline-action" :class="sortClass(ipList, 'mac_address')" @click="onThSort($event, ipList, 'mac_address')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'mac_address')">
+            <th class="sortable th-inline-action" :class="sortClass(ipList, 'mac_address')" @click="onThSort($event, ipList, 'mac_address')" tabindex="0" :aria-sort="sortAria(ipList, 'mac_address')" @keydown="onThSortKeydown($event, ipList, 'mac_address')">
               <span>{{ t("ip.mac_address") }}</span>
               <button type="button" class="btn btn-secondary btn-sm" @click="pullMacOpen = true">
                 {{ t("ip.pull_short") }}
               </button>
             </th>
-            <th class="sortable" :class="sortClass(ipList, 'interface_name')" @click="onThSort($event, ipList, 'interface_name')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'interface_name')">
+            <th class="sortable" :class="sortClass(ipList, 'interface_name')" @click="onThSort($event, ipList, 'interface_name')" tabindex="0" :aria-sort="sortAria(ipList, 'interface_name')" @keydown="onThSortKeydown($event, ipList, 'interface_name')">
               {{ t("ip.device_port") }}
             </th>
             <th class="sortable col-center" :class="sortClass(ipList, 'status')" @click="onThSort($event, ipList, 'status')" tabindex="0" :aria-sort="sortAria(ipList, 'status')" @keydown="onThSortKeydown($event, ipList, 'status')">

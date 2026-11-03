@@ -138,3 +138,139 @@
     overflow-y: auto;
   }
 }
+
+/* ==================== MAC 表 / LLDP 邻居表（模态内明细表） ====================
+   自 tables.css 迁入：仅 ARP/LLDP/实体/POE/CDP/LAG/VLAN 台账等设备数据表模态使用。
+   保持 @layer components（迁移前的层序语义不变），基础规则在前、列级变体在后
+   （biome noDescendingSpecificity 约定） */
+
+@layer components {
+  /* MAC 表组内明细表 */
+  .mac-group-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .mac-group-table th {
+    border: 1px solid var(--color-border-dark);
+    padding: 6px;
+    text-align: left;
+    background: var(--color-bg);
+  }
+
+  .mac-group-table td {
+    border: 1px solid var(--color-border-dark);
+    padding: 6px;
+  }
+
+  /* LLDP 邻居表 */
+  .lldp-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .lldp-table thead tr {
+    background-color: var(--color-bg-secondary);
+  }
+
+  .lldp-table th {
+    border: 1px solid var(--color-border-dark);
+    padding: 12px 10px;
+    font-weight: 600;
+  }
+
+  .lldp-table td {
+    border: 1px solid var(--color-border-dark);
+    padding: 10px;
+  }
+
+  /* MAC 表空数据提示 */
+  .mac-table-empty {
+    text-align: center;
+    color: var(--color-text-secondary);
+    padding: 20px;
+  }
+
+  /* MAC 表按网段分组的外层容器 */
+  .mac-network-group {
+    margin-bottom: 10px;
+  }
+
+  /* MAC 表可点击的网段分组标题行（点击折叠/展开组内明细） */
+  .network-group-header {
+    background: var(--color-bg-hover);
+    padding: 8px 12px;
+    font-weight: 700;
+    border-left: 3px solid var(--color-success);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+
+  /* MAC 表分组标题右侧折叠箭头：默认折叠态横置，展开时组件切换 .expanded 回正 */
+  .mac-collapse-icon {
+    transform: rotate(-90deg);
+    transition: transform var(--transition-normal);
+  }
+
+  .mac-collapse-icon.expanded {
+    transform: rotate(0deg);
+  }
+
+  /* MAC 表组内明细：折叠态由组件切换 .collapsed 收起 */
+  .network-group-content.collapsed {
+    display: none;
+  }
+
+  /* LLDP 列级变体 */
+  .lldp-table th.lldp-col-index {
+    width: 60px;
+    text-align: center;
+  }
+
+  /* 隔行底色：与原内联实现一致（首行主背景，偶数行次背景） */
+  .lldp-table tbody tr:nth-child(odd) {
+    background-color: var(--color-bg-white);
+  }
+
+  .lldp-table tbody tr:nth-child(even) {
+    background-color: var(--color-bg);
+  }
+
+  .lldp-table td.lldp-index {
+    text-align: center;
+    color: var(--color-text-muted);
+    padding: 10px 8px;
+  }
+
+  .lldp-table td.lldp-port {
+    font-weight: 500;
+  }
+
+  .lldp-table td.lldp-chassis {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  .lldp-table td.lldp-desc {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+  }
+
+  /* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
+  .mac-lldp-text-error {
+    color: var(--color-danger);
+  }
+
+  .mac-lldp-text-muted {
+    color: var(--color-text-secondary);
+    margin-bottom: 10px;
+  }
+}

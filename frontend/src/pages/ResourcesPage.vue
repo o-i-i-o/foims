@@ -585,7 +585,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
               >
                 {{ t("common.created_at") }}
               </th>
-              <th>
+              <th class="col-center">
                 <button type="button" class="btn btn-primary btn-sm" @click="openRegionModal()">
                   {{ t("network.add_region") }}
                 </button>
@@ -617,7 +617,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 </td>
                 <td>{{ region.description || "-" }}</td>
                 <td class="col-center">{{ formatDateTime(region.created_at) }}</td>
-                <td>
+                <td class="col-center">
                   <button
                     type="button"
                     class="icon-btn btn-edit"
@@ -665,22 +665,22 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 <span>{{ t("common.name") }}</span>
                 <ThSearch v-model="networkFilters.name" :aria-label="t('common.name')" />
               </th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'network_region')" @click="onThSort($event, networks, 'network_region')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'network_region')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'network_region')" @click="onThSort($event, networks, 'network_region')" tabindex="0" :aria-sort="sortAria(networks, 'network_region')" @keydown="onThSortKeydown($event, networks, 'network_region')">
                 <span>{{ t("network.region") }}</span>
                 <ThSearch v-model="networkFilters.region" :aria-label="t('network.region')" />
               </th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv4_cidr')" @click="onThSort($event, networks, 'ipv4_cidr')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'ipv4_cidr')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv4_cidr')" @click="onThSort($event, networks, 'ipv4_cidr')" tabindex="0" :aria-sort="sortAria(networks, 'ipv4_cidr')" @keydown="onThSortKeydown($event, networks, 'ipv4_cidr')">
                 <span>{{ t("network.ipv4_cidr") }}</span>
                 <ThSearch v-model="networkFilters.ipv4" :aria-label="t('network.ipv4_cidr')" />
               </th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv6_cidr')" @click="onThSort($event, networks, 'ipv6_cidr')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'ipv6_cidr')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv6_cidr')" @click="onThSort($event, networks, 'ipv6_cidr')" tabindex="0" :aria-sort="sortAria(networks, 'ipv6_cidr')" @keydown="onThSortKeydown($event, networks, 'ipv6_cidr')">
                 <span>{{ t("network.ipv6_cidr") }}</span>
                 <ThSearch v-model="networkFilters.ipv6" :aria-label="t('network.ipv6_cidr')" />
               </th>
-              <th class="sortable col-center" :class="sortClass(networks, 'created_at')" @click="onThSort($event, networks, 'created_at')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'created_at')">
+              <th class="sortable col-center" :class="sortClass(networks, 'created_at')" @click="onThSort($event, networks, 'created_at')" tabindex="0" :aria-sort="sortAria(networks, 'created_at')" @keydown="onThSortKeydown($event, networks, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
-              <th>
+              <th class="col-center">
                 <button type="button" class="btn btn-primary btn-sm" @click="openNetworkModal()">
                   {{ t("network.add_network") }}
                 </button>
@@ -702,7 +702,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 <td>{{ item.ipv4_cidr || "-" }}</td>
                 <td>{{ item.ipv6_cidr || "-" }}</td>
                 <td class="col-center">{{ formatDateTime(item.created_at) }}</td>
-                <td>
+                <td class="col-center">
                   <button
                     type="button"
                     class="icon-btn btn-usage"
@@ -772,7 +772,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable col-center" :class="sortClass(rooms, 'created_at')" @click="onThSort($event, rooms, 'created_at')" tabindex="0" :aria-sort="sortAria(rooms, 'created_at')" @keydown="onThSortKeydown($event, rooms, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
-              <th>
+              <th class="col-center">
                 <button type="button" class="btn btn-primary btn-sm" @click="openRoomModal()">
                   {{ t("room.add_room") }}
                 </button>
@@ -808,7 +808,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 </td>
                 <td>{{ item.description || "-" }}</td>
                 <td class="col-center">{{ formatDateTime(item.created_at) }}</td>
-                <td>
+                <td class="col-center">
                   <button
                     type="button"
                     class="icon-btn btn-edit"
@@ -886,7 +886,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable col-center" :class="sortClass(cabinets, 'created_at')" @click="onThSort($event, cabinets, 'created_at')" tabindex="0" :aria-sort="sortAria(cabinets, 'created_at')" @keydown="onThSortKeydown($event, cabinets, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
-              <th>
+              <th class="col-center">
                 <button type="button" class="btn btn-primary btn-sm" @click="openCabinetModal()">
                   {{ t("cabinet.add_cabinet") }}
                 </button>
@@ -913,7 +913,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 <td class="col-center">{{ item.position_count ?? 0 }}</td>
                 <td>{{ item.description || "-" }}</td>
                 <td class="col-center">{{ formatDateTime(item.created_at) }}</td>
-                <td>
+                <td class="col-center">
                   <button
                     type="button"
                     class="icon-btn btn-edit"
@@ -984,7 +984,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 {{ t("device.room") }}
               </th>
               <th>{{ t("common.description") }}</th>
-              <th>
+              <th class="col-center">
                 <div class="device-toolbar-actions">
                   <button type="button" class="btn btn-primary btn-sm" @click="deviceModal.device = null; deviceModal.open = true">
                     {{ t("device.add") }}
@@ -1011,7 +1011,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 <td>{{ deviceLocationText(item) }}</td>
                 <td>{{ item.room_name || "-" }}</td>
                 <td>{{ item.description || "-" }}</td>
-                <td>
+                <td class="col-center">
                   <button
                     type="button"
                     class="icon-btn btn-edit"
@@ -1064,18 +1064,17 @@ function deviceLocationText(item: DeviceWithDetails): string {
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
-              <th>{{ t("cable_link.a_endpoint_type") }}</th>
+              <th class="col-center">{{ t("cable_link.a_endpoint_type") }}</th>
               <th>{{ t("cable_link.a_endpoint_no") }}</th>
-              <th>{{ t("cable_link.b_endpoint_type") }}</th>
+              <th class="col-center">{{ t("cable_link.b_endpoint_type") }}</th>
               <th>{{ t("cable_link.b_endpoint_no") }}</th>
               <th class="sortable col-center" :class="sortClass(cableLinks, 'link_type')" @click="onThSort($event, cableLinks, 'link_type')" tabindex="0" :aria-sort="sortAria(cableLinks, 'link_type')" @keydown="onThSortKeydown($event, cableLinks, 'link_type')">
                 {{ t("common.type") }}
               </th>
-              <th>
-                <span class="sortable" role="button" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')" tabindex="0" @keydown="onThSortKeydown($event, cableLinks, 'cable_label')">
-                  {{ t("cable_link.cable_label") }}
-                </span>
-                <button type="button" class="btn btn-secondary btn-sm" @click="openCableLabelPrintModal">
+              <th class="sortable" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')" tabindex="0" :aria-sort="sortAria(cableLinks, 'cable_label')" @keydown="onThSortKeydown($event, cableLinks, 'cable_label')">
+                <span>{{ t("cable_link.cable_label") }}</span>
+                <!-- .stop：打印按钮点击不得冒泡到 th 触发排序 -->
+                <button type="button" class="btn btn-secondary btn-sm" @click.stop="openCableLabelPrintModal">
                   {{ t("cable_link.print") }}
                 </button>
               </th>
@@ -1085,7 +1084,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable col-center" :class="sortClass(cableLinks, 'tested')" @click="onThSort($event, cableLinks, 'tested')" tabindex="0" :aria-sort="sortAria(cableLinks, 'tested')" @keydown="onThSortKeydown($event, cableLinks, 'tested')">
                 {{ t("cable_link.tested") }}
               </th>
-              <th>
+              <th class="col-center">
                 <button type="button" class="btn btn-primary btn-sm" @click="cableLinkModal.linkId = ''; cableLinkModal.open = true">
                   {{ t("cable_link.add") }}
                 </button>
@@ -1110,7 +1109,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
                 <td>{{ item.cable_label || "-" }}</td>
                 <td class="col-center">{{ item.length_m != null ? `${item.length_m}m` : "-" }}</td>
                 <td class="col-center">{{ item.tested ? t("cable_link.tested_yes") : t("cable_link.tested_no") }}</td>
-                <td>
+                <td class="col-center">
                   <button
                     type="button"
                     class="icon-btn btn-edit"

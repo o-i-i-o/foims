@@ -1,12 +1,8 @@
 @layer pages {
   /* 主机监控页面与详情弹窗样式 */
 
-  /* 工具栏：状态筛选 + 关键字 + 查询/刷新 */
-  .agents-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+  /* 工具栏间距（flex/wrap/gap 等由全局 .toolbar 提供，此处只补页级垂直间距） */
+  #agents > .toolbar {
     margin-bottom: 0.5rem;
   }
 

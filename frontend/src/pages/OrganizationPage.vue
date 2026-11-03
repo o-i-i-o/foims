@@ -262,8 +262,6 @@ function handleOrgSaved() {
               :placeholder="t('organization.search_placeholder')"
               :aria-label="t('organization.search_placeholder')"
             >
-          </div>
-          <div class="org-actions">
             <button type="button" class="btn btn-primary btn-sm" @click="templateModalOpen = true">
               {{ t("org_template.management") }}
             </button>
@@ -311,4 +309,10 @@ function handleOrgSaved() {
     />
   </section>
 </template>
+
+<!-- 页面级样式（@layer pages/responsive）：树节点被递归子组件、模板编辑器
+ 被弹窗跨组件命中，豁免 scoped 走全局层（规则见 docs/CSS-style.md §一）；
+ 经 <style src> 随本页路由懒加载 -->
+<style src="../styles/pages/organization.css"></style>
+
 

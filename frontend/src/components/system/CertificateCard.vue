@@ -8,6 +8,7 @@
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { CA_DOWNLOAD_URL, applyCertificate, deleteCertificate, getCertificateInventory } from "../../api/system";
 import { formatDate } from "../../utils/formatter";
@@ -137,7 +138,7 @@ function downloadCa(): void {
   <section class="config-card">
     <header class="config-card-header">
       <div class="config-card-title">
-        <span class="icon">🔐</span>
+        <span class="icon"><NavIcon name="lock" /></span>
         <span>{{ t("cert.manager_title") }}</span>
       </div>
     </header>
@@ -168,11 +169,11 @@ function downloadCa(): void {
           <thead>
             <tr>
               <th>{{ t("cert.ca_col_id") }}</th>
-              <th>{{ t("cert.ca_col_type") }}</th>
+              <th class="col-center">{{ t("cert.ca_col_type") }}</th>
               <th>{{ t("cert.col_subject") }}</th>
-              <th>{{ t("cert.col_validity") }}</th>
-              <th>{{ t("cert.col_remaining") }}</th>
-              <th>{{ t("cert.ca_col_key") }}</th>
+              <th class="col-center">{{ t("cert.col_validity") }}</th>
+              <th class="col-center">{{ t("cert.col_remaining") }}</th>
+              <th class="col-center">{{ t("cert.ca_col_key") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -184,15 +185,15 @@ function downloadCa(): void {
             </tr>
             <tr v-for="ca in caList" v-else :key="ca.id">
               <td :title="ca.id">{{ ca.id }}</td>
-              <td>
+              <td class="col-center">
                 <span class="cert-type-badge" :class="ca.source === 'root' ? 'cert-type-generated' : 'cert-type-imported'">
                   {{ ca.source === "root" ? t("cert.ca_source_root") : t("cert.ca_source_imported") }}
                 </span>
               </td>
               <td>{{ ca.name || "-" }}</td>
-              <td>{{ formatCertValidity(ca) }}</td>
-              <td :class="certDaysClass(ca.days_remaining)">{{ certDaysText(ca.days_remaining) }}</td>
-              <td>
+              <td class="col-center">{{ formatCertValidity(ca) }}</td>
+              <td class="col-center" :class="certDaysClass(ca.days_remaining)">{{ certDaysText(ca.days_remaining) }}</td>
+              <td class="col-center">
                 <span class="ca-key-badge" :class="ca.has_key ? 'ca-key-ok' : 'ca-key-missing'">
                   {{ ca.has_key ? t("cert.ca_key_ok_label") : t("cert.ca_no_key_label") }}
                 </span>
@@ -226,11 +227,11 @@ function downloadCa(): void {
           <thead>
             <tr>
               <th>{{ t("cert.col_file") }}</th>
-              <th>{{ t("cert.col_type") }}</th>
-              <th>{{ t("cert.col_purpose") }}</th>
+              <th class="col-center">{{ t("cert.col_type") }}</th>
+              <th class="col-center">{{ t("cert.col_purpose") }}</th>
               <th>{{ t("cert.col_subject") }}</th>
-              <th>{{ t("cert.col_validity") }}</th>
-              <th>{{ t("cert.col_remaining") }}</th>
+              <th class="col-center">{{ t("cert.col_validity") }}</th>
+              <th class="col-center">{{ t("cert.col_remaining") }}</th>
               <th class="col-center">{{ t("common.actions") }}</th>
             </tr>
           </thead>
@@ -243,20 +244,20 @@ function downloadCa(): void {
             </tr>
             <tr v-for="info in mergedCerts" v-else :key="`${info.kind}-${info.file_stem}`">
               <td :title="info.cert_filename">{{ info.file_stem }}</td>
-              <td>
+              <td class="col-center">
                 <span class="cert-type-badge" :class="info.kind === 'generated' ? 'cert-type-generated' : 'cert-type-imported'">
                   {{ info.kind === "generated" ? t("cert.type_generated") : t("cert.type_imported") }}
                 </span>
               </td>
-              <td>
+              <td class="col-center">
                 <span class="cert-type-badge" :class="info.system_managed ? 'cert-type-imported' : info.purpose === 'nginx' ? 'cert-type-generated' : 'cert-type-imported'">
                   {{ info.system_managed ? t("cert.purpose_system") : info.purpose === "nginx" ? t("cert.purpose_nginx") : t("cert.purpose_agent") }}
                 </span>
               </td>
               <td>{{ info.subject_cn || "-" }}</td>
-              <td>{{ formatCertValidity(info) }}</td>
-              <td :class="certDaysClass(info.days_remaining)">{{ certDaysText(info.days_remaining) }}</td>
-              <td v-if="!readonly" class="cert-actions-cell">
+              <td class="col-center">{{ formatCertValidity(info) }}</td>
+              <td class="col-center" :class="certDaysClass(info.days_remaining)">{{ certDaysText(info.days_remaining) }}</td>
+              <td v-if="!readonly" class="col-center cert-actions-cell">
                 <!-- 应用仅对 nginx 用途有意义；agent 用途与系统物料不提供 -->
                 <button v-if="info.purpose === 'nginx'" type="button" class="btn btn-primary btn-sm" @click="confirmAction = { type: 'apply', item: info }">
                   {{ t("cert.apply_title") }}

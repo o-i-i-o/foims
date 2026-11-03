@@ -300,10 +300,11 @@ onBeforeUnmount(useModalStack(() => emit("close")));
           <button type="button" class="btn btn-primary btn-sm" @click="savePosition">
             {{ t("viz.save_position") }}
           </button>
-          <button type="button" class="btn btn-danger btn-sm" @click="emit('remove')">
-            {{ t("visualization.remove_from_topology") }}
-          </button>
         </div>
+        <!-- 危险操作独立分组居最右：与"保存坐标"拉开间距，防误触 -->
+        <button type="button" class="btn btn-danger btn-sm" @click="emit('remove')">
+          {{ t("visualization.remove_from_topology") }}
+        </button>
       </footer>
     </div>
   </Teleport>

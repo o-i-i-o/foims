@@ -5,6 +5,7 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery } from "@tanstack/vue-query";
 import { getPasswordPolicy, getSystemConfig, updatePasswordPolicy, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
@@ -168,7 +169,7 @@ async function savePasswordPolicy(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🚦</span>
+            <span class="icon"><NavIcon name="zap" /></span>
             <span>{{ t("config.rate_limit_settings") }}</span>
           </div>
           <div class="card-header-actions">
@@ -216,7 +217,7 @@ async function savePasswordPolicy(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🔑</span>
+            <span class="icon"><NavIcon name="password" /></span>
             <span>{{ t("config.password_policy") }}</span>
           </div>
           <div class="card-header-actions">

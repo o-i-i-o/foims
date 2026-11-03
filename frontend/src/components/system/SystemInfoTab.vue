@@ -7,6 +7,7 @@
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery } from "@tanstack/vue-query";
 import { getSystemInfo } from "../../api/system";
 import { formatDateTime } from "../../utils/formatter";
@@ -76,7 +77,7 @@ const showOpenSource = ref(false);
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🖥️</span>
+            <span class="icon"><NavIcon name="agents" /></span>
             <span>{{ t("system.info") }}</span>
           </div>
         </header>
@@ -100,7 +101,7 @@ const showOpenSource = ref(false);
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🧾</span>
+            <span class="icon"><NavIcon name="list" /></span>
             <span>{{ t("system.license") }}</span>
           </div>
         </header>
@@ -114,7 +115,7 @@ const showOpenSource = ref(false);
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">ℹ️</span>
+            <span class="icon"><NavIcon name="system" /></span>
             <span>{{ t("system.about") }}</span>
           </div>
         </header>

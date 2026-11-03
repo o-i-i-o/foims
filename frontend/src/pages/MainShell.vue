@@ -14,6 +14,7 @@ import { useAuthStore } from "../stores/auth";
 import { NAV_ITEMS } from "../router/index";
 import { initTooltip } from "../composables/useTooltip";
 import { usePageTimeout } from "../composables/usePageTimeout";
+import { useFocusTrap } from "../composables/useFocusTrap";
 import AppToast from "../components/AppToast.vue";
 import ChangePasswordModal from "../components/ChangePasswordModal.vue";
 import LanguageMenu from "../components/LanguageMenu.vue";
@@ -50,6 +51,10 @@ const toggleLabel = computed(() => t(collapsed.value ? "nav.expand_sidebar" : "n
 
 /* ---------- 移动端抽屉（≤768px 侧边栏离屏，汉堡按钮唤出） ---------- */
 const mobileOpen = ref(false);
+
+// 抽屉打开期间 Tab 焦点循环约束在侧边栏内（复用弹窗焦点陷阱，随开关启停；桌面端不触发）
+const sidebarRef = ref<HTMLElement | null>(null);
+useFocusTrap(sidebarRef, mobileOpen);
 
 watch(mobileOpen, (open) => {
   // 抽屉开合样式由 body.sidebar-open 驱动，与桌面收起态（sidebar-collapsed）解耦
@@ -133,7 +138,7 @@ onMounted(() => {
     <!-- 移动端抽屉遮罩（桌面端 CSS 隐藏） -->
     <div v-if="mobileOpen" class="sidebar-scrim" aria-hidden="true" @click="mobileOpen = false"></div>
 
-    <aside id="app-sidebar" class="sidebar" role="navigation" :aria-label="t('nav.main_navigation')">
+    <aside id="app-sidebar" ref="sidebarRef" class="sidebar" role="navigation" :aria-label="t('nav.main_navigation')">
       <header class="sidebar-header">
         <button
           id="sidebar-toggle-btn"

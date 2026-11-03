@@ -6,12 +6,12 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getFail2banStatus, banIp as requestBanIp, unbanIp as requestUnbanIp, updateFail2banConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
-import NavIcon from "../NavIcon.vue";
 import type { AppFail2banStatus } from "../../types/api/generated/AppFail2banStatus";
 import type { BannedIpInfo } from "../../types/api/generated/BannedIpInfo";
 import type { TrackedIpInfo } from "../../types/api/generated/TrackedIpInfo";
@@ -140,7 +140,7 @@ function unbanIp(): void {
   <section class="config-card">
     <header class="config-card-header">
       <div class="config-card-title">
-        <span class="icon">🛡️</span>
+        <span class="icon"><NavIcon name="shield" /></span>
         <span>{{ t("security.app_fail2ban") }}</span>
       </div>
       <div class="card-header-actions">

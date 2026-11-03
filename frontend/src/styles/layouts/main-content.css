@@ -8,13 +8,19 @@
       var(--sidebar-anim-easing);
   }
 
-  /* 仅承担分页切换（display 切换），不再作为带边距的画布容器 */
+  /* 仅承担分页切换（display 切换）；非画布页统一吃全局留白，替代各页自带边距 */
   .content-section {
     display: none;
   }
 
   .content-section.active {
     display: block;
+    padding: var(--space-lg);
+  }
+
+  /* 可视化页为满幅画布（自管高度与滚动），不吃全局留白 */
+  .content-section.active.visualization-page {
+    padding: 0;
   }
 
   /* ===== 分页页脚贴底 =====
@@ -136,10 +142,17 @@
     display: block;
   }
 
+  /* flex-wrap：窄视口控件整项换行（各页自定义工具栏均已带 wrap，此处对齐全局行为） */
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-sm);
     align-items: center;
+  }
+
+  /* 空间不足时由容器整项换行承接，按钮文字自身不折行 */
+  .toolbar .btn {
+    white-space: nowrap;
   }
 
   .toolbar label {

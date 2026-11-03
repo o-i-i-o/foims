@@ -22,55 +22,12 @@
     flex: 1;
   }
 
-  /* ===== 独立表格家族（不带 .data-table 类的模态内明细表）：
-   基础规则集中声明在前，列级变体覆盖在文件底部（biome noDescendingSpecificity 约定） ===== */
-
-  /* MAC 表组内明细表 */
-  .mac-group-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .mac-group-table th {
-    border: 1px solid var(--color-border-dark);
-    padding: 6px;
-    text-align: left;
-    background: var(--color-bg);
-  }
-
-  .mac-group-table td {
-    border: 1px solid var(--color-border-dark);
-    padding: 6px;
-  }
-
-  /* LLDP 邻居表 */
-  .lldp-table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-top: 10px;
-  }
-
-  .lldp-table thead tr {
-    background-color: var(--color-bg-secondary);
-  }
-
-  .lldp-table th {
-    border: 1px solid var(--color-border-dark);
-    padding: 12px 10px;
-    font-weight: 600;
-  }
-
-  .lldp-table td {
-    border: 1px solid var(--color-border-dark);
-    padding: 10px;
-  }
-
-  /* ===== .data-table 家族 ===== */
+  /* .data-table 家族：单元格默认左对齐（名称/描述/IP 等长文本为主），
+   居中列由 .col-center 按列 opt-in（序号/时间/数字/枚举/状态/操作） */
 
   .data-table td {
     padding: 0.35rem;
     padding-top: 0.3rem;
-    text-align: center;
     vertical-align: middle;
     border-bottom: 1px solid var(--color-border);
   }
@@ -89,7 +46,9 @@
     text-transform: uppercase;
     font-size: 0.875rem;
     letter-spacing: 0.05em;
-    text-align: center;
+    /* 显式左对齐基线：浏览器 UA 对 th 内建 text-align: center，
+     作者样式缺席时会回落到 UA 居中，必须显式声明压制 */
+    text-align: left;
   }
 
   /* 收紧表头行高：表头单元格单独减薄纵向内边距，
@@ -99,14 +58,23 @@
     padding-bottom: 0.3rem;
     border-top: 2px solid var(--color-border);
     border-bottom: 2px solid var(--color-border);
-    text-align: center;
   }
 
   /* 表头按钮的紧凑尺寸声明移至文件末尾的 responsive 层，
-   避免被 responsive.css 的通用 .btn 移动端最小宽度规则按层序反超 */
+   避免被全局 .btn 移动端最小宽度规则按层序反超 */
 
-  /* 宽度可控列（序号/时间/数字/枚举/按钮）：居中由 .data-table td 基础规则提供，
-   .col-center 仅作为 HTML 侧的语义标记类保留，无独立样式 */
+  /* 列级对齐 opt-in：内容天然居中的列（序号/时间/数字/枚举/状态/操作按钮）
+   在 th/td 上挂 .col-center；文本列（名称/描述/IP/MAC/UA）不挂即左对齐 */
+  .data-table th.col-center,
+  .data-table td.col-center {
+    text-align: center;
+  }
+
+  /* 序号列：全站序号 th/td 统一居中（列短、纯数字，无需逐处挂 col-center） */
+  .data-table th.index-column,
+  .data-table td.index-column {
+    text-align: center;
+  }
 
   .data-table tr:hover {
     background: var(--color-bg);
@@ -624,7 +592,7 @@
     width: 10%;
   }
 
-  /* IP 表：序号/位置/名称/类型/网络/IP地址/MAC/设备端口/状态/最后在线/创建时间（合计 100%）。
+  /* IP 表：序号/位置/名称/类型/网络/IP地址/MAC/设备端口/状态/最后在线（合计 100%）。
    配比按各列表头（含搜索图标/排序留白）单行所需宽度调校，避免中文表头竖排或 3+1 换行 */
   #ip-table th:nth-child(1) {
     width: 4%;
@@ -660,30 +628,30 @@
     width: 10%;
   }
 
-  /* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/搜索框 */
+  /* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/操作（搜索框在页签工具栏） */
   #operation-logs-table th:nth-child(1) {
     width: 4%;
   }
   #operation-logs-table th:nth-child(2) {
-    width: 16%;
+    width: 18%;
   }
   #operation-logs-table th:nth-child(3) {
-    width: 10%;
+    width: 12%;
   }
   #operation-logs-table th:nth-child(4) {
-    width: 12%;
+    width: 14%;
   }
   #operation-logs-table th:nth-child(5) {
-    width: 12%;
+    width: 14%;
   }
   #operation-logs-table th:nth-child(6) {
     width: 10%;
   }
   #operation-logs-table th:nth-child(7) {
-    width: 12%;
+    width: 16%;
   }
   #operation-logs-table th:nth-child(8) {
-    width: 24%;
+    width: 12%;
   }
 
   /* 登录日志表：序号/时间/用户名/IP/UA/结果/错误信息 */
@@ -781,101 +749,10 @@
     width: 14%;
   }
 
-  /* ==========================================
-   设备 MAC 表 / LLDP 邻居表（deviceMacLldp.js 模态框专用，
-   由 JS 模板渲染，类名以 mac-/lldp- 前缀隔离）
-   ========================================== */
-
-  /* MAC 表空数据提示 */
-  .mac-table-empty {
-    text-align: center;
-    color: var(--color-text-secondary);
-    padding: 20px;
-  }
-
-  /* MAC 表按网段分组的外层容器 */
-  .mac-network-group {
-    margin-bottom: 10px;
-  }
-
-  /* MAC 表可点击的网段分组标题行（点击折叠/展开组内明细） */
-  .network-group-header {
-    background: var(--color-bg-hover);
-    padding: 8px 12px;
-    font-weight: 700;
-    border-left: 3px solid var(--color-success);
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    user-select: none;
-  }
-
-  /* MAC 表分组标题右侧折叠箭头：默认折叠态横置，展开时 JS 切换 .expanded 回正 */
-  .mac-collapse-icon {
-    transform: rotate(-90deg);
-    transition: transform var(--transition-normal);
-  }
-
-  .mac-collapse-icon.expanded {
-    transform: rotate(0deg);
-  }
-
-  /* MAC 表组内明细：折叠态由 JS 切换 .collapsed 收起 */
-  .network-group-content.collapsed {
-    display: none;
-  }
-
-  .lldp-table th.lldp-col-index {
-    width: 60px;
-    text-align: center;
-  }
-
-  /* 隔行底色：与原内联实现一致（首行主背景，偶数行次背景） */
-  .lldp-table tbody tr:nth-child(odd) {
-    background-color: var(--color-bg-white);
-  }
-
-  .lldp-table tbody tr:nth-child(even) {
-    background-color: var(--color-bg);
-  }
-
-  .lldp-table td.lldp-index {
-    text-align: center;
-    color: var(--color-text-muted);
-    padding: 10px 8px;
-  }
-
-  .lldp-table td.lldp-port {
-    font-weight: 500;
-  }
-
-  .lldp-table td.lldp-chassis {
-    font-family: monospace;
-    font-size: 0.9em;
-  }
-
-  .lldp-table td.lldp-desc {
-    max-width: 250px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.9em;
-    color: var(--color-text-secondary, var(--color-text-secondary));
-  }
-
-  /* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
-  .mac-lldp-text-error {
-    color: #f00;
-  }
-
-  .mac-lldp-text-muted {
-    color: var(--color-text-secondary);
-    margin-bottom: 10px;
-  }
+  /* MAC/LLDP 表格家族已迁至 device-modals.css（仅设备数据表模态使用） */
 }
 
-/* 顶层 responsive 层：组件级移动端覆盖，需与 responsive.css 同层并靠更高特异性胜出 */
+/* 顶层 responsive 层：组件级移动端覆盖，置于文件末尾保证同层内文档序靠后 */
 @layer responsive {
   .data-table th .btn {
     height: 30px;

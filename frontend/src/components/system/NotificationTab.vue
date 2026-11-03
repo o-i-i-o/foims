@@ -7,6 +7,7 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
   getNotificationRecipients,
@@ -402,7 +403,7 @@ async function saveRecipients(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">📧</span>
+            <span class="icon"><NavIcon name="mail" /></span>
             <span>{{ t("smtp.server_settings") }}</span>
           </div>
           <div v-if="!readonly" class="card-header-actions">
@@ -457,7 +458,7 @@ async function saveRecipients(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🔔</span>
+            <span class="icon"><NavIcon name="bell" /></span>
             <span>{{ t("notification.settings") }}</span>
           </div>
           <button v-if="!readonly" type="button" class="btn btn-primary" :disabled="savingRecipients" @click="saveRecipients">
@@ -532,7 +533,7 @@ async function saveRecipients(): Promise<void> {
       <section class="config-card">
         <header class="config-card-header">
           <div class="config-card-title">
-            <span class="icon">🔗</span>
+            <span class="icon"><NavIcon name="link" /></span>
             <span>{{ t("webhook.settings") }}</span>
           </div>
           <div v-if="!readonly" class="card-header-actions">
@@ -548,10 +549,10 @@ async function saveRecipients(): Promise<void> {
           <thead>
             <tr>
               <th>{{ t("webhook.target_name") }}</th>
-              <th>{{ t("webhook.channel") }}</th>
-              <th>{{ t("notification.language_label") }}</th>
+              <th class="col-center">{{ t("webhook.channel") }}</th>
+              <th class="col-center">{{ t("notification.language_label") }}</th>
               <th>{{ t("webhook.scope_label") }}</th>
-              <th>{{ t("common.actions") }}</th>
+              <th class="col-center">{{ t("common.actions") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -563,15 +564,15 @@ async function saveRecipients(): Promise<void> {
                 <span v-if="target.name" class="webhook-target-name">{{ target.name }}</span>
                 <span v-else class="cell-muted">—</span>
               </td>
-              <td>{{ t(`webhook.channel_${target.channel}`) }}</td>
-              <td>{{ t(`notification.lang_${target.language}`) }}</td>
+              <td class="col-center">{{ t(`webhook.channel_${target.channel}`) }}</td>
+              <td class="col-center">{{ t(`notification.lang_${target.language}`) }}</td>
               <td>
                 <span v-if="target.ipChange || target.agentAlert || target.snmpEvent" class="webhook-scope-text">
                   {{ scopeText(target) }}
                 </span>
                 <span v-else class="cell-muted">—</span>
               </td>
-              <td class="webhook-actions-cell">
+              <td class="col-center webhook-actions-cell">
                 <button
                   type="button"
                   class="btn btn-secondary btn-sm"

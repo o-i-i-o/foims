@@ -7,6 +7,7 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getSystemConfig, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
@@ -281,7 +282,7 @@ async function saveSnmpTrapConfig(): Promise<void> {
   <section class="config-card">
     <header class="config-card-header">
       <div class="config-card-title">
-        <span class="icon">📡</span>
+        <span class="icon"><NavIcon name="snmp" /></span>
         <span>{{ t("snmp_trap.title") }}</span>
       </div>
       <div v-if="!readonly" class="config-switch">

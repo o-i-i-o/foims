@@ -104,7 +104,7 @@ async function doDelete(id: string): Promise<void> {
             <th class="col-center" :class="sortClass(list, 'enabled')" @click="onThSort($event, list, 'enabled')">{{ t("user.status") }}</th>
             <th class="col-center" :class="sortClass(list, 'two_factor_enabled')" @click="onThSort($event, list, 'two_factor_enabled')">2FA</th>
             <th class="col-center" :class="sortClass(list, 'created_at')" @click="onThSort($event, list, 'created_at')">{{ t("common.created_at") }}</th>
-            <th>
+            <th class="col-center">
               <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" @click="openCreate">
                 {{ t("user.add_user") }}
               </button>

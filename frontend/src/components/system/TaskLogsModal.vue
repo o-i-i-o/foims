@@ -68,9 +68,9 @@ function detailText(log: TaskLog): string {
       <thead>
         <tr>
           <th>{{ t("common.name") }}</th>
-          <th>{{ t("common.status") }}</th>
-          <th>{{ t("scheduled_tasks.execution_time") }}</th>
-          <th>{{ t("scheduled_tasks.duration") }}</th>
+          <th class="col-center">{{ t("common.status") }}</th>
+          <th class="col-center">{{ t("scheduled_tasks.execution_time") }}</th>
+          <th class="col-center">{{ t("scheduled_tasks.duration") }}</th>
           <th>{{ t("scheduled_tasks.details") }}</th>
         </tr>
       </thead>
@@ -80,9 +80,9 @@ function detailText(log: TaskLog): string {
         </tr>
         <tr v-for="(log, index) in logs" v-else :key="index">
           <td>{{ log.task_name }}</td>
-          <td><span class="status-badge" :class="statusClass(log.status)">{{ log.status }}</span></td>
-          <td>{{ formatDateTime(log.start_time) }}</td>
-          <td>{{ String(log.duration ?? 0) }}</td>
+          <td class="col-center"><span class="status-badge" :class="statusClass(log.status)">{{ log.status }}</span></td>
+          <td class="col-center">{{ formatDateTime(log.start_time) }}</td>
+          <td class="col-center">{{ String(log.duration ?? 0) }}</td>
           <td>{{ detailText(log) || "-" }}</td>
         </tr>
       </tbody>

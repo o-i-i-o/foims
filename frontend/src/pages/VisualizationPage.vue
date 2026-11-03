@@ -166,6 +166,21 @@ const workstationFitKey = ref(0);
 let workstationToken = 0;
 let workstationAutoSaveTimer: number | null = null;
 
+/** 自动保存成功的瞬时"已保存"徽标：2s 消退，连续保存重置计时（替代此前静默成功无感知） */
+const layoutSavedFlash = ref<"workstation" | "topology" | null>(null);
+let layoutFlashTimer: number | null = null;
+
+function triggerLayoutSavedFlash(tab: "workstation" | "topology"): void {
+  layoutSavedFlash.value = tab;
+  if (layoutFlashTimer !== null) {
+    window.clearTimeout(layoutFlashTimer);
+  }
+  layoutFlashTimer = window.setTimeout(() => {
+    layoutFlashTimer = null;
+    layoutSavedFlash.value = null;
+  }, 2000);
+}
+
 const WORKSTATION_ROOM_TYPES = [
   { value: "", labelKey: "viz.all_room_types" },
   { value: "office", labelKey: "room.type_office" },
@@ -379,7 +394,10 @@ async function saveWorkstationLayout(options: { silent?: boolean } = {}): Promis
     showToast(`${t("viz.layout_save_failed")}: ${result.message}`, "error");
     return;
   }
-  if (!options.silent) {
+  if (options.silent) {
+    // 自动保存：瞬时"已保存"徽标承担反馈，手动保存入口随之撤下（双轨收敛）
+    triggerLayoutSavedFlash("workstation");
+  } else {
     showToast(t("viz.layout_save_success"), "success");
   }
 }
@@ -896,7 +914,10 @@ async function saveTopologyLayout(options: { silent?: boolean } = {}): Promise<v
     showToast(`${t("viz.node_save_failed")}: ${result.message}`, "error");
     return;
   }
-  if (!options.silent) {
+  if (options.silent) {
+    // 自动保存：瞬时"已保存"徽标承担反馈，手动保存入口随之撤下（双轨收敛）
+    triggerLayoutSavedFlash("topology");
+  } else {
     showToast(t("viz.node_save_success"), "success");
   }
 }
@@ -1100,9 +1121,9 @@ const confirmDeviceId = ref("");
 const confirmMessage = computed(() => {
   switch (confirmTarget.value) {
     case "workstation-layout":
-      return t("viz.confirm_delete_workstation_layout");
+      return t("viz.confirm_delete_workstation_layout", { total: workstationNodes.value.length });
     case "cabinet-layout":
-      return t("viz.confirm_delete_cabinet_layout");
+      return t("viz.confirm_delete_cabinet_layout", { total: cabinetNodes.value.length });
     case "remove-device":
       return t("viz.confirm_remove_device");
     default:
@@ -1246,13 +1267,16 @@ onMounted(() => {
   void initPage();
 });
 
-// 保底：页面卸载时清掉未落库的防抖计时器（避免离开页面后又发保存请求）
+// 保底：页面卸载时清掉未落库的防抖计时器与徽标计时器（避免离开页面后又发保存请求）
 onBeforeUnmount(() => {
   if (workstationAutoSaveTimer !== null) {
     window.clearTimeout(workstationAutoSaveTimer);
   }
   if (topologyAutoSaveTimer !== null) {
     window.clearTimeout(topologyAutoSaveTimer);
+  }
+  if (layoutFlashTimer !== null) {
+    window.clearTimeout(layoutFlashTimer);
   }
   if (cabinetRelayoutTimer !== null) {
     window.clearTimeout(cabinetRelayoutTimer);
@@ -1322,11 +1346,12 @@ onBeforeUnmount(() => {
             {{ room.name }}
           </option>
         </select>
+        <!-- 自动保存成功瞬时反馈（2s 消退） -->
+        <Transition name="save-flash">
+          <span v-if="layoutSavedFlash === 'workstation'" class="save-flash" role="status">{{ t('viz.layout_saved_flash') }}</span>
+        </Transition>
         <button type="button" class="btn btn-primary btn-sm" @click="autoDrawWorkstationFromToolbar">
           {{ t('visualization.auto_draw') }}
-        </button>
-        <button type="button" class="btn btn-secondary btn-sm" @click="saveWorkstationLayout()">
-          {{ t('visualization.save_layout') }}
         </button>
         <button
           type="button"
@@ -1390,11 +1415,11 @@ onBeforeUnmount(() => {
         <button type="button" class="btn btn-primary btn-sm" @click="autoDrawCabinetFromToolbar">
           {{ t('visualization.auto_draw') }}
         </button>
-        <button type="button" class="btn btn-danger btn-sm" @click="confirmTarget = 'cabinet-layout'">
-          {{ t('visualization.delete_layout') }}
-        </button>
         <button type="button" class="btn btn-secondary btn-sm" @click="saveCabinetLayout()">
           {{ t('visualization.save_layout') }}
+        </button>
+        <button type="button" class="btn btn-danger btn-sm" @click="confirmTarget = 'cabinet-layout'">
+          {{ t('visualization.delete_layout') }}
         </button>
       </div>
       <CabinetCanvas
@@ -1446,9 +1471,10 @@ onBeforeUnmount(() => {
         <button type="button" class="btn btn-primary btn-sm" @click="autoLayoutTopology">
           {{ t('visualization.auto_layout') }}
         </button>
-        <button type="button" class="btn btn-secondary btn-sm" @click="saveTopologyLayout()">
-          {{ t('visualization.save_layout') }}
-        </button>
+        <!-- 自动保存成功瞬时反馈（2s 消退） -->
+        <Transition name="save-flash">
+          <span v-if="layoutSavedFlash === 'topology'" class="save-flash" role="status">{{ t('viz.layout_saved_flash') }}</span>
+        </Transition>
         <div class="zoom-controls">
           <button
             type="button"
@@ -1559,3 +1585,9 @@ onBeforeUnmount(() => {
     />
   </section>
 </template>
+
+<!-- 页面级样式（@layer pages/responsive）：画布/拓扑/机位弹窗经 v-html 注入
+ 与跨组件共享，拿不到 scoped 属性，豁免 scoped 走全局层（规则见 docs/CSS-style.md §一）；
+ 经 <style src> 随本页路由懒加载 -->
+<style src="../styles/pages/visualization.css"></style>
+

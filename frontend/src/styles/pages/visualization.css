@@ -19,11 +19,48 @@
   }
 
   /* 二级导航标签的紧凑尺寸声明移至文件末尾的 responsive 层，
-   避免被 responsive.css 的通用 .tab-btn 移动端规则按层序反超 */
+   避免被全局 .tab-btn 移动端规则按层序反超 */
 
   /* 工具栏统一靠右（三个分页共用；其余 flex 属性由全局 .toolbar 提供） */
   .visualization-page .toolbar {
     justify-content: flex-end;
+  }
+
+  /* 危险操作与常规操作拉开额外间距：破坏性按钮恒居工具栏最右并远离"保存布局" */
+  .visualization-page .toolbar .btn-danger {
+    margin-left: var(--space-md);
+  }
+
+  /* 自动保存瞬时"已保存"徽标：淡入上浮出现，2s 后淡出（save-flash 过渡类配 Vue Transition） */
+  .save-flash {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--color-success-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .save-flash::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-success);
+  }
+
+  .save-flash-enter-active,
+  .save-flash-leave-active {
+    transition:
+      opacity var(--transition-normal),
+      transform var(--transition-normal);
+  }
+
+  .save-flash-enter-from,
+  .save-flash-leave-to {
+    opacity: 0;
+    transform: translateY(2px);
   }
 
   .visualization-page .tab-content {
@@ -452,7 +489,7 @@
   }
 
   /* 缩放步进按钮的紧凑尺寸声明移至文件末尾的 responsive 层，
-   避免被 responsive.css 的通用 .btn 移动端最小宽度规则按层序反超 */
+   避免被全局 .btn 移动端最小宽度规则按层序反超 */
 
   .zoom-controls .zoom-select {
     width: auto;
@@ -529,8 +566,6 @@
     display: flex;
     align-items: flex-end;
     gap: 12px;
-    padding: 10px 20px;
-    border-bottom: 1px solid var(--color-border-light);
   }
 
   .topology-detail-coords .coord-field input {
@@ -617,6 +652,8 @@
   .topology-detail-footer {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-md);
     padding: 12px 20px;
     border-top: 1px solid var(--color-border-light);
   }
@@ -864,8 +901,7 @@
   }
 }
 
-/* 顶层 responsive 层：页面级移动端覆盖，需与 responsive.css 同层并靠更高特异性胜出。
- 本文件由 styleLoader 动态插到 head 末尾，同层内文档序亦在 responsive.css 之后 */
+/* 顶层 responsive 层：页面级移动端覆盖，置于文件末尾保证同层内文档序靠后 */
 @layer responsive {
   .visualization-page > .tabs .tab-btn {
     padding: 0.5rem 1rem;

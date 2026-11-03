@@ -9,6 +9,7 @@
  */
 import { computed, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import NavIcon from "../NavIcon.vue";
 import { useQuery } from "@tanstack/vue-query";
 import { getSystemServices, runServiceOp, type ServiceStatusItem } from "../../api/system";
 import { formatUptime } from "../../utils/formatter";
@@ -175,7 +176,7 @@ onUnmounted(() => {
   <section class="config-card">
     <header class="config-card-header">
       <div class="config-card-title">
-        <span class="icon">⚙️</span>
+        <span class="icon"><NavIcon name="refresh" /></span>
         <span>{{ t("services.title") }}</span>
       </div>
       <div class="card-header-actions">
@@ -190,10 +191,10 @@ onUnmounted(() => {
           <tr>
             <th>{{ t("services.col_service") }}</th>
             <th>{{ t("services.col_unit") }}</th>
-            <th>{{ t("services.col_status") }}</th>
-            <th>{{ t("services.col_enabled") }}</th>
-            <th>{{ t("services.col_uptime") }}</th>
-            <th>{{ t("common.actions") }}</th>
+            <th class="col-center">{{ t("services.col_status") }}</th>
+            <th class="col-center">{{ t("services.col_enabled") }}</th>
+            <th class="col-center">{{ t("services.col_uptime") }}</th>
+            <th class="col-center">{{ t("common.actions") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -206,17 +207,17 @@ onUnmounted(() => {
           <tr v-for="item in services" v-else :key="item.name">
             <td>{{ t(`services.name_${item.name}`) }}</td>
             <td>{{ item.unit }}</td>
-            <td>
+            <td class="col-center">
               <span class="svc-badge" :class="badgeMeta(item).cls" :title="badgeMeta(item).title">{{ badgeMeta(item).text }}</span>
             </td>
-            <td>
+            <td class="col-center">
               <span v-if="item.registered" class="svc-badge" :class="item.enabled ? 'svc-active' : 'svc-inactive'">
                 {{ item.enabled ? t("services.enabled_on") : t("services.enabled_off") }}
               </span>
               <span v-else class="svc-unregistered-hint">{{ t("services.uptime_unavailable") }}</span>
             </td>
-            <td>{{ item.uptime_seconds != null ? formatUptime(item.uptime_seconds + uptimeElapsedSecs) : t("services.uptime_unavailable") }}</td>
-            <td class="svc-actions-cell">
+            <td class="col-center">{{ item.uptime_seconds != null ? formatUptime(item.uptime_seconds + uptimeElapsedSecs) : t("services.uptime_unavailable") }}</td>
+            <td class="col-center svc-actions-cell">
               <span v-if="!item.registered" class="svc-unregistered-hint">{{ t("services.unregistered_hint") }}</span>
               <template v-else-if="!readonly">
                 <button type="button" class="btn btn-secondary btn-sm" @click="requestOp(item.name, 'restart')">
