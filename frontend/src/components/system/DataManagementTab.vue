@@ -277,16 +277,12 @@ async function confirmRestoreConfig(): Promise<void> {
                 {{ t("data-management.export_csv") }}
               </button>
             </div>
-          </section>
-          <section class="section">
             <h3>{{ t("data-management.db_export") }}</h3>
             <div v-if="!readonly" class="export-actions">
               <button type="button" class="btn btn-primary btn-sm" @click="exportDatabase">
                 {{ t("data-management.export_database") }}
               </button>
             </div>
-          </section>
-          <section class="section">
             <h3>{{ t("data-management.config_file") }}</h3>
             <div v-if="!readonly" class="export-actions">
               <button type="button" class="btn btn-primary btn-sm" :disabled="backingUp" @click="backupConfigFile">
