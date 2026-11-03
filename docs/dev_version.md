@@ -281,3 +281,7 @@ v0.76.0
 v0.76.1
 2026110322063401
 设备模态框模板操作收敛（普通修改 z 段 +1）：按用户产品决策——1) 模板管理入口由模板下拉行的内联图标按钮迁至模态框页脚（btn-secondary 文本按钮，置于 SNMP/IPMI 测试按钮之前）；2) 「保存为模板」复选框整体移除，保存逻辑改为模板名称输入框驱动：输入框非空即随本次保存落模板（save_as_template 由 templateName.trim() 非空推导），留空不保存——后端 save_as_template/template_name 契约不变，原「模板名缺省回落设备名」前端回退删除（save_as_template=true 时名称恒有值，后端缺省回落逻辑保留）。表单布局：模板下拉与模板名称同占一行（原先复选框内联组 + 隐藏独占行两块收敛为一块，恒显示）。顺带清理：DeviceFormState.saveAsTemplate 状态、NavIcon 导入（该文件唯一使用点随按钮迁移消失）、i18n device.save_as_template 键（zh/en），template_name_placeholder 文案改为「填写则随保存存为模板」（原「留空则使用设备名称」语义随回退逻辑失效）。表单随弹窗 v-if 重挂载自动重置，无额外清理逻辑。验证：npm run typecheck、npm run build、biome check frontend（仅余 organization.css/system.css 2 处既有格式漂移）均通过。仅 z+1，frontend/package.json 0.1.72→0.1.73 联动，Cargo.toml 不联动
+
+v0.76.2
+2026110322110301
+补回误删的设备位置文案（普通修复 z 段 +1，v0.76.0 误伤回滚）：v0.76.0 删除 location 字段时，i18n device.location 键被一并移除，但该键仍被 ResourcesPage 设备列表「位置」列表头引用（该列展示结构化工位/机柜归属，与被删的自由文本字段无关），导致表头渲染为原始键名。补回 zh「位置」/en「Location」，字段删除相关变更维持不变。验证：locale JSON 解析、npm run build 通过。仅 z+1，frontend/package.json 0.1.73→0.1.74 联动，Cargo.toml 不联动
