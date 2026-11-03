@@ -305,3 +305,7 @@ v0.77.3
 v0.77.4
 2026110323383101
 全站布局同类问题排查（前端普通修改，z 段 +1）：按 webhook 表格事故的三类病灶做机械扫描——(1) fixed 表格列宽 vs 实际列数：12 张主页面表格逐一比对 th 数与 nth-child 宽度规则数，仅 #ip-table 多 1 条失效的 nth-child(11) 宽度规则（现表 10 列），删除；(2) #users-table 与 #scheduled-tasks-table 的 fixed 布局+比例列宽规则（各 8 条，列语义与现表逐一吻合）因 Vue3 迁移丢 id 整体失效，为两表补回 id 恢复既定列宽；(3) colspan 与列数比对全部吻合；(4) 裸置 form-group 扫描命中的设备/机柜/位置/端口弹窗均为多行属性导致误报，实全部包在 form-row 内，无 webhook 弹窗同类问题。验证：biome、vue-tsc、npm run build 通过
+
+v0.77.5
+2026110323544701
+系统安全页签布局统一（前端普通修改，z 段 +1）：安全页签套用 SystemSectionCard 统一分组卡片——速率限制/密码策略两卡组头动作位承载保存按钮，速率限制 7 字段从单 form-row 一锅端改为按语义两行（启用/IP/用户/登录 + 时间窗口/邮件限制/邮件窗口，窄屏经既有断点回落）；Fail2banCard 同步套卡（状态徽章+刷新+保存收进组头动作位），封禁 IP/追踪 IP/手动封禁三个 h4.mt-md 裸标题改走 section-title-row，手动封禁行去掉一次性 inline-field-label 类（label 回归 form-group 家族统一样式），.inline-field-label/.mt-md 随之清退。另修全站观感：forms.css 同行表单变体 label 与控件间补 --space-sm 间距（.modal 与 .system-config-section 两个上下文同时生效，checkbox-label 除外）——此前行内 label 收缩到内容宽后与输入框零间距，即"字段名粘着输入框"的来源。浏览器复核：三卡分隔、4+3 字段行、label 间距全部生效，部署产物与 dist 逐字节一致。验证：biome、vue-tsc、npm run build、oxlint 通过

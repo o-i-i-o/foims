@@ -5,12 +5,12 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import NavIcon from "../NavIcon.vue";
 import { useQuery } from "@tanstack/vue-query";
 import { getPasswordPolicy, getSystemConfig, updatePasswordPolicy, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import Fail2banCard from "./Fail2banCard.vue";
+import SystemSectionCard from "./SystemSectionCard.vue";
 import type { PasswordPolicy } from "../../types/api/generated/PasswordPolicy";
 
 /** rate_limit 段配置（GET /api/system/config 的 rate_limit 段，后端未生成 ts-rs 类型） */
@@ -166,99 +166,97 @@ async function savePasswordPolicy(): Promise<void> {
   <div class="tab-content" :class="{ active: props.active }">
     <div class="system-config-section">
       <!-- 限流设置 -->
-      <header class="config-card-header">
-        <div class="config-card-title">
-          <span class="icon"><NavIcon name="zap" /></span>
-          <span>{{ t("config.rate_limit_settings") }}</span>
+      <SystemSectionCard icon="zap" :title="t('config.rate_limit_settings')">
+        <template #actions>
+          <div v-if="!readonly" class="card-header-actions">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="savingRateLimit" @click="saveRateLimitConfig">
+              {{ t("common.save") }}
+            </button>
+          </div>
+        </template>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="rate-limit-enabled">{{ t("config.rate_limit_enabled") }}</label>
+            <select id="rate-limit-enabled" v-model="rateEnabled" :disabled="readonly" :aria-label="t('config.rate_limit_enabled')">
+              <option value="true">{{ t("common.yes") }}</option>
+              <option value="false">{{ t("common.no") }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="rate-limit-ip">{{ t("config.rate_limit_ip") }}</label>
+            <input id="rate-limit-ip" v-model="rateIpLimit" type="number" min="1" max="10000" :disabled="readonly" :aria-label="t('config.rate_limit_ip')">
+          </div>
+          <div class="form-group">
+            <label for="rate-limit-user">{{ t("config.rate_limit_user") }}</label>
+            <input id="rate-limit-user" v-model="rateUserLimit" type="number" min="1" max="10000" :disabled="readonly" :aria-label="t('config.rate_limit_user')">
+          </div>
+          <div class="form-group">
+            <label for="rate-limit-login">{{ t("config.rate_limit_login") }}</label>
+            <input id="rate-limit-login" v-model="rateLoginLimit" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('config.rate_limit_login')">
+          </div>
         </div>
-        <div class="card-header-actions">
-          <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="savingRateLimit" @click="saveRateLimitConfig">
-            {{ t("common.save") }}
-          </button>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="rate-limit-window">{{ t("config.rate_limit_window") }}</label>
+            <input id="rate-limit-window" v-model="rateWindow" type="number" min="10" max="3600" :disabled="readonly" :aria-label="t('config.rate_limit_window')">
+          </div>
+          <div class="form-group">
+            <label for="rate-limit-email">{{ t("config.rate_limit_email") }}</label>
+            <input id="rate-limit-email" v-model="rateEmailLimit" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('config.rate_limit_email')">
+          </div>
+          <div class="form-group">
+            <label for="rate-limit-email-window">{{ t("config.rate_limit_email_window") }}</label>
+            <input id="rate-limit-email-window" v-model="rateEmailWindow" type="number" min="60" max="86400" :disabled="readonly" :aria-label="t('config.rate_limit_email_window')">
+          </div>
         </div>
-      </header>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="rate-limit-enabled">{{ t("config.rate_limit_enabled") }}</label>
-          <select id="rate-limit-enabled" v-model="rateEnabled" :disabled="readonly" :aria-label="t('config.rate_limit_enabled')">
-            <option value="true">{{ t("common.yes") }}</option>
-            <option value="false">{{ t("common.no") }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="rate-limit-ip">{{ t("config.rate_limit_ip") }}</label>
-          <input id="rate-limit-ip" v-model="rateIpLimit" type="number" min="1" max="10000" :disabled="readonly" :aria-label="t('config.rate_limit_ip')">
-        </div>
-        <div class="form-group">
-          <label for="rate-limit-user">{{ t("config.rate_limit_user") }}</label>
-          <input id="rate-limit-user" v-model="rateUserLimit" type="number" min="1" max="10000" :disabled="readonly" :aria-label="t('config.rate_limit_user')">
-        </div>
-        <div class="form-group">
-          <label for="rate-limit-login">{{ t("config.rate_limit_login") }}</label>
-          <input id="rate-limit-login" v-model="rateLoginLimit" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('config.rate_limit_login')">
-        </div>
-        <div class="form-group">
-          <label for="rate-limit-window">{{ t("config.rate_limit_window") }}</label>
-          <input id="rate-limit-window" v-model="rateWindow" type="number" min="10" max="3600" :disabled="readonly" :aria-label="t('config.rate_limit_window')">
-        </div>
-        <div class="form-group">
-          <label for="rate-limit-email">{{ t("config.rate_limit_email") }}</label>
-          <input id="rate-limit-email" v-model="rateEmailLimit" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('config.rate_limit_email')">
-        </div>
-        <div class="form-group">
-          <label for="rate-limit-email-window">{{ t("config.rate_limit_email_window") }}</label>
-          <input id="rate-limit-email-window" v-model="rateEmailWindow" type="number" min="60" max="86400" :disabled="readonly" :aria-label="t('config.rate_limit_email_window')">
-        </div>
-      </div>
+      </SystemSectionCard>
 
       <!-- 等保密码策略 -->
-      <header class="config-card-header">
-        <div class="config-card-title">
-          <span class="icon"><NavIcon name="password" /></span>
-          <span>{{ t("config.password_policy") }}</span>
+      <SystemSectionCard icon="password" :title="t('config.password_policy')">
+        <template #actions>
+          <div v-if="!readonly" class="card-header-actions">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="savingPolicy" @click="savePasswordPolicy">
+              {{ t("common.save") }}
+            </button>
+          </div>
+        </template>
+        <div class="form-row form-row-2col">
+          <div class="form-group">
+            <label for="password-policy-min-length">{{ t("config.password_min_length") }}</label>
+            <input id="password-policy-min-length" v-model="policyMinLength" type="number" min="8" max="128" :disabled="readonly" :aria-label="t('config.password_min_length')">
+          </div>
+          <div class="form-group">
+            <label for="password-policy-history">{{ t("config.password_history") }}</label>
+            <input id="password-policy-history" v-model="policyHistory" type="number" min="0" max="24" :disabled="readonly" :aria-label="t('config.password_history')">
+          </div>
         </div>
-        <div class="card-header-actions">
-          <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="savingPolicy" @click="savePasswordPolicy">
-            {{ t("common.save") }}
-          </button>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input v-model="requireUpper" type="checkbox" class="form-checkbox" :disabled="readonly">
+              <span>{{ t("config.password_require_upper") }}</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input v-model="requireLower" type="checkbox" class="form-checkbox" :disabled="readonly">
+              <span>{{ t("config.password_require_lower") }}</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input v-model="requireDigit" type="checkbox" class="form-checkbox" :disabled="readonly">
+              <span>{{ t("config.password_require_digit") }}</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input v-model="requireSpecial" type="checkbox" class="form-checkbox" :disabled="readonly">
+              <span>{{ t("config.password_require_special") }}</span>
+            </label>
+          </div>
         </div>
-      </header>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="password-policy-min-length">{{ t("config.password_min_length") }}</label>
-          <input id="password-policy-min-length" v-model="policyMinLength" type="number" min="8" max="128" :disabled="readonly" :aria-label="t('config.password_min_length')">
-        </div>
-        <div class="form-group">
-          <label for="password-policy-history">{{ t("config.password_history") }}</label>
-          <input id="password-policy-history" v-model="policyHistory" type="number" min="0" max="24" :disabled="readonly" :aria-label="t('config.password_history')">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input v-model="requireUpper" type="checkbox" class="form-checkbox" :disabled="readonly">
-            <span>{{ t("config.password_require_upper") }}</span>
-          </label>
-        </div>
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input v-model="requireLower" type="checkbox" class="form-checkbox" :disabled="readonly">
-            <span>{{ t("config.password_require_lower") }}</span>
-          </label>
-        </div>
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input v-model="requireDigit" type="checkbox" class="form-checkbox" :disabled="readonly">
-            <span>{{ t("config.password_require_digit") }}</span>
-          </label>
-        </div>
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input v-model="requireSpecial" type="checkbox" class="form-checkbox" :disabled="readonly">
-            <span>{{ t("config.password_require_special") }}</span>
-          </label>
-        </div>
-      </div>
+      </SystemSectionCard>
 
       <!-- 应用层 Fail2ban -->
       <Fail2banCard :active="props.active" />

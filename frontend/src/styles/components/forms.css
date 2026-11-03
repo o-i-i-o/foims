@@ -186,11 +186,17 @@
     align-self: flex-start;
   }
 
-  /* 行内组空间有限，label 退化为自适应宽度 */
+  /* 行内组空间有限，label 退化为自适应宽度；与控件间保留一个小间距
+   （checkbox-label 自带内距，不追加） */
   .modal .form-row .form-group label,
   .system-config-section .form-row .form-group label {
     width: auto;
     min-width: 80px;
+  }
+
+  .modal .form-row .form-group label:not(.checkbox-label),
+  .system-config-section .form-row .form-group label:not(.checkbox-label) {
+    margin-right: var(--space-sm);
   }
 
   /* 整行表单组（描述等长文本字段/块级分组）：无标题行，控件占满全宽——

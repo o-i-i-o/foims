@@ -200,14 +200,6 @@
     text-align: center;
   }
 
-  /* 行内表单组的字段标签（如安全卡片"手动封禁"行 IP 输入框），
-   与表单字段标签视觉一致 */
-  .inline-field-label {
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--color-text-secondary);
-  }
-
   /* 用户管理 2fa 二维码居中 */
   .qr-code-container {
     display: flex;
