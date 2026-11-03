@@ -1,9 +1,0 @@
-# CSS 按项目约定保持 2 空格手工排版（见 docs/CSS-style.md），不归 prettier
-static/css/
-# HTML 由表单/结构手工维护，避免整档重排
-static/main.html
-static/index.html
-static/init_index.html
-static/modals/
-node_modules/
-package-lock.json
