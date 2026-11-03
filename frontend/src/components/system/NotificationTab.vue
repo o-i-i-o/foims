@@ -400,217 +400,211 @@ async function saveRecipients(): Promise<void> {
   <div class="tab-content" :class="{ active: props.active }">
     <div class="system-config-section">
       <!-- SMTP 服务器设置 -->
-      <section class="config-card">
-        <header class="config-card-header">
-          <div class="config-card-title">
-            <span class="icon"><NavIcon name="mail" /></span>
-            <span>{{ t("smtp.server_settings") }}</span>
-          </div>
-          <div v-if="!readonly" class="card-header-actions">
-            <button type="button" class="btn btn-secondary" :disabled="testingSmtp" @click="testSmtpConnection">
-              {{ t("smtp.test_connection") }}
-            </button>
-            <button type="button" class="btn btn-primary" :disabled="savingSmtp" @click="saveSmtpConfig">
-              {{ t("common.save") }}
-            </button>
-          </div>
-        </header>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="smtp-host">{{ t("smtp.host") }}</label>
-            <input id="smtp-host" v-model="smtpHost" type="text" :placeholder="t('smtp.host_placeholder')" :aria-label="t('smtp.host')">
-          </div>
-          <div class="form-group">
-            <label for="smtp-port">{{ t("smtp.port") }}</label>
-            <input id="smtp-port" v-model="smtpPort" type="number" placeholder="587" :aria-label="t('smtp.port')">
-          </div>
-          <div class="form-group">
-            <label for="smtp-username">{{ t("smtp.username") }}</label>
-            <input id="smtp-username" v-model="smtpUsername" type="text" :placeholder="t('smtp.username_placeholder')" :aria-label="t('smtp.username')" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="smtp-password">{{ t("smtp.password") }}</label>
-            <input
-              id="smtp-password"
-              v-model="smtpPassword"
-              type="password"
-              autocomplete="new-password"
-              :placeholder="t(smtpHasPassword ? 'smtp.password_configured' : 'smtp.password_input')"
-              :aria-label="t('smtp.password')"
-            >
-          </div>
-          <div class="form-group">
-            <label for="smtp-from">{{ t("smtp.from") }}</label>
-            <input id="smtp-from" v-model="smtpFrom" type="email" :placeholder="t('smtp.from_placeholder')" :aria-label="t('smtp.from')" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="smtp-secure-type">{{ t("smtp.secure_type") }}</label>
-            <select id="smtp-secure-type" v-model="secureType" :aria-label="t('smtp.secure_type')">
-              <option value="none">{{ t("smtp.ssl_none") }}</option>
-              <option value="ssl">{{ t("smtp.ssl_ssl") }}</option>
-              <option value="starttls">{{ t("smtp.ssl_starttls") }}</option>
-            </select>
-          </div>
+      <header class="config-card-header">
+        <div class="config-card-title">
+          <span class="icon"><NavIcon name="mail" /></span>
+          <span>{{ t("smtp.server_settings") }}</span>
         </div>
-      </section>
-
-      <!-- 邮件通知（每收件人独立订阅通知类型） -->
-      <section class="config-card">
-        <header class="config-card-header">
-          <div class="config-card-title">
-            <span class="icon"><NavIcon name="bell" /></span>
-            <span>{{ t("notification.settings") }}</span>
-          </div>
-          <button v-if="!readonly" type="button" class="btn btn-primary" :disabled="savingRecipients" @click="saveRecipients">
+        <div v-if="!readonly" class="card-header-actions">
+          <button type="button" class="btn btn-secondary" :disabled="testingSmtp" @click="testSmtpConnection">
+            {{ t("smtp.test_connection") }}
+          </button>
+          <button type="button" class="btn btn-primary" :disabled="savingSmtp" @click="saveSmtpConfig">
             {{ t("common.save") }}
           </button>
-        </header>
-        <table class="recipients-table">
-          <thead>
-            <tr>
-              <th>{{ t("notification.col_user") }}</th>
-              <th>{{ t("notification.language_label") }}</th>
-              <th>{{ t("notification.type_ip_change") }}</th>
-              <th>{{ t("notification.type_agent_alert") }}</th>
-              <th>{{ t("notification.type_snmp_event") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="notifyUsers.length === 0">
-              <td colspan="5">{{ t("common.no_data") }}</td>
-            </tr>
-            <tr v-for="user in notifyUsers" v-else :key="user.id">
-              <td>
-                <span class="user-name">{{ user.username }}</span>
-                <span class="user-email">{{ user.email }}</span>
-              </td>
-              <td>
-                <select
-                  :value="scopeOf(user.id).language"
-                  class="recipient-lang-select"
-                  :disabled="readonly"
-                  :aria-label="`${user.username} ${t('notification.language_label')}`"
-                  @change="setLanguage(user.id, ($event.target as HTMLSelectElement).value as NotifyLang)"
-                >
-                  <option value="zh">{{ t("notification.lang_zh") }}</option>
-                  <option value="en">{{ t("notification.lang_en") }}</option>
-                </select>
-              </td>
-              <td>
-                <input
-                  type="checkbox"
-                  :checked="scopeOf(user.id).ip_change"
-                  :disabled="readonly"
-                  :aria-label="`${user.username} ${t('notification.type_ip_change')}`"
-                  @change="setScope(user.id, 'ip_change', ($event.target as HTMLInputElement).checked)"
-                >
-              </td>
-              <td>
-                <input
-                  type="checkbox"
-                  :checked="scopeOf(user.id).agent_alert"
-                  :disabled="readonly"
-                  :aria-label="`${user.username} ${t('notification.type_agent_alert')}`"
-                  @change="setScope(user.id, 'agent_alert', ($event.target as HTMLInputElement).checked)"
-                >
-              </td>
-              <td>
-                <input
-                  type="checkbox"
-                  :checked="scopeOf(user.id).snmp_event"
-                  :disabled="readonly"
-                  :aria-label="`${user.username} ${t('notification.type_snmp_event')}`"
-                  @change="setScope(user.id, 'snmp_event', ($event.target as HTMLInputElement).checked)"
-                >
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="form-hint">{{ t("notification.recipients_hint") }}</div>
-      </section>
+        </div>
+      </header>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="smtp-host">{{ t("smtp.host") }}</label>
+          <input id="smtp-host" v-model="smtpHost" type="text" :placeholder="t('smtp.host_placeholder')" :aria-label="t('smtp.host')">
+        </div>
+        <div class="form-group">
+          <label for="smtp-port">{{ t("smtp.port") }}</label>
+          <input id="smtp-port" v-model="smtpPort" type="number" placeholder="587" :aria-label="t('smtp.port')">
+        </div>
+        <div class="form-group">
+          <label for="smtp-username">{{ t("smtp.username") }}</label>
+          <input id="smtp-username" v-model="smtpUsername" type="text" :placeholder="t('smtp.username_placeholder')" :aria-label="t('smtp.username')" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="smtp-password">{{ t("smtp.password") }}</label>
+          <input
+            id="smtp-password"
+            v-model="smtpPassword"
+            type="password"
+            autocomplete="new-password"
+            :placeholder="t(smtpHasPassword ? 'smtp.password_configured' : 'smtp.password_input')"
+            :aria-label="t('smtp.password')"
+          >
+        </div>
+        <div class="form-group">
+          <label for="smtp-from">{{ t("smtp.from") }}</label>
+          <input id="smtp-from" v-model="smtpFrom" type="email" :placeholder="t('smtp.from_placeholder')" :aria-label="t('smtp.from')" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="smtp-secure-type">{{ t("smtp.secure_type") }}</label>
+          <select id="smtp-secure-type" v-model="secureType" :aria-label="t('smtp.secure_type')">
+            <option value="none">{{ t("smtp.ssl_none") }}</option>
+            <option value="ssl">{{ t("smtp.ssl_ssl") }}</option>
+            <option value="starttls">{{ t("smtp.ssl_starttls") }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 邮件通知（每收件人独立订阅通知类型） -->
+      <header class="config-card-header">
+        <div class="config-card-title">
+          <span class="icon"><NavIcon name="bell" /></span>
+          <span>{{ t("notification.settings") }}</span>
+        </div>
+        <button v-if="!readonly" type="button" class="btn btn-primary" :disabled="savingRecipients" @click="saveRecipients">
+          {{ t("common.save") }}
+        </button>
+      </header>
+      <table class="recipients-table">
+        <thead>
+          <tr>
+            <th>{{ t("notification.col_user") }}</th>
+            <th>{{ t("notification.language_label") }}</th>
+            <th>{{ t("notification.type_ip_change") }}</th>
+            <th>{{ t("notification.type_agent_alert") }}</th>
+            <th>{{ t("notification.type_snmp_event") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="notifyUsers.length === 0">
+            <td colspan="5">{{ t("common.no_data") }}</td>
+          </tr>
+          <tr v-for="user in notifyUsers" v-else :key="user.id">
+            <td>
+              <span class="user-name">{{ user.username }}</span>
+              <span class="user-email">{{ user.email }}</span>
+            </td>
+            <td>
+              <select
+                :value="scopeOf(user.id).language"
+                class="recipient-lang-select"
+                :disabled="readonly"
+                :aria-label="`${user.username} ${t('notification.language_label')}`"
+                @change="setLanguage(user.id, ($event.target as HTMLSelectElement).value as NotifyLang)"
+              >
+                <option value="zh">{{ t("notification.lang_zh") }}</option>
+                <option value="en">{{ t("notification.lang_en") }}</option>
+              </select>
+            </td>
+            <td>
+              <input
+                type="checkbox"
+                :checked="scopeOf(user.id).ip_change"
+                :disabled="readonly"
+                :aria-label="`${user.username} ${t('notification.type_ip_change')}`"
+                @change="setScope(user.id, 'ip_change', ($event.target as HTMLInputElement).checked)"
+              >
+            </td>
+            <td>
+              <input
+                type="checkbox"
+                :checked="scopeOf(user.id).agent_alert"
+                :disabled="readonly"
+                :aria-label="`${user.username} ${t('notification.type_agent_alert')}`"
+                @change="setScope(user.id, 'agent_alert', ($event.target as HTMLInputElement).checked)"
+              >
+            </td>
+            <td>
+              <input
+                type="checkbox"
+                :checked="scopeOf(user.id).snmp_event"
+                :disabled="readonly"
+                :aria-label="`${user.username} ${t('notification.type_snmp_event')}`"
+                @change="setScope(user.id, 'snmp_event', ($event.target as HTMLInputElement).checked)"
+              >
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="form-hint">{{ t("notification.recipients_hint") }}</div>
 
       <!-- Webhook 通知设置（多目标：表格仅展示，新增/编辑走弹窗） -->
-      <section class="config-card">
-        <header class="config-card-header">
-          <div class="config-card-title">
-            <span class="icon"><NavIcon name="link" /></span>
-            <span>{{ t("webhook.settings") }}</span>
-          </div>
-          <div v-if="!readonly" class="card-header-actions">
-            <button type="button" class="btn btn-secondary" @click="openAddTarget">
-              {{ t("webhook.add_target") }}
-            </button>
-            <button type="button" class="btn btn-primary" :disabled="savingWebhook" @click="saveWebhookConfig">
-              {{ t("common.save") }}
-            </button>
-          </div>
-        </header>
-        <table class="data-table webhook-table">
-          <thead>
-            <tr>
-              <th>{{ t("webhook.target_name") }}</th>
-              <th class="col-center">{{ t("webhook.channel") }}</th>
-              <th class="col-center">{{ t("notification.language_label") }}</th>
-              <th>{{ t("webhook.scope_label") }}</th>
-              <th class="col-center">{{ t("common.actions") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="webhookTargets.length === 0">
-              <td colspan="5">{{ t("webhook.empty") }}</td>
-            </tr>
-            <tr v-for="(target, index) in webhookTargets" v-else :key="target.id">
-              <td>
-                <span v-if="target.name" class="webhook-target-name">{{ target.name }}</span>
-                <span v-else class="cell-muted">—</span>
-              </td>
-              <td class="col-center">{{ t(`webhook.channel_${target.channel}`) }}</td>
-              <td class="col-center">{{ t(`notification.lang_${target.language}`) }}</td>
-              <td>
-                <span v-if="target.ipChange || target.agentAlert || target.snmpEvent" class="webhook-scope-text">
-                  {{ scopeText(target) }}
-                </span>
-                <span v-else class="cell-muted">—</span>
-              </td>
-              <td class="col-center webhook-actions-cell">
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  :disabled="readonly"
-                  @click="openEditTarget(index)"
-                >
-                  {{ t("common.edit") }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  :disabled="readonly || !target.saved || testingTargetId !== ''"
-                  :title="target.saved ? '' : t('webhook.target_unsaved')"
-                  @click="testWebhookTarget(target)"
-                >
-                  {{ t("webhook.test") }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-danger btn-sm"
-                  :disabled="readonly"
-                  @click="removeWebhookTarget(index)"
-                >
-                  {{ t("common.delete") }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- Webhook 目标新增/编辑弹窗（确认仅写回草稿，统一落库由"保存"承担） -->
-      <WebhookTargetModal
-        v-if="showTargetModal"
-        :target="editingTargetIndex >= 0 ? webhookTargets[editingTargetIndex] ?? null : null"
-        @confirm="handleTargetConfirm"
-        @close="showTargetModal = false"
-      />
+      <header class="config-card-header">
+        <div class="config-card-title">
+          <span class="icon"><NavIcon name="link" /></span>
+          <span>{{ t("webhook.settings") }}</span>
+        </div>
+        <div v-if="!readonly" class="card-header-actions">
+          <button type="button" class="btn btn-secondary" @click="openAddTarget">
+            {{ t("webhook.add_target") }}
+          </button>
+          <button type="button" class="btn btn-primary" :disabled="savingWebhook" @click="saveWebhookConfig">
+            {{ t("common.save") }}
+          </button>
+        </div>
+      </header>
+      <table class="data-table webhook-table">
+        <thead>
+          <tr>
+            <th>{{ t("webhook.target_name") }}</th>
+            <th class="col-center">{{ t("webhook.channel") }}</th>
+            <th class="col-center">{{ t("notification.language_label") }}</th>
+            <th>{{ t("webhook.scope_label") }}</th>
+            <th class="col-center">{{ t("common.actions") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="webhookTargets.length === 0">
+            <td colspan="5">{{ t("webhook.empty") }}</td>
+          </tr>
+          <tr v-for="(target, index) in webhookTargets" v-else :key="target.id">
+            <td>
+              <span v-if="target.name" class="webhook-target-name">{{ target.name }}</span>
+              <span v-else class="cell-muted">—</span>
+            </td>
+            <td class="col-center">{{ t(`webhook.channel_${target.channel}`) }}</td>
+            <td class="col-center">{{ t(`notification.lang_${target.language}`) }}</td>
+            <td>
+              <span v-if="target.ipChange || target.agentAlert || target.snmpEvent" class="webhook-scope-text">
+                {{ scopeText(target) }}
+              </span>
+              <span v-else class="cell-muted">—</span>
+            </td>
+            <td class="col-center webhook-actions-cell">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="readonly"
+                @click="openEditTarget(index)"
+              >
+                {{ t("common.edit") }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="readonly || !target.saved || testingTargetId !== ''"
+                :title="target.saved ? '' : t('webhook.target_unsaved')"
+                @click="testWebhookTarget(target)"
+              >
+                {{ t("webhook.test") }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-danger btn-sm"
+                :disabled="readonly"
+                @click="removeWebhookTarget(index)"
+              >
+                {{ t("common.delete") }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+
+    <!-- Webhook 目标新增/编辑弹窗（确认仅写回草稿，统一落库由"保存"承担） -->
+    <WebhookTargetModal
+      v-if="showTargetModal"
+      :target="editingTargetIndex >= 0 ? webhookTargets[editingTargetIndex] ?? null : null"
+      @confirm="handleTargetConfirm"
+      @close="showTargetModal = false"
+    />
   </div>
 </template>

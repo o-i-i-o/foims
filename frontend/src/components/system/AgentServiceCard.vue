@@ -221,96 +221,90 @@ async function regenerateToken(): Promise<void> {
 </script>
 
 <template>
-  <section class="config-card">
-    <header class="config-card-header">
-      <div class="config-card-title">
-        <span class="icon"><NavIcon name="agents" /></span>
-        <span>{{ t("system.agent_config_card") }}</span>
+  <header class="config-card-header">
+    <div class="config-card-title">
+      <span class="icon"><NavIcon name="agents" /></span>
+      <span>{{ t("system.agent_config_card") }}</span>
+    </div>
+    <div v-if="!readonly" class="config-switch">
+      <label for="agent-service-enabled">
+        <input id="agent-service-enabled" v-model="agentEnabled" type="checkbox" :aria-label="t('agent_service.enabled')">
+        <span>{{ t("agent_service.enabled") }}</span>
+      </label>
+      <button type="button" class="btn btn-primary btn-sm" :disabled="savingAgent" @click="saveAgentConfig">
+        {{ t("common.save") }}
+      </button>
+    </div>
+  </header>
+  <div class="data-management-container">
+    <!-- 上报接收服务参数：监听地址作为默认上报地址来源（采集/上报节奏
+         由 agent 独立维护，不在服务端配置） -->
+    <h3>{{ t("agent_service.section_service") }}</h3>
+    <div class="form-row form-row-2col">
+      <div class="form-group">
+        <label for="agent-service-bind-addr">{{ t("agent_service.bind_addr") }}</label>
+        <input id="agent-service-bind-addr" v-model="agentBindHost" type="text" :placeholder="t('agent_service.bind_addr_placeholder')" autocomplete="off" :aria-label="t('agent_service.bind_addr')">
       </div>
-      <div v-if="!readonly" class="config-switch">
-        <label for="agent-service-enabled">
-          <input id="agent-service-enabled" v-model="agentEnabled" type="checkbox" :aria-label="t('agent_service.enabled')">
-          <span>{{ t("agent_service.enabled") }}</span>
+      <div class="form-group">
+        <label for="agent-service-bind-port">{{ t("agent_service.bind_port") }}</label>
+        <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1025" max="65534" placeholder="9100" :aria-label="t('agent_service.bind_port')">
+      </div>
+    </div>
+    <!-- Agent 客户端配置：上报地址模式 / 分发下载 -->
+    <h3>{{ t("agent_service.section_agent") }}</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="checkbox-label" for="agent-use-public-url">
+          <input id="agent-use-public-url" v-model="agentUsePublicUrl" type="checkbox" class="form-checkbox">
+          <span>{{ t("agent_service.use_public_url") }}</span>
         </label>
-        <button type="button" class="btn btn-primary btn-sm" :disabled="savingAgent" @click="saveAgentConfig">
-          {{ t("common.save") }}
+      </div>
+      <div v-show="!agentUsePublicUrl" class="form-group">
+        <label for="agent-report-url-override">{{ t("agent_service.report_url_override") }}</label>
+        <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com:9100" autocomplete="off" :aria-label="t('agent_service.report_url_override')">
+      </div>
+    </div>
+    <div class="form-row">
+      <dl class="config-field">
+        <dt>{{ t("system.agent_enrollment_token") }}</dt>
+        <!-- 加载失败显式提示（渲染为字段文案，避免查询重试风暴） -->
+        <dd class="field-value">{{ tokenQuery.isError.value ? t("system.agent_token_load_failed") : enrollmentToken || t("system.agent_token_missing") }}</dd>
+      </dl>
+      <div v-if="!readonly" class="form-group">
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="regenerating" @click="showRegenerateConfirm = true">
+          {{ t("system.agent_token_regenerate") }}
         </button>
       </div>
-    </header>
-    <div class="data-management-container">
-      <!-- 上报接收服务参数：监听地址作为默认上报地址来源（采集/上报节奏
-           由 agent 独立维护，不在服务端配置） -->
-      <section class="section">
-        <h3>{{ t("agent_service.section_service") }}</h3>
-        <div class="form-row form-row-2col">
-          <div class="form-group">
-            <label for="agent-service-bind-addr">{{ t("agent_service.bind_addr") }}</label>
-            <input id="agent-service-bind-addr" v-model="agentBindHost" type="text" :placeholder="t('agent_service.bind_addr_placeholder')" autocomplete="off" :aria-label="t('agent_service.bind_addr')">
-          </div>
-          <div class="form-group">
-            <label for="agent-service-bind-port">{{ t("agent_service.bind_port") }}</label>
-            <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1025" max="65534" placeholder="9100" :aria-label="t('agent_service.bind_port')">
-          </div>
-        </div>
-      </section>
-      <!-- Agent 客户端配置：上报地址模式 / 分发下载 -->
-      <section class="section">
-        <h3>{{ t("agent_service.section_agent") }}</h3>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="checkbox-label" for="agent-use-public-url">
-              <input id="agent-use-public-url" v-model="agentUsePublicUrl" type="checkbox" class="form-checkbox">
-              <span>{{ t("agent_service.use_public_url") }}</span>
-            </label>
-          </div>
-          <div v-show="!agentUsePublicUrl" class="form-group">
-            <label for="agent-report-url-override">{{ t("agent_service.report_url_override") }}</label>
-            <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com:9100" autocomplete="off" :aria-label="t('agent_service.report_url_override')">
-          </div>
-        </div>
-        <div class="form-row">
-          <dl class="config-field">
-            <dt>{{ t("system.agent_enrollment_token") }}</dt>
-            <!-- 加载失败显式提示（渲染为字段文案，避免查询重试风暴） -->
-            <dd class="field-value">{{ tokenQuery.isError.value ? t("system.agent_token_load_failed") : enrollmentToken || t("system.agent_token_missing") }}</dd>
-          </dl>
-          <div v-if="!readonly" class="form-group">
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="regenerating" @click="showRegenerateConfirm = true">
-              {{ t("system.agent_token_regenerate") }}
-            </button>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="agent-dist-os">{{ t("system.agent_os") }}</label>
-            <select id="agent-dist-os" v-model="distOs" class="form-control" :aria-label="t('system.agent_os')" @change="onOsChange">
-              <option value="linux">linux</option>
-              <option value="windows">windows</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="agent-dist-format">{{ t("system.agent_format") }}</label>
-            <select id="agent-dist-format" v-model="distFormat" class="form-control" :disabled="formats.length <= 1" :aria-label="t('system.agent_format')">
-              <option v-for="format in formats" :key="format" :value="format">{{ format.toUpperCase() }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <button type="button" class="btn btn-primary" :disabled="!formats.length || distDownloading" @click="downloadConfigPackage">
-               {{ t("system.agent_download_config") }}
-            </button>
-          </div>
-        </div>
-      </section>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="agent-dist-os">{{ t("system.agent_os") }}</label>
+        <select id="agent-dist-os" v-model="distOs" class="form-control" :aria-label="t('system.agent_os')" @change="onOsChange">
+          <option value="linux">linux</option>
+          <option value="windows">windows</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="agent-dist-format">{{ t("system.agent_format") }}</label>
+        <select id="agent-dist-format" v-model="distFormat" class="form-control" :disabled="formats.length <= 1" :aria-label="t('system.agent_format')">
+          <option v-for="format in formats" :key="format" :value="format">{{ format.toUpperCase() }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <button type="button" class="btn btn-primary" :disabled="!formats.length || distDownloading" @click="downloadConfigPackage">
+           {{ t("system.agent_download_config") }}
+        </button>
+      </div>
+    </div>
+  </div>
 
-    <!-- 重新生成注册令牌确认（旧令牌即刻失效） -->
-    <ConfirmModal
-      v-if="showRegenerateConfirm"
-      :message="t('system.agent_token_regenerate_confirm')"
-      :title="t('system.agent_token_regenerate')"
-      danger
-      @confirm="regenerateToken"
-      @cancel="showRegenerateConfirm = false"
-    />
-  </section>
+  <!-- 重新生成注册令牌确认（旧令牌即刻失效） -->
+  <ConfirmModal
+    v-if="showRegenerateConfirm"
+    :message="t('system.agent_token_regenerate_confirm')"
+    :title="t('system.agent_token_regenerate')"
+    danger
+    @confirm="regenerateToken"
+    @cancel="showRegenerateConfirm = false"
+  />
 </template>

@@ -173,80 +173,78 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="config-card">
-    <header class="config-card-header">
-      <div class="config-card-title">
-        <span class="icon"><NavIcon name="refresh" /></span>
-        <span>{{ t("services.title") }}</span>
-      </div>
-      <div class="card-header-actions">
-        <button type="button" class="btn btn-secondary btn-sm" @click="servicesQuery.refetch()">
-          {{ t("common.refresh") }}
-        </button>
-      </div>
-    </header>
-    <div class="table-container cert-table-container">
-      <table class="data-table" :aria-label="t('services.title')">
-        <thead>
-          <tr>
-            <th>{{ t("services.col_service") }}</th>
-            <th>{{ t("services.col_unit") }}</th>
-            <th class="col-center">{{ t("services.col_status") }}</th>
-            <th class="col-center">{{ t("services.col_enabled") }}</th>
-            <th class="col-center">{{ t("services.col_uptime") }}</th>
-            <th class="col-center">{{ t("common.actions") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="servicesQuery.isError.value" class="empty-row">
-            <td colspan="6" class="text-center">{{ servicesQuery.error.value?.message || t("services.load_failed") }}</td>
-          </tr>
-          <tr v-else-if="services.length === 0" class="empty-row">
-            <td colspan="6" class="text-center">{{ t("common.no_data") }}</td>
-          </tr>
-          <tr v-for="item in services" v-else :key="item.name">
-            <td>{{ t(`services.name_${item.name}`) }}</td>
-            <td>{{ item.unit }}</td>
-            <td class="col-center">
-              <span class="svc-badge" :class="badgeMeta(item).cls" :title="badgeMeta(item).title">{{ badgeMeta(item).text }}</span>
-            </td>
-            <td class="col-center">
-              <span v-if="item.registered" class="svc-badge" :class="item.enabled ? 'svc-active' : 'svc-inactive'">
-                {{ item.enabled ? t("services.enabled_on") : t("services.enabled_off") }}
-              </span>
-              <span v-else class="svc-unregistered-hint">{{ t("services.uptime_unavailable") }}</span>
-            </td>
-            <td class="col-center">{{ item.uptime_seconds != null ? formatUptime(item.uptime_seconds + uptimeElapsedSecs) : t("services.uptime_unavailable") }}</td>
-            <td class="col-center svc-actions-cell">
-              <span v-if="!item.registered" class="svc-unregistered-hint">{{ t("services.unregistered_hint") }}</span>
-              <template v-else-if="!readonly">
-                <button type="button" class="btn btn-secondary btn-sm" @click="requestOp(item.name, 'restart')">
-                  {{ t("services.op_restart") }}
-                </button>
-                <button v-if="item.reload_supported" type="button" class="btn btn-secondary btn-sm" :disabled="!item.active" @click="requestOp(item.name, 'reload')">
-                  {{ t("services.op_reload") }}
-                </button>
-                <!-- 启用自启：已启用时不可点击（无禁用自启入口，避免服务脱离自启保障后停机无法经程序恢复） -->
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  :disabled="item.enabled"
-                  @click="requestOp(item.name, 'enable')"
-                >
-                  {{ t("services.op_enable") }}
-                </button>
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+  <header class="config-card-header">
+    <div class="config-card-title">
+      <span class="icon"><NavIcon name="refresh" /></span>
+      <span>{{ t("services.title") }}</span>
     </div>
+    <div class="card-header-actions">
+      <button type="button" class="btn btn-secondary btn-sm" @click="servicesQuery.refetch()">
+        {{ t("common.refresh") }}
+      </button>
+    </div>
+  </header>
+  <div class="table-container cert-table-container">
+    <table class="data-table" :aria-label="t('services.title')">
+      <thead>
+        <tr>
+          <th>{{ t("services.col_service") }}</th>
+          <th>{{ t("services.col_unit") }}</th>
+          <th class="col-center">{{ t("services.col_status") }}</th>
+          <th class="col-center">{{ t("services.col_enabled") }}</th>
+          <th class="col-center">{{ t("services.col_uptime") }}</th>
+          <th class="col-center">{{ t("common.actions") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-if="servicesQuery.isError.value" class="empty-row">
+          <td colspan="6" class="text-center">{{ servicesQuery.error.value?.message || t("services.load_failed") }}</td>
+        </tr>
+        <tr v-else-if="services.length === 0" class="empty-row">
+          <td colspan="6" class="text-center">{{ t("common.no_data") }}</td>
+        </tr>
+        <tr v-for="item in services" v-else :key="item.name">
+          <td>{{ t(`services.name_${item.name}`) }}</td>
+          <td>{{ item.unit }}</td>
+          <td class="col-center">
+            <span class="svc-badge" :class="badgeMeta(item).cls" :title="badgeMeta(item).title">{{ badgeMeta(item).text }}</span>
+          </td>
+          <td class="col-center">
+            <span v-if="item.registered" class="svc-badge" :class="item.enabled ? 'svc-active' : 'svc-inactive'">
+              {{ item.enabled ? t("services.enabled_on") : t("services.enabled_off") }}
+            </span>
+            <span v-else class="svc-unregistered-hint">{{ t("services.uptime_unavailable") }}</span>
+          </td>
+          <td class="col-center">{{ item.uptime_seconds != null ? formatUptime(item.uptime_seconds + uptimeElapsedSecs) : t("services.uptime_unavailable") }}</td>
+          <td class="col-center svc-actions-cell">
+            <span v-if="!item.registered" class="svc-unregistered-hint">{{ t("services.unregistered_hint") }}</span>
+            <template v-else-if="!readonly">
+              <button type="button" class="btn btn-secondary btn-sm" @click="requestOp(item.name, 'restart')">
+                {{ t("services.op_restart") }}
+              </button>
+              <button v-if="item.reload_supported" type="button" class="btn btn-secondary btn-sm" :disabled="!item.active" @click="requestOp(item.name, 'reload')">
+                {{ t("services.op_reload") }}
+              </button>
+              <!-- 启用自启：已启用时不可点击（无禁用自启入口，避免服务脱离自启保障后停机无法经程序恢复） -->
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="item.enabled"
+                @click="requestOp(item.name, 'enable')"
+              >
+                {{ t("services.op_enable") }}
+              </button>
+            </template>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-    <ConfirmModal
-      v-if="confirmOp"
-      :message="confirmMessage()"
-      @confirm="onOpConfirmed"
-      @cancel="confirmOp = null"
-    />
-  </section>
+  <ConfirmModal
+    v-if="confirmOp"
+    :message="confirmMessage()"
+    @confirm="onOpConfirmed"
+    @cancel="confirmOp = null"
+  />
 </template>

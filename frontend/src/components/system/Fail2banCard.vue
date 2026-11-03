@@ -137,117 +137,115 @@ function unbanIp(): void {
 </script>
 
 <template>
-  <section class="config-card">
-    <header class="config-card-header">
-      <div class="config-card-title">
-        <span class="icon"><NavIcon name="shield" /></span>
-        <span>{{ t("security.app_fail2ban") }}</span>
-      </div>
-      <div class="card-header-actions">
-        <span class="status-badge" :class="status.enabled ? 'status-active' : 'status-inactive'">
-          {{ status.enabled ? t("security.status_active") : t("security.status_inactive") }}
-        </span>
-        <button type="button" class="btn btn-secondary btn-sm" @click="() => queryClient.invalidateQueries({ queryKey: ['fail2ban-app'] })">
-          {{ t("common.refresh") }}
-        </button>
-        <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="saveConfig">
-          {{ t("common.save") }}
-        </button>
-      </div>
-    </header>
-
-    <div class="form-row">
-      <div class="form-group">
-        <label for="app-fail2ban-enabled">{{ t("security.enabled") }}</label>
-        <select id="app-fail2ban-enabled" v-model="enabled" :disabled="readonly" :aria-label="t('security.enabled')">
-          <option value="true">{{ t("common.yes") }}</option>
-          <option value="false">{{ t("common.no") }}</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="app-fail2ban-findtime">{{ t("security.findtime") }}</label>
-        <input id="app-fail2ban-findtime" v-model="findtime" type="number" min="60" max="86400" :disabled="readonly" :aria-label="t('security.findtime')">
-      </div>
-      <div class="form-group">
-        <label for="app-fail2ban-maxretry">{{ t("security.maxretry") }}</label>
-        <input id="app-fail2ban-maxretry" v-model="maxRetry" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('security.maxretry')">
-      </div>
-      <div class="form-group">
-        <label for="app-fail2ban-bantime">{{ t("security.bantime") }}</label>
-        <input id="app-fail2ban-bantime" v-model="bantime" type="number" min="60" max="604800" :disabled="readonly" :aria-label="t('security.bantime')">
-      </div>
+  <header class="config-card-header">
+    <div class="config-card-title">
+      <span class="icon"><NavIcon name="shield" /></span>
+      <span>{{ t("security.app_fail2ban") }}</span>
     </div>
-
-    <h4 class="mt-md">{{ t("security.banned_ips") }}</h4>
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>{{ t("security.ip_address") }}</th>
-            <th class="col-center">{{ t("security.remaining_seconds") }}</th>
-            <th v-if="!readonly" class="col-center">{{ t("common.actions") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="bannedIps.length === 0" class="empty-row">
-            <td class="text-center" :colspan="readonly ? 2 : 3">{{ t("common.no_data") }}</td>
-          </tr>
-          <tr v-for="item in bannedIps" v-else :key="item.ip">
-            <td>{{ item.ip }}</td>
-            <td class="col-center">{{ item.remaining_seconds }}</td>
-            <td v-if="!readonly" class="col-center">
-              <button
-                type="button"
-                class="icon-btn btn-success"
-                :data-tooltip="t('security.unban_ip')"
-                :aria-label="t('security.unban_ip')"
-                @click="unbanTarget = item.ip"
-              >
-                <NavIcon name="unlock" />
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="card-header-actions">
+      <span class="status-badge" :class="status.enabled ? 'status-active' : 'status-inactive'">
+        {{ status.enabled ? t("security.status_active") : t("security.status_inactive") }}
+      </span>
+      <button type="button" class="btn btn-secondary btn-sm" @click="() => queryClient.invalidateQueries({ queryKey: ['fail2ban-app'] })">
+        {{ t("common.refresh") }}
+      </button>
+      <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="saveConfig">
+        {{ t("common.save") }}
+      </button>
     </div>
+  </header>
 
-    <h4 class="mt-md">{{ t("security.tracked_ips") }}</h4>
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>{{ t("security.ip_address") }}</th>
-            <th class="col-center">{{ t("security.failure_count") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="trackedIps.length === 0" class="empty-row">
-            <td colspan="2" class="text-center">{{ t("common.no_data") }}</td>
-          </tr>
-          <tr v-for="item in trackedIps" v-else :key="item.ip">
-            <td>{{ item.ip }}</td>
-            <td class="col-center">{{ item.failure_count }}</td>
-          </tr>
-        </tbody>
-      </table>
+  <div class="form-row">
+    <div class="form-group">
+      <label for="app-fail2ban-enabled">{{ t("security.enabled") }}</label>
+      <select id="app-fail2ban-enabled" v-model="enabled" :disabled="readonly" :aria-label="t('security.enabled')">
+        <option value="true">{{ t("common.yes") }}</option>
+        <option value="false">{{ t("common.no") }}</option>
+      </select>
     </div>
+    <div class="form-group">
+      <label for="app-fail2ban-findtime">{{ t("security.findtime") }}</label>
+      <input id="app-fail2ban-findtime" v-model="findtime" type="number" min="60" max="86400" :disabled="readonly" :aria-label="t('security.findtime')">
+    </div>
+    <div class="form-group">
+      <label for="app-fail2ban-maxretry">{{ t("security.maxretry") }}</label>
+      <input id="app-fail2ban-maxretry" v-model="maxRetry" type="number" min="1" max="100" :disabled="readonly" :aria-label="t('security.maxretry')">
+    </div>
+    <div class="form-group">
+      <label for="app-fail2ban-bantime">{{ t("security.bantime") }}</label>
+      <input id="app-fail2ban-bantime" v-model="bantime" type="number" min="60" max="604800" :disabled="readonly" :aria-label="t('security.bantime')">
+    </div>
+  </div>
 
-    <!-- 手动封禁/解封 -->
-    <template v-if="!readonly">
-      <h4 class="mt-md">{{ t("security.manual_ban") }}</h4>
-      <!-- 复用 form-group 家族：命中 .config-card 同行表单变体，label 左、输入框同行撑满、按钮右置 -->
-      <div class="form-group">
-        <label for="app-fail2ban-ip-input" class="inline-field-label">{{ t("system.app_fail2ban_ip") }}</label>
-        <input id="app-fail2ban-ip-input" v-model="manualIp" type="text" placeholder="192.168.1.100" autocomplete="off">
-        <button type="button" class="btn btn-danger btn-sm" @click="banIp">
-          {{ t("security.ban_ip") }}
-        </button>
-        <button type="button" class="btn btn-success btn-sm" @click="unbanIp">
-          {{ t("security.unban_ip") }}
-        </button>
-      </div>
-    </template>
-  </section>
+  <h4 class="mt-md">{{ t("security.banned_ips") }}</h4>
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t("security.ip_address") }}</th>
+          <th class="col-center">{{ t("security.remaining_seconds") }}</th>
+          <th v-if="!readonly" class="col-center">{{ t("common.actions") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-if="bannedIps.length === 0" class="empty-row">
+          <td class="text-center" :colspan="readonly ? 2 : 3">{{ t("common.no_data") }}</td>
+        </tr>
+        <tr v-for="item in bannedIps" v-else :key="item.ip">
+          <td>{{ item.ip }}</td>
+          <td class="col-center">{{ item.remaining_seconds }}</td>
+          <td v-if="!readonly" class="col-center">
+            <button
+              type="button"
+              class="icon-btn btn-success"
+              :data-tooltip="t('security.unban_ip')"
+              :aria-label="t('security.unban_ip')"
+              @click="unbanTarget = item.ip"
+            >
+              <NavIcon name="unlock" />
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 class="mt-md">{{ t("security.tracked_ips") }}</h4>
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t("security.ip_address") }}</th>
+          <th class="col-center">{{ t("security.failure_count") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-if="trackedIps.length === 0" class="empty-row">
+          <td colspan="2" class="text-center">{{ t("common.no_data") }}</td>
+        </tr>
+        <tr v-for="item in trackedIps" v-else :key="item.ip">
+          <td>{{ item.ip }}</td>
+          <td class="col-center">{{ item.failure_count }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 手动封禁/解封 -->
+  <template v-if="!readonly">
+    <h4 class="mt-md">{{ t("security.manual_ban") }}</h4>
+    <!-- 复用 form-group 家族：命中 .system-config-section 同行表单变体，label 左、输入框同行撑满、按钮右置 -->
+    <div class="form-group">
+      <label for="app-fail2ban-ip-input" class="inline-field-label">{{ t("system.app_fail2ban_ip") }}</label>
+      <input id="app-fail2ban-ip-input" v-model="manualIp" type="text" placeholder="192.168.1.100" autocomplete="off">
+      <button type="button" class="btn btn-danger btn-sm" @click="banIp">
+        {{ t("security.ban_ip") }}
+      </button>
+      <button type="button" class="btn btn-success btn-sm" @click="unbanIp">
+        {{ t("security.unban_ip") }}
+      </button>
+    </div>
+  </template>
 
   <ConfirmModal
     v-if="unbanTarget"

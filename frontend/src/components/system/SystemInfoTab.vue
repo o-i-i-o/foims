@@ -74,70 +74,64 @@ const showOpenSource = ref(false);
 <template>
   <div class="tab-content" :class="{ active: props.active }">
     <div class="system-config-section">
-      <section class="config-card">
-        <header class="config-card-header">
-          <div class="config-card-title">
-            <span class="icon"><NavIcon name="agents" /></span>
-            <span>{{ t("system.info") }}</span>
-          </div>
-        </header>
-        <!-- 只读字段 dl 化：dl/dt/dd 语义化键值对（dd 默认边距已在 CSS 重置） -->
-        <div class="form-row">
-          <dl class="config-field">
-            <dt>{{ t("system.system_name") }}</dt>
-            <dd class="field-value">{{ info.name || "FOIMS" }}</dd>
-          </dl>
-          <dl class="config-field">
-            <dt>{{ t("system.database_status") }}</dt>
-            <dd class="field-value">{{ databaseStatusText }}</dd>
-          </dl>
-          <dl class="config-field">
-            <dt>{{ t("system.system_time") }}</dt>
-            <dd class="field-value">{{ systemTimeText }}</dd>
-          </dl>
+      <header class="config-card-header">
+        <div class="config-card-title">
+          <span class="icon"><NavIcon name="agents" /></span>
+          <span>{{ t("system.info") }}</span>
         </div>
-      </section>
+      </header>
+      <!-- 只读字段 dl 化：dl/dt/dd 语义化键值对（dd 默认边距已在 CSS 重置） -->
+      <div class="form-row">
+        <dl class="config-field">
+          <dt>{{ t("system.system_name") }}</dt>
+          <dd class="field-value">{{ info.name || "FOIMS" }}</dd>
+        </dl>
+        <dl class="config-field">
+          <dt>{{ t("system.database_status") }}</dt>
+          <dd class="field-value">{{ databaseStatusText }}</dd>
+        </dl>
+        <dl class="config-field">
+          <dt>{{ t("system.system_time") }}</dt>
+          <dd class="field-value">{{ systemTimeText }}</dd>
+        </dl>
+      </div>
 
-      <section class="config-card">
-        <header class="config-card-header">
-          <div class="config-card-title">
-            <span class="icon"><NavIcon name="list" /></span>
-            <span>{{ t("system.license") }}</span>
-          </div>
-        </header>
-        <!-- 占位按钮：注册/购买入口暂未开放，不绑定任何真实连接 -->
-        <div class="license-actions">
-          <button type="button" class="btn btn-primary btn-sm">{{ t("system.license_register") }}</button>
-          <button type="button" class="btn btn-secondary btn-sm">{{ t("system.license_purchase") }}</button>
+      <header class="config-card-header">
+        <div class="config-card-title">
+          <span class="icon"><NavIcon name="list" /></span>
+          <span>{{ t("system.license") }}</span>
         </div>
-      </section>
+      </header>
+      <!-- 占位按钮：注册/购买入口暂未开放，不绑定任何真实连接 -->
+      <div class="license-actions">
+        <button type="button" class="btn btn-primary btn-sm">{{ t("system.license_register") }}</button>
+        <button type="button" class="btn btn-secondary btn-sm">{{ t("system.license_purchase") }}</button>
+      </div>
 
-      <section class="config-card">
-        <header class="config-card-header">
-          <div class="config-card-title">
-            <span class="icon"><NavIcon name="system" /></span>
-            <span>{{ t("system.about") }}</span>
-          </div>
-        </header>
-        <div class="form-row">
-          <dl class="config-field">
-            <dt>{{ t("system.version") }}</dt>
-            <dd class="field-value">{{ info.version || "-" }}</dd>
-          </dl>
-          <dl class="config-field">
-            <dt>{{ t("system.author") }}</dt>
-            <dd class="field-value">oi-io</dd>
-          </dl>
-          <dl class="config-field">
-            <dt>{{ t("system.contact") }}</dt>
-            <dd class="field-value">boss@oi-io.cc</dd>
-          </dl>
+      <header class="config-card-header">
+        <div class="config-card-title">
+          <span class="icon"><NavIcon name="system" /></span>
+          <span>{{ t("system.about") }}</span>
         </div>
-        <!-- 原模拟链接按钮化：.about-link 已补按钮 reset，视觉不变 -->
-        <button type="button" class="about-link" @click="showOpenSource = true">
-          {{ t("system.open_source_components") }}
-        </button>
-      </section>
+      </header>
+      <div class="form-row">
+        <dl class="config-field">
+          <dt>{{ t("system.version") }}</dt>
+          <dd class="field-value">{{ info.version || "-" }}</dd>
+        </dl>
+        <dl class="config-field">
+          <dt>{{ t("system.author") }}</dt>
+          <dd class="field-value">oi-io</dd>
+        </dl>
+        <dl class="config-field">
+          <dt>{{ t("system.contact") }}</dt>
+          <dd class="field-value">boss@oi-io.cc</dd>
+        </dl>
+      </div>
+      <!-- 原模拟链接按钮化：.about-link 已补按钮 reset，视觉不变 -->
+      <button type="button" class="about-link" @click="showOpenSource = true">
+        {{ t("system.open_source_components") }}
+      </button>
     </div>
 
     <OpenSourceModal v-if="showOpenSource" @close="showOpenSource = false" />

@@ -1,5 +1,5 @@
 @layer pages {
-  /* 系统管理分区页样式（配置卡片/数据管理 +
+  /* 系统管理分区页样式（配置分组/数据管理 +
    通知矩阵/收件人清单/日志统计类） */
 
   .system-config-section {
@@ -10,52 +10,17 @@
     box-shadow: var(--shadow-md);
   }
 
-  .system-config-section h3 {
-    color: var(--color-text);
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: var(--space-lg);
-    padding-bottom: var(--space-sm);
-
-    /* 标题分隔线用实色主色：--color-primary-light 是 10% tint，2px 线条几乎不可见 */
-    border-bottom: 2px solid var(--color-primary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-
-  .system-config-section h3::before {
-    content: "";
-    width: 4px;
-    height: 20px;
-    background: var(--color-primary);
-    border-radius: 2px;
-  }
-
-  .config-card {
-    background: var(--color-bg);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    margin-bottom: var(--space-lg);
-    border: 1px solid var(--color-border-light);
-    transition:
-      border-color var(--transition-fast),
-      box-shadow var(--transition-fast);
-  }
-
-  .config-card:hover {
-    /* hover 边框用实色主色，10% tint 边框视觉上消失 */
-    border-color: var(--color-primary);
-    box-shadow: 0 4px 12px
-      color-mix(in srgb, var(--color-primary) 15%, transparent);
-  }
-
   .config-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding-bottom: var(--space-sm);
     border-bottom: 1px solid var(--color-border-light);
+  }
+
+  /* 卡片容器已移除：组间距改由分组头部上边距承担（各页签首个头部为面板首子节点，不缩进） */
+  .config-card-header:not(:first-child) {
+    margin-top: var(--space-lg);
   }
 
   .config-card-title {
@@ -84,7 +49,7 @@
   }
 
   /* 字段行已换用页面表单家族 form-row/form-group（label 定宽居中、控件同行撑满，
-   同行表单变体规则见 forms.css；卡片直落字段行固定 4 列、内嵌 section 字段行
+   同行表单变体规则见 forms.css；面板直落字段行固定 4 列、内嵌 section 字段行
    固定 2 列见下方声明），此处仅保留只读 dl 字段与整行分组块的差异 */
 
   /* 只读字段 dl：dt 与家族行 label 同款定宽居中，dd 值框 flex:1 撑满剩余空间 */
@@ -124,7 +89,7 @@
   }
 
   /* SNMP Trap v3 USM 用户表：fixed 布局按列宽分配，行内输入控件按列宽自适应，
-   防止 6 列控件以默认尺寸（~170px/列）撑破卡片产生横向滚动 */
+   防止 6 列控件以默认尺寸（~170px/列）撑破面板产生横向滚动 */
   .snmp-trap-users-container .data-table {
     table-layout: fixed;
   }
@@ -175,7 +140,7 @@
 
   /* 整行分组块（收件人清单/SNMP v3 用户表）：标题左对齐取齐正文、
    按钮不随 align-items:stretch 拉满整行；块规则本体见 forms.css 同行表单变体 */
-  .config-card .form-group.form-group-block > .group-label {
+  .system-config-section .form-group.form-group-block > .group-label {
     width: 100%;
     min-width: 0;
     text-align: left;
@@ -194,7 +159,7 @@
     margin-right: 6px;
   }
 
-  .config-card .form-group.form-group-block > .btn {
+  .system-config-section .form-group.form-group-block > .btn {
     align-self: flex-start;
   }
 
@@ -507,34 +472,24 @@
 
   /* ==================== 导入导出 / 数据管理 ==================== */
 
+  /* 平铺容器：子区块盒子（灰底 section）已随卡片容器实验移除，内容直落白面板 */
   .data-management-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-lg);
     min-width: 0;
   }
 
-  .data-management-container .section {
-    background: var(--color-bg);
-    border-radius: var(--radius-lg);
-    padding: var(--space-md);
-    border: 1px solid var(--color-border-light);
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  /* 数据管理/日志管理卡片化后：子区块置于 config-card 灰底之上，改用白底保持层次 */
-  .config-card .data-management-container .section {
-    background: var(--color-bg-white);
-  }
-
-  .data-management-container .section h3 {
+  .data-management-container h3 {
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--color-text);
     margin-bottom: var(--space-md);
     padding-bottom: var(--space-xs);
     border-bottom: 1px solid var(--color-border-light);
+  }
+
+  /* 平铺分组的组标题与上一组内容间补缝（块级相邻外边距折叠，不叠加） */
+  .data-management-container > h3:not(:first-child),
+  .data-management-container > .section-title-row:not(:first-child) {
+    margin-top: var(--space-md);
   }
 
   /* 带右侧动作的块标题行：标题左、按钮右，分隔线移到行容器以占满整宽 */
@@ -554,10 +509,9 @@
     border-bottom: none;
   }
 
-  /* 内嵌半宽 section 的直落字段行固定 2 列（与卡片直落行 4 列合成每卡片
-   等效 4 列口径，forms.css 同特异度声明靠前让位）；窄屏回落单列 */
-  .data-management-container .section > .form-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  
+  .data-management-container > .form-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .import-actions,
@@ -577,8 +531,8 @@
     min-width: 0;
   }
 
-  .config-card .data-management-container .import-actions .btn,
-  .config-card .data-management-container .export-actions .btn {
+  .system-config-section .data-management-container .import-actions .btn,
+  .system-config-section .data-management-container .export-actions .btn {
     padding: 0.5rem 1rem;
     font-size: 0.85rem;
     white-space: nowrap;
@@ -610,8 +564,8 @@
     margin-top: 2rem;
   }
 
-  /* Webhook 卡片：字段说明文字与空列表提示 */
-  .system-config-section .form-hint {
+  /* Webhook 弹窗/卡片：字段说明文字与空列表提示 */
+  #system .form-hint {
     font-size: 0.8rem;
     color: var(--color-text-secondary);
     margin-top: 0.25rem;
@@ -830,17 +784,17 @@
 
   /* label 的字重与颜色由 forms.css 的 .form-group label:not(.checkbox-label) 提供；
    此处仅保留其未覆盖的 white-space */
-  .config-card .clear-logs-form .form-group label {
+  .system-config-section .clear-logs-form .form-group label {
     white-space: nowrap;
   }
 
   @media (width <= 576px) {
-    .data-management-container .clear-logs-form .form-row {
+    /* 窄屏：平铺容器字段行回落单列（与既有 576 清日志/统计卡断点同阶梯） */
+    .data-management-container > .form-row {
       grid-template-columns: 1fr;
     }
 
-    /* 窄屏：内嵌 section 字段行回落单列（与既有 576 清日志/统计卡断点同阶梯） */
-    .data-management-container .section > .form-row {
+    .data-management-container .clear-logs-form .form-row {
       grid-template-columns: 1fr;
     }
 
@@ -854,10 +808,6 @@
   }
 
   @media (width <= 768px) {
-    .data-management-container {
-      grid-template-columns: 1fr;
-    }
-
     /* 窄屏：导入导出操作区纵向堆叠（原 responsive.css 组件级规则迁回） */
     .import-actions,
     .export-actions {

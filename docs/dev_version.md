@@ -265,3 +265,11 @@ v0.75.0
 v0.75.1
 2026110320191101
 组织详情右栏删除标题区（普通修改 z 段 +1）：OrgDetailPanel.vue 移除 org-detail-header 头部块（图标/名称/类型徽章/备注同行展示）及其专属依赖——icon prop、typeLabel computed、getOrgTypeLabel/OrgIcon/computed 导入；OrganizationPage.vue 联动删除 selectedIcon computed 与 :icon 传参（resolveIcon 仍经 orgTreeCtx 供树节点使用，保留）；organization.css 删除 .org-detail-header 全家族规则（.org-node-type-badge 树节点仍用，保留）。验证：npm run typecheck、biome check 通过。仅 z+1，frontend/package.json 与 Cargo.toml 均不联动（仅前端普通修改）
+
+v0.75.2
+2026110321125801
+系统设置页去除卡片容器实验（普通修改 z 段 +1）：按需求全面删除形成卡片的 `<section class="config-card">` 包裹（七页签内联卡片 12 处 + 独立卡片组件 6 个），内容解包为 .system-config-section 白面板直接子节点（独立组件变多根片段，均仅接收已声明 props 无透传），页面呈"单面板平铺分组"效果。关键迁移：.config-card 是 forms.css 同行表单变体（.form-group 家族、> .form-row 直落 4 列及 3 档媒体查询回落、form-group-block 家族）的挂载上下文，全部选择器改挂 .system-config-section（.modal 半边不动）；NotificationTab 的 WebhookTargetModal 移出面板至 tab-content 直下，避免迁移后误命中弹窗表单；组间距由 .config-card 的 margin-bottom 改由 .config-card-header:not(:first-child) 上边距承担。顺带清理死代码：.config-card 卡片观感规则（灰底/边框/圆角/hover）、.system-config-section h3/h3::before（早被 .data-management-container .section h3 完全覆盖）、.config-card .data-management-container .section 白底覆盖；.form-hint 作用域改 #system（弹窗移出面板后仍需命中）；相关失实"卡片"注释同步改"面板/分组"。验证：npm run typecheck、biome check（0 警告）通过。仅 z+1，frontend/package.json 与 Cargo.toml 均不联动（仅前端普通修改）
+
+v0.75.3
+2026110321203401
+数据管理页残余卡片清理（普通修改 z 段 +1）：v0.75.2 仅解包 config-card 后，data-management-container 内层 section.section 子区块（灰底+边框+圆角盒子 5 处：AgentServiceCard ×2 / DataManagementTab ×1 / LogsManagementCard ×2）直接落于白面板反而更显眼，用户反馈"卡片仍存在"。本次同口径拆平：5 处 section.section 解包（内容左移 2 空格直落容器），容器由 2 列栅格改平铺块级（grid/gap 声明与 768px 单列回落一并移除）；.data-management-container .section 盒子规则删除，h3 标题样式改挂 .data-management-container h3，新增 > h3/.section-title-row:not(:first-child) 上边距补组缝（块级外边距折叠不叠加）；容器直落字段行 2 列规则 .section > .form-row 改 > .form-row（576px 单列回落同步），576 块内两规则按特异度升序重排消除 biome 降序对警告。验证：npm run typecheck、biome check（0 警告）通过。仅 z+1，frontend/package.json 与 Cargo.toml 均不联动（仅前端普通修改）

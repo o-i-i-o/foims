@@ -201,96 +201,90 @@ async function testLogForwarding(): Promise<void> {
 </script>
 
 <template>
-  <section class="config-card">
-    <header class="config-card-header">
-      <div class="config-card-title">
-        <span class="icon"><NavIcon name="logs" /></span>
-        <span>{{ t("logs.manager") }}</span>
-      </div>
-    </header>
-    <div class="data-management-container">
-      <section class="section">
-        <h3>{{ t("logs.stats") }}</h3>
-        <div class="logs-stats-grid">
-          <div class="log-stat-card">
-            <div class="log-stat-title">{{ t("logs.operation_logs") }}</div>
-            <div class="log-stat-value">{{ stats.operation_logs?.count ?? 0 }}</div>
-            <div class="log-stat-info">{{ oldestText(stats.operation_logs?.oldest) }}</div>
-          </div>
-          <div class="log-stat-card">
-            <div class="log-stat-title">{{ t("logs.login_logs") }}</div>
-            <div class="log-stat-value">{{ stats.login_logs?.count ?? 0 }}</div>
-            <div class="log-stat-info">{{ oldestText(stats.login_logs?.oldest) }}</div>
-          </div>
-          <div class="log-stat-card">
-            <div class="log-stat-title">{{ t("logs.notifications") }}</div>
-            <div class="log-stat-value">{{ stats.notifications?.count ?? 0 }}</div>
-            <div class="log-stat-info">{{ oldestText(stats.notifications?.oldest) }}</div>
-          </div>
-        </div>
-        <div class="section-title-row">
-          <h3>{{ t("logs.clear_logs") }}</h3>
-          <button v-if="!readonly" type="button" class="btn btn-danger btn-sm" :disabled="clearing" @click="requestClearLogs">
-            {{ t("logs.clear") }}
-          </button>
-        </div>
-        <div class="clear-logs-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="clear-log-type">{{ t("logs.log_type") }}</label>
-              <select id="clear-log-type" v-model="clearType" :disabled="readonly">
-                <option value="operation">{{ t("logs.operation_logs") }}</option>
-                <option value="login">{{ t("logs.login_logs") }}</option>
-                <option value="notification">{{ t("logs.notifications") }}</option>
-                <option value="all">{{ t("logs.all_logs") }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="clear-log-days">{{ t("logs.keep_days") }}</label>
-              <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="3650" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="section">
-        <div class="section-title-row">
-          <h3>{{ t("logs.forwarding_title") }}</h3>
-          <div v-if="!readonly" class="action-buttons">
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="testingForwarding" @click="testLogForwarding">
-              {{ t("logs.forwarding_test") }}
-            </button>
-            <button type="button" class="btn btn-primary btn-sm" :disabled="savingForwarding" @click="saveLogForwarding">
-              {{ t("common.save") }}
-            </button>
-          </div>
-        </div>
-        <div class="form-row form-row-2col">
-          <div class="form-group">
-            <label for="log-forwarding-enabled">{{ t("logs.forwarding_enabled") }}</label>
-            <select id="log-forwarding-enabled" v-model="forwardingEnabled" :disabled="readonly" :aria-label="t('logs.forwarding_enabled')">
-              <option value="true">{{ t("common.yes") }}</option>
-              <option value="false">{{ t("common.no") }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="log-forwarding-protocol">{{ t("logs.forwarding_protocol") }}</label>
-            <select id="log-forwarding-protocol" v-model="forwardingProtocol" :disabled="readonly" :aria-label="t('logs.forwarding_protocol')">
-              <option value="udp">UDP</option>
-              <option value="tcp">TCP</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="log-forwarding-host">{{ t("logs.forwarding_host") }}</label>
-            <input id="log-forwarding-host" v-model="forwardingHost" type="text" :placeholder="t('logs.forwarding_host_placeholder')" autocomplete="off" :disabled="readonly" :aria-label="t('logs.forwarding_host')">
-          </div>
-          <div class="form-group">
-            <label for="log-forwarding-port">{{ t("logs.forwarding_port") }}</label>
-            <input id="log-forwarding-port" v-model="forwardingPort" type="number" min="1" max="65535" placeholder="514" :disabled="readonly" :aria-label="t('logs.forwarding_port')">
-          </div>
-        </div>
-      </section>
+  <header class="config-card-header">
+    <div class="config-card-title">
+      <span class="icon"><NavIcon name="logs" /></span>
+      <span>{{ t("logs.manager") }}</span>
     </div>
-  </section>
+  </header>
+  <div class="data-management-container">
+    <h3>{{ t("logs.stats") }}</h3>
+    <div class="logs-stats-grid">
+      <div class="log-stat-card">
+        <div class="log-stat-title">{{ t("logs.operation_logs") }}</div>
+        <div class="log-stat-value">{{ stats.operation_logs?.count ?? 0 }}</div>
+        <div class="log-stat-info">{{ oldestText(stats.operation_logs?.oldest) }}</div>
+      </div>
+      <div class="log-stat-card">
+        <div class="log-stat-title">{{ t("logs.login_logs") }}</div>
+        <div class="log-stat-value">{{ stats.login_logs?.count ?? 0 }}</div>
+        <div class="log-stat-info">{{ oldestText(stats.login_logs?.oldest) }}</div>
+      </div>
+      <div class="log-stat-card">
+        <div class="log-stat-title">{{ t("logs.notifications") }}</div>
+        <div class="log-stat-value">{{ stats.notifications?.count ?? 0 }}</div>
+        <div class="log-stat-info">{{ oldestText(stats.notifications?.oldest) }}</div>
+      </div>
+    </div>
+    <div class="section-title-row">
+      <h3>{{ t("logs.clear_logs") }}</h3>
+      <button v-if="!readonly" type="button" class="btn btn-danger btn-sm" :disabled="clearing" @click="requestClearLogs">
+        {{ t("logs.clear") }}
+      </button>
+    </div>
+    <div class="clear-logs-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="clear-log-type">{{ t("logs.log_type") }}</label>
+          <select id="clear-log-type" v-model="clearType" :disabled="readonly">
+            <option value="operation">{{ t("logs.operation_logs") }}</option>
+            <option value="login">{{ t("logs.login_logs") }}</option>
+            <option value="notification">{{ t("logs.notifications") }}</option>
+            <option value="all">{{ t("logs.all_logs") }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="clear-log-days">{{ t("logs.keep_days") }}</label>
+          <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="3650" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
+        </div>
+      </div>
+    </div>
+    <div class="section-title-row">
+      <h3>{{ t("logs.forwarding_title") }}</h3>
+      <div v-if="!readonly" class="action-buttons">
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="testingForwarding" @click="testLogForwarding">
+          {{ t("logs.forwarding_test") }}
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" :disabled="savingForwarding" @click="saveLogForwarding">
+          {{ t("common.save") }}
+        </button>
+      </div>
+    </div>
+    <div class="form-row form-row-2col">
+      <div class="form-group">
+        <label for="log-forwarding-enabled">{{ t("logs.forwarding_enabled") }}</label>
+        <select id="log-forwarding-enabled" v-model="forwardingEnabled" :disabled="readonly" :aria-label="t('logs.forwarding_enabled')">
+          <option value="true">{{ t("common.yes") }}</option>
+          <option value="false">{{ t("common.no") }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="log-forwarding-protocol">{{ t("logs.forwarding_protocol") }}</label>
+        <select id="log-forwarding-protocol" v-model="forwardingProtocol" :disabled="readonly" :aria-label="t('logs.forwarding_protocol')">
+          <option value="udp">UDP</option>
+          <option value="tcp">TCP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="log-forwarding-host">{{ t("logs.forwarding_host") }}</label>
+        <input id="log-forwarding-host" v-model="forwardingHost" type="text" :placeholder="t('logs.forwarding_host_placeholder')" autocomplete="off" :disabled="readonly" :aria-label="t('logs.forwarding_host')">
+      </div>
+      <div class="form-group">
+        <label for="log-forwarding-port">{{ t("logs.forwarding_port") }}</label>
+        <input id="log-forwarding-port" v-model="forwardingPort" type="number" min="1" max="65535" placeholder="514" :disabled="readonly" :aria-label="t('logs.forwarding_port')">
+      </div>
+    </div>
+  </div>
   <ConfirmModal
     v-if="showClearConfirm"
     :message="clearConfirmMessage"
