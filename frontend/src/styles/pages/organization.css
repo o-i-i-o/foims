@@ -23,7 +23,7 @@
     display: flex;
     gap: var(--space-sm);
     flex-wrap: wrap;
-    margin-bottom: var(--space-sm)
+    margin-bottom: var(--space-sm);
   }
 
   /* ==================== 两栏布局：左栏组织树 + 右栏详情面板（4:6） ==================== */

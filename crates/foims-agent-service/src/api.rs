@@ -207,30 +207,13 @@ fn valid_server_addr(addr: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | ':' | '[' | ']' | '-' | '_'))
 }
 
-/// 端口段校验：非空纯数字（0 与超长段交由 agent 端配置校验拒绝）。
-fn is_port_segment(segment: &str) -> bool {
-    !segment.is_empty() && segment.bytes().all(|b| b.is_ascii_digit())
-}
-
-/// 拆分手动覆盖地址为 (主机, 显式端口段)。仅处理已通过 `valid_override_addr`
-/// 校验的 host[:port] 形式；裸 IPv6 已被校验拒绝，不会走到这里。
-fn split_override_addr(addr: &str) -> (&str, Option<&str>) {
-    if let Some(idx) = addr.rfind(']') {
-        // [v6]:port 或 [v6]
-        let (host, rest) = addr.split_at(idx + 1);
-        return (host, rest.strip_prefix(':'));
-    }
-    match addr.rsplit_once(':') {
-        Some((host, port)) => (host, Some(port)),
-        None => (addr, None),
-    }
-}
-
 /// 解析配置包内上报地址，优先级：
 /// 1. 公共URL开关开启：主机名取系统配置 server.public_url（未配置则返回
 ///    参数错误），端口取监听端口——监听地址/端口可能经代理、NAT 映射，
 ///    并非 agent 可达的真实上报地址；
-/// 2. 开关关闭且填写覆盖地址：直接使用（缺端口补监听端口，裸 IPv6 拒绝）；
+/// 2. 开关关闭且填写覆盖地址：仅取主机（纯主机形式，裸 IPv6 拒绝），端口
+///    恒取监听端口——上报端口由 agent 服务监听端口决定，覆盖地址不携带
+///    端口；
 /// 3. 其余：按监听地址推导（通配主机按请求 Host 兜底）。
 fn resolve_report_addr(
     use_public_url: bool,
@@ -254,40 +237,28 @@ fn resolve_report_addr(
     }
     let override_addr = report_url_override.trim();
     if !override_addr.is_empty() {
-        if !valid_override_addr(override_addr) {
+        if !valid_override_host(override_addr) {
             return Err(AppError::Validation(msg(
                 "server.agent.invalid_report_override",
             )));
         }
-        // 无显式端口段（host 或 [v6]）时补监听端口
-        let (host, port) = split_override_addr(override_addr);
-        let addr = match port {
-            Some(_) => override_addr.to_string(),
-            None => format!("{host}:{bind_port}"),
-        };
-        return Ok(addr);
+        return Ok(format!("{override_addr}:{bind_port}"));
     }
     resolve_server_addr(bind_addr, bind_port, headers, uri)
 }
 
-/// 校验手动覆盖地址为严格 host[:port] 形式：主机名/IPv4 或方括号 IPv6，
-/// 端口段须为纯数字；裸 IPv6（多冒号无方括号）因与端口歧义直接拒绝。
-fn valid_override_addr(addr: &str) -> bool {
-    if addr.starts_with('[') {
-        let Some(end) = addr.find(']') else {
+/// 校验手动上报地址为纯主机形式：主机名/IPv4 或方括号 IPv6，不含端口段
+/// （端口统一取监听端口，拼接时补齐）；裸 IPv6 与方括号不闭合直接拒绝。
+fn valid_override_host(addr: &str) -> bool {
+    if let Some(rest) = addr.strip_prefix('[') {
+        let Some(end) = rest.find(']') else {
             return false;
         };
-        let rest = &addr[end + 1..];
-        return rest.is_empty() || (rest.starts_with(':') && is_port_segment(&rest[1..]));
+        // ] 之后不得再有任何字符（含旧式 host:port 的端口段残留）
+        return end + 1 == rest.len() && valid_server_addr(addr);
     }
-    if addr.contains('[') {
-        // 方括号不闭合等畸形：整体视为主机段，交白名单校验拒绝
-        return valid_server_addr(addr);
-    }
-    match addr.split_once(':') {
-        None => valid_server_addr(addr),
-        Some((host, port)) => !host.is_empty() && is_port_segment(port) && valid_server_addr(addr),
-    }
+    // 主机名/IPv4 不含冒号；带冒号即裸 IPv6 或旧式 host:port，均拒绝
+    !addr.contains(':') && valid_server_addr(addr)
 }
 
 /// 从系统配置 server.public_url 提取主机名段：剥 scheme 与路径/查询，
@@ -365,7 +336,7 @@ fn host_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
 mod tests {
     use super::{
         host_from_public_url, read_material, resolve_report_addr, resolve_server_addr,
-        split_override_addr, valid_override_addr, valid_server_addr,
+        valid_override_host, valid_server_addr,
     };
     use axum::http::{HeaderMap, Uri};
 
@@ -397,23 +368,6 @@ mod tests {
             "读取失败（权限/IO）不得与「未生成」混淆"
         );
         let _ = tokio::fs::remove_dir(&dir).await;
-    }
-
-    #[test]
-    fn test_split_override_addr() {
-        // host:port 与 [v6]:port：拆分出主机与显式端口段
-        assert_eq!(
-            split_override_addr("127.0.0.1:9100"),
-            ("127.0.0.1", Some("9100"))
-        );
-        assert_eq!(split_override_addr("[::1]:9443"), ("[::1]", Some("9443")));
-        // 缺端口段（host 或 [v6]）：端口为 None，由调用方补监听端口
-        assert_eq!(split_override_addr("127.0.0.1"), ("127.0.0.1", None));
-        assert_eq!(split_override_addr("[::]"), ("[::]", None));
-        assert_eq!(
-            split_override_addr("agent.example-com_cn"),
-            ("agent.example-com_cn", None)
-        );
     }
 
     #[test]
@@ -511,20 +465,22 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_override_addr() {
-        // 合法：host / host:port / [v6] / [v6]:port
-        assert!(valid_override_addr("agent.example.com"));
-        assert!(valid_override_addr("agent.example.com:9100"));
-        assert!(valid_override_addr("127.0.0.1:9100"));
-        assert!(valid_override_addr("[2001:db8::1]"));
-        assert!(valid_override_addr("[2001:db8::1]:9100"));
-        // 非法：裸 IPv6 歧义 / 尾冒号 / 畸形端口 / 空串
-        assert!(!valid_override_addr("2001:db8::1"));
-        assert!(!valid_override_addr("host:"));
-        assert!(!valid_override_addr("host:abc"));
-        assert!(!valid_override_addr("[2001:db8::1"));
-        assert!(!valid_override_addr(""));
-        assert!(!valid_override_addr("host\"; rm -rf /"));
+    fn test_valid_override_host() {
+        // 合法：纯主机形式（主机名 / IPv4 / 方括号 IPv6），不含端口段
+        assert!(valid_override_host("agent.example.com"));
+        assert!(valid_override_host("127.0.0.1"));
+        assert!(valid_override_host("[2001:db8::1]"));
+        assert!(valid_override_host("agent.example-com_cn"));
+        // 非法：端口由监听端口决定，携带端口段（含方括号 IPv6 带端口）拒绝
+        assert!(!valid_override_host("agent.example.com:9100"));
+        assert!(!valid_override_host("127.0.0.1:9100"));
+        assert!(!valid_override_host("[2001:db8::1]:9100"));
+        // 非法：裸 IPv6 / 尾冒号 / 方括号不闭合 / 空串 / 注入字符
+        assert!(!valid_override_host("2001:db8::1"));
+        assert!(!valid_override_host("host:"));
+        assert!(!valid_override_host("[2001:db8::1"));
+        assert!(!valid_override_host(""));
+        assert!(!valid_override_host("host\"; rm -rf /"));
     }
 
     #[test]
@@ -555,7 +511,7 @@ mod tests {
             axum::http::StatusCode::BAD_REQUEST
         );
 
-        // 优先级 2：手动覆盖地址；缺端口补监听端口，带端口原样
+        // 优先级 2：手动覆盖地址仅取主机，端口恒取监听端口
         assert_eq!(
             resolve_report_addr(
                 false,
@@ -569,6 +525,7 @@ mod tests {
             .unwrap(),
             "relay.example.com:9100"
         );
+        // 覆盖地址携带端口段：拒绝（端口由 agent 监听端口决定，不由覆盖地址决定）
         assert_eq!(
             resolve_report_addr(
                 false,
@@ -579,8 +536,9 @@ mod tests {
                 &empty_headers,
                 &uri
             )
-            .unwrap(),
-            "relay.example.com:9443"
+            .unwrap_err()
+            .status_code(),
+            axum::http::StatusCode::BAD_REQUEST
         );
         assert_eq!(
             resolve_report_addr(

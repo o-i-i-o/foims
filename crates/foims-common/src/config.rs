@@ -562,7 +562,8 @@ pub struct AgentConfig {
     /// 的主机名 + 监听端口（监听地址端口可能经代理/NAT 映射，并非真实上报地址）。
     #[serde(default)]
     pub use_public_url: bool,
-    /// 手动上报地址覆盖（开关关闭时生效）：host:port 形式，留空回退监听地址推导。
+    /// 手动上报地址（开关关闭时生效）：仅主机形式（主机名/IPv4/方括号
+    /// IPv6，端口由监听端口决定不在此填写），留空回退监听地址推导。
     #[serde(default)]
     pub report_url_override: String,
 }

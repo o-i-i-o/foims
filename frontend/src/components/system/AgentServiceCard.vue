@@ -110,12 +110,13 @@ async function saveAgentConfig(): Promise<void> {
     showToast(t("agent_service.invalid_port", { port: String(agentBindPort.value).trim() }), "warning");
     return;
   }
-  // 上报地址模式：开关关时允许手动覆盖（host:port，留空回退监听地址推导）
+  // 上报地址模式：开关关时手动指定主机（端口由 Agent 监听端口决定，不在
+  // 覆盖地址中填写），留空回退监听地址推导
   const reportOverride = agentReportOverride.value.trim();
   if (
     !agentUsePublicUrl.value &&
     reportOverride &&
-    !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)(?::\d+)?$/.test(reportOverride)
+    !/^(?:\[[0-9a-fA-F:]+\]|[0-9A-Za-z.-]+)$/.test(reportOverride)
   ) {
     showToast(t("agent_service.invalid_report_override"), "warning");
     return;
@@ -263,7 +264,7 @@ async function regenerateToken(): Promise<void> {
       </div>
       <div v-show="!agentUsePublicUrl" class="form-group">
         <label for="agent-report-url-override">{{ t("agent_service.report_url_override") }}</label>
-        <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com:9100" autocomplete="off" :aria-label="t('agent_service.report_url_override')">
+        <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com" autocomplete="off" :aria-label="t('agent_service.report_url_override')">
       </div>
     </div>
     <!-- 注册令牌：字段撑满、重新生成动作右置（field-action-row 通用模式） -->

@@ -337,3 +337,7 @@ v0.77.11
 v0.77.12
 2026110400394501
 终端定位弹窗工具栏两行布局调整（前端普通修改，z 段 +1）：按用户要求改为第一行 MAC/IP 切换组、第二行 输入框（flex 撑满）+ 文字查询按钮；恢复 locate-toolbar-row 行容器样式（toolbar 纵向两行、行内横向排列）。验证：vue-tsc、npm run build 通过
+
+v0.78.0
+2026110400595901
+Agent 上报地址端口语义修正（功能 bug 更新，y 段 +1）：配置包内上报地址口径定为「端口恒由 Agent 服务监听端口（agent.port）决定，手动上报地址仅决定主机不覆盖端口」——api.rs resolve_report_addr 手动地址分支删除 host:port 拆分并保留显式端口的旧逻辑（split_override_addr/is_port_segment 一并移除），新增 valid_override_host 仅接受主机名/IPv4/方括号 IPv6 纯主机形式，携带端口段（含旧式 [v6]:port）与裸 IPv6 一律 400 拒绝（拒绝而非静默剥除，避免用户误以为所填端口生效；存量带端口配置在下载时按 400 明确报错引导修正）；前端 AgentServiceCard.vue 上报地址校验正则去掉可选端口组（与监听地址校验同口径）；zh/en i18n 校验消息、字段标签（上报地址覆盖→上报地址）与帮助文本同步 host-only 语义；config.rs 字段注释同步；顺手修复 organization.css .org-actions 缺失分号（历史遗留格式错误，biome 拦截项）。验证：cargo fmt、workspace clippy -D warnings、foims-agent-service 97 单测、npm run typecheck/build、biome、oxlint 均通过。y 段 +1，Cargo.toml 0.33.22→0.33.23、frontend/package.json 0.1.87→0.1.88 联动；foims-agent-service 0.1.35、foims-common 0.3.22
