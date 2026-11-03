@@ -624,9 +624,6 @@
   #ip-table th:nth-child(10) {
     width: 10%;
   }
-  #ip-table th:nth-child(11) {
-    width: 10%;
-  }
 
   /* 操作日志表：序号/时间/操作人/操作类型/资源类型/结果/IP/操作（搜索框在页签工具栏） */
   #operation-logs-table th:nth-child(1) {

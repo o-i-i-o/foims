@@ -575,10 +575,6 @@
 
   /* ==================== 通知设置 ==================== */
 
-  .notification-settings-section {
-    margin-top: 2rem;
-  }
-
   /* Webhook 弹窗/卡片：字段说明文字与空列表提示 */
   #system .form-hint {
     font-size: 0.8rem;
@@ -587,28 +583,12 @@
     line-height: 1.4;
   }
 
-  /* Webhook 目标表：仅展示列（编辑走弹窗），fixed 布局按列宽分配 */
-  .webhook-table {
-    table-layout: fixed;
-  }
+  /* Webhook 目标表：五列（名称/渠道/语言/接收内容/操作），自动布局按内容
+   分配——操作列三按钮不换行由 .webhook-actions-cell 承担；历史 fixed 列宽
+   （4 列无操作列时代）已随多目标订阅重构退役，勿再加 table-layout: fixed
+   （第 5 列未定义宽度会被压成 0，按钮溢出不可见） */
 
-  .webhook-table th:nth-child(1) {
-    width: 20%;
-  }
-
-  .webhook-table th:nth-child(2) {
-    width: 16%;
-  }
-
-  .webhook-table th:nth-child(3) {
-    width: 42%;
-  }
-
-  .webhook-table th:nth-child(4) {
-    width: 22%;
-  }
-
-  /* 非钉钉行密钥列占位符 */
+  /* 占位符样式（无名称/未订阅任何内容时显示 —） */
   .webhook-table .cell-muted {
     color: var(--color-text-muted);
   }

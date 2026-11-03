@@ -284,7 +284,7 @@
     border-radius: 4px;
   }
 
-  /* 磁盘 / 网卡 / 温度风扇行 */
+  /* 磁盘 / 温度风扇行（网卡明细已改走 agent-nets-table） */
   .agent-rows {
     display: flex;
     flex-direction: column;
@@ -292,7 +292,6 @@
   }
 
   .agent-disk-row,
-  .agent-net-row,
   .agent-sensor-row {
     display: flex;
     align-items: center;
@@ -327,17 +326,6 @@
     color: var(--color-text-muted);
   }
 
-  .agent-net-iface {
-    font-weight: 600;
-    color: var(--color-text-light);
-    min-width: 80px;
-  }
-
-  .agent-net-rate {
-    font-family: monospace;
-  }
-
-  .agent-net-errors,
   .agent-sensor-kind,
   .agent-sensor-value {
     color: var(--color-text-muted);

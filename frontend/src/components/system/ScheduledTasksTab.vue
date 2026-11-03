@@ -207,7 +207,8 @@ function openCreate(): void {
 <template>
   <div class="tab-content" :class="{ active: props.active }">
     <div class="table-container">
-      <table class="data-table" :aria-label="t('system.scheduled_tasks')">
+      <!-- id 对应 tables.css 的 #scheduled-tasks-table fixed 列宽（迁移时丢失，补回） -->
+      <table id="scheduled-tasks-table" class="data-table" :aria-label="t('system.scheduled_tasks')">
         <thead>
           <tr>
             <th class="index-column">{{ t("common.index") }}</th>

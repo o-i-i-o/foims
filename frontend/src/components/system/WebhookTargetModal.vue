@@ -86,6 +86,7 @@ function handleConfirm(): void {
     </template>
 
     <form ref="formRef">
+
       <div class="form-row">
         <div class="form-group">
           <label for="webhook-target-name">{{ t("webhook.target_name") }}</label>
@@ -107,53 +108,61 @@ function handleConfirm(): void {
           </select>
         </div>
       </div>
-      <div class="form-group">
-        <label for="webhook-target-url">{{ t("webhook.url") }}<span class="required">*</span></label>
-        <input
-          id="webhook-target-url"
-          v-model="url"
-          type="url"
-          maxlength="2048"
-          required
-          autocomplete="off"
-          :placeholder="t(channel === 'wecom' ? 'webhook.url_placeholder_wecom' : 'webhook.url_placeholder_generic')"
-          :aria-label="t('webhook.url')"
-        >
+      <div class="form-row">
+        <div class="form-group">
+          <label for="webhook-target-url">{{ t("webhook.url") }}<span class="required">*</span></label>
+          <input
+            id="webhook-target-url"
+            v-model="url"
+            type="url"
+            maxlength="2048"
+            required
+            autocomplete="off"
+            :placeholder="t(channel === 'wecom' ? 'webhook.url_placeholder_wecom' : 'webhook.url_placeholder_generic')"
+            :aria-label="t('webhook.url')"
+          >
+        </div>
       </div>
-      <div v-if="channel === 'dingtalk'" class="form-group">
-        <label for="webhook-target-secret">{{ t("webhook.dingtalk_secret") }}</label>
-        <input
-          id="webhook-target-secret"
-          v-model="secret"
-          type="password"
-          maxlength="256"
-          autocomplete="new-password"
-          :placeholder="t(props.target?.hasSecret ? 'webhook.dingtalk_secret_configured' : 'webhook.dingtalk_secret_input')"
-          :aria-label="t('webhook.dingtalk_secret')"
-        >
+      <div v-if="channel === 'dingtalk'" class="form-row">
+        <div class="form-group">
+          <label for="webhook-target-secret">{{ t("webhook.dingtalk_secret") }}</label>
+          <input
+            id="webhook-target-secret"
+            v-model="secret"
+            type="password"
+            maxlength="256"
+            autocomplete="new-password"
+            :placeholder="t(props.target?.hasSecret ? 'webhook.dingtalk_secret_configured' : 'webhook.dingtalk_secret_input')"
+            :aria-label="t('webhook.dingtalk_secret')"
+          >
+        </div>
       </div>
-      <div class="form-group">
-        <label for="webhook-target-language">{{ t("notification.language_label") }}</label>
-        <select id="webhook-target-language" v-model="language" :aria-label="t('notification.language_label')">
-          <option value="zh">{{ t("notification.lang_zh") }}</option>
-          <option value="en">{{ t("notification.lang_en") }}</option>
-        </select>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="webhook-target-language">{{ t("notification.language_label") }}</label>
+          <select id="webhook-target-language" v-model="language" :aria-label="t('notification.language_label')">
+            <option value="zh">{{ t("notification.lang_zh") }}</option>
+            <option value="en">{{ t("notification.lang_en") }}</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>{{ t("webhook.scope_label") }}</label>
-        <div class="webhook-scope">
-          <label class="webhook-scope-item">
-            <input v-model="ipChange" type="checkbox">
-            {{ t("notification.type_ip_change") }}
-          </label>
-          <label class="webhook-scope-item">
-            <input v-model="agentAlert" type="checkbox">
-            {{ t("notification.type_agent_alert") }}
-          </label>
-          <label class="webhook-scope-item">
-            <input v-model="snmpEvent" type="checkbox">
-            {{ t("notification.type_snmp_event") }}
-          </label>
+      <div class="form-row">
+        <div class="form-group">
+          <label>{{ t("webhook.scope_label") }}</label>
+          <div class="webhook-scope">
+            <label class="webhook-scope-item">
+              <input v-model="ipChange" type="checkbox">
+              {{ t("notification.type_ip_change") }}
+            </label>
+            <label class="webhook-scope-item">
+              <input v-model="agentAlert" type="checkbox">
+              {{ t("notification.type_agent_alert") }}
+            </label>
+            <label class="webhook-scope-item">
+              <input v-model="snmpEvent" type="checkbox">
+              {{ t("notification.type_snmp_event") }}
+            </label>
+          </div>
         </div>
       </div>
       <div class="form-hint">{{ t("webhook.url_hint") }}</div>

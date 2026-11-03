@@ -289,3 +289,19 @@ v0.76.2
 v0.77.0
 2026110322392801
 系统页数据管理页签布局重构（前端布局统一整改第一步，y 段 +1）：根治"长长短短"的结构性原因——同一页签三套标题体系（config-card-header/h3/title-row）、五种动作安放（组头右/h3 下方/表头 th/行内无 label 组/title-row 右）、2/3/4 列混排与灰盒嵌套、卡片组件为模板片段依赖父级兄弟选择器撑间距。新建 SystemSectionCard.vue 统一分组卡片（真实 section 根节点自持组间距 .config-card + .config-card，组头含 #actions 动作位，内容直落 config-card-body），AgentServiceCard/SnmpTrapCard/LogsManagementCard/DataManagementTab 内联导入导出组全部套用；二级分组收敛为 section-title-row 单一模式并上移为面板级通用规则（数据管理四组导入导出动作位上移标题行右侧、SNMP"添加用户"移出表头 th、日志卡三组沿用）；字段行节奏统一 4 列阶梯（卡片内行在 system.css 补齐 992→2 列/768→1 列断点回落，forms.css 直落行规则不动），成对短字段保留 form-row-2col；注册令牌行改 field-action-row（字段撑满+重新生成按钮右置）；清理日志灰底盒/裸 h3/import-actions/export-actions/data-management-container 退役，清理条件直落 2 列字段行；form-group-block 保留（收件人清单与定时任务弹窗仍依赖，含无 teleport 弹窗渲染在面板 DOM 的场景）。其余 6 个页签零改动。验证：npm run typecheck、npm run build、biome check frontend、oxlint 均通过。y 段 +1，frontend/package.json 0.1.74→0.1.75 联动，Cargo.toml 不联动
+
+v0.77.1
+2026110323075601
+Webhook 目标弹窗表单间距修复（前端普通修改，z 段 +1）：弹窗裸置 .form-group（url/密钥/语言/订阅范围）未包 .form-row，行距真源在 .form-row（margin-bottom: var(--space-sm)），裸组无边距导致字段挤贴；曾尝试给 .form-group 基类补 margin-bottom，但在 .form-row 网格单元内与 .form-row .form-group { margin-bottom: 0 } 冲突、全局冗余。修复：回退 .form-group 基类边距（保持"行距统一由 .form-row 承担、.form-group 无纵向边距"的单一真源），WebhookTargetModal 全部字段按 DeviceModal/ScheduledTaskModal 既有惯例包回 .form-row（名称+渠道成对两列，其余单字段行撑满），并清理手改残留的缩进与空行。通知页 webhook 目标列表删除按钮已存在（4c4367b9 多目标订阅重构引入，btn-danger 操作列），本次未改动。验证：npm run typecheck、npm run build、biome check、oxlint 通过
+
+v0.77.2
+2026110323232901
+Webhook 目标表操作列 0 宽修复（前端普通修改，z 段 +1）：.webhook-table 残留 4 列时代的 table-layout: fixed 列宽（语言列 42%，第 5 列操作列未定义宽度），多目标订阅重构改为 5 列（名称/渠道/语言/接收内容/操作）后 fixed 布局把操作列压成 0 宽，编辑/测试/删除三按钮溢出不可见（浏览器实测操作列 0.025px）。修复：退役 fixed 布局与 4 条 nth-child 列宽，改自动布局按内容分配，操作列不换行由 .webhook-actions-cell 承担；.cell-muted 注释同步纠正（密钥列已不存在，现为通用占位符）。浏览器核实：新增/编辑弹窗字段排布与资源页弹窗完全一致（同行布局、0px 间距），此前"系统页弹窗与资源页不一致"系旧构建中弹窗裸置 form-group 所致，已随 v0.77.1 修复统一。验证：npm run typecheck、npm run build、biome、oxlint 通过
+
+v0.77.3
+2026110323264401
+全量失效样式清理（前端普通修改，z 段 +1）：对 637 个 CSS 类与全部模板/TS/入口 HTML 做引用比对（动态拼接类如 nav-\${name}/toast-\${type}/type-\${device_type}/modal-\${size}、Vue Transition 生成类 save-flash-*/toast-*、入口 body 类逐一甄别排除），确认仅 6 个规则块零引用：agents.css 的 .agent-net-row/.agent-net-iface/.agent-net-rate/.agent-net-errors（AgentDetailModal 网卡明细已改走 agent-nets-table，磁盘行注释同步纠正）与 system.css 的 .notification-settings-section（旧版通知区块容器，多目标订阅重构后无模板引用），全部删除。另有 3 处冗余缺陷已于本日 v0.77.0~v0.77.2 修复（webhook 表格 4 列时代 fixed 列宽、.form-group 基类边距、webhook 弹窗裸置字段组）。存留的"重复"均为设计内双上下文规则（forms.css 中 .modal/.system-config-section 同行变体 17 组规则对，两处布局上下文共用同一套字段排布）与组件内必要覆盖（dynamic-lists.css 动态列表行、device-modals.css 模板编辑表单）。验证：biome、npm run build 通过
+
+v0.77.4
+2026110323383101
+全站布局同类问题排查（前端普通修改，z 段 +1）：按 webhook 表格事故的三类病灶做机械扫描——(1) fixed 表格列宽 vs 实际列数：12 张主页面表格逐一比对 th 数与 nth-child 宽度规则数，仅 #ip-table 多 1 条失效的 nth-child(11) 宽度规则（现表 10 列），删除；(2) #users-table 与 #scheduled-tasks-table 的 fixed 布局+比例列宽规则（各 8 条，列语义与现表逐一吻合）因 Vue3 迁移丢 id 整体失效，为两表补回 id 恢复既定列宽；(3) colspan 与列数比对全部吻合；(4) 裸置 form-group 扫描命中的设备/机柜/位置/端口弹窗均为多行属性导致误报，实全部包在 form-row 内，无 webhook 弹窗同类问题。验证：biome、vue-tsc、npm run build 通过
