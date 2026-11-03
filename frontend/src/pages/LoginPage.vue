@@ -958,11 +958,14 @@ onMounted(async () => {
     showError(t(ssoErrorKey));
   }
 
-  document.addEventListener("mousemove", onMouseMove);
-  mousemoveBound = true;
+  // 减少动态效果偏好：不绑定鼠标跟随、不调度眨眼，吉祥物保持静态姿态
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.addEventListener("mousemove", onMouseMove);
+    mousemoveBound = true;
 
-  scheduleBlink("purple");
-  scheduleBlink("black");
+    scheduleBlink("purple");
+    scheduleBlink("black");
+  }
   updateCharacters();
 });
 

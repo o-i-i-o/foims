@@ -139,7 +139,10 @@ const spaceDown = ref(false);
 /** 平移中（容器 cursor 切换 grabbing） */
 const panning = ref(false);
 
-type Interaction =
+type Interaction = {
+  /** 发起交互的指针 id：过滤多指触控时其他手指的干扰事件 */
+  pointerId: number;
+} & (
   | {
       kind: "pan";
       startClientX: number;
@@ -163,7 +166,8 @@ type Interaction =
       moved: boolean;
       fixedKey: string;
       fixedGroupKey: string | null;
-    };
+    }
+);
 
 const interaction = ref<Interaction | null>(null);
 const selectedNodeId = ref<string | null>(null);
@@ -571,19 +575,20 @@ function shapeOf(kind: ContainerKind, key: string): ContainerShape | undefined {
 }
 
 function bindWindowListeners(): void {
-  window.addEventListener("mousemove", onWindowMouseMove);
-  window.addEventListener("mouseup", onWindowMouseUp);
+  window.addEventListener("pointermove", onWindowPointerMove);
+  window.addEventListener("pointerup", onWindowPointerUp);
 }
 
 function unbindWindowListeners(): void {
-  window.removeEventListener("mousemove", onWindowMouseMove);
-  window.removeEventListener("mouseup", onWindowMouseUp);
+  window.removeEventListener("pointermove", onWindowPointerMove);
+  window.removeEventListener("pointerup", onWindowPointerUp);
 }
 
-function startPan(event: MouseEvent): void {
+function startPan(event: PointerEvent): void {
   panning.value = true;
   userAdjusted.value = true;
   interaction.value = {
+    pointerId: event.pointerId,
     kind: "pan",
     startClientX: event.clientX,
     startClientY: event.clientY,
@@ -592,7 +597,7 @@ function startPan(event: MouseEvent): void {
   bindWindowListeners();
 }
 
-function onMouseDown(event: MouseEvent): void {
+function onPointerDown(event: PointerEvent): void {
   if (connectionMode.value) {
     const anchor = closest<SVGElement>(event.target, ".port-anchor");
     if (anchor) {
@@ -638,7 +643,7 @@ function onMouseDown(event: MouseEvent): void {
   startPan(event);
 }
 
-function startNodeDrag(event: MouseEvent, deviceId: string): void {
+function startNodeDrag(event: PointerEvent, deviceId: string): void {
   const point = toCanvasPoint(event);
   const node = props.nodes.find((item) => item.device_id === deviceId);
   if (!point || !node) {
@@ -648,6 +653,7 @@ function startNodeDrag(event: MouseEvent, deviceId: string): void {
   hideTooltip();
   selectedNodeId.value = deviceId;
   interaction.value = {
+    pointerId: event.pointerId,
     kind: "node",
     deviceId,
     start: point,
@@ -658,7 +664,7 @@ function startNodeDrag(event: MouseEvent, deviceId: string): void {
   bindWindowListeners();
 }
 
-function startContainerDrag(event: MouseEvent, kind: ContainerKind, key: string): void {
+function startContainerDrag(event: PointerEvent, kind: ContainerKind, key: string): void {
   const point = toCanvasPoint(event);
   if (!point) {
     return;
@@ -674,6 +680,7 @@ function startContainerDrag(event: MouseEvent, kind: ContainerKind, key: string)
     (item) => item.key === key || item.cabinets.some((cabinet) => cabinet.key === key),
   );
   interaction.value = {
+    pointerId: event.pointerId,
     kind: "container",
     containerKind: kind,
     key,
@@ -686,9 +693,10 @@ function startContainerDrag(event: MouseEvent, kind: ContainerKind, key: string)
   bindWindowListeners();
 }
 
-function onWindowMouseMove(event: MouseEvent): void {
+function onWindowPointerMove(event: PointerEvent): void {
   const state = interaction.value;
-  if (!state) {
+  // 多指触控：仅跟踪发起交互的指针，其余手指事件忽略
+  if (!state || event.pointerId !== state.pointerId) {
     return;
   }
   if (state.kind === "pan") {
@@ -729,12 +737,13 @@ function onWindowMouseMove(event: MouseEvent): void {
   }
 }
 
-function onWindowMouseUp(): void {
+function onWindowPointerUp(event: PointerEvent): void {
   unbindWindowListeners();
   panning.value = false;
   const state = interaction.value;
   interaction.value = null;
-  if (!state) {
+  // 多指触控：仅发起交互的指针抬起重置，其余手指事件忽略
+  if (!state || event.pointerId !== state.pointerId) {
     return;
   }
 
@@ -770,7 +779,7 @@ function onWindowMouseUp(): void {
   emit("container-drag-end", state.fixedKey, state.fixedGroupKey, { ...state.offset });
 }
 
-function onCanvasMouseMove(event: MouseEvent): void {
+function onCanvasPointerMove(event: PointerEvent): void {
   if (interaction.value) {
     hideTooltip();
     return;
@@ -928,8 +937,8 @@ defineExpose({ setZoom, zoomBy, fitView, setConnectionMode });
       class="visualization-svg"
       :viewBox="`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`"
       preserveAspectRatio="xMinYMin meet"
-      @mousedown="onMouseDown"
-      @mousemove="onCanvasMouseMove"
+      @pointerdown="onPointerDown"
+      @pointermove="onCanvasPointerMove"
       @mouseleave="hideTooltip()"
       @click="onCanvasClick"
       @wheel="onWheel"

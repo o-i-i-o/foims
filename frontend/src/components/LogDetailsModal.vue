@@ -4,8 +4,9 @@
  * log 对象由调用方直接传入（不再经 JSON 序列化挂 data 属性）。
  * 样式为 SFC 自包含 + 全局模态壳样式（styles/components/modals.css）。
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useFocusTrap } from "../composables/useFocusTrap";
 import { formatDateTime, getOperationTypeText, getResourceTypeText } from "../utils/formatter";
 import type { OperationLog } from "../types/api/generated/OperationLog";
 
@@ -16,6 +17,10 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
+
+// 焦点陷阱容器（弹窗本体）
+const dialogRef = ref<HTMLElement | null>(null);
+useFocusTrap(dialogRef);
 
 const detailsText = computed<string | null>(() => {
   if (!props.log.details) {
@@ -34,7 +39,7 @@ const detailsText = computed<string | null>(() => {
 
 <template>
   <div class="modal-overlay" @click.self="emit('close')">
-    <div class="modal-dialog" role="dialog" aria-modal="true" :aria-label="t('logs.details')">
+    <div ref="dialogRef" class="modal-dialog" role="dialog" aria-modal="true" :aria-label="t('logs.details')">
       <header class="modal-header">
         <h3 class="modal-title">{{ t("logs.details") }}</h3>
         <button type="button" class="modal-close" :aria-label="t('common.close')" @click="emit('close')">&times;</button>

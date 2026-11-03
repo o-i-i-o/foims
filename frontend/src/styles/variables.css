@@ -16,17 +16,19 @@
    * - xs: 480px (portrait phones)
    */
   :root {
-    --color-primary: #66a80f;
-    --color-primary-hover: #5c940d;
-    --color-primary-light: rgb(102 168 15 / 10%);
+    /* 主色取 lime 系加深档（AA 4.5:1，Open Color lime 全档无达标深值）：
+     #4a750a 在白底/灰底/浅 lime 底上作文字均 ≥4.5:1，白字压底 ≥5.4:1 */
+    --color-primary: #4a750a;
+    --color-primary-hover: #3f640a;
+    --color-primary-light: rgb(74 117 10 / 10%);
     --color-secondary: #495057;
     --color-secondary-hover: #343a40;
     --color-success: #2f9e44;
     --color-success-bg: #d3f9d8;
     --color-success-text: #2b8a3e;
     --color-success-border: #b2f2bb;
-    --color-danger: #f03e3e;
-    --color-danger-hover: #c92a2a;
+    --color-danger: #c92a2a;
+    --color-danger-hover: #a61e1e;
     --color-danger-bg: #ffe3e3;
     --color-danger-text: #c92a2a;
     --color-danger-border: #ffc9c9;
@@ -34,14 +36,16 @@
     --color-warning-bg: #fff3bf;
     --color-warning-text: #e67700;
     --color-warning-border: #ffec99;
-    --color-info: #15aabf;
-    --color-info-hover: #0c8599;
+    /* 图标级 warning 用色（白底 ≥3:1 图形对比度；#e67700 仅 2.99 差一线） */
+    --color-warning-deep: #e8590c;
+    --color-info: #0b7285;
+    --color-info-hover: #085c72;
     --color-info-bg: #c5f6fa;
     --color-info-text: #0b7285;
     --color-info-border: #99e9f2;
     --color-text: #212529;
     --color-text-secondary: #495057;
-    --color-text-muted: #868e96;
+    --color-text-muted: #626b73;
     --color-text-placeholder: #adb5bd;
     --color-text-light: #343a40;
     --color-bg: #f8f9fa;
@@ -57,11 +61,11 @@
     --control-bg-muted: #f1f3f5;
     --control-border: #ced4da;
     --control-border-hover: #adb5bd;
-    --control-border-focus: #74b816;
+    --control-border-focus: #4a750a;
     --control-radius: 8px;
     --control-padding-x: 0.4rem;
     --control-padding-y: 0.4rem;
-    --control-shadow: 0 0 0 3px rgb(102 168 15 / 20%);
+    --control-shadow: 0 0 0 3px rgb(74 117 10 / 20%);
     --btn-height: 32px;
     --btn-padding-x: 1.1rem;
     --shadow-sm: 0 2px 4px rgb(0 0 0 / 10%);
@@ -102,7 +106,7 @@
     --color-status-info-text: #1c7ed6;
     --color-status-danger-text: #c92a2a;
     --color-status-warning-text: #e8590c;
-    --color-status-neutral-text: #868e96;
+    --color-status-neutral-text: #626b73;
     --color-orange: #fd7e14;
     --color-bg-hover: #f1f3f5;
     --color-bg-secondary: #f1f3f5;

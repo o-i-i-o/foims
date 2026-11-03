@@ -12,7 +12,7 @@ import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import { formatDateTime, getStatusText } from "../utils/formatter";
 import { getDeviceTypeName } from "../config/deviceOptions";
-import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList";
+import { onThSort, onThSortKeydown, seqIndex, sortAria, sortClass, usePagedList } from "../composables/usePagedList";
 import { queryKeys } from "../utils/queryKeys";
 import type { IpDetailWithNames } from "../types/api/generated/IpDetailWithNames";
 import Pagination from "../components/Pagination.vue";
@@ -117,36 +117,36 @@ function onPullSaved() {
         <thead>
           <tr>
             <th class="index-column">{{ t("common.index") }}</th>
-            <th class="sortable th-searchable" :class="sortClass(ipList, 'device_name')" @click="onThSort($event, ipList, 'device_name')">
+            <th class="sortable th-searchable" :class="sortClass(ipList, 'device_name')" @click="onThSort($event, ipList, 'device_name')" tabindex="0" :aria-sort="sortAria(ipList, 'device_name')" @keydown="onThSortKeydown($event, ipList, 'device_name')">
               <span>{{ t("common.device") }}</span>
               <ThSearch v-model="ipFilters.device_name" :aria-label="t('common.device')" />
             </th>
             <th>{{ t("ip.location") }}</th>
-            <th class="sortable col-center th-searchable" :class="sortClass(ipList, 'device_type')" @click="onThSort($event, ipList, 'device_type')">
+            <th class="sortable col-center th-searchable" :class="sortClass(ipList, 'device_type')" @click="onThSort($event, ipList, 'device_type')" tabindex="0" :aria-sort="sortAria(ipList, 'device_type')" @keydown="onThSortKeydown($event, ipList, 'device_type')">
               <span>{{ t("common.type") }}</span>
               <ThSearch v-model="ipFilters.device_type" :aria-label="t('common.type')" />
             </th>
-            <th class="sortable th-searchable" :class="sortClass(ipList, 'network_name')" @click="onThSort($event, ipList, 'network_name')">
+            <th class="sortable th-searchable" :class="sortClass(ipList, 'network_name')" @click="onThSort($event, ipList, 'network_name')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'network_name')">
               <span>{{ t("ip.network") }}</span>
               <ThSearch v-model="ipFilters.network" :aria-label="t('ip.network')" />
             </th>
-            <th class="sortable th-searchable" :class="sortClass(ipList, 'ip_address')" @click="onThSort($event, ipList, 'ip_address')">
+            <th class="sortable th-searchable" :class="sortClass(ipList, 'ip_address')" @click="onThSort($event, ipList, 'ip_address')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'ip_address')">
               <span>{{ t("ip.ip_address") }}</span>
               <ThSearch v-model="ipFilters.ip_address" :aria-label="t('ip.ip_address')" />
             </th>
-            <th class="sortable th-inline-action" :class="sortClass(ipList, 'mac_address')" @click="onThSort($event, ipList, 'mac_address')">
+            <th class="sortable th-inline-action" :class="sortClass(ipList, 'mac_address')" @click="onThSort($event, ipList, 'mac_address')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'mac_address')">
               <span>{{ t("ip.mac_address") }}</span>
               <button type="button" class="btn btn-secondary btn-sm" @click="pullMacOpen = true">
                 {{ t("ip.pull_short") }}
               </button>
             </th>
-            <th class="sortable" :class="sortClass(ipList, 'interface_name')" @click="onThSort($event, ipList, 'interface_name')">
+            <th class="sortable" :class="sortClass(ipList, 'interface_name')" @click="onThSort($event, ipList, 'interface_name')" tabindex="0" role="button" @keydown="onThSortKeydown($event, ipList, 'interface_name')">
               {{ t("ip.device_port") }}
             </th>
-            <th class="sortable col-center" :class="sortClass(ipList, 'status')" @click="onThSort($event, ipList, 'status')">
+            <th class="sortable col-center" :class="sortClass(ipList, 'status')" @click="onThSort($event, ipList, 'status')" tabindex="0" :aria-sort="sortAria(ipList, 'status')" @keydown="onThSortKeydown($event, ipList, 'status')">
               {{ t("ip.status") }}
             </th>
-            <th class="sortable col-center" :class="sortClass(ipList, 'last_seen')" @click="onThSort($event, ipList, 'last_seen')">
+            <th class="sortable col-center" :class="sortClass(ipList, 'last_seen')" @click="onThSort($event, ipList, 'last_seen')" tabindex="0" :aria-sort="sortAria(ipList, 'last_seen')" @keydown="onThSortKeydown($event, ipList, 'last_seen')">
               {{ t("ip.last_seen") }}
             </th>
           </tr>

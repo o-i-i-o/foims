@@ -184,7 +184,9 @@
     font-family: inherit;
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: all var(--transition-normal);
+    transition:
+      background-color var(--transition-normal),
+      color var(--transition-normal);
   }
 
   .login-tabs .login-tab-btn.active {
@@ -337,7 +339,9 @@
     font-family: inherit;
     cursor: pointer;
     white-space: nowrap;
-    transition: all var(--transition-normal);
+    transition:
+      background-color var(--transition-normal),
+      color var(--transition-normal);
   }
 
   .form-inline-group .btn-send-code:hover:not(:disabled) {
@@ -424,12 +428,14 @@
     cursor: pointer;
     overflow: hidden;
     margin-bottom: 14px;
-    transition: all var(--transition-slow);
+    transition: opacity var(--transition-slow);
   }
 
   .btn-login .btn-text {
     display: inline-block;
-    transition: all var(--transition-slow);
+    transition:
+      transform var(--transition-slow),
+      opacity var(--transition-slow);
   }
 
   .btn-login .btn-hover-content {
@@ -442,7 +448,7 @@
     background: var(--color-text-light);
     color: var(--color-bg-white);
     opacity: 0;
-    transition: all var(--transition-slow);
+    transition: opacity var(--transition-slow);
     border-radius: 25px;
   }
 
@@ -549,7 +555,9 @@
   .character {
     position: absolute;
     bottom: 0;
-    transition: all 0.7s ease-in-out;
+    transition:
+      transform 0.7s ease-in-out,
+      height 0.7s ease-in-out;
     transform-origin: bottom center;
   }
 
@@ -597,7 +605,10 @@
   .eyes {
     position: absolute;
     display: flex;
-    transition: all 0.7s ease-in-out;
+    transition:
+      left 0.7s ease-in-out,
+      top 0.7s ease-in-out,
+      gap 0.7s ease-in-out;
   }
 
   /* 眼球（白色 + 瞳孔） */
@@ -633,7 +644,9 @@
     height: 4px;
     background: var(--color-text);
     border-radius: 2px;
-    transition: all 0.7s ease-in-out;
+    transition:
+      left 0.7s ease-in-out,
+      top 0.7s ease-in-out;
   }
 
   /* 橙色难过嘴（登录失败时显示） */
@@ -645,7 +658,10 @@
     border-top: none;
     border-radius: 0 0 14px 14px;
     opacity: 0;
-    transition: all 0.7s ease-in-out;
+    transition:
+      opacity 0.7s ease-in-out,
+      left 0.7s ease-in-out,
+      top 0.7s ease-in-out;
   }
 
   .orange-mouth.visible {
@@ -1029,7 +1045,11 @@
     font-family: inherit;
     cursor: pointer;
     border: 1.5px solid transparent;
-    transition: all var(--transition-normal);
+    transition:
+      background-color var(--transition-normal),
+      color var(--transition-normal),
+      border-color var(--transition-normal),
+      opacity var(--transition-normal);
   }
 
   .login-modal-footer .login-btn-primary {
@@ -1132,5 +1152,20 @@
 
   .captcha-image:hover {
     border-color: color-mix(in srgb, var(--color-blue) 45%, transparent);
+  }
+  /* 减少动态效果偏好：登录页动效降级（吉祥物姿态与按钮状态直接切换） */
+  @media (prefers-reduced-motion: reduce) {
+    .login-tab-btn,
+    .btn-send-code,
+    .btn-login,
+    .btn-login .btn-text,
+    .btn-login .btn-hover-content,
+    .character,
+    .eyes,
+    .yellow-mouth,
+    .orange-mouth,
+    .login-modal-footer .login-btn-primary {
+      transition: none;
+    }
   }
 }

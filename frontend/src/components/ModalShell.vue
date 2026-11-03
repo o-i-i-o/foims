@@ -7,8 +7,9 @@
  * 作为标签页内容内嵌渲染——此时不套遮罩/页头，也不注册 Esc 栈（层级由外层
  * 弹窗统一承载），仅渲染 body/footer 插槽为普通内联块。
  */
-import { onBeforeUnmount } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useFocusTrap } from "../composables/useFocusTrap";
 import { useModalStack } from "../composables/useModalStack";
 
 const props = withDefaults(
@@ -26,10 +27,14 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
+// 焦点陷阱容器（弹窗本体）；内联模式不独立成层，焦点由外层弹窗统一管理
+const dialogRef = ref<HTMLElement | null>(null);
+
 // Esc 仅关闭最上层弹窗（嵌套子弹窗场景）；调用即注册，卸载时注销。
 // 内联模式不弹出独立层，跳过注册避免抢占栈顶、误关内联内容。
 if (!props.embedded) {
   onBeforeUnmount(useModalStack(() => emit("close")));
+  useFocusTrap(dialogRef);
 }
 </script>
 
@@ -45,6 +50,7 @@ if (!props.embedded) {
   </div>
   <div v-else class="modal-overlay" @click.self="emit('close')">
     <div
+      ref="dialogRef"
       class="modal modal-dialog"
       :class="size ? `modal-${size}` : ''"
       role="dialog"

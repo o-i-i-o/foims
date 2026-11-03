@@ -4,8 +4,9 @@
  * v-if 控制挂载，确认/取消经事件通知调用方；Esc 与点击遮罩视为取消。
  * 样式为 SFC 自包含（不依赖全局组件样式包）。
  */
-import { onBeforeUnmount } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useFocusTrap } from "../composables/useFocusTrap";
 import { useModalStack } from "../composables/useModalStack";
 
 withDefaults(
@@ -21,13 +22,17 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
 
 const { t } = useI18n();
 
+// 焦点陷阱容器（弹窗本体）
+const dialogRef = ref<HTMLElement | null>(null);
+
 // Esc 仅取消最上层弹窗（嵌套在业务弹窗内时不应连带关闭父弹窗）
 onBeforeUnmount(useModalStack(() => emit("cancel")));
+useFocusTrap(dialogRef);
 </script>
 
 <template>
   <div class="modal-overlay" @click.self="emit('cancel')">
-    <div class="modal-dialog" role="dialog" aria-modal="true" :aria-label="title || t('common.confirm')">
+    <div ref="dialogRef" class="modal-dialog" role="dialog" aria-modal="true" :aria-label="title || t('common.confirm')">
       <header class="modal-header">
         <h3 class="modal-title">{{ title || t("common.confirm") }}</h3>
         <button type="button" class="modal-close" :aria-label="t('common.close')" @click="emit('cancel')">&times;</button>

@@ -82,6 +82,8 @@ const {
 
 interface DragState {
   id: string;
+  /** 发起拖拽的指针 id：过滤多指触控时其他手指的干扰事件 */
+  pointerId: number;
   start: { x: number; y: number };
   origin: CanvasRect;
   rect: CanvasRect;
@@ -157,7 +159,7 @@ const alignment = computed<AlignmentSegment[]>(() => {
   return computeAlignmentSegments(state.rect, others);
 });
 
-function startCabinetDrag(event: MouseEvent, cabinet: CabinetCanvasNode): void {
+function startCabinetDrag(event: PointerEvent, cabinet: CabinetCanvasNode): void {
   if (event.button !== 0) {
     return;
   }
@@ -170,18 +172,19 @@ function startCabinetDrag(event: MouseEvent, cabinet: CabinetCanvasNode): void {
   selectedId.value = cabinet.id;
   drag.value = {
     id: cabinet.id,
+    pointerId: event.pointerId,
     start: point,
     origin: { ...cabinet.rect },
     rect: { ...cabinet.rect },
     moved: false,
   };
-  window.addEventListener("mousemove", onDragMove);
-  window.addEventListener("mouseup", onDragEnd);
+  window.addEventListener("pointermove", onDragMove);
+  window.addEventListener("pointerup", onDragEnd);
 }
 
-function onDragMove(event: MouseEvent): void {
+function onDragMove(event: PointerEvent): void {
   const state = drag.value;
-  if (!state) {
+  if (!state || event.pointerId !== state.pointerId) {
     return;
   }
   const point = toCanvasPoint(event);
@@ -198,8 +201,8 @@ function onDragMove(event: MouseEvent): void {
 }
 
 function onDragEnd(): void {
-  window.removeEventListener("mousemove", onDragMove);
-  window.removeEventListener("mouseup", onDragEnd);
+  window.removeEventListener("pointermove", onDragMove);
+  window.removeEventListener("pointerup", onDragEnd);
   const state = drag.value;
   drag.value = null;
   if (!state) {
@@ -263,8 +266,8 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(scrollRaf);
     scrollRaf = 0;
   }
-  window.removeEventListener("mousemove", onDragMove);
-  window.removeEventListener("mouseup", onDragEnd);
+  window.removeEventListener("pointermove", onDragMove);
+  window.removeEventListener("pointerup", onDragEnd);
 });
 
 function onCanvasMouseMove(event: MouseEvent): void {
@@ -343,7 +346,7 @@ function onCanvasClick(event: MouseEvent): void {
             :transform="`translate(${item.rect.x}, ${item.rect.y})`"
             :data-id="item.cabinet.id"
             :data-tooltip="item.tooltip"
-            @mousedown="startCabinetDrag($event, item.cabinet)"
+            @pointerdown="startCabinetDrag($event, item.cabinet)"
           >
             <rect :width="item.rect.width" :height="item.rect.height" />
             <line
@@ -373,7 +376,7 @@ function onCanvasClick(event: MouseEvent): void {
               :transform="`translate(${slot.rect.x - item.rect.x}, ${slot.rect.y - item.rect.y})`"
               :data-id="slot.position.id"
               :data-tooltip="slot.tooltip"
-              @mousedown.stop
+              @pointerdown.stop
               @click.stop="emit('position-click', slot.position.id)"
             >
               <rect :width="slot.rect.width" :height="slot.rect.height" />

@@ -26,10 +26,10 @@
 
   .sidebar-header {
     position: relative;
-    background: #343a40;
+    background: var(--color-text-light);
     color: var(--color-bg-white);
     padding: var(--space-md) var(--space-lg);
-    border-bottom: 1px solid #212529;
+    border-bottom: 1px solid var(--color-text);
     text-align: center;
   }
 
@@ -371,8 +371,86 @@
     .sidebar-menu li a,
     .nav-text,
     .sidebar-footer .user-info,
-    .footer-btn {
+    .footer-btn,
+    .mobile-menu-btn,
+    .sidebar-scrim {
       transition: none;
+    }
+  }
+
+  /* ---------- 移动端抽屉：侧边栏离屏，汉堡按钮唤出（≤768px） ---------- */
+
+  /* 汉堡按钮：桌面端隐藏；移动端固定左上角，层级低于抽屉与遮罩 */
+  .mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: calc(var(--z-modal) - 10);
+    width: 2.25rem;
+    height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--control-radius);
+    background: var(--color-text-light);
+    color: var(--color-bg-white);
+    cursor: pointer;
+  }
+
+  .sidebar-scrim {
+    display: none;
+  }
+
+  @media (width <= 768px) {
+    /* 抽屉态下不启用桌面收起态，保持完整导航 */
+    .mobile-menu-btn {
+      display: inline-flex;
+    }
+
+    /* 抽屉宽度恒为展开档（中和桌面收起态的 72px，特异性对齐 (0,2,1) 就地覆盖） */
+    body.sidebar-collapsed .sidebar {
+      width: var(--sidebar-width);
+    }
+
+    /* 离屏抽屉（app-shell 提特异性，避免与收起态选择器构成降特异性对） */
+    body .app-shell .sidebar {
+      z-index: var(--z-modal);
+      transform: translateX(-100%);
+      transition: transform var(--sidebar-anim-duration)
+        var(--sidebar-anim-easing);
+      box-shadow: none;
+    }
+
+    body.sidebar-open .app-shell .sidebar {
+      transform: translateX(0);
+      box-shadow: 2px 0 12px rgb(0 0 0 / 25%);
+    }
+
+    /* 抽屉遮罩 */
+    .sidebar-scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: calc(var(--z-modal) - 1);
+      background: rgb(0 0 0 / 40%);
+    }
+
+    /* 抽屉内文字导航完整展示（覆盖收起态的 max-width/透明度裁剪） */
+    body.sidebar-collapsed .sidebar .nav-text {
+      max-width: 165px;
+      opacity: 1;
+      visibility: visible;
+    }
+
+    body.sidebar-collapsed .sidebar-title {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* 桌面收起按钮在抽屉内无意义，隐藏避免误触 */
+    .sidebar-toggle {
+      display: none;
     }
   }
 }

@@ -79,6 +79,8 @@ type DragKind = "node" | "door";
 interface DragState {
   id: string;
   kind: DragKind;
+  /** 发起拖拽的指针 id：过滤多指触控时其他手指的干扰事件 */
+  pointerId: number;
   /** 按下时的指针画布坐标 */
   start: { x: number; y: number };
   /** 按下时的元素矩形 */
@@ -158,7 +160,7 @@ const alignment = computed<AlignmentSegment[]>(() => {
 });
 
 function startDrag(
-  event: MouseEvent,
+  event: PointerEvent,
   id: string,
   kind: DragKind,
   rect: CanvasRect,
@@ -177,18 +179,20 @@ function startDrag(
   drag.value = {
     id,
     kind,
+    pointerId: event.pointerId,
     start: point,
     origin: { ...rect },
     rect: { ...rect },
     moved: false,
   };
-  window.addEventListener("mousemove", onDragMove);
-  window.addEventListener("mouseup", onDragEnd);
+  window.addEventListener("pointermove", onDragMove);
+  window.addEventListener("pointerup", onDragEnd);
 }
 
-function onDragMove(event: MouseEvent): void {
+function onDragMove(event: PointerEvent): void {
   const state = drag.value;
-  if (!state) {
+  // 多指触控：仅跟踪发起拖拽的指针，其余手指事件忽略
+  if (!state || event.pointerId !== state.pointerId) {
     return;
   }
   const point = toCanvasPoint(event);
@@ -205,8 +209,8 @@ function onDragMove(event: MouseEvent): void {
 }
 
 function onDragEnd(): void {
-  window.removeEventListener("mousemove", onDragMove);
-  window.removeEventListener("mouseup", onDragEnd);
+  window.removeEventListener("pointermove", onDragMove);
+  window.removeEventListener("pointerup", onDragEnd);
   const state = drag.value;
   drag.value = null;
   if (!state) {
@@ -308,7 +312,7 @@ function onCanvasClick(event: MouseEvent): void {
           :transform="`translate(${item.rect.x}, ${item.rect.y})`"
           :data-id="item.node.id"
           :data-tooltip="item.tooltip"
-          @mousedown="startDrag($event, item.node.id, 'node', item.node.rect)"
+          @pointerdown="startDrag($event, item.node.id, 'node', item.node.rect)"
         >
           <rect :width="item.rect.width" :height="item.rect.height" />
           <text
@@ -330,7 +334,7 @@ function onCanvasClick(event: MouseEvent): void {
           :transform="`translate(${renderDoor.previewRect.x}, ${renderDoor.previewRect.y})`"
           :data-id="renderDoor.id"
           :data-tooltip="renderDoor.tooltip"
-          @mousedown="startDrag($event, renderDoor.id, 'door', renderDoor.rect)"
+          @pointerdown="startDrag($event, renderDoor.id, 'door', renderDoor.rect)"
         >
           <rect
             :width="renderDoor.previewRect.width"

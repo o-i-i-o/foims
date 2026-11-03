@@ -12,7 +12,7 @@ import { computed, defineAsyncComponent, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { apiDelete, apiGet } from "../api/client";
-import { onThSort, seqIndex, sortClass, usePagedList } from "../composables/usePagedList";
+import { onThSort, onThSortKeydown, seqIndex, sortAria, sortClass, usePagedList } from "../composables/usePagedList";
 import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
 import { formatDateTime, formatPowerValue, getRoomTypeName } from "../utils/formatter";
 import { getDeviceTypeName } from "../config/deviceOptions";
@@ -559,21 +559,21 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th
                 class="sortable"
                 :class="sortClass(regions, 'name')"
-                @click="onThSort($event, regions, 'name')"
+                @click="onThSort($event, regions, 'name')" tabindex="0" :aria-sort="sortAria(regions, 'name')" @keydown="onThSortKeydown($event, regions, 'name')"
               >
                 {{ t("common.name") }}
               </th>
               <th
                 class="sortable"
                 :class="sortClass(regions, 'ipv4_cidrs')"
-                @click="onThSort($event, regions, 'ipv4_cidrs')"
+                @click="onThSort($event, regions, 'ipv4_cidrs')" tabindex="0" :aria-sort="sortAria(regions, 'ipv4_cidrs')" @keydown="onThSortKeydown($event, regions, 'ipv4_cidrs')"
               >
                 {{ t("network.ipv4_cidrs") }}
               </th>
               <th
                 class="sortable"
                 :class="sortClass(regions, 'ipv6_cidrs')"
-                @click="onThSort($event, regions, 'ipv6_cidrs')"
+                @click="onThSort($event, regions, 'ipv6_cidrs')" tabindex="0" :aria-sort="sortAria(regions, 'ipv6_cidrs')" @keydown="onThSortKeydown($event, regions, 'ipv6_cidrs')"
               >
                 {{ t("network.ipv6_cidrs") }}
               </th>
@@ -581,7 +581,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th
                 class="sortable col-center"
                 :class="sortClass(regions, 'created_at')"
-                @click="onThSort($event, regions, 'created_at')"
+                @click="onThSort($event, regions, 'created_at')" tabindex="0" :aria-sort="sortAria(regions, 'created_at')" @keydown="onThSortKeydown($event, regions, 'created_at')"
               >
                 {{ t("common.created_at") }}
               </th>
@@ -661,23 +661,23 @@ function deviceLocationText(item: DeviceWithDetails): string {
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'name')" @click="onThSort($event, networks, 'name')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'name')" @click="onThSort($event, networks, 'name')" tabindex="0" :aria-sort="sortAria(networks, 'name')" @keydown="onThSortKeydown($event, networks, 'name')">
                 <span>{{ t("common.name") }}</span>
                 <ThSearch v-model="networkFilters.name" :aria-label="t('common.name')" />
               </th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'network_region')" @click="onThSort($event, networks, 'network_region')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'network_region')" @click="onThSort($event, networks, 'network_region')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'network_region')">
                 <span>{{ t("network.region") }}</span>
                 <ThSearch v-model="networkFilters.region" :aria-label="t('network.region')" />
               </th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv4_cidr')" @click="onThSort($event, networks, 'ipv4_cidr')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv4_cidr')" @click="onThSort($event, networks, 'ipv4_cidr')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'ipv4_cidr')">
                 <span>{{ t("network.ipv4_cidr") }}</span>
                 <ThSearch v-model="networkFilters.ipv4" :aria-label="t('network.ipv4_cidr')" />
               </th>
-              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv6_cidr')" @click="onThSort($event, networks, 'ipv6_cidr')">
+              <th class="sortable th-searchable" :class="sortClass(networks, 'ipv6_cidr')" @click="onThSort($event, networks, 'ipv6_cidr')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'ipv6_cidr')">
                 <span>{{ t("network.ipv6_cidr") }}</span>
                 <ThSearch v-model="networkFilters.ipv6" :aria-label="t('network.ipv6_cidr')" />
               </th>
-              <th class="sortable col-center" :class="sortClass(networks, 'created_at')" @click="onThSort($event, networks, 'created_at')">
+              <th class="sortable col-center" :class="sortClass(networks, 'created_at')" @click="onThSort($event, networks, 'created_at')" tabindex="0" role="button" @keydown="onThSortKeydown($event, networks, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
               <th>
@@ -755,13 +755,13 @@ function deviceLocationText(item: DeviceWithDetails): string {
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
-              <th class="sortable" :class="sortClass(rooms, 'name')" @click="onThSort($event, rooms, 'name')">
+              <th class="sortable" :class="sortClass(rooms, 'name')" @click="onThSort($event, rooms, 'name')" tabindex="0" :aria-sort="sortAria(rooms, 'name')" @keydown="onThSortKeydown($event, rooms, 'name')">
                 {{ t("common.name") }}
               </th>
-              <th class="sortable col-center" :class="sortClass(rooms, 'room_type')" @click="onThSort($event, rooms, 'room_type')">
+              <th class="sortable col-center" :class="sortClass(rooms, 'room_type')" @click="onThSort($event, rooms, 'room_type')" tabindex="0" :aria-sort="sortAria(rooms, 'room_type')" @keydown="onThSortKeydown($event, rooms, 'room_type')">
                 {{ t("common.type") }}
               </th>
-              <th class="sortable" :class="sortClass(rooms, 'org_name')" @click="onThSort($event, rooms, 'org_name')">
+              <th class="sortable" :class="sortClass(rooms, 'org_name')" @click="onThSort($event, rooms, 'org_name')" tabindex="0" :aria-sort="sortAria(rooms, 'org_name')" @keydown="onThSortKeydown($event, rooms, 'org_name')">
                 {{ t("organization.parent_org") }}
               </th>
               <th class="col-center">{{ t("room.workstation_count") }}</th>
@@ -769,7 +769,7 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="col-center">{{ t("room.power_supply") }}</th>
               <th>{{ t("room.networks") }}</th>
               <th>{{ t("common.description") }}</th>
-              <th class="sortable col-center" :class="sortClass(rooms, 'created_at')" @click="onThSort($event, rooms, 'created_at')">
+              <th class="sortable col-center" :class="sortClass(rooms, 'created_at')" @click="onThSort($event, rooms, 'created_at')" tabindex="0" :aria-sort="sortAria(rooms, 'created_at')" @keydown="onThSortKeydown($event, rooms, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
               <th>
@@ -870,20 +870,20 @@ function deviceLocationText(item: DeviceWithDetails): string {
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
-              <th class="sortable" :class="sortClass(cabinets, 'room_name')" @click="onThSort($event, cabinets, 'room_name')">
+              <th class="sortable" :class="sortClass(cabinets, 'room_name')" @click="onThSort($event, cabinets, 'room_name')" tabindex="0" :aria-sort="sortAria(cabinets, 'room_name')" @keydown="onThSortKeydown($event, cabinets, 'room_name')">
                 {{ t("cabinet.room") }}
               </th>
-              <th class="sortable" :class="sortClass(cabinets, 'name')" @click="onThSort($event, cabinets, 'name')">
+              <th class="sortable" :class="sortClass(cabinets, 'name')" @click="onThSort($event, cabinets, 'name')" tabindex="0" :aria-sort="sortAria(cabinets, 'name')" @keydown="onThSortKeydown($event, cabinets, 'name')">
                 {{ t("common.name") }}
               </th>
-              <th class="sortable col-center" :class="sortClass(cabinets, 'capacity')" @click="onThSort($event, cabinets, 'capacity')">
+              <th class="sortable col-center" :class="sortClass(cabinets, 'capacity')" @click="onThSort($event, cabinets, 'capacity')" tabindex="0" :aria-sort="sortAria(cabinets, 'capacity')" @keydown="onThSortKeydown($event, cabinets, 'capacity')">
                 {{ t("cabinet.capacity") }}
               </th>
               <th class="col-center">{{ t("cabinet.power") }}</th>
               <th class="col-center">{{ t("cabinet.power_supply") }}</th>
               <th class="col-center">{{ t("cabinet.position_count") }}</th>
               <th>{{ t("common.description") }}</th>
-              <th class="sortable col-center" :class="sortClass(cabinets, 'created_at')" @click="onThSort($event, cabinets, 'created_at')">
+              <th class="sortable col-center" :class="sortClass(cabinets, 'created_at')" @click="onThSort($event, cabinets, 'created_at')" tabindex="0" :aria-sort="sortAria(cabinets, 'created_at')" @keydown="onThSortKeydown($event, cabinets, 'created_at')">
                 {{ t("common.created_at") }}
               </th>
               <th>
@@ -966,21 +966,21 @@ function deviceLocationText(item: DeviceWithDetails): string {
           <thead>
             <tr>
               <th class="index-column">{{ t("common.index") }}</th>
-              <th class="sortable" :class="sortClass(devices, 'name')" @click="onThSort($event, devices, 'name')">
+              <th class="sortable" :class="sortClass(devices, 'name')" @click="onThSort($event, devices, 'name')" tabindex="0" :aria-sort="sortAria(devices, 'name')" @keydown="onThSortKeydown($event, devices, 'name')">
                 {{ t("common.name") }}
               </th>
-              <th class="sortable col-center" :class="sortClass(devices, 'device_type')" @click="onThSort($event, devices, 'device_type')">
+              <th class="sortable col-center" :class="sortClass(devices, 'device_type')" @click="onThSort($event, devices, 'device_type')" tabindex="0" :aria-sort="sortAria(devices, 'device_type')" @keydown="onThSortKeydown($event, devices, 'device_type')">
                 {{ t("common.type") }}
               </th>
-              <th class="sortable" :class="sortClass(devices, 'brand')" @click="onThSort($event, devices, 'brand')">
+              <th class="sortable" :class="sortClass(devices, 'brand')" @click="onThSort($event, devices, 'brand')" tabindex="0" :aria-sort="sortAria(devices, 'brand')" @keydown="onThSortKeydown($event, devices, 'brand')">
                 {{ t("device.brand") }}
               </th>
-              <th class="sortable" :class="sortClass(devices, 'model')" @click="onThSort($event, devices, 'model')">
+              <th class="sortable" :class="sortClass(devices, 'model')" @click="onThSort($event, devices, 'model')" tabindex="0" :aria-sort="sortAria(devices, 'model')" @keydown="onThSortKeydown($event, devices, 'model')">
                 {{ t("device.model") }}
               </th>
               <th class="col-center">{{ t("device.power_watts") }}</th>
               <th>{{ t("device.location") }}</th>
-              <th class="sortable" :class="sortClass(devices, 'room_name')" @click="onThSort($event, devices, 'room_name')">
+              <th class="sortable" :class="sortClass(devices, 'room_name')" @click="onThSort($event, devices, 'room_name')" tabindex="0" :aria-sort="sortAria(devices, 'room_name')" @keydown="onThSortKeydown($event, devices, 'room_name')">
                 {{ t("device.room") }}
               </th>
               <th>{{ t("common.description") }}</th>
@@ -1068,21 +1068,21 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th>{{ t("cable_link.a_endpoint_no") }}</th>
               <th>{{ t("cable_link.b_endpoint_type") }}</th>
               <th>{{ t("cable_link.b_endpoint_no") }}</th>
-              <th class="sortable col-center" :class="sortClass(cableLinks, 'link_type')" @click="onThSort($event, cableLinks, 'link_type')">
+              <th class="sortable col-center" :class="sortClass(cableLinks, 'link_type')" @click="onThSort($event, cableLinks, 'link_type')" tabindex="0" :aria-sort="sortAria(cableLinks, 'link_type')" @keydown="onThSortKeydown($event, cableLinks, 'link_type')">
                 {{ t("common.type") }}
               </th>
               <th>
-                <span class="sortable" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')">
+                <span class="sortable" role="button" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')" tabindex="0" @keydown="onThSortKeydown($event, cableLinks, 'cable_label')">
                   {{ t("cable_link.cable_label") }}
                 </span>
                 <button type="button" class="btn btn-secondary btn-sm" @click="openCableLabelPrintModal">
                   {{ t("cable_link.print") }}
                 </button>
               </th>
-              <th class="sortable col-center" :class="sortClass(cableLinks, 'length_m')" @click="onThSort($event, cableLinks, 'length_m')">
+              <th class="sortable col-center" :class="sortClass(cableLinks, 'length_m')" @click="onThSort($event, cableLinks, 'length_m')" tabindex="0" :aria-sort="sortAria(cableLinks, 'length_m')" @keydown="onThSortKeydown($event, cableLinks, 'length_m')">
                 {{ t("cable_link.length_m") }}
               </th>
-              <th class="sortable col-center" :class="sortClass(cableLinks, 'tested')" @click="onThSort($event, cableLinks, 'tested')">
+              <th class="sortable col-center" :class="sortClass(cableLinks, 'tested')" @click="onThSort($event, cableLinks, 'tested')" tabindex="0" :aria-sort="sortAria(cableLinks, 'tested')" @keydown="onThSortKeydown($event, cableLinks, 'tested')">
                 {{ t("cable_link.tested") }}
               </th>
               <th>

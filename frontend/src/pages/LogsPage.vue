@@ -18,7 +18,7 @@ import {
   translateServerKey
 } from "../utils/formatter";
 import { showToast } from "../composables/useToast";
-import { usePagedList } from "../composables/usePagedList";
+import { onThSortKeydown, sortAria, usePagedList } from "../composables/usePagedList";
 import { useSubTabs, type SubTabMeta } from "../composables/useSubTabs";
 import { useLiveLogs } from "../composables/useLiveLogs";
 import { queryKeys } from "../utils/queryKeys";
@@ -281,42 +281,42 @@ const detailsLog = ref<OperationLog | null>(null);
               <th
                 class="sortable col-center"
                 :class="{ sorted: operation.sort.by === 'created_at', asc: operation.sort.by === 'created_at' && operation.sort.order === 'asc', desc: operation.sort.by === 'created_at' && operation.sort.order === 'desc' }"
-                @click="operation.toggleSort('created_at')"
+                @click="operation.toggleSort('created_at')" tabindex="0" :aria-sort="sortAria(operation, 'created_at')" @keydown="onThSortKeydown($event, operation, 'created_at')"
               >
                 {{ t("logs.operation_time") }}
               </th>
               <th
                 class="sortable"
                 :class="{ sorted: operation.sort.by === 'username', asc: operation.sort.by === 'username' && operation.sort.order === 'asc', desc: operation.sort.by === 'username' && operation.sort.order === 'desc' }"
-                @click="operation.toggleSort('username')"
+                @click="operation.toggleSort('username')" tabindex="0" :aria-sort="sortAria(operation, 'username')" @keydown="onThSortKeydown($event, operation, 'username')"
               >
                 {{ t("logs.operator") }}
               </th>
               <th
                 class="sortable col-center"
                 :class="{ sorted: operation.sort.by === 'action', asc: operation.sort.by === 'action' && operation.sort.order === 'asc', desc: operation.sort.by === 'action' && operation.sort.order === 'desc' }"
-                @click="operation.toggleSort('action')"
+                @click="operation.toggleSort('action')" tabindex="0" :aria-sort="sortAria(operation, 'action')" @keydown="onThSortKeydown($event, operation, 'action')"
               >
                 {{ t("logs.action") }}
               </th>
               <th
                 class="sortable col-center"
                 :class="{ sorted: operation.sort.by === 'resource_type', asc: operation.sort.by === 'resource_type' && operation.sort.order === 'asc', desc: operation.sort.by === 'resource_type' && operation.sort.order === 'desc' }"
-                @click="operation.toggleSort('resource_type')"
+                @click="operation.toggleSort('resource_type')" tabindex="0" :aria-sort="sortAria(operation, 'resource_type')" @keydown="onThSortKeydown($event, operation, 'resource_type')"
               >
                 {{ t("logs.resource_type") }}
               </th>
               <th
                 class="sortable col-center"
                 :class="{ sorted: operation.sort.by === 'result', asc: operation.sort.by === 'result' && operation.sort.order === 'asc', desc: operation.sort.by === 'result' && operation.sort.order === 'desc' }"
-                @click="operation.toggleSort('result')"
+                @click="operation.toggleSort('result')" tabindex="0" :aria-sort="sortAria(operation, 'result')" @keydown="onThSortKeydown($event, operation, 'result')"
               >
                 {{ t("logs.result") }}
               </th>
               <th
                 class="sortable"
                 :class="{ sorted: operation.sort.by === 'ip_address', asc: operation.sort.by === 'ip_address' && operation.sort.order === 'asc', desc: operation.sort.by === 'ip_address' && operation.sort.order === 'desc' }"
-                @click="operation.toggleSort('ip_address')"
+                @click="operation.toggleSort('ip_address')" tabindex="0" :aria-sort="sortAria(operation, 'ip_address')" @keydown="onThSortKeydown($event, operation, 'ip_address')"
               >
                 {{ t("logs.ip_address") }}
               </th>
@@ -380,21 +380,21 @@ const detailsLog = ref<OperationLog | null>(null);
               <th
                 class="sortable col-center"
                 :class="{ sorted: login.sort.by === 'created_at', asc: login.sort.by === 'created_at' && login.sort.order === 'asc', desc: login.sort.by === 'created_at' && login.sort.order === 'desc' }"
-                @click="login.toggleSort('created_at')"
+                @click="login.toggleSort('created_at')" tabindex="0" :aria-sort="sortAria(login, 'created_at')" @keydown="onThSortKeydown($event, login, 'created_at')"
               >
                 {{ t("logs.login_time") }}
               </th>
               <th
                 class="sortable"
                 :class="{ sorted: login.sort.by === 'username', asc: login.sort.by === 'username' && login.sort.order === 'asc', desc: login.sort.by === 'username' && login.sort.order === 'desc' }"
-                @click="login.toggleSort('username')"
+                @click="login.toggleSort('username')" tabindex="0" :aria-sort="sortAria(login, 'username')" @keydown="onThSortKeydown($event, login, 'username')"
               >
                 {{ t("auth.username") }}
               </th>
               <th
                 class="sortable"
                 :class="{ sorted: login.sort.by === 'ip_address', asc: login.sort.by === 'ip_address' && login.sort.order === 'asc', desc: login.sort.by === 'ip_address' && login.sort.order === 'desc' }"
-                @click="login.toggleSort('ip_address')"
+                @click="login.toggleSort('ip_address')" tabindex="0" :aria-sort="sortAria(login, 'ip_address')" @keydown="onThSortKeydown($event, login, 'ip_address')"
               >
                 {{ t("logs.ip_address") }}
               </th>
@@ -402,7 +402,7 @@ const detailsLog = ref<OperationLog | null>(null);
               <th
                 class="sortable col-center"
                 :class="{ sorted: login.sort.by === 'success', asc: login.sort.by === 'success' && login.sort.order === 'asc', desc: login.sort.by === 'success' && login.sort.order === 'desc' }"
-                @click="login.toggleSort('success')"
+                @click="login.toggleSort('success')" tabindex="0" :aria-sort="sortAria(login, 'success')" @keydown="onThSortKeydown($event, login, 'success')"
               >
                 {{ t("logs.login_result") }}
               </th>
@@ -527,14 +527,14 @@ const detailsLog = ref<OperationLog | null>(null);
               <th
                 class="sortable col-center"
                 :class="{ sorted: notifications.sort.by === 'created_at', asc: notifications.sort.by === 'created_at' && notifications.sort.order === 'asc', desc: notifications.sort.by === 'created_at' && notifications.sort.order === 'desc' }"
-                @click="notifications.toggleSort('created_at')"
+                @click="notifications.toggleSort('created_at')" tabindex="0" :aria-sort="sortAria(notifications, 'created_at')" @keydown="onThSortKeydown($event, notifications, 'created_at')"
               >
                 {{ t("notifications.time") }}
               </th>
               <th
                 class="sortable"
                 :class="{ sorted: notifications.sort.by === 'title', asc: notifications.sort.by === 'title' && notifications.sort.order === 'asc', desc: notifications.sort.by === 'title' && notifications.sort.order === 'desc' }"
-                @click="notifications.toggleSort('title')"
+                @click="notifications.toggleSort('title')" tabindex="0" :aria-sort="sortAria(notifications, 'title')" @keydown="onThSortKeydown($event, notifications, 'title')"
               >
                 {{ t("notifications.title") }}
               </th>
@@ -542,7 +542,7 @@ const detailsLog = ref<OperationLog | null>(null);
               <th
                 class="sortable col-center"
                 :class="{ sorted: notifications.sort.by === 'read', asc: notifications.sort.by === 'read' && notifications.sort.order === 'asc', desc: notifications.sort.by === 'read' && notifications.sort.order === 'desc' }"
-                @click="notifications.toggleSort('read')"
+                @click="notifications.toggleSort('read')" tabindex="0" :aria-sort="sortAria(notifications, 'read')" @keydown="onThSortKeydown($event, notifications, 'read')"
               >
                 {{ t("notifications.status") }}
               </th>
@@ -827,7 +827,7 @@ const detailsLog = ref<OperationLog | null>(null);
 .live-empty-hint {
   margin: 0;
   font-size: var(--font-size-xs);
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 .live-pane .live-filter-empty {
@@ -852,7 +852,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
 .live-time {
   flex-shrink: 0;
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 .live-level-badge {
@@ -911,7 +911,7 @@ const detailsLog = ref<OperationLog | null>(null);
 
 .live-line.live-debug .live-message,
 .live-line.live-trace .live-message {
-  color: #868e96;
+  color: var(--color-text-muted);
 }
 
 /* 上翻查看历史时悬浮的「回到最新」按钮 */

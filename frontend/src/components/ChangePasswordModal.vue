@@ -7,12 +7,17 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiPost, redirectToLogin } from "../api/client";
+import { useFocusTrap } from "../composables/useFocusTrap";
 import { showToast } from "../composables/useToast";
 import type { ChangePasswordRequest } from "../types/api/generated/ChangePasswordRequest";
 
 const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
+
+// 焦点陷阱容器（弹窗本体）
+const dialogRef = ref<HTMLElement | null>(null);
+useFocusTrap(dialogRef);
 
 const oldPassword = ref("");
 const newPassword = ref("");
@@ -52,7 +57,7 @@ async function handleSubmit() {
 
 <template>
   <div class="modal-overlay" @click.self="emit('close')">
-    <div class="modal-dialog" role="dialog" aria-modal="true" :aria-label="t('auth.change_password')">
+    <div ref="dialogRef" class="modal-dialog" role="dialog" aria-modal="true" :aria-label="t('auth.change_password')">
       <header class="modal-header">
         <h3 class="modal-title">{{ t("auth.change_password") }}</h3>
         <button type="button" class="modal-close" :aria-label="t('common.close')" @click="emit('close')">&times;</button>

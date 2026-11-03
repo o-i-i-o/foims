@@ -153,4 +153,11 @@
   .section-subtitle {
     margin-bottom: var(--space-md);
   }
+  /* 移动端：主内容铺满整行（覆盖展开/收起两套 margin；app-shell 抬特异性对齐收起态） */
+  @media (width <= 768px) {
+    body .app-shell .main-content,
+    body.sidebar-collapsed .main-content {
+      margin-left: 0;
+    }
+  }
 }

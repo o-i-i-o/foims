@@ -76,7 +76,7 @@ function dispatch(action: string): void {
 
 <template>
   <div v-show="visible" class="org-node-wrapper">
-    <div class="org-node" :class="{ selected: ctx.selectedId.value === node.id }" @click="ctx.onSelect(node)">
+    <div class="org-node" :class="{ selected: ctx.selectedId.value === node.id }">
       <span
         v-if="hasChildren"
         class="org-toggle"
@@ -94,10 +94,18 @@ function dispatch(action: string): void {
       </span>
       <span v-else class="org-toggle-placeholder"></span>
 
-      <span class="org-node-icon"><OrgIcon :icon="nodeIcon" /></span>
-      <span class="org-node-name">{{ node.name }}</span>
-      <span class="org-node-type-badge" :data-type="node.org_type">{{ typeLabel }}</span>
-      <span v-if="node.description" class="org-node-desc" :title="node.description">{{ node.description }}</span>
+      <!-- 行选中用真实 button 承载（键盘 Tab 可达，Enter/Space 原生触发） -->
+      <button
+        type="button"
+        class="org-node-main"
+        :aria-pressed="ctx.selectedId.value === node.id ? 'true' : 'false'"
+        @click="ctx.onSelect(node)"
+      >
+        <span class="org-node-icon"><OrgIcon :icon="nodeIcon" /></span>
+        <span class="org-node-name">{{ node.name }}</span>
+        <span class="org-node-type-badge" :data-type="node.org_type">{{ typeLabel }}</span>
+        <span v-if="node.description" class="org-node-desc" :title="node.description">{{ node.description }}</span>
+      </button>
 
       <!-- 操作按钮阻止冒泡：删除等动作不应顺带改变选中节点 -->
       <span class="org-node-actions" @click.stop>

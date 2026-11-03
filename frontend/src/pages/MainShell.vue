@@ -6,9 +6,9 @@
  * 分区内容页由 RouterView 按路由懒加载渲染，侧边栏视觉与交互样式
  * 由 layouts/sidebar.css（@layer layouts）承载。
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { RouterLink, RouterView } from "vue-router";
+import { RouterLink, RouterView, useRoute } from "vue-router";
 import { apiGet, redirectToLogin } from "../api/client";
 import { useAuthStore } from "../stores/auth";
 import { NAV_ITEMS } from "../router/index";
@@ -21,6 +21,7 @@ import NavIcon from "../components/NavIcon.vue";
 
 const { t } = useI18n();
 const auth = useAuthStore();
+const route = useRoute();
 
 const SIDEBAR_COLLAPSE_KEY = "sidebar-collapsed";
 
@@ -46,6 +47,37 @@ function applyCollapsedState(value: boolean) {
 }
 
 const toggleLabel = computed(() => t(collapsed.value ? "nav.expand_sidebar" : "nav.collapse_sidebar"));
+
+/* ---------- 移动端抽屉（≤768px 侧边栏离屏，汉堡按钮唤出） ---------- */
+const mobileOpen = ref(false);
+
+watch(mobileOpen, (open) => {
+  // 抽屉开合样式由 body.sidebar-open 驱动，与桌面收起态（sidebar-collapsed）解耦
+  document.body.classList.toggle("sidebar-open", open);
+});
+
+// 选中分区/按 Esc 即收起抽屉；Esc 与弹窗栈无冲突（抽屉非弹层栈成员）
+watch(
+  () => route.name,
+  () => {
+    mobileOpen.value = false;
+  }
+);
+
+function onDrawerEsc(event: KeyboardEvent) {
+  if (event.key === "Escape" && mobileOpen.value) {
+    mobileOpen.value = false;
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", onDrawerEsc);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onDrawerEsc);
+  document.body.classList.remove("sidebar-open");
+});
 
 // 空闲超时看护（等保：超时尝试续期，失败回登录页）
 usePageTimeout();
@@ -81,7 +113,26 @@ onMounted(() => {
 <template>
   <!-- 根节点不得复用 id="app"：该 id 已属 main.html 挂载容器，
        模板根再占用会在 DOM 里形成嵌套重复 id，污染 querySelector("#app") 语义 -->
-  <div>
+  <div class="app-shell">
+    <!-- 移动端汉堡按钮：唤出离屏侧边栏（桌面端 CSS 隐藏） -->
+    <button
+      type="button"
+      class="mobile-menu-btn"
+      aria-controls="app-sidebar"
+      :aria-expanded="mobileOpen ? 'true' : 'false'"
+      :aria-label="t('nav.main_navigation')"
+      @click="mobileOpen = !mobileOpen"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="4" y1="7" x2="20" y2="7" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="4" y1="17" x2="20" y2="17" />
+      </svg>
+    </button>
+
+    <!-- 移动端抽屉遮罩（桌面端 CSS 隐藏） -->
+    <div v-if="mobileOpen" class="sidebar-scrim" aria-hidden="true" @click="mobileOpen = false"></div>
+
     <aside id="app-sidebar" class="sidebar" role="navigation" :aria-label="t('nav.main_navigation')">
       <header class="sidebar-header">
         <button
@@ -102,13 +153,14 @@ onMounted(() => {
       </header>
 
       <nav>
-        <ul class="sidebar-menu" role="menubar">
-          <li v-for="item in visibleNavItems" :key="item.name" role="none">
+        <!-- 常规站内导航列表（menubar/menuitem 语义要求方向键漫游，这里不适用） -->
+        <ul class="sidebar-menu">
+          <li v-for="item in visibleNavItems" :key="item.name">
             <RouterLink
               :to="{ name: item.name }"
               class="nav-link"
               :class="`nav-${item.name}`"
-              role="menuitem"
+              :aria-current="route.name === item.name ? 'page' : undefined"
               active-class="active"
               :data-tooltip="t(item.title)"
             >

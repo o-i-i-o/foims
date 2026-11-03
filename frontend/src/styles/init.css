@@ -144,7 +144,10 @@
     align-items: center;
     justify-content: center;
     margin: 0 auto 12px;
-    transition: all 0.3s ease;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease,
+      box-shadow 0.3s ease;
   }
 
   .step.active .step-number {
@@ -214,7 +217,9 @@
     margin-bottom: 24px;
     border: 1px solid var(--color-border-light);
     text-align: center;
-    transition: all 0.3s ease;
+    transition:
+      background-color 0.3s ease,
+      border-color 0.3s ease;
   }
 
   /* 状态文字配色基础规则（低特异度）声明在容器状态组合类之前 */
@@ -357,7 +362,10 @@
     border-radius: 12px;
     cursor: pointer;
     text-align: center;
-    transition: all 0.3s ease;
+    transition:
+      border-color 0.3s ease,
+      background-color 0.3s ease,
+      box-shadow 0.3s ease;
     background: var(--color-bg-white);
     font: inherit;
   }
@@ -440,7 +448,9 @@
     border-radius: 10px;
     font-size: 15px;
     color: var(--color-text);
-    transition: all 0.2s ease;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
     background: var(--color-bg-white);
   }
 
@@ -494,7 +504,12 @@
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
+      opacity 0.2s ease;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -690,6 +705,16 @@
     .init-btn {
       width: 100%;
       justify-content: center;
+    }
+  }
+  /* 减少动态效果偏好：初始化向导过渡降级 */
+  @media (prefers-reduced-motion: reduce) {
+    .step-number,
+    .status-container,
+    .init-tab,
+    .init-form-group select,
+    .init-btn {
+      transition: none;
     }
   }
 }

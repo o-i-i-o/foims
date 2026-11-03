@@ -212,3 +212,23 @@ export function onThSort(event: MouseEvent, list: SortableTable, key: string): v
   }
   list.toggleSort(key);
 }
+
+/** 表头 aria-sort 值：当前列输出 asc/desc，未排序列返回 undefined（属性不渲染） */
+export function sortAria(
+  list: SortableTable,
+  key: string
+): "ascending" | "descending" | undefined {
+  if (list.sort.by !== key) {
+    return undefined;
+  }
+  return list.sort.order === "asc" ? "ascending" : "descending";
+}
+
+/** 表头键盘排序：Enter/Space 等效点击（配合 th/span 的 tabindex=0 使用） */
+export function onThSortKeydown(event: KeyboardEvent, list: SortableTable, key: string): void {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  list.toggleSort(key);
+}
