@@ -7,11 +7,11 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getSystemConfig, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
+import SystemSectionCard from "./SystemSectionCard.vue";
 
 /** GET 配置中的 trap 段 USM 用户行（历史数据字段可能缺省） */
 interface TrapUserConfig {
@@ -279,101 +279,99 @@ async function saveSnmpTrapConfig(): Promise<void> {
 </script>
 
 <template>
-  <header class="config-card-header">
-    <div class="config-card-title">
-      <span class="icon"><NavIcon name="snmp" /></span>
-      <span>{{ t("snmp_trap.title") }}</span>
-    </div>
-    <div v-if="!readonly" class="config-switch">
-      <label>
-        <input v-model="trapEnabled" type="checkbox">
-        <span>{{ t("snmp_trap.enabled") }}</span>
-      </label>
-      <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="saveSnmpTrapConfig">
-        {{ t("common.save") }}
-      </button>
-    </div>
-  </header>
-  <div class="form-row">
-    <div class="form-group">
-      <label for="snmp-trap-bind-addr">{{ t("snmp_trap.bind_addr") }}</label>
-      <input id="snmp-trap-bind-addr" v-model="bindHost" type="text" placeholder="0.0.0.0" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label for="snmp-trap-bind-port">{{ t("snmp_trap.bind_port") }}</label>
-      <input id="snmp-trap-bind-port" v-model="bindPort" type="number" min="162" max="65534" placeholder="162">
-    </div>
-    <div class="form-group">
-      <label for="snmp-trap-cooldown">{{ t("snmp_trap.cooldown_secs") }}</label>
-      <input id="snmp-trap-cooldown" v-model="cooldown" type="number" min="0" max="86400" placeholder="30">
-    </div>
-    <div class="form-group">
-      <label for="snmp-trap-communities">{{ t("snmp_trap.communities") }}</label>
-      <input id="snmp-trap-communities" v-model="communities" type="text" :placeholder="t('snmp_trap.communities_placeholder')" autocomplete="off">
-    </div>
-  </div>
-  <div class="form-row">
-    <div class="form-group form-group-block">
-      <span class="group-label">{{ t("snmp_trap.users") }}</span>
-      <div class="table-container snmp-trap-users-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>{{ t("snmp_trap.username") }}</th>
-              <th>{{ t("snmp_trap.auth_protocol") }}</th>
-              <th>{{ t("snmp_trap.auth_password") }}</th>
-              <th>{{ t("snmp_trap.priv_protocol") }}</th>
-              <th>{{ t("snmp_trap.priv_password") }}</th>
-              <th v-if="!readonly" class="th-inline-action">
-                <button type="button" class="btn btn-secondary btn-sm" @click="addUser">
-                  {{ t("snmp_trap.add_user") }}
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="trapUsers.length === 0" class="empty-row">
-              <td class="text-center" :colspan="readonly ? 5 : 6">{{ t("snmp_trap.no_users") }}</td>
-            </tr>
-            <tr v-for="(row, index) in trapUsers" v-else :key="index">
-              <td><input v-model="row.username" type="text" :placeholder="t('snmp_trap.username')" autocomplete="off"></td>
-              <td>
-                <select v-model="row.auth_protocol">
-                  <option value="">{{ t("snmp_trap.no_auth") }}</option>
-                  <option v-for="protocol in AUTH_PROTOCOLS" :key="protocol" :value="protocol">{{ protocol.toUpperCase() }}</option>
-                </select>
-              </td>
-              <td>
-                <input
-                  v-model="row.auth_password"
-                  type="password"
-                  autocomplete="new-password"
-                  :placeholder="t(row.authHasValue ? 'snmp_trap.password_configured' : 'snmp_trap.password_placeholder')"
-                >
-              </td>
-              <td>
-                <select v-model="row.priv_protocol">
-                  <option value="">{{ t("snmp_trap.no_priv") }}</option>
-                  <option v-for="protocol in PRIV_PROTOCOLS" :key="protocol" :value="protocol">{{ protocol.toUpperCase() }}</option>
-                </select>
-              </td>
-              <td>
-                <input
-                  v-model="row.priv_password"
-                  type="password"
-                  autocomplete="new-password"
-                  :placeholder="t(row.privHasValue ? 'snmp_trap.password_configured' : 'snmp_trap.password_placeholder')"
-                >
-              </td>
-              <td v-if="!readonly">
-                <button type="button" class="btn btn-danger btn-sm" @click="removeRow(index)">
-                  {{ t("common.delete") }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+  <SystemSectionCard icon="snmp" :title="t('snmp_trap.title')">
+    <template #actions>
+      <div v-if="!readonly" class="config-switch">
+        <label>
+          <input v-model="trapEnabled" type="checkbox">
+          <span>{{ t("snmp_trap.enabled") }}</span>
+        </label>
+        <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="saveSnmpTrapConfig">
+          {{ t("common.save") }}
+        </button>
+      </div>
+    </template>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="snmp-trap-bind-addr">{{ t("snmp_trap.bind_addr") }}</label>
+        <input id="snmp-trap-bind-addr" v-model="bindHost" type="text" placeholder="0.0.0.0" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="snmp-trap-bind-port">{{ t("snmp_trap.bind_port") }}</label>
+        <input id="snmp-trap-bind-port" v-model="bindPort" type="number" min="162" max="65534" placeholder="162">
+      </div>
+      <div class="form-group">
+        <label for="snmp-trap-cooldown">{{ t("snmp_trap.cooldown_secs") }}</label>
+        <input id="snmp-trap-cooldown" v-model="cooldown" type="number" min="0" max="86400" placeholder="30">
+      </div>
+      <div class="form-group">
+        <label for="snmp-trap-communities">{{ t("snmp_trap.communities") }}</label>
+        <input id="snmp-trap-communities" v-model="communities" type="text" :placeholder="t('snmp_trap.communities_placeholder')" autocomplete="off">
       </div>
     </div>
-  </div>
+
+    <!-- v3 USM 用户表：新增入口上移标题行动作位，表头操作列仅承载删除 -->
+    <div class="section-title-row">
+      <h3>{{ t("snmp_trap.users") }}</h3>
+      <button v-if="!readonly" type="button" class="btn btn-secondary btn-sm" @click="addUser">
+        {{ t("snmp_trap.add_user") }}
+      </button>
+    </div>
+    <div class="table-container snmp-trap-users-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>{{ t("snmp_trap.username") }}</th>
+            <th>{{ t("snmp_trap.auth_protocol") }}</th>
+            <th>{{ t("snmp_trap.auth_password") }}</th>
+            <th>{{ t("snmp_trap.priv_protocol") }}</th>
+            <th>{{ t("snmp_trap.priv_password") }}</th>
+            <th v-if="!readonly" class="th-inline-action"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="trapUsers.length === 0" class="empty-row">
+            <td class="text-center" :colspan="readonly ? 5 : 6">{{ t("snmp_trap.no_users") }}</td>
+          </tr>
+          <tr v-for="(row, index) in trapUsers" v-else :key="index">
+            <td><input v-model="row.username" type="text" :placeholder="t('snmp_trap.username')" autocomplete="off"></td>
+            <td>
+              <select v-model="row.auth_protocol">
+                <option value="">{{ t("snmp_trap.no_auth") }}</option>
+                <option v-for="protocol in AUTH_PROTOCOLS" :key="protocol" :value="protocol">{{ protocol.toUpperCase() }}</option>
+              </select>
+            </td>
+            <td>
+              <input
+                v-model="row.auth_password"
+                type="password"
+                autocomplete="new-password"
+                :placeholder="t(row.authHasValue ? 'snmp_trap.password_configured' : 'snmp_trap.password_placeholder')"
+              >
+            </td>
+            <td>
+              <select v-model="row.priv_protocol">
+                <option value="">{{ t("snmp_trap.no_priv") }}</option>
+                <option v-for="protocol in PRIV_PROTOCOLS" :key="protocol" :value="protocol">{{ protocol.toUpperCase() }}</option>
+              </select>
+            </td>
+            <td>
+              <input
+                v-model="row.priv_password"
+                type="password"
+                autocomplete="new-password"
+                :placeholder="t(row.privHasValue ? 'snmp_trap.password_configured' : 'snmp_trap.password_placeholder')"
+              >
+            </td>
+            <td v-if="!readonly">
+              <button type="button" class="btn btn-danger btn-sm" @click="removeRow(index)">
+                {{ t("common.delete") }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </SystemSectionCard>
 </template>

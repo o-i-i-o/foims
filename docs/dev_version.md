@@ -285,3 +285,7 @@ v0.76.1
 v0.76.2
 2026110322110301
 补回误删的设备位置文案（普通修复 z 段 +1，v0.76.0 误伤回滚）：v0.76.0 删除 location 字段时，i18n device.location 键被一并移除，但该键仍被 ResourcesPage 设备列表「位置」列表头引用（该列展示结构化工位/机柜归属，与被删的自由文本字段无关），导致表头渲染为原始键名。补回 zh「位置」/en「Location」，字段删除相关变更维持不变。验证：locale JSON 解析、npm run build 通过。仅 z+1，frontend/package.json 0.1.73→0.1.74 联动，Cargo.toml 不联动
+
+v0.77.0
+2026110322392801
+系统页数据管理页签布局重构（前端布局统一整改第一步，y 段 +1）：根治"长长短短"的结构性原因——同一页签三套标题体系（config-card-header/h3/title-row）、五种动作安放（组头右/h3 下方/表头 th/行内无 label 组/title-row 右）、2/3/4 列混排与灰盒嵌套、卡片组件为模板片段依赖父级兄弟选择器撑间距。新建 SystemSectionCard.vue 统一分组卡片（真实 section 根节点自持组间距 .config-card + .config-card，组头含 #actions 动作位，内容直落 config-card-body），AgentServiceCard/SnmpTrapCard/LogsManagementCard/DataManagementTab 内联导入导出组全部套用；二级分组收敛为 section-title-row 单一模式并上移为面板级通用规则（数据管理四组导入导出动作位上移标题行右侧、SNMP"添加用户"移出表头 th、日志卡三组沿用）；字段行节奏统一 4 列阶梯（卡片内行在 system.css 补齐 992→2 列/768→1 列断点回落，forms.css 直落行规则不动），成对短字段保留 form-row-2col；注册令牌行改 field-action-row（字段撑满+重新生成按钮右置）；清理日志灰底盒/裸 h3/import-actions/export-actions/data-management-container 退役，清理条件直落 2 列字段行；form-group-block 保留（收件人清单与定时任务弹窗仍依赖，含无 teleport 弹窗渲染在面板 DOM 的场景）。其余 6 个页签零改动。验证：npm run typecheck、npm run build、biome check frontend、oxlint 均通过。y 段 +1，frontend/package.json 0.1.74→0.1.75 联动，Cargo.toml 不联动

@@ -6,7 +6,6 @@
  */
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import NavIcon from "../NavIcon.vue";
 import {
   backupSystemConfig,
   downloadCsvExport,
@@ -18,12 +17,13 @@ import {
 } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
-import { downloadBlobResult } from "../../utils/download";
-import ConfirmModal from "../ConfirmModal.vue";
-import ModalShell from "../ModalShell.vue";
 import AgentServiceCard from "./AgentServiceCard.vue";
 import SnmpTrapCard from "./SnmpTrapCard.vue";
 import LogsManagementCard from "./LogsManagementCard.vue";
+import SystemSectionCard from "./SystemSectionCard.vue";
+import { downloadBlobResult } from "../../utils/download";
+import ConfirmModal from "../ConfirmModal.vue";
+import ModalShell from "../ModalShell.vue";
 
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
@@ -243,58 +243,58 @@ async function confirmRestoreConfig(): Promise<void> {
       <AgentServiceCard :active="props.active" />
       <SnmpTrapCard :active="props.active" />
 
-      <!-- 导入导出 -->
-      <header class="config-card-header">
-        <div class="config-card-title">
-          <span class="icon"><NavIcon name="resources" /></span>
-          <span>{{ t("data-management.data_management") }}</span>
+      <!-- 导入导出：四组二级标题统一走 section-title-row（标题左 + 动作右） -->
+      <SystemSectionCard icon="resources" :title="t('data-management.data_management')">
+        <div class="section-title-row">
+          <h3>{{ t("data-management.csv_import") }}</h3>
+          <div v-if="!readonly" class="action-buttons">
+            <button type="button" class="btn btn-secondary btn-sm" @click="downloadTemplate">
+              {{ t("data-management.download_template") }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" :disabled="importing" @click="triggerImportCsv">
+              {{ t("data-management.import_csv") }}
+            </button>
+          </div>
         </div>
-      </header>
-      <div class="data-management-container">
-        <h3>{{ t("data-management.csv_import") }}</h3>
-        <div v-if="!readonly" class="import-actions">
-          <button type="button" class="btn btn-primary btn-sm" :disabled="importing" @click="triggerImportCsv">
-            {{ t("data-management.import_csv") }}
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" @click="downloadTemplate">
-            {{ t("data-management.download_template") }}
-          </button>
+        <div class="section-title-row">
+          <h3>{{ t("data-management.csv_export") }}</h3>
+          <div v-if="!readonly" class="action-buttons">
+            <select id="export-type" v-model="exportType" class="form-control" :aria-label="t('data-management.export_module')">
+              <option value="all">{{ t("data-management.module_all") }}</option>
+              <option value="organization">{{ t("data-management.module_organization") }}</option>
+              <option value="network">{{ t("data-management.module_network") }}</option>
+              <option value="room">{{ t("data-management.module_room") }}</option>
+              <option value="cabinet">{{ t("data-management.module_cabinet") }}</option>
+              <option value="device">{{ t("data-management.module_device") }}</option>
+              <option value="cable-link">{{ t("data-management.module_cable_link") }}</option>
+              <option value="visualization">{{ t("data-management.module_visualization") }}</option>
+            </select>
+            <button type="button" class="btn btn-primary btn-sm" :disabled="exporting" @click="exportCsvData">
+              {{ t("data-management.export_csv") }}
+            </button>
+          </div>
         </div>
-        <h3>{{ t("data-management.csv_export") }}</h3>
-        <div v-if="!readonly" class="export-actions">
-          <select id="export-type" v-model="exportType" class="form-control" :aria-label="t('data-management.export_module')">
-            <option value="all">{{ t("data-management.module_all") }}</option>
-            <option value="organization">{{ t("data-management.module_organization") }}</option>
-            <option value="network">{{ t("data-management.module_network") }}</option>
-            <option value="room">{{ t("data-management.module_room") }}</option>
-            <option value="cabinet">{{ t("data-management.module_cabinet") }}</option>
-            <option value="device">{{ t("data-management.module_device") }}</option>
-            <option value="cable-link">{{ t("data-management.module_cable_link") }}</option>
-            <option value="visualization">{{ t("data-management.module_visualization") }}</option>
-          </select>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="exporting" @click="exportCsvData">
-            {{ t("data-management.export_csv") }}
-          </button>
-        </div>
-        <h3>{{ t("data-management.db_export") }}</h3>
-        <div v-if="!readonly" class="export-actions">
-          <button type="button" class="btn btn-primary btn-sm" @click="exportDatabase">
+        <div class="section-title-row">
+          <h3>{{ t("data-management.db_export") }}</h3>
+          <button v-if="!readonly" type="button" class="btn btn-primary btn-sm" @click="exportDatabase">
             {{ t("data-management.export_database") }}
           </button>
         </div>
-        <h3>{{ t("data-management.config_file") }}</h3>
-        <div v-if="!readonly" class="export-actions">
-          <button type="button" class="btn btn-primary btn-sm" :disabled="backingUp" @click="backupConfigFile">
-            {{ t("data-management.config_backup") }}
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="restoring" @click="triggerRestoreConfig">
-            {{ t("data-management.config_restore") }}
-          </button>
+        <div class="section-title-row">
+          <h3>{{ t("data-management.config_file") }}</h3>
+          <div v-if="!readonly" class="action-buttons">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="backingUp" @click="backupConfigFile">
+              {{ t("data-management.config_backup") }}
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="restoring" @click="triggerRestoreConfig">
+              {{ t("data-management.config_restore") }}
+            </button>
+          </div>
         </div>
-      </div>
-      <!-- 隐藏文件选择框：导入/恢复按钮触发点击 -->
-      <input ref="importFileInput" type="file" accept=".zip,.csv" hidden @change="handleImportFile">
-      <input ref="configFileInput" type="file" accept=".json,application/json" hidden @change="handleRestoreFile">
+        <!-- 隐藏文件选择框：导入/恢复按钮触发点击 -->
+        <input ref="importFileInput" type="file" accept=".zip,.csv" hidden @change="handleImportFile">
+        <input ref="configFileInput" type="file" accept=".json,application/json" hidden @change="handleRestoreFile">
+      </SystemSectionCard>
 
       <LogsManagementCard :active="props.active" />
     </div>

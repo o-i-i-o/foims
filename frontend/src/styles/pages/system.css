@@ -48,9 +48,86 @@
     height: 12px;
   }
 
+  /* ==================== 统一分组卡片（SystemSectionCard） ==================== */
+
+  /* 卡片为真实根节点（section.config-card），自持组间距：
+   相邻卡片一个组距，替代旧"模板片段 + 兄弟头部上边距"的上下文耦合 */
+  .config-card + .config-card {
+    margin-top: var(--space-lg);
+  }
+
+  .config-card-body {
+    margin-top: var(--space-sm);
+    min-width: 0;
+  }
+
+  /* 卡片内字段行与面板直落行同阶梯（forms.css 4 列阶梯仅覆盖面板直子行，
+   卡片内行需在此补齐同款断点回落） */
+  .system-config-section .config-card .form-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  @media (width <= 992px) {
+    .system-config-section .config-card .form-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (width <= 768px) {
+    .system-config-section .config-card .form-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ==================== 二级分组标题行（section-title-row） ==================== */
+
+  /* 标题左 + 动作右，分隔线移到行容器占满整宽：数据管理页签所有二级分组
+   （导入导出/清理/外发/SNMP 用户表）与日志卡片共用同一渲染路径 */
+  .system-config-section .section-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .system-config-section .section-title-row > h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  /* 非首个二级分组与上一组内容之间补一个组内间距（与相邻块外边距折叠不叠加） */
+  .config-card-body > .section-title-row:not(:first-child) {
+    margin-top: var(--space-md);
+  }
+
+  /* 导出模块下拉在标题行动作位：自适应宽并给可读下限 */
+  .system-config-section .section-title-row select.form-control {
+    width: auto;
+    min-width: 10rem;
+  }
+
+  /* 字段值 + 动作行：只读字段撑满、动作按钮右置（注册令牌行） */
+  .field-action-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .field-action-row > .config-field {
+    flex: 1;
+    min-width: 0;
+  }
+
   /* 字段行已换用页面表单家族 form-row/form-group（label 定宽居中、控件同行撑满，
-   同行表单变体规则见 forms.css；面板直落字段行固定 4 列、内嵌 section 字段行
-   固定 2 列见下方声明），此处仅保留只读 dl 字段与整行分组块的差异 */
+   同行表单变体规则见 forms.css；列数阶梯：面板直落行见 forms.css，
+   卡片内行见上方统一分组卡片声明），此处仅保留只读 dl 字段的差异 */
 
   /* 只读字段 dl：dt 与家族行 label 同款定宽居中，dd 值框 flex:1 撑满剩余空间 */
   dl.config-field,
@@ -138,8 +215,10 @@
     justify-content: center;
   }
 
-  /* 整行分组块（收件人清单/SNMP v3 用户表）：标题左对齐取齐正文、
-   按钮不随 align-items:stretch 拉满整行；块规则本体见 forms.css 同行表单变体 */
+  /* 整行分组块（收件人清单/定时任务弹窗设备清单等，含渲染在面板 DOM 内的
+   弹窗内容）：标题左对齐取齐正文、按钮不随 align-items:stretch 拉满整行；
+   块规则本体见 forms.css 同行表单变体。数据管理页签的清单型分组已改走
+   section-title-row + 表格直落，不再占用本规则 */
   .system-config-section .form-group.form-group-block > .group-label {
     width: 100%;
     min-width: 0;
@@ -472,71 +551,7 @@
 
   /* ==================== 导入导出 / 数据管理 ==================== */
 
-  /* 平铺容器：子区块盒子（灰底 section）已随卡片容器实验移除，内容直落白面板 */
-  .data-management-container {
-    min-width: 0;
-  }
-
-  .data-management-container h3 {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--color-text);
-    margin-bottom: var(--space-md);
-    padding-bottom: var(--space-xs);
-    border-bottom: 1px solid var(--color-border-light);
-  }
-
-  /* 平铺分组的组标题与上一组内容间补缝（块级相邻外边距折叠，不叠加） */
-  .data-management-container > h3:not(:first-child),
-  .data-management-container > .section-title-row:not(:first-child) {
-    margin-top: var(--space-md);
-  }
-
-  /* 带右侧动作的块标题行：标题左、按钮右，分隔线移到行容器以占满整宽 */
-  .data-management-container .section-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-md);
-    padding-bottom: var(--space-xs);
-    border-bottom: 1px solid var(--color-border-light);
-  }
-
-  .data-management-container .section-title-row > h3 {
-    margin-bottom: 0;
-    padding-bottom: 0;
-    border-bottom: none;
-  }
-
-  
-  .data-management-container > .form-row {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .import-actions,
-  .export-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-md);
-  }
-
-  .data-management-container .export-actions select {
-    flex: 1;
-    padding: 0.5rem;
-    border: 1px solid var(--control-border);
-    border-radius: var(--control-radius);
-    font-size: 0.85rem;
-    min-width: 0;
-  }
-
-  .system-config-section .data-management-container .import-actions .btn,
-  .system-config-section .data-management-container .export-actions .btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
-    white-space: nowrap;
-  }
+  /* 二级分组统一由 section-title-row 承载（见上方声明）；导入结果弹窗沿用原列表样式 */
 
   .import-result-list {
     max-height: 400px;
@@ -758,60 +773,13 @@
     white-space: nowrap;
   }
 
-  .clear-logs-form {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-md);
-    padding: 1.5rem;
-    min-width: 0;
-  }
-
-  /* 堆叠式清日志表单：控件纵向占满列宽，不受同行变体横向限宽规则影响 */
-  .data-management-container .clear-logs-form .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 0;
-    min-width: 0;
-  }
-
-  .clear-logs-form .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  /* label 的字重与颜色由 forms.css 的 .form-group label:not(.checkbox-label) 提供；
-   此处仅保留其未覆盖的 white-space */
-  .system-config-section .clear-logs-form .form-group label {
-    white-space: nowrap;
-  }
-
   @media (width <= 576px) {
-    /* 窄屏：平铺容器字段行回落单列（与既有 576 清日志/统计卡断点同阶梯） */
-    .data-management-container > .form-row {
-      grid-template-columns: 1fr;
-    }
-
-    .data-management-container .clear-logs-form .form-row {
-      grid-template-columns: 1fr;
-    }
-
     .logs-stats-grid {
       grid-template-columns: 1fr;
     }
 
     .log-stat-value {
       font-size: 1.5rem;
-    }
-  }
-
-  @media (width <= 768px) {
-    /* 窄屏：导入导出操作区纵向堆叠（原 responsive.css 组件级规则迁回） */
-    .import-actions,
-    .export-actions {
-      flex-direction: column;
     }
   }
 }

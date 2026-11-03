@@ -5,8 +5,8 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import SystemSectionCard from "./SystemSectionCard.vue";
 import {
   clearLogs,
   getLogForwarding,
@@ -201,14 +201,10 @@ async function testLogForwarding(): Promise<void> {
 </script>
 
 <template>
-  <header class="config-card-header">
-    <div class="config-card-title">
-      <span class="icon"><NavIcon name="logs" /></span>
-      <span>{{ t("logs.manager") }}</span>
+  <SystemSectionCard icon="logs" :title="t('logs.manager')">
+    <div class="section-title-row">
+      <h3>{{ t("logs.stats") }}</h3>
     </div>
-  </header>
-  <div class="data-management-container">
-    <h3>{{ t("logs.stats") }}</h3>
     <div class="logs-stats-grid">
       <div class="log-stat-card">
         <div class="log-stat-title">{{ t("logs.operation_logs") }}</div>
@@ -226,29 +222,30 @@ async function testLogForwarding(): Promise<void> {
         <div class="log-stat-info">{{ oldestText(stats.notifications?.oldest) }}</div>
       </div>
     </div>
+
     <div class="section-title-row">
       <h3>{{ t("logs.clear_logs") }}</h3>
       <button v-if="!readonly" type="button" class="btn btn-danger btn-sm" :disabled="clearing" @click="requestClearLogs">
         {{ t("logs.clear") }}
       </button>
     </div>
-    <div class="clear-logs-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="clear-log-type">{{ t("logs.log_type") }}</label>
-          <select id="clear-log-type" v-model="clearType" :disabled="readonly">
-            <option value="operation">{{ t("logs.operation_logs") }}</option>
-            <option value="login">{{ t("logs.login_logs") }}</option>
-            <option value="notification">{{ t("logs.notifications") }}</option>
-            <option value="all">{{ t("logs.all_logs") }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="clear-log-days">{{ t("logs.keep_days") }}</label>
-          <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="3650" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
-        </div>
+    <!-- 清理条件直落字段行（原灰底盒已随统一卡片布局退役） -->
+    <div class="form-row form-row-2col">
+      <div class="form-group">
+        <label for="clear-log-type">{{ t("logs.log_type") }}</label>
+        <select id="clear-log-type" v-model="clearType" :disabled="readonly">
+          <option value="operation">{{ t("logs.operation_logs") }}</option>
+          <option value="login">{{ t("logs.login_logs") }}</option>
+          <option value="notification">{{ t("logs.notifications") }}</option>
+          <option value="all">{{ t("logs.all_logs") }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="clear-log-days">{{ t("logs.keep_days") }}</label>
+        <input id="clear-log-days" v-model="clearDays" type="number" min="0" max="3650" :placeholder="t('logs.clear_zero_hint')" :disabled="readonly">
       </div>
     </div>
+
     <div class="section-title-row">
       <h3>{{ t("logs.forwarding_title") }}</h3>
       <div v-if="!readonly" class="action-buttons">
@@ -284,7 +281,7 @@ async function testLogForwarding(): Promise<void> {
         <input id="log-forwarding-port" v-model="forwardingPort" type="number" min="1" max="65535" placeholder="514" :disabled="readonly" :aria-label="t('logs.forwarding_port')">
       </div>
     </div>
-  </div>
+  </SystemSectionCard>
   <ConfirmModal
     v-if="showClearConfirm"
     :message="clearConfirmMessage"

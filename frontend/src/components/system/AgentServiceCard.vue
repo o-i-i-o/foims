@@ -7,13 +7,13 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import NavIcon from "../NavIcon.vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { downloadAgentConfigPackage, getEnrollmentToken, regenerateEnrollmentToken } from "../../api/agents";
 import { getSystemConfig, updateSystemConfig } from "../../api/system";
 import { isSectionReadonly } from "../../utils/roleCapabilities";
 import { showToast } from "../../composables/useToast";
 import ConfirmModal from "../ConfirmModal.vue";
+import SystemSectionCard from "./SystemSectionCard.vue";
 import { downloadBlobResult } from "../../utils/download";
 
 /** agent 段配置（GET /api/system/config 的 agent 段，后端未生成 ts-rs 类型） */
@@ -221,25 +221,24 @@ async function regenerateToken(): Promise<void> {
 </script>
 
 <template>
-  <header class="config-card-header">
-    <div class="config-card-title">
-      <span class="icon"><NavIcon name="agents" /></span>
-      <span>{{ t("system.agent_config_card") }}</span>
-    </div>
-    <div v-if="!readonly" class="config-switch">
-      <label for="agent-service-enabled">
-        <input id="agent-service-enabled" v-model="agentEnabled" type="checkbox" :aria-label="t('agent_service.enabled')">
-        <span>{{ t("agent_service.enabled") }}</span>
-      </label>
-      <button type="button" class="btn btn-primary btn-sm" :disabled="savingAgent" @click="saveAgentConfig">
-        {{ t("common.save") }}
-      </button>
-    </div>
-  </header>
-  <div class="data-management-container">
+  <SystemSectionCard icon="agents" :title="t('system.agent_config_card')">
+    <template #actions>
+      <div v-if="!readonly" class="config-switch">
+        <label for="agent-service-enabled">
+          <input id="agent-service-enabled" v-model="agentEnabled" type="checkbox" :aria-label="t('agent_service.enabled')">
+          <span>{{ t("agent_service.enabled") }}</span>
+        </label>
+        <button type="button" class="btn btn-primary btn-sm" :disabled="savingAgent" @click="saveAgentConfig">
+          {{ t("common.save") }}
+        </button>
+      </div>
+    </template>
+
     <!-- 上报接收服务参数：监听地址作为默认上报地址来源（采集/上报节奏
          由 agent 独立维护，不在服务端配置） -->
-    <h3>{{ t("agent_service.section_service") }}</h3>
+    <div class="section-title-row">
+      <h3>{{ t("agent_service.section_service") }}</h3>
+    </div>
     <div class="form-row form-row-2col">
       <div class="form-group">
         <label for="agent-service-bind-addr">{{ t("agent_service.bind_addr") }}</label>
@@ -250,9 +249,12 @@ async function regenerateToken(): Promise<void> {
         <input id="agent-service-bind-port" v-model="agentBindPort" type="number" min="1025" max="65534" placeholder="9100" :aria-label="t('agent_service.bind_port')">
       </div>
     </div>
-    <!-- Agent 客户端配置：上报地址模式 / 分发下载 -->
-    <h3>{{ t("agent_service.section_agent") }}</h3>
-    <div class="form-row">
+
+    <!-- Agent 客户端配置：上报地址模式 / 注册令牌 / 分发下载 -->
+    <div class="section-title-row">
+      <h3>{{ t("agent_service.section_agent") }}</h3>
+    </div>
+    <div class="form-row form-row-2col">
       <div class="form-group">
         <label class="checkbox-label" for="agent-use-public-url">
           <input id="agent-use-public-url" v-model="agentUsePublicUrl" type="checkbox" class="form-checkbox">
@@ -264,17 +266,16 @@ async function regenerateToken(): Promise<void> {
         <input id="agent-report-url-override" v-model="agentReportOverride" type="text" placeholder="agent.example.com:9100" autocomplete="off" :aria-label="t('agent_service.report_url_override')">
       </div>
     </div>
-    <div class="form-row">
+    <!-- 注册令牌：字段撑满、重新生成动作右置（field-action-row 通用模式） -->
+    <div class="field-action-row">
       <dl class="config-field">
         <dt>{{ t("system.agent_enrollment_token") }}</dt>
         <!-- 加载失败显式提示（渲染为字段文案，避免查询重试风暴） -->
         <dd class="field-value">{{ tokenQuery.isError.value ? t("system.agent_token_load_failed") : enrollmentToken || t("system.agent_token_missing") }}</dd>
       </dl>
-      <div v-if="!readonly" class="form-group">
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="regenerating" @click="showRegenerateConfirm = true">
-          {{ t("system.agent_token_regenerate") }}
-        </button>
-      </div>
+      <button v-if="!readonly" type="button" class="btn btn-secondary btn-sm" :disabled="regenerating" @click="showRegenerateConfirm = true">
+        {{ t("system.agent_token_regenerate") }}
+      </button>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -292,11 +293,11 @@ async function regenerateToken(): Promise<void> {
       </div>
       <div class="form-group">
         <button type="button" class="btn btn-primary" :disabled="!formats.length || distDownloading" @click="downloadConfigPackage">
-           {{ t("system.agent_download_config") }}
+          {{ t("system.agent_download_config") }}
         </button>
       </div>
     </div>
-  </div>
+  </SystemSectionCard>
 
   <!-- 重新生成注册令牌确认（旧令牌即刻失效） -->
   <ConfirmModal
