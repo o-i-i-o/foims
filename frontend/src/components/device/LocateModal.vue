@@ -10,7 +10,6 @@ import { nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet } from "../../api/client";
 import ModalShell from "../ModalShell.vue";
-import NavIcon from "../NavIcon.vue";
 import type { DeviceLocateResult } from "../../types/api/generated/DeviceLocateResult";
 
 const props = withDefaults(defineProps<{ prefillMac?: string }>(), { prefillMac: "" });
@@ -79,42 +78,43 @@ onMounted(() => {
   <ModalShell size="lg" @close="emit('close')">
     <template #title>{{ t("device.locate.title") }}</template>
     <div class="modal-body-scroll">
+      <!-- 工具栏两行：第一行 MAC/IP 切换，第二行 输入框 + 文字查询按钮 -->
       <div class="locate-toolbar">
-        <div class="locate-toolbar-row">
-          <div class="tab-buttons" role="tablist">
-            <button
-              type="button"
-              class="tab-btn"
-              :class="{ active: mode === 'mac' }"
-              role="tab"
-              :aria-selected="mode === 'mac'"
-              @click="switchMode('mac')"
-            >
-              {{ t("device.locate.by_mac") }}
-            </button>
-            <button
-              type="button"
-              class="tab-btn"
-              :class="{ active: mode === 'ip' }"
-              role="tab"
-              :aria-selected="mode === 'ip'"
-              @click="switchMode('ip')"
-            >
-              {{ t("device.locate.by_ip") }}
-            </button>
-          </div>
-          <button type="button" class="icon-btn btn-primary" :disabled="!keyword.trim() || phase === 'loading'" :title="t('device.locate.search')" @click="query">
-            <NavIcon name="eye" />
+        <div class="locate-toolbar-row tab-buttons" role="tablist">
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: mode === 'mac' }"
+            role="tab"
+            :aria-selected="mode === 'mac'"
+            @click="switchMode('mac')"
+          >
+            {{ t("device.locate.by_mac") }}
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: mode === 'ip' }"
+            role="tab"
+            :aria-selected="mode === 'ip'"
+            @click="switchMode('ip')"
+          >
+            {{ t("device.locate.by_ip") }}
           </button>
         </div>
-        <input
-          v-model="keyword"
-          type="text"
-          class="tab-search locate-input"
-          :placeholder="mode === 'mac' ? t('device.locate.placeholder_mac') : t('device.locate.placeholder_ip')"
-          :aria-label="mode === 'mac' ? t('device.mac_address') : t('device.ip_address')"
-          @keydown.enter.prevent="query"
-        >
+        <div class="locate-toolbar-row">
+          <input
+            v-model="keyword"
+            type="text"
+            class="tab-search locate-input"
+            :placeholder="mode === 'mac' ? t('device.locate.placeholder_mac') : t('device.locate.placeholder_ip')"
+            :aria-label="mode === 'mac' ? t('device.mac_address') : t('device.ip_address')"
+            @keydown.enter.prevent="query"
+          >
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="!keyword.trim() || phase === 'loading'" @click="query">
+            {{ t("device.locate.search") }}
+          </button>
+        </div>
       </div>
 
       <div v-if="phase === 'loading'" class="modal-loading" role="status" aria-live="polite">
@@ -175,7 +175,8 @@ onMounted(() => {
   gap: 12px;
 }
 .locate-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 .locate-text-error {
   color: var(--danger, #d33);
