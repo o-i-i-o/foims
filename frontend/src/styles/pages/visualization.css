@@ -70,8 +70,20 @@
     width: 100%;
     height: 100%;
     background-color: var(--color-bg-white);
-    /* 画布接管触摸手势（拖拽节点/平移），避免触摸拖动触发页面滚动 */
+    /* 拓扑画布接管触摸手势（捏合缩放/平移/拖拽均为应用级实现），
+     避免触摸拖动触发页面滚动 */
     touch-action: none;
+  }
+
+  /* 机柜画布为虚拟横向滚动条带（viewBox 由滚动位置派生，不做应用级缩放）：
+   保留横向滚动与浏览器原生捏合，仅禁纵向页面滚动 */
+  .visualization-svg--scroll-x {
+    touch-action: pan-x pinch-zoom;
+  }
+
+  /* 工位画布 fit-only（视野只增不减）：禁页面滚动，放行原生捏合 */
+  .visualization-svg--fixed-fit {
+    touch-action: pinch-zoom;
   }
 
   /* ==================== 画布主网格与坐标标尺（工位/设备可视化共用） ==================== */

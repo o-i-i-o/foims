@@ -16,6 +16,7 @@ import { useI18n } from "vue-i18n";
 import CanvasGridLayer from "./CanvasGridLayer.vue";
 import { useCanvasTooltip } from "../../composables/useCanvasTooltip";
 import { useCanvasViewport } from "../../composables/useCanvasViewport";
+import { usePinchZoom } from "../../composables/usePinchZoom";
 import { showToast } from "../../composables/useToast";
 import {
   CABINET_HEADER,
@@ -110,6 +111,7 @@ const {
   gridSize,
   setViewBox,
   toCanvasPoint,
+  clientToCanvas,
   syncContainerSize,
   setZoom,
   zoomBy,
@@ -121,6 +123,9 @@ const {
   rulerFontDivisor: 150,
   preserveAspectRatio: "xMinYMin meet",
 });
+
+// 双指捏合缩放：触屏第二指落下即接管为捏合手势，接管期间单指交互全部让位
+const pinchZoom = usePinchZoom({ viewBox, setViewBox, clientToCanvas });
 
 const tooltipRef = ref<HTMLDivElement | null>(null);
 
@@ -598,6 +603,18 @@ function startPan(event: PointerEvent): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
+  pinchZoom.onPointerDown(event);
+  if (pinchZoom.isPinching.value) {
+    // 捏合接管：终止进行中的单指交互（平移/拖拽），视野交由捏合手势处理
+    if (interaction.value) {
+      unbindWindowListeners();
+      panning.value = false;
+      interaction.value = null;
+      hideTooltip();
+    }
+    userAdjusted.value = true;
+    return;
+  }
   if (connectionMode.value) {
     const anchor = closest<SVGElement>(event.target, ".port-anchor");
     if (anchor) {

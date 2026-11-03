@@ -323,7 +323,7 @@ function onCanvasClick(event: MouseEvent): void {
     >
       <svg
         ref="svgRef"
-        class="visualization-svg"
+        class="visualization-svg visualization-svg--scroll-x"
         :viewBox="`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`"
         preserveAspectRatio="xMidYMax meet"
         @mousemove="onCanvasMouseMove"

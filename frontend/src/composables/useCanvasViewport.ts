@@ -16,11 +16,11 @@ import {
 import type { CanvasRect } from "../types/visualization";
 
 /** 缩放比例上下限（与旧 TopologyCore.setZoom 口径一致） */
-const MIN_ZOOM_SCALE = 0.05;
-const MAX_ZOOM_SCALE = 8;
-/** 滚轮缩放的视野宽度闸门：超出即忽略，避免一次滚轮把画布缩成不可用状态 */
-const MIN_ZOOM_WIDTH = 300;
-const MAX_ZOOM_WIDTH = 30000;
+export const MIN_ZOOM_SCALE = 0.05;
+export const MAX_ZOOM_SCALE = 8;
+/** 缩放的视野宽度闸门：超出即忽略，避免一次缩放把画布缩成不可用状态 */
+export const MIN_ZOOM_WIDTH = 300;
+export const MAX_ZOOM_WIDTH = 30000;
 
 /** 容器可视尺寸（隐藏页签下为 0，覆盖矩形此时退化为 viewBox 本身） */
 export interface CanvasSize {
@@ -52,8 +52,10 @@ export interface CanvasViewport {
   zoomScale: ComputedRef<number>;
   gridSize: number;
   setViewBox(rect: CanvasRect): void;
-  /** 鼠标视口坐标 → 画布世界坐标（拖拽/缩放锚点换算） */
+  /** 鼠标/指针事件坐标 → 画布世界坐标（拖拽/缩放锚点换算） */
   toCanvasPoint(event: MouseEvent): { x: number; y: number } | null;
+  /** 客户区坐标 → 画布世界坐标（捏合锚点等无事件对象场景复用） */
+  clientToCanvas(clientX: number, clientY: number): { x: number; y: number } | null;
   /** 重新测量容器尺寸（ResizeObserver 之外的兜底入口） */
   syncContainerSize(): void;
   /** 视野至少覆盖容器尺寸（只增不减，工位画布语义） */
@@ -100,7 +102,7 @@ export function useCanvasViewport(options: CanvasViewportOptions): CanvasViewpor
     containerSize.value = { width, height };
   }
 
-  function toCanvasPoint(event: MouseEvent): { x: number; y: number } | null {
+  function clientToCanvas(clientX: number, clientY: number): { x: number; y: number } | null {
     const svg = svgRef.value;
     if (!svg) {
       return null;
@@ -109,11 +111,15 @@ export function useCanvasViewport(options: CanvasViewportOptions): CanvasViewpor
     if (!matrix) {
       return null;
     }
-    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
     if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
       return null;
     }
     return { x: point.x, y: point.y };
+  }
+
+  function toCanvasPoint(event: MouseEvent): { x: number; y: number } | null {
+    return clientToCanvas(event.clientX, event.clientY);
   }
 
   function fitToContainer(): void {
@@ -202,6 +208,7 @@ export function useCanvasViewport(options: CanvasViewportOptions): CanvasViewpor
     gridSize: GRID_SIZE,
     setViewBox,
     toCanvasPoint,
+    clientToCanvas,
     syncContainerSize,
     fitToContainer,
     setZoom,
