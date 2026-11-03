@@ -1190,7 +1190,6 @@
     "alert_placeholder_pct": "留空不监控",
     "alert_placeholder_temp": "留空不监控",
     "alert_invalid_range": "阈值必须是 {{min}}-{{max}} 之间的整数，或留空不监控",
-    "alert_window_group": "抖动抑制（全局一套，作用于每台主机的每个指标）",
     "alert_for_secs": "持续超标时长（秒）",
     "alert_quiet_window": "静默窗口（秒）",
     "alert_cooldown": "恢复冷却（秒）",

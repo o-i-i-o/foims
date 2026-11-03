@@ -317,3 +317,15 @@ v0.77.6
 v0.77.7
 2026110400060701
 告警阈值弹窗收尾（前端普通修改，z 段 +1）：阈值 4 字段组也改 form-group-block（此前 4 列同行中「温度阈值 (℃)」长标签把输入框挤出模态框右缘，浏览器截图发现），8 字段统一 label 上/控件满列宽；窗口 4 项的 small.hint-text 帮助文字按用户要求移出弹窗，语义说明（含取值范围）迁入 docs/document.md「主机监控-告警」小节，弹窗仅保留抖动抑制分组说明一行（forms.css 约定的表单描述模式）；zh/en 语言包删除随之失效的 alert_for_secs_help/alert_quiet_window_help/alert_cooldown_help/alert_hysteresis_help 四键。验证：vue-tsc、npm run build、oxlint 通过
+
+v0.77.8
+2026110400155801
+告警阈值弹窗调宽与提示清空（前端普通修改，z 段 +1）：ModalShell 挂 size="lg"（900px 档）解决 4 列阈值行中「CPU 使用率阈值 (%)」等长标签挤压输入框的溢出；删除弹窗内最后一处 p.hint-text 分组说明行（窗口语义与分组说明一并以 docs/document.md 主机监控-告警小节为准），语言包删除失效键 alert_window_group。验证：vue-tsc、npm run build、oxlint 通过
+
+v0.77.9
+2026110400212501
+告警阈值弹窗改同行字段（前端普通修改，z 段 +1）：按用户要求 8 字段全部改回同行变体（label 左、输入框右），阈值 4 项由一行 4 列拆为两行、每行两项，与窗口 4 项两两一行一致，全弹窗统一 4 行 × 2 字段节奏；去掉全部 form-group-block。验证：vue-tsc、npm run build 通过
+
+v0.77.10
+2026110400300701
+告警阈值弹窗同行布局落地并修复字段丢失回归（前端普通修改，z 段 +1）：8 字段全部改回同行变体（label 左、输入框右），阈值 4 项拆两行、每行两项，全弹窗统一 4 行 × 2 字段；修复静默窗口与回落迟滞带两个表单组在早前帮助文字清理中被误删的回归（已随 dab565a3 提交固化，vue-tsc 不校验模板字段缺失故未报警，浏览器几何实测发现第 3/4 行仅剩单字段），现已按原 id/v-model/取值范围补回并核实 8 字段齐全；弹窗保持 size="lg"。验证：vue-tsc、npm run build、label 计数 8 通过

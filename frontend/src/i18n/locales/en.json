@@ -1190,7 +1190,6 @@
     "alert_placeholder_pct": "Leave empty to skip",
     "alert_placeholder_temp": "Leave empty to skip",
     "alert_invalid_range": "Threshold must be an integer between {{min}} and {{max}}, or left empty to skip",
-    "alert_window_group": "Flap suppression (global, applied to every metric of every host)",
     "alert_for_secs": "Sustained breach (seconds)",
     "alert_quiet_window": "Quiet window (seconds)",
     "alert_cooldown": "Re-alert cooldown (seconds)",

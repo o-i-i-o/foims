@@ -135,12 +135,12 @@ function handleSubmit() {
 </script>
 
 <template>
-  <ModalShell :title="t('agents.alert_threshold')" @close="emit('close')">
+  <ModalShell :title="t('agents.alert_threshold')" size="lg" @close="emit('close')">
     <form id="agent-alert-threshold-form" @submit.prevent="handleSubmit">
-      <!-- 字段一律包 .form-row，且统一用 form-group-block（label 上、控件满列宽）：
-       阈值 4 项一行、窗口 4 项两两一行；窗口语义说明已迁移至 docs/document.md 主机监控-告警 -->
+      <!-- 字段一律包 .form-row，label 左、控件右同行：阈值与窗口各两行、每行两项；
+       取值范围与窗口语义见 docs/document.md 主机监控-告警 -->
       <div class="form-row">
-        <div class="form-group form-group-block">
+        <div class="form-group">
           <label for="agent-alert-cpu">{{ t("agents.alert_cpu") }}</label>
           <input
             id="agent-alert-cpu"
@@ -154,7 +154,7 @@ function handleSubmit() {
             autocomplete="off"
           >
         </div>
-        <div class="form-group form-group-block">
+        <div class="form-group">
           <label for="agent-alert-mem">{{ t("agents.alert_mem") }}</label>
           <input
             id="agent-alert-mem"
@@ -168,7 +168,9 @@ function handleSubmit() {
             autocomplete="off"
           >
         </div>
-        <div class="form-group form-group-block">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label for="agent-alert-disk">{{ t("agents.alert_disk") }}</label>
           <input
             id="agent-alert-disk"
@@ -182,7 +184,7 @@ function handleSubmit() {
             autocomplete="off"
           >
         </div>
-        <div class="form-group form-group-block">
+        <div class="form-group">
           <label for="agent-alert-temp">{{ t("agents.alert_temp") }}</label>
           <input
             id="agent-alert-temp"
@@ -197,9 +199,8 @@ function handleSubmit() {
           >
         </div>
       </div>
-      <p class="hint-text">{{ t("agents.alert_window_group") }}</p>
       <div class="form-row">
-        <div class="form-group form-group-block">
+        <div class="form-group">
           <label for="agent-alert-for-secs">{{ t("agents.alert_for_secs") }}</label>
           <input
             id="agent-alert-for-secs"
@@ -212,9 +213,22 @@ function handleSubmit() {
             autocomplete="off"
           >
         </div>
+        <div class="form-group">
+          <label for="agent-alert-quiet">{{ t("agents.alert_quiet_window") }}</label>
+          <input
+            id="agent-alert-quiet"
+            v-model="form.quiet_window_secs"
+            type="number"
+            min="0"
+            max="86400"
+            step="1"
+            inputmode="numeric"
+            autocomplete="off"
+          >
+        </div>
       </div>
       <div class="form-row">
-        <div class="form-group form-group-block">
+        <div class="form-group">
           <label for="agent-alert-cooldown">{{ t("agents.alert_cooldown") }}</label>
           <input
             id="agent-alert-cooldown"
@@ -222,6 +236,19 @@ function handleSubmit() {
             type="number"
             min="0"
             max="86400"
+            step="1"
+            inputmode="numeric"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-group">
+          <label for="agent-alert-hysteresis">{{ t("agents.alert_hysteresis") }}</label>
+          <input
+            id="agent-alert-hysteresis"
+            v-model="form.hysteresis_pct"
+            type="number"
+            min="0"
+            max="50"
             step="1"
             inputmode="numeric"
             autocomplete="off"
