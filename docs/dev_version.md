@@ -309,3 +309,11 @@ v0.77.4
 v0.77.5
 2026110323544701
 系统安全页签布局统一（前端普通修改，z 段 +1）：安全页签套用 SystemSectionCard 统一分组卡片——速率限制/密码策略两卡组头动作位承载保存按钮，速率限制 7 字段从单 form-row 一锅端改为按语义两行（启用/IP/用户/登录 + 时间窗口/邮件限制/邮件窗口，窄屏经既有断点回落）；Fail2banCard 同步套卡（状态徽章+刷新+保存收进组头动作位），封禁 IP/追踪 IP/手动封禁三个 h4.mt-md 裸标题改走 section-title-row，手动封禁行去掉一次性 inline-field-label 类（label 回归 form-group 家族统一样式），.inline-field-label/.mt-md 随之清退。另修全站观感：forms.css 同行表单变体 label 与控件间补 --space-sm 间距（.modal 与 .system-config-section 两个上下文同时生效，checkbox-label 除外）——此前行内 label 收缩到内容宽后与输入框零间距，即"字段名粘着输入框"的来源。浏览器复核：三卡分隔、4+3 字段行、label 间距全部生效，部署产物与 dist 逐字节一致。验证：biome、vue-tsc、npm run build、oxlint 通过
+
+v0.77.6
+2026110400004601
+主机监控告警阈值弹窗修复（前端普通修改，z 段 +1）：AgentThresholdModal 8 个字段全部裸置 form-group（无 form-row 行容器），窗口 4 项的帮助文字 small.hint-text 作为 flex 行内项被挤到输入框右侧拥挤变形，且数值输入框各自撑满整行弹窗、8 行纵向拉长。修复：阈值 4 项包一个 form-row（auto-fit 自适应列数，窄屏自动回落），窗口 4 项改 form-group-block 两两一行（label 上、控件满宽、帮助文字 block 落到控件下方），label 去掉无意义的 span 包裹；逻辑零改动。验证：vue-tsc、npm run build、oxlint 通过
+
+v0.77.7
+2026110400060701
+告警阈值弹窗收尾（前端普通修改，z 段 +1）：阈值 4 字段组也改 form-group-block（此前 4 列同行中「温度阈值 (℃)」长标签把输入框挤出模态框右缘，浏览器截图发现），8 字段统一 label 上/控件满列宽；窗口 4 项的 small.hint-text 帮助文字按用户要求移出弹窗，语义说明（含取值范围）迁入 docs/document.md「主机监控-告警」小节，弹窗仅保留抖动抑制分组说明一行（forms.css 约定的表单描述模式）；zh/en 语言包删除随之失效的 alert_for_secs_help/alert_quiet_window_help/alert_cooldown_help/alert_hysteresis_help 四键。验证：vue-tsc、npm run build、oxlint 通过

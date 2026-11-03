@@ -137,118 +137,96 @@ function handleSubmit() {
 <template>
   <ModalShell :title="t('agents.alert_threshold')" @close="emit('close')">
     <form id="agent-alert-threshold-form" @submit.prevent="handleSubmit">
-      <div class="form-group">
-        <label for="agent-alert-cpu"><span>{{ t("agents.alert_cpu") }}</span></label>
-        <input
-          id="agent-alert-cpu"
-          v-model="form.cpu_pct"
-          type="number"
-          min="1"
-          max="100"
-          step="1"
-          inputmode="numeric"
-          :placeholder="t('agents.alert_placeholder_pct')"
-          autocomplete="off"
-        >
-      </div>
-      <div class="form-group">
-        <label for="agent-alert-mem"><span>{{ t("agents.alert_mem") }}</span></label>
-        <input
-          id="agent-alert-mem"
-          v-model="form.mem_pct"
-          type="number"
-          min="1"
-          max="100"
-          step="1"
-          inputmode="numeric"
-          :placeholder="t('agents.alert_placeholder_pct')"
-          autocomplete="off"
-        >
-      </div>
-      <div class="form-group">
-        <label for="agent-alert-disk"><span>{{ t("agents.alert_disk") }}</span></label>
-        <input
-          id="agent-alert-disk"
-          v-model="form.disk_pct"
-          type="number"
-          min="1"
-          max="100"
-          step="1"
-          inputmode="numeric"
-          :placeholder="t('agents.alert_placeholder_pct')"
-          autocomplete="off"
-        >
-      </div>
-      <div class="form-group">
-        <label for="agent-alert-temp"><span>{{ t("agents.alert_temp") }}</span></label>
-        <input
-          id="agent-alert-temp"
-          v-model="form.temp_c"
-          type="number"
-          min="1"
-          max="200"
-          step="1"
-          inputmode="numeric"
-          :placeholder="t('agents.alert_placeholder_temp')"
-          autocomplete="off"
-        >
+      <!-- 字段一律包 .form-row，且统一用 form-group-block（label 上、控件满列宽）：
+       阈值 4 项一行、窗口 4 项两两一行；窗口语义说明已迁移至 docs/document.md 主机监控-告警 -->
+      <div class="form-row">
+        <div class="form-group form-group-block">
+          <label for="agent-alert-cpu">{{ t("agents.alert_cpu") }}</label>
+          <input
+            id="agent-alert-cpu"
+            v-model="form.cpu_pct"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            inputmode="numeric"
+            :placeholder="t('agents.alert_placeholder_pct')"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-group form-group-block">
+          <label for="agent-alert-mem">{{ t("agents.alert_mem") }}</label>
+          <input
+            id="agent-alert-mem"
+            v-model="form.mem_pct"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            inputmode="numeric"
+            :placeholder="t('agents.alert_placeholder_pct')"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-group form-group-block">
+          <label for="agent-alert-disk">{{ t("agents.alert_disk") }}</label>
+          <input
+            id="agent-alert-disk"
+            v-model="form.disk_pct"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            inputmode="numeric"
+            :placeholder="t('agents.alert_placeholder_pct')"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-group form-group-block">
+          <label for="agent-alert-temp">{{ t("agents.alert_temp") }}</label>
+          <input
+            id="agent-alert-temp"
+            v-model="form.temp_c"
+            type="number"
+            min="1"
+            max="200"
+            step="1"
+            inputmode="numeric"
+            :placeholder="t('agents.alert_placeholder_temp')"
+            autocomplete="off"
+          >
+        </div>
       </div>
       <p class="hint-text">{{ t("agents.alert_window_group") }}</p>
-      <div class="form-group">
-        <label for="agent-alert-for-secs"><span>{{ t("agents.alert_for_secs") }}</span></label>
-        <input
-          id="agent-alert-for-secs"
-          v-model="form.for_secs"
-          type="number"
-          min="0"
-          max="3600"
-          step="1"
-          inputmode="numeric"
-          autocomplete="off"
-        >
-        <small class="hint-text">{{ t("agents.alert_for_secs_help") }}</small>
+      <div class="form-row">
+        <div class="form-group form-group-block">
+          <label for="agent-alert-for-secs">{{ t("agents.alert_for_secs") }}</label>
+          <input
+            id="agent-alert-for-secs"
+            v-model="form.for_secs"
+            type="number"
+            min="0"
+            max="3600"
+            step="1"
+            inputmode="numeric"
+            autocomplete="off"
+          >
+        </div>
       </div>
-      <div class="form-group">
-        <label for="agent-alert-quiet"><span>{{ t("agents.alert_quiet_window") }}</span></label>
-        <input
-          id="agent-alert-quiet"
-          v-model="form.quiet_window_secs"
-          type="number"
-          min="0"
-          max="86400"
-          step="1"
-          inputmode="numeric"
-          autocomplete="off"
-        >
-        <small class="hint-text">{{ t("agents.alert_quiet_window_help") }}</small>
-      </div>
-      <div class="form-group">
-        <label for="agent-alert-cooldown"><span>{{ t("agents.alert_cooldown") }}</span></label>
-        <input
-          id="agent-alert-cooldown"
-          v-model="form.cooldown_secs"
-          type="number"
-          min="0"
-          max="86400"
-          step="1"
-          inputmode="numeric"
-          autocomplete="off"
-        >
-        <small class="hint-text">{{ t("agents.alert_cooldown_help") }}</small>
-      </div>
-      <div class="form-group">
-        <label for="agent-alert-hysteresis"><span>{{ t("agents.alert_hysteresis") }}</span></label>
-        <input
-          id="agent-alert-hysteresis"
-          v-model="form.hysteresis_pct"
-          type="number"
-          min="0"
-          max="50"
-          step="1"
-          inputmode="numeric"
-          autocomplete="off"
-        >
-        <small class="hint-text">{{ t("agents.alert_hysteresis_help") }}</small>
+      <div class="form-row">
+        <div class="form-group form-group-block">
+          <label for="agent-alert-cooldown">{{ t("agents.alert_cooldown") }}</label>
+          <input
+            id="agent-alert-cooldown"
+            v-model="form.cooldown_secs"
+            type="number"
+            min="0"
+            max="86400"
+            step="1"
+            inputmode="numeric"
+            autocomplete="off"
+          >
+        </div>
       </div>
     </form>
     <template #footer>
