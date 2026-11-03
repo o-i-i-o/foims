@@ -1,8 +1,10 @@
 //! IEEE8023-LAG-MIB 聚合口台账采集（dot3adAggPortTable + ifTable）。
 //!
-//! 聚合口识别：`ifTable.ifType == 161(ieee8023adLap)`；成员归属：
-//! `dot3adAggPortAttachedAggID`（1.3.6.1.2.1.34.2.4.1.7）值即聚合口 ifIndex，
-//! 实例末弧为成员 ifIndex。端口名统一取 ifDescr。无 LACP 的设备返回空集。
+//! 聚合口识别：`ifTable.ifType == 161(ieee8023adLag)`；成员归属：
+//! `dot3adAggPortAttachedAggID`（1.2.840.10006.300.43.1.2.1.1.13，IEEE
+//! 802.1AX 标准注册位置）值即聚合口 ifIndex，实例末弧为成员 ifIndex
+//!（dot3adAggPortIndex，单弧 InterfaceIndex）。端口名统一取 ifDescr。
+//! 无 LACP 的设备返回空集。
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -17,7 +19,7 @@ use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
-/// ifType 常量：ieee8023adLap（LACP 链路聚合口）。
+/// ifType 常量：ieee8023adLag（LACP 链路聚合口）。
 const IF_TYPE_LACP: i32 = 161;
 
 /// 采集 LACP 聚合口台账（聚合口 + 成员端口名/ifIndex）。
@@ -62,7 +64,7 @@ pub async fn get_lags_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<LagRecor
 
     let attached = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 34, 2, 4, 1, 7),
+        oid!(1, 2, 840, 10006, 300, 43, 1, 2, 1, 1, 13),
         "log.device.snmp.lag_walk_failed",
     )
     .await;

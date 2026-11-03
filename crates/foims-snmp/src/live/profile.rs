@@ -508,17 +508,17 @@ async fn celsius_sources(client: &Client<UdpHandle>, column: &Oid) -> Vec<TempSo
 /// ENTITY-SENSOR-MIB：整表 walk，按 status=ok 且换算后温度合理的行建来源。
 async fn discover_entity_sensors(client: &Client<UdpHandle>) -> Vec<TempSource> {
     let varbinds = walk_all(client, entity_sensor_table()).await;
-    let mut scales: BTreeMap<(u32, u32), i32> = BTreeMap::new();
-    let mut precisions: BTreeMap<(u32, u32), i32> = BTreeMap::new();
-    let mut values: BTreeMap<(u32, u32), u64> = BTreeMap::new();
-    let mut statuses: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    let mut scales: BTreeMap<u32, i32> = BTreeMap::new();
+    let mut precisions: BTreeMap<u32, i32> = BTreeMap::new();
+    let mut values: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut statuses: BTreeMap<u32, u32> = BTreeMap::new();
     for vb in &varbinds {
         let arcs = vb.oid.arcs();
-        // 表基 10 弧 + entry(1) + 列号 + entPhysicalIndex + entSensorIndex
-        if arcs.len() != 14 {
+        // 表基 10 弧 + entry(1) + 列号 + entPhysicalIndex（RFC 3433 单弧索引）
+        if arcs.len() != 13 {
             continue;
         }
-        let key = (arcs[12], arcs[13]);
+        let key = arcs[12];
         match arcs[11] {
             2 => {
                 if let Some(v) = vb.value.as_u32() {
@@ -552,7 +552,7 @@ async fn discover_entity_sensors(client: &Client<UdpHandle>) -> Vec<TempSource> 
             let unit = TempUnit::EntitySensor { scale, precision };
             let celsius = apply_temp_unit(raw as f64, unit)?;
             (0.0 < celsius && celsius <= 200.0).then_some(TempSource {
-                source: RawSource::new(oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 4), vec![key.0, key.1]),
+                source: RawSource::indexed(oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 4), key),
                 unit,
             })
         })

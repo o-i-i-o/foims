@@ -47,21 +47,20 @@ const MAX_NET_IFACES: usize = 24;
 const WALK_MAX_REPETITIONS: u32 = 20;
 
 // OID 构造（oid! 宏展开为运行期 from_slice，非常量）：UCD-SNMP-MIB
-// CPU 计数器 ssCpuRaw*.50~60（SNMP 标量必须带 .0 实例后缀，缺失会
-// 返回 No Such Instance 导致使用率永远为空）
-fn cpu_raw_oids() -> [async_snmp::Oid; 11] {
+// CPU 计数器 ssCpuRaw*（SNMP 标量必须带 .0 实例后缀，缺失会返回
+// No Such Instance 导致使用率永远为空）。编号以 net-snmp 官方 MIB/代理
+// 注册为准：User(50)/Nice(51)/System(52)/Idle(53)/Wait(54)/Interrupt(56)；
+// 注意 57~60 是 ssIORawSent/ssIORawReceived/ssRawInterrupts/ssRawContexts
+//（块 I/O 与中断/上下文切换计数，非 CPU 时间），SoftIRQ(61)/Steal(64)/
+// Guest(65)/GuestNice(66) 不参与求和口径（子集/重叠/客态），均不采集。
+fn cpu_raw_oids() -> [async_snmp::Oid; 6] {
     [
         oid!(1, 3, 6, 1, 4, 1, 2021, 11, 50, 0), // User
         oid!(1, 3, 6, 1, 4, 1, 2021, 11, 51, 0), // Nice
         oid!(1, 3, 6, 1, 4, 1, 2021, 11, 52, 0), // System
         oid!(1, 3, 6, 1, 4, 1, 2021, 11, 53, 0), // Idle
         oid!(1, 3, 6, 1, 4, 1, 2021, 11, 54, 0), // Wait
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 55, 0), // Kernel
         oid!(1, 3, 6, 1, 4, 1, 2021, 11, 56, 0), // Interrupt
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 57, 0), // SoftIrq
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 58, 0), // Steal
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 59, 0), // Guest
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 60, 0), // GuestNice
     ]
 }
 
@@ -72,15 +71,10 @@ const CPU_RAW_IDLE_IDX: usize = 3;
 /// I/O 等待不算 CPU 使用率）
 const CPU_RAW_WAIT_IDX: usize = 4;
 
-/// total 计入口径下标：User/Nice/System/Idle/Wait/Interrupt 六列。
-/// 剔除 SoftIrq/Steal/Guest/GuestNice：实测（snmpd 5.9.5.2）这四列计数器
-/// 完全失真——SoftIrq/Steal 数值数千倍于 /proc/stat 真实值，Guest≈intr
-/// 中断总数，疑似读错 /proc/stat 行，计入会把使用率推高数十个百分点
-/// （实测 3% 被算成 37%）；保留的六列经多轮对照与 /proc/stat 一致。
-/// 另排除 Kernel（net-snmp 中 Kernel=System+Interrupt+SoftIrq 的重叠和，
-/// 一并求和会双倍计入内核时间）。剔除后 total 少计真实 softirq/steal
-/// 时间（通常 <5%），使用率略高估，属可接受误差。
-const CPU_RAW_TOTAL_IDXS: [usize; 6] = [0, 1, 2, 3, 4, 6];
+/// total 计入口径下标：User/Nice/System/Idle/Wait/Interrupt 全部六列
+///（与 top 的 user+nice+system+iowait+irq 口径一致；softirq/steal/guest
+/// 不计入，通常合计 <5%，使用率略高估，属可接受误差）。
+const CPU_RAW_TOTAL_IDXS: [usize; 6] = [0, 1, 2, 3, 4, 5];
 
 /// hrStorageType 取值：Ram（物理内存行）
 fn storage_type_ram() -> async_snmp::Oid {
@@ -458,14 +452,15 @@ fn format_secs(secs: i64) -> String {
 
 // 采集实现
 
-/// CPU：GET ssCpuRaw* 11 个计数器 → 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和与
+/// CPU：GET ssCpuRaw* 六个计数器 → 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和与
 /// 非 busy（Idle+Wait）分量 → 与上一轮差值算使用率。Idle 缺失时整体
 /// None（无法定义使用率），其余缺失按 0 计入。
 async fn collect_cpu(
     client: &Client<UdpHandle>,
     prev: Option<CpuCounters>,
 ) -> (Option<CpuCounters>, Option<f64>) {
-    let counters = match client.get_many(&cpu_raw_oids()).await {
+    let oids = cpu_raw_oids();
+    let counters = match client.get_many(&oids).await {
         Ok(resp) => {
             // 响应与请求等长且有序（FixedCardinality）；异常值
             //（No Such Instance 等）归为缺失
@@ -480,7 +475,7 @@ async fn collect_cpu(
                     }
                 })
                 .collect();
-            if vals.len() != 11 {
+            if vals.len() != oids.len() {
                 None
             } else {
                 let idle = vals.get(CPU_RAW_IDLE_IDX).copied().flatten();

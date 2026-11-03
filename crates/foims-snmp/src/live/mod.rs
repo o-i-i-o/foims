@@ -55,8 +55,9 @@ impl VendorKind {
 
 /// 带实例后缀的 OID 来源（列 OID + 实例弧）。
 ///
-/// 实例用 `Vec<u32>` 而非单个 `u32`：ENTITY-SENSOR-MIB 等双弧索引表
-/// （entPhysicalIndex, entSensorIndex）需要完整后缀。
+/// `instance` 恒为空（OID 标量，如 UCD 内存总量）或单弧（表列实例）：
+/// 所涉及的表均为单弧索引（RFC 3433 实体传感器表亦然），单弧用
+/// [`RawSource::indexed`] 便捷构造。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawSource {
     pub base: Oid,

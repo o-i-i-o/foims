@@ -1,10 +1,10 @@
 //! ENTITY-MIB / ENTITY-SENSOR-MIB 采集（物理实体清单 + 传感器读数）。
 //!
-//! `entPhysicalTable`（1.3.6.1.2.1.47.1.1.1.1）以单一 entPhysicalIndex 为
-//! 实例索引，逐列 walk 汇总；`entSensorTable`（1.3.6.1.2.1.99.1.1.1）实例
-//! 索引为 (entPhysicalIndex, entSensorIndex) 双弧，取次末弧映射实体、末弧
-//! 作传感器实例。两表都以「各列索引并集」驱动遍历：单列缺失只把该字段降级
-//! 为 NULL，不丢整行。vendor 差异或缺失列一律降级 NULL/跳过，不阻断同步。
+//! `entPhysicalTable`（1.3.6.1.2.1.47.1.1.1.1，RFC 6933）与
+//! `entPhySensorTable`（1.3.6.1.2.1.99.1.1.1，RFC 3433）都以单一
+//! entPhysicalIndex 为实例索引：列 OID 为表基 + entry(.1) + 列号，实例
+//! 尾弧即实体索引。两表都以「各列索引并集」驱动遍历：单列缺失只把该字段
+//! 降级为 NULL，不丢整行。vendor 差异或缺失列一律降级 NULL/跳过，不阻断同步。
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -72,13 +72,13 @@ pub async fn get_entities_via_snmp(
 
     let descr = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 1),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 2),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let class_map = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 3),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 5),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
@@ -90,43 +90,43 @@ pub async fn get_entities_via_snmp(
     .await;
     let name_map = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 5),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 7),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let hw_rev = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 6),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 8),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let fw_rev = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 7),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 9),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let sw_rev = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 8),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 10),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let serial = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 9),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 11),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let mfg = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 10),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 12),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
     let model = walk_index_value_map(
         &client,
-        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 11),
+        oid!(1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 13),
         "log.device.snmp.entity_walk_failed",
     )
     .await;
@@ -187,7 +187,7 @@ pub async fn get_sensors_via_snmp(
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
-    let mut by_key: HashMap<(i32, u32), SensorRecord> = HashMap::new();
+    let mut by_key: HashMap<u32, SensorRecord> = HashMap::new();
 
     let type_map = walk_sensor_columns(&client, 1).await;
     let scale_map = walk_sensor_columns(&client, 2).await;
@@ -203,11 +203,10 @@ pub async fn get_sensors_via_snmp(
         .chain(status_map.keys())
         .copied()
     {
-        let (ent_index, _) = key;
         by_key.insert(
             key,
             SensorRecord {
-                ent_index,
+                ent_index: i32::try_from(key).unwrap_or(0),
                 sensor_type: value_as_i32(type_map.get(&key)),
                 sensor_scale: value_as_i32(scale_map.get(&key)),
                 sensor_precision: value_as_i32(precision_map.get(&key)),
@@ -227,15 +226,17 @@ pub async fn get_sensors_via_snmp(
     Ok(sensors)
 }
 
-/// walk entSensorTable 单列，返回 `(ent_index, sensor_index) → 值` 映射
-///（实例索引双弧：次末弧实体、末弧传感器序号）。
-async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<(i32, u32), async_snmp::Value> {
+/// walk entPhySensorTable 单列，返回 `entPhysicalIndex → 值` 映射
+///（RFC 3433：单弧索引，实例尾弧即实体索引）。
+async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<u32, async_snmp::Value> {
+    // 列 OID = 表基(10 弧) + entry(.1) + 列号；RFC 3433 entPhySensorEntry：
+    // Type(1)/Scale(2)/Precision(3)/Value(4)/OperStatus(5)
     let base = match col {
-        1 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 1),
-        2 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 2),
-        3 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 3),
-        4 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 4),
-        5 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 5),
+        1 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 1, 1),
+        2 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 1, 2),
+        3 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 1, 3),
+        4 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 1, 4),
+        5 => oid!(1, 3, 6, 1, 2, 1, 99, 1, 1, 1, 1, 5),
         // 未知列号直接跳过，不给兜底 OID（否则静默 walk 到错列）
         other => {
             tracing::debug!("未知传感器列号 {other}，跳过");
@@ -255,12 +256,9 @@ async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<(i32, u32), a
             }
             continue;
         }
-        let arcs = vb.oid.arcs();
-        // 前缀 11 弧 + ent_index + sensor_index
-        if arcs.len() >= 13 {
-            let ent_index = arcs[arcs.len() - 2] as i32;
-            let sensor_index = arcs[arcs.len() - 1];
-            map.insert((ent_index, sensor_index), vb.value);
+        // 前缀 12 弧 + entPhysicalIndex
+        if let Some(&ent_index) = vb.oid.arcs().last() {
+            map.insert(ent_index, vb.value);
         }
     }
     map

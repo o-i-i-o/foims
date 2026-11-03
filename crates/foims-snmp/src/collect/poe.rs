@@ -1,9 +1,11 @@
-//! PFN-MIB PoE 供电端口采集（pethPsePortTable）与供电中断事件比对。
+//! POWER-ETHERNET-MIB（RFC 3621）PoE 供电端口采集（pethPsePortTable）与
+//! 供电中断事件比对。
 //!
 //! pethPsePortTable（1.3.6.1.2.1.105.1.3.1）实例索引为
-//! (pethPsePortGroupIndex, pethPsePortIndex) 双弧，`pethPsePortIfIndex`(.7)
-//! 关联真实 ifIndex，端口名经 ifDescr 表映射。实测功率 best-effort 取
-//! Cisco `cpeExtPsePortPwrConsumption`，缺失为 NULL。
+//! (pethPsePortGroupIndex, pethPsePortIndex) 双弧，RFC 3621 未定义 IfIndex
+//! 列；主流厂商（Cisco/H3C 等）按 ifIndex 实例化 pethPsePortIndex，台账
+//! 直接以表内端口号作 if_index，端口名经 ifDescr 表映射。实测功率
+//! best-effort 取 Cisco `cpeExtPsePortPwrConsumption`（毫瓦），缺失为 NULL。
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -24,13 +26,14 @@ use crate::events::ObsEvent;
 const PSE_DELIVERING: i32 = 3;
 
 /// walk pethPsePortTable 单列，返回 `(group, port) → 值` 映射。
+///
+/// RFC 3621 pethPsePortEntry：AdminEnable(3)/DetectionStatus(6)/
+/// PowerClassifications(10)；越界列号显式拒绝，禁止兜底分支静默 walk 错列。
 async fn walk_poe_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value> {
     let base = match col {
-        2 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 2),
-        5 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 5),
+        3 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 3),
         6 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 6),
-        7 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 7),
-        // C2：越界列号显式拒绝，禁止兜底分支静默 walk 错列
+        10 => oid!(1, 3, 6, 1, 2, 1, 105, 1, 3, 1, 10),
         other => {
             tracing::debug!("未知 PoE 列号 {other}，跳过");
             return HashMap::new();
@@ -50,8 +53,8 @@ async fn walk_poe_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value
             continue;
         }
         let arcs = vb.oid.arcs();
-        // 前缀 10 弧 + group + port
-        if arcs.len() >= 12 {
+        // 前缀 12 弧 + group + port
+        if arcs.len() >= 14 {
             let group = arcs[arcs.len() - 2];
             let port = arcs[arcs.len() - 1];
             map.insert((group, port), vb.value.clone());
@@ -64,12 +67,12 @@ fn i32_at(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<i32> {
     map.get(key).and_then(|v| value_as_i32(Some(v)))
 }
 
-/// walk `cpeExtPsePortPwrConsumption`（1.3.6.1.4.1.9.9.16.1.1.3.1.4，
-/// 单弧 ifIndex 索引，设备侧单位 0.1W）：非 Cisco 设备不实现该表，
-/// walk 失败只记告警并返回空映射（实测功率落 NULL）。
-async fn walk_poe_power_consumption(client: &Client) -> HashMap<u32, f64> {
+/// walk `cpeExtPsePortPwrConsumption`（1.3.6.1.4.1.9.9.402.1.2.1.9，
+/// CISCO-POWER-ETHERNET-EXT-MIB，单位毫瓦，索引双弧 (group, port)）：
+/// 非 Cisco 设备不实现该表，walk 失败只记告警并返回空映射（实测功率落 NULL）。
+async fn walk_poe_power_consumption(client: &Client) -> HashMap<(u32, u32), f64> {
     let mut map = HashMap::new();
-    let Ok(mut walk) = client.walk(oid!(1, 3, 6, 1, 4, 1, 9, 9, 16, 1, 1, 3, 1, 4)) else {
+    let Ok(mut walk) = client.walk(oid!(1, 3, 6, 1, 4, 1, 9, 9, 402, 1, 2, 1, 9)) else {
         log_warn!("log.device.snmp.poe_walk_failed");
         return map;
     };
@@ -81,16 +84,21 @@ async fn walk_poe_power_consumption(client: &Client) -> HashMap<u32, f64> {
             }
             continue;
         }
-        if let (Some(&if_index), Some(raw)) = (vb.oid.arcs().last(), value_as_i32(Some(&vb.value)))
+        let arcs = vb.oid.arcs();
+        // 前缀 13 弧 + group + port
+        if arcs.len() >= 15
+            && let Some(&port) = arcs.last()
+            && let Some(&group) = arcs.get(arcs.len() - 2)
+            && let Some(raw) = value_as_i32(Some(&vb.value))
         {
-            map.insert(if_index, f64::from(raw) / 10.0);
+            map.insert((group, port), f64::from(raw) / 1000.0);
         }
     }
     map
 }
 
-/// 采集 PoE 端口：pethPsePortTable 列 2/5/6/7（管理态/检测态/功率类别/
-/// ifIndex）逐列 walk，再按 ifIndex 对齐实测功率。
+/// 采集 PoE 端口：pethPsePortTable 列 3/6/10（管理态/检测态/功率类别）
+/// 逐列 walk，行由三列键并集驱动，再按 (group, port) 对齐实测功率。
 ///
 /// 错误仅来自鉴权构造与会话建立；表缺失或列缺失只降级为空值。
 pub async fn get_poe_ports_via_snmp(
@@ -113,34 +121,34 @@ pub async fn get_poe_ports_via_snmp(
     )
     .await;
 
-    let admin = walk_poe_column(&client, 2).await;
-    let detection = walk_poe_column(&client, 5).await;
-    let class_map = walk_poe_column(&client, 6).await;
-    let if_index_map = walk_poe_column(&client, 7).await;
+    let admin = walk_poe_column(&client, 3).await;
+    let detection = walk_poe_column(&client, 6).await;
+    let class_map = walk_poe_column(&client, 10).await;
     let power_map = walk_poe_power_consumption(&client).await;
 
-    // 行由 pethPsePortIfIndex(.7) 驱动：端口名与实测功率均按真实 ifIndex
-    // 对齐（PoE 表自身索引是 group/port 双弧），缺该列的条目无法归属端口
-    let mut keys: Vec<&(u32, u32)> = if_index_map.keys().collect();
+    // 行由三列键并集驱动；RFC 3621 无 IfIndex 列，主流厂商 pethPsePortIndex
+    // 即 ifIndex，直接以表内端口号归属端口（见模块注释）
+    let mut keys: Vec<(u32, u32)> = admin
+        .keys()
+        .chain(detection.keys())
+        .chain(class_map.keys())
+        .copied()
+        .collect();
     keys.sort_unstable();
+    keys.dedup();
     let mut ports = Vec::new();
-    for key in keys {
-        let Some(if_index) = value_as_i32(if_index_map.get(key)) else {
+    for &(group, port) in &keys {
+        let Ok(if_index) = i32::try_from(port) else {
             continue;
         };
-        let if_name = clean_snmp_text(if_descr.get(&(if_index as u32)).and_then(|v| v.as_str()));
-        let measured_power_w = if if_index >= 0 {
-            power_map.get(&(if_index as u32)).copied()
-        } else {
-            None
-        };
+        let if_name = clean_snmp_text(if_descr.get(&port).and_then(|v| v.as_str()));
         ports.push(PoeRecord {
             if_index,
             if_name,
-            admin_status: i32_at(&admin, key),
-            detection_status: i32_at(&detection, key),
-            power_class: i32_at(&class_map, key),
-            measured_power_w,
+            admin_status: i32_at(&admin, &(group, port)),
+            detection_status: i32_at(&detection, &(group, port)),
+            power_class: i32_at(&class_map, &(group, port)),
+            measured_power_w: power_map.get(&(group, port)).copied(),
         });
     }
 
