@@ -1,17 +1,18 @@
 //! 社区 OS 级识别规则：LibreNMS os_detection 全量转换（GPL 上游，
-//! 只提取识别事实：sysObjectID 前缀 + sysDescr 关键词）。
+//! 只提取识别事实：sysObjectID 前缀 + sysDescr 关键词/正则 + 主动探测）。
 //! 由 da-scripts/gen_vendor_community.py 于 2026-11-04 生成，**勿手改**：
 //! 更新上游后重跑脚本再生成；新增规则结构变化须同步 vendor/mod.rs。
 //!
-//! 上游 822 个定义 → 本表 686 条 OS 规则。转换口径：
+//! 上游 822 个定义 → 本表 738 条 OS 规则。转换口径：
 //! - 平台类（type=server/unix，走 platform.rs）29 个；与内置品牌 id 重复 1 个（内置优先）
-//! - 无有效前缀/关键词（仅正则/主动探测，模型表达不了）跳过 106 个
-//! - 丢弃平台 agent 号前缀 21 条（8072 net-snmp 等，§3.1 不作厂商证据）
+//! - 无有效证据（前缀/关键词/正则/探测全空）跳过 54 个
+//! - 丢弃平台 agent 号前缀 38 条（8072 net-snmp 等，§3.1 不作厂商证据）
 //! - 丢弃高风险关键词（单词元 ≤2 字符）0 条、孤儿关键词（AND 伙伴失效，块内前缀为平台号/含主动探测）65 条
-//! - 正则证据（sysDescr_regex/except，语义不同不转换）177 条、主动探测 84 条
+//! - 正则：sysDescr_regex/except 原始 177 条，仅收纯 sysDescr 块正向正则61 条（PCRE 定界符剥除，/i 转 (?i)，Rust regex 编译失败运行时跳过）；空定界丢弃 0 条
+//! - 主动探测：snmpget 块 84 个，转换 31 项检查、丢弃（op=!=/未知/缺 OID）25 条、MIB 名格式 OID（MIB::obj，零 MIB 依赖无法解析）28 条
 //! - 多词元关键词保留（本项目全词元命中，比上游子串严格，漏报方向安全）
 
-use super::{VendorMib, VendorRule, only};
+use super::{ProbeCheck, ProbeOp, VendorMib, VendorRule, only};
 
 pub(super) static COMMUNITY: &[VendorMib] = &[
     // LibreNMS os_detection/3com.yaml
@@ -22,6 +23,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 43, 1], &[1, 3, 6, 1, 4, 1, 43, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aaron.yaml
     only(&VendorRule {
@@ -34,6 +37,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/abbups.yaml
+    only(&VendorRule {
+        id: "abbups",
+        display_name: "ABB UPS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.53973.1.1.1.1.1.1.0",
+            op: ProbeOp::Contains,
+            value: "ABB",
+        }],
     }),
     // LibreNMS os_detection/acos.yaml
     only(&VendorRule {
@@ -43,6 +63,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 22610, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/acs.yaml
     only(&VendorRule {
@@ -52,6 +74,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9, 1, 1117]],
         descr_keywords: &["cisco secure access control system"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/acsw.yaml
     only(&VendorRule {
@@ -64,6 +88,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "cisco application control software",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adtran-aos.yaml
     only(&VendorRule {
@@ -73,6 +99,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 664]],
         descr_keywords: &["netvanta"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva-alm.yaml
     only(&VendorRule {
@@ -82,6 +110,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2544, 1, 14]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva-aos.yaml
     only(&VendorRule {
@@ -91,6 +121,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2544, 1, 20, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva-fsp150cp.yaml
     only(&VendorRule {
@@ -100,6 +132,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2544, 1, 10, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva-osa.yaml
     only(&VendorRule {
@@ -109,6 +143,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5551, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva_fsp150.yaml
     only(&VendorRule {
@@ -118,6 +154,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2544, 1, 12, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva_fsp3kr7.yaml
     only(&VendorRule {
@@ -127,6 +165,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2544, 1, 11, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/adva_xg300.yaml
     only(&VendorRule {
@@ -136,6 +176,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 629, 22]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/advantech.yaml
     only(&VendorRule {
@@ -145,6 +187,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10297, 202]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/aen.yaml
+    only(&VendorRule {
+        id: "aen",
+        display_name: "Accedian AEN",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^AEN-", "^AMN-", "^AMO-"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/airconsole.yaml
     only(&VendorRule {
@@ -154,6 +209,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14358, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/airos-af.yaml
     only(&VendorRule {
@@ -163,6 +220,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10002, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/airos-af60.yaml
     only(&VendorRule {
@@ -172,6 +231,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10002, 1], &[1, 3, 6, 1, 4, 1, 41112]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/airos.yaml
     only(&VendorRule {
@@ -184,6 +245,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/airport.yaml
     only(&VendorRule {
@@ -193,6 +256,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["apple airport", "apple base station", "base station v3.84"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/akcp.yaml
     only(&VendorRule {
@@ -202,6 +267,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3854]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/alaxala.yaml
     only(&VendorRule {
@@ -214,6 +281,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/albentiaaos.yaml
     only(&VendorRule {
@@ -223,6 +292,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28087]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/alcoma-almp.yaml
     only(&VendorRule {
@@ -232,6 +303,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12140, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/alfo80hd.yaml
     only(&VendorRule {
@@ -241,6 +314,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3373, 1103]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/algcom-dc-ups.yaml
     only(&VendorRule {
@@ -250,6 +325,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 49136]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/algcom-pdu.yaml
     only(&VendorRule {
@@ -259,6 +336,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 49136, 200]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/algcom-sm.yaml
     only(&VendorRule {
@@ -268,6 +347,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 49136, 100]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/allied-tq.yaml
     only(&VendorRule {
@@ -277,6 +358,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 207, 1, 13]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/allied.yaml
     only(&VendorRule {
@@ -286,6 +369,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 207]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/allworx_voip.yaml
     only(&VendorRule {
@@ -295,6 +380,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 38516, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/alpha-power.yaml
     only(&VendorRule {
@@ -304,6 +391,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 926, 1, 99, 1, 4, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/alpineoe-tdcmedfa.yaml
     only(&VendorRule {
@@ -313,6 +402,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 52326]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/alteonos.yaml
     only(&VendorRule {
@@ -325,6 +416,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/anue.yaml
     only(&VendorRule {
@@ -334,6 +427,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 32620]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/anyos.yaml
     only(&VendorRule {
@@ -343,6 +438,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4413]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aos-emu2.yaml
     only(&VendorRule {
@@ -355,6 +452,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aos.yaml
     only(&VendorRule {
@@ -364,6 +463,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6486, 800, 1, 1, 2, 2, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aos6.yaml
     only(&VendorRule {
@@ -373,6 +474,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6486, 800, 1, 1, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aos7.yaml
     only(&VendorRule {
@@ -382,6 +485,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6486, 801]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apc-cpdu.yaml
     only(&VendorRule {
@@ -391,6 +496,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 318, 1, 1, 32, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apc-epdu.yaml
     only(&VendorRule {
@@ -400,6 +507,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 0], &[1, 3, 6, 1, 4, 1, 318, 1, 3, 4, 9]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.6.3.10.2.1.1.0",
+            op: ProbeOp::Equals,
+            value: "APC",
+        }],
     }),
     // LibreNMS os_detection/apc-inrow.yaml
     only(&VendorRule {
@@ -409,6 +522,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 318, 1, 3, 14, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apc-mgeups.yaml
     only(&VendorRule {
@@ -418,6 +533,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 705, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apc-netbotz.yaml
     only(&VendorRule {
@@ -427,6 +544,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 52674, 500]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apc.yaml
     only(&VendorRule {
@@ -447,6 +566,30 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "apc web/snmp management card",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/apex-lynx.yaml
+    only(&VendorRule {
+        id: "apex-lynx",
+        display_name: "Apex Lynx",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Apex Lynx"],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/apex-plus.yaml
+    only(&VendorRule {
+        id: "apex-plus",
+        display_name: "Apex Plus",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^ApexPlus.*"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apic.yaml
     only(&VendorRule {
@@ -456,6 +599,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9, 1, 2238]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/applicationsware.yaml
     only(&VendorRule {
@@ -465,6 +610,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 449, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aprisa.yaml
     only(&VendorRule {
@@ -474,6 +621,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14817, 7, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/apsoluteos.yaml
     only(&VendorRule {
@@ -483,6 +632,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 89, 1, 1, 62]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arbos.yaml
     only(&VendorRule {
@@ -492,6 +643,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9694, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/ardmore-encoder.yaml
+    only(&VendorRule {
+        id: "ardmore-encoder",
+        display_name: "AvediaStream Encoder",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["Ardmore-Encoder_VX"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/areca.yaml
     only(&VendorRule {
@@ -501,6 +665,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["raid subsystem v"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arista-mos.yaml
     only(&VendorRule {
@@ -521,6 +687,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arista_eos.yaml
     only(&VendorRule {
@@ -530,6 +698,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30065, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arrayos.yaml
     only(&VendorRule {
@@ -539,6 +709,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7564]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arris-apex.yaml
     only(&VendorRule {
@@ -548,6 +720,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1166, 1, 31]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arris-c3.yaml
     only(&VendorRule {
@@ -557,6 +731,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4115, 1, 4, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arris-c4.yaml
     only(&VendorRule {
@@ -570,6 +746,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arris-cm.yaml
     only(&VendorRule {
@@ -579,6 +757,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4115]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arris-d5.yaml
     only(&VendorRule {
@@ -588,6 +768,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4115, 1, 8]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arris-dsr4410md.yaml
     only(&VendorRule {
@@ -597,6 +779,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1166, 1, 621]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aruba-instant.yaml
     only(&VendorRule {
@@ -606,6 +790,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14823, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arubaos-cx.yaml
     only(&VendorRule {
@@ -615,6 +801,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 47196, 4, 1, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/arubaos.yaml
     only(&VendorRule {
@@ -627,6 +815,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["arubaos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/asa.yaml
+    only(&VendorRule {
+        id: "asa",
+        display_name: "Cisco ASA",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Cisco (Adaptive|Industrial) Security Appliance"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ascom.yaml
     only(&VendorRule {
@@ -636,6 +837,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27614]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/asuswrt-merlin.yaml
+    only(&VendorRule {
+        id: "asuswrt-merlin",
+        display_name: "AsusWRT Merlin",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.2021.7890.1.101.1",
+            op: ProbeOp::Starts,
+            value: "ASUSWRT-Merlin",
+        }],
     }),
     // LibreNMS os_detection/asyncos.yaml
     only(&VendorRule {
@@ -645,6 +863,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 15497, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/atenpdu.yaml
     only(&VendorRule {
@@ -654,6 +874,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21317]],
         descr_keywords: &["aten"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ats.yaml
     only(&VendorRule {
@@ -663,6 +885,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 37662, 1, 2, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/audiocodes.yaml
     only(&VendorRule {
@@ -672,6 +896,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5003, 8, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/avaya-ipo.yaml
     only(&VendorRule {
@@ -681,6 +907,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6889]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/aviat-wtm.yaml
     only(&VendorRule {
@@ -699,6 +927,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/avocent-mp.yaml
     only(&VendorRule {
@@ -708,6 +938,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10418, 18, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/avocent.yaml
     only(&VendorRule {
@@ -717,6 +949,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10418, 16]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^AlterPath", "^Avocent"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/avr-hd.yaml
     only(&VendorRule {
@@ -726,6 +960,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28194]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/avtech.yaml
     only(&VendorRule {
@@ -735,6 +971,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20916], &[1, 3, 6, 1, 4, 1, 20916, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/awplus.yaml
     only(&VendorRule {
@@ -744,6 +982,43 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 207]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/axisaudio.yaml
+    only(&VendorRule {
+        id: "axisaudio",
+        display_name: "AXIS Audio Appliances",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["AXIS .* (Network IO Audio Module|Network Speaker)"],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/axiscam.yaml
+    only(&VendorRule {
+        id: "axiscam",
+        display_name: "AXIS Network Camera",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[
+            "AXIS .* ((Network|Bullet|PTZ|Dome|Panoramic|Box) Camera|Security Radar|Video (Server|Decoder)|Network Video Encoder|Network Video Intercom|Network Strobe Speaker|Connectivity Hub)",
+        ],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/axisdocserver.yaml
+    only(&VendorRule {
+        id: "axisdocserver",
+        display_name: "AXIS Network Document Server",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^AXIS .* Network Document Server"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/axos.yaml
     only(&VendorRule {
@@ -753,6 +1028,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6321, 1, 2, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/baicells-od04.yaml
     only(&VendorRule {
@@ -762,6 +1039,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["baicpe"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/barracudaloadbalancer.yaml
     only(&VendorRule {
@@ -771,6 +1050,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["barracuda load balancer"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/barracudangfirewall.yaml
     only(&VendorRule {
@@ -780,6 +1061,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10704, 1]],
         descr_keywords: &["barracuda firewall", "barracuda ng firewall"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/barracudaspamfirewall.yaml
     only(&VendorRule {
@@ -792,6 +1075,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "barracuda spam firewall",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/barracudawafirewall.yaml
     only(&VendorRule {
@@ -801,6 +1086,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["barracuda web application firewall"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bats.yaml
     only(&VendorRule {
@@ -810,6 +1097,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 37069]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bcm963.yaml
     only(&VendorRule {
@@ -819,6 +1108,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["bcm963"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bdcom.yaml
     only(&VendorRule {
@@ -828,6 +1119,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3320, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bdt-flexstor.yaml
     only(&VendorRule {
@@ -837,6 +1130,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20884, 10893, 2, 101]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/benuos.yaml
     only(&VendorRule {
@@ -846,6 +1141,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39406, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/binos.yaml
     only(&VendorRule {
@@ -855,6 +1152,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 738, 1, 5, 100]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/binox.yaml
     only(&VendorRule {
@@ -864,6 +1163,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 738, 10, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bintec-beip-plus.yaml
     only(&VendorRule {
@@ -873,6 +1174,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 272, 4, 201, 66, 69, 50, 48]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bintec-smart.yaml
     only(&VendorRule {
@@ -885,6 +1188,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/bison.yaml
+    only(&VendorRule {
+        id: "bison",
+        display_name: "Bison Router",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["Linux bison"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bke.yaml
     only(&VendorRule {
@@ -894,6 +1210,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27533]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bktel-oa.yaml
     only(&VendorRule {
@@ -906,6 +1224,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bluecatnetworks.yaml
     only(&VendorRule {
@@ -915,6 +1235,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13315, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/bnt.yaml
+    only(&VendorRule {
+        id: "bnt",
+        display_name: "Blade Network Technologies",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["(?i)Blade Network Technologies", "^BNT"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/boschcpp.yaml
     only(&VendorRule {
@@ -924,6 +1257,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3967, 1, 1, 0]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/boss.yaml
     only(&VendorRule {
@@ -933,6 +1268,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 45], &[1, 3, 6, 1, 4, 1, 2272]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/breeze.yaml
     only(&VendorRule {
@@ -942,6 +1279,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12394, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/broadworks.yaml
     only(&VendorRule {
@@ -951,6 +1290,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6431]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/brother.yaml
+    only(&VendorRule {
+        id: "brother",
+        display_name: "Brother Printer",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["Brother NC-.*(h|w),"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/bti800.yaml
     only(&VendorRule {
@@ -960,6 +1312,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30005, 1, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/buffalo.yaml
+    only(&VendorRule {
+        id: "buffalo",
+        display_name: "Buffalo",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^BUFFALO"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/calix.yaml
     only(&VendorRule {
@@ -972,6 +1337,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/canonprinter.yaml
     only(&VendorRule {
@@ -985,6 +1352,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["canon ip", "canon ir", "canon mf", "canon tm", "canon tx"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cat1900.yaml
     only(&VendorRule {
@@ -994,6 +1363,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco systems catalyst 1900"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/catos.yaml
     only(&VendorRule {
@@ -1003,6 +1374,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco catalyst operating system software"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cdata.yaml
     only(&VendorRule {
@@ -1012,6 +1385,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17409]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ceraos.yaml
     only(&VendorRule {
@@ -1021,6 +1396,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2281]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cetpower.yaml
     only(&VendorRule {
@@ -1030,6 +1407,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12551, 4, 0]],
         descr_keywords: &["t2s-eth supervisor for tsi snmp v1.0"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/chatsworth-pdu.yaml
     only(&VendorRule {
@@ -1039,6 +1418,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30932]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/christie-projector.yaml
     only(&VendorRule {
@@ -1048,6 +1429,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25766]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciena-rls.yaml
     only(&VendorRule {
@@ -1057,6 +1440,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1271, 1, 2, 12]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciena-saos.yaml
     only(&VendorRule {
@@ -1066,6 +1451,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 562, 68, 11]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[".*Version saos-.*"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciena-sds.yaml
     only(&VendorRule {
@@ -1075,6 +1462,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1271, 1], &[1, 3, 6, 1, 4, 1, 6141, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciena-waveserver.yaml
     only(&VendorRule {
@@ -1084,6 +1473,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1271, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cimc.yaml
     only(&VendorRule {
@@ -1093,6 +1484,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco integrated management controller"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/cips.yaml
+    only(&VendorRule {
+        id: "cips",
+        display_name: "Cisco Intrusion Prevention System",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Cisco Intrusion Prevention System"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscoepc.yaml
     only(&VendorRule {
@@ -1102,6 +1506,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1429, 3940]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscome1200.yaml
     only(&VendorRule {
@@ -1111,6 +1517,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9, 1, 1899]],
         descr_keywords: &["me1200"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscosat.yaml
     only(&VendorRule {
@@ -1120,6 +1528,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1429, 2, 2, 6, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscosb.yaml
     only(&VendorRule {
@@ -1133,6 +1543,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "catalyst 1300x series",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &["^Linksys SLM"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscosce.yaml
     only(&VendorRule {
@@ -1142,6 +1554,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco service control"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscospa.yaml
     only(&VendorRule {
@@ -1151,6 +1565,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9, 6, 1, 23, 1, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscosrp.yaml
     only(&VendorRule {
@@ -1160,6 +1576,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9, 1, 1157]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscowap.yaml
     only(&VendorRule {
@@ -1176,6 +1594,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["cisco small business wap"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ciscowlc.yaml
     only(&VendorRule {
@@ -1185,6 +1605,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco business wireless", "cisco controller"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/clearpass.yaml
     only(&VendorRule {
@@ -1194,6 +1616,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14823, 1, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/clickshare.yaml
     only(&VendorRule {
@@ -1203,6 +1627,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7312]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cmm.yaml
     only(&VendorRule {
@@ -1212,6 +1638,27 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 161, 19]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.161.19.3.4.4.2.0",
+            op: ProbeOp::Exists,
+            value: "CMM",
+        }],
+    }),
+    // LibreNMS os_detection/cmm4.yaml
+    only(&VendorRule {
+        id: "cmm4",
+        display_name: "Cambium CMM4",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.161.19.3.6.3.2.0",
+            op: ProbeOp::Exists,
+            value: "CMM4",
+        }],
     }),
     // LibreNMS os_detection/cms.yaml
     only(&VendorRule {
@@ -1221,6 +1668,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 41036]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cnmatrix.yaml
     only(&VendorRule {
@@ -1230,6 +1679,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 24]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cnos.yaml
     only(&VendorRule {
@@ -1239,6 +1690,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 19046, 1, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cnpilote.yaml
     only(&VendorRule {
@@ -1248,6 +1701,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 22]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/cnpilotr.yaml
+    only(&VendorRule {
+        id: "cnpilotr",
+        display_name: "Cambium cnPilot Router",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["(?i)(cnPilot R[0-9][0-9][0-9])"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cnwave60.yaml
     only(&VendorRule {
@@ -1257,6 +1723,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 60, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/commander-plus.yaml
     only(&VendorRule {
@@ -1266,6 +1734,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 18642]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/compas.yaml
     only(&VendorRule {
@@ -1275,6 +1745,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 26854, 3, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/comtrol.yaml
     only(&VendorRule {
@@ -1288,6 +1760,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/comware.yaml
     only(&VendorRule {
@@ -1297,6 +1771,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25506]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/conteg-pdu.yaml
     only(&VendorRule {
@@ -1306,6 +1782,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28402, 11, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/controlbox.yaml
     only(&VendorRule {
@@ -1315,6 +1793,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17095, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/coriant.yaml
     only(&VendorRule {
@@ -1324,6 +1804,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 42229, 6, 22]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ctcu.yaml
     only(&VendorRule {
@@ -1333,6 +1815,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4756]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ctm.yaml
     only(&VendorRule {
@@ -1342,6 +1826,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25868]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cts.yaml
     only(&VendorRule {
@@ -1351,6 +1837,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9304]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cubo.yaml
     only(&VendorRule {
@@ -1360,6 +1848,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27894, 10, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cumulus.yaml
     only(&VendorRule {
@@ -1369,6 +1859,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 40310]],
         descr_keywords: &["cumulus"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cxc.yaml
     only(&VendorRule {
@@ -1378,6 +1870,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7309, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cxr-ts.yaml
     only(&VendorRule {
@@ -1387,6 +1881,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1425]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cxrc.yaml
     only(&VendorRule {
@@ -1396,6 +1892,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7309, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cyan.yaml
     only(&VendorRule {
@@ -1405,6 +1903,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28533]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cyberoam-utm.yaml
     only(&VendorRule {
@@ -1414,6 +1914,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21067, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/cyberpower.yaml
     only(&VendorRule {
@@ -1423,6 +1925,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3808]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dahua-nvr.yaml
     only(&VendorRule {
@@ -1432,6 +1936,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1004849, 3, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dantherm-os.yaml
     only(&VendorRule {
@@ -1441,6 +1947,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["freecooling controller, snmp v1.0"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dasan-nos.yaml
     only(&VendorRule {
@@ -1453,6 +1961,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/datacom-dmos.yaml
     only(&VendorRule {
@@ -1462,6 +1972,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3709, 1, 2, 137]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/datacom.yaml
     only(&VendorRule {
@@ -1471,6 +1983,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3709], &[1, 3, 6, 1, 4, 1, 4413]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/datadomain.yaml
     only(&VendorRule {
@@ -1480,6 +1994,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 19746, 3, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dcn-software.yaml
     only(&VendorRule {
@@ -1492,6 +2008,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/deliberant.yaml
     only(&VendorRule {
@@ -1501,6 +2019,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["deliberant"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/dell-compellent.yaml
+    only(&VendorRule {
+        id: "dell-compellent",
+        display_name: "Dell Storage",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.674.11000.2000.500.1.2.1.0",
+            op: ProbeOp::Starts,
+            value: "Dell-Compellent",
+        }],
     }),
     // LibreNMS os_detection/dell-laser.yaml
     only(&VendorRule {
@@ -1510,6 +2045,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 10898]],
         descr_keywords: &["dell color laser", "dell laser printer"],
         descr_keywords_except: &[],
+        descr_regexes: &["^Dell.*(MFP|Printer|Laser)"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-ome-m.yaml
     only(&VendorRule {
@@ -1519,6 +2056,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 10892, 6]],
         descr_keywords: &["dell openmanage enterprise modular"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-os10.yaml
     only(&VendorRule {
@@ -1528,6 +2067,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 11000, 5000, 100, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-powervault.yaml
     only(&VendorRule {
@@ -1540,6 +2081,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-rcs.yaml
     only(&VendorRule {
@@ -1549,6 +2092,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10418, 18, 21, 17]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-rpdu.yaml
     only(&VendorRule {
@@ -1558,6 +2103,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 10903, 200, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-sonic.yaml
     only(&VendorRule {
@@ -1570,6 +2117,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dell-ups.yaml
     only(&VendorRule {
@@ -1579,6 +2128,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 10902, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/deltaorion.yaml
     only(&VendorRule {
@@ -1588,6 +2139,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20246]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/deltaups.yaml
     only(&VendorRule {
@@ -1597,6 +2150,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2254, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/deva-db7001.yaml
     only(&VendorRule {
@@ -1606,6 +2161,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 35833, 37]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/developprinter.yaml
     only(&VendorRule {
@@ -1615,6 +2172,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 18334, 1, 2, 1, 2, 1, 50, 2, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/didactum.yaml
     only(&VendorRule {
@@ -1624,6 +2183,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 46501]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/digipower.yaml
     only(&VendorRule {
@@ -1633,6 +2194,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17420]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/digital-loggers.yaml
+    only(&VendorRule {
+        id: "digital-loggers",
+        display_name: "Digital Loggers",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.2.1.229.0.1.0",
+            op: ProbeOp::Equals,
+            value: "1",
+        }],
     }),
     // LibreNMS os_detection/dkt.yaml
     only(&VendorRule {
@@ -1642,6 +2220,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27304]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dlink-dgs1250.yaml
     only(&VendorRule {
@@ -1651,6 +2231,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 171, 10, 165, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dlink.yaml
     only(&VendorRule {
@@ -1660,6 +2242,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 171, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dlinkap.yaml
     only(&VendorRule {
@@ -1669,6 +2253,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 171, 10, 37]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dnos.yaml
     only(&VendorRule {
@@ -1678,6 +2264,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6027, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dpi.yaml
     only(&VendorRule {
@@ -1687,6 +2275,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["ibm dpi"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/drac.yaml
     only(&VendorRule {
@@ -1699,6 +2289,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["dell out-of-band snmp agent for remote access controller"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/draytek.yaml
     only(&VendorRule {
@@ -1708,6 +2300,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7367]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^DrayTek"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/dxmos.yaml
     only(&VendorRule {
@@ -1717,6 +2311,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21150]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/e3meter.yaml
     only(&VendorRule {
@@ -1726,6 +2322,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21695, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/e3meterdc.yaml
     only(&VendorRule {
@@ -1735,6 +2333,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21695, 1401]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/eaton-ats.yaml
+    only(&VendorRule {
+        id: "eaton-ats",
+        display_name: "Eaton ATS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Eaton ATS"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eaton-matrix.yaml
     only(&VendorRule {
@@ -1744,6 +2355,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 935, 10, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^NMC for Matrix Inverter"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eaton-mgeups.yaml
     only(&VendorRule {
@@ -1753,6 +2366,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 705, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eaton-sc200.yaml
     only(&VendorRule {
@@ -1762,6 +2377,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1918, 2, 13]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eaton-sc300.yaml
     only(&VendorRule {
@@ -1771,6 +2388,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1918, 2, 14]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eatonpdu.yaml
     only(&VendorRule {
@@ -1780,6 +2399,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 534, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eatonups.yaml
     only(&VendorRule {
@@ -1789,6 +2410,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 534, 1], &[1, 3, 6, 1, 4, 1, 534, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eatonupsm2.yaml
     only(&VendorRule {
@@ -1798,6 +2421,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 534, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/ecresofm-os.yaml
+    only(&VendorRule {
+        id: "ecresofm-os",
+        display_name: "Ecreso FM Transmitter",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.6404.3.1.2.9.1.1.0",
+            op: ProbeOp::Regex,
+            value: "(E01|E03|G20|G10)",
+        }],
     }),
     // LibreNMS os_detection/edfa.yaml
     only(&VendorRule {
@@ -1807,6 +2447,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17409, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/edfamux.yaml
     only(&VendorRule {
@@ -1816,6 +2458,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 51628]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/edgecos.yaml
     only(&VendorRule {
@@ -1848,6 +2492,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^SONiC Software Version: SONiC\\.Edgecore"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/edgeos-ep.yaml
     only(&VendorRule {
@@ -1857,6 +2503,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10002, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.41112.1.5.1.1.0",
+            op: ProbeOp::Contains,
+            value: "EP-",
+        }],
     }),
     // LibreNMS os_detection/edgeos.yaml
     only(&VendorRule {
@@ -1866,6 +2518,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 41112, 1, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/edgeosolt.yaml
     only(&VendorRule {
@@ -1875,6 +2529,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4413], &[1, 3, 6, 1, 4, 1, 41112, 1, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.41112.1.5.1.1.0",
+            op: ProbeOp::Contains,
+            value: "UFiber",
+        }],
     }),
     // LibreNMS os_detection/edgeswitch.yaml
     only(&VendorRule {
@@ -1889,6 +2549,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eds.yaml
     only(&VendorRule {
@@ -1898,6 +2560,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 31440]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ees.yaml
     only(&VendorRule {
@@ -1907,6 +2571,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["linux at9263", "linux es_controller"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ekinops.yaml
     only(&VendorRule {
@@ -1916,6 +2582,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20044]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/elg-ipecs-es.yaml
     only(&VendorRule {
@@ -1925,6 +2593,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 572, 17389]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/elg-ipecs-ucp.yaml
     only(&VendorRule {
@@ -1934,6 +2604,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 572, 16838]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eltek-webpower.yaml
     only(&VendorRule {
@@ -1943,6 +2615,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12148, 9]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eltex-mes21xx.yaml
     only(&VendorRule {
@@ -1958,6 +2632,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eltex-mes23xx.yaml
     only(&VendorRule {
@@ -1997,6 +2673,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eltex-mes24xx.yaml
     only(&VendorRule {
@@ -2011,6 +2689,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eltex-olt.yaml
     only(&VendorRule {
@@ -2024,6 +2704,46 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/endian.yaml
+    only(&VendorRule {
+        id: "endian",
+        display_name: "Endian",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Linux.*endian"],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/endrun.yaml
+    only(&VendorRule {
+        id: "endrun",
+        display_name: "EndRun",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[
+            ProbeCheck {
+                oid: "1.3.6.1.4.1.13827.12.1.16.0",
+                op: ProbeOp::Contains,
+                value: "Sonoma_D12",
+            },
+            ProbeCheck {
+                oid: "1.3.6.1.4.1.13827.14.1.16.0",
+                op: ProbeOp::Contains,
+                value: "MeridianII",
+            },
+            ProbeCheck {
+                oid: "1.3.6.1.4.1.13827.5.0.11.0",
+                op: ProbeOp::Contains,
+                value: "Tempus LX CDMA",
+            },
+        ],
     }),
     // LibreNMS os_detection/enexus.yaml
     only(&VendorRule {
@@ -2033,6 +2753,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12148, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/engenius-switch.yaml
     only(&VendorRule {
@@ -2042,6 +2764,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 44194]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/engenius.yaml
     only(&VendorRule {
@@ -2055,6 +2779,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/enlogic-pdu.yaml
     only(&VendorRule {
@@ -2064,6 +2790,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 38446]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/enterasys.yaml
     only(&VendorRule {
@@ -2073,6 +2801,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5624, 2, 1]],
         descr_keywords: &["enterasys networks"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/epmp.yaml
     only(&VendorRule {
@@ -2082,6 +2812,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 21]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/epson-projector.yaml
     only(&VendorRule {
@@ -2091,6 +2823,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1248, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/epson-scanner.yaml
     only(&VendorRule {
@@ -2103,6 +2837,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/epson.yaml
     only(&VendorRule {
@@ -2112,6 +2848,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["epson built-in"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/equallogic.yaml
     only(&VendorRule {
@@ -2124,6 +2862,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ericsson-6600.yaml
     only(&VendorRule {
@@ -2133,6 +2873,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 193, 81, 1, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ericsson-ipos.yaml
     only(&VendorRule {
@@ -2152,6 +2894,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ericsson-ml.yaml
     only(&VendorRule {
@@ -2161,6 +2905,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 193, 223, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ericsson-tn.yaml
     only(&VendorRule {
@@ -2170,6 +2916,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 193, 81, 1, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/esphome.yaml
     only(&VendorRule {
@@ -2179,6 +2927,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["esphome"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/etherwan.yaml
     only(&VendorRule {
@@ -2188,6 +2938,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2736]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ets.yaml
     only(&VendorRule {
@@ -2197,6 +2949,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28507, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/eurostor.yaml
     only(&VendorRule {
@@ -2206,6 +2960,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14752, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ewc.yaml
     only(&VendorRule {
@@ -2215,6 +2971,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4329, 15, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/exa.yaml
     only(&VendorRule {
@@ -2224,6 +2982,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6321, 1, 2, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/exagridos.yaml
     only(&VendorRule {
@@ -2233,6 +2993,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["exagrid"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/exalink-fusion.yaml
     only(&VendorRule {
@@ -2242,6 +3004,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 43296]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/exeltech-xfersw.yaml
+    only(&VendorRule {
+        id: "exeltech-xfersw",
+        display_name: "Exeltech XFERSW",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.30320.1.0.0.1.0",
+            op: ProbeOp::Exists,
+            value: "True",
+        }],
     }),
     // LibreNMS os_detection/exinda.yaml
     only(&VendorRule {
@@ -2251,6 +3030,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21091]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/exos.yaml
     only(&VendorRule {
@@ -2260,6 +3041,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 347, 2, 5730]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/extendair.yaml
     only(&VendorRule {
@@ -2269,6 +3052,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25651, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/extremeware.yaml
     only(&VendorRule {
@@ -2278,6 +3063,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1916, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/f5.yaml
     only(&VendorRule {
@@ -2287,6 +3074,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3375, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/f5os.yaml
     only(&VendorRule {
@@ -2296,6 +3085,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12276]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fabos.yaml
     only(&VendorRule {
@@ -2305,6 +3096,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1588, 2, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/feos.yaml
     only(&VendorRule {
@@ -2314,6 +3107,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25597, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fiberhome-switch.yaml
     only(&VendorRule {
@@ -2323,6 +3118,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3807, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/fiberhome.yaml
+    only(&VendorRule {
+        id: "fiberhome",
+        display_name: "Fiberhome",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^AN5516-0(1|6|4|4B)$"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fibernet-xmux4-plus.yaml
     only(&VendorRule {
@@ -2332,6 +3140,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 29003, 2, 44, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fibrolan-falcon.yaml
     only(&VendorRule {
@@ -2341,6 +3151,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4467, 1000]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fibrolan-metrostar.yaml
     only(&VendorRule {
@@ -2350,6 +3162,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4467, 100, 100, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/firebrick.yaml
     only(&VendorRule {
@@ -2359,6 +3173,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 24693, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fireware.yaml
     only(&VendorRule {
@@ -2371,6 +3187,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/flareos.yaml
     only(&VendorRule {
@@ -2380,6 +3198,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1981, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/flexbng.yaml
     only(&VendorRule {
@@ -2389,6 +3209,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 54268]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/forcepoint-fe.yaml
     only(&VendorRule {
@@ -2398,6 +3220,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 47565, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/forcepoint.yaml
     only(&VendorRule {
@@ -2407,6 +3231,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1369, 5, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiadc.yaml
     only(&VendorRule {
@@ -2416,6 +3242,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 112, 100]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiap.yaml
     only(&VendorRule {
@@ -2425,6 +3253,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 120, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiauthenticator.yaml
     only(&VendorRule {
@@ -2434,6 +3264,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 113, 100]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiextender.yaml
     only(&VendorRule {
@@ -2443,6 +3275,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 121]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortigate.yaml
     only(&VendorRule {
@@ -2455,6 +3289,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortimail.yaml
     only(&VendorRule {
@@ -2464,6 +3300,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 105]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortios.yaml
     only(&VendorRule {
@@ -2473,6 +3311,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 103]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortisandbox.yaml
     only(&VendorRule {
@@ -2482,6 +3322,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 118, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiswitch.yaml
     only(&VendorRule {
@@ -2491,6 +3333,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 106]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortivoice.yaml
     only(&VendorRule {
@@ -2500,6 +3344,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 115]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiweb.yaml
     only(&VendorRule {
@@ -2509,6 +3355,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12356, 107, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fortiwlc.yaml
     only(&VendorRule {
@@ -2518,6 +3366,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 15983, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/foundryos.yaml
     only(&VendorRule {
@@ -2527,6 +3377,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["foundry networks"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/freshtomato.yaml
+    only(&VendorRule {
+        id: "freshtomato",
+        display_name: "FreshTomato",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.8072.1.3.2.2.1.3.7.118.101.114.115.105.111.110",
+            op: ProbeOp::Starts,
+            value: "FreshTomato",
+        }],
     }),
     // LibreNMS os_detection/fs-bdcom.yaml
     only(&VendorRule {
@@ -2542,6 +3409,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fs-centec.yaml
     only(&VendorRule {
@@ -2551,6 +3420,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 52642, 1, 99]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fs-gbn.yaml
     only(&VendorRule {
@@ -2560,6 +3431,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13464]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fs-net-pdu.yaml
     only(&VendorRule {
@@ -2569,6 +3442,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30966]],
         descr_keywords: &["net-pdu"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fs-ruijie.yaml
     only(&VendorRule {
@@ -2578,6 +3453,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 52642, 1, 1, 10, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fs-switch-dc.yaml
     only(&VendorRule {
@@ -2591,6 +3468,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fs-switch.yaml
     only(&VendorRule {
@@ -2605,6 +3484,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ftd.yaml
     only(&VendorRule {
@@ -2645,6 +3526,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ftos.yaml
     only(&VendorRule {
@@ -2657,6 +3540,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "force10 operating system",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fujifilmprinter.yaml
     only(&VendorRule {
@@ -2666,6 +3551,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 297, 1, 11, 93, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fujitsu-irmc.yaml
     only(&VendorRule {
@@ -2675,6 +3562,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 231]],
         descr_keywords: &["fujitsu out-of-band snmp agent for irmc"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fujitsueternusos.yaml
     only(&VendorRule {
@@ -2684,6 +3573,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 211, 1, 21, 1, 150]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fujitsupyos.yaml
     only(&VendorRule {
@@ -2693,6 +3584,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["py cb eth switch"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fusion.yaml
     only(&VendorRule {
@@ -2702,6 +3595,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 259, 6, 10, 120]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fusionhub.yaml
     only(&VendorRule {
@@ -2711,6 +3606,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 23695]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fxm.yaml
     only(&VendorRule {
@@ -2720,6 +3617,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7309, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/fxos.yaml
     only(&VendorRule {
@@ -2729,6 +3628,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco fx-os"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gaia.yaml
     only(&VendorRule {
@@ -2741,6 +3642,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gam.yaml
     only(&VendorRule {
@@ -2750,6 +3653,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20095, 2000, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gamatronicups.yaml
     only(&VendorRule {
@@ -2759,6 +3664,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6050, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ge-ups.yaml
     only(&VendorRule {
@@ -2768,6 +3675,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 818, 1, 100, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/geist-pdu.yaml
     only(&VendorRule {
@@ -2777,6 +3686,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21239, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/geist-watchdog.yaml
     only(&VendorRule {
@@ -2786,6 +3697,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21239]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gemds.yaml
     only(&VendorRule {
@@ -2795,6 +3708,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4130, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/genieatm.yaml
     only(&VendorRule {
@@ -2804,6 +3719,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9926, 1, 1, 21]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gepulsar.yaml
     only(&VendorRule {
@@ -2813,6 +3730,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10520, 2, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gestetner.yaml
     only(&VendorRule {
@@ -2822,6 +3741,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["gestetner network printer"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gigavue.yaml
     only(&VendorRule {
@@ -2831,6 +3752,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 26866, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gos.yaml
     only(&VendorRule {
@@ -2840,6 +3763,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 35847, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/grandstream-ap.yaml
+    only(&VendorRule {
+        id: "grandstream-ap",
+        display_name: "Grandstream Access Point",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.42397.1.1.2.1.0",
+            op: ProbeOp::Starts,
+            value: "GWN76",
+        }],
     }),
     // LibreNMS os_detection/grandstream-sw.yaml
     only(&VendorRule {
@@ -2849,6 +3789,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 42397]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gude-epc.yaml
     only(&VendorRule {
@@ -2880,6 +3822,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gude-esb.yaml
     only(&VendorRule {
@@ -2892,6 +3836,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gw-eydfa.yaml
     only(&VendorRule {
@@ -2901,6 +3847,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17409, 1, 11]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/gwd.yaml
     only(&VendorRule {
@@ -2910,6 +3858,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10072, 2, 20]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/halon.yaml
     only(&VendorRule {
@@ -2919,6 +3869,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["halon"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/harmony-enhanced.yaml
     only(&VendorRule {
@@ -2928,6 +3880,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7262, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hatteras.yaml
     only(&VendorRule {
@@ -2937,6 +3891,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["hn4000-i", "hn4000e"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/helios.yaml
     only(&VendorRule {
@@ -2946,6 +3902,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 47307]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/heliosip.yaml
     only(&VendorRule {
@@ -2955,6 +3913,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6530]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/hikvision-cam.yaml
+    only(&VendorRule {
+        id: "hikvision-cam",
+        display_name: "Hikvision Camera",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.39165.1.1.0",
+            op: ProbeOp::Contains,
+            value: "-",
+        }],
     }),
     // LibreNMS os_detection/hikvision-nvr.yaml
     only(&VendorRule {
@@ -2964,6 +3939,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 50001]],
         descr_keywords: &["hikvision company products"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/himoinsa-gensets.yaml
     only(&VendorRule {
@@ -2973,6 +3950,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["c2lan snmp"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hirschmann.yaml
     only(&VendorRule {
@@ -2982,6 +3961,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 248, 14, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hiveos-network.yaml
     only(&VendorRule {
@@ -2991,6 +3972,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4413], &[1, 3, 6, 1, 4, 1, 26928, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/hiveos-wireless.yaml
+    only(&VendorRule {
+        id: "hiveos-wireless",
+        display_name: "Aerohive HiveOS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^(Hive)?AP[\\w-]+(?:_n)?, (HiveOS|IQ Engine)"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/horizon-compact.yaml
     only(&VendorRule {
@@ -3000,6 +3994,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7262, 2, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/horizon-compactplus.yaml
     only(&VendorRule {
@@ -3009,6 +4005,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7262, 2, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/horizon-duo.yaml
     only(&VendorRule {
@@ -3018,6 +4016,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7262, 2, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/horizon-quantum.yaml
     only(&VendorRule {
@@ -3027,6 +4027,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7262, 2, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpblmos.yaml
     only(&VendorRule {
@@ -3036,6 +4038,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11, 5, 7, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-ilo.yaml
     only(&VendorRule {
@@ -3050,6 +4054,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-ipdu.yaml
     only(&VendorRule {
@@ -3059,6 +4065,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 232, 165, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-mapdu.yaml
     only(&VendorRule {
@@ -3071,6 +4079,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["outlet metered, outlet switched", "p9s18a"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-msa.yaml
     only(&VendorRule {
@@ -3080,6 +4090,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11, 2, 51]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-msl.yaml
     only(&VendorRule {
@@ -3089,6 +4101,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11, 10, 2, 1, 3, 25]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-pdumm.yaml
     only(&VendorRule {
@@ -3098,6 +4112,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["hp pdu management module"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpe-rtups.yaml
     only(&VendorRule {
@@ -3107,6 +4123,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 232, 165, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpmsm.yaml
     only(&VendorRule {
@@ -3137,6 +4155,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hpvc.yaml
     only(&VendorRule {
@@ -3146,6 +4166,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11, 5, 7, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/huawei-optixrtn.yaml
     only(&VendorRule {
@@ -3155,6 +4177,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011, 2, 25]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/huawei-smu.yaml
     only(&VendorRule {
@@ -3164,6 +4188,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011, 6, 164]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.2011.6.164.1.1.1.4.0",
+            op: ProbeOp::Starts,
+            value: "['HUAWEI SMU', 'huawei description']",
+        }],
     }),
     // LibreNMS os_detection/hwg-perseus.yaml
     only(&VendorRule {
@@ -3173,6 +4203,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21796, 5, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hwg-poseidon.yaml
     only(&VendorRule {
@@ -3182,6 +4214,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21796, 3, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hwg-ste.yaml
     only(&VendorRule {
@@ -3191,6 +4225,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21796, 4, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hwg-ste2.yaml
     only(&VendorRule {
@@ -3200,6 +4236,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21796, 4, 9]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hwg-wld.yaml
     only(&VendorRule {
@@ -3212,6 +4250,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hyperion.yaml
     only(&VendorRule {
@@ -3221,6 +4261,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6603]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/hytera.yaml
     only(&VendorRule {
@@ -3230,6 +4272,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 26381]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ibm-amm.yaml
     only(&VendorRule {
@@ -3239,6 +4283,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["bladecenter advanced management module"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ibmc.yaml
     only(&VendorRule {
@@ -3248,6 +4294,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011, 2, 235]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ibmnos.yaml
     only(&VendorRule {
@@ -3261,6 +4309,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "networking operating system",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ibmtl.yaml
     only(&VendorRule {
@@ -3270,6 +4320,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14851]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["IBM (.*) UltraScaleable Tape Library"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ibos.yaml
     only(&VendorRule {
@@ -3282,6 +4334,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/icotera.yaml
     only(&VendorRule {
@@ -3291,6 +4345,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 29865, 11]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/icr-os.yaml
     only(&VendorRule {
@@ -3300,6 +4356,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30140, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ict-mps.yaml
     only(&VendorRule {
@@ -3309,6 +4367,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39145, 13]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ict-pdu.yaml
     only(&VendorRule {
@@ -3318,6 +4378,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39145, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ict-psu.yaml
     only(&VendorRule {
@@ -3327,6 +4389,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39145, 11]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ict-swi.yaml
     only(&VendorRule {
@@ -3336,6 +4400,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39145, 12]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ies.yaml
     only(&VendorRule {
@@ -3345,6 +4411,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 890]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ies5000.yaml
     only(&VendorRule {
@@ -3357,6 +4425,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ies52xxM.yaml
     only(&VendorRule {
@@ -3370,6 +4440,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ifotec.yaml
     only(&VendorRule {
@@ -3379,6 +4451,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21362]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/illustra.yaml
     only(&VendorRule {
@@ -3388,6 +4462,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["illustra"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/imcopower-big.yaml
     only(&VendorRule {
@@ -3397,6 +4473,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 818, 32, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/imcopower-ls110.yaml
     only(&VendorRule {
@@ -3406,6 +4484,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 33283, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/infinera-groove.yaml
     only(&VendorRule {
@@ -3415,6 +4495,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 42229, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/infinera-xtm.yaml
     only(&VendorRule {
@@ -3424,6 +4506,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8708]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/infinity.yaml
     only(&VendorRule {
@@ -3433,6 +4517,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10002, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/informos.yaml
     only(&VendorRule {
@@ -3442,6 +4528,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12925, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/infortrend.yaml
     only(&VendorRule {
@@ -3454,6 +4542,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/innovaphone.yaml
     only(&VendorRule {
@@ -3463,6 +4553,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6666]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/intelliflash.yaml
     only(&VendorRule {
@@ -3472,6 +4564,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 43906, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/inteno.yaml
     only(&VendorRule {
@@ -3481,6 +4575,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4413]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/interseptor.yaml
     only(&VendorRule {
@@ -3490,6 +4586,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 19011, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ionodes.yaml
     only(&VendorRule {
@@ -3499,6 +4597,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 40748, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ionos.yaml
     only(&VendorRule {
@@ -3508,6 +4608,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1038]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ios.yaml
     only(&VendorRule {
@@ -3527,6 +4629,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "ios (tm)",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/iosxe.yaml
     only(&VendorRule {
@@ -3542,6 +4646,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["cat3k_caa", "ios-xe", "iosxe", "linux_iosd"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/iosxr.yaml
     only(&VendorRule {
@@ -3551,6 +4657,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["ios xr"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ipolis.yaml
     only(&VendorRule {
@@ -3560,6 +4668,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 36849, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ipoman.yaml
     only(&VendorRule {
@@ -3569,6 +4679,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2468, 1, 4, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/iqnos.yaml
     only(&VendorRule {
@@ -3578,6 +4690,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21296]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ird.yaml
     only(&VendorRule {
@@ -3587,6 +4701,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2021, 250, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ironware.yaml
     only(&VendorRule {
@@ -3596,6 +4712,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["ironware"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ise.yaml
     only(&VendorRule {
@@ -3613,6 +4731,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/iskratel-lumia.yaml
     only(&VendorRule {
@@ -3622,6 +4742,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1332, 1, 1, 1, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/istars.yaml
     only(&VendorRule {
@@ -3631,6 +4753,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 40614]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/janitza-umg96.yaml
     only(&VendorRule {
@@ -3640,6 +4764,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 34278, 8]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/janitza.yaml
     only(&VendorRule {
@@ -3649,6 +4775,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 34278, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/jetdirect.yaml
     only(&VendorRule {
@@ -3658,6 +4786,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11, 2, 3, 9, 1]],
         descr_keywords: &["hp ethernet multi-environment", "hp laser mfp", "jetdirect"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/jetstream.yaml
     only(&VendorRule {
@@ -3667,6 +4797,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11863, 5]],
         descr_keywords: &["jetstream"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/juniper-mss.yaml
     only(&VendorRule {
@@ -3676,6 +4808,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14525, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/juniperex2500os.yaml
     only(&VendorRule {
@@ -3685,6 +4819,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1411, 102]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/junos.yaml
     only(&VendorRule {
@@ -3694,6 +4830,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2636]],
         descr_keywords: &["kernel junos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/junose.yaml
     only(&VendorRule {
@@ -3703,6 +4841,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4874]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/jwos.yaml
     only(&VendorRule {
@@ -3712,6 +4852,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8239, 1, 2, 9]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/keeneticos.yaml
+    only(&VendorRule {
+        id: "keeneticos",
+        display_name: "KeeneticOS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Keenetic"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/kemp.yaml
     only(&VendorRule {
@@ -3721,6 +4874,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12196, 250, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/konica.yaml
     only(&VendorRule {
@@ -3730,6 +4885,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 18334, 1]],
         descr_keywords: &["konica minolta"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/kti.yaml
+    only(&VendorRule {
+        id: "kti",
+        display_name: "KTI",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^KGS-"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/kymata.yaml
     only(&VendorRule {
@@ -3739,6 +4907,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 60429, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/kyocera.yaml
+    only(&VendorRule {
+        id: "kyocera",
+        display_name: "Kyocera Mita Printer",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^KYOCERA"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lambdatrail.yaml
     only(&VendorRule {
@@ -3748,6 +4929,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 35616]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lanier.yaml
     only(&VendorRule {
@@ -3757,6 +4940,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["lanier"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lantronix-slc.yaml
     only(&VendorRule {
@@ -3766,6 +4951,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 244, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lantronix-uds.yaml
     only(&VendorRule {
@@ -3775,6 +4962,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1723, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lcos.yaml
     only(&VendorRule {
@@ -3787,6 +4976,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lcoslx.yaml
     only(&VendorRule {
@@ -3796,6 +4987,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2356, 13, 8]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lcossx.yaml
     only(&VendorRule {
@@ -3808,6 +5001,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lenovoemc.yaml
     only(&VendorRule {
@@ -3817,6 +5012,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["emc soho-nas storage."],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/lexmarkprinter.yaml
     only(&VendorRule {
@@ -3826,6 +5023,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["lexmark"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/liebert.yaml
     only(&VendorRule {
@@ -3835,6 +5034,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 476, 1, 42]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/ligoos.yaml
+    only(&VendorRule {
+        id: "ligoos",
+        display_name: "LigoWave LigoOS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^LigoDLB", "^LigoPTP"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/linksys-ss.yaml
     only(&VendorRule {
@@ -3844,6 +5056,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3955, 1000]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/logmaster.yaml
     only(&VendorRule {
@@ -3853,6 +5067,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 935]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/loop-telecom.yaml
     only(&VendorRule {
@@ -3862,6 +5078,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 823, 34441]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/luminato.yaml
     only(&VendorRule {
@@ -3871,6 +5089,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3715]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/magnum.yaml
     only(&VendorRule {
@@ -3880,6 +5100,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3073, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/marathonups.yaml
     only(&VendorRule {
@@ -3889,6 +5111,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2021, 1, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mbg-ltos6.yaml
     only(&VendorRule {
@@ -3898,6 +5122,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5597, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mbg-meinbergos.yaml
     only(&VendorRule {
@@ -3907,6 +5133,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5597, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mcafeewebgateway.yaml
     only(&VendorRule {
@@ -3916,6 +5144,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1230, 2, 7, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mediornet.yaml
     only(&VendorRule {
@@ -3925,6 +5155,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 23056, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mellanox.yaml
     only(&VendorRule {
@@ -3937,6 +5169,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/meraki-cloud-controller.yaml
     only(&VendorRule {
@@ -3946,6 +5180,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 29671, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/merakimr.yaml
+    only(&VendorRule {
+        id: "merakimr",
+        display_name: "Meraki AP",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^=?Cisco Wireless CW", "^=?Meraki CW", "^=?Meraki MR"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/merakims.yaml
     only(&VendorRule {
@@ -3955,6 +5202,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 29671, 2, 388]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^Meraki MS"],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/merakimx.yaml
+    only(&VendorRule {
+        id: "merakimx",
+        display_name: "Meraki MX Appliance",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Meraki MX"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mgepdu.yaml
     only(&VendorRule {
@@ -3964,6 +5224,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 705, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/microsemipdsine.yaml
     only(&VendorRule {
@@ -3973,6 +5235,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7428, 1, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/microsemitime.yaml
     only(&VendorRule {
@@ -3985,6 +5249,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/microsens-g6.yaml
     only(&VendorRule {
@@ -3994,6 +5260,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3181, 10, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mimosa.yaml
     only(&VendorRule {
@@ -4003,6 +5271,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 43356]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/minkelsrms.yaml
     only(&VendorRule {
@@ -4012,6 +5282,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["8vd-x20"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/mlos-nsp.yaml
+    only(&VendorRule {
+        id: "mlos-nsp",
+        display_name: "McAfee Linux OS - NSP",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.8962.2.1.2.1.1.6.0",
+            op: ProbeOp::Contains,
+            value: "['NETWORK-SECURITY-PLATFORM', 'TRELLIX-INTRUSION-PREVENTION-SYSTEM']",
+        }],
     }),
     // LibreNMS os_detection/mni.yaml
     only(&VendorRule {
@@ -4021,6 +5308,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3323, 11, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/monowall.yaml
     only(&VendorRule {
@@ -4030,6 +5319,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["m0n0wall"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/morningstar-mppt.yaml
     only(&VendorRule {
@@ -4039,6 +5330,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 33333]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/morningstar-pwm.yaml
     only(&VendorRule {
@@ -4048,6 +5341,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 33333]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/motorola-cm.yaml
     only(&VendorRule {
@@ -4057,6 +5352,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1166, 1, 450, 12, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/moxa-awk.yaml
     only(&VendorRule {
@@ -4066,6 +5363,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8691, 15, 34]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/moxa-etherdevice.yaml
     only(&VendorRule {
@@ -4075,6 +5374,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8691, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/moxa-nport.yaml
     only(&VendorRule {
@@ -4087,6 +5388,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/mpb-srp.yaml
+    only(&VendorRule {
+        id: "mpb-srp",
+        display_name: "MPB SRP",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.4464.2.2.12.2.4.0",
+            op: ProbeOp::Contains,
+            value: "MPBC_SNMP",
+        }],
     }),
     // LibreNMS os_detection/mrv-od.yaml
     only(&VendorRule {
@@ -4096,6 +5414,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 629, 200]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/mrvld.yaml
+    only(&VendorRule {
+        id: "mrvld",
+        display_name: "MRV LambdaDriver",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^LambdaDriver"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mts-com.yaml
     only(&VendorRule {
@@ -4105,6 +5436,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 40865]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mx-nos.yaml
     only(&VendorRule {
@@ -4114,6 +5447,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8691, 600]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/mypoweros.yaml
     only(&VendorRule {
@@ -4127,6 +5462,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/neptune.yaml
     only(&VendorRule {
@@ -4136,6 +5473,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1286, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netagent2.yaml
     only(&VendorRule {
@@ -4145,6 +5484,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 935]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netapp.yaml
     only(&VendorRule {
@@ -4154,6 +5495,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["netapp"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netbotz.yaml
     only(&VendorRule {
@@ -4163,6 +5506,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5528, 100, 20, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netguardian.yaml
     only(&VendorRule {
@@ -4172,6 +5517,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2682]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netmanplus.yaml
     only(&VendorRule {
@@ -4181,6 +5528,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5491]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^NetMan.*plus"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netmodule.yaml
     only(&VendorRule {
@@ -4190,6 +5539,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 31496, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netonix.yaml
     only(&VendorRule {
@@ -4199,6 +5550,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 46242]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/netopia.yaml
+    only(&VendorRule {
+        id: "netopia",
+        display_name: "Motorola Netopia",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Netopia"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netscaler-sdwan.yaml
     only(&VendorRule {
@@ -4208,6 +5572,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3845, 31]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netscaler.yaml
     only(&VendorRule {
@@ -4217,6 +5583,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5951, 1], &[1, 3, 6, 1, 4, 1, 5951, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netspire.yaml
     only(&VendorRule {
@@ -4226,6 +5594,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1732]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/netsure.yaml
     only(&VendorRule {
@@ -4235,6 +5605,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 885, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nexans.yaml
     only(&VendorRule {
@@ -4244,6 +5616,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 266]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nimbleos.yaml
     only(&VendorRule {
@@ -4253,6 +5627,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["nimble storage"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nios.yaml
     only(&VendorRule {
@@ -4262,6 +5638,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7779]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nitro.yaml
     only(&VendorRule {
@@ -4276,6 +5654,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nokia-1830.yaml
     only(&VendorRule {
@@ -4292,6 +5672,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nokia-isam.yaml
     only(&VendorRule {
@@ -4301,6 +5683,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 637, 61]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nos.yaml
     only(&VendorRule {
@@ -4313,6 +5697,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nrg.yaml
     only(&VendorRule {
@@ -4322,6 +5708,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["nrg network printer"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ns-bsd.yaml
     only(&VendorRule {
@@ -4334,6 +5722,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nti.yaml
     only(&VendorRule {
@@ -4348,6 +5738,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ntron.yaml
     only(&VendorRule {
@@ -4357,6 +5749,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28381]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/nxos.yaml
     only(&VendorRule {
@@ -4366,6 +5760,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco nx-os", "nx-os(tm)"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/occamos.yaml
     only(&VendorRule {
@@ -4375,6 +5771,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6066, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/oceanstor.yaml
     only(&VendorRule {
@@ -4384,6 +5782,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011, 2, 91]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ocnos.yaml
     only(&VendorRule {
@@ -4393,6 +5793,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 36673], &[1, 3, 6, 1, 4, 1, 52587]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/okilan.yaml
     only(&VendorRule {
@@ -4402,6 +5804,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["oki okilan"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/omnipcx.yaml
     only(&VendorRule {
@@ -4411,6 +5815,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 637, 64, 4400, 1, 1, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/omnitron-iconverter.yaml
     only(&VendorRule {
@@ -4420,6 +5826,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7342, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/oneaccess.yaml
     only(&VendorRule {
@@ -4429,6 +5837,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13191]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/onefs.yaml
     only(&VendorRule {
@@ -4438,6 +5848,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12124, 1]],
         descr_keywords: &["isilon onefs"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ons.yaml
     only(&VendorRule {
@@ -4447,6 +5859,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco ons"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/open-e.yaml
     only(&VendorRule {
@@ -4456,6 +5870,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["open-e"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/opengear-lighthouse.yaml
     only(&VendorRule {
@@ -4465,6 +5881,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25049, 1, 42]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/opengear.yaml
     only(&VendorRule {
@@ -4474,6 +5892,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25049, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/opnsense.yaml
     only(&VendorRule {
@@ -4483,6 +5903,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["opnsense", "sensey"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.8072.1.3.2.3.1.2.7.118.101.114.115.105.111.110",
+            op: ProbeOp::Contains,
+            value: "OPNsense",
+        }],
     }),
     // LibreNMS os_detection/orolia-securesync.yaml
     only(&VendorRule {
@@ -4492,6 +5918,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 18837, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/orvaldi-ups.yaml
     only(&VendorRule {
@@ -4501,6 +5929,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 43943]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.21111.1.1.1.6.0",
+            op: ProbeOp::Starts,
+            value: "VER",
+        }],
     }),
     // LibreNMS os_detection/osag.yaml
     only(&VendorRule {
@@ -4510,6 +5944,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3996, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/osm.yaml
     only(&VendorRule {
@@ -4519,6 +5955,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 18418]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/packetlight.yaml
     only(&VendorRule {
@@ -4528,6 +5966,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4515, 100, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/packetpower-eg.yaml
     only(&VendorRule {
@@ -4537,6 +5977,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 33688]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/packetshaper.yaml
     only(&VendorRule {
@@ -4546,6 +5988,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["packetshaper"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/panasonic-ns.yaml
     only(&VendorRule {
@@ -4555,6 +5999,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 258, 601, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pandacom.yaml
     only(&VendorRule {
@@ -4564,6 +6010,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3652]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/panduit-eagle.yaml
     only(&VendorRule {
@@ -4573,6 +6021,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3711, 24]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/panduit.yaml
     only(&VendorRule {
@@ -4582,6 +6032,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 19536]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/panos.yaml
     only(&VendorRule {
@@ -4591,6 +6043,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["palo alto networks"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/paradyne.yaml
     only(&VendorRule {
@@ -4600,6 +6054,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3278, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/parks-switch.yaml
     only(&VendorRule {
@@ -4609,6 +6065,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 50224, 3, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/patton-sn.yaml
     only(&VendorRule {
@@ -4618,6 +6076,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1768, 100]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pbn-cp.yaml
     only(&VendorRule {
@@ -4627,6 +6087,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11606, 24]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pbn.yaml
     only(&VendorRule {
@@ -4640,6 +6102,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pcoweb-rittal-lcp-3311.yaml
     only(&VendorRule {
@@ -4649,6 +6113,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9839, 2606, 3311]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pcoweb-rittalchiller.yaml
     only(&VendorRule {
@@ -4658,6 +6124,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9839, 2606, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pcoweb.yaml
     only(&VendorRule {
@@ -4667,6 +6135,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["pco gateway"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pegasus.yaml
     only(&VendorRule {
@@ -4676,6 +6146,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6368, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pepwave.yaml
     only(&VendorRule {
@@ -4685,6 +6157,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27662]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/perle.yaml
     only(&VendorRule {
@@ -4694,6 +6168,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1966]],
         descr_keywords: &["perle mcr-mgt"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/pfsense.yaml
+    only(&VendorRule {
+        id: "pfsense",
+        display_name: "pfSense",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["(?i)pfsense"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/phybridge-flex.yaml
     only(&VendorRule {
@@ -4703,6 +6190,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 54743, 1, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/picos.yaml
     only(&VendorRule {
@@ -4712,6 +6201,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 35098]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pixos.yaml
     only(&VendorRule {
@@ -4721,6 +6212,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["cisco firewall services module", "cisco pix"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/planet-mc.yaml
     only(&VendorRule {
@@ -4730,6 +6223,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10456, 2, 625]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/planetos.yaml
     only(&VendorRule {
@@ -4743,6 +6238,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pmp.yaml
     only(&VendorRule {
@@ -4752,6 +6249,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 161, 19]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/polycomLens.yaml
     only(&VendorRule {
@@ -4761,6 +6260,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2684]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/poweralert.yaml
     only(&VendorRule {
@@ -4770,6 +6271,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 850]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["(?i)POWERALERT"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/powercode.yaml
     only(&VendorRule {
@@ -4779,6 +6282,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["powercode bmu"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/powerconnect.yaml
     only(&VendorRule {
@@ -4788,6 +6293,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 10895]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/powerlogic.yaml
     only(&VendorRule {
@@ -4797,6 +6304,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3833, 1, 7, 255, 15]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/powervault.yaml
     only(&VendorRule {
@@ -4806,6 +6315,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674, 10893, 2, 102]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/powerwalker-vfi.yaml
     only(&VendorRule {
@@ -4815,6 +6326,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3808, 1, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/powerwalker.yaml
     only(&VendorRule {
@@ -4824,6 +6337,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 935, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^Network Management Card for UPS"],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/prestige.yaml
+    only(&VendorRule {
+        id: "prestige",
+        display_name: "ZyXEL Prestige",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^P-.*-", "^Prestige"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/prismasdwan.yaml
     only(&VendorRule {
@@ -4833,6 +6359,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 50114, 11, 1, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/procera.yaml
     only(&VendorRule {
@@ -4842,6 +6370,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 15397, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/procurve.yaml
     only(&VendorRule {
@@ -4854,6 +6384,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/profline-sfd.yaml
     only(&VendorRule {
@@ -4863,6 +6395,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21222, 1, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/protelevision-t1.yaml
     only(&VendorRule {
@@ -4872,6 +6406,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 18086, 8]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/proxim.yaml
     only(&VendorRule {
@@ -4881,6 +6417,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11898, 2, 4, 9]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ptp250.yaml
     only(&VendorRule {
@@ -4890,6 +6428,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 250]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ptp500.yaml
     only(&VendorRule {
@@ -4899,6 +6439,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ptp600.yaml
     only(&VendorRule {
@@ -4908,6 +6450,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ptp650.yaml
     only(&VendorRule {
@@ -4917,6 +6461,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ptp670.yaml
     only(&VendorRule {
@@ -4926,6 +6472,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 11]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ptp800.yaml
     only(&VendorRule {
@@ -4935,6 +6483,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17713, 8]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/pulse.yaml
     only(&VendorRule {
@@ -4944,6 +6494,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 12532]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/purestorage.yaml
     only(&VendorRule {
@@ -4953,6 +6505,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 40482]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/qnap.yaml
     only(&VendorRule {
@@ -4962,6 +6516,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 24681]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/qtech.yaml
     only(&VendorRule {
@@ -4971,6 +6527,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27514]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/quanta.yaml
     only(&VendorRule {
@@ -4980,6 +6538,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4413], &[1, 3, 6, 1, 4, 1, 7244]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/quantum.yaml
     only(&VendorRule {
@@ -4989,6 +6549,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3764, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rad-rici.yaml
     only(&VendorRule {
@@ -4998,6 +6560,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 164, 6, 1, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/radlan.yaml
     only(&VendorRule {
@@ -5015,6 +6579,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["at-8000"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/radwin.yaml
     only(&VendorRule {
@@ -5028,6 +6594,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/raisecom-ros.yaml
     only(&VendorRule {
@@ -5037,6 +6605,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8886]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/raisecom.yaml
     only(&VendorRule {
@@ -5046,6 +6616,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8886]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rajant.yaml
     only(&VendorRule {
@@ -5055,6 +6627,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 34861, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/raritan-emx.yaml
     only(&VendorRule {
@@ -5064,6 +6638,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13742, 8]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/raritan-kvm.yaml
     only(&VendorRule {
@@ -5073,6 +6649,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13742, 3, 2, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ray.yaml
     only(&VendorRule {
@@ -5082,6 +6660,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 33555, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ray3.yaml
     only(&VendorRule {
@@ -5091,6 +6671,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 33555, 4, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ricoh.yaml
     only(&VendorRule {
@@ -5100,6 +6682,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["ricoh aficio", "ricoh network printer"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rittal-cmc-iii-pu.yaml
     only(&VendorRule {
@@ -5109,6 +6693,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2606, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rittal-cmc.yaml
     only(&VendorRule {
@@ -5118,6 +6704,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2606, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rittal-lcp.yaml
     only(&VendorRule {
@@ -5127,6 +6715,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2606, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/riverbed.yaml
     only(&VendorRule {
@@ -5136,6 +6726,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17163]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rnx-updu.yaml
     only(&VendorRule {
@@ -5145,6 +6737,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 55108, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ros.yaml
     only(&VendorRule {
@@ -5157,6 +6751,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/routeros.yaml
     only(&VendorRule {
@@ -5166,6 +6762,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14988, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/rs.yaml
     only(&VendorRule {
@@ -5175,6 +6773,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2566, 127, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ruckuswireless-hotzone.yaml
     only(&VendorRule {
@@ -5184,6 +6784,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25053, 3, 1, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ruckuswireless-sz.yaml
     only(&VendorRule {
@@ -5196,6 +6798,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ruckuswireless-unleashed.yaml
     only(&VendorRule {
@@ -5208,6 +6812,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["^Ruckus Wireless R\\d{3}"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ruckuswireless.yaml
     only(&VendorRule {
@@ -5217,6 +6823,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25053, 3, 1, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.25053.1.2.1.1.1.1.9.0",
+            op: ProbeOp::Starts,
+            value: "['ZD', 'zd']",
+        }],
     }),
     // LibreNMS os_detection/ruijie.yaml
     only(&VendorRule {
@@ -5226,6 +6838,45 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4881, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/rutos-2xx.yaml
+    only(&VendorRule {
+        id: "rutos-2xx",
+        display_name: "Teltonika RutOS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[
+            ProbeCheck {
+                oid: "1.3.6.1.4.1.48690.1.6.0",
+                op: ProbeOp::Starts,
+                value: "RUT2_",
+            },
+            ProbeCheck {
+                oid: "1.3.6.1.4.1.48690.2.14.0",
+                op: ProbeOp::Starts,
+                value: "RUT2XX",
+            },
+        ],
+    }),
+    // LibreNMS os_detection/rutos-otd.yaml
+    only(&VendorRule {
+        id: "rutos-otd",
+        display_name: "Teltonika OTD Series",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.48690.1.3.0",
+            op: ProbeOp::Starts,
+            value: "OTD",
+        }],
     }),
     // LibreNMS os_detection/rutos-rutm.yaml
     only(&VendorRule {
@@ -5235,6 +6886,42 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 48690]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.48690.1.3.0",
+            op: ProbeOp::Starts,
+            value: "['RUTM']",
+        }],
+    }),
+    // LibreNMS os_detection/rutos-rutx.yaml
+    only(&VendorRule {
+        id: "rutos-rutx",
+        display_name: "Teltonika RutOS RUTX Series",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.48690.1.3.0",
+            op: ProbeOp::Starts,
+            value: "['RUT2', 'RUT360', 'RUT950', 'RUT955', 'RUT956', 'RUTX', 'TRB160', 'TRB255', 'TRB500']",
+        }],
+    }),
+    // LibreNMS os_detection/rutos.yaml
+    only(&VendorRule {
+        id: "rutos",
+        display_name: "teltonika rutos",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.48690.2.14.0",
+            op: ProbeOp::Starts,
+            value: "RUT9XX",
+        }],
     }),
     // LibreNMS os_detection/saf-cfm.yaml
     only(&VendorRule {
@@ -5244,6 +6931,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7571, 100, 1, 1, 2, 22]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/saf-integra-b.yaml
     only(&VendorRule {
@@ -5253,6 +6942,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7571, 100, 1, 1, 7, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/saf-integra-e.yaml
     only(&VendorRule {
@@ -5262,6 +6953,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7571, 100, 1, 1, 7, 9]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/saf-integra-w.yaml
     only(&VendorRule {
@@ -5271,6 +6964,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7571, 100, 1, 1, 7, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/saf-integra-x.yaml
     only(&VendorRule {
@@ -5280,6 +6975,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7571, 100, 1, 1, 7, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/saf.yaml
     only(&VendorRule {
@@ -5292,6 +6989,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/samlex.yaml
     only(&VendorRule {
@@ -5301,6 +7000,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 49075]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/samsungprinter.yaml
     only(&VendorRule {
@@ -5316,6 +7017,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "samsung x",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sanos.yaml
     only(&VendorRule {
@@ -5325,6 +7028,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["san-os"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/savin.yaml
     only(&VendorRule {
@@ -5334,6 +7039,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["savin"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/scalance.yaml
     only(&VendorRule {
@@ -5346,6 +7053,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/schleifenbauer-pdu5.yaml
     only(&VendorRule {
@@ -5355,6 +7064,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 44568, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/schleifenbauer.yaml
     only(&VendorRule {
@@ -5367,6 +7078,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/scopia.yaml
     only(&VendorRule {
@@ -5376,6 +7089,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 903, 31]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/screenos.yaml
     only(&VendorRule {
@@ -5385,6 +7100,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3224]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/scs-ks.yaml
     only(&VendorRule {
@@ -5394,6 +7111,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9839]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/seh-uds.yaml
     only(&VendorRule {
@@ -5403,6 +7122,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1229]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sensatronics-em1.yaml
     only(&VendorRule {
@@ -5412,6 +7133,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 16174, 1, 1, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sensatronics-ittm.yaml
     only(&VendorRule {
@@ -5421,6 +7144,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 16174, 1, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sentry3.yaml
     only(&VendorRule {
@@ -5430,6 +7155,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1718, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sentry4.yaml
     only(&VendorRule {
@@ -5439,6 +7166,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1718, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/seos.yaml
     only(&VendorRule {
@@ -5448,6 +7177,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2352, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/serveriron.yaml
     only(&VendorRule {
@@ -5457,6 +7188,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["serveriron"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/serverscheck.yaml
     only(&VendorRule {
@@ -5466,6 +7199,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 17095]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sgos.yaml
     only(&VendorRule {
@@ -5475,6 +7210,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["sgos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/sharp.yaml
+    only(&VendorRule {
+        id: "sharp",
+        display_name: "Sharp Printer",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["SHARP (BP|MX)-"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siklu-mhtg.yaml
     only(&VendorRule {
@@ -5484,6 +7232,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 31926, 35]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siklu.yaml
     only(&VendorRule {
@@ -5493,6 +7243,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 31926]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/sinetica.yaml
+    only(&VendorRule {
+        id: "sinetica",
+        display_name: "Sinetica UPS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Sinetica UPSController."],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siteboss.yaml
     only(&VendorRule {
@@ -5502,6 +7265,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3052, 12]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siteboss360.yaml
     only(&VendorRule {
@@ -5511,6 +7276,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3052, 23, 3, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siteboss550.yaml
     only(&VendorRule {
@@ -5520,6 +7287,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3052, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siteboss571.yaml
     only(&VendorRule {
@@ -5529,6 +7298,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3052, 14]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/siteboss572.yaml
     only(&VendorRule {
@@ -5538,6 +7309,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3052, 20]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sitemonitor.yaml
     only(&VendorRule {
@@ -5547,6 +7320,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 32050]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sitemonitor3.yaml
     only(&VendorRule {
@@ -5556,6 +7331,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 32050, 1, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sixnet.yaml
     only(&VendorRule {
@@ -5565,6 +7342,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20540, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/skyhighwebprotect.yaml
     only(&VendorRule {
@@ -5577,6 +7356,12 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.59732.2.7.1.1.0",
+            op: ProbeOp::Starts,
+            value: "Skyhigh Secure Web Gateway",
+        }],
     }),
     // LibreNMS os_detection/slms.yaml
     only(&VendorRule {
@@ -5589,6 +7374,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/slxos.yaml
     only(&VendorRule {
@@ -5601,6 +7388,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sm-os.yaml
     only(&VendorRule {
@@ -5610,6 +7399,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3373, 1103]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/smartax-mdu.yaml
     only(&VendorRule {
@@ -5619,6 +7410,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011, 2, 185]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/smartax.yaml
     only(&VendorRule {
@@ -5634,6 +7427,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["huawei integrated access software"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/smartbyte.yaml
     only(&VendorRule {
@@ -5643,6 +7438,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 56166]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/smartos-dcp-m.yaml
     only(&VendorRule {
@@ -5652,6 +7449,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30826, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/smartos-t.yaml
     only(&VendorRule {
@@ -5661,6 +7460,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4515, 100, 1, 1000]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/smartos.yaml
     only(&VendorRule {
@@ -5670,6 +7471,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 30826, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/snr-erd.yaml
     only(&VendorRule {
@@ -5679,6 +7482,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 40418, 2, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/snr-olt.yaml
     only(&VendorRule {
@@ -5688,6 +7493,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 65268, 1, 3, 34]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/snr.yaml
     only(&VendorRule {
@@ -5700,6 +7507,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/socomec-ups.yaml
     only(&VendorRule {
@@ -5709,6 +7518,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4555, 1, 1, 7]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/socomec.yaml
     only(&VendorRule {
@@ -5718,6 +7529,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4555, 2, 30]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/solidserver.yaml
     only(&VendorRule {
@@ -5727,6 +7540,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2440]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sonicwall.yaml
     only(&VendorRule {
@@ -5736,6 +7551,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8741]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sonus-gsx.yaml
     only(&VendorRule {
@@ -5745,6 +7562,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2879, 1, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sonus-sbc.yaml
     only(&VendorRule {
@@ -5757,6 +7576,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sophos-xg.yaml
     only(&VendorRule {
@@ -5766,6 +7587,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2604, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/speedtouch.yaml
     only(&VendorRule {
@@ -5775,6 +7598,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["speedtouch ", "tg585v7"],
         descr_keywords_except: &[],
+        descr_regexes: &["^ST"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/srlinux.yaml
     only(&VendorRule {
@@ -5784,6 +7609,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6527, 1, 20]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sslvis.yaml
     only(&VendorRule {
@@ -5793,6 +7620,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3417, 1, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ssu2000.yaml
     only(&VendorRule {
@@ -5802,6 +7631,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 601, 3, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/stellar.yaml
     only(&VendorRule {
@@ -5811,6 +7642,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6486, 802]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/stoneos.yaml
     only(&VendorRule {
@@ -5820,6 +7653,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 28557, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/stulz.yaml
     only(&VendorRule {
@@ -5829,6 +7664,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 29462]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/sub10.yaml
     only(&VendorRule {
@@ -5838,6 +7675,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39003]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/supermicro-switch.yaml
+    only(&VendorRule {
+        id: "supermicro-switch",
+        display_name: "Supermicro Switch",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^SBM-", "^SSE-", "^SuperSwitch", "^Supermicro Switch"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/svos.yaml
     only(&VendorRule {
@@ -5847,6 +7697,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 116, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/swos.yaml
     only(&VendorRule {
@@ -5856,6 +7708,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14988, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/symbol.yaml
     only(&VendorRule {
@@ -5865,6 +7719,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 388]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tachyon.yaml
     only(&VendorRule {
@@ -5874,6 +7730,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 57344]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tailyn.yaml
     only(&VendorRule {
@@ -5883,6 +7741,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5833, 2017]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tait-infra93.yaml
     only(&VendorRule {
@@ -5892,6 +7752,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3570, 2, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tait-tnadmin.yaml
     only(&VendorRule {
@@ -5901,6 +7763,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3570, 3, 15]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/teldat.yaml
     only(&VendorRule {
@@ -5910,6 +7774,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2007]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/televes-fs.yaml
     only(&VendorRule {
@@ -5919,6 +7785,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 23180, 2, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/teracom.yaml
     only(&VendorRule {
@@ -5928,6 +7796,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 38783]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/teradici-pcoip.yaml
     only(&VendorRule {
@@ -5937,6 +7807,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25071, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/terra-receivers.yaml
     only(&VendorRule {
@@ -5950,6 +7822,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tgos.yaml
     only(&VendorRule {
@@ -5959,6 +7833,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2863, 405, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/thomson-cm.yaml
     only(&VendorRule {
@@ -5968,6 +7844,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2863, 205, 43014, 420, 4, 0, 82, 4, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/timos.yaml
     only(&VendorRule {
@@ -5977,6 +7855,23 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6527]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/tomato.yaml
+    only(&VendorRule {
+        id: "tomato",
+        display_name: "Tomato",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[ProbeCheck {
+            oid: "1.3.6.1.4.1.2021.7890.1.101.1",
+            op: ProbeOp::Starts,
+            value: "Tomato",
+        }],
     }),
     // LibreNMS os_detection/topvision.yaml
     only(&VendorRule {
@@ -5986,6 +7881,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 32285, 11]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/toshiba-tec.yaml
     only(&VendorRule {
@@ -5995,6 +7892,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1129, 1, 2]],
         descr_keywords: &["toshiba e-studio"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tpconductor.yaml
     only(&VendorRule {
@@ -6004,6 +7903,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5596, 180, 6, 4, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tpdin.yaml
     only(&VendorRule {
@@ -6013,6 +7914,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 45621, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tpdin3.yaml
     only(&VendorRule {
@@ -6022,6 +7925,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 45621, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tplink.yaml
     only(&VendorRule {
@@ -6031,6 +7936,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11863], &[1, 3, 6, 1, 4, 1, 16972]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/transition.yaml
     only(&VendorRule {
@@ -6040,6 +7947,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 868]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/tranzeo.yaml
+    only(&VendorRule {
+        id: "tranzeo",
+        display_name: "Tranzeo",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Tranzeo"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/trendnet.yaml
     only(&VendorRule {
@@ -6056,6 +7976,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/trippliteconsole.yaml
     only(&VendorRule {
@@ -6068,6 +7990,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/truenas-scale.yaml
     only(&VendorRule {
@@ -6077,6 +8001,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 50536, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/truenas.yaml
     only(&VendorRule {
@@ -6086,6 +8012,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 50536, 3]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ts-bspdu.yaml
     only(&VendorRule {
@@ -6095,6 +8023,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 42610, 1, 4, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/tsc.yaml
     only(&VendorRule {
@@ -6104,6 +8034,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 51966]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ubiquoss-pon.yaml
     only(&VendorRule {
@@ -6113,6 +8045,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7800, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ucopia.yaml
     only(&VendorRule {
@@ -6122,6 +8056,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 31218]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ucos.yaml
     only(&VendorRule {
@@ -6134,6 +8070,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &["cisco nx-os(tm) ucs", "software:ucos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/uhp.yaml
     only(&VendorRule {
@@ -6143,6 +8081,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 8000]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/ulaf.yaml
     only(&VendorRule {
@@ -6152,6 +8092,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1887, 1, 1, 1, 2, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/unifi.yaml
     only(&VendorRule {
@@ -6161,6 +8103,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 10002, 1], &[1, 3, 6, 1, 4, 1, 41112]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/uniping.yaml
     only(&VendorRule {
@@ -6170,6 +8114,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25728]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/univerge.yaml
     only(&VendorRule {
@@ -6179,6 +8125,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 119, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/utax.yaml
     only(&VendorRule {
@@ -6188,6 +8136,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1347, 41]],
         descr_keywords: &["ta_utax printing system"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/valere.yaml
     only(&VendorRule {
@@ -6197,6 +8147,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13858]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vccodec.yaml
     only(&VendorRule {
@@ -6206,6 +8158,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5596, 150, 6, 4, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vcs.yaml
     only(&VendorRule {
@@ -6215,6 +8169,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5596, 130, 6, 4, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vega.yaml
     only(&VendorRule {
@@ -6224,6 +8180,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4686]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/velocloud.yaml
     only(&VendorRule {
@@ -6233,6 +8191,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 45346, 1, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vertiv-dcs.yaml
     only(&VendorRule {
@@ -6242,6 +8202,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2021, 250, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vertiv-ita2.yaml
     only(&VendorRule {
@@ -6251,6 +8213,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 13400, 2, 54]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vertiv-pdu.yaml
     only(&VendorRule {
@@ -6260,6 +8224,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 21239, 42, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vigintos.yaml
     only(&VendorRule {
@@ -6269,6 +8235,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 27993, 5]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/viprinux.yaml
     only(&VendorRule {
@@ -6278,6 +8246,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["viprinet vpn router"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/viptela.yaml
     only(&VendorRule {
@@ -6287,6 +8257,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 41916]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vivotek.yaml
     only(&VendorRule {
@@ -6296,6 +8268,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 23465]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/volius.yaml
     only(&VendorRule {
@@ -6305,6 +8279,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 34652]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vos.yaml
     only(&VendorRule {
@@ -6314,6 +8290,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 42359, 2, 2, 1, 1, 4, 1, 2]],
         descr_keywords: &["versa appliance"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/voss.yaml
     only(&VendorRule {
@@ -6323,6 +8301,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1916, 2], &[1, 3, 6, 1, 4, 1, 2272]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/voswall.yaml
     only(&VendorRule {
@@ -6332,6 +8312,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["voswall"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vrp.yaml
     only(&VendorRule {
@@ -6346,6 +8328,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
             "vrp software version",
         ],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vsolution.yaml
     only(&VendorRule {
@@ -6355,6 +8339,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 37950]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vubiq.yaml
     only(&VendorRule {
@@ -6364,6 +8350,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 46330, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vutlan.yaml
     only(&VendorRule {
@@ -6373,6 +8361,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 39052]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vxoa.yaml
     only(&VendorRule {
@@ -6382,6 +8372,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 23867, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/vyatta.yaml
+    only(&VendorRule {
+        id: "vyatta",
+        display_name: "Vyatta",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Vyatta"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/vyos.yaml
     only(&VendorRule {
@@ -6391,6 +8394,19 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 44641]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &["(?i)^VyOS", "^Vyatta VyOS"],
+        probe_checks: &[],
+    }),
+    // LibreNMS os_detection/waas.yaml
+    only(&VendorRule {
+        id: "waas",
+        display_name: "Cisco WAAS",
+        aliases: &[],
+        sysobjectid_prefixes: &[],
+        descr_keywords: &[],
+        descr_keywords_except: &[],
+        descr_regexes: &["^Cisco Wide Area Application Services"],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wavence.yaml
     only(&VendorRule {
@@ -6403,6 +8419,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/webmon.yaml
     only(&VendorRule {
@@ -6412,6 +8430,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 994, 3, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/webpower-smart2.yaml
     only(&VendorRule {
@@ -6421,6 +8441,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2468, 1, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/webpower.yaml
     only(&VendorRule {
@@ -6430,6 +8452,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2468, 1, 2, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/websensor.yaml
     only(&VendorRule {
@@ -6439,6 +8463,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 22626, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/weos.yaml
     only(&VendorRule {
@@ -6448,6 +8474,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 16177]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/westmountainradio.yaml
     only(&VendorRule {
@@ -6457,6 +8485,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 15117, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wipipe.yaml
     only(&VendorRule {
@@ -6466,6 +8496,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 20992]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wis-bridge.yaml
     only(&VendorRule {
@@ -6475,6 +8507,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 62821, 1, 4]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wiseway.yaml
     only(&VendorRule {
@@ -6484,6 +8518,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["wiseway network adapter"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wisi-tangram.yaml
     only(&VendorRule {
@@ -6493,6 +8529,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 7465]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/witchos.yaml
     only(&VendorRule {
@@ -6502,6 +8540,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 24686]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wti-console.yaml
     only(&VendorRule {
@@ -6511,6 +8551,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2634, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wti-power.yaml
     only(&VendorRule {
@@ -6520,6 +8562,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2634, 6]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wut.yaml
     only(&VendorRule {
@@ -6529,6 +8573,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 5040, 1, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/wxgoos.yaml
     only(&VendorRule {
@@ -6538,6 +8584,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 901, 1], &[1, 3, 6, 1, 4, 1, 17373]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/xclarity.yaml
     only(&VendorRule {
@@ -6547,6 +8595,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 19046, 11, 1]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/xerox.yaml
     only(&VendorRule {
@@ -6559,6 +8609,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/xirrus_aos.yaml
     only(&VendorRule {
@@ -6568,6 +8620,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["arrayos", "xirrus"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/xos.yaml
     only(&VendorRule {
@@ -6577,6 +8631,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1916, 2]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/yunshan.yaml
     only(&VendorRule {
@@ -6586,6 +8642,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011, 2, 23]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zebra.yaml
     only(&VendorRule {
@@ -6595,6 +8653,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 683], &[1, 3, 6, 1, 4, 1, 10642]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zmtel.yaml
     only(&VendorRule {
@@ -6604,6 +8664,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 38595, 10]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zxa10.yaml
     only(&VendorRule {
@@ -6613,6 +8675,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 3902, 1082]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zxdsl.yaml
     only(&VendorRule {
@@ -6625,6 +8689,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zxr10.yaml
     only(&VendorRule {
@@ -6634,6 +8700,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["zte 5950", "zte ethernet switch", "zxr10"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zynos.yaml
     only(&VendorRule {
@@ -6643,6 +8711,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 890]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zywall.yaml
     only(&VendorRule {
@@ -6655,6 +8725,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zyxelac.yaml
     only(&VendorRule {
@@ -6664,6 +8736,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 890]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zyxelnwa.yaml
     only(&VendorRule {
@@ -6673,6 +8747,8 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 890, 1, 15]],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // LibreNMS os_detection/zyxelwlc.yaml
     only(&VendorRule {
@@ -6685,5 +8761,7 @@ pub(super) static COMMUNITY: &[VendorMib] = &[
         ],
         descr_keywords: &[],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
 ];

@@ -123,7 +123,18 @@ pub async fn probe<R: SnmpReader>(reader: &R) -> Result<DeviceProfile, ProbeErro
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let identity = vendor::identify(object_id.as_ref(), descr);
+    let mut identity = vendor::identify(object_id.as_ref(), descr);
+    // 静态证据（前缀/关键词/正则）全未命中 → 主动探测一轮 GET 比对
+    //（LibreNMS snmpget 语义，见 vendor/probe.rs；每探测周期仅此一次）
+    if identity.vendor_guess.is_none()
+        && let Some(probed) = vendor::probe::identify_by_probes(reader).await
+    {
+        tracing::debug!(
+            "SNMP 主动探测识别厂商: {}",
+            probed.vendor_guess.unwrap_or_default()
+        );
+        identity = probed;
+    }
     let vendor = vendor::vendor_kind(identity.vendor_guess);
     let oid_set = vendor::oid_set(identity.vendor_guess);
 

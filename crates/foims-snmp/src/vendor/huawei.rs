@@ -34,6 +34,8 @@ pub(super) static RULE: VendorRule = VendorRule {
     // "versatile routing platform" 为华为 VRP 系统 sysDescr 多词关键词
     descr_keywords: &["huawei", "versatile routing platform"],
     descr_keywords_except: &[],
+    descr_regexes: &[],
+    probe_checks: &[],
 };
 
 pub(super) static OID_SET: VendorOidSet = VendorOidSet {

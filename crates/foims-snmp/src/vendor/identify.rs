@@ -1,10 +1,28 @@
 //! 双证据聚合纯函数：sysObjectID 企业号 + sysDescr 词边界关键词
 //! → 平台/厂商/置信度/证据（§6.1）。无 IO，全部输入即可测试。
 
+use std::sync::LazyLock;
+
 use async_snmp::Oid;
+use regex::Regex;
 
 use super::platform::{self, PlatformRule};
 use super::{Confidence, SnmpIdentity, VendorRule, registry};
+
+/// 全部规则的 descr_regexes 编译缓存（与 registry() 迭代顺序一一对应）。
+/// 编译失败的项为 None——上游 PCRE 超出 Rust regex 语法子集（如
+/// look-around），数量记录于 community.rs 生成头，不中断识别
+static DESCR_REGEXES: LazyLock<Vec<Vec<Option<Regex>>>> = LazyLock::new(|| {
+    registry()
+        .map(|m| {
+            m.rule
+                .descr_regexes
+                .iter()
+                .map(|r| Regex::new(r).ok())
+                .collect()
+        })
+        .collect()
+});
 
 /// 识别入口：输入 sysObjectID 与 sysDescr（均可缺失）。
 pub fn identify(object_id: Option<&Oid>, descr: Option<&str>) -> SnmpIdentity {
@@ -46,8 +64,21 @@ pub fn identify(object_id: Option<&Oid>, descr: Option<&str>) -> SnmpIdentity {
     }
     let ent_vendor = prefix_match.map(|(m, _)| m);
     let tokens = descr.map(vendor_tokens);
-    let descr_vendor = tokens.as_ref().and_then(|tk| {
-        registry().find(|m| m.rule.descr_keywords.iter().any(|k| keyword_hit(tk, k)))
+    // sysDescr 证据：词元关键词（词边界）或正则（上游 sysDescr_regex 转换），
+    // registry 顺序即优先级
+    let descr_vendor = descr.and_then(|d| {
+        let tk = vendor_tokens(d);
+        registry()
+            .enumerate()
+            .find(|(idx, m)| {
+                m.rule.descr_keywords.iter().any(|k| keyword_hit(&tk, k))
+                    || m.rule.descr_regexes.iter().enumerate().any(|(ri, _pat)| {
+                        DESCR_REGEXES[*idx][ri]
+                            .as_ref()
+                            .is_some_and(|re| re.is_match(d))
+                    })
+            })
+            .map(|(_, m)| m)
     });
     if let Some(m) = descr_vendor {
         evidence.push(format!("sysDescr 命中 {}", m.rule.display_name));
@@ -379,6 +410,17 @@ mod tests {
         );
         let id = identify(Some(&oid("1.3.6.1.4.1.9.1.716")), None);
         assert_eq!(id.vendor_guess, Some("cisco"));
+    }
+
+    #[test]
+    fn 厂商识别_sysdescr正则命中() {
+        // community.rs 转换的 sysDescr_regex（LibreNMS buffalo.yaml ^BUFFALO）：
+        // 关键词之外的第三条静态证据路径，仅描述证据 → Low
+        let id = identify(None, Some("BUFFALO BS-GS2024"));
+        assert_eq!(id.vendor_guess, Some("buffalo"));
+        assert_eq!(id.confidence, Confidence::Low);
+        // ^ 锚定语义：非行首不命中（正则不回退到关键词路径）
+        assert_eq!(vendor_of("Wireless BUFFALO router"), None);
     }
 
     #[test]

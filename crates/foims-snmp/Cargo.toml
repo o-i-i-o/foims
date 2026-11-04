@@ -1,6 +1,6 @@
 [package]
 name = "foims-snmp"
-version = "0.1.15"
+version = "0.1.16"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS SNMP 域：协议参数构造与鉴权、设备采集（系统信息/端口/LLDP/ARP/性能指标）、观测事件与业务文案构造"
@@ -9,6 +9,9 @@ license = "GPL-3.0-or-later"
 [dependencies]
 # SNMP 协议客户端（原寄居 foims-resource / foims-agent-service，随域拆分归口本 crate）
 async-snmp = "0.18.1"
+
+# 厂商识别正则（vendor 规则 descr_regexes / probe 值比对）
+regex.workspace = true
 
 # Axum（SNMP 探测/信息采集 handler）
 axum = { workspace = true }
@@ -44,6 +47,10 @@ foims-models = { path = "../foims-models" }
 foims-auth = { path = "../foims-auth" }
 # 站内通知原语与邮件/Webhook 渠道外发门面
 foims-notify = { path = "../foims-notify" }
+
+[dev-dependencies]
+# 测试构造 Value::OctetString（async-snmp 未 re-export Bytes）
+bytes = { workspace = true }
 
 [lints]
 workspace = true

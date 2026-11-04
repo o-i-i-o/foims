@@ -30,6 +30,8 @@ pub(super) static RULE: VendorRule = VendorRule {
     sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25506]],
     descr_keywords: &["h3c", "comware", "3com"],
     descr_keywords_except: &[],
+    descr_regexes: &[],
+    probe_checks: &[],
 };
 
 pub(super) static OID_SET: VendorOidSet = VendorOidSet {

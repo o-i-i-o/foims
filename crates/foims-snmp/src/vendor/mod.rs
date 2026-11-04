@@ -19,6 +19,7 @@ mod h3c;
 mod huawei;
 pub mod identify;
 pub mod platform;
+pub mod probe;
 
 use async_snmp::Oid;
 
@@ -54,6 +55,39 @@ pub struct VendorRule {
     /// sysDescr 排除关键词：命中即证据降级为 Low（OEM/固件上报他人企业号，
     /// 对应 LibreNMS sysDescr_except 实践）。初始规则暂无已知排除词
     pub descr_keywords_except: &'static [&'static str],
+    /// sysDescr 正则关键词（Rust regex 语法——上游 PCRE 的无 look-around
+    /// 子集，编译失败的丢弃并记录于 community.rs 生成头）。命中与关键词
+    /// 同级记 sysDescr 证据（Low）。仅收正向 sysDescr_regex；except 排除
+    /// 正则对无其他证据的 OS 无识别价值，不转换
+    pub descr_regexes: &'static [&'static str],
+    /// 主动探测检查（LibreNMS snmpget 语义，多条 AND）：前缀/关键词/正则
+    /// 全未命中时经 probe 链路 GET 比对（识别期 IO，仅 profile 探测期一次，
+    /// 见 vendor/probe.rs）。上游 op=!= 的负条件不转换（几乎所有值都满足，
+    /// 无识别价值）
+    pub probe_checks: &'static [ProbeCheck],
+}
+
+/// 主动探测单条检查：GET `oid` 后按 `op` 比对响应值与 `value`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProbeCheck {
+    pub oid: &'static str,
+    pub op: ProbeOp,
+    pub value: &'static str,
+}
+
+/// 探测值比对方式（对应 LibreNMS snmpget op；无 op 字段默认 Exists）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbeOp {
+    /// OID 有非异常响应即命中
+    Exists,
+    /// 值包含子串
+    Contains,
+    /// 值以前缀开头
+    Starts,
+    /// 值完全相等
+    Equals,
+    /// 值匹配正则（Rust regex 语法）
+    Regex,
 }
 
 /// 厂商内存采集 OID 方案参数（探测期据此确定 MemPlan 形态与索引）。
@@ -139,6 +173,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2636]],
         descr_keywords: &["juniper", "junos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "dell",
@@ -147,6 +183,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674]],
         descr_keywords: &["dell"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // 企业号 11 同时覆盖 Comware（→h3c 冲突，描述词胜出）与
     // ProVision/Aruba（本条），冲突组合一律 Low + 人工确认（§6.1）
@@ -163,6 +201,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11]],
         descr_keywords: &["hp", "hpe", "procurve", "hewlett packard"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "aruba",
@@ -171,6 +211,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14823]],
         descr_keywords: &["aruba", "arubaos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "netgear",
@@ -179,6 +221,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4526]],
         descr_keywords: &["netgear", "prosafe"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     // TP-Link/Linksys/ZyXEL 企业号未核实，留空不虚构（§5.3.1）
     only(&VendorRule {
@@ -188,6 +232,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["tp-link", "tplink"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "linksys",
@@ -196,6 +242,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["linksys"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "ubiquiti",
@@ -208,6 +256,8 @@ static BUILTIN: &[VendorMib] = &[
         ],
         descr_keywords: &["ubiquiti", "ubnt", "unifi"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "mikrotik",
@@ -216,6 +266,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14988]],
         descr_keywords: &["mikrotik", "routeros"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "extreme",
@@ -224,6 +276,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1916]],
         descr_keywords: &["extreme", "extremexos"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "alcatel",
@@ -232,6 +286,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6486]],
         descr_keywords: &["alcatel"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "zyxel",
@@ -240,6 +296,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[],
         descr_keywords: &["zyxel"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
     only(&VendorRule {
         id: "d-link",
@@ -248,6 +306,8 @@ static BUILTIN: &[VendorMib] = &[
         sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 171]],
         descr_keywords: &["d-link", "dlink"],
         descr_keywords_except: &[],
+        descr_regexes: &[],
+        probe_checks: &[],
     }),
 ];
 

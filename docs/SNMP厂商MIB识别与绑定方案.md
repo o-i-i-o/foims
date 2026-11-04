@@ -134,6 +134,24 @@ pub struct VendorRule {
     /// 企业号的场景，如华为 USG 防火墙上报 net-snmp sysObjectID 8072.3.2.10）。
     /// 对应 LibreNMS sysDescr_except 实践，来源标注同上
     pub descr_keywords_except: &'static [&'static str],
+    /// sysDescr 正则关键词（Rust regex 语法——上游 PCRE 的无 look-around
+    /// 子集，定界符剥除、/i 转 (?i)；编译失败的丢弃并记录于 community.rs
+    /// 生成头）。命中与关键词同级记 sysDescr 证据；仅收纯 sysDescr 块的
+    /// 正向正则（except 排除正则对无其他证据的 OS 无识别价值，不转换）
+    pub descr_regexes: &'static [&'static str],
+    /// 主动探测检查（LibreNMS snmpget 语义，多条 AND）：前缀/关键词/正则
+    /// 全未命中时经 probe 链路 GET 比对（识别期 IO 收敛于 profile 探测
+    /// 链路，见 vendor/probe.rs）。上游 op=!= 的负条件不转换（几乎所有
+    /// 值都满足，无识别价值）；探测 OID 仅收点分数字（MIB 名格式运行时
+    /// 零 MIB 依赖无法解析，生成端丢弃并计数）
+    pub probe_checks: &'static [ProbeCheck],
+}
+
+/// 主动探测单条检查：GET `oid` 后按 `op` 比对响应值与 `value`。
+pub struct ProbeCheck {
+    pub oid: &'static str, // 点分数字 OID
+    pub op: ProbeOp,       // Exists / Contains / Starts / Equals / Regex
+    pub value: &'static str,
 }
 ```
 
@@ -192,8 +210,8 @@ pub struct SnmpIdentity {
 2. 采集库初始仅 cisco/huawei/h3c，OID 常量从 profile.rs 迁入，**每条常量上方注释必须注明来源**：RFC 号 / 厂商公开 MIB 文件名 / IANA 企业号。迁移时顺带修正粗糙口径：华为实体表 `hwEntityCpuUsageThreshold=0` 占位行应跳过（借鉴 LibreNMS skip_values），不再只按 0..=100 过滤；
 3. 采集库 ⊂ 识别规则：识别得出但无采集库的品牌（如 Juniper）→ 展示识别结果，不提供绑定；
 4. 新增厂商 = 新增模块文件 + registry 注册 + 单测，不动核心逻辑；示例厂商骨架注释必须标注「示例」；
-5. 规则数据的批量来源（GPL 上游只提取识别事实：sysObjectID 前缀 + sysDescr 关键词，不拷贝采集配置表达；优先级从高到低）：
-   - **LibreNMS `resources/definitions/os_detection/*.yaml`**（822 个 OS 识别规则、持续更新的社区验证数据）：**已按 LibreNMS 的 OS 级分组方式直接全量入库**（项目决策：社区验证数据可信，不按品牌级人工归并）——识别模型随之升级为 sysObjectID 前缀**最长匹配**（LibreNMS 语义），OS 级深前缀（如 9.1.2330=ios 特定型号）优先于品牌级 7 弧前缀，同长度内置优先；命中 OS 级 id 后经 `vendor_kind()` 按 LibreNMS group 归属采集库（cisco 组全产品线→Cisco；华为仅 vrp/yunshan→Huawei，oceanstor/smartax 等存储接入线走 Generic；comware→H3c）。入库落地为 **`da-scripts/gen_vendor_community.py`**（本地 sparse clone 全量转换 → `vendor/community.rs`，勿手改），转换口径：排除平台类（type=server/unix，29 个，属 platform.rs 域）与无有效证据 OS（仅正则/主动探测）；**关键词仅从纯 sysDescr 块收集**——上游 AND 块（前缀+关键词+snmpget 组合，如 airos-af-ltu=8072+"Linux"+UBNT MIB 探测）的关键词是跨设备通用词，作为独立证据只会误命中；单词元 ≤2 字符关键词丢弃；正则（191 条）与 snmpget（87 条）不机械转换（计数记录于生成文件头）。现状 822 → 686 条 OS 规则 + 16 内置品牌级规则共存。8072(net-snmp) 下聚合 68 个互不相干 OS，印证「8072 不作厂商证据」的设计；
+5. 规则数据的批量来源（GPL 上游只提取识别事实：sysObjectID 前缀 + sysDescr 关键词/正则 + 主动探测检查，不拷贝采集配置表达；优先级从高到低）：
+   - **LibreNMS `resources/definitions/os_detection/*.yaml`**（822 个 OS 识别规则、持续更新的社区验证数据）：**已按 LibreNMS 的 OS 级分组方式直接全量入库**（项目决策：社区验证数据可信，不按品牌级人工归并）——识别模型随之升级为 sysObjectID 前缀**最长匹配**（LibreNMS 语义），OS 级深前缀（如 9.1.2330=ios 特定型号）优先于品牌级 7 弧前缀，同长度内置优先；命中 OS 级 id 后经 `vendor_kind()` 按 LibreNMS group 归属采集库（cisco 组全产品线→Cisco；华为仅 vrp/yunshan→Huawei，oceanstor/smartax 等存储接入线走 Generic；comware→H3c）。入库落地为 **`da-scripts/gen_vendor_community.py`**（本地 sparse clone 全量转换 → `vendor/community.rs`，勿手改），转换口径：排除平台类（type=server/unix，29 个，属 platform.rs 域）与无有效证据 OS（前缀/关键词/正则/探测全空，54 个）；**关键词仅从纯 sysDescr 块收集**——上游 AND 块（前缀+关键词+snmpget 组合，如 airos-af-ltu=8072+"Linux"+UBNT MIB 探测）的关键词是跨设备通用词，作为独立证据只会误命中；单词元 ≤2 字符关键词丢弃；**sysDescr_regex → descr_regexes**（仅收纯 sysDescr 块的正向正则，PCRE 定界符剥除、`/i` 标志转 Rust regex 内联 `(?i)`，编译失败运行时跳过；except 排除正则对无其他证据的 OS 无识别价值，不转换）；**snmpget → probe_checks**（探测 OID 多为厂商私有 MIB、设备自证，GET+值比对独立于块内伙伴成立；仅收点分数字 OID——`MIB::obj` 格式运行时零 MIB 依赖无法解析，生成端丢弃并计数；op=`!=` 负条件几乎全满足，丢弃）。各项丢弃计数均记录于生成文件头。现状 822 → 738 条 OS 规则 + 16 内置品牌级规则共存。8072(net-snmp) 下聚合 68 个互不相干 OS，印证「8072 不作厂商证据」的设计；
    - **单 OS 草稿工具 `da-scripts/gen_vendor_rule_draft.py`**（`<os名>` 按需生成单条草稿 / `--list` 列全部 os 名 / `--all` 生成仓库外候选池草稿与 `_SUMMARY.md` 企业号聚合对照）：用于核对单个 OS 的转换细节或排查识别差异，不入库流程；
    - **SNMP::Info 企业号映射表**（`lib/SNMP/Info.pm` 的 `device_type()`）：单表核对；
    - **外部 MIB 资料池（独立仓库 `MIBs-more`，2019 年快照）**：仅作离线 OID 字典，查证「OID 数值 ↔ 含义/单位」；它**不进 foims 仓库、不进程序与部署包**——FOIMS 采集是数字 OID 定向 GET，运行时零 MIB 依赖（与 Prometheus snmp_exporter 同路线，区别于 LibreNMS 运行时 snmptranslate）；
@@ -219,7 +237,8 @@ pub struct SnmpIdentity {
 | 企业号命中 + 描述词命中同厂商，且未命中 except 词 | 该厂商 | High | **自动绑定**（source=detected） |
 | 命中任一 except 词（OEM/固件上报他人企业号，如 USG 报 8072.3.2.10） | 按 sysDescr 判定 | Low | 不绑定，UI 提示确认（防误自动绑定——绑定后不回退，错误会持续到人工发现） |
 | 仅企业号命中（如 9/2011/25506） | 该厂商 | Low | 不绑定，UI 提示确认 |
-| 仅描述词命中 | 该厂商 | Low | 不绑定，UI 提示确认 |
+| 仅描述词命中（关键词或 descr_regexes 正则） | 该厂商 | Low | 不绑定，UI 提示确认 |
+| 静态证据全未命中 + 主动探测 probe_checks 全命中（多条 AND，一轮 GET） | 该厂商 | Low | 不绑定，UI 提示确认（探测 op 多为宽松子串/存在性检查，不足以驱动自动绑定） |
 | 企业号 11(HPE) + 描述词 comware（冲突，描述胜出，沿用现语义） | H3C | Low | 不绑定，UI 提示确认 |
 | 企业号 11(HPE) + 描述词 aruba/procurve（同企业号下的 ProVision 系） | Aruba（无采集库则展示-only） | Low | 不绑定，UI 提示确认；11 下的所有冲突组合一律人工确认 |
 | 企业号 8072 / 311 / 12325 / 30155 | None（platform=linux/windows/freebsd/openbsd） | — | 不绑定，记录 OS 版本 |

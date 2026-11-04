@@ -28,11 +28,13 @@
   上游 AND 块（前缀+关键词+主动探测组合）中前缀证据已独立成立，其关键
   词常是跨设备通用词（如 airos-af-ltu/airos-af 的 "linux"），作为独立
   证据只会误命中，一律丢弃
-- sysDescr_regex / sysDescr_except 不机械转换（正则/主动探测
-  与本项目词元匹配语义不同），仅计数记录
-- 无有效前缀且无有效关键词的 OS 跳过（本项目识别模型表达不了）
+- sysDescr_regex → descr_regexes（仅收纯 sysDescr 块的正向正则，Rust
+  regex 语法；空定界符丢弃，编译失败运行时跳过）；except 排除正则对
+  无其他证据的 OS 无识别价值，仅计数记录
+- 无有效前缀/关键词/正则/探测的 OS 跳过（本项目识别模型表达不了）
 """
 
+import re
 import sys
 from collections import Counter
 from datetime import date
@@ -59,6 +61,12 @@ BUILTIN_IDS = {
 # 平台 agent 企业号（vendor/platform.rs 注册表 + net-snmp）：
 # 前缀第 7 弧为这些号的不作厂商证据（§3.1）
 PLATFORM_AGENTS = {8072, 311, 12325, 30155, 42, 2, 6876}
+# snmpget op → Rust ProbeOp 变体（vendor/mod.rs）；不在表内的 op（含 != 负
+# 条件——几乎所有值都满足，无识别价值）丢弃
+PROBE_OPS = {
+    "exists": "Exists", "contains": "Contains", "starts": "Starts",
+    "=": "Equals", "regex": "Regex",
+}
 
 
 def as_list(value) -> list:
@@ -76,7 +84,7 @@ def parse_prefix(prefix: str) -> list[int] | None:
 
 
 def tokens(keyword: str) -> list[str]:
-    return [t for t in __import__("re").split(r"[^0-9a-zA-Z]+", keyword.lower()) if t]
+    return [t for t in re.split(r"[^0-9a-zA-Z]+", keyword.lower()) if t]
 
 
 def usable_keyword(kw: str) -> bool:
@@ -118,6 +126,7 @@ def main() -> None:
             kind_groups.setdefault(group, []).append(path.stem)
 
         prefixes, keywords = [], set()
+        regexes, probes = set(), set()
         dropped_agent = 0
         regex_cnt = 0
         for rule in doc.get("discovery", []) or []:
@@ -132,9 +141,9 @@ def main() -> None:
                 else:
                     block_prefixes.append(arcs)
             prefixes.extend(block_prefixes)
-            # 关键词仅从「纯 sysDescr 块」收集（无前缀、无 snmpget）：
-            # 上游 AND 块（前缀+关键词）中前缀已独立成立，关键词转换后
-            # 只有跨设备通用词（如 "linux"）误命中风险、无识别增益
+            # 关键词/正则仅从「纯 sysDescr 块」收集（无 sysObjectID、无
+            # snmpget）：上游 AND 块中前缀已独立成立，子串/正则转换后
+            # 只有跨设备通用词误命中风险、无识别增益（airos-af-ltu 教训）
             if not as_list(rule.get("sysObjectID")) and "snmpget" not in rule:
                 for k in as_list(rule.get("sysDescr")):
                     k = str(k).lower()
@@ -142,55 +151,96 @@ def main() -> None:
                         keywords.add(k)
                     elif tokens(k):
                         stats["kw_dropped"] += 1
+                for rx in as_list(rule.get("sysDescr_regex")):
+                    rx = str(rx).strip()
+                    # PCRE 定界格式 /pattern/flags（如 /.../i）：剥定界符，
+                    # i 标志转 Rust regex 内联 (?i)；其余标志（s/m/x）上游
+                    # 罕见且丢弃后匹配更保守（漏报方向安全）
+                    delimited = re.fullmatch(r"/(.*)/([a-z]*)", rx)
+                    if delimited:
+                        rx, pcre_flags = delimited.group(1).strip(), delimited.group(2)
+                        if "i" in pcre_flags:
+                            rx = f"(?i){rx}"
+                    else:
+                        rx = rx.strip("/")
+                    if rx:
+                        regexes.add(rx)
+                    else:
+                        stats["regex_dropped"] += 1
             elif as_list(rule.get("sysDescr")):
                 stats["kw_orphan_dropped"] += len(as_list(rule.get("sysDescr")))
             regex_cnt += len(as_list(rule.get("sysDescr_regex")))
             regex_cnt += len(as_list(rule.get("sysDescr_regex_except")))
             regex_cnt += len(as_list(rule.get("sysDescr_except")))
+            # 主动探测（snmpget）独立成立：探测 OID 多为厂商私有 MIB（设备
+            # 自证），GET+值比对不依赖块内伙伴；op=!= 负条件与未知 op 丢弃；
+            # MIB 名格式（MIB::obj，上游靠 snmptranslate 解析）本项目运行时
+            # 零 MIB 依赖，仅收点分数字 OID
+            for g in as_list(rule.get("snmpget")):
+                op = str(g.get("op", "exists")).lower()
+                oid_s = str(g.get("oid", "")).strip().lstrip(".")
+                if not oid_s or op not in PROBE_OPS:
+                    stats["probe_dropped"] += 1
+                    continue
+                if not re.fullmatch(r"[\d.]+", oid_s):
+                    stats["probe_mibname_dropped"] += 1
+                    continue
+                probes.add((oid_s, PROBE_OPS[op], str(g.get("value", ""))))
             if "snmpget" in rule:
                 stats["snmpget"] += 1
         stats["regex"] += regex_cnt
         # 前缀去重（同前缀多 discovery 条目）并按弧序排序（生成输出稳定）
         prefixes = sorted({tuple(a) for a in prefixes})
 
-        if not prefixes and not keywords:
+        if not prefixes and not keywords and not regexes and not probes:
             stats["no_evidence"] += 1
-            skipped.append(f"{path.stem}（无有效前缀/关键词，仅正则/主动探测）")
+            skipped.append(f"{path.stem}（无有效前缀/关键词/正则/探测）")
             continue
         stats["dropped_agent_prefix"] += dropped_agent
-        rules.append((path.stem, str(doc.get("text") or path.stem), prefixes, sorted(keywords)))
+        rules.append((path.stem, str(doc.get("text") or path.stem), prefixes,
+                      sorted(keywords), sorted(regexes), sorted(probes)))
 
     # —— 生成 Rust ——
     out = ["//! 社区 OS 级识别规则：LibreNMS os_detection 全量转换（GPL 上游，",
-           f"//! 只提取识别事实：sysObjectID 前缀 + sysDescr 关键词）。",
+           "//! 只提取识别事实：sysObjectID 前缀 + sysDescr 关键词/正则 + 主动探测）。",
            f"//! 由 da-scripts/gen_vendor_community.py 于 {date.today()} 生成，**勿手改**：",
            "//! 更新上游后重跑脚本再生成；新增规则结构变化须同步 vendor/mod.rs。",
            "//!",
            f"//! 上游 {stats['upstream']} 个定义 → 本表 {len(rules)} 条 OS 规则。转换口径：",
            f"//! - 平台类（type=server/unix，走 platform.rs）{stats['platform']} 个；"
            f"与内置品牌 id 重复 {stats['builtin_dup']} 个（内置优先）",
-           f"//! - 无有效前缀/关键词（仅正则/主动探测，模型表达不了）跳过 {stats['no_evidence']} 个",
+           f"//! - 无有效证据（前缀/关键词/正则/探测全空）跳过 {stats['no_evidence']} 个",
            f"//! - 丢弃平台 agent 号前缀 {stats['dropped_agent_prefix']} 条"
            f"（8072 net-snmp 等，§3.1 不作厂商证据）",
            f"//! - 丢弃高风险关键词（单词元 ≤2 字符）{stats['kw_dropped']} 条、"
            f"孤儿关键词（AND 伙伴失效，块内前缀为平台号/含主动探测）{stats['kw_orphan_dropped']} 条",
-           f"//! - 正则证据（sysDescr_regex/except，语义不同不转换）{stats['regex']} 条、"
-           f"主动探测 {stats['snmpget']} 条",
+           f"//! - 正则：sysDescr_regex/except 原始 {stats['regex']} 条，仅收纯 sysDescr 块正向正则"
+           f"{sum(len(r[4]) for r in rules)} 条（PCRE 定界符剥除，/i 转 (?i)，Rust regex"
+           f" 编译失败运行时跳过）；空定界丢弃 {stats.get('regex_dropped', 0)} 条",
+           f"//! - 主动探测：snmpget 块 {stats['snmpget']} 个，转换 {sum(len(p) for *_, p in rules)} 项检查、"
+           f"丢弃（op=!=/未知/缺 OID）{stats['probe_dropped']} 条、"
+           f"MIB 名格式 OID（MIB::obj，零 MIB 依赖无法解析）{stats['probe_mibname_dropped']} 条",
            "//! - 多词元关键词保留（本项目全词元命中，比上游子串严格，漏报方向安全）",
            "",
-           "use super::{VendorMib, VendorRule, only};",
+           "use super::{ProbeCheck, ProbeOp, VendorMib, VendorRule, only};",
            "",
            "pub(super) static COMMUNITY: &[VendorMib] = &["]
-    for os, text, prefixes, keywords in rules:
+    for os, text, prefixes, keywords, regexes, probes in rules:
         out.append(f"    // LibreNMS os_detection/{os}.yaml")
-        if prefixes:
-            pres = ", ".join("&[" + ", ".join(map(str, p)) + "]" for p in prefixes)
-            out.append(f"    only(&VendorRule {{ id: {rust_str(os)}, display_name: {rust_str(text)}, aliases: &[], sysobjectid_prefixes: &[{pres}], descr_keywords: &[")
-        else:
-            out.append(f"    only(&VendorRule {{ id: {rust_str(os)}, display_name: {rust_str(text)}, aliases: &[], sysobjectid_prefixes: &[], descr_keywords: &[")
+        pres = ", ".join("&[" + ", ".join(map(str, p)) + "]" for p in prefixes)
+        out.append(f"    only(&VendorRule {{ id: {rust_str(os)}, display_name: {rust_str(text)}, aliases: &[], sysobjectid_prefixes: &[{pres}], descr_keywords: &[")
         for kw in keywords:
             out.append(f"        {rust_str(kw)},")
-        out.append("        ], descr_keywords_except: &[], }),")
+        out.append("        ], descr_keywords_except: &[], descr_regexes: &[")
+        for rx in regexes:
+            out.append(f"        {rust_str(rx)},")
+        out.append("        ], probe_checks: &[")
+        for oid_s, op, val in probes:
+            out.append(
+                f"        ProbeCheck {{ oid: {rust_str(oid_s)}, op: ProbeOp::{op}, "
+                f"value: {rust_str(val)} }},"
+            )
+        out.append("        ], }),")
     out.append("];")
     OUT.write_text("\n".join(out) + "\n", encoding="utf-8")
 

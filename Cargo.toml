@@ -1,6 +1,6 @@
 [package]
 name = "foims"
-version = "0.33.28"
+version = "0.33.29"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -61,6 +61,8 @@ base64 = "0.23.1"
 
 # 密码哈希 / 随机数 / TOML 序列化 / 日志时间格式化（多 crate 共享）
 bcrypt = "0.19.3"
+# 正则（SNMP 厂商识别：descr_regexes / probe 值比对）
+regex = "1.13.1"
 
 # Date/Time
 chrono = { version = "0.4.45", features = ["serde"] }
