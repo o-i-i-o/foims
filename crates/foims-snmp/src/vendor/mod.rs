@@ -3,10 +3,9 @@
 //! 设计（docs/SNMP厂商MIB识别与绑定方案.md §5）：
 //! - 本域只放「规则与 OID 数据 + 识别纯函数」，采集逻辑（probe/discover_*）
 //!   留在 [`crate::live::profile`]；
-//! - 识别规则分两层：内置品牌级 16 条（BUILTIN，人工核实）+ 社区 OS 级
-//!   （community，LibreNMS os_detection 全量转换生成）；采集 OID 库独立
-//!   于识别规则（mibs.rs，仅三家绑定直连），识别与采集经 vendor_kind()
-//!   关联（§5.2）；
+//! - 识别规则数据**全部出自生成脚本**（community/ 目录：内置品牌级 16 条 +
+//!   社区 OS 级，勿手改）；采集 OID 库独立分层（mibs.rs，仅三家绑定直连，
+//!   人工核实无结构化上游），识别与采集经 vendor_kind() 关联（§5.2）；
 //! - 识别证据：sysObjectID 前缀最长匹配（LibreNMS 语义）+ sysDescr
 //!   关键词/正则 + 主动探测（probe.rs）；平台（Linux/Windows/BSD…）与
 //!   硬件厂商严格分层：平台 agent 企业号（8072/311/12325/30155 等）不作
@@ -120,8 +119,9 @@ pub struct VendorOidSet {
 
 /// 厂商库条目：识别规则引用 + 可选私有采集 OID 集。
 /// `oid_set = None` 表示识别-only（识别得出但不提供绑定，§5.3.3）。
-/// 规则以 `&'static` 引用存放：内置品牌级定义于本文件 BUILTIN，
-/// 采集 OID 集集中定义于 mibs.rs，注册表不复制规则数据。
+/// 规则以 `&'static` 引用存放：识别规则数据全部在 community/ 生成目录
+///（内置品牌级 builtin.rs + 社区 OS 级 os_*.rs），采集 OID 集在 mibs.rs，
+/// 注册表不复制规则数据。
 pub struct VendorMib {
     pub rule: &'static VendorRule,
     pub oid_set: Option<&'static VendorOidSet>,
@@ -147,208 +147,7 @@ pub struct SnmpIdentity {
 /// 顺序即 sysDescr 识别优先级：内置品牌级在前（词表更精、判定优先），
 /// 社区 OS 级在后（前缀匹配不受顺序影响，最长前缀胜出）。
 pub fn registry() -> impl Iterator<Item = &'static VendorMib> {
-    BUILTIN.iter().chain(community::COMMUNITY)
-}
-
-// —— 内置品牌级规则（三家采集库 + 13 识别-only，收编 sysinfo.rs 词表）——
-
-static BUILTIN: &[VendorMib] = &[
-    VendorMib {
-        rule: &VendorRule {
-            id: "cisco",
-            display_name: "Cisco",
-            aliases: &["cisco"],
-            // IANA enterprise-numbers：9 = Cisco Systems
-            sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9]],
-            descr_keywords: &["cisco"],
-            descr_keywords_except: &[],
-            descr_regexes: &[],
-            probe_checks: &[],
-        },
-        oid_set: Some(&mibs::CISCO),
-    },
-    VendorMib {
-        rule: &VendorRule {
-            id: "huawei",
-            display_name: "Huawei",
-            aliases: &["huawei"],
-            // IANA enterprise-numbers：2011 = Huawei Technologies；
-            // "versatile routing platform" 为华为 VRP 系统多词关键词
-            sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011]],
-            descr_keywords: &["huawei", "versatile routing platform"],
-            descr_keywords_except: &[],
-            descr_regexes: &[],
-            probe_checks: &[],
-        },
-        oid_set: Some(&mibs::HUAWEI),
-    },
-    VendorMib {
-        rule: &VendorRule {
-            id: "h3c",
-            display_name: "H3C",
-            aliases: &["h3c", "3com"],
-            // IANA enterprise-numbers：25506 = H3C（原 3Com 归并）
-            sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25506]],
-            descr_keywords: &["h3c", "comware", "3com"],
-            descr_keywords_except: &[],
-            descr_regexes: &[],
-            probe_checks: &[],
-        },
-        oid_set: Some(&mibs::H3C),
-    },
-    // —— 识别-only 品牌（识别得出但不提供绑定，§5.3.3）——
-    // 企业号来源：SNMP::Info 企业号映射表（IANA 注册）
-    only(&VendorRule {
-        id: "juniper",
-        display_name: "Juniper",
-        aliases: &["juniper"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2636]],
-        descr_keywords: &["juniper", "junos"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "dell",
-        display_name: "Dell",
-        aliases: &["dell"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 674]],
-        descr_keywords: &["dell"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    // 企业号 11 同时覆盖 Comware（→h3c 冲突，描述词胜出）与
-    // ProVision/Aruba（本条），冲突组合一律 Low + 人工确认（§6.1）
-    only(&VendorRule {
-        id: "hp",
-        display_name: "HP/HPE",
-        aliases: &[
-            "hp",
-            "hpe",
-            "procurve",
-            "hewlett packard",
-            "hewlett-packard",
-        ],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 11]],
-        descr_keywords: &["hp", "hpe", "procurve", "hewlett packard"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "aruba",
-        display_name: "Aruba",
-        aliases: &["aruba"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14823]],
-        descr_keywords: &["aruba", "arubaos"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "netgear",
-        display_name: "Netgear",
-        aliases: &["netgear"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 4526]],
-        descr_keywords: &["netgear", "prosafe"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    // TP-Link/Linksys/ZyXEL 企业号未核实，留空不虚构（§5.3.1）
-    only(&VendorRule {
-        id: "tp-link",
-        display_name: "TP-Link",
-        aliases: &["tp-link", "tplink", "tp link"],
-        sysobjectid_prefixes: &[],
-        descr_keywords: &["tp-link", "tplink"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "linksys",
-        display_name: "Linksys",
-        aliases: &["linksys"],
-        sysobjectid_prefixes: &[],
-        descr_keywords: &["linksys"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "ubiquiti",
-        display_name: "Ubiquiti",
-        aliases: &["ubiquiti", "ubnt", "unifi"],
-        sysobjectid_prefixes: &[
-            &[1, 3, 6, 1, 4, 1, 4413],
-            &[1, 3, 6, 1, 4, 1, 10002],
-            &[1, 3, 6, 1, 4, 1, 41112],
-        ],
-        descr_keywords: &["ubiquiti", "ubnt", "unifi"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "mikrotik",
-        display_name: "MikroTik",
-        aliases: &["mikrotik", "routeros"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 14988]],
-        descr_keywords: &["mikrotik", "routeros"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "extreme",
-        display_name: "Extreme Networks",
-        aliases: &["extreme", "extremenetworks", "extreme networks"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 1916]],
-        descr_keywords: &["extreme", "extremexos"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "alcatel",
-        display_name: "Alcatel",
-        aliases: &["alcatel", "alcatel-lucent"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 6486]],
-        descr_keywords: &["alcatel"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "zyxel",
-        display_name: "ZyXEL",
-        aliases: &["zyxel"],
-        sysobjectid_prefixes: &[],
-        descr_keywords: &["zyxel"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-    only(&VendorRule {
-        id: "d-link",
-        display_name: "D-Link",
-        aliases: &["d-link", "dlink"],
-        sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 171]],
-        descr_keywords: &["d-link", "dlink"],
-        descr_keywords_except: &[],
-        descr_regexes: &[],
-        probe_checks: &[],
-    }),
-];
-
-/// 识别-only 品牌条目（无采集库）。
-const fn only(rule: &'static VendorRule) -> VendorMib {
-    VendorMib {
-        rule,
-        oid_set: None,
-    }
+    community::COMMUNITY.iter().flat_map(|g| g.iter())
 }
 
 /// 手填品牌 → 厂商库匹配（display_name/aliases/id 大小写不敏感，
@@ -366,23 +165,13 @@ pub fn find_by_brand(brand: &str) -> Option<&'static VendorMib> {
 }
 
 /// 规则 id → 采集计划区分键（无采集库或未知 id → Generic 公共回退链）。
-/// 社区 OS 级 id 按 LibreNMS group 归属采集库：cisco 组全产品线绑定 Cisco
-/// MIB 家族（探测失败自动回退公共链，激进绑定安全）；华为仅 VRP 网络设备
-/// 绑定（oceanstor/smartax 等产品线走 Generic，公共链等价）。
+/// 映射数据 KIND_BY_OS 由生成脚本按上游 group 产出（cisco 组全产品线绑定
+/// Cisco MIB 家族，探测失败自动回退公共链，激进绑定安全；华为仅 VRP 网络
+/// 设备——oceanstor/smartax 等产品线走 Generic；新华三 Comware），见
+/// community/mod.rs。
 pub fn vendor_kind(id: Option<&str>) -> VendorKind {
-    match id {
-        // Cisco 产品线（LibreNMS group=cisco）
-        Some(
-            "cisco" | "ios" | "iosxe" | "iosxr" | "nxos" | "ftd" | "asa" | "pixos" | "catos"
-            | "cat1900" | "fxos" | "sanos" | "waas" | "cimc" | "acano" | "acs" | "acsw" | "apic"
-            | "ciscoepc" | "ciscome1200" | "ciscosce" | "ciscospa" | "ciscosrp" | "ons" | "viptela",
-        ) => VendorKind::Cisco,
-        // 华为 VRP 网络设备（yunshan=云山/CloudEngine，VRP8 家族实体表同构）
-        Some("huawei" | "vrp" | "yunshan") => VendorKind::Huawei,
-        // 新华三 Comware
-        Some("h3c" | "comware") => VendorKind::H3c,
-        _ => VendorKind::Generic,
-    }
+    id.and_then(|id| community::KIND_BY_OS.iter().find(|(os, _)| *os == id))
+        .map_or(VendorKind::Generic, |(_, kind)| *kind)
 }
 
 /// 规则 id → 私有采集 OID 集（识别-only 品牌与未知 id → None）。

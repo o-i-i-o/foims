@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
-"""LibreNMS os_detection 全量 → vendor/community.rs 社区规则（OS 级入库）。
+"""LibreNMS os_detection 全量 → vendor/community/ 识别规则目录（OS 级入库）。
 
 用法：
     python3 da-scripts/gen_vendor_community.py [--src DIR]
 
 决策依据（docs/SNMP厂商MIB识别与绑定方案.md §5.3.5）：
-按 LibreNMS 的 OS 级分组方式**直接入库**（社区验证数据），不再按品牌级
-人工归并——本项目识别模型已升级为 sysObjectID 前缀最长匹配（LibreNMS
-语义），OS 级规则与内置品牌级规则（同长度前缀内置优先）自然共存：
-- 内置 16 品牌 + 三家采集库保留（人工核实的品牌归并，id/display 语义不变）；
-- 社区 OS 级规则提供更深前缀细分（如 9=Cisco 下 ios/iosxe）与更广覆盖，
-  命中后经 vendor_kind() 映射回采集库归属。
+按 LibreNMS 的 OS 级分组方式**直接入库**（社区验证数据），识别模型为
+sysObjectID 前缀最长匹配（LibreNMS 语义）。**全部识别规则数据出自本脚本**：
+- 16 条内置品牌级规则（数据源为脚本内 BUILTIN_BRANDS——原 vendor/mod.rs
+  手工词表迁入，人工核实的 IANA 企业号/别名/关键词）；
+- 社区 OS 级规则（LibreNMS os_detection 全量转换）；与内置品牌同 id 的
+  上游 OS（如 netgear.yaml）**证据合并进内置条目**（前缀/关键词/正则/探测
+  并集），display_name/aliases 保持内置（手填品牌匹配的 UI 语义人工核实）；
+- vendor_kind() 的 OS→采集库映射（KIND_BY_OS）由脚本按上游 group 生成，
+  不再人工同步。
+
+输出（识别/采集分层，采集库 mibs.rs 为手工核实文件，不在本脚本范围）：
+    vendor/community/mod.rs        聚合 + only() + KIND_BY_OS + 头注释
+    vendor/community/builtin.rs    16 条内置品牌规则（三家关联采集库）
+    vendor/community/os_*.rs       社区 OS 规则（按 id 首字母四桶）
 
 数据源：本地 sparse clone 的 os_detection 目录（约 300KB，不进仓库）：
     git clone --depth 1 --filter=blob:none --sparse https://github.com/librenms/librenms /tmp/librenms
@@ -18,7 +26,6 @@
 
 转换与排除规则（全部记录在生成文件头注释中）：
 - 排除 type=server/unix 平台类（平台识别属 vendor/platform.rs 域）
-- 排除 os 名与内置品牌 id 重复的 OS（内置规则优先）
 - sysObjectID 前缀 → sysobjectid_prefixes；前缀第 7 弧为平台 agent 号
   （8072/311/12325/30155/42/2/6876）的丢弃（§3.1 不作厂商证据）
 - sysDescr 子串 → descr_keywords（小写去重）；单词元 ≤2 字符的丢弃
@@ -31,7 +38,8 @@
 - sysDescr_regex → descr_regexes（仅收纯 sysDescr 块的正向正则，Rust
   regex 语法；空定界符丢弃，编译失败运行时跳过）；except 排除正则对
   无其他证据的 OS 无识别价值，仅计数记录
-- 无有效前缀/关键词/正则/探测的 OS 跳过（本项目识别模型表达不了）
+- 无可转换证据的 OS 生成空规则占位（识别永不命中，保留名录完整性），
+  不跳过——上游 822 个定义全部在产物中有对应条目
 """
 
 import re
@@ -49,15 +57,62 @@ yaml.SafeLoader.add_constructor(
 )
 
 DEFAULT_SRC = Path("/tmp/librenms/resources/definitions/os_detection")
-# 生成目标（入库文件，勿手改——重跑脚本再生成）
-OUT = Path(__file__).resolve().parent.parent / "crates/foims-snmp/src/vendor/community.rs"
+# 生成目标目录（入库文件，勿手改——重跑脚本再生成）
+OUT_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "crates/foims-snmp/src/vendor/community"
+)
+BUCKETS = ("a_g", "h_n", "o_t", "u_z")  # OS 规则按 id 首字母四桶
 
-# 内置品牌 id（vendor/mod.rs BUILTIN）：同名 OS 排除，内置规则优先
-BUILTIN_IDS = {
-    "cisco", "huawei", "h3c", "juniper", "dell", "hp", "aruba", "netgear",
-    "tp-link", "linksys", "ubiquiti", "mikrotik", "extreme", "alcatel",
-    "zyxel", "d-link",
-}
+# —— 内置品牌级规则（原 vendor/mod.rs BUILTIN 手工词表迁入，数据不变）——
+# (id, display_name, aliases, 前缀弧组, 关键词, 采集库, 来源注释)
+BUILTIN_BRANDS = [
+    ("cisco", "Cisco", ["cisco"], [[1, 3, 6, 1, 4, 1, 9]], ["cisco"], "CISCO",
+     "IANA enterprise-numbers：9 = Cisco Systems"),
+    ("huawei", "Huawei", ["huawei"], [[1, 3, 6, 1, 4, 1, 2011]],
+     ["huawei", "versatile routing platform"], "HUAWEI",
+     "IANA enterprise-numbers：2011 = Huawei Technologies；"
+     "「versatile routing platform」为华为 VRP 系统多词关键词"),
+    ("h3c", "H3C", ["h3c", "3com"], [[1, 3, 6, 1, 4, 1, 25506]],
+     ["h3c", "comware", "3com"], "H3C",
+     "IANA enterprise-numbers：25506 = H3C（原 3Com 归并）"),
+    ("juniper", "Juniper", ["juniper"], [[1, 3, 6, 1, 4, 1, 2636]],
+     ["juniper", "junos"], None, "识别-only（无采集库）"),
+    ("dell", "Dell", ["dell"], [[1, 3, 6, 1, 4, 1, 674]], ["dell"], None,
+     "识别-only"),
+    ("hp", "HP/HPE",
+     ["hp", "hpe", "procurve", "hewlett packard", "hewlett-packard"],
+     [[1, 3, 6, 1, 4, 1, 11]],
+     ["hp", "hpe", "procurve", "hewlett packard"], None,
+     "企业号 11 同时覆盖 Comware（→h3c 冲突，描述词胜出）与"
+     " ProVision/Aruba（本条），冲突组合一律 Low + 人工确认（§6.1）"),
+    ("aruba", "Aruba", ["aruba"], [[1, 3, 6, 1, 4, 1, 14823]],
+     ["aruba", "arubaos"], None, "识别-only"),
+    ("netgear", "Netgear", ["netgear"], [[1, 3, 6, 1, 4, 1, 4526]],
+     ["netgear", "prosafe"], None, "识别-only"),
+    ("tp-link", "TP-Link", ["tp-link", "tplink", "tp link"], [],
+     ["tp-link", "tplink"], None,
+     "企业号未核实，留空不虚构（§5.3.1）；识别-only"),
+    ("linksys", "Linksys", ["linksys"], [], ["linksys"], None,
+     "企业号未核实，留空不虚构；识别-only"),
+    ("ubiquiti", "Ubiquiti", ["ubiquiti", "ubnt", "unifi"],
+     [[1, 3, 6, 1, 4, 1, 4413], [1, 3, 6, 1, 4, 1, 10002],
+      [1, 3, 6, 1, 4, 1, 41112]],
+     ["ubiquiti", "ubnt", "unifi"], None, "识别-only"),
+    ("mikrotik", "MikroTik", ["mikrotik", "routeros"],
+     [[1, 3, 6, 1, 4, 1, 14988]], ["mikrotik", "routeros"], None, "识别-only"),
+    ("extreme", "Extreme Networks",
+     ["extreme", "extremenetworks", "extreme networks"],
+     [[1, 3, 6, 1, 4, 1, 1916]], ["extreme", "extremexos"], None, "识别-only"),
+    ("alcatel", "Alcatel", ["alcatel", "alcatel-lucent"],
+     [[1, 3, 6, 1, 4, 1, 6486]], ["alcatel"], None, "识别-only"),
+    ("zyxel", "ZyXEL", ["zyxel"], [], ["zyxel"], None,
+     "企业号未核实，留空不虚构；识别-only"),
+    ("d-link", "D-Link", ["d-link", "dlink"], [[1, 3, 6, 1, 4, 1, 171]],
+     ["d-link", "dlink"], None, "识别-only"),
+]
+BUILTIN_IDS = {b[0] for b in BUILTIN_BRANDS}
+
 # 平台 agent 企业号（vendor/platform.rs 注册表 + net-snmp）：
 # 前缀第 7 弧为这些号的不作厂商证据（§3.1）
 PLATFORM_AGENTS = {8072, 311, 12325, 30155, 42, 2, 6876}
@@ -67,6 +122,10 @@ PROBE_OPS = {
     "exists": "Exists", "contains": "Contains", "starts": "Starts",
     "=": "Equals", "regex": "Regex",
 }
+# vendor_kind（OS → 采集库归属）生成口径：与原 mod.rs 硬编码语义一致——
+# cisco 组全产品线绑定 Cisco；华为仅 VRP 网络设备（yunshan=CloudEngine
+# VRP8 实体表同构）；新华三 Comware。其余（含 huawei 组的 oceanstor/
+# smartax 等存储接入线）走 Generic 公共回退链
 
 
 def as_list(value) -> list:
@@ -97,38 +156,69 @@ def rust_str(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def bucket_of(os_name: str) -> str:
+    c = os_name[0].lower()
+    if c <= "g":
+        return "a_g"
+    if c <= "n":
+        return "h_n"
+    if c <= "t":
+        return "o_t"
+    return "u_z"
+
+
 def main() -> None:
     src = Path(sys.argv[sys.argv.index("--src") + 1]) if "--src" in sys.argv else DEFAULT_SRC
     if not src.is_dir():
         sys.exit(f"错误：数据源不存在：{src}（先 sparse clone，见脚本头注释）")
 
-    rules = []           # (os, text, prefixes, keywords)
-    kind_groups = {}     # vendor_kind 校准用：group → os 列表
+    # 证据按 OS 归集：内置品牌条目与上游同 id 条目合并进同一证据集
+    # entries[os] = {"display": 内置 display_name 或上游 text, "aliases": 内置,
+    #                "mib": 采集库或 None, "note": 来源注释, "builtin": bool,
+    #                "prefixes": set, "keywords": set, "regexes": set,
+    #                "probes": set}
+    entries: dict[str, dict] = {}
+    for os_id, display, aliases, prefixes, keywords, mib, note in BUILTIN_BRANDS:
+        entries[os_id] = {
+            "display": display, "aliases": aliases, "mib": mib, "note": note,
+            "builtin": True, "prefixes": {tuple(p) for p in prefixes},
+            "keywords": set(keywords), "regexes": set(), "probes": set(),
+        }
+
+    kind_groups: dict[str, list[str]] = {}
     stats = Counter()
-    skipped = []
 
     for path in sorted(src.glob("*.yaml")):
         stats["upstream"] += 1
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(doc, dict):
-            stats["skipped"] += 1
-            skipped.append(f"{path.stem}（结构非映射）")
+            # 结构非映射：既非平台类也无法提取 OS 名，仅计数（上游现状为 0）
+            stats["malformed"] += 1
             continue
         if str(doc.get("type", "")) in ("server", "unix"):
             stats["platform"] += 1
             continue
-        if path.stem in BUILTIN_IDS:
-            stats["builtin_dup"] += 1
-            skipped.append(f"{path.stem}（与内置品牌 id 重复）")
-            continue
-        group = str(doc.get("group") or "")
-        if group:
-            kind_groups.setdefault(group, []).append(path.stem)
+        os_id = path.stem
+        builtin_hit = os_id in BUILTIN_IDS
+        if builtin_hit:
+            # 与内置品牌同 id（如 netgear.yaml）：证据合并进内置条目，
+            # display_name/aliases 保持内置（手填品牌匹配的 UI 语义）
+            stats["builtin_merged"] += 1
+            entry = entries[os_id]
+        else:
+            group = str(doc.get("group") or "")
+            if group:
+                kind_groups.setdefault(group, []).append(os_id)
+            entry = {
+                "display": str(doc.get("text") or os_id), "aliases": [],
+                "mib": None, "note": "", "builtin": False,
+                "prefixes": set(), "keywords": set(), "regexes": set(),
+                "probes": set(),
+            }
+            entries[os_id] = entry
 
-        prefixes, keywords = [], set()
-        regexes, probes = set(), set()
-        dropped_agent = 0
         regex_cnt = 0
+        dropped_agent = 0
         for rule in doc.get("discovery", []) or []:
             # 块内 AND 语义：收集本块前缀，平台号前缀丢弃并计数
             block_prefixes = []
@@ -139,8 +229,8 @@ def main() -> None:
                 if arcs[6] in PLATFORM_AGENTS:
                     dropped_agent += 1
                 else:
-                    block_prefixes.append(arcs)
-            prefixes.extend(block_prefixes)
+                    block_prefixes.append(tuple(arcs))
+            entry["prefixes"].update(block_prefixes)
             # 关键词/正则仅从「纯 sysDescr 块」收集（无 sysObjectID、无
             # snmpget）：上游 AND 块中前缀已独立成立，子串/正则转换后
             # 只有跨设备通用词误命中风险、无识别增益（airos-af-ltu 教训）
@@ -148,7 +238,7 @@ def main() -> None:
                 for k in as_list(rule.get("sysDescr")):
                     k = str(k).lower()
                     if usable_keyword(k):
-                        keywords.add(k)
+                        entry["keywords"].add(k)
                     elif tokens(k):
                         stats["kw_dropped"] += 1
                 for rx in as_list(rule.get("sysDescr_regex")):
@@ -164,7 +254,7 @@ def main() -> None:
                     else:
                         rx = rx.strip("/")
                     if rx:
-                        regexes.add(rx)
+                        entry["regexes"].add(rx)
                     else:
                         stats["regex_dropped"] += 1
             elif as_list(rule.get("sysDescr")):
@@ -185,76 +275,175 @@ def main() -> None:
                 if not re.fullmatch(r"[\d.]+", oid_s):
                     stats["probe_mibname_dropped"] += 1
                     continue
-                probes.add((oid_s, PROBE_OPS[op], str(g.get("value", ""))))
+                entry["probes"].add((oid_s, PROBE_OPS[op], str(g.get("value", ""))))
             if "snmpget" in rule:
                 stats["snmpget"] += 1
         stats["regex"] += regex_cnt
-        # 前缀去重（同前缀多 discovery 条目）并按弧序排序（生成输出稳定）
-        prefixes = sorted({tuple(a) for a in prefixes})
-
-        if not prefixes and not keywords and not regexes and not probes:
-            stats["no_evidence"] += 1
-            skipped.append(f"{path.stem}（无有效前缀/关键词/正则/探测）")
-            continue
         stats["dropped_agent_prefix"] += dropped_agent
-        rules.append((path.stem, str(doc.get("text") or path.stem), prefixes,
-                      sorted(keywords), sorted(regexes), sorted(probes)))
 
-    # —— 生成 Rust ——
-    out = ["//! 社区 OS 级识别规则：LibreNMS os_detection 全量转换（GPL 上游，",
-           "//! 只提取识别事实：sysObjectID 前缀 + sysDescr 关键词/正则 + 主动探测）。",
-           f"//! 由 da-scripts/gen_vendor_community.py 于 {date.today()} 生成，**勿手改**：",
-           "//! 更新上游后重跑脚本再生成；新增规则结构变化须同步 vendor/mod.rs。",
-           "//!",
-           f"//! 上游 {stats['upstream']} 个定义 → 本表 {len(rules)} 条 OS 规则。转换口径：",
-           f"//! - 平台类（type=server/unix，走 platform.rs）{stats['platform']} 个；"
-           f"与内置品牌 id 重复 {stats['builtin_dup']} 个（内置优先）",
-           f"//! - 无有效证据（前缀/关键词/正则/探测全空）跳过 {stats['no_evidence']} 个",
-           f"//! - 丢弃平台 agent 号前缀 {stats['dropped_agent_prefix']} 条"
-           f"（8072 net-snmp 等，§3.1 不作厂商证据）",
-           f"//! - 丢弃高风险关键词（单词元 ≤2 字符）{stats['kw_dropped']} 条、"
-           f"孤儿关键词（AND 伙伴失效，块内前缀为平台号/含主动探测）{stats['kw_orphan_dropped']} 条",
-           f"//! - 正则：sysDescr_regex/except 原始 {stats['regex']} 条，仅收纯 sysDescr 块正向正则"
-           f"{sum(len(r[4]) for r in rules)} 条（PCRE 定界符剥除，/i 转 (?i)，Rust regex"
-           f" 编译失败运行时跳过）；空定界丢弃 {stats.get('regex_dropped', 0)} 条",
-           f"//! - 主动探测：snmpget 块 {stats['snmpget']} 个，转换 {sum(len(p) for *_, p in rules)} 项检查、"
-           f"丢弃（op=!=/未知/缺 OID）{stats['probe_dropped']} 条、"
-           f"MIB 名格式 OID（MIB::obj，零 MIB 依赖无法解析）{stats['probe_mibname_dropped']} 条",
-           "//! - 多词元关键词保留（本项目全词元命中，比上游子串严格，漏报方向安全）",
-           "",
-           "use super::{ProbeCheck, ProbeOp, VendorMib, VendorRule, only};",
-           "",
-           "pub(super) static COMMUNITY: &[VendorMib] = &["]
-    for os, text, prefixes, keywords, regexes, probes in rules:
-        out.append(f"    // LibreNMS os_detection/{os}.yaml")
-        pres = ", ".join("&[" + ", ".join(map(str, p)) + "]" for p in prefixes)
-        out.append(f"    only(&VendorRule {{ id: {rust_str(os)}, display_name: {rust_str(text)}, aliases: &[], sysobjectid_prefixes: &[{pres}], descr_keywords: &[")
-        for kw in keywords:
-            out.append(f"        {rust_str(kw)},")
-        out.append("        ], descr_keywords_except: &[], descr_regexes: &[")
-        for rx in regexes:
-            out.append(f"        {rust_str(rx)},")
-        out.append("        ], probe_checks: &[")
-        for oid_s, op, val in probes:
-            out.append(
-                f"        ProbeCheck {{ oid: {rust_str(oid_s)}, op: ProbeOp::{op}, "
-                f"value: {rust_str(val)} }},"
+        # 无有效证据的上游 OS：生成空规则占位（识别永不命中、无风险），
+        # 保留 OS 名录完整性——上游补充证据后重跑本脚本自动补全；
+        # 内置条目已有数据不受影响
+        if not (entry["prefixes"] or entry["keywords"] or entry["regexes"] or entry["probes"]):
+            stats["empty_evidence"] += 1
+
+    # —— KIND_BY_OS：OS id → 采集库归属（cisco 组 + 华为 VRP 家族 + Comware）——
+    # 空证据占位条目不入表（识别永不命中，映射不可达）
+    kind_by_os = []
+    for os_id in sorted(entries):
+        e = entries[os_id]
+        if not (e["prefixes"] or e["keywords"] or e["regexes"] or e["probes"]):
+            continue
+        group = next((g for g, l in kind_groups.items() if os_id in l), "")
+        if os_id == "cisco" or group == "cisco":
+            kind_by_os.append((os_id, "Cisco"))
+        elif os_id in ("huawei", "vrp", "yunshan"):
+            kind_by_os.append((os_id, "Huawei"))
+        elif os_id in ("h3c", "comware"):
+            kind_by_os.append((os_id, "H3c"))
+        # 其余（含 huawei 组 oceanstor/smartax 等）→ Generic，不入表
+
+    # —— 生成 Rust：community/ 目录（mod 聚合 + builtin + OS 四桶）——
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    os_rules = [o for o in sorted(entries) if not entries[o]["builtin"]]
+    per_bucket = {b: [o for o in os_rules if bucket_of(o) == b] for b in BUCKETS}
+
+    header = [
+        "//! LibreNMS os_detection 全量转换 + 内置品牌级规则（识别数据单一来源）。",
+        f"//! 由 da-scripts/gen_vendor_community.py 于 {date.today()} 生成，**勿手改**：",
+        "//! 更新上游后重跑脚本再生成；规则结构变化须同步 vendor/mod.rs。",
+        "//!",
+        f"//! 上游 {stats['upstream']} 个定义 = 平台类 {stats['platform']} 个（platform.rs 域）"
+        + (f"+ 结构异常 {stats['malformed']} 个 + " if stats["malformed"] else "+ ")
+        + f"本表 {len(entries)} 条（内置品牌 {sum(1 for e in entries.values() if e['builtin'])}"
+        f" + 社区 OS {len(os_rules)}）。对账：{stats['upstream']} 全覆盖，无跳过。",
+        f"//! - 与内置品牌同 id 证据合并 {stats['builtin_merged']} 个"
+        "（如 netgear.yaml 并入内置 netgear，display/aliases 保持内置）",
+        f"//! - 空证据占位 {stats['empty_evidence']} 个：上游证据为 MIB 名格式探测"
+        "（厂商 MIB 不可得，零 MIB 依赖无法解析）/平台号前缀/except 正则/低质"
+        "关键词，无可转换证据 → 生成空规则（识别永不命中、无风险），保留 OS 名录"
+        "完整性，上游补充证据后重跑自动补全",
+        f"//! - 丢弃平台 agent 号前缀 {stats['dropped_agent_prefix']} 条"
+        "（8072 net-snmp 等，§3.1 不作厂商证据）",
+        f"//! - 丢弃高风险关键词（单词元 ≤2 字符）{stats['kw_dropped']} 条、"
+        f"孤儿关键词（AND 伙伴失效，块内前缀为平台号/含主动探测）{stats['kw_orphan_dropped']} 条",
+        f"//! - 正则：sysDescr_regex/except 原始 {stats['regex']} 条，仅收纯 sysDescr 块正向正则"
+        f"{sum(len(e['regexes']) for e in entries.values())} 条（PCRE 定界符剥除，/i 转 (?i)，"
+        "Rust regex 编译失败运行时跳过）；空定界丢弃"
+        f" {stats.get('regex_dropped', 0)} 条",
+        f"//! - 主动探测：snmpget 块 {stats['snmpget']} 个，转换 "
+        f"{sum(len(e['probes']) for e in entries.values())} 项检查、"
+        f"丢弃（op=!=/未知/缺 OID）{stats['probe_dropped']} 条、"
+        "MIB 名格式 OID（MIB::obj，零 MIB 依赖无法解析）"
+        f"{stats['probe_mibname_dropped']} 条",
+        "//! - 多词元关键词保留（本项目全词元命中，比上游子串严格，漏报方向安全）",
+    ]
+
+    # mod.rs：聚合 + only + KIND_BY_OS
+    mod_rs = header + [
+        "",
+        "use super::{VendorMib, VendorRule};",
+        "",
+        "/// 识别-only 品牌条目（无采集库）。",
+        "pub(super) const fn only(rule: &'static VendorRule) -> VendorMib {",
+        "    VendorMib { rule, oid_set: None }",
+        "}",
+        "",
+        "/// 全部规则分桶：内置品牌级在前（词表更精、sysDescr 判定优先），",
+        "/// 社区 OS 级按 id 首字母四桶（前缀匹配不受顺序影响，最长前缀胜出）。",
+        "pub(super) static COMMUNITY: &[&[VendorMib]] = &[",
+        "    builtin::BUILTIN,",
+    ]
+    for b in BUCKETS:
+        mod_rs.append(f"    os_{b}::OS_{b.upper().replace('_', '')},")
+    mod_rs += [
+        "];",
+        "",
+        "/// OS id → 采集库归属（vendor_kind() 查表，miss → Generic 公共回退链）。",
+        "/// cisco 组全产品线绑定 Cisco MIB 家族（探测失败自动回退公共链，激进",
+        "/// 绑定安全）；华为仅 VRP 网络设备（oceanstor/smartax 等产品线走",
+        "/// Generic）；新华三 Comware。",
+        "pub(super) static KIND_BY_OS: &[(&str, crate::live::VendorKind)] = &[",
+    ]
+    for os_id, kind in kind_by_os:
+        mod_rs.append(f'    ({rust_str(os_id)}, crate::live::VendorKind::{kind}),')
+    mod_rs += [
+        "];",
+        "",
+    ]
+    for b in BUCKETS:
+        mod_rs.append(f"mod os_{b};")
+    mod_rs.append("mod builtin;")
+    (OUT_DIR / "mod.rs").write_text("\n".join(mod_rs) + "\n", encoding="utf-8")
+
+    # builtin.rs：16 条内置品牌（三家关联采集库；literal 构造不用 only）
+    builtin_rs = header + [
+        "",
+        "use super::super::{VendorMib, VendorRule};",
+        "",
+        "pub(super) static BUILTIN: &[VendorMib] = &[",
+    ]
+    for os_id, display, aliases, prefixes, keywords, mib, note in BUILTIN_BRANDS:
+        e = entries[os_id]
+        pres = ", ".join("&[" + ", ".join(map(str, p)) + "]" for p in sorted(e["prefixes"]))
+        oid_set = f"Some(&super::super::mibs::{mib})" if mib else "None"
+        if note:
+            builtin_rs.append(f"    // {note}")
+        builtin_rs.append("    VendorMib {")
+        builtin_rs.append(f"        rule: &VendorRule {{ id: {rust_str(os_id)}, display_name: {rust_str(display)}, aliases: &[")
+        for a in aliases:
+            builtin_rs.append(f"            {rust_str(a)},")
+        builtin_rs.append(f"        ], sysobjectid_prefixes: &[{pres}], descr_keywords: &[")
+        for kw in sorted(e["keywords"]):
+            builtin_rs.append(f"            {rust_str(kw)},")
+        builtin_rs.append("        ], descr_keywords_except: &[], descr_regexes: &[], probe_checks: &[], },")
+        builtin_rs.append(f"        oid_set: {oid_set},")
+        builtin_rs.append("    },")
+    builtin_rs.append("];")
+    (OUT_DIR / "builtin.rs").write_text("\n".join(builtin_rs) + "\n", encoding="utf-8")
+
+    # os_*.rs：社区 OS 规则四桶（导入按需：ProbeCheck/ProbeOp 仅探测桶需要）
+    for b in BUCKETS:
+        has_probes = any(entries[o]["probes"] for o in per_bucket[b])
+        probe_types = "ProbeCheck, ProbeOp, " if has_probes else ""
+        bucket_rs = [
+            f"//! 社区 OS 级规则（id 首字母 {b.replace('_', '–')} 桶）。"
+            f"统计口径见 mod.rs 头注释，**勿手改**。",
+            "",
+            f"use super::super::{{{probe_types}VendorMib, VendorRule}};",
+            "use super::only;",
+            "",
+            f"pub(super) static OS_{b.upper().replace('_', '')}: &[VendorMib] = &[",
+        ]
+        for os_id in per_bucket[b]:
+            e = entries[os_id]
+            pres = ", ".join("&[" + ", ".join(map(str, p)) + "]" for p in sorted(e["prefixes"]))
+            bucket_rs.append(f"    // LibreNMS os_detection/{os_id}.yaml")
+            bucket_rs.append(
+                f"    only(&VendorRule {{ id: {rust_str(os_id)}, display_name: {rust_str(e['display'])}, aliases: &[], sysobjectid_prefixes: &[{pres}], descr_keywords: &["
             )
-        out.append("        ], }),")
-    out.append("];")
-    OUT.write_text("\n".join(out) + "\n", encoding="utf-8")
+            for kw in sorted(e["keywords"]):
+                bucket_rs.append(f"        {rust_str(kw)},")
+            bucket_rs.append("        ], descr_keywords_except: &[], descr_regexes: &[")
+            for rx in sorted(e["regexes"]):
+                bucket_rs.append(f"        {rust_str(rx)},")
+            bucket_rs.append("        ], probe_checks: &[")
+            for oid_s, op, val in sorted(e["probes"]):
+                bucket_rs.append(
+                    f"        ProbeCheck {{ oid: {rust_str(oid_s)}, op: ProbeOp::{op}, "
+                    f"value: {rust_str(val)} }},"
+                )
+            bucket_rs.append("        ], }),")
+        bucket_rs.append("];")
+        (OUT_DIR / f"os_{b}.rs").write_text("\n".join(bucket_rs) + "\n", encoding="utf-8")
 
-    # —— vendor_kind 校准清单（stdout，人工核对 mod.rs 映射表）——
-    print(f"已生成 {OUT}（{len(rules)} 条 OS 规则）")
-    for g in ("cisco", "huawei", "h3c"):
+    print(f"已生成 {OUT_DIR}（内置 {sum(1 for e in entries.values() if e['builtin'])} + "
+          f"OS {len(os_rules)} = {len(entries)} 条，KIND_BY_OS {len(kind_by_os)} 条）")
+    for g, kind in (("cisco", "Cisco"), ("comware", "H3c")):
         if g in kind_groups:
-            print(f"vendor_kind 校准 [{g}]: {' '.join(sorted(kind_groups[g]))}")
-    for extra in ("comware", "vrp"):
-        if extra in kind_groups:
-            print(f"vendor_kind 校准 [{extra}]: {' '.join(sorted(kind_groups[extra]))}")
-    if skipped:
-        print(f"跳过 {len(skipped)} 个：", "、".join(s.split("（")[0] for s in skipped[:30]),
-              "..." if len(skipped) > 30 else "")
+            print(f"vendor_kind [{g} 组 → {kind}]: {' '.join(sorted(kind_groups[g]))}")
+    if stats["malformed"]:
+        print(f"结构非映射（未转换）{stats['malformed']} 个")
 
 
 if __name__ == "__main__":

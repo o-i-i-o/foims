@@ -100,13 +100,16 @@ SNMP 探测（sysObjectID + sysDescr 一次读取）
 
 ```
 crates/foims-snmp/src/vendor/
-├── mod.rs        # VendorRule / ProbeCheck / VendorOidSet / SnmpIdentity /
-│                 # registry() + BUILTIN 16 条内置品牌级规则（含三家识别规则）
-├── community.rs  # 社区 OS 级规则 738 条（gen_vendor_community.py 生成，勿手改）
-├── mibs.rs       # 三家私有采集 OID 库（CISCO/HUAWEI/H3C，绑定直连目标）
-├── platform.rs   # PlatformRule / PlatformCaps + platform registry() + 版本解析
-├── identify.rs   # 证据聚合（前缀/关键词/正则）→ best_guess + confidence（纯函数）
-└── probe.rs      # 主动探测识别（probe_checks 全未命中静态证据时的一轮 GET 比对）
+├── mod.rs            # VendorRule / ProbeCheck / VendorOidSet / SnmpIdentity /
+│                     # registry() 聚合 + vendor_kind() 查表 + find_by_brand
+├── community/        # 识别规则数据（gen_vendor_community.py 生成，勿手改）
+│   ├── mod.rs        # 分桶聚合 + only() + KIND_BY_OS（OS→采集库归属）
+│   ├── builtin.rs    # 16 条内置品牌规则（三家关联采集库，脚本内置表数据源）
+│   └── os_*.rs       # 社区 OS 规则 738 条（按 id 首字母四桶）
+├── mibs.rs           # 三家私有采集 OID 库（CISCO/HUAWEI/H3C，绑定直连目标）
+├── platform.rs       # PlatformRule / PlatformCaps + platform registry() + 版本解析
+├── identify.rs       # 证据聚合（前缀/关键词/正则）→ best_guess + confidence（纯函数）
+└── probe.rs          # 主动探测识别（probe_checks 全未命中静态证据时的一轮 GET 比对）
 ```
 
 ### 5.1 核心类型
@@ -136,7 +139,7 @@ pub struct VendorRule {
     /// 对应 LibreNMS sysDescr_except 实践，来源标注同上
     pub descr_keywords_except: &'static [&'static str],
     /// sysDescr 正则关键词（Rust regex 语法——上游 PCRE 的无 look-around
-    /// 子集，定界符剥除、/i 转 (?i)；编译失败的丢弃并记录于 community.rs
+    /// 子集，定界符剥除、/i 转 (?i)；编译失败的丢弃并记录于 community/
     /// 生成头）。命中与关键词同级记 sysDescr 证据；仅收纯 sysDescr 块的
     /// 正向正则（except 排除正则对无其他证据的 OS 无识别价值，不转换）
     pub descr_regexes: &'static [&'static str],
@@ -210,9 +213,9 @@ pub struct SnmpIdentity {
 1. 识别规则初始 16 家词表（收编现状：cisco/huawei/h3c + 13 识别-only）+ 已验证企业号（9=Cisco / 2011=Huawei / 25506=HH3C / 11=HPE）；企业号以 **IANA 官方 enterprise-numbers 文件为唯一权威来源**（可随时下载最新版），其他资料仅作旁证；
 2. 采集库初始仅 cisco/huawei/h3c，OID 常量从 profile.rs 迁入，**每条常量上方注释必须注明来源**：RFC 号 / 厂商公开 MIB 文件名 / IANA 企业号。迁移时顺带修正粗糙口径：华为实体表 `hwEntityCpuUsageThreshold=0` 占位行应跳过（借鉴 LibreNMS skip_values），不再只按 0..=100 过滤；
 3. 采集库 ⊂ 识别规则：识别得出但无采集库的品牌（如 Juniper）→ 展示识别结果，不提供绑定；
-4. 新增厂商 = mod.rs BUILTIN 追加规则（绑定直连另在 mibs.rs 加采集库）+ 单测，不动核心逻辑；社区 OS 级随上游更新重跑生成脚本；
+4. 新增厂商/调整规则 = 脚本内置表（BUILTIN_BRANDS）与上游 YAML 更新后**重跑生成脚本**，不动核心逻辑；单测覆盖品牌匹配与 kind 映射；
 5. 规则数据的批量来源（GPL 上游只提取识别事实：sysObjectID 前缀 + sysDescr 关键词/正则 + 主动探测检查，不拷贝采集配置表达；优先级从高到低）：
-   - **LibreNMS `resources/definitions/os_detection/*.yaml`**（822 个 OS 识别规则、持续更新的社区验证数据）：**已按 LibreNMS 的 OS 级分组方式直接全量入库**（项目决策：社区验证数据可信，不按品牌级人工归并）——识别模型随之升级为 sysObjectID 前缀**最长匹配**（LibreNMS 语义），OS 级深前缀（如 9.1.2330=ios 特定型号）优先于品牌级 7 弧前缀，同长度内置优先；命中 OS 级 id 后经 `vendor_kind()` 按 LibreNMS group 归属采集库（cisco 组全产品线→Cisco；华为仅 vrp/yunshan→Huawei，oceanstor/smartax 等存储接入线走 Generic；comware→H3c）。入库落地为 **`da-scripts/gen_vendor_community.py`**（本地 sparse clone 全量转换 → `vendor/community.rs`，勿手改），转换口径：排除平台类（type=server/unix，29 个，属 platform.rs 域）与无有效证据 OS（前缀/关键词/正则/探测全空，54 个）；**关键词仅从纯 sysDescr 块收集**——上游 AND 块（前缀+关键词+snmpget 组合，如 airos-af-ltu=8072+"Linux"+UBNT MIB 探测）的关键词是跨设备通用词，作为独立证据只会误命中；单词元 ≤2 字符关键词丢弃；**sysDescr_regex → descr_regexes**（仅收纯 sysDescr 块的正向正则，PCRE 定界符剥除、`/i` 标志转 Rust regex 内联 `(?i)`，编译失败运行时跳过；except 排除正则对无其他证据的 OS 无识别价值，不转换）；**snmpget → probe_checks**（探测 OID 多为厂商私有 MIB、设备自证，GET+值比对独立于块内伙伴成立；仅收点分数字 OID——`MIB::obj` 格式运行时零 MIB 依赖无法解析，生成端丢弃并计数；op=`!=` 负条件几乎全满足，丢弃）。各项丢弃计数均记录于生成文件头。现状 822 → 738 条 OS 规则 + 16 内置品牌级规则共存。8072(net-snmp) 下聚合 68 个互不相干 OS，印证「8072 不作厂商证据」的设计；
+   - **LibreNMS `resources/definitions/os_detection/*.yaml`**（822 个 OS 识别规则、持续更新的社区验证数据）：**已按 LibreNMS 的 OS 级分组方式直接全量入库**（项目决策：社区验证数据可信，不按品牌级人工归并）——识别模型随之升级为 sysObjectID 前缀**最长匹配**（LibreNMS 语义），OS 级深前缀（如 9.1.2330=ios 特定型号）优先于品牌级 7 弧前缀，同长度内置优先；命中 OS 级 id 后经 `vendor_kind()` 按 LibreNMS group 归属采集库（cisco 组全产品线→Cisco；华为仅 vrp/yunshan→Huawei，oceanstor/smartax 等存储接入线走 Generic；comware→H3c）。入库落地为 **`da-scripts/gen_vendor_community.py`**（本地 sparse clone 全量转换 → `vendor/community/` 目录：mod.rs 聚合 + builtin.rs 内置品牌 + os_*.rs 四桶，**识别规则数据单一来源、勿手改**；原 mod.rs 手工 16 条词表已迁入脚本内置表 BUILTIN_BRANDS，与上游同 id 的 OS（如 netgear.yaml）证据合并进内置条目；vendor_kind 映射 KIND_BY_OS 亦由脚本按 group 生成），转换口径：排除平台类（type=server/unix，29 个，属 platform.rs 域），其余全部生成条目（无可转换证据的为空占位）；**关键词仅从纯 sysDescr 块收集**——上游 AND 块（前缀+关键词+snmpget 组合，如 airos-af-ltu=8072+"Linux"+UBNT MIB 探测）的关键词是跨设备通用词，作为独立证据只会误命中；单词元 ≤2 字符关键词丢弃；**sysDescr_regex → descr_regexes**（仅收纯 sysDescr 块的正向正则，PCRE 定界符剥除、`/i` 标志转 Rust regex 内联 `(?i)`，编译失败运行时跳过；except 排除正则对无其他证据的 OS 无识别价值，不转换）；**snmpget → probe_checks**（探测 OID 多为厂商私有 MIB、设备自证，GET+值比对独立于块内伙伴成立；仅收点分数字 OID——`MIB::obj` 格式运行时零 MIB 依赖无法解析，生成端丢弃并计数；op=`!=` 负条件几乎全满足，丢弃）。各项丢弃计数均记录于生成头。现状 822 全覆盖、无跳过：29 个平台类（type=server/unix）归 platform.rs 域 + 本表 808 条规则（内置品牌 16 + 社区 OS 792，其中 54 个为空证据占位——上游证据为 MIB 名格式探测/平台号前缀/except 正则等无可转换证据，识别永不命中、保留名录完整性，上游补充后重跑自动补全）。8072(net-snmp) 下聚合 68 个互不相干 OS，印证「8072 不作厂商证据」的设计；
    - **单 OS 草稿工具 `da-scripts/gen_vendor_rule_draft.py`**（`<os名>` 按需生成单条草稿 / `--list` 列全部 os 名 / `--all` 生成仓库外候选池草稿与 `_SUMMARY.md` 企业号聚合对照）：用于核对单个 OS 的转换细节或排查识别差异，不入库流程；
    - **SNMP::Info 企业号映射表**（`lib/SNMP/Info.pm` 的 `device_type()`）：单表核对；
    - **外部 MIB 资料池（独立仓库 `MIBs-more`，2019 年快照）**：仅作离线 OID 字典，查证「OID 数值 ↔ 含义/单位」；它**不进 foims 仓库、不进程序与部署包**——FOIMS 采集是数字 OID 定向 GET，运行时零 MIB 依赖（与 Prometheus snmp_exporter 同路线，区别于 LibreNMS 运行时 snmptranslate）；

@@ -420,3 +420,11 @@ SNMP 识别模型加正则匹配与主动 GET 探测能力，覆盖原 107 个�
 v0.84.1
 2026110423100001
 vendor 域结构整合拆分（识别 OS 级化后的概念分层，纯重构无功能变化，z 段）：三家品牌文件 cisco.rs/huawei.rs/h3c.rs 原为「识别规则 + 采集 OID 集」混合体，与 LibreNMS OS 级识别模型分层语义不符——识别规则统一化、采集库独立化：① mod.rs BUILTIN 内联 cisco/huawei/h3c 三条品牌级识别规则（与 13 条识别-only 同一视图，16 条内置规则一处可见）；② 新建 vendor/mibs.rs 集中三家私有采集 OID 库（CISCO/HUAWEI/H3C，绑定直连目标，来源注释随迁）；③ 删除 cisco.rs/huawei.rs/h3c.rs。头注释与方案文档 §5 目录树/§5.3.4 扩展规则同步。验证：cargo fmt、workspace clippy -D warnings 全绿，foims-snmp 102 测试全过。z 段不联动 Cargo.toml
+
+v0.85.0
+2026110423550001
+vendor 识别规则数据单一来源化（识别/采集数据彻底分离，识别模型 LibreNMS 化后的结构收尾，y 段）：① 清理旧不合理代码——vendor/mod.rs 手工维护的 16 条内置品牌词表（BUILTIN 数组 ~200 行）与 vendor_kind() 硬编码 match（31 个 OS id）迁出，mod.rs 精简为「类型 + registry() 聚合 + vendor_kind() 查表 + find_by_brand/display_name/oid_set」纯函数层（-330 行）；② 转换脚本完善——gen_vendor_community.py 重写：内置品牌表 BUILTIN_BRANDS 迁入脚本（16 条数据/注释原样迁移），与上游同 id 的 OS（netgear.yaml）证据合并进内置条目（前缀/关键词/正则/探测并集，display_name/aliases 保持内置 UI 语义），vendor_kind 映射 KIND_BY_OS 由脚本按上游 group 生成（cisco 组→Cisco、huawei/vrp/yunshan→Huawei、h3c/comware→H3c），废弃人工「校准清单」同步流程；③ 合理拆分——community.rs 单文件 8767 行拆为 community/ 目录五文件：mod.rs（聚合+KIND_BY_OS+转换口径头注释）、builtin.rs（16 条内置，三家关联 mibs.rs 采集库）、os_a_g/os_h_n/os_o_t/os_u_z.rs（OS 规则按 id 首字母四桶，导入按需生成）。数据不变性：registry() 迭代顺序语义不变（内置在前 sysDescr 优先、OS 级字母序），前缀最长匹配/关键词/正则/探测证据链路零变化；acano（cisco 组但无识别证据）不入 KIND 表——原硬编码不可达分支，行为等价。验证：cargo fmt、workspace clippy -D warnings 全绿，foims-snmp 102 测试全过。方案文档 §5 目录树/§5.3.4/§5.3.5 同步。y 段变化联动：Cargo.toml 0.33.29→0.33.30、foims-snmp 0.1.16→0.1.17
+
+v0.85.1
+2026110500250001
+识别规则 822 全覆盖、去除跳过逻辑（数据口径收尾，识别行为零变化，z 段）：gen_vendor_community.py 废除「无有效证据跳过」分支——793 个脚本域 OS 全部生成条目，其中 54 个无可转换证据（上游证据为 MIB 名格式探测（厂商 MIB 不可得，snmptranslate 实测 SYNOLOGY/UPSC/PTX/SUPERCAPBATTERY 均缺失）/平台号前缀/except 正则/低质关键词）的生成空规则占位：识别永不命中、无风险，保留 OS 名录完整性，上游补充证据后重跑脚本自动补全；KIND_BY_OS 过滤空占位条目（映射不可达不冗余）；结构非映射文件计数口径 skipped→malformed。现状对账：822 = 平台类 29（platform.rs 域）+ 表内 808（内置 16 + 社区 OS 792，含空占位 54）。方案文档 §5.3.5 对账口径同步。验证：cargo fmt、workspace clippy -D warnings 全绿，foims-snmp 102 + agent-service 97 测试全过。z 段不联动 Cargo.toml
