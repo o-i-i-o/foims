@@ -3,21 +3,22 @@
 //! 设计（docs/SNMP厂商MIB识别与绑定方案.md §5）：
 //! - 本域只放「规则与 OID 数据 + 识别纯函数」，采集逻辑（probe/discover_*）
 //!   留在 [`crate::live::profile`]；
-//! - 识别双证据：sysObjectID 企业号（弱证据，net-snmp 可装在任何 OS）+
-//!   sysDescr 词边界关键词（强证据），双证据一致才 High（驱动后续自动绑定）；
-//! - 平台（Linux/Windows/BSD…）与硬件厂商严格分层：平台 agent 企业号
-//!   （8072/311/12325/30155 等）不作为厂商证据（§3）；
+//! - 识别规则分两层：内置品牌级 16 条（BUILTIN，人工核实）+ 社区 OS 级
+//!   （community，LibreNMS os_detection 全量转换生成）；采集 OID 库独立
+//!   于识别规则（mibs.rs，仅三家绑定直连），识别与采集经 vendor_kind()
+//!   关联（§5.2）；
+//! - 识别证据：sysObjectID 前缀最长匹配（LibreNMS 语义）+ sysDescr
+//!   关键词/正则 + 主动探测（probe.rs）；平台（Linux/Windows/BSD…）与
+//!   硬件厂商严格分层：平台 agent 企业号（8072/311/12325/30155 等）不作
+//!   为厂商证据（§3）；
 //! - 规则数据来源（§5.3，按需拉取不整目录拷贝）：IANA enterprise-numbers
-//!   （企业号唯一权威）、SNMP::Info 企业号映射表、本地外部 MIB 资料池查证；
-//!   扩展 = 新增厂商模块文件 + registry 注册 + 单测，不动核心逻辑。
+//!   （企业号唯一权威）、SNMP::Info 企业号映射表、本地外部 MIB 资料池查证。
 //!
 //! 运行时零 MIB 依赖：采集是数字 OID 定向 GET，MIB 文件仅开发期查证用。
 
-mod cisco;
 mod community;
-mod h3c;
-mod huawei;
 pub mod identify;
+mod mibs;
 pub mod platform;
 pub mod probe;
 
@@ -119,8 +120,8 @@ pub struct VendorOidSet {
 
 /// 厂商库条目：识别规则引用 + 可选私有采集 OID 集。
 /// `oid_set = None` 表示识别-only（识别得出但不提供绑定，§5.3.3）。
-/// 规则以 `&'static` 引用存放：规则定义与 OID 集同置于各厂商模块文件，
-/// 注册表不复制规则数据。
+/// 规则以 `&'static` 引用存放：内置品牌级定义于本文件 BUILTIN，
+/// 采集 OID 集集中定义于 mibs.rs，注册表不复制规则数据。
 pub struct VendorMib {
     pub rule: &'static VendorRule,
     pub oid_set: Option<&'static VendorOidSet>,
@@ -153,16 +154,47 @@ pub fn registry() -> impl Iterator<Item = &'static VendorMib> {
 
 static BUILTIN: &[VendorMib] = &[
     VendorMib {
-        rule: &cisco::RULE,
-        oid_set: Some(&cisco::OID_SET),
+        rule: &VendorRule {
+            id: "cisco",
+            display_name: "Cisco",
+            aliases: &["cisco"],
+            // IANA enterprise-numbers：9 = Cisco Systems
+            sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 9]],
+            descr_keywords: &["cisco"],
+            descr_keywords_except: &[],
+            descr_regexes: &[],
+            probe_checks: &[],
+        },
+        oid_set: Some(&mibs::CISCO),
     },
     VendorMib {
-        rule: &huawei::RULE,
-        oid_set: Some(&huawei::OID_SET),
+        rule: &VendorRule {
+            id: "huawei",
+            display_name: "Huawei",
+            aliases: &["huawei"],
+            // IANA enterprise-numbers：2011 = Huawei Technologies；
+            // "versatile routing platform" 为华为 VRP 系统多词关键词
+            sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 2011]],
+            descr_keywords: &["huawei", "versatile routing platform"],
+            descr_keywords_except: &[],
+            descr_regexes: &[],
+            probe_checks: &[],
+        },
+        oid_set: Some(&mibs::HUAWEI),
     },
     VendorMib {
-        rule: &h3c::RULE,
-        oid_set: Some(&h3c::OID_SET),
+        rule: &VendorRule {
+            id: "h3c",
+            display_name: "H3C",
+            aliases: &["h3c", "3com"],
+            // IANA enterprise-numbers：25506 = H3C（原 3Com 归并）
+            sysobjectid_prefixes: &[&[1, 3, 6, 1, 4, 1, 25506]],
+            descr_keywords: &["h3c", "comware", "3com"],
+            descr_keywords_except: &[],
+            descr_regexes: &[],
+            probe_checks: &[],
+        },
+        oid_set: Some(&mibs::H3C),
     },
     // —— 识别-only 品牌（识别得出但不提供绑定，§5.3.3）——
     // 企业号来源：SNMP::Info 企业号映射表（IANA 注册）
