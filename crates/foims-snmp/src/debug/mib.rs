@@ -61,17 +61,23 @@ const MIB_TABLE: &[(&str, &str, &str)] = &[
         "ifHCOutOctets",
         "接口发送字节数（64 位）",
     ),
-    // HOST-RESOURCES-MIB hrStorageTable（1.3.6.1.2.1.25.2.3）
+    // HOST-RESOURCES-MIB hrStorageTable（1.3.6.1.2.1.25.2.3，RFC 2790）
+    // hrStorage 下无 hrStorageLastChanged 对象，25.2.1 为类型定义子树
     (
         "1.3.6.1.2.1.25.2.1",
-        "hrStorageLastChanged",
-        "hrStorageTable 最近变更时间",
+        "hrStorageTypes",
+        "存储介质类型子树（Ram=.2、FixedDisk=.4 等）",
     ),
-    ("1.3.6.1.2.1.25.2.3.1.2", "hrStorageDescr", "存储单元描述"),
     (
-        "1.3.6.1.2.1.25.2.3.1.3",
+        "1.3.6.1.2.1.25.2.3.1.2",
+        "hrStorageType",
+        "存储介质类型（hrStorageTypes 子树 OID 值）",
+    ),
+    ("1.3.6.1.2.1.25.2.3.1.3", "hrStorageDescr", "存储单元描述"),
+    (
+        "1.3.6.1.2.1.25.2.3.1.4",
         "hrStorageAllocationUnits",
-        "存储分配单元大小",
+        "存储分配单元大小（字节）",
     ),
     (
         "1.3.6.1.2.1.25.2.3.1.5",
@@ -91,14 +97,28 @@ const MIB_TABLE: &[(&str, &str, &str)] = &[
         "设备描述（CPU/内存等）",
     ),
     // UCD-SNMP 负载与 CPU（1.3.6.1.4.1.2021）
-    ("1.3.6.1.4.1.2021.10.1.3.1", "laLoad1", "1 分钟系统平均负载"),
+    (
+        "1.3.6.1.4.1.2021.10.1.3.1",
+        "laLoad.1",
+        "1 分钟系统平均负载（laLoad 列第 1 行）",
+    ),
     (
         "1.3.6.1.4.1.2021.11.11.0",
         "ssCpuIdle",
         "UCD CPU 空闲百分比",
     ),
-    // ENTITY 传感器（1.3.6.1.2.1.99）
-    ("1.3.6.1.2.1.99.1.1.1.2", "entSensorValue", "实体传感器读数"),
+    // ENTITY 传感器（1.3.6.1.2.1.99，RFC 3433：列 Type=1/Scale=2/Precision=3/
+    // Value=4/OperStatus=5，实际值 = Value × 10^Scale）
+    (
+        "1.3.6.1.2.1.99.1.1.1.2",
+        "entPhySensorScale",
+        "传感器读数量级（10 的幂）",
+    ),
+    (
+        "1.3.6.1.2.1.99.1.1.1.4",
+        "entPhySensorValue",
+        "实体传感器读数（配 Scale 修正）",
+    ),
     // BRIDGE-MIB dot1dBase（1.3.6.1.2.1.17）
     ("1.3.6.1.2.1.17.1.4.1", "dot1dBasePortTable", "桥接端口表"),
 ];
@@ -178,7 +198,7 @@ mod tests {
         let hits = lookup("SYSNAME");
         assert!(hits.iter().any(|e| e.name == "sysName"));
         let cn = lookup("负载");
-        assert!(cn.iter().any(|e| e.name == "laLoad1"));
+        assert!(cn.iter().any(|e| e.name == "laLoad.1"));
     }
 
     #[test]
