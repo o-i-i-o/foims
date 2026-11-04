@@ -8,8 +8,9 @@
 //!   hwEntityMemSize(.9，字节)/hwEntityMemSizeMega(.19，MB)/hwEntityTemperature(.11)；
 //! - 华三：HH3C-ENTITY-EXT-MIB hh3cEntityExtCpuUsage(.6)/hh3cEntityExtMemUsage(.8)/
 //!   hh3cEntityExtMemSize(.10，字节)/hh3cEntityExtTemperature(.12)；
-//! - 通用回退：HOST-RESOURCES-MIB（hrProcessorLoad、hrStorage Ram）、
-//!   UCD 内存标量、ENTITY-SENSOR-MIB、LM-SENSORS-MIB。
+//! - 通用回退：UCD 内存标量（net-snmp 主机，total−available 口径）、
+//!   HOST-RESOURCES-MIB（hrProcessorLoad、hrStorage Ram）、
+//!   ENTITY-SENSOR-MIB、LM-SENSORS-MIB。
 //!
 //! 探测失败（系统组无响应）返回 [`ProbeError`]；单项 MIB 缺失只降级为空
 //! 来源，不影响设备纳入实时采集。
@@ -128,9 +129,14 @@ fn hr_storage_ram_type() -> Oid {
     oid!(1, 3, 6, 1, 2, 1, 25, 2, 1, 2)
 }
 
-// UCD-SNMP-MIB 内存标量（KB）
+// UCD-SNMP-MIB 内存标量（KB）；可用量优先 memSysAvail(4.27，MemAvailable
+// 口径，net-snmp ≥5.8)，缺失回落 memAvailReal(4.6，MemFree 口径，老内核
+// 唯一可用，含缓冲缓存会高估使用率数十个百分点)
 fn ucd_mem_total() -> Oid {
     oid!(1, 3, 6, 1, 4, 1, 2021, 4, 5, 0)
+}
+fn ucd_mem_sys_avail() -> Oid {
+    oid!(1, 3, 6, 1, 4, 1, 2021, 4, 27, 0)
 }
 fn ucd_mem_avail() -> Oid {
     oid!(1, 3, 6, 1, 4, 1, 2021, 4, 6, 0)
@@ -350,14 +356,53 @@ async fn discover_mem(client: &Client<UdpHandle>, vendor: VendorKind) -> MemPlan
     if let Some(plan) = memory {
         return plan;
     }
+    // net-snmp 主机优先 UCD 标量：used = total − available，与 free 命令/
+    // agent/5 分钟轮询口径一致；hrStorage Ram 行的 used 是 total − free 口径
+    //（含缓冲缓存），直接使用会把内存使用率高估数十个百分点
+    if let Some(plan) = discover_ucd_mem(client).await {
+        return plan;
+    }
     if let Some(plan) = discover_hr_mem(client).await {
         return plan;
     }
-    // UCD 标量（net-snmp 主机）：始终可用，无需探测
+    // UCD 标量兜底（探测无响应时仍按 UCD 采集，值缺失自然为空）
     MemPlan::Ucd {
         total_kb: RawSource::new(ucd_mem_total(), Vec::new()),
         avail_kb: RawSource::new(ucd_mem_avail(), Vec::new()),
     }
+}
+
+/// UCD 内存标量探测：total 与可用量标量 GET 均有效且 total_kb > 0 才采用。
+/// 可用量优先 memSysAvail(4.27，MemAvailable 口径，net-snmp ≥5.8)，
+/// 缺失回落 memAvailReal(4.6，MemFree 口径，老 net-snmp 唯一可用)。
+async fn discover_ucd_mem(client: &Client<UdpHandle>) -> Option<MemPlan> {
+    let total_oid = ucd_mem_total();
+    for avail_oid in [ucd_mem_sys_avail(), ucd_mem_avail()] {
+        if let Some(plan) = probe_ucd_pair(client, &total_oid, &avail_oid).await {
+            return Some(plan);
+        }
+    }
+    None
+}
+
+/// 双标量探测：GET 均有效且 total_kb > 0 时返回计划（值在采集轮经同一
+/// RawSource 读取）。
+async fn probe_ucd_pair(
+    client: &Client<UdpHandle>,
+    total_oid: &Oid,
+    avail_oid: &Oid,
+) -> Option<MemPlan> {
+    let response = client
+        .get_many(&[total_oid.clone(), avail_oid.clone()])
+        .await
+        .ok()?;
+    // 响应与请求等长且有序（FixedCardinality）
+    let total_kb = response.varbinds.first()?.value.as_u64()?;
+    response.varbinds.get(1)?.value.as_u64()?;
+    (total_kb > 0).then(|| MemPlan::Ucd {
+        total_kb: RawSource::new(total_oid.clone(), Vec::new()),
+        avail_kb: RawSource::new(avail_oid.clone(), Vec::new()),
+    })
 }
 
 async fn discover_cisco_mem(client: &Client<UdpHandle>) -> Option<MemPlan> {

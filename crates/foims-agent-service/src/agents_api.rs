@@ -300,7 +300,11 @@ pub async fn get_top_metrics<S: ConfigProvider>(
     ))
 }
 
-/// GET /api/agents/{id}：详情（含 raw_metrics），不存在返回 404。
+/// GET /api/agents/{id}：详情（含 raw_metrics 与同 IP 兄弟行），不存在返回 404。
+///
+/// `siblings` 为同 IP 的其他来源行：主页面按 IP 去重只保留 rank 高的一行
+/// （ipmi>agent>snmp），详情弹窗经此切换查看被隐藏来源的数据；同一 IP 不会
+/// 同时存在 agent 与 ipmi 行，兄弟行至多一条。
 pub async fn get_agent_detail<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -324,6 +328,16 @@ pub async fn get_agent_detail<S: ConfigProvider>(
         return Err(AppError::NotFound(msg("server.agent.not_found")));
     };
 
+    let siblings = sqlx::query(
+        r#"SELECT id, source FROM monitored_hosts
+            WHERE ip IS NOT NULL AND ip = $1 AND id <> $2
+            ORDER BY source"#,
+    )
+    .bind(row.get::<Option<String>, _>("ip"))
+    .bind(id)
+    .fetch_all(&pool)
+    .await?;
+
     let body = json!({
         "id": row.get::<Uuid, _>("id"),
         "machine_id": row.get::<Option<String>, _>("machine_id"),
@@ -346,6 +360,15 @@ pub async fn get_agent_detail<S: ConfigProvider>(
         "first_seen": row.get::<Option<DateTime<Utc>>, _>("first_seen").map(rfc3339),
         "last_seen": row.get::<Option<DateTime<Utc>>, _>("last_seen").map(rfc3339),
         "created_at": rfc3339(row.get::<DateTime<Utc>, _>("created_at")),
+        "siblings": siblings
+            .iter()
+            .map(|s| {
+                json!({
+                    "id": s.get::<Uuid, _>("id"),
+                    "source": s.get::<String, _>("source"),
+                })
+            })
+            .collect::<Vec<Value>>(),
     });
     Ok(foims_common::ok_json(
         body,

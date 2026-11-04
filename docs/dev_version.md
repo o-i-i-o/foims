@@ -382,3 +382,12 @@ v0.80.2
 3.失真注释清理：lib.rs 模块索引「三层存储的中间层」、live_poll/report_server/snmp_poll/ipmi_poll 中「5min 桶中间层」措辞统一为「5min 桶趋势层」（两层口径）。
 4.架构文档 v0.80.0 注记补全失效清单（§3.3 版本分发 latest_version、§8 协议卫生 collectors/latest_version）并补记轮询路径统一口径；dev_version v0.80.0 条目「三源统一」表述经本条修复后成立。
 审计结论：升级 SQL/foims-init/曲线 API/ingest 语义/配置链/门禁四方口径/agent 仓改动/硬性规范各项通过；双副本 report.rs 仅注释差异为 HEAD 既有状态。验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings、foims-agent-service 97 单测、前端 vue-tsc/npm run build 全过。仅 dev_version z+1，Cargo.toml/package.json 不联动
+
+v0.81.0
+2026110416230901
+SNMP 采集口径纠偏 + 主机详情同 IP 双来源切换（功能 bug 更新 + 小功能，y 段 +1）：
+1.live 内存口径修复（本机 192.168.93.115 实测复现：live 值 ~96% vs free 实际 ~47%，相差近一倍）——live/profile.rs discover_mem 通用回退顺序由 hrStorage 优先改为 UCD 标量优先（新增 discover_ucd_mem 探测：双标量 GET 有效且 total_kb>0 才采用）；根因是 hrStorage Ram 行 hrStorageUsed 为 total−free 口径（含缓冲缓存），与 free/agent/5 分钟轮询（total−available）严重不一致，现仅对不支持 UCD 的 HOST-RESOURCES 设备兜底。配套口径修正：可用量优先 UCD memSysAvail(4.27，CounterBasedGauge64，MemAvailable 口径，net-snmp ≥5.8，MIB 文档与本机 snmpwalk 双重核实)、回落 memAvailReal(4.6，MemFree 口径，老内核唯一可用)——本机实测 4.6≈MemFree 而非 MemAvailable，若直接采用会得到 ~82% 的高估值；metrics.rs 5 分钟路径的 ucd_memory 兜底同步改 4.27 优先。
+2.主机 uptime 源修复（本机实测 sysUpTime=3h47m vs 真实 6h51m）——snmp_poll.rs read_system_info 开机时长优先 HOST-RESOURCES-MIB hrSystemUptime.0（主机口径），失败回落 sysUpTime.0（SNMP agent 进程口径，snmpd 重启会回退，原实现会缩短 uptime 并把 snmpd 重启误判成主机重启触发重启通知）。
+3.主机信息补齐——metrics.rs 新增 collect_cores（hrProcessorLoad 有效行数=逻辑核数，网络设备无 HOST-RESOURCES 为 None）与 parse_linux_sysdescr（uname 风格 sysDescr 解析内核版本/架构，仅识别 Linux 前缀，网络设备不解析），SnmpSnapshot 增 cores 字段，build_report_json 参数收敛为 SnmpReportBase 结构体（修 too_many_arguments），system.kernel/arch 与 cpu.cores 随报告落库；snmp_poll upsert 同步写入 kernel/arch 列（列已存在，无 DDL 变更）。
+4.主机详情同 IP 双来源切换——列表/Top 的 IP 去重（v0.46.0）保持不变，get_agent_detail 响应新增 siblings（同 IP 其他来源行，agent↔snmp / ipmi↔snmp 两两互斥至多一条，NULL IP 恒无兄弟）；AgentDetailModal 内部 viewId 承载当前查看行（默认列表传入行），概要行渲染切换按钮「查看 {source} 采集数据」（zh/en i18n），点击后详情/趋势/采集端口/实时匹配随 viewId 重新拉取，弹窗不关闭。
+验证：本机 SNMP 实测（snmpwalk/snmpget 对照 free/df/uptime/nproc：内存行、磁盘行、CPU 计数器、负载逐项核对）；cargo fmt、cargo clippy --release --workspace --all-targets -D warnings、foims-snmp 97 单测、前端 vue-tsc/npm run build 全过。版本联动：Cargo.toml 0.33.25→0.33.26、frontend/package.json 0.1.89→0.1.90、foims-snmp 0.1.12→0.1.13、foims-agent-service 0.1.36→0.1.37

@@ -1116,6 +1116,7 @@
     "source_snmp": "SNMP",
     "source_ipmi": "IPMI",
     "source_agent": "Agent",
+    "view_source_data": "查看 {source} 采集数据",
     "live_connected": "实时推送已连接",
     "live_disconnected": "实时推送重连中",
     "live_realtime": "实时",

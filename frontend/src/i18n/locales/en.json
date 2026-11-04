@@ -1116,6 +1116,7 @@
     "source_snmp": "SNMP",
     "source_ipmi": "IPMI",
     "source_agent": "Agent",
+    "view_source_data": "View {source} data",
     "live_connected": "Live stream connected",
     "live_disconnected": "Live stream reconnecting",
     "live_realtime": "Live",

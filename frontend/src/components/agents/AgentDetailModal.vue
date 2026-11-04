@@ -33,6 +33,8 @@ interface AgentDetail {
   mem_usage_pct: number | null;
   max_temp: number | null;
   raw_metrics: RawMetrics | null;
+  /** 同 IP 的其他来源行（主页面按 IP 去重后隐藏侧，agent/ipmi 与 snmp 两两互斥） */
+  siblings: Array<{ id: number | string; source: string }> | null;
 }
 
 /** IPMI 单个传感器读数（_ipmi_state.temps/fans/volts 元素，与 LiveSensorRow 同构） */
@@ -153,6 +155,19 @@ const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
 
+/**
+ * 当前查看的行 id：默认打开列表传入的行；同 IP 存在双来源（agent↔snmp /
+ * ipmi↔snmp）时，详情弹窗内切换按钮跟随切换，弹窗不关闭。
+ */
+const viewId = ref<number | string>(props.agentId);
+
+watch(
+  () => props.agentId,
+  (id) => {
+    viewId.value = id;
+  }
+);
+
 // 状态元数据：徽章配色类 + 名称 i18n 键（active/offline 由上报自动翻转）
 const STATUS_META: Record<string, { badge: string; labelKey: string }> = {
   active: { badge: "agent-badge-active", labelKey: "agents.status_active" },
@@ -173,9 +188,9 @@ function sourceBadgeText(source: string | null | undefined): string | null {
 }
 
 const detailQuery = useQuery({
-  queryKey: computed(() => ["agent-detail", props.agentId]),
+  queryKey: computed(() => ["agent-detail", viewId.value]),
   queryFn: async (): Promise<AgentDetail | null> => {
-    const result = await apiGet<AgentDetail>(`/api/agents/${props.agentId}`);
+    const result = await apiGet<AgentDetail>(`/api/agents/${viewId.value}`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -191,10 +206,10 @@ const historyHours = computed(
 );
 
 const historyQuery = useQuery({
-  queryKey: computed(() => ["agent-history", props.agentId, historyRange.value]),
+  queryKey: computed(() => ["agent-history", viewId.value, historyRange.value]),
   queryFn: async (): Promise<AgentHistoryPoint[]> => {
     const result = await apiGet<{ items?: AgentHistoryPoint[] }>(
-      `/api/agents/${props.agentId}/history?hours=${historyHours.value}`
+      `/api/agents/${viewId.value}/history?hours=${historyHours.value}`
     );
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
@@ -234,7 +249,7 @@ const live = computed(() => {
   }
   // Agent 主机：实时行 device_id 即 monitored_hosts.id，按行 id 精确匹配
   return liveDevices.value.find(
-    (row) => row.source === "agent" && row.device_id === String(props.agentId)
+    (row) => row.source === "agent" && row.device_id === String(viewId.value)
   );
 });
 
@@ -272,6 +287,15 @@ const displayMemTotal = computed(() => liveMemTotal.value ?? raw.value.memory?.t
 
 // ===== IPMI 硬件视图：BMC 无 CPU/内存/磁盘/网络语义，详情改展温度/风扇/电压与电源状态 =====
 const isIpmi = computed(() => agent.value?.source === "ipmi");
+
+// ===== 同 IP 双来源切换：主页面去重只保留 agent/ipmi 行，snmp 侧经此查看 =====
+const siblings = computed(() => agent.value?.siblings ?? []);
+
+/** 切换查看同 IP 的另一来源数据（弹窗不关闭，各查询随 viewId 重新拉取） */
+function switchSibling(sibling: { id: number | string }): void {
+  viewId.value = sibling.id;
+}
+
 const ipmiState = computed<IpmiState>(() => raw.value._ipmi_state ?? {});
 /** 电源状态：优先秒级实时快照（Get Chassis Status），回落 5 分钟轮询落库值 */
 const ipmiPowerOn = computed<boolean | null>(() => {
@@ -314,9 +338,9 @@ interface MonitorPortPayload {
 
 // 仅 SNMP 主机有采集端口概念：Agent 主机不发起该请求
 const monitorPortQuery = useQuery({
-  queryKey: computed(() => ["agent-monitor-port", props.agentId]),
+  queryKey: computed(() => ["agent-monitor-port", viewId.value]),
   queryFn: async (): Promise<MonitorPortPayload | null> => {
-    const result = await apiGet<MonitorPortPayload>(`/api/agents/${props.agentId}/monitor-port`);
+    const result = await apiGet<MonitorPortPayload>(`/api/agents/${viewId.value}/monitor-port`);
     if (!result.success) {
       throw new Error(result.message || t("common.load_failed"));
     }
@@ -346,7 +370,7 @@ async function saveMonitorPort(): Promise<void> {
   savingPort.value = true;
   try {
     const result = await apiPut<MonitorPortPayload, { if_name: string | null }>(
-      `/api/agents/${props.agentId}/monitor-port`,
+      `/api/agents/${viewId.value}/monitor-port`,
       { if_name: selectedPort.value || null }
     );
     if (!result.success) {
@@ -546,7 +570,7 @@ function formatUnit(unit: string): (value: number) => string {
     <p v-if="detailQuery.isPending.value" class="agent-detail-empty">{{ t("common.loading") }}</p>
     <p v-else-if="detailQuery.isError.value" class="agent-detail-empty">{{ detailError }}</p>
     <template v-else-if="agent">
-      <!-- 头部概要：状态徽章 + IP -->
+      <!-- 头部概要：状态徽章 + IP + 同 IP 双来源切换 -->
       <div class="agent-detail-summary">
         <span class="status-badge agent-detail-badge" :class="statusMeta?.badge">{{ statusText }}</span>
         <span
@@ -554,6 +578,15 @@ function formatUnit(unit: string): (value: number) => string {
           class="agent-source-badge"
         >{{ sourceBadgeText(agent.source) }}</span>
         <span class="agent-detail-ip">{{ agent.ip || "-" }}</span>
+        <button
+          v-for="sibling in siblings"
+          :key="sibling.id"
+          type="button"
+          class="agent-detail-switch"
+          @click="switchSibling(sibling)"
+        >
+          {{ t("agents.view_source_data", { source: sourceBadgeText(sibling.source) ?? sibling.source }) }}
+        </button>
       </div>
 
       <!-- 分组卡片网格：系统信息 / CPU / 内存 / 磁盘 / 网络 / 温度风扇 -->

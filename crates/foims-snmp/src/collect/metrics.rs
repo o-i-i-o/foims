@@ -180,6 +180,8 @@ pub struct SensorRow {
 /// 单轮 SNMP 指标采集结果：上报 JSON 明细 + 热列输入 + 写回状态
 pub struct SnmpSnapshot {
     pub cpu_usage_pct: Option<f64>,
+    /// 逻辑核数（hrProcessorLoad 行数；设备不支持 HOST-RESOURCES 时为 None）
+    pub cores: Option<u64>,
     pub load: (Option<f64>, Option<f64>, Option<f64>),
     /// 内存（字节，used = total − available）
     pub mem_total: Option<u64>,
@@ -219,9 +221,11 @@ pub async fn collect(
     let (nets, state_ifaces, state_if_status, state_if_admin) =
         collect_nets(client, prev, now_unix).await;
     let load = collect_load(client).await;
+    let cores = collect_cores(client).await;
 
     SnmpSnapshot {
         cpu_usage_pct,
+        cores,
         load,
         mem_total: mem.as_ref().map(|(t, _)| *t),
         mem_used: mem.as_ref().map(|(_, u)| *u),
@@ -450,6 +454,17 @@ fn format_secs(secs: i64) -> String {
     format!("{h}h {m}m {s}s")
 }
 
+/// Linux sysDescr 解析（uname 风格）：`Linux <主机名> <内核版本> <编译信息…> <架构>`，
+/// 取第 3 段为内核版本、末段为架构；仅识别 `Linux ` 前缀（网络设备描述串
+/// 格式各异不解析），返回 (kernel, arch)。
+pub fn parse_linux_sysdescr(descr: &str) -> Option<(String, String)> {
+    let tokens: Vec<&str> = descr.split_whitespace().collect();
+    if tokens.first() == Some(&"Linux") && tokens.len() >= 4 {
+        return Some((tokens[2].to_string(), tokens[tokens.len() - 1].to_string()));
+    }
+    None
+}
+
 // 采集实现
 
 /// CPU：GET ssCpuRaw* 六个计数器 → 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和与
@@ -637,11 +652,16 @@ fn disks_from_storage(rows: &[StorageRow]) -> Vec<DiskRow> {
         .collect()
 }
 
-/// UCD 内存回落：memTotalReal(4.5)/memAvailReal(4.6)，KB → 字节；
+/// UCD 内存回落：memTotalReal(4.5) + 可用量优先 memSysAvail(4.27，
+/// MemAvailable 口径，net-snmp ≥5.8)，缺失回落 memAvailReal(4.6，
+/// MemFree 口径，老内核唯一可用，含缓冲缓存会高估使用率)；KB → 字节。
 /// 仅在 hrStorage 两行不全时调用。
 async fn ucd_memory(client: &Client<UdpHandle>) -> Option<(u64, u64)> {
     let total_kb = get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 5, 0)).await?;
-    let avail_kb = get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 6, 0)).await?;
+    let avail_kb = match get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 27, 0)).await {
+        Some(sys_avail_kb) => sys_avail_kb,
+        None => get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 6, 0)).await?,
+    };
     let total = total_kb.saturating_mul(1024);
     let used = total_kb.saturating_sub(avail_kb).saturating_mul(1024);
     (total > 0).then_some((total, used))
@@ -914,6 +934,23 @@ async fn collect_load(client: &Client<UdpHandle>) -> (Option<f64>, Option<f64>, 
     (load1, load5, load15)
 }
 
+/// HOST-RESOURCES-MIB hrProcessorLoad（每逻辑核一行，单弧行索引）
+fn hr_processor_load() -> async_snmp::Oid {
+    oid!(1, 3, 6, 1, 2, 1, 25, 3, 3, 1, 2)
+}
+
+/// CPU 逻辑核数：hrProcessorLoad 每逻辑核一行，有效行（load 值 ≥0）数即
+/// 核数。多数网络设备不支持 HOST-RESOURCES → None，报告 cores 留空。
+async fn collect_cores(client: &Client<UdpHandle>) -> Option<u64> {
+    let column_len = hr_processor_load().len();
+    let cores = walk_all(client, hr_processor_load())
+        .await
+        .iter()
+        .filter(|vb| vb.oid.len() > column_len && vb.value.as_i32().is_some_and(|v| v >= 0))
+        .count() as u64;
+    (cores > 0).then_some(cores)
+}
+
 // 采集工具函数
 
 /// bulk walk 全量收集（单条 walk 错误即中断，保留已收条目；
@@ -1003,32 +1040,40 @@ fn num_map(value: &SnmpValue, map: &mut BTreeMap<u32, u64>, idx: u32) {
 
 // 上报 JSON 合成
 
+/// 报告静态段：设备身份 + 系统组信息（每轮采集内不变，单独成参避免
+/// build_report_json 参数膨胀）。
+pub struct SnmpReportBase<'a> {
+    pub machine_id: &'a str,
+    pub hostname: &'a str,
+    pub os: Option<&'a str>,
+    pub kernel: Option<&'a str>,
+    pub arch: Option<&'a str>,
+    pub uptime_secs: Option<i64>,
+}
+
 /// 合成与 AgentReport 同形的上报 JSON（前端主机详情弹窗无需改动即可
-/// 渲染；agent_version 缺省、kernel/arch 等设备侧不可得字段置 null，
+/// 渲染；agent_version 缺省、kernel/arch 非联网设备侧不可得字段置 null，
 /// 前端回落 "-"）。附加私有键 `_snmp_state` 随 raw_metrics 持久化，
 /// 供下一轮差值计算（前端忽略未知键）。
 pub fn build_report_json(
-    machine_id: &str,
-    hostname: &str,
-    os: Option<&str>,
-    uptime_secs: Option<i64>,
+    base: &SnmpReportBase<'_>,
     snap: &SnmpSnapshot,
     now: DateTime<Utc>,
 ) -> Value {
     let (load1, load5, load15) = snap.load;
     json!({
-        "machine_id": machine_id,
-        "hostname": hostname,
+        "machine_id": base.machine_id,
+        "hostname": base.hostname,
         "collected_at": now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         "system": {
-            "os": os,
-            "kernel": Value::Null,
-            "arch": Value::Null,
-            "uptime_secs": uptime_secs,
+            "os": base.os,
+            "kernel": base.kernel,
+            "arch": base.arch,
+            "uptime_secs": base.uptime_secs,
         },
         "cpu": {
             "usage_pct": snap.cpu_usage_pct,
-            "cores": Value::Null,
+            "cores": snap.cores,
             "load1": load1,
             "load5": load5,
             "load15": load15,
@@ -1293,6 +1338,7 @@ mod tests {
     fn 上报json合成_与agent同形且含状态() {
         let snap = SnmpSnapshot {
             cpu_usage_pct: Some(12.5),
+            cores: Some(8),
             load: (Some(0.5), Some(0.4), Some(0.3)),
             mem_total: Some(1000),
             mem_used: Some(250),
@@ -1324,19 +1370,23 @@ mod tests {
             },
         };
         let now = Utc::now();
-        let report = build_report_json(
-            "snmp:1",
-            "dev-01",
-            Some("Linux dev 5.9"),
-            Some(3600),
-            &snap,
-            now,
-        );
+        let base = SnmpReportBase {
+            machine_id: "snmp:1",
+            hostname: "dev-01",
+            os: Some("Linux dev 5.9"),
+            kernel: Some("5.9.0"),
+            arch: Some("x86_64"),
+            uptime_secs: Some(3600),
+        };
+        let report = build_report_json(&base, &snap, now);
         // 前端渲染依赖键存在
         assert_eq!(report["machine_id"], "snmp:1");
         assert_eq!(report["hostname"], "dev-01");
         assert_eq!(report["system"]["os"], "Linux dev 5.9");
+        assert_eq!(report["system"]["kernel"], "5.9.0");
+        assert_eq!(report["system"]["arch"], "x86_64");
         assert_eq!(report["cpu"]["usage_pct"], 12.5);
+        assert_eq!(report["cpu"]["cores"], 8);
         assert_eq!(report["memory"]["used"], 250);
         assert_eq!(report["disks"][0]["total"], 1000);
         assert!(report["disks"][0]["util_pct"].is_null());
@@ -1406,5 +1456,24 @@ mod tests {
         assert_eq!(ev.detail["downtime_secs"], 240);
         let ev = detect_reboot(Some(3600), Some(300), 100).unwrap_or_else(|| panic!("应检出重启"));
         assert_eq!(ev.detail["downtime_secs"], 0);
+    }
+
+    #[test]
+    fn linux_sysdescr解析_主机命中与设备不命中() {
+        let (kernel, arch) = parse_linux_sysdescr(
+            "Linux oi-io-Precision-3551 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64",
+        )
+        .unwrap_or_else(|| panic!("uname 风格描述串应解析"));
+        assert_eq!(kernel, "7.3.0-10-generic");
+        assert_eq!(arch, "x86_64");
+        assert_eq!(
+            parse_linux_sysdescr("Linux dev 5.9"),
+            None,
+            "段数不足不解析"
+        );
+        // 网络设备/Windows 描述串不识别
+        assert!(parse_linux_sysdescr("Cisco IOS Software, Version 15.2").is_none());
+        assert!(parse_linux_sysdescr("Microsoft Windows Version 10.0 Build 17763").is_none());
+        assert!(parse_linux_sysdescr("").is_none());
     }
 }

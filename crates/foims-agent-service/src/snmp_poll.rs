@@ -6,7 +6,8 @@
 //! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
 //! - 设备删除时 monitored_hosts 行经 device_id 外键级联清理。
 //!
-//! 采集范围：MIB-II 系统组（sysName/sysDescr/sysUpTime）+ 性能指标
+//! 采集范围：MIB-II 系统组（sysName/sysDescr）+ 主机开机时长
+//! （hrSystemUptime 优先，回落 sysUpTime）+ 性能指标
 //! （CPU/内存/磁盘/温度/流量/负载，见 [`foims_snmp::collect::metrics`]）。
 
 use std::sync::Arc;
@@ -54,7 +55,7 @@ struct SnmpSysInfo {
     hostname: Option<String>,
     /// sysDescr（设备描述串）
     os: Option<String>,
-    /// sysUpTime 换算秒（TimeTicks 百分之一秒 → 秒）
+    /// 主机开机时长换算秒（hrSystemUptime 优先，回落 sysUpTime）
     uptime_secs: Option<i64>,
 }
 
@@ -275,6 +276,11 @@ async fn poll_and_upsert(
     let hostname = info.hostname.unwrap_or_else(|| device_name.to_string());
     let hostname = truncate_to_column_width(&hostname, MAX_HOSTNAME_LEN);
     let os = info.os.map(|s| truncate_to_column_width(&s, MAX_OS_LEN));
+    // Linux 描述串（uname 风格）补齐内核/架构，非 Linux 设备为 None（列留空）
+    let (kernel, arch) = os
+        .as_deref()
+        .and_then(snmp_metrics::parse_linux_sysdescr)
+        .map_or((None, None), |(k, a)| (Some(k), Some(a)));
 
     // 性能指标（二期）：差值依赖上一轮 raw_metrics._snmp_state
     let now = Utc::now();
@@ -302,10 +308,14 @@ async fn poll_and_upsert(
     }
 
     let raw_metrics = snmp_metrics::build_report_json(
-        &machine_id,
-        &hostname,
-        os.as_deref(),
-        info.uptime_secs,
+        &snmp_metrics::SnmpReportBase {
+            machine_id: &machine_id,
+            hostname: &hostname,
+            os: os.as_deref(),
+            kernel: kernel.as_deref(),
+            arch: arch.as_deref(),
+            uptime_secs: info.uptime_secs,
+        },
         &snap,
         now,
     );
@@ -319,14 +329,16 @@ async fn poll_and_upsert(
     // upsert：热列仅在采得新值时覆盖（COALESCE），raw_metrics 整体写回
     let upsert = sqlx::query_scalar::<_, uuid::Uuid>(
         r"INSERT INTO monitored_hosts (machine_id, source, device_id, status,
-                              hostname, ip, os, uptime_secs,
+                              hostname, ip, os, kernel, arch, uptime_secs,
                               cpu_usage, mem_usage_pct, disk_usage_pct, max_temp,
                               raw_metrics, first_seen, last_seen)
-          VALUES ($1, 'snmp', $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+          VALUES ($1, 'snmp', $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
           ON CONFLICT (machine_id) WHERE machine_id IS NOT NULL DO UPDATE SET
               status = CASE WHEN monitored_hosts.status = 'offline' THEN 'active' ELSE monitored_hosts.status END,
               hostname = EXCLUDED.hostname,
               os = EXCLUDED.os,
+              kernel = EXCLUDED.kernel,
+              arch = EXCLUDED.arch,
               uptime_secs = EXCLUDED.uptime_secs,
               cpu_usage = COALESCE(EXCLUDED.cpu_usage, monitored_hosts.cpu_usage),
               mem_usage_pct = COALESCE(EXCLUDED.mem_usage_pct, monitored_hosts.mem_usage_pct),
@@ -341,6 +353,8 @@ async fn poll_and_upsert(
     .bind(&hostname)
     .bind(ip)
     .bind(&os)
+    .bind(&kernel)
+    .bind(&arch)
     .bind(info.uptime_secs)
     .bind(cpu_usage)
     .bind(mem_pct)
@@ -424,7 +438,7 @@ async fn connect_snmp(params: &foims_snmp::SnmpParamsLegacy) -> Result<Client<Ud
         .map_err(|e| format!("创建SNMP会话失败: {}", format_snmp_error(e).log_string()))
 }
 
-/// 读取系统组三个 OID（同一会话顺序请求，一期语义：缺失容忍）。
+/// 读取系统组（sysName/sysDescr + 开机时长，同一会话顺序请求，缺失容忍）。
 async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
     // sysName → 主机名；设备不支持该 OID 时容忍缺失
     let hostname = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 5, 0)).await {
@@ -462,26 +476,46 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
         }
     };
 
-    // sysUpTime → 运行时长（TimeTicks 百分之一秒）；读取/换算失败容忍缺失
-    let uptime_secs = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 3, 0)).await {
-        Ok(v) => v
-            .varbinds
-            .first()
-            .filter(|vb| !vb.value.is_exception())
-            .and_then(|vb| vb.value.as_u32())
-            .map(|ticks| i64::from(ticks) / 100),
-        Err(e) => {
-            tracing::debug!(
-                "sysUpTime 读取失败（容忍缺失）: {}",
-                format_snmp_error(e).log_string()
-            );
-            None
-        }
-    };
+    // 开机时长：优先 HOST-RESOURCES-MIB hrSystemUptime（主机上次初始化以来的
+    // 时长）；SNMPv2-MIB sysUpTime 是 SNMP agent 自身初始化时长，snmpd 重启/
+    // 重载会回退，直接使用会把 uptime 缩短并把 snmpd 重启误判成主机重启，
+    // 仅在不支持 HOST-RESOURCES 的设备上回落。
+    let uptime_secs = read_uptime_ticks(client)
+        .await
+        .map(|ticks| i64::from(ticks) / 100);
 
     SnmpSysInfo {
         hostname,
         os,
         uptime_secs,
+    }
+}
+
+/// 读开机时长 TimeTicks：hrSystemUptime（主机）优先，失败回落 sysUpTime
+/// （SNMP agent 进程时长）；两者均无响应时 None。
+async fn read_uptime_ticks(client: &Client<UdpHandle>) -> Option<u32> {
+    // hrSystemUptime 与 sysUpTime 可能同轮有效，但 hrSystemUptime 才是主机口径，
+    // 命中即用；都读不到返回 None（uptime_secs 缺失，重启检测自然跳过）
+    match read_ticks(client, &oid!(1, 3, 6, 1, 2, 1, 25, 1, 1, 0)).await {
+        Some(ticks) => Some(ticks),
+        None => read_ticks(client, &oid!(1, 3, 6, 1, 2, 1, 1, 3, 0)).await,
+    }
+}
+
+/// 单 OID TimeTicks GET（读取/换算失败容忍缺失）。
+async fn read_ticks(client: &Client<UdpHandle>, oid_val: &async_snmp::Oid) -> Option<u32> {
+    match client.get(oid_val).await {
+        Ok(v) => v
+            .varbinds
+            .first()
+            .filter(|vb| !vb.value.is_exception())
+            .and_then(|vb| vb.value.as_u32()),
+        Err(e) => {
+            tracing::debug!(
+                "开机时长 OID 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
+            None
+        }
     }
 }

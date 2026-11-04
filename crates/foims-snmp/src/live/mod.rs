@@ -107,7 +107,9 @@ pub enum MemPlan {
         used: RawSource,
         units: u64,
     },
-    /// UCD-SNMP-MIB：KB 标量（net-snmp 主机回退）。
+    /// UCD-SNMP-MIB：KB 标量（net-snmp 主机优先口径）：
+    /// used = (total − avail) × 1024，avail 优先 memSysAvail(4.27，
+    /// MemAvailable 口径)、回落 memAvailReal(4.6)。
     Ucd {
         total_kb: RawSource,
         avail_kb: RawSource,
