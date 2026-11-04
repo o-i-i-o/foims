@@ -428,3 +428,7 @@ vendor 识别规则数据单一来源化（识别/采集数据彻底分离，识
 v0.85.1
 2026110500250001
 识别规则 822 全覆盖、去除跳过逻辑（数据口径收尾，识别行为零变化，z 段）：gen_vendor_community.py 废除「无有效证据跳过」分支——793 个脚本域 OS 全部生成条目，其中 54 个无可转换证据（上游证据为 MIB 名格式探测（厂商 MIB 不可得，snmptranslate 实测 SYNOLOGY/UPSC/PTX/SUPERCAPBATTERY 均缺失）/平台号前缀/except 正则/低质关键词）的生成空规则占位：识别永不命中、无风险，保留 OS 名录完整性，上游补充证据后重跑脚本自动补全；KIND_BY_OS 过滤空占位条目（映射不可达不冗余）；结构非映射文件计数口径 skipped→malformed。现状对账：822 = 平台类 29（platform.rs 域）+ 表内 808（内置 16 + 社区 OS 792，含空占位 54）。方案文档 §5.3.5 对账口径同步。验证：cargo fmt、workspace clippy -D warnings 全绿，foims-snmp 102 + agent-service 97 测试全过。z 段不联动 Cargo.toml
+
+v0.86.0
+2026110422245901
+主机监控页同 IP 去重改为「在线优先」（功能优化，y 段 +1）：agents_api 列表与 Top 榜的 dedup CTE 排序由单一来源优先级（ipmi>agent>snmp）升级为两级键——新增 STATUS_RANK_SQL（active 视为在线恒排前）为第一级，SOURCE_RANK_SQL 降为第二级（仅双方同在线或同离线时作确定性取舍，last_seen 兜底不变）；效果：同 IP 的 ipmi/agent 行与 snmp 行仅一方在线时恒展示在线方，双方都在线时维持 ipmi/agent 优先。Top 榜因 WHERE status='active' 预过滤，在线键恒并列退化为来源优先级，SQL 不变仅注释澄清口径；get_agent_detail siblings 与 AgentDetailModal 双来源切换机制零改动（仍返回全部同 IP 行），后端/前端相关注释口径同步。验证：cargo fmt、workspace clippy --all-targets -D warnings 全绿，foims-agent-service 97 测试全过。y 段变化联动：Cargo.toml 0.33.30→0.33.31、foims-agent-service 0.1.37→0.1.38

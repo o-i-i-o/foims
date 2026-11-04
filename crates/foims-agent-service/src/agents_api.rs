@@ -100,9 +100,14 @@ pub(crate) fn rfc3339(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
-/// 同 IP 多来源去重优先级（ipmi > agent > snmp）：实际场景 agent 与 ipmi 分处
-/// 不同 IP（BMC 管理口与 OS），此处仅作同 IP 并存时展示层的确定性取舍。
-/// SQL 片段：列表与 Top 榜的 `ROW_NUMBER() OVER (... ORDER BY <本表达式>)` 共用。
+/// 同 IP 多来源去重排序第一级键·在线优先：仅一方在线（active）时恒展示在线
+/// 方，双方同态（同在线或同离线）时并列，回落来源优先级取舍。
+const STATUS_RANK_SQL: &str = "(CASE WHEN status = 'active' THEN 0 ELSE 1 END)";
+
+/// 同 IP 多来源去重排序第二级键·来源优先级（ipmi > agent > snmp）：实际场景
+/// agent 与 ipmi 分处不同 IP（BMC 管理口与 OS），仅在双方同为在线（或同离线）
+/// 时作展示层的确定性取舍。SQL 片段：列表与 Top 榜的
+/// `ROW_NUMBER() OVER (... ORDER BY <本表达式>)` 共用。
 const SOURCE_RANK_SQL: &str =
     "(CASE source WHEN 'ipmi' THEN 0 WHEN 'agent' THEN 1 WHEN 'snmp' THEN 2 ELSE 3 END)";
 
@@ -142,13 +147,14 @@ pub async fn list_agents<S: ConfigProvider>(
     let pool = state.pool()?.get_conn();
     let pagination = Pagination::new(query.page.unwrap_or(1), query.page_size.unwrap_or(20));
 
-    // 同 IP 去重（ipmi > agent > snmp）：按 IP（NULL 以自身 id）分组取 rank 最优行，
-    // 各来源 DB 行保留不变，仅展示层去重。count 与 rows 共用同一 dedup CTE。
+    // 同 IP 去重（在线优先，同态再按来源 ipmi > agent > snmp）：按 IP（NULL 以
+    // 自身 id）分组取 rank 最优行，各来源 DB 行保留不变，仅展示层去重。
+    // count 与 rows 共用同一 dedup CTE。
     let mut count_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
         r"WITH dedup AS (
              SELECT id, ROW_NUMBER() OVER (
                PARTITION BY {DEDUP_PARTITION_SQL}
-               ORDER BY {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
+               ORDER BY {STATUS_RANK_SQL}, {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
              ) AS rn
              FROM monitored_hosts WHERE 1=1"
     ));
@@ -171,7 +177,7 @@ pub async fn list_agents<S: ConfigProvider>(
                     cpu_usage, mem_usage_pct, disk_usage_pct, max_temp, uptime_secs, last_seen, created_at,
                     ROW_NUMBER() OVER (
                       PARTITION BY {DEDUP_PARTITION_SQL}
-                      ORDER BY {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
+                      ORDER BY {STATUS_RANK_SQL}, {SOURCE_RANK_SQL}, last_seen DESC NULLS LAST
                     ) AS rn
              FROM monitored_hosts WHERE 1=1"
     ));
@@ -256,9 +262,10 @@ pub async fn get_top_metrics<S: ConfigProvider>(
 
     let mut body = serde_json::Map::new();
     for (key, column) in TOP_METRIC_COLUMNS {
-        // 与列表同口径的 IP 去重（ipmi > agent > snmp）：先在 active 行内按 IP
-        // 取 rank 最优行，再按指标非空排序取 Top N（IPMI 行为 rank 最优但
-        // cpu/mem 无读数时自然不参与该类榜单）。
+        // 与列表同口径的 IP 去重：行已限定 active（在线），列表排序的在线优先
+        // 键在此恒并列，退化为来源优先级（ipmi > agent > snmp）取 rank 最优行，
+        // 再按指标非空排序取 Top N（IPMI 行为 rank 最优但 cpu/mem 无读数时
+        // 自然不参与该类榜单）。
         let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
             r"WITH dedup AS (
                  SELECT id, hostname, label, ip, {column} AS metric, last_seen,
@@ -302,9 +309,9 @@ pub async fn get_top_metrics<S: ConfigProvider>(
 
 /// GET /api/agents/{id}：详情（含 raw_metrics 与同 IP 兄弟行），不存在返回 404。
 ///
-/// `siblings` 为同 IP 的其他来源行：主页面按 IP 去重只保留 rank 高的一行
-/// （ipmi>agent>snmp），详情弹窗经此切换查看被隐藏来源的数据；同一 IP 不会
-/// 同时存在 agent 与 ipmi 行，兄弟行至多一条。
+/// `siblings` 为同 IP 的其他来源行：主页面按 IP 去重只保留 rank 最优的一行
+/// （在线优先，同态再 ipmi>agent>snmp），详情弹窗经此切换查看被隐藏来源的
+/// 数据；同一 IP 不会同时存在 agent 与 ipmi 行，兄弟行至多一条。
 pub async fn get_agent_detail<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,

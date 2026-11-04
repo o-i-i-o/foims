@@ -33,7 +33,7 @@ interface AgentDetail {
   mem_usage_pct: number | null;
   max_temp: number | null;
   raw_metrics: RawMetrics | null;
-  /** 同 IP 的其他来源行（主页面按 IP 去重后隐藏侧，agent/ipmi 与 snmp 两两互斥） */
+  /** 同 IP 的其他来源行（主页面按 IP 去重后的隐藏侧，agent/ipmi 与 snmp 两两互斥） */
   siblings: Array<{ id: number | string; source: string }> | null;
 }
 
@@ -288,7 +288,7 @@ const displayMemTotal = computed(() => liveMemTotal.value ?? raw.value.memory?.t
 // ===== IPMI 硬件视图：BMC 无 CPU/内存/磁盘/网络语义，详情改展温度/风扇/电压与电源状态 =====
 const isIpmi = computed(() => agent.value?.source === "ipmi");
 
-// ===== 同 IP 双来源切换：主页面去重只保留 agent/ipmi 行，snmp 侧经此查看 =====
+// ===== 同 IP 双来源切换：主页面去重只保留 rank 最优行（在线优先，同态再按来源），被隐藏侧经此查看 =====
 const siblings = computed(() => agent.value?.siblings ?? []);
 
 /** 切换查看同 IP 的另一来源数据（弹窗不关闭，各查询随 viewId 重新拉取） */
