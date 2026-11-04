@@ -9,8 +9,11 @@
 //! 关键约束：
 //! - IPv6 管理地址：单个 GET 的 OID 数上限 [`MAX_OIDS_PER_REQUEST`]，
 //!   使 UDP 载荷（含 v3 头）留在 1232 字节安全线内，避免分片丢包；
-//! - 会话复用由上层（agent-service）负责，本模块只接收 `&Client`；
-//! - 厂商差异集中在 [`profile::probe`]：探测一次缓存，采集循环不再 walk；
+//! - 会话复用由上层（agent-service）负责，本模块经 [`SnmpReader`] 抽象
+//!   接收客户端，探测链路全量可 mock；
+//! - 厂商识别集中在 [`crate::vendor::identify`]（双证据纯函数），厂商差异
+//!   落在 [`profile::probe`]：私有 OID 集来自 vendor 注册表，公共 MIB 回退
+//!   链按平台能力声明（caps）裁剪，探测一次缓存，采集循环不再 walk；
 //! - 温度回退顺序：厂商 MIB → ENTITY-SENSOR-MIB → LM-SENSORS，任一命中
 //!   即止（交换机优先厂商 MIB，Linux 主机回退 LM-SENSORS）。
 
@@ -18,13 +21,43 @@ pub mod collector;
 pub mod profile;
 
 use std::collections::BTreeMap;
+use std::future::Future;
 
-use async_snmp::Oid;
+use async_snmp::{Client, Oid, VarBind, transport::UdpHandle};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+use crate::core::format_snmp_error;
+
 pub use collector::LiveCollector;
 pub use profile::{ProbeError, probe};
+
+/// SNMP 读操作抽象：探测（profile::probe）链路的唯一 IO 出口。
+///
+/// 生产实现为 async_snmp UDP 客户端；测试实现为内存 OID 快照
+/// （见 profile::tests），探测全链路可离线验证，无需真实设备。
+///
+/// 方法用 RPITIT 而非 `async fn` 声明：显式 `+ Send` 保证返回的 Future
+/// 可跨线程（agent-service 采集任务在多线程 runtime 上调度）。
+pub trait SnmpReader {
+    /// 多 OID 精确 GET：请求/响应等长有序，任一 OID 失败即整体 Err。
+    fn get_many(&self, oids: &[Oid]) -> impl Future<Output = Result<Vec<VarBind>, String>> + Send;
+    /// walk 子树：返回 base 子树内全部 varbind，空子树返回空集。
+    fn walk(&self, base: &Oid) -> impl Future<Output = Vec<VarBind>> + Send;
+}
+
+impl SnmpReader for Client<UdpHandle> {
+    async fn get_many(&self, oids: &[Oid]) -> Result<Vec<VarBind>, String> {
+        Client::get_many(self, oids)
+            .await
+            .map(|resp| resp.varbinds)
+            .map_err(|e| format_snmp_error(e).log_string())
+    }
+
+    async fn walk(&self, base: &Oid) -> Vec<VarBind> {
+        crate::collect::metrics::walk_all(self, base.clone()).await
+    }
+}
 
 /// 单请求 OID 上限：20 个 OID × 约 30B + v3 authPriv 头约 150B ≈ 750B，
 /// 低于 IPv6 最小 MTU 1280 对应的 UDP 安全载荷 1232B。

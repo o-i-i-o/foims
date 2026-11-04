@@ -391,3 +391,24 @@ SNMP 采集口径纠偏 + 主机详情同 IP 双来源切换（功能 bug 更新
 3.主机信息补齐——metrics.rs 新增 collect_cores（hrProcessorLoad 有效行数=逻辑核数，网络设备无 HOST-RESOURCES 为 None）与 parse_linux_sysdescr（uname 风格 sysDescr 解析内核版本/架构，仅识别 Linux 前缀，网络设备不解析），SnmpSnapshot 增 cores 字段，build_report_json 参数收敛为 SnmpReportBase 结构体（修 too_many_arguments），system.kernel/arch 与 cpu.cores 随报告落库；snmp_poll upsert 同步写入 kernel/arch 列（列已存在，无 DDL 变更）。
 4.主机详情同 IP 双来源切换——列表/Top 的 IP 去重（v0.46.0）保持不变，get_agent_detail 响应新增 siblings（同 IP 其他来源行，agent↔snmp / ipmi↔snmp 两两互斥至多一条，NULL IP 恒无兄弟）；AgentDetailModal 内部 viewId 承载当前查看行（默认列表传入行），概要行渲染切换按钮「查看 {source} 采集数据」（zh/en i18n），点击后详情/趋势/采集端口/实时匹配随 viewId 重新拉取，弹窗不关闭。
 验证：本机 SNMP 实测（snmpwalk/snmpget 对照 free/df/uptime/nproc：内存行、磁盘行、CPU 计数器、负载逐项核对）；cargo fmt、cargo clippy --release --workspace --all-targets -D warnings、foims-snmp 97 单测、前端 vue-tsc/npm run build 全过。版本联动：Cargo.toml 0.33.25→0.33.26、frontend/package.json 0.1.89→0.1.90、foims-snmp 0.1.12→0.1.13、foims-agent-service 0.1.36→0.1.37
+
+v0.82.0
+2026110419401201
+SNMP 厂商/平台识别与绑定方案阶段一落地（小功能，y 段 +1）：新增 foims-snmp vendor 域（识别规则静态注册表 + 识别纯函数），probe 采集链路按平台能力声明裁剪，无数据库变更：
+1.vendor 域新建（crates/foims-snmp/src/vendor/）：mod.rs 厂商注册表（16 品牌：cisco/huawei/h3c 带 Cisco-PROCESS/CISCO-MEMORY-POOL/CISCO-ENVMON、华为/华三实体表私有 OID 集【自 live/profile.rs 迁入，数值不变】+ 13 识别-only 品牌，企业号来源 IANA/SNMP::Info 已核实，TP-Link/Linksys/ZyXEL 未核实留空）；platform.rs 平台注册表（linux/windows/freebsd/openbsd/solaris/aix/esxi/macos 8 规则 + PlatformCaps 能力声明 + net-snmp 8072 跨 OS 不定位平台、仅升级 UCD/LM-SENSORS 能力 + 无正则版本解析器）；identify.rs 双证据聚合纯函数（sysObjectID 企业号弱证据 + sysDescr 词边界关键词强证据 → High/Low 置信度 + 证据链，冲突描述词胜出，排除词降级），收编原 sysinfo.rs 16 品牌 identify_vendor 与 live/profile.rs detect_vendor 两套旧识别（词表 22 用例回归），沿用 ship/Sharp 词边界防误命中口径。
+2.live 域重构：mod.rs 新增 SnmpReader trait（RPITIT + Send：get_many/walk 两个读操作，生产实现为 async_snmp UDP 客户端，walk 委托 metrics::walk_all）；profile.rs probe/discover_* 全链泛型化，采集回退链按 PlatformCaps 门控（Windows 无 UCD/lm_sensors/entity_sensors/hrProcessor，仅 hrStorage；FreeBSD+bsnmpd 同；FreeBSD+net-snmp 经 8072 升级 UCD；未知平台全能力=现状 Generic 链等价，识别-only 平台按 ALL 走 best-effort 不砍采集）；discover_cisco_mem 参数化为 discover_pool_mem；测试内置 MockSnmpReader 内存 OID 快照，新增华为/思科/linux/windows/系统组无响应 5 个 mock 探测测试。
+3.sysinfo.rs 收编：get_device_info_via_snmp 单次 GET 合并 sysDescr+sysObjectID（sysDescr 缺失仍整体失败、sysObjectID 容忍缺失单证据识别），brand 改走 vendor::identify + display_name（兼容 HP/HPE 历史取值），删除本地 identify_vendor/has_vendor_word。
+4.修复版本解析启发式：token_after 由「取关键词紧邻词元」改为「向后扫描首个数字开头且含小数点的词元」，主机名（web01/gw.example.com）占据关键词后一位时不再误取/漏取。
+验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings、foims-snmp 96 单测、foims-agent-service 97 单测全过。版本联动：Cargo.toml 0.33.26→0.33.27、foims-snmp 0.1.13→0.1.14（阶段二三将引入设备绑定持久化与 DB 变更，届时再评估 x 段）
+
+v0.82.1
+2026110420103501
+新增半自动脚本 da-scripts/gen_vendor_rule_draft.py：经 GitHub API 按需拉取 LibreNMS os_detection YAML（GPL 上游，只提取事实不拷贝表达），生成 vendor 注册表 VendorRule Rust 草稿——sysObjectID 前缀收敛为 IANA 企业号、sysDescr 子串小写去重预填；正则/主动探测（snmpget）/子串→词元匹配的语义差异输出为注释与 ⚠ 风险标记（短词元/特殊字符检测），全部带 TODO 人工核对标记；--list 列上游 822 个 os 名；type=server/unix 平台类 OS 提示走 platform.rs。实测 junos（企业号 2636 与现有注册表一致）/vrp（纯 sysDescr 识别+风险标记）/linux（平台提示+except/snmpget 注释）/iosxe（多前缀收敛企业号 9）四个代表样例。方案文档 §5.3.5 同步脚本用法。仅开发辅助脚本，z+1 不联动 Cargo.toml
+
+v0.82.2
+2026110420402601
+gen_vendor_rule_draft.py 新增 --all 全量模式：从本地 sparse clone（git clone --depth 1 --filter=blob:none --sparse，约 300KB 不进仓库）批量转换上游全部 822 个 os_detection YAML 为候选池草稿，输出缺省 /tmp/librenms-rule-drafts（仓库外）+ _SUMMARY.md 汇总（统计与企业号→OS 聚合表，标记现有 16 品牌命中/新候选）；修复上游 `op: =`（YAML 1.1 value 隐式标签，boschcpp.yaml）导致的 PyYAML 解析失败，822/822 全部转换成功。全量统计：696 有企业号证据/67 仅 sysDescr/59 最弱（仅正则+主动探测）、29 平台类、56 条 ⚠ 风险关键词、191 条正则待人工改写、88 条主动探测忽略、428 组企业号聚合。关键实证：8072(net-snmp) 下聚合 68 个互不相干 OS，印证「8072 不作厂商证据」设计；现有品牌企业号与上游全部吻合；国内环境候选：ZTE 3902、锐捷 4881、烽火 3807、博达 3320，另 Fortinet 12356、Ruckus 25053、Arista 30065 等。草稿不进仓库不自动入库，人工核对后按需摘取。z+1 不联动 Cargo.toml
+
+v0.83.0
+2026110421154801
+SNMP 厂商识别升级为 LibreNMS OS 级分组方式并全量入库（项目决策：社区验证数据直接入库，不按品牌级人工归并）：① VendorRule.enterprise_ids → sysobjectid_prefixes（前缀至少 7 弧），identify() 改为 sysObjectID 前缀最长匹配（LibreNMS 语义），同长度前缀内置品牌级优先；② 新增 vendor/community.rs（686 条 OS 规则，da-scripts/gen_vendor_community.py 从本地 sparse clone 全量生成，勿手改），与 16 条内置品牌级规则共存，registry() 改为双表链式迭代器；③ vendor_kind() 按 LibreNMS group 扩 OS 级映射（cisco 组 24 OS→Cisco，vrp/yunshan→Huawei，comware→H3c）；④ 转换口径：排除平台类 29 个（platform.rs 域）与无有效证据 OS 107 个、丢弃平台 agent 号前缀 60 条、关键词仅从纯 sysDescr 块收集（上游 AND 块如 airos-af-ltu=8072+"Linux"+snmpget 的孤儿关键词会误命中 Linux 主机，实测两轮修复）、单词元 ≤2 字符关键词丢弃、正则 191 条与 snmpget 87 条不机械转换。新增社区规则识别测试（fortigate/锐捷/ios 深前缀/yunshan 细分）。验证：cargo fmt、workspace clippy -D warnings 全绿，foims-snmp 97 + agent-service 97 测试全过，部署后 snmp-info/live API 实测正常（本机 Linux+net-snmp 零误命中）。方案文档 §5.1 VendorRule/§5.3.5 同步。y 段变化联动：Cargo.toml 0.33.27→0.33.28、foims-snmp 0.1.14→0.1.15

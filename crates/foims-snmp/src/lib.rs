@@ -15,6 +15,7 @@ pub mod debug;
 pub mod events;
 pub mod handlers;
 pub mod live;
+pub mod vendor;
 
 pub use core::config::{SwitchConfigError, get_device_ip_address, get_device_snmp_config};
 pub use core::{

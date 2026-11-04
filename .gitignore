@@ -13,3 +13,4 @@ frontend/dist/
 frontend/node_modules/
 *.log
 foims-agent/
+MIBs-more/
