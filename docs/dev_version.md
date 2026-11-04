@@ -349,3 +349,7 @@ SNMP 采集 OID 依据本机 MIB（docs-mibs）与 RFC 原文核对修复（功�
 v0.79.1
 2026110409071101
 修复调试 MIB 对照表错位（普通 bug 修复，z 段 +1，仅 foims-snmp debug/mib.rs）：hrStorage 组修正三处——1.3.6.1.2.1.25.2.1 实为 hrStorageTypes 类型定义子树（RFC 2790 无 hrStorageLastChanged 对象，原名虚构）、.25.2.3.1.2 实为 hrStorageType（原错标 hrStorageDescr）、.25.2.3.1.3 实为 hrStorageDescr（原错标 hrStorageAllocationUnits），补 .25.2.3.1.4 hrStorageAllocationUnits（字节）；ENTITY 传感器按 RFC 3433 修正——.99.1.1.1.2 实为 entPhySensorScale（原错标 entSensorValue），补 .99.1.1.1.4 entPhySensorValue（读数 × 10^Scale 为实际值）；顺带修正 laLoad1 → laLoad.1（UCD laLoad 列第 1 行，原名非真实符号）并同步单测断言。验证：cargo fmt、foims-snmp clippy --all-targets -D warnings、77 单测全过；仅 dev_version z+1，Cargo.toml/package.json 不联动
+
+v0.79.2
+2026110412310701
+数据管理页签四功能卡改造（仅前端布局调整，z 段 +1）：系统-数据管理页签中「数据管理」卡片的四组功能（CSV 数据导入 / CSV 数据导出 / 数据库导出 / 配置文件）由四条 section-title-row 标题行改为四张功能卡，直接复用日志统计的网格与卡片样式（.logs-stats-grid + .log-stat-card + .log-stat-title），卡内新增 .data-manage-card-actions 纵向动作区（按钮/导出模块下拉铺满卡宽），卡片作为卡体末尾内容将网格底边距归零（.data-manage-cards），只读角色仍隐藏全部动作仅留卡标题，导入/恢复隐藏文件框与导入结果/恢复确认弹窗逻辑零改动；system.css 数据管理分区原 section-title-row 相关注释同步。验证：npm run typecheck、npm run build、biome（0 警告）均通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
