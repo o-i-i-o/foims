@@ -153,7 +153,6 @@
   /* 只读字段值框：控件壳与表单控件同款（token 见 variables.css） */
   .config-field .field-value {
     flex: 1;
-    min-width: 0;
     padding: var(--control-padding-y) var(--control-padding-x);
     border: 1px solid var(--control-border);
     border-radius: var(--control-radius);
@@ -553,7 +552,7 @@
   .data-manage-card-actions {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     gap: var(--space-xs);
   }
 
