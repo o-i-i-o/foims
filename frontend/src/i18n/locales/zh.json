@@ -2861,7 +2861,7 @@
       "agent_ipmi_poll_completed": "IPMI 设备轮询完成：成功 {{ok}} 台，失败 {{fail}} 台",
       "agent_history_cleanup_completed": "Agent 历史指标清理完成：删除 {{count}} 条过期记录",
       "agent_history_cleanup_failed": "Agent 历史指标清理失败: {{error}}",
-      "agent_metrics_rollup_completed": "主机指标滚降完成：滚降 {{count}} 个小时桶，补聚合 {{healed}} 个5分钟桶",
+      "agent_metrics_rollup_completed": "主机指标滚降完成：滚降 {{count}} 个小时桶",
       "agent_metrics_rollup_failed": "主机指标滚降失败: {{error}}",
       "type_unknown": "未知的任务类型: {{task_type}}",
       "system_readonly": "系统内置任务由服务启动时按代码与配置生成，不支持修改、删除或启停",

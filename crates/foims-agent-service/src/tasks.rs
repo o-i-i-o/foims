@@ -25,18 +25,12 @@ const DEFAULT_IPMI_POLL_INTERVAL_SECS: u64 = 300;
 /// 历史保留天数缺省值与上限（天数类清理任务共用口径）
 const DEFAULT_RETENTION_DAYS: i64 = 30;
 const MAX_RETENTION_DAYS: i64 = 3650;
-/// 原始层（granularity=0）保留天数缺省值：秒级数据量最大，短保留
-const DEFAULT_RAW_RETENTION_DAYS: i64 = 3;
 /// 5min 桶层（granularity=5）保留天数缺省值：趋势曲线主层
 const DEFAULT_ARCHIVE_RETENTION_DAYS: i64 = 30;
 /// 1h 桶层（granularity=60）保留天数缺省值：长期趋势层
 const DEFAULT_ROLLUP_RETENTION_DAYS: i64 = 365;
 /// 单轮滚降处理的小时桶数上限：每小时例行运行，积压断点顺延至下一轮
 const ROLLUP_HOURS_PER_RUN: i64 = 500;
-/// 原始层→5min 桶补聚合回看窗口（小时）：覆盖进程重启/落库瞬断造成的近期
-/// 桶层缺口（原始层默认保留 3 天，每小时自愈一次，26h 留足整天余量）；
-/// i32 对应 make_interval(hours => int) 签名
-const RECONCILE_LOOKBACK_HOURS: i32 = 26;
 
 /// 从任务配置读取正整数参数（缺失、类型不符或 ≤0 时回落默认值）。
 fn config_u64(config: &Value, key: &str, default: u64) -> u64 {
@@ -124,8 +118,8 @@ impl TaskExecutor for AgentOfflineTaskExecutor {
 }
 
 /// Agent 历史指标分层清理任务执行器：按 granularity 分层删除超过保留期的
-/// host_metrics_history 行（原始秒级/5min 桶/1h 桶保留期独立可配），并同轮
-/// 清理 snmp_events。
+/// host_metrics_history 行（5min 桶/1h 桶保留期独立可配），并同轮清理
+/// snmp_events。
 pub struct AgentHistoryCleanupTaskExecutor;
 
 #[async_trait]
@@ -140,10 +134,9 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
-        // 三层保留期：原始层（秒级，体积最大）默认 3 天、5min 桶层默认 30 天、
-        // 1h 桶层（长期趋势）默认 365 天，均 clamp 1-3650
-        let layers: [(&str, i64, i32); 3] = [
-            ("retention_days", DEFAULT_RAW_RETENTION_DAYS, 0),
+        // 两层保留期：5min 桶层默认 30 天、1h 桶层（长期趋势）默认 365 天，
+        // 均 clamp 1-3650
+        let layers: [(&str, i64, i32); 2] = [
             ("archive_retention_days", DEFAULT_ARCHIVE_RETENTION_DAYS, 5),
             ("rollup_retention_days", DEFAULT_ROLLUP_RETENTION_DAYS, 60),
         ];
@@ -201,13 +194,12 @@ impl TaskExecutor for AgentHistoryCleanupTaskExecutor {
 /// 结果以 source='snmp' 的 monitored_hosts 行呈现于主机监控页，并按
 /// 轮询间隔 × 2 翻转连续失联设备为 offline。
 pub struct AgentSnmpPollTaskExecutor {
-    /// 降采样聚合器喂料口（None = SNMP 实时采集开启，秒级样本已覆盖，
-    /// 由实时路径喂入；注册侧按 snmp.live.enabled 决定）
-    metrics: Option<Arc<MetricsAggregator>>,
+    /// 降采样聚合器喂料口：趋势存储统一经聚合器落库，本路径始终喂入
+    metrics: Arc<MetricsAggregator>,
 }
 
 impl AgentSnmpPollTaskExecutor {
-    pub fn new(metrics: Option<Arc<MetricsAggregator>>) -> Self {
+    pub fn new(metrics: Arc<MetricsAggregator>) -> Self {
         Self { metrics }
     }
 }
@@ -242,13 +234,12 @@ impl TaskExecutor for AgentSnmpPollTaskExecutor {
 /// 呈现于主机监控页，并按轮询间隔 × 2 翻转连续失联设备为 offline
 /// （采集细节见 [`crate::ipmi_poll`]）。
 pub struct AgentIpmiPollTaskExecutor {
-    /// 降采样聚合器喂料口（None = IPMI 实时采集开启，秒级样本已覆盖，
-    /// 注册侧按 ipmi.live.enabled 决定）
-    metrics: Option<Arc<MetricsAggregator>>,
+    /// 降采样聚合器喂料口：趋势存储统一经聚合器落库，本路径始终喂入
+    metrics: Arc<MetricsAggregator>,
 }
 
 impl AgentIpmiPollTaskExecutor {
-    pub fn new(metrics: Option<Arc<MetricsAggregator>>) -> Self {
+    pub fn new(metrics: Arc<MetricsAggregator>) -> Self {
         Self { metrics }
     }
 }
@@ -278,11 +269,10 @@ impl TaskExecutor for AgentIpmiPollTaskExecutor {
     }
 }
 
-/// 1h 桶滚降任务执行器：先做原始层→5min 桶补聚合（自愈重启/落库瞬断造成的
-/// 桶层缺口），再把已完结小时的 granularity=5 行按 (agent_id, 小时) 内存合并为
-/// granularity=60 行（avg 按样本数 cnt 加权、min/max 取极值、last 取末桶、cnt
-/// 累加），每小时第 10 分运行补断点漏滚；1h 行内嵌 `_src_max_id`（滚降时源行
-/// 最大 id），源层数据后到时据此重滚。
+/// 1h 桶滚降任务执行器：把已完结小时的 granularity=5 行按 (agent_id, 小时)
+/// 内存合并为 granularity=60 行（avg 按样本数 cnt 加权、min/max 取极值、last
+/// 取末桶、cnt 累加），每小时第 10 分运行补断点漏滚；1h 行内嵌 `_src_max_id`
+/// （滚降时源行最大 id），源层数据后到时据此重滚。
 pub struct AgentMetricsRollupTaskExecutor;
 
 #[async_trait]
@@ -297,64 +287,9 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
     }
 
     async fn execute(&self, ctx: &TaskContext) -> SchedulerResult<AppMessage> {
-        // 第一步：原始层→5min 桶补聚合。仅聚合「5min 层整桶缺失」的桶（NOT
-        // EXISTS 防与已有半截桶混口径），且桶窗结束已超过 flush 滞留期
-        //（≤ NOW()-15min）防与聚合器在途桶竞争——与聚合器落库同为
-        // ON CONFLICT DO NOTHING，先到者胜、口径一致，无重复计数。
-        // 与 upgrade 回填脚本同一聚合口径（avg 4 位小数、last 取最新样本）。
-        let healed = sqlx::query(
-            r"INSERT INTO host_metrics_history (agent_id, granularity, collected_at, metrics)
-              SELECT agent_id, 5, bucket,
-                     jsonb_object_agg(k, jsonb_build_object(
-                         'avg', round((sum_v / cnt)::numeric, 4),
-                         'min', min_v, 'max', max_v, 'last', last_v, 'cnt', cnt))
-              FROM (
-                  SELECT agent_id, bucket, k,
-                         sum(nv) AS sum_v,
-                         min(nv) AS min_v,
-                         max(nv) AS max_v,
-                         (array_agg(nv ORDER BY collected_at DESC))[1] AS last_v,
-                         count(*) AS cnt
-                  FROM (
-                      SELECT s.agent_id, s.bucket, s.collected_at, e.k,
-                             (e.v #>> '{}')::double precision AS nv
-                      FROM (
-                          SELECT h.agent_id, h.collected_at, h.metrics,
-                                 to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300)
-                                     AS bucket
-                          FROM host_metrics_history h
-                          WHERE h.granularity = 0
-                            AND h.collected_at >= NOW() - make_interval(hours => $1)
-                            AND to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300)
-                                <= NOW() - INTERVAL '15 minutes'
-                            AND jsonb_typeof(h.metrics) = 'object'
-                            AND NOT EXISTS (
-                                SELECT 1 FROM host_metrics_history h5
-                                WHERE h5.agent_id = h.agent_id
-                                  AND h5.granularity = 5
-                                  AND h5.collected_at =
-                                      to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300)
-                            )
-                      ) s
-                      CROSS JOIN LATERAL jsonb_each(s.metrics) AS e(k, v)
-                      WHERE jsonb_typeof(e.v) = 'number'
-                  ) samples
-                  GROUP BY agent_id, bucket, k
-              ) key_stats
-              GROUP BY agent_id, bucket
-              ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
-        )
-        .bind(RECONCILE_LOOKBACK_HOURS)
-        .execute(&ctx.pool)
-        .await
-        .map_err(|e| {
-            SchedulerError::Execution(msg("server.task.agent_metrics_rollup_failed").with("error", e))
-        })?
-        .rows_affected();
-
-        // 第二步：选待滚降小时——无 1h 桶行，或已有行落后于本小时 5min 数据
-        //（_src_max_id 记录滚降时源行最大 id，小于当前最大 id 即补聚合/迟到
-        // 桶已到，需重滚）。小时窗已结束且留足 5min 桶落库滞留（10min）余量。
+        // 选待滚降小时——无 1h 桶行，或已有行落后于本小时 5min 数据
+        //（_src_max_id 记录滚降时源行最大 id，小于当前最大 id 即迟到桶已到，
+        // 需重滚）。小时窗已结束且留足 5min 桶落库滞留（10min）余量。
         let pending = sqlx::query_as::<_, (Uuid, DateTime<Utc>)>(
             r"SELECT DISTINCT agent_id,
                       to_timestamp(floor(extract(epoch FROM collected_at) / 3600) * 3600) AS hour_bucket
@@ -428,12 +363,9 @@ impl TaskExecutor for AgentMetricsRollupTaskExecutor {
 
         log_debug!(
             "log.task.agent_metrics_rollup_completed",
-            count = pending_count,
-            healed = healed
+            count = pending_count
         );
-        Ok(msg("server.task.agent_metrics_rollup_completed")
-            .with("count", pending_count)
-            .with("healed", healed))
+        Ok(msg("server.task.agent_metrics_rollup_completed").with("count", pending_count))
     }
 }
 

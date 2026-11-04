@@ -211,7 +211,7 @@ main() {
     # 后端检查（对齐 CI build job）
     echo "──────── 后端检查（CI build job）────────"
     run_check "代码格式检查" "cargo fmt --check"
-    run_check "Clippy 静态分析" "cargo clippy --release -- -D warnings"
+    run_check "Clippy 静态分析" "cargo clippy --release --workspace --all-targets -- -D warnings"
     run_cargo_test
     run_check "Release 构建" "cargo build --release"
     echo ""

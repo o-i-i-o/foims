@@ -20,7 +20,7 @@
 //!   SDR/传感器采集本体在 foims-ipmi::collect；
 //! - [`live_api`]：实时快照 Web API（全量列表 + SSE 变更推送，三来源合并）；
 //! - [`metrics_aggregator`]：指标降采样聚合器（秒级读数内存分桶 → 5min 桶
-//!   granularity=5 落库，三层存储的中间层）；
+//!   granularity=5 落库，两层趋势存储的第一层）；
 //! - [`trap`]：SNMP Trap/Inform 接收（属采集服务，非资源管理业务）；
 //! - [`tasks`]：离线判定、SNMP 轮询、1h 桶滚降与历史清理调度任务执行器。
 

@@ -353,3 +353,32 @@ v0.79.1
 v0.79.2
 2026110412310701
 数据管理页签四功能卡改造（仅前端布局调整，z 段 +1）：系统-数据管理页签中「数据管理」卡片的四组功能（CSV 数据导入 / CSV 数据导出 / 数据库导出 / 配置文件）由四条 section-title-row 标题行改为四张功能卡，直接复用日志统计的网格与卡片样式（.logs-stats-grid + .log-stat-card + .log-stat-title），卡内新增 .data-manage-card-actions 纵向动作区（按钮/导出模块下拉铺满卡宽），卡片作为卡体末尾内容将网格底边距归零（.data-manage-cards），只读角色仍隐藏全部动作仅留卡标题，导入/恢复隐藏文件框与导入结果/恢复确认弹窗逻辑零改动；system.css 数据管理分区原 section-title-row 相关注释同步。验证：npm run typecheck、npm run build、biome（0 警告）均通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
+
+v0.80.0
+2026110413201501
+监控采集链路重构：去掉旧 agent 兼容口径、去掉秒级入库，全面实现「实时显示 + 趋势储存」双轨（模块级功能更新，y 段 +1）：
+1.协议面去兼容残留：foims-common/src/report.rs 删除 ReportResponse（report_interval/collectors/latest_version 三字段均无消费方，属旧协议兼容残留），agent 侧受控副本 foims-agent/crates/foims-protocol/src/report.rs 同步删除；服务端上报响应改为空 JSON 对象（上报链路无控制面语义，agent 端成功以 HTTP 200 判定、不解析响应体）。
+2.秒级入库退役：ingest 不再逐帧写 host_metrics_history 原始层（granularity=0），每帧仅喂入降采样聚合器（内存 5min 桶，flush 循环统一落库）；三源（agent/SNMP/IPMI）统一为「内存实时快照（SSE 秒级展示 + 就地告警）+ 聚合器 5min/1h 桶趋势」双轨。
+3.曲线 API 两层选层：agents_api.rs get_agent_history 分层收敛为 ≤720h 读 5min 桶（granularity=5）、更长读 1h 桶（granularity=60），删除原始层标量分支，响应恒带 *_min/*_max 极值键（IPMI 实时节拍保持 5s 设计约束不变）。
+4.清理与滚降任务收敛：agent_history_cleanup 分层清理删除原始层条目（DEFAULT_RAW_RETENTION_DAYS 删除）；agent_metrics_rollup 删除「原始层→5min 桶补聚合」自愈步骤与 RECONCILE_LOOKBACK_HOURS，成功消息去掉 healed 参数（zh/en i18n 同步）。
+5.配置收敛：AgentConfig 删除 history_retention_days（字段、校验、任务种子 json、config.toml.example、仓库 config.toml 遗留 report_interval_secs/collect_interval_secs 一并清理），snmp_event_retention_days 独立默认函数（30）。
+6.建表与升级：foims-init 建表 DDL 粒度约束改 CHECK (granularity IN (5, 60)) 且无默认值，check.rs 索引注释同步；upgrade/0.33/upgrade_0.33.0.sql 追加第 10 节——存量原始层按第 6 节同口径幂等回填 5min 桶（ON CONFLICT DO NOTHING 先到者胜）→ 整层 DELETE granularity=0 → 重建 CHECK 约束 → DROP DEFAULT。
+7.前端零功能改动：曲线 band 渲染对 null 极值已鲁棒（连续非空区间才拼多边形），仅清理 AgentDetailModal/AgentSparkline 注释中的原始层口径与 i18n 滚降消息。
+8.部署顺序：先升级 agent（新版 agent 不解析响应体，对旧服务端兼容），再升级服务端；旧版 agent（≤0.7.x）对新服务端会因响应缺字段反序列化失败而持续重试，需随后升级。agent 仓独立版本 v0.7.0→v0.8.0（详见其 dev_version.md）。
+验证：cargo fmt、workspace clippy --release -D warnings、foims-agent-service/foims-common/foims-init 单测、agent workspace fmt/clippy/test、前端 vue-tsc/npm run build 均通过。版本联动：Cargo.toml 0.33.24→0.33.25、frontend/package.json 0.1.88→0.1.89、foims-common 0.3.22→0.3.23、foims-agent-service 0.1.35→0.1.36、foims-init 0.1.23→0.1.24
+
+v0.80.1
+2026110413281701
+仓库门禁与 CI 口径对齐（普通修改，z 段 +1）：CI（ci.yml/release.yml build job）本就以 `cargo clippy --release --workspace --all-targets -- -D warnings` 为准（测试代码一并检查），但 AGENTS.md、docs/code-style.md、da-scripts/release_check.sh 三处本地门禁仍是宽松口径（缺 --workspace --all-targets），本次统一对齐并修复严格口径下的存量违规：
+1.metrics_aggregator.rs 测试函数 `落库JSON结构与均值舍入` 含大写拉丁字母触发 non_snake_case，按同模块纯中文小写命名惯例改为 `落库json结构与均值舍入`（全工作区 --all-targets 下唯一违规项）。
+2.门禁口径统一为 `cargo fmt && cargo clippy --release --workspace --all-targets -- -D warnings`（AGENTS.md / docs/code-style.md / release_check.sh 三处同步，注明与 CI 同口径）；agent 仓 CI 本已严格口径、无门禁文档无需改动。
+验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings 全绿、foims-agent-service 97 单测全过。仅 dev_version z+1，Cargo.toml/package.json 不联动
+
+v0.80.2
+2026110413421601
+独立审计补遗：修复秒级入库退役的路径遗漏（普通修改，z 段 +1，v0.80.0 审计发现项）：
+1.blocker 修复——SNMP/IPMI 轮询路径仍直写 host_metrics_history（INSERT 未指定 granularity，依赖已删除的 DEFAULT 0，新 DDL 下每次轮询必 23502 失败）：snmp_poll/ipmi_poll 删除两处直写 INSERT，趋势存储统一经降采样聚合器落库；喂料口由 Option（仅实时关闭时喂）改为始终喂入——实时开启时秒级 live 路径与轮询路径共用同一键集指纹（SNMP 实时侧 disk 恒 null 占位：指纹含 null 值键、null 不进桶，与轮询侧 disk 有值键集一致不拆桶），实时关闭时轮询路径是唯一喂料来源；附带收益：live 开启但设备无活跃实时 worker 时趋势数据不再断档，且 disk 趋势在实时开启时也按 5min 节奏入桶（旧行为因自愈 NOT EXISTS 从不覆盖已有桶，5min 层实际无 disk）。连带简化：tasks.rs 两执行器 metrics 字段 Option<Arc>→Arc、main.rs 注册侧删除 snmp_live_enabled/ipmi_live_enabled 门控变量。
+2.前端死引用清理：AgentServiceCard.vue 删除 history_retention_days 接口字段/Pick/回带赋值，「以下四项」注释改「以下三项」。
+3.失真注释清理：lib.rs 模块索引「三层存储的中间层」、live_poll/report_server/snmp_poll/ipmi_poll 中「5min 桶中间层」措辞统一为「5min 桶趋势层」（两层口径）。
+4.架构文档 v0.80.0 注记补全失效清单（§3.3 版本分发 latest_version、§8 协议卫生 collectors/latest_version）并补记轮询路径统一口径；dev_version v0.80.0 条目「三源统一」表述经本条修复后成立。
+审计结论：升级 SQL/foims-init/曲线 API/ingest 语义/配置链/门禁四方口径/agent 仓改动/硬性规范各项通过；双副本 report.rs 仅注释差异为 HEAD 既有状态。验证：cargo fmt、cargo clippy --release --workspace --all-targets -D warnings、foims-agent-service 97 单测、前端 vue-tsc/npm run build 全过。仅 dev_version z+1，Cargo.toml/package.json 不联动

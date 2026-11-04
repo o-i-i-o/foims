@@ -1023,15 +1023,15 @@ pub fn get_required_indexes() -> Vec<(&'static str, &'static str)> {
         ("idx_monitored_hosts_machine_id", "monitored_hosts"),
         // 一台设备每个来源至多一条采集记录（(device_id, source) 部分唯一索引）
         ("idx_monitored_hosts_device_id", "monitored_hosts"),
-        // 指标历史 (agent_id, granularity, collected_at) 唯一：配合入库 ON CONFLICT
-        // 幂等去重，防重复上报写重；原始层与 5min/1h 降采样桶层互不冲突
-        //（agents.rs 建表时创建）
+        // 指标历史 (agent_id, granularity, collected_at) 唯一：配合聚合器/滚降
+        // 落库的 ON CONFLICT 幂等去重，防重复聚合写重；5min/1h 降采样桶层
+        // 互不冲突（agents.rs 建表时创建）
         (
             "idx_host_metrics_history_agent_time",
             "host_metrics_history",
         ),
         // 指标历史 (granularity, collected_at) 复合：分层清理 DELETE、1h 滚降
-        // pending 扫描与原始层补聚合扫描按「层 + 时间」过滤无 agent_id 前导列
+        // pending 扫描按「层 + 时间」过滤无 agent_id 前导列
         //（agents.rs 建表时创建）
         (
             "idx_host_metrics_history_granularity_time",

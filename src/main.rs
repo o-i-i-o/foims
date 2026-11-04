@@ -539,10 +539,9 @@ async fn main() -> std::io::Result<()> {
         Arc::clone(runtime).start_sweeper(shutdown.subscribe());
     }
 
-    // 轮询路径喂料口径：实时采集开启时秒级样本已覆盖，轮询路径不重复喂
-    //（在下方 if-let 消耗 live_config 前捕获，供任务注册处使用）
-    let snmp_live_enabled = live_config.is_some();
-    let ipmi_live_enabled = ipmi_live_config.is_some();
+    // 轮询路径喂料口径：趋势存储统一经降采样聚合器，轮询任务始终持有
+    // 喂料口（实时开启时秒级路径与本路径共用同一键集指纹，见 live_poll
+    // 与 snmp_poll 注释）
 
     if let Some(live) = live_config
         && let Some(db_pool) = pool.as_ref()
@@ -589,13 +588,13 @@ async fn main() -> std::io::Result<()> {
             u64::from(config.agent.offline_factor),
         )));
         registry.register(Box::new(AgentHistoryCleanupTaskExecutor));
-        // 轮询路径喂料口：仅对应实时采集关闭时喂降采样聚合器（开启时由
-        // 秒级实时路径喂入，见 start_live_poller/start_ipmi_live_poller）
+        // 轮询路径喂料口：趋势存储统一经降采样聚合器（实时开启时秒级
+        // 路径与本路径共用同一键集指纹，见 live_poll/snmp_poll 注释）
         registry.register(Box::new(AgentSnmpPollTaskExecutor::new(
-            (!snmp_live_enabled).then(|| metrics_aggregator.clone()),
+            metrics_aggregator.clone(),
         )));
         registry.register(Box::new(AgentIpmiPollTaskExecutor::new(
-            (!ipmi_live_enabled).then(|| metrics_aggregator.clone()),
+            metrics_aggregator.clone(),
         )));
         registry.register(Box::new(AgentMetricsRollupTaskExecutor));
         registry
@@ -652,7 +651,7 @@ async fn main() -> std::io::Result<()> {
                             "factor": config.agent.offline_factor
                         }),
                     ),
-                    // Agent 历史指标分层清理（每日 03:40）：原始秒级/5min 桶/1h 桶
+                    // Agent 历史指标分层清理（每日 03:40）：5min 桶/1h 桶
                     // 保留期与 SNMP 事件保留期同属本任务配置，清理量均随运行
                     // 时长增长，故合并在同一轮执行
                     (
@@ -660,7 +659,6 @@ async fn main() -> std::io::Result<()> {
                         "agent_history_cleanup",
                         "0 40 3 * * *",
                         serde_json::json!({
-                            "retention_days": config.agent.history_retention_days,
                             "archive_retention_days": config.agent.archive_retention_days,
                             "rollup_retention_days": config.agent.rollup_retention_days,
                             "snmp_event_retention_days": config.agent.snmp_event_retention_days

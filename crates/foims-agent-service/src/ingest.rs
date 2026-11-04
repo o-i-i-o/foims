@@ -9,7 +9,8 @@
 //! 以 [`AgentReportBatch`] 批次补报，`frames` 多帧时仍整批复用本入口。
 //! 入库成功后同步覆盖 [`crate::live_poll::AgentLiveRegistry`]（内存实时
 //! 快照，不落库），供主机监控页秒级展示；429 频控/禁用/失败路径不覆盖。
-//! 注册表按 collected_at 单调合并，旧帧不回退快照。
+//! 注册表按 collected_at 单调合并，旧帧不回退快照。趋势存储不逐帧落库：
+//! 每帧同步喂入降采样聚合器（5min 桶），由 flush 循环统一落库。
 //!
 //! 认证模型（共享注册令牌）：所有 agent 使用配置文件中的同一注册令牌
 //! （`agent.enrollment_token`，经配置包分发）作 Bearer 凭据，服务端比对
@@ -32,12 +33,8 @@ const MAX_CLOCK_SKEW_SECS: i64 = 300;
 /// 采集时刻允许的最大历史深度（秒）：断网恢复后批量补报的历史帧
 /// （agent 侧队列上限 120 帧，正常深度远小于该防御性上限）
 const MAX_PAST_AGE_SECS: i64 = 86_400;
-/// 下发给 agent 的上报节奏（秒）：逐帧实时上报，采集即发（1s 节拍）。
-/// agent 新版以采集节奏驱动上报、不再消费该值，字段仅为旧协议兼容保留；
-/// 服务端仍按下述频控闸门独立限流
-const REPORT_INTERVAL_SECS: u64 = 1;
 /// 最小上报间隔（秒，频控闸门）：实时逐帧节奏的一半，正常 agent 的
-/// 1s 节拍（含 ±10% 抖动）不会命中，仅在恶意高频写库时拒绝
+/// 1s 节拍不会命中，仅在恶意高频写库时拒绝
 const MIN_REPORT_GAP_SECS: f64 = 0.5;
 /// 温度读数业务范围（℃）：越界视为明显异常，且会溢出 max_temp 的 NUMERIC(5,1)
 const TEMP_MIN_C: f64 = -100.0;
@@ -269,8 +266,8 @@ fn parse_frames(body: &[u8]) -> Result<(Vec<AgentReport>, u64), String> {
 /// - monitored_hosts 主行：首报自动注册（INSERT，status='active'、label 取 hostname），
 ///   已注册行刷新快照列（取最后一帧；offline 首报即翻转 active；disabled
 ///   行前置拒收不写库）；删除记录后同机可再次注册；
-/// - host_metrics_history 逐帧追加曲线精简快照
-///   {"cpu","mem","disk","temp","rx_bps","tx_bps"}。
+/// - 指标趋势不逐帧落库：逐帧喂入降采样聚合器（内存分桶，flush 循环统一
+///   写 host_metrics_history 5min 桶层）。
 pub async fn ingest(
     ctx: &ReportContext,
     headers: &HeaderMap,
@@ -447,8 +444,8 @@ pub async fn ingest(
     if status == "disabled" {
         return error_json(StatusCode::FORBIDDEN, "Agent 已被禁用，禁止上报");
     }
-    // 唯一索引 (agent_id, granularity, collected_at) 冲突时跳过：agent 重试/重放
-    // 同一采集时刻的幂等去重，避免重复上报写重
+    // 逐帧喂入降采样聚合器（5min 桶趋势层，纯内存无 IO）：秒级入库已退役，
+    // 趋势存储统一经聚合器落库，本入口不再逐帧写 host_metrics_history
     for (report, collected_at, _) in &valid {
         let mem = mem_usage_pct(report.memory.total, report.memory.used);
         let disk = disk_usage_pct(&report.disks);
@@ -462,24 +459,7 @@ pub async fn ingest(
             "rx_bps": sum_net_bps(&report.nets, |n| n.rx_bps),
             "tx_bps": sum_net_bps(&report.nets, |n| n.tx_bps),
         });
-        // 同步喂入降采样聚合器（5min 桶中间层，纯内存无 IO）
         ctx.metrics.ingest(agent_id, *collected_at, &snapshot);
-        let insert = sqlx::query(
-            r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
-              VALUES ($1, $2, $3) ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
-        )
-        .bind(agent_id)
-        .bind(*collected_at)
-        .bind(&snapshot)
-        .execute(&mut *tx)
-        .await;
-        if let Err(e) = insert {
-            foims_common::log_error!("log.agent.ingest_db_error", error = e);
-            return error_json(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "入库失败：历史指标写入出错",
-            );
-        }
     }
     if let Err(e) = tx.commit().await {
         foims_common::log_error!("log.agent.ingest_db_error", error = e);
@@ -524,18 +504,10 @@ pub async fn ingest(
     };
     ctx.alerts.evaluate_host(&host, values).await;
 
-    // 响应控制面：字段为旧协议兼容保留整型下发（report_interval=1 逐帧
-    // 实时节拍、collectors 空集）。latest_version 不再回填服务端版本号占位
-    // ——client 版本独立自管理（agent 独立仓），服务端无权威来源，空值
-    // 即「无版本通告」；旧版 agent 反序列化要求字段存在，故不能整体移除
-    (
-        StatusCode::OK,
-        Json(json!(foims_common::report::ReportResponse {
-            report_interval: REPORT_INTERVAL_SECS,
-            collectors: std::collections::BTreeMap::new(),
-            latest_version: String::new(),
-        })),
-    )
+    // 响应体：上报链路无控制面语义（上报节奏由 agent 采集节拍驱动、无远程
+    // 开关、client 版本独立自管理），回空 JSON 对象即可；agent 端不解析
+    // 响应体，成功以 HTTP 200 判定
+    (StatusCode::OK, Json(json!({})))
 }
 
 #[cfg(test)]

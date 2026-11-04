@@ -1,7 +1,7 @@
-//! 指标降采样聚合器：秒级原始读数 → 5 分钟桶（granularity=5）。
+//! 指标降采样聚合器：秒级实时读数 → 5 分钟桶（granularity=5）。
 //!
-//! 三层存储的中间层（原始秒级 → 5min 桶 → 1h 桶）：agent 上报、SNMP/IPMI
-//! 实时与轮询路径在构造快照后同步调用 [`MetricsAggregator::ingest`]（纯内存，
+//! 两层趋势存储的第一层（5min 桶 → 1h 桶）：agent 上报、SNMP/IPMI 实时与
+//! 轮询路径在构造快照后同步调用 [`MetricsAggregator::ingest`]（纯内存，
 //! 无 IO），后台 flush 循环每 30s 把到期桶落库 host_metrics_history
 //! （granularity=5），单行 JSONB 形如 `{"cpu":{"avg","min","max","last","cnt"}}`，
 //! 与 upgrade 脚本的历史回填格式一致；1h 桶（granularity=60）由定时任务
@@ -9,13 +9,12 @@
 //!
 //! 内存与落库口径：
 //! - 水位去重：同主机样本按 collected_at 单调递增接受，乱序/重放样本丢弃，
-//!   与原始层唯一索引的幂等去重同源，防重放双计；
+//!   防重放双计；
 //! - 指纹切换：顶层键集（含 null 值键）变化视为指标口径变化，切换前的
 //!   半截桶移入 stale 原样落库——不同口径数据不混桶、不丢数据；
 //! - 迟到吸收：桶时间窗结束后再滞留 [`BUCKET_LINGER_SECS`] 才落库，
 //!   窗口边缘的迟到样本仍能进桶；
-//! - 失败重试：落库失败的桶回推 stale，下一节拍重试——DB 瞬断不永久丢桶
-//!   （近期缺口由滚降任务的原始层补聚合自愈）；
+//! - 失败重试：落库失败的桶回推 stale，下一节拍重试——DB 瞬断不永久丢桶；
 //! - 冲突丢弃：落库 ON CONFLICT DO NOTHING——进程重启后重新累积的半截桶
 //!   不得覆盖重启前已落库的完整桶（完整桶胜出）；
 //! - 关闭冲刷：关闭信号到达后全量写出（含在途半截桶），重启后同桶尾部样本
@@ -337,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn 落库JSON结构与均值舍入() {
+    fn 落库json结构与均值舍入() {
         let mut accs = BTreeMap::new();
         accs.insert(
             "cpu".to_string(),

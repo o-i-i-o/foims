@@ -112,8 +112,9 @@ pub async fn download_config_package<S: ConfigProvider>(
     )?;
 
     // 采集与上报节奏由 agent 独立维护：逐帧实时上报（采集即发，每秒一帧
-    // 直接入库）；组包不再下发 report_interval —— 断网缓冲恢复后批量补报
-    // （agent.toml 不含 report_interval_secs，旧键会被新 agent 忽略）
+    // 直达服务端，快照实时刷新、趋势经降采样聚合落库）；组包不再下发
+    // report_interval —— 断网缓冲恢复后批量补报（agent.toml 不含
+    // report_interval_secs，旧键会被新 agent 忽略）
     let agent_toml = format!(
         "# FOIMS Agent 配置（由 FOIMS 服务端下载时自动生成）\n\
          server_addr = \"{server_addr}\"\n\

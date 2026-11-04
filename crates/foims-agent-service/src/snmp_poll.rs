@@ -61,13 +61,13 @@ struct SnmpSysInfo {
 /// 单轮 SNMP 轮询入口：采集全部已配置设备并 upsert `monitored_hosts`（source='snmp'）行，
 /// 返回 (成功台数, 失败台数)。
 ///
-/// `metrics` 为降采样聚合器喂料口：实时采集关闭时传入 Some（秒级样本已停，
-/// 由本路径 5 分钟一次喂入中间层）；实时开启时传 None——秒级样本已覆盖，
-/// 且本路径快照含 disk 键、键集与实时路径不同，喂入会触发指纹切换拆桶。
+/// `metrics` 为降采样聚合器喂料口：本路径 5 分钟一次喂入趋势层。实时开启时
+/// 秒级实时路径与本路径共用同一键集（实时侧 disk 恒 null 占位，见 live_poll），
+/// 指纹一致不拆桶；实时关闭时本路径是唯一喂料来源。
 pub async fn poll_all(
     pool: &PgPool,
     interval_secs: u64,
-    metrics: Option<Arc<MetricsAggregator>>,
+    metrics: Arc<MetricsAggregator>,
 ) -> (usize, usize) {
     let devices = match load_snmp_devices(pool).await {
         Ok(d) => d,
@@ -97,7 +97,7 @@ pub async fn poll_all(
                 }
             };
             let _permit = permit;
-            poll_and_upsert(&pool, &row, metrics.as_deref()).await
+            poll_and_upsert(&pool, &row, &metrics).await
         });
     }
 
@@ -237,7 +237,7 @@ pub(crate) async fn ensure_snmp_host_present(
 async fn poll_and_upsert(
     pool: &PgPool,
     row: &SnmpDeviceRow,
-    metrics: Option<&MetricsAggregator>,
+    metrics: &MetricsAggregator,
 ) -> Result<(), ()> {
     let device_id = row.device.id;
     let device_name = row.device.name.as_str();
@@ -376,7 +376,7 @@ async fn poll_and_upsert(
     // （实时采集开启时走秒级 live 路径，否则由常驻兜底扫描读同一批快照列）
 
     // 历史曲线快照：cpu/mem/disk/temp + 流量合计（与 agent 上报路径
-    // ingest 的快照键保持一致）；冲突（同秒重复轮询）幂等跳过
+    // ingest 的快照键保持一致）
     let (rx_bps, tx_bps) = snmp_metrics::net_sums(&snap.nets);
     let history = serde_json::json!({
         "cpu": cpu_usage,
@@ -386,29 +386,10 @@ async fn poll_and_upsert(
         "rx_bps": rx_bps,
         "tx_bps": tx_bps,
     });
-    // 喂入降采样聚合器（5min 桶中间层）：仅实时采集关闭时喂（见 poll_all）
-    if let Some(metrics) = metrics {
-        metrics.ingest(agent_id, now, &history);
-    }
-    let insert = sqlx::query(
-        r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
-          VALUES ($1, $2, $3) ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
-    )
-    .bind(agent_id)
-    .bind(now)
-    .bind(&history)
-    .execute(pool)
-    .await;
-    match insert {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            foims_common::log_error!(
-                "log.task.agent_snmp_poll_failed",
-                error = format!("设备 {device_name}（{device_id}）历史写入失败: {e}")
-            );
-            Err(())
-        }
-    }
+    // 喂入降采样聚合器（5min 桶趋势层）：趋势存储统一经聚合器落库，
+    // 本路径不再直写 host_metrics_history
+    metrics.ingest(agent_id, now, &history);
+    Ok(())
 }
 
 /// 读取上一轮差值状态（raw_metrics 私有键 `_snmp_state`）；行不存在/

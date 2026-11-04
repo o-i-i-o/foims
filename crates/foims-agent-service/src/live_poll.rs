@@ -171,7 +171,7 @@ struct WorkerContext {
     config: SnmpLiveConfig,
     registry: Arc<LiveRegistry>,
     alerts: Arc<AlertRuntime>,
-    /// 指标降采样聚合器（5min 桶中间层，秒级读数喂入）
+    /// 指标降采样聚合器（5min 桶趋势层，秒级读数喂入）
     metrics: Arc<MetricsAggregator>,
     semaphore: Arc<Semaphore>,
     initial_delay: Duration,
@@ -494,14 +494,17 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
     let cpu_pct = snapshot.cpu_usage_pct;
     let mem_pct = snapshot.mem_usage_pct;
     let temp_c = snapshot.temperature_c;
-    // 喂入降采样聚合器（5min 桶中间层）：秒级读数；实时路径无磁盘读数，
-    // 不落 disk 键（快照入注册表前完成，snapshot 随后 move）
+    // 喂入降采样聚合器（5min 桶趋势层）：秒级读数。实时路径无磁盘读数，
+    // disk 恒 null 占位——指纹含 null 值键、null 不进桶，与轮询路径
+    //（disk 有值）键集一致、共用同一指纹不拆桶（快照入注册表前完成，
+    // snapshot 随后 move）
     context.metrics.ingest(
         context.host_id,
         snapshot.collected_at,
         &serde_json::json!({
             "cpu": cpu_pct,
             "mem": mem_pct,
+            "disk": serde_json::Value::Null,
             "temp": temp_c,
             "rx_bps": snapshot.rx_bps,
             "tx_bps": snapshot.tx_bps,
@@ -643,7 +646,7 @@ struct IpmiWorkerContext {
     config: IpmiLiveConfig,
     registry: Arc<IpmiLiveRegistry>,
     alerts: Arc<AlertRuntime>,
-    /// 指标降采样聚合器（5min 桶中间层，秒级读数喂入）
+    /// 指标降采样聚合器（5min 桶趋势层，秒级读数喂入）
     metrics: Arc<MetricsAggregator>,
     semaphore: Arc<Semaphore>,
     initial_delay: Duration,
@@ -886,7 +889,7 @@ async fn run_ipmi_cycle(context: &IpmiWorkerContext) -> bool {
 
     let temp_c = reading.max_temp;
     let snapshot = IpmiLiveSnapshot::from_reading(&reading, Utc::now());
-    // 喂入降采样聚合器（5min 桶中间层）：IPMI 仅温度读数
+    // 喂入降采样聚合器（5min 桶趋势层）：IPMI 仅温度读数
     context.metrics.ingest(
         context.host_id,
         snapshot.collected_at,

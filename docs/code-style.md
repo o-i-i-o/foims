@@ -16,7 +16,7 @@
 - 版本号规则统一见 `docs/dev_version.md`（x/y/z 判级分别与
   frontend/package.json、Cargo.toml 联动），前端与后端同一套机制，
   两个版本号独立计数。
-- 每次改动后：`cargo fmt && cargo clippy --release -- -D warnings`；数据库结构
+- 每次改动后：`cargo fmt && cargo clippy --release --workspace --all-targets -- -D warnings`（与 CI 同口径，测试代码一并检查）；数据库结构
   变更走“直接执行 SQL + 同步完善 foims-init 的 DDL”，不用迁移框架。
 - 新增功能（rust、js）、新增前端布局、新增样式代码 保障代码健壮性的前提下遵循最少代码实现原则
 

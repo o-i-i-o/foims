@@ -43,7 +43,7 @@
   复用同一套 x/y/z 判级机制与 Cargo.toml 独立联动（仅前端修改不再 bump
   Cargo.toml）；Vite 内容指纹（assets/ 哈希文件名）仅承担静态资源缓存，
   入口 HTML 引用变化随构建自动生效。
-- 每次更新后：`cargo fmt && cargo clippy --release -- -D warnings`；
+- 每次更新后：`cargo fmt && cargo clippy --release --workspace --all-targets -- -D warnings`（与 CI 同口径，测试代码一并检查）；
   前端改动后：`cd frontend && npm run typecheck`（vue-tsc，开发循环可单跑）
   与 `npm run build`；后端载荷类型变更后运行
   `bash da-scripts/gen-ts-types.sh` 再生成 TS 类型（生成物提交入库，

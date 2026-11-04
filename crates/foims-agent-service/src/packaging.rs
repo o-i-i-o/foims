@@ -39,7 +39,7 @@ pub const ZIP_README: &str = r#"FOIMS Agent 配置包
 本压缩包仅含配置与 mTLS 证书，需配合 foims-agent 程序本体使用
 （程序本体请从发布页按平台下载安装）：
 
-  agent.toml    上报配置（server_addr/token/采集与上报间隔）
+  agent.toml    上报配置（server_addr/token/采集间隔）
   ca.pem        站点 CA 证书（mTLS 信任锚）
   client.pem    客户端证书
   client.key    客户端私钥（敏感物料，请勿泄露）

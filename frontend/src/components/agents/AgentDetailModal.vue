@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * 主机详情弹窗：分组卡片（系统/CPU/内存/磁盘/网络/温度风扇）+ 历史趋势
- * SVG 迷你曲线五卡（时间范围可切换，24h 原始层 / 7d·30d 5min 桶层 /
- * 1y 1h 桶层）。
+ * SVG 迷你曲线五卡（时间范围可切换，24h/7d/30d 读 5min 桶层、
+ * 1y 读 1h 桶层）。
  * 详情与历史各走一条 useQuery；曲线为声明式渲染，无延迟测量时序依赖
  * （SVG 按 viewBox 等比缩放，容器宽度不影响绘制）。
  */
@@ -108,8 +108,8 @@ interface RawMetrics {
   _ipmi_state?: IpmiState | null;
 }
 
-/** 曲线点：后端补齐六键（缺值 null）；桶层点额外带 *_min/*_max 极值键
- *（原始层无此后缀键，undefined），供绘制 avg 主线 + min/max 波动带宽 */
+/** 曲线点：后端补齐六键（缺值 null）并附 *_min/*_max 极值键，供绘制
+ * avg 主线 + min/max 波动带宽 */
 interface AgentHistoryPoint {
   cpu: number | null;
   mem: number | null;
@@ -134,8 +134,8 @@ interface AgentHistoryPoint {
 /** 曲线序列键 */
 type HistoryKey = "cpu" | "mem" | "disk" | "temp" | "rx_bps" | "tx_bps";
 
-/** 曲线时间范围选项：hours 同时决定后端降采样层（≤72 原始秒级 / ≤720
- * 5min 桶 / 更长 1h 桶），24h=原始层、7d/30d=5min 桶层、1y=1h 桶层 */
+/** 曲线时间范围选项：hours 同时决定后端降采样层（≤720 读 5min 桶、
+ * 更长读 1h 桶），24h/7d/30d=5min 桶层、1y=1h 桶层 */
 const HISTORY_RANGES = [
   { key: "24h", hours: 24 },
   { key: "7d", hours: 168 },
@@ -510,8 +510,8 @@ function formatChartNum(value: number): string {
 }
 
 /** 按指标拆分历史序列（cpu/mem/disk/temp/rx/tx 均可能为 null）；
- * 桶层点带 *_min/*_max 极值 → 附 band 波动带宽，原始层无极值键 →
- * band 全 null，AgentSparkline 不渲染多边形 */
+ * 各点附 *_min/*_max 极值 → band 波动带宽，极值缺失（null）区间
+ * AgentSparkline 不渲染多边形 */
 const sparkSeries = computed(() => {
   const items = historyQuery.data.value ?? [];
   const column = (key: HistoryKey) => items.map((item) => item?.[key] ?? null);

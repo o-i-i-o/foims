@@ -5,7 +5,7 @@
  * max/min 标注由 formatValue 人性化；null/缺失值视为断点（分段 polyline），
  * 孤立单点渲染为实心圆点；全部无数据时渲染"暂无历史数据"。
  * 序列可携带波动带宽（band，min/max 包络多边形，半透明填充在主线下方），
- * 仅降采样桶层数据有极值键；原始层不传 band，不渲染多边形。
+ * 极值缺失（null）的区间不渲染多边形。
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";

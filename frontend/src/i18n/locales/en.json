@@ -2861,7 +2861,7 @@
       "agent_ipmi_poll_completed": "IPMI device polling completed: {{ok}} succeeded, {{fail}} failed",
       "agent_history_cleanup_completed": "Agent metrics history cleanup completed: {{count}} expired row(s) deleted",
       "agent_history_cleanup_failed": "Agent metrics history cleanup failed: {{error}}",
-      "agent_metrics_rollup_completed": "Host metrics rollup completed: {{count}} hour bucket(s) rolled up, {{healed}} 5-minute bucket(s) backfilled",
+      "agent_metrics_rollup_completed": "Host metrics rollup completed: {{count}} hour bucket(s) rolled up",
       "agent_metrics_rollup_failed": "Host metrics rollup failed: {{error}}",
       "type_unknown": "Unknown task type: {{task_type}}",
       "system_readonly": "Built-in system tasks are generated from code and configuration at startup; editing, deleting or toggling them is not supported",

@@ -28,10 +28,17 @@
 --      回填 5min 桶层（数值键聚合 avg/min/max/last/cnt），1h 桶层由服务端
 --      定时任务从 5min 桶滚降生成，不做历史回填。
 --   7. host_metrics_history 新增 (granularity, collected_at) 复合索引：
---      分层清理 DELETE、1h 滚降 pending 扫描与原始层补聚合扫描均按
---      「层 + 时间」过滤而无 agent_id 前导列，唯一索引无法服务。
---   8. devices 删除 location 自由文本列：空间归属已由房间/工位/机柜/机位
+--      分层清理 DELETE 与 1h 滚降 pending 扫描均按「层 + 时间」过滤而无
+--      agent_id 前导列，唯一索引无法服务。
+--   8. check_position_overlap 自定义 SQLSTATE P0401：U 位重叠由「默认
+--      P0001 + 中文消息文本匹配」改为自定义错误码，应用层按错误码匹配，
+--      跨语言/客户端稳定（详见第 8 节）。
+--   9. devices 删除 location 自由文本列：空间归属已由房间/工位/机柜/机位
 --      结构化字段承载，该列全站无展示出口，属冗余备注（存量值随删列丢弃）。
+--   10. host_metrics_history 移除原始秒级层（granularity=0）：秒级入库退役，
+--      存量原始层尾差按第 6 节同口径幂等回填 5min 桶后整层删除，粒度约束
+--      重建为 CHECK (5, 60) 并去默认值；曲线分层选层收敛为 ≤720h 读 5min
+--      桶、更长读 1h 桶。
 --   说明：foims-init 建表代码（schema/tables/devices.rs、agents.rs、views.rs、
 --   users.rs）与 check.rs 表/列/列宽清单已同步新增。
 BEGIN;
@@ -168,7 +175,8 @@ WHERE config_type = 'notification' AND key = 'methods';
 
 -- ===== 6. host_metrics_history 降采样分层 =====
 -- granularity：降采样粒度（0=原始秒级 / 5=5min 桶 / 60=1h 桶）。
--- 存量行均为原始层，默认 0 即正确语义，无需回填该列。
+-- 存量行均为原始层，默认 0 即正确语义，无需回填该列
+--（原始层已于本脚本第 10 节退役，此处先按当时口径建层）。
 ALTER TABLE host_metrics_history
     ADD COLUMN IF NOT EXISTS granularity SMALLINT NOT NULL DEFAULT 0;
 
@@ -221,10 +229,9 @@ GROUP BY agent_id, bucket
 ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING;
 
 -- ===== 7. host_metrics_history 层 + 时间复合索引 =====
--- 分层清理 DELETE（WHERE granularity = $1 AND collected_at < ...）、1h 滚降
--- pending 扫描（WHERE granularity = 5 AND 小时窗已完结）与原始层补聚合扫描
--- （WHERE granularity = 0 AND collected_at >= ...）均无 agent_id 前导列可用
--- 唯一索引，补建复合索引避免例行任务全表扫描。
+-- 分层清理 DELETE（WHERE granularity = $1 AND collected_at < ...）与 1h 滚降
+-- pending 扫描（WHERE granularity = 5 AND 小时窗已完结）均无 agent_id 前导列
+-- 可用唯一索引，补建复合索引避免例行任务全表扫描。
 CREATE INDEX IF NOT EXISTS idx_host_metrics_history_granularity_time
     ON host_metrics_history (granularity, collected_at);
 
@@ -259,5 +266,51 @@ $$ LANGUAGE plpgsql;
 -- 导出的 devices CSV 含 location 列，升级后导入将报 header_mismatch——
 -- 存量数据应在升级前完成导入，或升级后从旧版本导出文件中手工剔除该列。
 ALTER TABLE devices DROP COLUMN IF EXISTS location;
+
+-- ===== 10. host_metrics_history 移除原始秒级层 =====
+-- 秒级入库退役：三源（agent/SNMP/IPMI）统一「内存实时快照（SSE 展示与
+-- 就地告警）+ 降采样聚合（5min/1h 桶趋势）」双轨，host_metrics_history
+-- 仅保留 5min/1h 桶层。顺序：先按第 6 节同口径把存量原始层尾差回填 5min
+-- 桶（幂等，与服务端聚合器先到者胜），再删原始层行（新 CHECK 不再允许
+-- 0，须先清数据才能通过约束校验），最后重建约束并去默认值。
+INSERT INTO host_metrics_history (agent_id, granularity, collected_at, metrics)
+SELECT agent_id, 5, bucket,
+       jsonb_object_agg(k, jsonb_build_object(
+           'avg', round((sum_v / cnt)::numeric, 4),
+           'min', min_v, 'max', max_v, 'last', last_v, 'cnt', cnt
+       ))
+FROM (
+    SELECT agent_id, bucket, k,
+           sum(nv) AS sum_v,
+           min(nv) AS min_v,
+           max(nv) AS max_v,
+           (array_agg(nv ORDER BY collected_at DESC))[1] AS last_v,
+           count(*) AS cnt
+    FROM (
+        SELECT h.agent_id,
+               to_timestamp(floor(extract(epoch FROM h.collected_at) / 300) * 300) AS bucket,
+               e.k,
+               (e.v #>> '{}')::double precision AS nv,
+               h.collected_at
+        FROM host_metrics_history h
+        CROSS JOIN LATERAL jsonb_each(h.metrics) AS e(k, v)
+        WHERE h.granularity = 0
+          AND jsonb_typeof(h.metrics) = 'object'
+          AND jsonb_typeof(e.v) = 'number'
+    ) samples
+    GROUP BY agent_id, bucket, k
+) key_stats
+GROUP BY agent_id, bucket
+ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING;
+
+DELETE FROM host_metrics_history WHERE granularity = 0;
+
+ALTER TABLE host_metrics_history
+    DROP CONSTRAINT IF EXISTS chk_host_metrics_history_granularity;
+ALTER TABLE host_metrics_history ADD CONSTRAINT chk_host_metrics_history_granularity
+    CHECK (granularity IN (5, 60));
+
+ALTER TABLE host_metrics_history
+    ALTER COLUMN granularity DROP DEFAULT;
 
 COMMIT;

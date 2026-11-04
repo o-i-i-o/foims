@@ -68,17 +68,17 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             id BIGSERIAL PRIMARY KEY,
             agent_id UUID NOT NULL REFERENCES monitored_hosts(id) ON DELETE CASCADE,
             collected_at TIMESTAMP WITH TIME ZONE NOT NULL,
-            granularity SMALLINT NOT NULL DEFAULT 0
-                CONSTRAINT chk_host_metrics_history_granularity CHECK (granularity IN (0, 5, 60)),
+            granularity SMALLINT NOT NULL
+                CONSTRAINT chk_host_metrics_history_granularity CHECK (granularity IN (5, 60)),
             metrics JSONB NOT NULL
         )",
     )
     .execute(pool)
     .await?;
 
-    // (agent_id, granularity, collected_at) 唯一：配合入库 ON CONFLICT 幂等去重，
-    // 防止 agent 重试/重放同一采集时刻重复写重（原始层 granularity=0 与
-    // 5min/1h 降采样桶层互不冲突）；兼顾曲线查询按层范围扫描
+    // (agent_id, granularity, collected_at) 唯一：配合聚合器/滚降落库的
+    // ON CONFLICT 幂等去重，防止重复聚合写重；5min/1h 降采样桶层互不冲突；
+    // 兼顾曲线查询按层范围扫描
     sqlx::query(
         r"CREATE UNIQUE INDEX IF NOT EXISTS idx_host_metrics_history_agent_time
             ON host_metrics_history (agent_id, granularity, collected_at)",
@@ -87,8 +87,8 @@ pub async fn create(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .await?;
 
     // (granularity, collected_at) 复合索引：分层清理 DELETE、1h 滚降 pending
-    // 扫描与原始层补聚合扫描均按「层 + 时间」过滤而无 agent_id 前导列，
-    // 唯一索引无法服务，避免每次例行任务全表扫描
+    // 扫描均按「层 + 时间」过滤而无 agent_id 前导列，唯一索引无法服务，
+    // 避免每次例行任务全表扫描
     sqlx::query(
         r"CREATE INDEX IF NOT EXISTS idx_host_metrics_history_granularity_time
             ON host_metrics_history (granularity, collected_at)",

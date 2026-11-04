@@ -485,10 +485,9 @@ pub async fn put_monitor_port<S: ConfigProvider>(
 /// 返回 {items:[{t,cpu,mem,disk,temp,rx_bps,tx_bps}]}（非分页，超出上限
 /// 均匀抽样）。
 ///
-/// 分层选层（三层降采样存储）：≤72h 读原始层（granularity=0，秒级标量）；
-/// ≤720h 读 5min 桶层（granularity=5）；更长读 1h 桶层（granularity=60）。
-/// 桶层行内为 {avg,min,max,last,cnt} 聚合对象：输出 avg 作主值并附
-/// *_min/*_max 供前端绘制波动带宽；原始层为标量，无极值后缀键。
+/// 分层选层（两层降采样存储）：≤720h 读 5min 桶层（granularity=5）；
+/// 更长读 1h 桶层（granularity=60）。桶行内为 {avg,min,max,last,cnt} 聚合
+/// 对象：输出 avg 作主值并附 *_min/*_max 供前端绘制波动带宽。
 pub async fn get_agent_history<S: ConfigProvider>(
     State(state): State<Arc<S>>,
     _user: AdminOrSecAdminUser,
@@ -505,18 +504,12 @@ pub async fn get_agent_history<S: ConfigProvider>(
         ));
     }
     // 分层选层：窗口越长取越粗粒度，控制扫描行数与响应点数
-    let granularity: i16 = if hours <= 72 {
-        0
-    } else if hours <= 720 {
-        5
-    } else {
-        60
-    };
+    let granularity: i16 = if hours <= 720 { 5 } else { 60 };
     let pool = state.pool()?.get_conn();
     let since = Utc::now() - chrono::Duration::hours(hours);
     // 抽样下推：窗口函数计算行号 rn 与总行数 n，超上限时按「600/n 分桶取每桶
-    // 首行」在 SQL 内均匀抽取（ceil(rn·K/n) 值变化处即桶首），避免原始层 72h
-    // 最坏约 26 万行全量拉取后内存抽样；n 略超上限（如 601）时仍保留 ~600 点
+    // 首行」在 SQL 内均匀抽取（ceil(rn·K/n) 值变化处即桶首），避免长窗口
+    // 全量拉取后内存抽样；n 略超上限（如 601）时仍保留 ~600 点
     //（rn/n 为 bigint；内插值仅为 HISTORY_MAX_POINTS 编译期常量与分层
     // granularity 白名单值，经 QueryBuilder push 拼接；id/时间走 push_bind）
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
@@ -544,7 +537,8 @@ pub async fn get_agent_history<S: ConfigProvider>(
         .fetch_all(&pool)
         .await?;
 
-    // 曲线六键统一口径：缺失键（如 IPMI 主机无 cpu/mem）输出 null
+    // 曲线六键统一口径：缺失键（如 IPMI 主机无 cpu/mem）输出 null；
+    // 桶层输出 avg 主值 + min/max 带宽（last/cnt 仅供内部校对，不下发）
     const METRIC_KEYS: [&str; 6] = ["cpu", "mem", "disk", "temp", "rx_bps", "tx_bps"];
     let points: Vec<Value> = rows
         .into_iter()
@@ -552,34 +546,25 @@ pub async fn get_agent_history<S: ConfigProvider>(
             let mut point = Map::new();
             point.insert("t".to_string(), json!(rfc3339(t)));
             for key in METRIC_KEYS {
-                if granularity == 0 {
-                    // 原始层：标量直出
-                    point.insert(
-                        key.to_string(),
-                        metrics.get(key).cloned().unwrap_or(Value::Null),
-                    );
-                } else {
-                    // 桶层：avg 主值 + min/max 带宽（last/cnt 仅供内部校对，不下发）
-                    let spec = metrics.get(key);
-                    point.insert(
-                        key.to_string(),
-                        spec.and_then(|s| s.get("avg"))
-                            .cloned()
-                            .unwrap_or(Value::Null),
-                    );
-                    point.insert(
-                        format!("{key}_min"),
-                        spec.and_then(|s| s.get("min"))
-                            .cloned()
-                            .unwrap_or(Value::Null),
-                    );
-                    point.insert(
-                        format!("{key}_max"),
-                        spec.and_then(|s| s.get("max"))
-                            .cloned()
-                            .unwrap_or(Value::Null),
-                    );
-                }
+                let spec = metrics.get(key);
+                point.insert(
+                    key.to_string(),
+                    spec.and_then(|s| s.get("avg"))
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                );
+                point.insert(
+                    format!("{key}_min"),
+                    spec.and_then(|s| s.get("min"))
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                );
+                point.insert(
+                    format!("{key}_max"),
+                    spec.and_then(|s| s.get("max"))
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                );
             }
             Value::Object(point)
         })

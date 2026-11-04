@@ -43,12 +43,13 @@ pub(crate) struct IpmiDeviceRow {
 /// 单轮 IPMI 轮询入口：采集全部已配置设备并 upsert `monitored_hosts`（source='ipmi'）行，
 /// 返回 (成功台数, 失败台数)。
 ///
-/// `metrics` 为降采样聚合器喂料口：实时采集关闭时传入 Some（秒级样本已停，
-/// 由本路径 5 分钟一次喂入中间层）；实时开启时传 None——秒级样本已覆盖。
+/// `metrics` 为降采样聚合器喂料口：本路径 5 分钟一次喂入趋势层。实时开启时
+/// 秒级实时路径与本路径同喂 temp 键、键集一致不拆桶；实时关闭时本路径是
+/// 唯一喂料来源。
 pub async fn poll_all(
     pool: &PgPool,
     interval_secs: u64,
-    metrics: Option<Arc<MetricsAggregator>>,
+    metrics: Arc<MetricsAggregator>,
 ) -> (usize, usize) {
     let devices = match load_ipmi_devices(pool).await {
         Ok(d) => d,
@@ -76,7 +77,7 @@ pub async fn poll_all(
                 }
             };
             let _permit = permit;
-            poll_and_upsert(&pool, &row, metrics.as_deref()).await
+            poll_and_upsert(&pool, &row, &metrics).await
         });
     }
 
@@ -202,7 +203,7 @@ pub(crate) async fn ensure_ipmi_host_present(
 async fn poll_and_upsert(
     pool: &PgPool,
     row: &IpmiDeviceRow,
-    metrics: Option<&MetricsAggregator>,
+    metrics: &MetricsAggregator,
 ) -> Result<(), ()> {
     let device_id = row.device.id;
     let device_name = row.device.name.as_str();
@@ -276,32 +277,13 @@ async fn poll_and_upsert(
     };
 
     // 历史曲线快照：IPMI 只有温度可取（cpu/mem/disk 无语义，不落键）。
-    // 喂入降采样聚合器（5min 桶中间层）：仅实时采集关闭时喂（见 poll_all）
+    // 喂入降采样聚合器（5min 桶趋势层）：趋势存储统一经聚合器落库，
+    // 本路径不再直写 host_metrics_history
     let history = serde_json::json!({
         "temp": max_temp,
     });
-    if let Some(metrics) = metrics {
-        metrics.ingest(agent_id, now, &history);
-    }
-    let insert = sqlx::query(
-        r"INSERT INTO host_metrics_history (agent_id, collected_at, metrics)
-          VALUES ($1, $2, $3) ON CONFLICT (agent_id, granularity, collected_at) DO NOTHING",
-    )
-    .bind(agent_id)
-    .bind(now)
-    .bind(&history)
-    .execute(pool)
-    .await;
-    match insert {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            foims_common::log_error!(
-                "log.task.agent_ipmi_poll_failed",
-                error = format!("设备 {device_name}（{device_id}）IPMI 历史写入失败: {e}")
-            );
-            Err(())
-        }
-    }
+    metrics.ingest(agent_id, now, &history);
+    Ok(())
 }
 
 /// 建会话 → 采集 → 关会话（单台一轮）。会话异常同样返回 Err（供 poll 失败计数）。
