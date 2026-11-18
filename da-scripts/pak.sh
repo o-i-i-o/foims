@@ -2,7 +2,7 @@
 set -e
 
 NGINXCONF=/etc/nginx/nginx.conf
-cd /media/oi-io/data/foims
+cd /home/oi-io/foims
 
 echo 编译后端
 cargo build --release
