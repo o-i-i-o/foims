@@ -84,8 +84,10 @@ impl JwtUtils {
                 audience: "foims-client".to_string(),
                 leeway: 30,
             },
-            decoding_key: DecodingKey::from_secret(secret.as_bytes()),
-            encoding_key: EncodingKey::from_secret(secret.as_bytes()),
+            decoding_key: DecodingKey::from_secret(secret.as_bytes())
+                .map_err(|e| format!("JWT 密钥构建失败: {e}"))?,
+            encoding_key: EncodingKey::from_secret(secret.as_bytes())
+                .map_err(|e| format!("JWT 密钥构建失败: {e}"))?,
             token_cache: GLOBAL_TOKEN_CACHE.clone(),
         })
     }
@@ -475,12 +477,10 @@ mod tests {
 
     /// 用指定密钥与声明手工签发一个 token（绕过配置的过期时长）
     fn sign_token(secret: &str, claims: &JwtClaims) -> String {
-        encode(
-            &Header::new(Algorithm::HS256),
-            claims,
-            &EncodingKey::from_secret(secret.as_bytes()),
-        )
-        .unwrap_or_else(|e| panic!("测试 token 签发失败: {e}"))
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes())
+            .unwrap_or_else(|e| panic!("测试密钥构建失败: {e}"));
+        encode(&Header::new(Algorithm::HS256), claims, &encoding_key)
+            .unwrap_or_else(|e| panic!("测试 token 签发失败: {e}"))
     }
 
     /// 构造一份自定义时间的声明（签发者/受众与生产一致）

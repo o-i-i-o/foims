@@ -50,7 +50,7 @@ allow_attributes = "warn"
 
 # Crypto (AES)
 aes-gcm = "0.11.1"
-arc-swap = "1.9.3"
+arc-swap = "1.9.5"
 
 # Async trait
 async-trait = "0.1.92"
@@ -62,7 +62,7 @@ base64 = "0.23.1"
 # 密码哈希 / 随机数 / TOML 序列化 / 日志时间格式化（多 crate 共享）
 bcrypt = "0.19.3"
 # 正则（SNMP 厂商识别：descr_regexes / probe 值比对）
-regex = "1.13.1"
+regex = "1.13.2"
 
 # Date/Time
 chrono = { version = "0.4.45", features = ["serde"] }
@@ -71,7 +71,7 @@ config = { version = "0.15.27", features = ["toml"] }
 # CSV and ZIP
 csv = "1.4.0"
 dashmap = "6.2.1"
-flate2 = "1.1.10"
+flate2 = "1.1.11"
 hex = "0.4.3"
 
 # 本机网卡地址枚举（agent-service 证书 SAN，纯安全封装 getifaddrs）
@@ -84,11 +84,11 @@ ipnetwork = "0.21.1"
 hmac = "0.13.0"
 
 # JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
-jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "12.0.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
-lettre = { version = "0.11.23", features = ["tokio1", "tokio1-native-tls"] }
+lettre = { version = "0.11.24", features = ["tokio1", "tokio1-native-tls"] }
 openidconnect = { version = "4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
-rand = "0.10.3"
+rand = "0.10.4"
 
 # Webhook 通知推送（钉钉/企业微信/通用）
 # reqwest 0.13 的 rustls feature 硬绑 aws-lc-rs（无 ring 对应项），经弱依赖
@@ -106,7 +106,7 @@ ts-rs = { version = "12.0.1", features = ["serde-compat", "no-serde-warnings", "
 sha2 = "0.11.1"
 
 # SQLx
-sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
+sqlx = { version = "0.9.1", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json", "macros"] }
 
 # deb 组包（foims-agent-service 分发下载：control/data tar + flate2 gzip）
 tar = "0.4.46"
@@ -122,7 +122,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 
 # Cron scheduler
 tokio-cron-scheduler = "0.15.1"
-toml = "1.1.8"
+toml = "1.2.1"
 totp-rs = { version = "6.0.0", features = ["qr", "gen_secret"] }
 tower-http = { version = "0.7.1", features = ["cors", "compression-full", "trace", "set-header", "limit"] }
 
@@ -135,7 +135,7 @@ rpm = { version = "0.30.2", default-features = false, features = ["payload", "gz
 
 # HTTP/3 / QUIC（foims-agent mTLS 上报）
 # rustls-pemfile已经停止维护很久了，请勿使用，检查是否可用rustls-pki-types替代（rustls依赖）
-bytes = "1.12.1"
+bytes = "1.12.2"
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
 http = "1.5.0"
@@ -143,11 +143,11 @@ quinn = { version = "0.11.12", default-features = false, features = ["log", "rus
 rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std"] }
 
 # UUID
-uuid = { version = "1.29.0", features = ["v4", "serde"] }
+uuid = { version = "1.29.3", features = ["v4", "serde"] }
 
 # Validation
 validator = { version = "0.21.0", features = ["derive"] }
-zip = { version = "9.2.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.7.0", default-features = false, features = ["deflate"] }
 
 # x509 证书解析（foims-common 证书剩余寿命辅助：agent 续期链路共用）
 x509-parser = "0.18.1"
@@ -200,7 +200,7 @@ uuid = { workspace = true }
 validator = { workspace = true }
 
 [dev-dependencies]
-regex = "1.13.1"
+regex = "1.13.2"
 
 [lints]
 workspace = true

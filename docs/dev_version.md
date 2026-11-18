@@ -432,3 +432,7 @@ v0.85.1
 v0.86.0
 2026110422245901
 主机监控页同 IP 去重改为「在线优先」（功能优化，y 段 +1）：agents_api 列表与 Top 榜的 dedup CTE 排序由单一来源优先级（ipmi>agent>snmp）升级为两级键——新增 STATUS_RANK_SQL（active 视为在线恒排前）为第一级，SOURCE_RANK_SQL 降为第二级（仅双方同在线或同离线时作确定性取舍，last_seen 兜底不变）；效果：同 IP 的 ipmi/agent 行与 snmp 行仅一方在线时恒展示在线方，双方都在线时维持 ipmi/agent 优先。Top 榜因 WHERE status='active' 预过滤，在线键恒并列退化为来源优先级，SQL 不变仅注释澄清口径；get_agent_detail siblings 与 AgentDetailModal 双来源切换机制零改动（仍返回全部同 IP 行），后端/前端相关注释口径同步。验证：cargo fmt、workspace clippy --all-targets -D warnings 全绿，foims-agent-service 97 测试全过。y 段变化联动：Cargo.toml 0.33.30→0.33.31、foims-agent-service 0.1.37→0.1.38
+
+v0.86.1
+2026111814205801
+jsonwebtoken 升级 11.1.0→12.0.0 的破坏性变更适配：EncodingKey/DecodingKey::from_secret 改为返回 Result（新版本拒绝空 HMAC 密钥），JwtUtils::new 构建密钥处改用 map_err 转为启动配置错误，测试签名辅助函数同步先构造密钥再 encode；encode/decode/Validation/ErrorKind 等其余用法无变化。验证：cargo fmt、cargo clippy -p foims-auth --all-targets -D warnings 全绿，workspace cargo check --all-targets 通过，foims-auth jwt 24 项单测全过。z 段不联动 Cargo.toml
