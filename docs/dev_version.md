@@ -480,3 +480,7 @@ v0.87.1
 v0.87.2
 2026111911060701
 组织管理-员工编辑弹窗改为两栏布局（仅前端 UI 调整，z 段 +1）：OrgEmployeeList.vue 编辑/新增员工弹窗宽度由 sm（480px）提升为 md（600px，与用户管理弹窗同档），原 5 个字段挤在单个 form-row（窄容器下 auto-fit 列数过多）改为三行 form-row 两列排布——姓名+性别、电话+邮箱各占一行，入职日期独占末行；窄屏仍由 form-row 的 auto-fit 自动回落单列，表单逻辑与载荷不变。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
+
+v0.87.3
+2026111911141801
+修复模态框关闭按钮「×」未居中于圆形背景（仅前端 UI 调整，z 段 +1）：modals.css 的 .modal-close 原用 &times; 字符配合 flex 居中，字符字面中心取决于字体 ascent/descent（跨平台整体下沉 1~3px），无法与 36px 圆形背景同心。改为 font-size: 0 隐藏模板字符（可访问名称仍由 aria-label 提供），用两条绝对定位、top/left 50% + translate(-50%, -50%) 各旋转 ±45° 的 16×2px 伪元素线拼成 ×，以按钮中心为原点严格居中；悬停整体 rotate(90deg) 旋转效果不变。影响全部 ModalShell 及其同款关闭钮（ConfirmModal/ChangePasswordModal/LogDetailsModal）。验证：biome check、npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。

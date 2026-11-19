@@ -113,26 +113,47 @@
   }
 
   /* ==================== 关闭按钮（白色圆形，悬停旋转） ==================== */
+  /* 不用 &times; 字符绘制：数学符号的字面中心随字体度量浮动（ASCII 字体
+     ascent/descent 不对称时整体下沉 1~3px），无法与圆形背景同心。改用两条
+     以按钮中心为原点的伪元素线拼成 ×，跨平台严格居中。 */
   .modal-close {
-    color: var(--color-bg-white);
-    font-size: 1.5rem;
-    font-weight: 700;
-    cursor: pointer;
-    line-height: 1;
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 10%);
     opacity: 0.8;
+
+    /* 隐藏模板中的 &times; 字形，可访问名称由 aria-label 提供 */
+    font-size: 0;
+    color: var(--color-bg-white);
+    flex-shrink: 0;
+    cursor: pointer;
     transition:
       opacity var(--transition-fast),
       background-color var(--transition-fast),
       transform var(--transition-fast);
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: rgb(255 255 255 / 10%);
-    border: none;
-    flex-shrink: 0;
+  }
+
+  .modal-close::before,
+  .modal-close::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+
+  .modal-close::before {
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  .modal-close::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
   }
 
   .modal-close:hover {
