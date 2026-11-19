@@ -308,8 +308,8 @@ fn configure_app_services(
             config.init.enabled,
             Arc::new(|| {
                 Box::pin(async move {
-                    // 未注册 systemd 单元：程序并非以服务方式运行，
-                    // 不下发重启，交由用户手动重启完成初始化
+                    // 未注册 systemd 单元：程序并非以服务方式运行，属于
+                    // 生产部署异常，不下发重启，交由前端按错误态提示
                     if foims_services::ManagedService::Foims
                         .unit_file()
                         .await

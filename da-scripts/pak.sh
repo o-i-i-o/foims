@@ -27,6 +27,11 @@ echo 配置静态资源文件目录权限
 sudo find /usr/share/foims/web -type d -exec chmod 755 {} +
 sudo find /usr/share/foims/web -type f -exec chmod 644 {} +
 
+# 数据库备份目录：初始化向导与定时备份任务的唯一落点，必须归服务用户所有
+# 且可写（属主为 root 时向导备份会因 chmod EPERM 失败）
+echo 创建数据库备份目录
+sudo install -d -o foims -g foims -m 750 /usr/share/foims/backups
+
 echo 更新Nginx配置文件
 sudo rm -f /etc/nginx/conf.d/foims-dev.conf
 sudo rm -f /etc/nginx/conf.d/foims.conf

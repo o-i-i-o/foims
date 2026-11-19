@@ -13,8 +13,8 @@ use foims_common::config::DatabaseConfig;
 pub enum RestartMode {
     /// 已注册 systemd 单元：重启命令已下发（systemctl restart）。
     Systemd,
-    /// 未注册 systemd 单元（程序并非以服务运行）：不执行重启，
-    /// 由用户手动重启程序完成初始化。
+    /// 未注册 systemd 单元（程序并非以服务运行，属部署异常）：
+    /// 不执行重启，由前端按错误态提示检查部署并手动重启。
     Manual,
 }
 

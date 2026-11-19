@@ -288,13 +288,20 @@ async function submitAdmin() {
 }
 
 // 第 5 步：完成与重启
-// 后端检测到程序未注册为 systemd 服务时不执行重启（restart_mode = manual），
-// 切换为手动重启指引并隐藏自动跳转与登录入口
+// 生产部署必须注册 foims.service：后端未找到服务单元时返回 manual，
+// 这属于部署异常而非正常路径，前端按错误态展示并给出部署检查指引，
+// 不提供自动跳转登录入口
 const manualRestart = ref(false);
+// 重启请求失败或等待恢复超时：保留在完成页并展示错误，不再盲目跳转
+const restartError = ref("");
 
 async function handleRestart() {
   const restartResult = await apiPost<{ restart_mode?: string }>("/api/init/restart");
-  if (restartResult?.data?.restart_mode === "manual") {
+  if (!restartResult.success) {
+    restartError.value = `${t("init.restart_failed")}: ${restartResult.message || unknownError.value}`;
+    return;
+  }
+  if (restartResult.data?.restart_mode === "manual") {
     manualRestart.value = true;
     return;
   }
@@ -303,8 +310,9 @@ async function handleRestart() {
 
 /**
  * systemd 自退出重启后轮询后端恢复（/api/auth/init-status 两分支常驻注册），
- * 恢复后跳转登录页。重启窗口内请求失败属预期，静默重试；
- * 超时（服务未能自行拉起）提示用户后仍尝试跳转。
+ * 确认新进程已切到正常模式（init_enabled=false）后跳转登录页。重启窗口内
+ * 请求失败属预期，静默重试；旧进程退出前仍会返回 success，故不能据此
+ * 提前跳转。超时（服务未能自行拉起）停在完成页展示错误。
  */
 async function waitForBackendRestart() {
   const maxAttempts = 30;
@@ -319,8 +327,10 @@ async function waitForBackendRestart() {
       });
       if (response.ok) {
         const result: unknown = await response.json();
-        if ((result as { success?: unknown } | null)?.success) {
-          window.location.href = "/main.html";
+        const envelope = result as { success?: unknown; data?: { init_enabled?: unknown } } | null;
+        // 新进程读盘后 init_enabled=false 才代表重启完成
+        if (envelope?.success === true && envelope.data?.init_enabled === false) {
+          window.location.href = "/index.html";
           return;
         }
       }
@@ -328,8 +338,7 @@ async function waitForBackendRestart() {
       // 服务重启窗口内连接失败属预期：静默进入下一轮
     }
     if (attempt >= maxAttempts) {
-      showToast(t("init.restart_timeout"), "warning");
-      window.location.href = "/main.html";
+      restartError.value = t("init.restart_timeout");
       return;
     }
     await new Promise<void>((resolve) => setTimeout(resolve, 1000));
@@ -687,15 +696,23 @@ onMounted(() => {
             <h2>{{ t("init.done_title") }}</h2>
             <div class="success-icon">✓</div>
             <p>{{ t("init.done_desc") }}</p>
-            <!-- systemd 重启分支：已注册单元，重启命令已下发 -->
-            <p v-if="!manualRestart">{{ t("init.restarting") }}</p>
-            <!-- 手动重启分支：未注册 systemd 单元，后端不下发重启 -->
-            <div v-if="manualRestart">
+            <!-- systemd 重启分支：已注册单元，重启命令已下发并等待新进程恢复 -->
+            <div v-if="!manualRestart && !restartError" class="restart-waiting">
+              <div class="restart-spinner"></div>
+              <p>{{ t("init.restarting") }}</p>
+            </div>
+            <!-- 部署异常分支：未注册 systemd 单元，生产环境按错误态展示 -->
+            <div v-if="manualRestart" class="status-container status-error">
+              <div class="status-error">✗</div>
+              <h3>{{ t("init.manual_restart_title") }}</h3>
               <p>{{ t("init.manual_restart") }}</p>
               <p class="manual-restart-hint">{{ t("init.manual_restart_hint") }}</p>
             </div>
-            <div v-if="!manualRestart" class="form-actions">
-              <a href="/main.html" class="init-btn init-btn-primary">{{ t("init.login_system") }}</a>
+            <!-- 重启请求失败或等待恢复超时 -->
+            <div v-if="restartError" class="status-container status-error">
+              <div class="status-error">✗</div>
+              <h3>{{ t("init.restart_failed_title") }}</h3>
+              <p>{{ restartError }}</p>
             </div>
           </div>
         </div>

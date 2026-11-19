@@ -440,3 +440,19 @@ jsonwebtoken 升级 11.1.0→12.0.0 的破坏性变更适配：EncodingKey/Decod
 v0.86.2
 2026111909262001
 初始化向导第 2 步「连接测试」报 TypeError: port.trim is not a function 修复（前端普通 bug 修复，z 段 +1）：数据库端口输入框为 type="number"，Vue 的 v-model 会将该输入自动转换为数字，而提交前统一按字符串 trim 组装 DatabaseSetupRequest，导致 dbConfig.port.trim 在数字上调用直接抛错、向导无法进入下一步。改为 String(dbConfig.port).trim() 归一化后再 trim（空值仍为 ""，后端 port 契约不变）。验证：vue-tsc、npm run build 通过。z 段不联动 Cargo.toml
+
+v0.86.3
+2026111909403401
+初始化完成页重启逻辑与部署异常提示修正（功能 bug 修复，z 段 +1）：
+1.等待口径纠偏：/api/init/restart 后轮询 /api/auth/init-status 不再以 success 即跳转（旧进程退出前同样返回 success，会提前离开完成页），改为仅在 data.init_enabled === false（新进程已读盘切入正常模式）时跳转，目标由 /main.html 改为登录页 /index.html。
+2.失败与超时不再盲目跳转：重启请求 success=false 或轮询 30 次未恢复时停在完成页，以错误态展示「重启失败/等待超时」，不再静默跳转。
+3.部署异常判定：未找到 foims.service（restart_mode=manual）由「手动重启指引」改为错误态「部署异常：未找到系统服务」，文案明确生产环境必须注册并启用服务单元；同步修订 zh/en 文案与 server.init.manual_restart_required，以及 foims-init/context、status 与 main.rs 中对应注释语义。
+验证：cd frontend && npm run typecheck、npm run build 通过；后端仅注释改动，cargo fmt --all 通过。z 段不联动 Cargo.toml 与 frontend/package.json。
+
+v0.86.4
+2026111910005101
+初始化备份目录权限报 server.init.db.backup_failed(error=Operation not permitted (os error 1)) 修复（功能 bug 修复，z 段 +1）：服务以 User=foims 运行，而 /usr/share/foims/backups 安装后属主为 root:root（755），create_dir_all 因目录已存在直接通过，随后 chmod 0700 收紧权限时以 EPERM 失败并被笼统映射为 backup_failed。处理：1. da-scripts/pak.sh 新增 install -d -o foims -g foims -m 750 /usr/share/foims/backups，保证备份目录归服务用户且可写；2. operations.rs 中将收紧权限失败单独映射为 server.init.db.backup_dir_permission_failed，zh/en 文案提示目录属主不是服务用户（foims）并携带原始 error，便于定位。存量环境需一次性执行 chown foims:foims /usr/share/foims/backups && chmod 750。验证：cargo fmt、foims-init clippy -D warnings、npm run typecheck、npm run build 通过。z 段不联动 Cargo.toml 与 frontend/package.json。
+
+v0.86.5
+2026111910113901
+初始化完成页提示优化（前端普通 UI 调整，z 段 +1）：第 5 步去除「登录系统」手动入口（重启完成由前端自动跳转登录页，不再需要也不应提前暴露入口），等待态由纯文本改为旋转指示器 + 文案的居中动画（新增 .restart-waiting/.restart-spinner，复用 spin 关键帧）；同步删除失效的 .init-success .form-actions 样式与未使用的 init.login_system 中英文案。验证：npm run typecheck、npm run build 通过。z 段不联动 Cargo.toml 与 frontend/package.json。

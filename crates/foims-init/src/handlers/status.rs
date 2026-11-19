@@ -155,7 +155,7 @@ pub async fn check_init_status(State(ctx): State<Arc<InitContext>>) -> Result<Re
 
 /// POST /api/init/restart：重启程序以切入正常模式（仅 init 刚完成后的
 /// 一次性许可有效，其余情形 403；下发失败 500 并恢复许可；未注册
-/// systemd 单元时返回 manual，由前端引导手动重启）。
+/// systemd 单元属部署异常，返回 manual 由前端按错误态提示）。
 pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Response, InitError> {
     // 重启端点仅在「初始化刚完成」后放行一次：init 模式开启期间与关闭后
     // 均拒绝，避免被滥用为任意重启入口
@@ -177,8 +177,8 @@ pub async fn restart_program(State(ctx): State<Arc<InitContext>>) -> Result<Resp
         }
     };
 
-    // 纯 systemd 重启；未注册单元（程序并非以服务运行）不下发重启，
-    // 由前端展示完整页面引导用户手动重启完成初始化
+    // 纯 systemd 重启；未注册单元（程序并非以服务运行）属于部署异常，
+    // 不下发重启，由前端展示错误态并提示检查部署
     let (message, restart_mode) = match mode {
         crate::context::RestartMode::Systemd => ("server.init.restart_command_sent", "systemd"),
         crate::context::RestartMode::Manual => ("server.init.manual_restart_required", "manual"),
