@@ -468,3 +468,7 @@ v0.86.7
 v0.86.8
 2026111910472201
 资源管理-线路页签「线缆标签」表头打印按钮改为图标按钮（仅前端 UI 调整，z 段 +1）：ResourcesPage.vue 线缆标签列表头 th 增加 th-inline-action（与 IP 页「拉取」按钮同款：不换行、收窄左右内边距、排序箭头移至右上角避让按钮），原文本按钮 btn btn-secondary btn-sm 替换为 icon-btn btn-print-cable + NavIcon printer，继续用 data-tooltip/aria-label 承载「打印」语义（t('cable_link.print')），@click.stop 保持不触发列排序；与行内单行打印图标按钮视觉统一。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
+
+v0.87.0
+2026111910590101
+可视化页画布改为按页签懒加载（前端性能与交互优化，y 段 +1）：原 initPage 用 Promise.all 同时加载工位与机柜两套房间，两条房间列表请求本身很轻，但会级联两个页签的首房画布——工位链路无条件全量分页拉取 IP（最多 5×1000 条，与当前房间无关）；机柜链路在隐藏容器 0 高度下按回退 600px 猜测尺寸分批渲染并批量拉机位 IP，切回页签后又按真实高度整批重排；且隐藏页签的空态/失败提示会打扰用户（此前「同时弹两条相同通知」即其症状）。改为与拓扑一致的懒加载口径：initPage 只加载组织树 + 当前 activeTab 对应画布，新增 ensureWorkstationLoaded / ensureCabinetLoaded（先置位再加载，页签来回切换不重复请求），onSwitch 首次切入工位/机柜页签时补齐加载；保留既有 token 代次机制丢弃过期响应。验证：npm run typecheck、npm run build 通过；y 段 +1，frontend/package.json 0.1.91→0.1.92 联动，Cargo.toml 不联动。

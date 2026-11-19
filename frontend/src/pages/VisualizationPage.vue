@@ -123,12 +123,19 @@ const { activeTab, switchTab } = useSubTabs({
   storageKey: "foims_subtab_visualization",
   tabs: TABS,
   syncQuery: false,
-  // 切到拓扑时才拉取拓扑数据；离开拓扑页签时关闭已打开的连线详情弹窗
+  // 三个画布均按页签懒加载；离开拓扑页签时关闭已打开的连线详情弹窗
   onSwitch: (tabId) => {
     if (tabId === "global-visualization") {
       void ensureTopologyLoaded();
-    } else if (connectionDetail.value) {
+      return;
+    }
+    if (connectionDetail.value) {
       connectionDetail.value = null;
+    }
+    if (tabId === "workstation-visualization") {
+      void ensureWorkstationLoaded();
+    } else {
+      void ensureCabinetLoaded();
     }
   }
 });
@@ -164,6 +171,8 @@ const workstationFitKey = ref(0);
 
 /** 工位渲染代次：切换房间时旧响应丢弃，避免画布混入两个房间的工位 */
 let workstationToken = 0;
+/** 工位画布首次加载标记：页签懒加载，切回不重复请求 */
+let workstationLoaded = false;
 let workstationAutoSaveTimer: number | null = null;
 
 /** 自动保存成功的瞬时"已保存"徽标：2s 消退，连续保存重置计时（替代此前静默成功无感知） */
@@ -318,6 +327,16 @@ async function refreshWorkstationRooms(): Promise<void> {
   await loadWorkstationRoom(first.id);
 }
 
+/** 首次进入工位页签时加载房间与首房布局；切回不重复请求 */
+async function ensureWorkstationLoaded(): Promise<void> {
+  if (workstationLoaded) {
+    return;
+  }
+  // 先置位再加载：页签来回切换时同一批请求不重复发起
+  workstationLoaded = true;
+  await refreshWorkstationRooms();
+}
+
 function onWorkstationRoomChange(event: Event): void {
   const roomId = (event.target as HTMLSelectElement).value;
   if (!roomId || roomId === workstationRoomId.value) {
@@ -427,6 +446,8 @@ const cabinetSize = ref({ width: 0, height: 0 });
 const cabinetSettled = ref(true);
 
 let cabinetToken = 0;
+/** 机柜画布首次加载标记：页签懒加载，切回不重复请求 */
+let cabinetLoaded = false;
 let cabinetRelayoutTimer: number | null = null;
 /** 最近一次渲染输入：容器 resize 后本地重排复用 */
 let lastCabinetInput: { cabinets: RoomCabinet[]; layout: LayoutItem[] } | null = null;
@@ -597,6 +618,16 @@ async function refreshCabinetRooms(): Promise<void> {
     return;
   }
   await loadCabinetRoom(first.id);
+}
+
+/** 首次进入机柜页签时加载房间与首房布局；切回不重复请求 */
+async function ensureCabinetLoaded(): Promise<void> {
+  if (cabinetLoaded) {
+    return;
+  }
+  // 先置位再加载：页签来回切换时同一批请求不重复发起
+  cabinetLoaded = true;
+  await refreshCabinetRooms();
 }
 
 function onCabinetRoomChange(event: Event): void {
@@ -1257,9 +1288,14 @@ async function initPage(): Promise<void> {
   }
   initialized = true;
   await loadOrganizationTree();
-  await Promise.all([refreshWorkstationRooms(), refreshCabinetRooms()]);
-  if (activeTab.value === "global-visualization") {
-    await loadTopology();
+  // 只加载当前页签的画布：隐藏页签不做全量加载（工位会拉全量 IP、
+  // 机柜会在 0 高度下按猜测尺寸分批渲染），首次切换时再由 onSwitch 补齐
+  if (activeTab.value === "workstation-visualization") {
+    await ensureWorkstationLoaded();
+  } else if (activeTab.value === "cabinet-visualization") {
+    await ensureCabinetLoaded();
+  } else {
+    await ensureTopologyLoaded();
   }
 }
 
