@@ -436,3 +436,7 @@ v0.86.0
 v0.86.1
 2026111814205801
 jsonwebtoken 升级 11.1.0→12.0.0 的破坏性变更适配：EncodingKey/DecodingKey::from_secret 改为返回 Result（新版本拒绝空 HMAC 密钥），JwtUtils::new 构建密钥处改用 map_err 转为启动配置错误，测试签名辅助函数同步先构造密钥再 encode；encode/decode/Validation/ErrorKind 等其余用法无变化。验证：cargo fmt、cargo clippy -p foims-auth --all-targets -D warnings 全绿，workspace cargo check --all-targets 通过，foims-auth jwt 24 项单测全过。z 段不联动 Cargo.toml
+
+v0.86.2
+2026111909262001
+初始化向导第 2 步「连接测试」报 TypeError: port.trim is not a function 修复（前端普通 bug 修复，z 段 +1）：数据库端口输入框为 type="number"，Vue 的 v-model 会将该输入自动转换为数字，而提交前统一按字符串 trim 组装 DatabaseSetupRequest，导致 dbConfig.port.trim 在数字上调用直接抛错、向导无法进入下一步。改为 String(dbConfig.port).trim() 归一化后再 trim（空值仍为 ""，后端 port 契约不变）。验证：vue-tsc、npm run build 通过。z 段不联动 Cargo.toml

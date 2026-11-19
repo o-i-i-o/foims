@@ -139,7 +139,8 @@ async function submitDbConfig() {
   const payload: DatabaseSetupRequest = {
     type: "pgsql",
     host: dbConfig.host.trim(),
-    port: dbConfig.port.trim(),
+    // type="number" 的输入框由 Vue 自动转成数字，需先转字符串再 trim
+    port: String(dbConfig.port).trim(),
     database: dbConfig.database.trim(),
     username: dbConfig.username.trim(),
     password: dbConfig.password
