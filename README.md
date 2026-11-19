@@ -57,7 +57,7 @@ F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技
 - **PostgreSQL**: 版本 16 或更高
 - **OpenSSL**: 开发库 (libssl-dev，邮件组件 native-tls 依赖)
 - **nginx**: 版本 ≥ 1.28.1（h2c 上游代理；如需 HTTP/3 还需编译 QUIC 支持）
-- **系统**: Linux（推荐 Debian 11+ 或 Ubuntu 24.04+）
+- **系统**: Linux（amd64/arm64，推荐 Debian 11+ 或 Ubuntu 24.04+）
 
 ### 1. 获取代码与配置
 
@@ -114,7 +114,7 @@ cd frontend && npm ci && npm run dev
    - 后端 UDS 路径需与 nginx upstream 一致（默认 `/run/foims/api.sock`）
 
 3. **注册 systemd 服务**
-   - 通过安装deb包或手动将 `foims.service` 到 `/etc/systemd/system/foims.service`注册为服务运行
+   - 从 Releases 下载对应架构的安装包（deb：amd64/arm64，rpm：x86_64/aarch64）安装；或手动将 `foims.service` 放到 `/etc/systemd/system/foims.service` 注册为服务运行
 
 
 4. **启用并启动**

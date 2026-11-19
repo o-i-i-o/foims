@@ -129,12 +129,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # build-essential/pkg-config/libssl-dev/libpq-dev 为主程序构建依赖，
-      # lintian 为 DEB 包检查
+      # build-essential/pkg-config/libssl-dev/libpq-dev 为主程序构建依赖；
+      # rpm/zip 供 build-pkgs.sh 打包，lintian 为 DEB 包检查。GitHub 镜像
+      # 虽预装部分工具，但各架构镜像清单并不保证一致，显式声明避免
+      # aarch64 leg 在打包阶段才失败
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian
+          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian rpm zip
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable

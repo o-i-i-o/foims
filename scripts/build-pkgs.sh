@@ -51,8 +51,9 @@ DEBPAK_DIR="$PROJECT_DIR/target/debpak"
 BINARY_NAME="foims"
 SERVICE_SRC="$PROJECT_DIR/deploy/services/foims.service"
 
-# 前置检查
-for cmd in cargo dpkg-deb; do
+# 前置检查：打包工具全部提前校验，避免耗时编译/前端构建结束后才在
+# 打包阶段失败（rpm/zip 在部分精简镜像中不预装）
+for cmd in cargo dpkg-deb rpmbuild rpm zip; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         echo "错误：缺少必要命令 $cmd" >&2
         exit 1
@@ -714,6 +715,14 @@ echo ""
 echo "19. 构建 DEB 包..."
 dpkg-deb --root-owner-group --build "$DEBPAK_DIR" "$PROJECT_DIR/target/$DEB_NAME"
 
+# 架构自检：deb/rpm 架构均由宿主推导，若在模拟/交叉环境中实际二进制与
+# 标注架构不一致，这里尽早失败，避免把错架构包交付出去
+BUILT_DEB_ARCH="$(dpkg-deb -f "$PROJECT_DIR/target/$DEB_NAME" Architecture)"
+if [ "$BUILT_DEB_ARCH" != "$ARCH" ]; then
+    echo "错误：DEB 包内架构 $BUILT_DEB_ARCH 与预期 $ARCH 不一致" >&2
+    exit 1
+fi
+
 echo ""
 echo "=== DEB 完成 ==="
 echo "DEB 包: $PROJECT_DIR/target/$DEB_NAME"
@@ -730,10 +739,6 @@ fi
 
 echo ""
 echo "20. 构建 RPM 包（复用 DEB staging，内容一致；rpmbuild 用户态无需 root）..."
-if ! command -v rpmbuild >/dev/null 2>&1; then
-    echo "错误：缺少 rpmbuild（Debian/Ubuntu 安装：sudo apt-get install rpm）" >&2
-    exit 1
-fi
 # deb 架构 → rpm 架构映射（同机编译，架构与宿主一致）
 case "$ARCH" in
     amd64) RPM_ARCH=x86_64 ;;
@@ -908,6 +913,13 @@ rpmbuild -bb --quiet --define "_topdir $RPMTOP" --define "_dbpath $RPMTOP/rpmdb"
     --target "$RPM_ARCH" "$RPMTOP/SPECS/foims.spec"
 mv "$RPMTOP/RPMS/$RPM_ARCH/$RPM_NAME" "$PROJECT_DIR/target/$RPM_NAME"
 rm -rf "$RPMTOP"
+
+# 架构自检：与 DEB 同理，确保 rpm 元数据架构与宿主映射结果一致
+BUILT_RPM_ARCH="$(rpm -qp --qf '%{ARCH}' "$PROJECT_DIR/target/$RPM_NAME" 2>/dev/null || true)"
+if [ "$BUILT_RPM_ARCH" != "$RPM_ARCH" ]; then
+    echo "错误：RPM 包内架构 ${BUILT_RPM_ARCH:-未知} 与预期 $RPM_ARCH 不一致" >&2
+    exit 1
+fi
 
 echo ""
 echo "=== RPM 完成 ==="

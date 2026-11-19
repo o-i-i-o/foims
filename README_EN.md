@@ -55,7 +55,7 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 - **PostgreSQL**: version 16 or higher
 - **OpenSSL**: development libraries (libssl-dev, required by the native-tls mail component)
 - **nginx**: version ≥ 1.28.1 (h2c upstream proxy; QUIC support must be compiled in for HTTP/3)
-- **OS**: Linux (Debian 11+ or Ubuntu 24.04+ recommended)
+- **OS**: Linux, amd64/arm64 (Debian 11+ or Ubuntu 24.04+ recommended)
 
 ### 1. Get the Code and Configure
 
@@ -113,7 +113,7 @@ cd frontend && npm ci && npm run dev
    - The backend UDS path must match the nginx upstream (default `/run/foims/api.sock`)
 
 3. **Register the systemd service**
-   - Install the deb package, or manually place `foims.service` at `/etc/systemd/system/foims.service` to register the service
+   - Download the package for your architecture from Releases (deb: amd64/arm64, rpm: x86_64/aarch64), or manually place `foims.service` at `/etc/systemd/system/foims.service` to register the service
 
 
 4. **Enable and start**

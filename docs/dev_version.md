@@ -456,3 +456,7 @@ v0.86.4
 v0.86.5
 2026111910113901
 初始化完成页提示优化（前端普通 UI 调整，z 段 +1）：第 5 步去除「登录系统」手动入口（重启完成由前端自动跳转登录页，不再需要也不应提前暴露入口），等待态由纯文本改为旋转指示器 + 文案的居中动画（新增 .restart-waiting/.restart-spinner，复用 spin 关键帧）；同步删除失效的 .init-success .form-actions 样式与未使用的 init.login_system 中英文案。验证：npm run typecheck、npm run build 通过。z 段不联动 Cargo.toml 与 frontend/package.json。
+
+v0.86.6
+2026111910184901
+CI/CD 双架构打包交付完善（CI/构建配置调整，z 段 +1）：1. ci.yml 的 build 任务改为与 release.yml 同构的 matrix（x86_64→ubuntu-latest / aarch64→ubuntu-24.04-arm），ARM leg 原生编译，deb/rpm/zip 由 build-pkgs.sh 按 dpkg --print-architecture 自动出 arm64/aarch64 包；fmt/clippy/test/TS 漂移检查仍仅在 x86_64 leg 执行一次，缓存键按架构隔离；tag 触发时 release 任务同时下载两个架构 artifact 并发布。2. 两个工作流的系统依赖显式补装 rpm/zip（GitHub 各架构镜像预装清单不一致，避免 aarch64 leg 到打包阶段才失败）。3. build-pkgs.sh 前置检查前移并覆盖 rpmbuild/rpm/zip，新增 DEB/RPM 产物架构自检（dpkg-deb -f Architecture 与 rpm -qp %{ARCH} 必须等于预期值，防止错架构包静默交付）。4. README/README_EN 同步说明 Linux amd64/arm64 与各架构安装包命名。验证：两工作流 YAML 解析通过、build-pkgs.sh bash -n 通过。z 段不联动 Cargo.toml 与 frontend/package.json。
