@@ -484,7 +484,7 @@ async function saveRecipients(): Promise<void> {
             <td>
               <select
                 :value="scopeOf(user.id).language"
-                class="recipient-lang-select"
+                class="form-control recipient-lang-select"
                 :disabled="readonly"
                 :aria-label="`${user.username} ${t('notification.language_label')}`"
                 @change="setLanguage(user.id, ($event.target as HTMLSelectElement).value as NotifyLang)"

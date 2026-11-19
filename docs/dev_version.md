@@ -472,3 +472,7 @@ v0.86.8
 v0.87.0
 2026111910590101
 可视化页画布改为按页签懒加载（前端性能与交互优化，y 段 +1）：原 initPage 用 Promise.all 同时加载工位与机柜两套房间，两条房间列表请求本身很轻，但会级联两个页签的首房画布——工位链路无条件全量分页拉取 IP（最多 5×1000 条，与当前房间无关）；机柜链路在隐藏容器 0 高度下按回退 600px 猜测尺寸分批渲染并批量拉机位 IP，切回页签后又按真实高度整批重排；且隐藏页签的空态/失败提示会打扰用户（此前「同时弹两条相同通知」即其症状）。改为与拓扑一致的懒加载口径：initPage 只加载组织树 + 当前 activeTab 对应画布，新增 ensureWorkstationLoaded / ensureCabinetLoaded（先置位再加载，页签来回切换不重复请求），onSwitch 首次切入工位/机柜页签时补齐加载；保留既有 token 代次机制丢弃过期响应。验证：npm run typecheck、npm run build 通过；y 段 +1，frontend/package.json 0.1.91→0.1.92 联动，Cargo.toml 不联动。
+
+v0.87.1
+2026111911041201
+系统-邮件通知收件人「通知语言」下拉框补齐控件样式（仅前端 UI 调整，z 段 +1）：该 select 位于表格单元格内、无 .form-group 包裹，未命中 forms.css 的控件基样式与自定义下拉箭头，浏览器按原生外观渲染、与页面其他下拉不一致。NotificationTab.vue 收件人语言下拉补 form-control 工具类（复用全局控件基样式、focus/disabled 态与统一箭头），保留 recipient-lang-select 的 max-width 9rem 列宽约束。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
