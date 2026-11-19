@@ -1071,11 +1071,17 @@ function deviceLocationText(item: DeviceWithDetails): string {
               <th class="sortable col-center" :class="sortClass(cableLinks, 'link_type')" @click="onThSort($event, cableLinks, 'link_type')" tabindex="0" :aria-sort="sortAria(cableLinks, 'link_type')" @keydown="onThSortKeydown($event, cableLinks, 'link_type')">
                 {{ t("common.type") }}
               </th>
-              <th class="sortable" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')" tabindex="0" :aria-sort="sortAria(cableLinks, 'cable_label')" @keydown="onThSortKeydown($event, cableLinks, 'cable_label')">
+              <th class="sortable th-inline-action" :class="sortClass(cableLinks, 'cable_label')" @click="onThSort($event, cableLinks, 'cable_label')" tabindex="0" :aria-sort="sortAria(cableLinks, 'cable_label')" @keydown="onThSortKeydown($event, cableLinks, 'cable_label')">
                 <span>{{ t("cable_link.cable_label") }}</span>
                 <!-- .stop：打印按钮点击不得冒泡到 th 触发排序 -->
-                <button type="button" class="btn btn-secondary btn-sm" @click.stop="openCableLabelPrintModal">
-                  {{ t("cable_link.print") }}
+                <button
+                  type="button"
+                  class="icon-btn btn-print-cable"
+                  :data-tooltip="t('cable_link.print')"
+                  :aria-label="t('cable_link.print')"
+                  @click.stop="openCableLabelPrintModal"
+                >
+                  <NavIcon name="printer" />
                 </button>
               </th>
               <th class="sortable col-center" :class="sortClass(cableLinks, 'length_m')" @click="onThSort($event, cableLinks, 'length_m')" tabindex="0" :aria-sort="sortAria(cableLinks, 'length_m')" @keydown="onThSortKeydown($event, cableLinks, 'length_m')">

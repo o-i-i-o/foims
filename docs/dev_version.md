@@ -464,3 +464,7 @@ CI/CD 双架构打包交付完善（CI/构建配置调整，z 段 +1）：1. ci.
 v0.86.7
 2026111910370501
 组织管理「新增根节点」「编辑模板」弹窗布局与样式统一（参考资源管理，仅前端 UI 调整，z 段 +1）：1. OrgNodeModal 新增根节点模式下模板选择由裸 form-group 收进 form-row（与资源管理弹窗单字段整行同构，补齐行间距），模板改为 required，编辑/根类型的只读下拉由 :value+selected 改为 v-model 统一受控写法；2. TemplateModal 编辑模板弹窗字段重排——名称与快捷填充并入同一 form-row 双列（原两个无间距的整行 form-group），层级结构由 group-label 改为资源管理弹窗同款 list-header/list-title + dyn-list 容器；3. organization.css 层级树容器移除自带边框/圆角/内边距/白底，复用 .dyn-list 的卡片视觉，仅保留纵向 flex 排布与最小高度；类型名称输入框取消 .form-control 的 140px 上限并撑满行内剩余宽度。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
+
+v0.86.8
+2026111910472201
+资源管理-线路页签「线缆标签」表头打印按钮改为图标按钮（仅前端 UI 调整，z 段 +1）：ResourcesPage.vue 线缆标签列表头 th 增加 th-inline-action（与 IP 页「拉取」按钮同款：不换行、收窄左右内边距、排序箭头移至右上角避让按钮），原文本按钮 btn btn-secondary btn-sm 替换为 icon-btn btn-print-cable + NavIcon printer，继续用 data-tooltip/aria-label 承载「打印」语义（t('cable_link.print')），@click.stop 保持不触发列排序；与行内单行打印图标按钮视觉统一。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
