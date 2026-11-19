@@ -216,15 +216,16 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
       </table>
     </div>
 
-    <ModalShell v-if="editOpen" :title="editTitle" size="sm" @close="editOpen = false">
+    <ModalShell v-if="editOpen" :title="editTitle" size="md" @close="editOpen = false">
       <form @submit.prevent="handleSubmit">
+        <!-- 两栏布局：每行两个字段（窄屏由 form-row auto-fit 自动回落单列） -->
         <div class="form-row">
-         <div class="form-group">
-          <label for="employee-edit-name">
-            <span>{{ t("employee.name") }}</span><span class="required">*</span>
-          </label>
-          <input id="employee-edit-name" v-model="editForm.name" type="text" maxlength="50" required autocomplete="off">
-         </div>
+          <div class="form-group">
+            <label for="employee-edit-name">
+              <span>{{ t("employee.name") }}</span><span class="required">*</span>
+            </label>
+            <input id="employee-edit-name" v-model="editForm.name" type="text" maxlength="50" required autocomplete="off">
+          </div>
           <div class="form-group">
             <label for="employee-edit-gender">{{ t("employee.gender") }}</label>
             <select id="employee-edit-gender" v-model="editForm.gender">
@@ -233,6 +234,8 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
               <option value="female">{{ t("employee.gender_female") }}</option>
             </select>
           </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label for="employee-edit-phone">{{ t("employee.phone") }}</label>
             <input id="employee-edit-phone" v-model="editForm.phone" type="tel" maxlength="20" autocomplete="off">
@@ -241,6 +244,8 @@ const editTitle = computed(() => (editForm.id ? t("employee.edit_title") : t("em
             <label for="employee-edit-email">{{ t("employee.email") }}</label>
             <input id="employee-edit-email" v-model="editForm.email" type="email" maxlength="100" autocomplete="off">
           </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label for="employee-edit-hire-date">{{ t("employee.hire_date") }}</label>
             <input id="employee-edit-hire-date" v-model="editForm.hireDate" type="date">

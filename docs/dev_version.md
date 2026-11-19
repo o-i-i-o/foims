@@ -476,3 +476,7 @@ v0.87.0
 v0.87.1
 2026111911041201
 系统-邮件通知收件人「通知语言」下拉框补齐控件样式（仅前端 UI 调整，z 段 +1）：该 select 位于表格单元格内、无 .form-group 包裹，未命中 forms.css 的控件基样式与自定义下拉箭头，浏览器按原生外观渲染、与页面其他下拉不一致。NotificationTab.vue 收件人语言下拉补 form-control 工具类（复用全局控件基样式、focus/disabled 态与统一箭头），保留 recipient-lang-select 的 max-width 9rem 列宽约束。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
+
+v0.87.2
+2026111911060701
+组织管理-员工编辑弹窗改为两栏布局（仅前端 UI 调整，z 段 +1）：OrgEmployeeList.vue 编辑/新增员工弹窗宽度由 sm（480px）提升为 md（600px，与用户管理弹窗同档），原 5 个字段挤在单个 form-row（窄容器下 auto-fit 列数过多）改为三行 form-row 两列排布——姓名+性别、电话+邮箱各占一行，入职日期独占末行；窄屏仍由 form-row 的 auto-fit 自动回落单列，表单逻辑与载荷不变。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。
