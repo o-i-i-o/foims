@@ -327,24 +327,30 @@ const saving = computed(() => saveMutation.isPending.value);
 
     <ModalShell v-if="editorOpen" :title="t('org_template.editor_title')" size="md" @close="editorOpen = false">
       <form @submit.prevent="handleSubmit">
-        <div class="form-group">
-          <label for="org-template-editor-name">
-            <span>{{ t("common.name") }}</span><span class="required">*</span>
-          </label>
-          <input id="org-template-editor-name" v-model="editor.name" type="text" autocomplete="off" required>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="org-template-editor-name">
+              <span>{{ t("common.name") }}</span><span class="required">*</span>
+            </label>
+            <input id="org-template-editor-name" v-model="editor.name" type="text" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label for="org-template-quick-fill">{{ t("org_template.quick_fill") }}</label>
+            <select id="org-template-quick-fill" v-model="editor.quickFill">
+              <option value="">{{ t("org_template.select_quick_fill") }}</option>
+              <option v-for="tpl in templatesQuery.data.value" :key="tpl.id" :value="tpl.name">{{ tpl.name }}</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="org-template-quick-fill">{{ t("org_template.quick_fill") }}</label>
-          <select id="org-template-quick-fill" v-model="editor.quickFill">
-            <option value="">{{ t("org_template.select_quick_fill") }}</option>
-            <option v-for="tpl in templatesQuery.data.value" :key="tpl.id" :value="tpl.name">{{ tpl.name }}</option>
-          </select>
-        </div>
-        <div class="form-group form-group-block">
-          <!-- 层级树为动态容器、无单一控件可关联：分组标题替代 label -->
-          <span class="group-label">{{ t("org_template.levels") }}</span>
-          <div class="org-template-tree-container">
-            <TemplateTypeNode v-for="node in editor.nodes" :key="node.uid" :node="node" :is-root="true" />
+        <div class="form-row">
+          <div class="form-group">
+            <!-- 层级树为动态容器、无单一控件可关联：列表标题替代 label -->
+            <div class="list-header">
+              <span class="list-title">{{ t("org_template.levels") }}</span>
+            </div>
+            <div class="dyn-list org-template-tree-container">
+              <TemplateTypeNode v-for="node in editor.nodes" :key="node.uid" :node="node" :is-root="true" />
+            </div>
           </div>
         </div>
         <div class="form-group form-group-block">

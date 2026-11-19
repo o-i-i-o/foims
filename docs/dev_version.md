@@ -460,3 +460,7 @@ v0.86.5
 v0.86.6
 2026111910184901
 CI/CD 双架构打包交付完善（CI/构建配置调整，z 段 +1）：1. ci.yml 的 build 任务改为与 release.yml 同构的 matrix（x86_64→ubuntu-latest / aarch64→ubuntu-24.04-arm），ARM leg 原生编译，deb/rpm/zip 由 build-pkgs.sh 按 dpkg --print-architecture 自动出 arm64/aarch64 包；fmt/clippy/test/TS 漂移检查仍仅在 x86_64 leg 执行一次，缓存键按架构隔离；tag 触发时 release 任务同时下载两个架构 artifact 并发布。2. 两个工作流的系统依赖显式补装 rpm/zip（GitHub 各架构镜像预装清单不一致，避免 aarch64 leg 到打包阶段才失败）。3. build-pkgs.sh 前置检查前移并覆盖 rpmbuild/rpm/zip，新增 DEB/RPM 产物架构自检（dpkg-deb -f Architecture 与 rpm -qp %{ARCH} 必须等于预期值，防止错架构包静默交付）。4. README/README_EN 同步说明 Linux amd64/arm64 与各架构安装包命名。验证：两工作流 YAML 解析通过、build-pkgs.sh bash -n 通过。z 段不联动 Cargo.toml 与 frontend/package.json。
+
+v0.86.7
+2026111910370501
+组织管理「新增根节点」「编辑模板」弹窗布局与样式统一（参考资源管理，仅前端 UI 调整，z 段 +1）：1. OrgNodeModal 新增根节点模式下模板选择由裸 form-group 收进 form-row（与资源管理弹窗单字段整行同构，补齐行间距），模板改为 required，编辑/根类型的只读下拉由 :value+selected 改为 v-model 统一受控写法；2. TemplateModal 编辑模板弹窗字段重排——名称与快捷填充并入同一 form-row 双列（原两个无间距的整行 form-group），层级结构由 group-label 改为资源管理弹窗同款 list-header/list-title + dyn-list 容器；3. organization.css 层级树容器移除自带边框/圆角/内边距/白底，复用 .dyn-list 的卡片视觉，仅保留纵向 flex 排布与最小高度；类型名称输入框取消 .form-control 的 140px 上限并撑满行内剩余宽度。验证：npm run typecheck、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动。

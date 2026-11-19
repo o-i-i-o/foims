@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-cd /media/oi-io/data/foims
+cd /home/oi-io/foims
 
 echo 构建前端
 (cd frontend && npm run build)

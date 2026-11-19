@@ -194,16 +194,18 @@ const modalTitle = computed(() => {
   <ModalShell v-if="open" :title="modalTitle" size="md" @close="emit('close')">
     <form @submit.prevent="handleSubmit">
       <!-- 新增根节点：先选层级模板 -->
-      <div v-if="mode === 'add-root'" class="form-group">
-        <label for="org-template-select">
-          <span>{{ t("org_template.select_template") }}</span><span class="required">*</span>
-        </label>
-        <select id="org-template-select" v-model="form.templateId" @change="onTemplateChange">
-          <option value="">{{ t("org_template.select_template") }}</option>
-          <option v-for="tpl in templatesQuery.data.value" :key="tpl.id" :value="tpl.id">
-            {{ tpl.name }} ({{ templateLevelText(tpl) }})
-          </option>
-        </select>
+      <div v-if="mode === 'add-root'" class="form-row">
+        <div class="form-group">
+          <label for="org-template-select">
+            <span>{{ t("org_template.select_template") }}</span><span class="required">*</span>
+          </label>
+          <select id="org-template-select" v-model="form.templateId" @change="onTemplateChange">
+            <option value="">{{ t("org_template.select_template") }}</option>
+            <option v-for="tpl in templatesQuery.data.value" :key="tpl.id" :value="tpl.id">
+              {{ tpl.name }} ({{ templateLevelText(tpl) }})
+            </option>
+          </select>
+        </div>
       </div>
 
       <div class="form-row">
@@ -218,11 +220,11 @@ const modalTitle = computed(() => {
             <span>{{ t("organization.type") }}</span><span class="required">*</span>
           </label>
           <!-- 编辑模式：类型不可修改，单选项回显 -->
-          <select v-if="mode === 'edit'" id="org-type" disabled>
-            <option :value="form.typeId" selected>{{ editTypeLabel }}</option>
+          <select v-if="mode === 'edit'" id="org-type" v-model="form.typeId" disabled>
+            <option :value="form.typeId">{{ editTypeLabel }}</option>
           </select>
           <!-- 新增根节点：选中模板后锁定根类型 -->
-          <select v-else-if="mode === 'add-root'" id="org-type" :value="form.typeId" disabled>
+          <select v-else-if="mode === 'add-root'" id="org-type" v-model="form.typeId" disabled>
             <option v-if="form.typeId" :value="form.typeId">{{ rootLabel }}</option>
             <option v-else value="">{{ t("organization.select_type") }}</option>
           </select>

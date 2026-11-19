@@ -447,12 +447,12 @@
 
   /* ==================== 模板编辑器 ==================== */
 
+  /* 层级树容器：复用资源管理弹窗动态列表（.dyn-list）的卡片视觉，
+     此处仅保留纵向排布与最小高度，视觉声明交给 .dyn-list */
   .org-template-tree-container {
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-md);
-    padding: var(--space-md);
-    background: var(--color-bg-white);
-    margin-bottom: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
     min-height: 80px;
   }
 
@@ -584,9 +584,11 @@
     outline: 2px solid var(--color-primary);
   }
 
+  /* 类型输入框撑满行内剩余宽度：取消 .form-control 的 140px 上限 */
   .org-template-type-row .org-template-type-input {
     flex: 1;
     min-width: 0;
+    max-width: none;
   }
 
   /* 行内「添加子层级/删除」图标按钮：统一 icon-btn 尺寸，仅保留防挤压 */
