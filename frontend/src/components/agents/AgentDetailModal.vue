@@ -11,7 +11,7 @@ import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { apiGet, apiPut } from "../../api/client";
 import { showToast } from "../../composables/useToast";
-import { useLiveAgents } from "../../composables/useLiveAgents";
+import { useLiveAgents, useLiveDevicePorts } from "../../composables/useLiveAgents";
 import { useNowTick } from "../../composables/useNowTick";
 import { formatBps, formatDateTime } from "../../utils/formatter";
 import ModalShell from "../ModalShell.vue";
@@ -228,6 +228,13 @@ const raw = computed<RawMetrics>(() => agent.value?.raw_metrics ?? {});
 // 独立，按行来源优先），Agent 主机按 monitored_hosts.id 匹配
 const { devices: liveDevices, connected: liveConnected } = useLiveAgents();
 
+// SNMP 网络卡（链路状态/采集端口流量）只在 Detail 档采集：弹窗打开期间为
+// 当前设备单独登记详情订阅，关闭即释放，避免为整页设备采样全端口
+const detailDeviceId = computed(() =>
+  agent.value?.source === "snmp" ? (agent.value?.device_id ?? "") : ""
+);
+const { detail: snmpDetail } = useLiveDevicePorts(detailDeviceId);
+
 /** 快照新鲜窗口：采样与 SSE 节拍均为 1s，留 10s 容忍丢包/短暂重连 */
 const LIVE_FRESH_MS = 10_000;
 
@@ -251,6 +258,18 @@ const live = computed(() => {
   return liveDevices.value.find(
     (row) => row.source === "agent" && row.device_id === String(viewId.value)
   );
+});
+
+/**
+ * SNMP 网络卡数据源：详情流 summary（Detail 档含链路状态与流量）。
+ * 详情流到达前为 null，网络卡按「等待实时数据」展示，不回退共享摘要的
+ * 未采端口快照（那会把未采集误显示为 0/N 链路）。
+ */
+const liveNetwork = computed(() => {
+  if (agent.value?.source !== "snmp") {
+    return live.value ?? null;
+  }
+  return snmpDetail.value?.summary ?? null;
 });
 
 // 采集时间推进 = 新快照到手；离线设备保留的陈旧快照不会推进，自然过期
@@ -678,7 +697,7 @@ function formatUnit(unit: string): (value: number) => string {
         </section>
 
         <section v-if="!isIpmi" class="agent-detail-card">
-          <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}<span v-if="agent.source === 'snmp' && liveFresh" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
+          <h4 class="agent-detail-card-title">{{ t("agents.group_network") }}<span v-if="agent.source === 'snmp' && liveNetwork && liveFresh" class="agent-live-badge">{{ t("agents.live_realtime") }}</span></h4>
           <!-- SNMP：每台设备只采一个端口（默认首端口），速率取秒级实时快照 -->
           <template v-if="agent.source === 'snmp'">
             <dl class="agent-kv">
@@ -697,15 +716,15 @@ function formatUnit(unit: string): (value: number) => string {
                 </select>
               </dd>
               <dt>{{ t("agents.monitor_port_traffic") }}</dt>
-              <dd v-if="liveFresh">
-                <span class="agent-live-rx">↓ {{ formatBps(live?.rx_bps) }}</span>
-                <span class="agent-live-tx">↑ {{ formatBps(live?.tx_bps) }}</span>
+              <dd v-if="liveNetwork && liveFresh">
+                <span class="agent-live-rx">↓ {{ formatBps(liveNetwork.rx_bps) }}</span>
+                <span class="agent-live-tx">↑ {{ formatBps(liveNetwork.tx_bps) }}</span>
               </dd>
               <dd v-else>{{ t("agents.monitor_port_waiting") }}</dd>
               <dt>{{ t("agents.monitor_port_active") }}</dt>
-              <dd>{{ live?.monitor_if || "-" }}</dd>
+              <dd>{{ liveNetwork?.monitor_if || "-" }}</dd>
               <dt>{{ t("agents.monitor_port_links") }}</dt>
-              <dd>{{ live ? `${live.ports_up} / ${live.ports_total}` : "-" }}</dd>
+              <dd>{{ liveNetwork ? `${liveNetwork.ports_up} / ${liveNetwork.ports_total}` : "-" }}</dd>
               <dt>{{ t("agents.live_updated_at") }}</dt>
               <dd>{{ liveCollectedAt ? formatDateTime(liveCollectedAt) : "-" }}</dd>
             </dl>

@@ -347,10 +347,22 @@ pub struct SnmpLiveConfig {
     /// 总开关（缺省开启；500 台以内建议保持开启）
     #[serde(default = "default_live_enabled")]
     pub enabled: bool,
-    /// 单轮采样间隔（秒，下限 1）：状态/流量与 CPU/内存/温度同轮采集，
-    /// 保证展示层读数是秒级的；设备量大时可整体调大降载
+    /// 无人观察时的基线采样间隔（秒，下限 1）：只采集资源组，
+    /// 用于告警与趋势兜底；有观察者时自动切换到下方档位
     #[serde(default = "default_live_interval")]
     pub interval_secs: u64,
+    /// 主机列表观察档位间隔（秒）：只采集资源组
+    #[serde(default = "default_live_watch_interval")]
+    pub watch_interval_secs: u64,
+    /// 仪表盘观察档位间隔（秒）：采集资源组 + 采集端口流量
+    #[serde(default = "default_live_overview_interval")]
+    pub overview_interval_secs: u64,
+    /// 选中设备详情档位间隔（秒）：采集资源组 + 流量 + 全端口状态
+    #[serde(default = "default_live_detail_interval")]
+    pub detail_interval_secs: u64,
+    /// 观察租约有效期（秒）：前端 SSE 心跳需在此之前续期
+    #[serde(default = "default_live_interest_ttl")]
+    pub interest_ttl_secs: u64,
     /// 单次请求超时（秒，实时路径需短于全量轮询的 5s）
     #[serde(default = "default_live_timeout")]
     pub timeout_secs: u64,
@@ -358,7 +370,7 @@ pub struct SnmpLiveConfig {
     #[serde(default = "default_live_concurrency")]
     pub max_concurrency: usize,
     /// 设备清单与厂商 profile 的刷新间隔（秒）
-    #[serde(default = "default_live_inventory_refresh")]
+    #[serde(default = "default_snmp_live_inventory_refresh")]
     pub inventory_refresh_secs: u64,
     /// 连续失败后的最大退避（秒）
     #[serde(default = "default_live_max_backoff")]
@@ -370,7 +382,23 @@ const fn default_live_enabled() -> bool {
 }
 
 const fn default_live_interval() -> u64 {
+    30
+}
+
+const fn default_live_watch_interval() -> u64 {
     1
+}
+
+const fn default_live_overview_interval() -> u64 {
+    5
+}
+
+const fn default_live_detail_interval() -> u64 {
+    1
+}
+
+const fn default_live_interest_ttl() -> u64 {
+    15
 }
 
 const fn default_live_timeout() -> u64 {
@@ -382,7 +410,7 @@ const fn default_live_concurrency() -> usize {
 }
 
 const fn default_live_inventory_refresh() -> u64 {
-    1800
+    21600
 }
 
 const fn default_live_max_backoff() -> u64 {
@@ -394,12 +422,20 @@ impl Default for SnmpLiveConfig {
         Self {
             enabled: default_live_enabled(),
             interval_secs: default_live_interval(),
+            watch_interval_secs: default_live_watch_interval(),
+            overview_interval_secs: default_live_overview_interval(),
+            detail_interval_secs: default_live_detail_interval(),
+            interest_ttl_secs: default_live_interest_ttl(),
             timeout_secs: default_live_timeout(),
             max_concurrency: default_live_concurrency(),
-            inventory_refresh_secs: default_live_inventory_refresh(),
+            inventory_refresh_secs: default_snmp_live_inventory_refresh(),
             max_backoff_secs: default_live_max_backoff(),
         }
     }
+}
+
+const fn default_snmp_live_inventory_refresh() -> u64 {
+    21600
 }
 
 const fn default_snmp_timeout() -> u64 {

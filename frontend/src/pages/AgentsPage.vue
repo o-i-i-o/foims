@@ -143,8 +143,17 @@ function formatTemp(temp: number | string | null): string {
 // SSE 推送的全部实时快照（source='snmp'/'ipmi'/'agent' 三路）：按
 // `source|device_id` 复合键索引，Agent 行 device_id 即 monitored_hosts.id；
 // 列表结构（分页/状态/关键字）仍由 30s 轮询维护
+// 主机列表只把「当前页 SNMP 设备」登记为 1s 观察对象：列表只消费
+// CPU/内存/温度/最近采集时间，不需要端口状态与流量；其余设备（含其他页）
+// 由后端回落到低频基线。
+const watchedDeviceIds = computed(() =>
+  list.items
+    .filter((row) => row.source === "snmp" && row.device_id)
+    .map((row) => row.device_id as string)
+);
 const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
-  !auth.hiddenSections.includes("agents")
+  !auth.hiddenSections.includes("agents"),
+  { scope: "agents", deviceIds: watchedDeviceIds }
 );
 const liveBySourceDevice = computed(() => {
   const map = new Map<string, LiveSummaryRow>();

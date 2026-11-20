@@ -119,15 +119,22 @@ cooldown_secs = 30
 [snmp.live]
 # 总开关（关闭时不启动任何实时采集任务）
 enabled = true
-# 单轮采样间隔（秒）：接口状态/流量与 CPU/内存/温度同轮采集，
-# 默认 1s 保证展示层为秒级实时；设备量大时可整体调大降载
-interval_secs = 1
+# 无人观察时的基线采样间隔（秒）：只采集 CPU/内存/温度/uptime
+interval_secs = 30
+# 主机列表观察档位（秒）：只采集列表展示的资源组
+watch_interval_secs = 1
+# 仪表盘观察档位（秒）：资源组 + 采集端口流量
+overview_interval_secs = 5
+# 选中设备详情档位（秒）：资源组 + 流量 + 全端口状态
+detail_interval_secs = 1
+# 观察租约有效期（秒）：前端 SSE 心跳续期，断连后自动回落基线
+interest_ttl_secs = 15
 # 单次请求超时（秒，实时路径需短于全量轮询的 5s）
 timeout_secs = 2
 # 同时在途的设备数上限（离线设备会占满超时窗口，按主机性能与设备量调整）
 max_concurrency = 64
 # 设备清单与厂商 profile 重建间隔（秒；ifIndex 变化时也会自动重建）
-inventory_refresh_secs = 1800
+inventory_refresh_secs = 21600
 # 连续失败的最大退避（秒）
 max_backoff_secs = 60
 

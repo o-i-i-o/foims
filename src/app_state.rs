@@ -34,6 +34,8 @@ pub struct AppState {
     /// SNMP 实时快照注册表（只驻内存；实时列表与 SSE 端点读取，
     /// 写入方为 agent-service 的实时采集 worker）。
     pub live_registry: Arc<foims_agent_service::LiveRegistry>,
+    /// 实时观察订阅表：SSE 连接登记观察范围，采集 worker 据此切换档位。
+    pub live_interest: Arc<foims_agent_service::LiveInterest>,
     /// IPMI 实时快照注册表（结构对齐 `live_registry`，按 device_id 键）。
     pub ipmi_live_registry: Arc<foims_agent_service::IpmiLiveRegistry>,
     /// Agent 上报实时快照注册表（按 machine_id 键，ingest 入库成功后写入）。
@@ -67,6 +69,7 @@ impl AppState {
         ipmi_live_registry: Arc<foims_agent_service::IpmiLiveRegistry>,
         agent_live_registry: Arc<foims_agent_service::AgentLiveRegistry>,
         alerts: Option<Arc<foims_agent_service::AlertRuntime>>,
+        live_interest: Arc<foims_agent_service::LiveInterest>,
         shutdown: ShutdownSignal,
         rate_limiter: RateLimiter,
     ) -> Result<Self, String> {
@@ -81,6 +84,7 @@ impl AppState {
             ipmi_live_registry,
             agent_live_registry,
             alerts,
+            live_interest,
             shutdown,
             rate_limiter,
             config_write_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -129,6 +133,10 @@ impl foims_agent_service::LiveProvider for AppState {
 
     fn agent_live_registry(&self) -> Arc<foims_agent_service::AgentLiveRegistry> {
         self.agent_live_registry.clone()
+    }
+
+    fn live_interest(&self) -> Arc<foims_agent_service::LiveInterest> {
+        self.live_interest.clone()
     }
 
     fn live_shutdown(&self) -> tokio::sync::broadcast::Receiver<()> {

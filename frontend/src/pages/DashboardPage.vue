@@ -181,7 +181,8 @@ const hostMetricsQuery = useQuery({
 });
 
 const { devices: liveDevices, connected: liveConnected } = useLiveAgents(
-  !auth.hiddenSections.includes("agents")
+  !auth.hiddenSections.includes("agents"),
+  { scope: "dashboard" }
 );
 const hostMetricActive = ref<HostMetricKey>("cpu");
 const hostOnlyAbnormal = ref(false);

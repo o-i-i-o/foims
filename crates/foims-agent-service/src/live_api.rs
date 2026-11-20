@@ -9,7 +9,7 @@
 
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::{Query, State};
 use axum::http::{HeaderName, header};
@@ -25,15 +25,20 @@ use foims_auth::extractor::AdminOrSecAdminUser;
 use foims_common::{AppError, msg};
 
 use crate::agents_api::rfc3339;
+use crate::live_interest::{InterestLease, InterestScope, LiveInterest};
 use crate::live_poll::{
     AgentLiveDeviceSnapshot, AgentLiveRegistry, IpmiLiveDeviceSnapshot, IpmiLiveRegistry,
     LiveDeviceSnapshot, LiveRegistry,
 };
 
-/// SSE 推送节拍：与默认采样间隔（1s）对齐，注册表有写入时逐秒下发。
+/// SSE 推送节拍：注册表有更新时按该节拍检查。
 const SSE_TICK_SECS: u64 = 1;
+/// 仪表盘摘要的最小推送间隔：卡片需要全设备数据，但无需秒级。
+const SSE_OVERVIEW_EMIT_SECS: u64 = 5;
 /// SSE 心跳间隔：低于常见代理 60s 空闲超时，避免连接被误断。
 const SSE_KEEPALIVE_SECS: u64 = 15;
+/// 单次订阅允许登记的设备上限（主机列表当前页通常远小于该值）。
+const MAX_WATCH_DEVICES: usize = 500;
 
 /// 读取实时注册表的 AppState 能力（避免 agent-service 反向依赖主 crate）。
 pub trait LiveProvider {
@@ -45,6 +50,9 @@ pub trait LiveProvider {
     /// Agent 上报实时快照注册表（ingest 入库成功后写入，按 machine_id 键）。
     fn agent_live_registry(&self) -> Arc<AgentLiveRegistry>;
 
+    /// 实时观察订阅表：SSE 连接按 scope 登记，采集 worker 据此切换档位。
+    fn live_interest(&self) -> Arc<LiveInterest>;
+
     /// 服务关闭信号：SSE 长连接需在退出时主动结束，否则会阻塞优雅关闭。
     fn live_shutdown(&self) -> tokio::sync::broadcast::Receiver<()>;
 }
@@ -54,6 +62,10 @@ pub trait LiveProvider {
 pub struct LiveStreamQuery {
     /// 可选：订阅单台设备的端口明细（详情弹窗使用）
     device_id: Option<Uuid>,
+    /// 观察范围：`dashboard`（全设备汇总）或 `agents`（当前列表设备）。
+    scope: Option<String>,
+    /// `scope=agents` 时登记的当前页设备 id，逗号分隔。
+    device_ids: Option<String>,
 }
 
 /// 单个传感器读数（IPMI 风扇/电压明细，`source='ipmi'` 行专用）。
@@ -275,20 +287,37 @@ pub async fn list_live<S: LiveProvider>(
     ))
 }
 
-/// SSE 流的去重状态：三个注册表代数 + 已推送的设备快照时间 + 关闭信号。
+/// SSE 流的去重状态：三个注册表代数 + 已推送的设备快照时间 + 观察租约。
 struct StreamState {
     revision: u64,
     ipmi_revision: u64,
     agent_revision: u64,
     collected_at: Option<DateTime<Utc>>,
+    /// 连接持有的观察租约；每个节拍续期，断连 Drop 后采集自动回落基线。
+    lease: InterestLease,
+    /// 上次下发摘要的时间，用于仪表盘 5s 节流。
+    last_emit: Option<Instant>,
+    emit_every: Duration,
     shutdown: tokio::sync::broadcast::Receiver<()>,
+}
+
+/// 解析 `device_ids=a,b,c`，忽略非法项并限制数量。
+fn parse_device_ids(raw: Option<&str>) -> Vec<Uuid> {
+    raw.map(|raw| {
+        raw.split(',')
+            .filter_map(|part| Uuid::parse_str(part.trim()).ok())
+            .take(MAX_WATCH_DEVICES)
+            .collect()
+    })
+    .unwrap_or_default()
 }
 
 /// GET /api/agents/live/stream：SSE 变更推送。
 ///
-/// - `summary`：任一注册表有写入时下发全部设备摘要；
+/// - `summary`：按观察范围节流下发全量设备摘要（仪表盘 5s，列表/详情 1s）；
 /// - `device`：仅当请求带 `device_id` 且该设备快照更新时下发端口明细。
 ///
+/// 同时按 `scope`/`device_ids` 登记观察租约，驱动后端切换采样档位。
 /// 设备不可达期间注册表保留最后一份成功快照（不推送空值），消费方按
 /// `collected_at` 判断新鲜度。
 pub async fn live_stream<S: LiveProvider>(
@@ -300,12 +329,30 @@ pub async fn live_stream<S: LiveProvider>(
     let ipmi_registry = state.ipmi_live_registry();
     let agent_registry = state.agent_live_registry();
     let device_id = query.device_id;
+    let (scope, emit_every) = match device_id {
+        Some(id) => (
+            InterestScope::Detail(id),
+            Duration::from_secs(SSE_TICK_SECS),
+        ),
+        None if query.scope.as_deref() == Some("agents") => {
+            (InterestScope::Devices, Duration::from_secs(SSE_TICK_SECS))
+        }
+        None => (
+            InterestScope::Dashboard,
+            Duration::from_secs(SSE_OVERVIEW_EMIT_SECS),
+        ),
+    };
+    let devices = parse_device_ids(query.device_ids.as_deref());
+    let lease = state.live_interest().lease(scope, devices);
     let tick = IntervalStream::new(tokio::time::interval(Duration::from_secs(SSE_TICK_SECS)));
     let stream_state = StreamState {
         revision: u64::MAX,
         ipmi_revision: u64::MAX,
         agent_revision: u64::MAX,
         collected_at: None,
+        lease,
+        last_emit: None,
+        emit_every,
         shutdown: state.live_shutdown(),
     };
 
@@ -316,17 +363,24 @@ pub async fn live_stream<S: LiveProvider>(
                 Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {}
                 _ => return std::future::ready(None),
             }
+            // 心跳续期：浏览器断连后租约自动过期，设备回落基线
+            stream_state.lease.touch();
             let mut events: Vec<Result<Event, Infallible>> = Vec::new();
             let revision = registry.revision();
             let ipmi_revision = ipmi_registry.revision();
             let agent_revision = agent_registry.revision();
-            if revision != stream_state.revision
-                || ipmi_revision != stream_state.ipmi_revision
-                || agent_revision != stream_state.agent_revision
+            let due = stream_state
+                .last_emit
+                .is_none_or(|at| at.elapsed() >= stream_state.emit_every);
+            if due
+                && (revision != stream_state.revision
+                    || ipmi_revision != stream_state.ipmi_revision
+                    || agent_revision != stream_state.agent_revision)
             {
                 stream_state.revision = revision;
                 stream_state.ipmi_revision = ipmi_revision;
                 stream_state.agent_revision = agent_revision;
+                stream_state.last_emit = Some(Instant::now());
                 if let Ok(data) =
                     serde_json::to_string(&summary_rows(&registry, &ipmi_registry, &agent_registry))
                 {
@@ -364,7 +418,10 @@ pub async fn live_stream<S: LiveProvider>(
 
 #[cfg(test)]
 mod tests {
-    use super::{agent_summary_row, device_detail, ipmi_summary_row, summary_row, summary_rows};
+    use super::{
+        MAX_WATCH_DEVICES, agent_summary_row, device_detail, ipmi_summary_row, parse_device_ids,
+        summary_row, summary_rows,
+    };
     use crate::live_poll::{
         AgentLiveDeviceSnapshot, AgentLiveRegistry, AgentLiveSnapshot, IpmiLiveDeviceSnapshot,
         IpmiLiveRegistry, LiveDeviceSnapshot, LiveRegistry,
@@ -467,6 +524,21 @@ mod tests {
         assert_eq!(row.cpu_usage_pct, Some(12.5));
         // RFC 3339 秒精度 + Z 后缀
         assert!(row.collected_at.ends_with('Z'));
+    }
+
+    #[test]
+    fn 设备观察列表_忽略非法项并限量() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let raw = format!("{a}, bad ,{b},");
+        assert_eq!(parse_device_ids(Some(&raw)), vec![a, b]);
+
+        let many = (0..MAX_WATCH_DEVICES + 5)
+            .map(|n| Uuid::from_u128(n as u128).to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        assert_eq!(parse_device_ids(Some(&many)).len(), MAX_WATCH_DEVICES);
+        assert!(parse_device_ids(None).is_empty());
     }
 
     #[test]

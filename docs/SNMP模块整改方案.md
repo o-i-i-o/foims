@@ -80,6 +80,8 @@
 - 端口状态改为按列 GETBULK（`max-repetitions` 10~25，按厂商可调），标量资源组继续使用精确 GET；保留 20 OID/包的 MTU 安全线。
 - 只对 `snmp_enabled + monitored` 设备建 worker；虚拟接口在探测期过滤，避免「先全量 walk 再截断」。
 
+> **落地状态（v0.88.0）**：已实现订阅驱动分级采样——`LiveDemand` 四档（Baseline 30s 仅资源组 / Overview 5s 资源组+采集端口流量 / Watch 1s 仅资源组 / Detail 1s 全端口），SSE 带 `scope=dashboard|agents` 或 `device_id` 登记租约（TTL 15s），断连后自动回落基线；采集侧按 `LiveSampleSpec` 裁剪每轮 OID。尚未落地：端口状态 GETBULK、worker 只建 `snmp_enabled + monitored` 设备、实时设备数硬上限（当前仅限制单条订阅登记 500 台）。
+
 ### P3：重活改造（手动同步与写入）
 
 - MAC/LLDP 同步改成**异步任务**：`POST` 返回 `202 + job_id`，`GET /jobs/{id}` 或 SSE 推送进度；前端不再阻塞等待。

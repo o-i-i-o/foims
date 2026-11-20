@@ -40,7 +40,7 @@ use foims_common::config::IpmiLiveConfig;
 use foims_common::config::SnmpLiveConfig;
 use foims_ipmi::{IpmiLiveSnapshot, IpmiParams};
 use foims_snmp::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
-use foims_snmp::live::{LiveCollector, LiveSnapshot, MAX_OIDS_PER_REQUEST, probe};
+use foims_snmp::live::{LiveCollector, LiveSampleSpec, LiveSnapshot, MAX_OIDS_PER_REQUEST, probe};
 
 use crate::alert_episode::{AlertRuntime, HostRef};
 use crate::alerts::MetricValues;
@@ -48,6 +48,7 @@ use crate::ipmi_poll::{
     IpmiDeviceRow, collect_device, ensure_ipmi_host_present, ipmi_machine_id, load_ipmi_devices,
     load_ipmi_host_id,
 };
+use crate::live_interest::{LiveDemand, LiveInterest};
 use crate::metrics_aggregator::MetricsAggregator;
 use crate::snmp_poll::{
     SnmpDeviceRow, ensure_snmp_host_present, load_snmp_devices, load_snmp_host_id, snmp_machine_id,
@@ -139,13 +140,14 @@ pub fn start_live_poller(
     registry: Arc<LiveRegistry>,
     alerts: Arc<AlertRuntime>,
     metrics: Arc<MetricsAggregator>,
+    interest: Arc<LiveInterest>,
     shutdown: ShutdownReceiver<()>,
 ) {
     if !config.enabled {
         return;
     }
     tokio::spawn(run_supervisor(
-        pool, config, registry, alerts, metrics, shutdown,
+        pool, config, registry, alerts, metrics, interest, shutdown,
     ));
 }
 
@@ -175,6 +177,7 @@ struct WorkerContext {
     metrics: Arc<MetricsAggregator>,
     semaphore: Arc<Semaphore>,
     initial_delay: Duration,
+    interest: Arc<LiveInterest>,
 }
 
 /// 已启动 worker 的句柄：凭据/地址变化时用于比对与重启。
@@ -191,6 +194,7 @@ async fn run_supervisor(
     registry: Arc<LiveRegistry>,
     alerts: Arc<AlertRuntime>,
     metrics: Arc<MetricsAggregator>,
+    interest: Arc<LiveInterest>,
     mut shutdown: ShutdownReceiver<()>,
 ) {
     let semaphore = Arc::new(Semaphore::new(config.max_concurrency.max(1)));
@@ -209,6 +213,7 @@ async fn run_supervisor(
                         alerts: &alerts,
                         metrics: &metrics,
                         semaphore: &semaphore,
+                        interest: &interest,
                     },
                     &mut workers,
                 )
@@ -246,6 +251,7 @@ struct SnmpReconcileDeps<'a> {
     alerts: &'a Arc<AlertRuntime>,
     metrics: &'a Arc<MetricsAggregator>,
     semaphore: &'a Arc<Semaphore>,
+    interest: &'a Arc<LiveInterest>,
 }
 
 /// 对比数据库设备清单与运行中的 worker：新增/变更重启，删除清理。
@@ -318,7 +324,8 @@ async fn reconcile(
             alerts: deps.alerts.clone(),
             metrics: deps.metrics.clone(),
             semaphore: deps.semaphore.clone(),
-            initial_delay: stagger_delay(config.interval_secs, index, total),
+            initial_delay: stagger_delay(config.interval_secs.clamp(1, 5), index, total),
+            interest: deps.interest.clone(),
         };
         workers.insert(
             device_id,
@@ -352,11 +359,15 @@ fn stagger_delay(interval_secs: u64, index: usize, total: usize) -> Duration {
 
 /// 单设备常驻采集循环：每轮先取全局许可，结束后按结果正常间隔或退避休眠。
 ///
+/// 采样档位与间隔由 [`LiveInterest`] 决定：无人观察时走基线，仪表盘/主机列表/
+/// 设备详情分别升级到各自档位；休眠期间按秒检查档位变化，用户打开页面后
+/// 最多 1 秒内切换到实时档。
+///
 /// 关闭由 supervisor 统一 abort（sleep/probe/sample 任意点被丢弃都安全）。
 async fn run_device_worker(context: WorkerContext) {
     tokio::time::sleep(context.initial_delay).await;
 
-    let interval = Duration::from_secs(context.config.interval_secs.max(1));
+    let baseline = Duration::from_secs(context.config.interval_secs.max(1));
     let timeout = Duration::from_secs(context.config.timeout_secs.max(1));
     let probe_interval = Duration::from_secs(
         context
@@ -364,7 +375,7 @@ async fn run_device_worker(context: WorkerContext) {
             .inventory_refresh_secs
             .max(context.config.interval_secs.max(1)),
     );
-    let max_backoff = Duration::from_secs(context.config.max_backoff_secs.max(interval.as_secs()));
+    let max_backoff = Duration::from_secs(context.config.max_backoff_secs.max(baseline.as_secs()));
 
     let mut state = WorkerState {
         client: None,
@@ -373,10 +384,14 @@ async fn run_device_worker(context: WorkerContext) {
         endpoint: snmp_target(&context.ip, context.params.port),
         timeout,
     };
-    let mut backoff = interval;
+    let mut backoff = baseline;
 
     loop {
         let cycle_start = Instant::now();
+        let demand = context.interest.demand_for(context.device_id);
+        let interval = live_interval(&context.config, demand);
+        let spec = live_spec(demand);
+
         // 索引刷新：网络重建/堆叠变化后 ifIndex 可能重排，重新探测一次
         if state
             .last_probe
@@ -389,7 +404,7 @@ async fn run_device_worker(context: WorkerContext) {
             Ok(permit) => permit,
             Err(_) => return,
         };
-        let ok = run_cycle(&context, &mut state).await;
+        let ok = run_cycle(&context, &mut state, spec).await;
         drop(permit);
 
         let wait = if ok {
@@ -400,12 +415,44 @@ async fn run_device_worker(context: WorkerContext) {
             backoff = backoff.saturating_mul(2).min(max_backoff);
             wait
         };
-        tokio::time::sleep(wait.saturating_sub(cycle_start.elapsed())).await;
+
+        let mut remaining = wait.saturating_sub(cycle_start.elapsed());
+        while !remaining.is_zero() {
+            let step = remaining.min(Duration::from_secs(1));
+            tokio::time::sleep(step).await;
+            remaining = remaining.saturating_sub(step);
+            // 成功轮次才响应档位变化提前唤醒；失败退避期间保持退避，
+            // 避免设备不可达时被页面切换反复触发重连。
+            if ok && context.interest.demand_for(context.device_id) != demand {
+                break;
+            }
+        }
     }
 }
 
-/// 执行一轮：按需建连/探测，再采样并写入注册表；返回本轮是否成功。
-async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
+/// 档位 → 采样间隔。
+fn live_interval(config: &SnmpLiveConfig, demand: LiveDemand) -> Duration {
+    let secs = match demand {
+        LiveDemand::Baseline => config.interval_secs,
+        LiveDemand::Overview => config.overview_interval_secs,
+        LiveDemand::Watch => config.watch_interval_secs,
+        LiveDemand::Detail => config.detail_interval_secs,
+    };
+    Duration::from_secs(secs.max(1))
+}
+
+/// 档位 → 采样范围。
+fn live_spec(demand: LiveDemand) -> LiveSampleSpec {
+    match demand {
+        LiveDemand::Baseline => LiveSampleSpec::BASELINE,
+        LiveDemand::Overview => LiveSampleSpec::OVERVIEW,
+        LiveDemand::Watch => LiveSampleSpec::WATCH,
+        LiveDemand::Detail => LiveSampleSpec::DETAIL,
+    }
+}
+
+/// 执行一轮：按需建连/探测，再按 `spec` 采样并写入注册表；返回本轮是否成功。
+async fn run_cycle(context: &WorkerContext, state: &mut WorkerState, spec: LiveSampleSpec) -> bool {
     if state.client.is_none() {
         match connect_live(&state.endpoint, &context.params, state.timeout).await {
             Ok(client) => {
@@ -463,7 +510,7 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
     let Some(collector) = state.collector.as_mut() else {
         return false;
     };
-    let snapshot = collector.sample(client, Utc::now()).await;
+    let snapshot = collector.sample(client, Utc::now(), spec).await;
 
     if !snapshot.responded {
         tracing::debug!(
@@ -476,8 +523,10 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState) -> bool {
         state.client = None;
         return false;
     }
-    // 端口状态全缺说明探测期的 ifIndex 已失效，下一轮重建 profile
-    if !snapshot.ports.is_empty()
+    // 端口状态全缺说明探测期的 ifIndex 已失效，下一轮重建 profile。
+    // 仅在确实读取端口状态的档位判断，避免基线/列表轮次误触发探测。
+    if spec.includes_ports()
+        && !snapshot.ports.is_empty()
         && snapshot
             .ports
             .iter()

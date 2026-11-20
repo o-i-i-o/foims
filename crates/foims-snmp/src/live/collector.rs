@@ -15,8 +15,8 @@ use futures_util::future::join_all;
 
 use super::profile::apply_temp_unit;
 use super::{
-    DeviceProfile, EntityMem, LiveCounters, LivePortSnapshot, LiveSnapshot, MAX_OIDS_PER_REQUEST,
-    MemPlan, PortCounters, PortMeta,
+    DeviceProfile, EntityMem, LiveCounters, LivePortSnapshot, LiveSampleSpec, LiveSnapshot,
+    MAX_OIDS_PER_REQUEST, MemPlan, PortCounters, PortMeta,
 };
 use crate::collect::metrics::iface_rate_bps;
 
@@ -68,10 +68,15 @@ impl LiveCollector {
         &self.profile
     }
 
-    /// 采集一轮：状态/流量/资源组（CPU/内存/温度）同轮 GET，保证快照
-    /// 各指标时间戳一致；返回快照包含端口数据（若本轮有任何响应）。
-    pub async fn sample(&mut self, client: &Client<UdpHandle>, now: DateTime<Utc>) -> LiveSnapshot {
-        let items = self.build_items();
+    /// 采集一轮：按 `spec` 选择端口状态/流量，资源组（CPU/内存/温度）
+    /// 始终同轮 GET，保证快照各指标时间戳一致。
+    pub async fn sample(
+        &mut self,
+        client: &Client<UdpHandle>,
+        now: DateTime<Utc>,
+        spec: LiveSampleSpec,
+    ) -> LiveSnapshot {
+        let items = self.build_items(spec);
         let (values, responded, failed_batches) = fetch(client, &items).await;
         let now_unix = now.timestamp();
         let elapsed = self.prev.as_ref().map(|p| now_unix - p.ts).unwrap_or(0);
@@ -161,7 +166,7 @@ impl LiveCollector {
         for meta in &self.profile.ports {
             // 流量只在采集端口上计算；其余端口仅保留运行状态
             let is_target = Some(meta.if_index) == target_index;
-            let (rx_bps, tx_bps) = if is_target {
+            let (rx_bps, tx_bps) = if is_target && spec.traffic {
                 match (
                     prev_ports.and_then(|m| m.get(&meta.if_index)),
                     port_in.get(&meta.if_index).copied(),
@@ -176,7 +181,7 @@ impl LiveCollector {
             } else {
                 (None, None)
             };
-            if is_target {
+            if is_target && spec.traffic {
                 rx_total = rx_bps;
                 tx_total = tx_bps;
                 if let (Some(ci), Some(co)) = (
@@ -202,11 +207,17 @@ impl LiveCollector {
                 tx_bps,
             });
         }
-        if !next_ports.is_empty() {
-            self.prev = Some(LiveCounters {
-                ts: now_unix,
-                ports: next_ports,
-            });
+        if spec.traffic {
+            if !next_ports.is_empty() {
+                self.prev = Some(LiveCounters {
+                    ts: now_unix,
+                    ports: next_ports,
+                });
+            }
+        } else {
+            // 未采流量的轮次清空计数器基线，避免下次切回流量模式时用
+            // 过期时间差算出异常速率。
+            self.prev = None;
         }
 
         let cpu_usage_pct = cpu_values
@@ -263,7 +274,7 @@ impl LiveCollector {
     }
 
     /// 构造本轮读取项清单（顺序固定：uptime → 端口状态 → 采集端口流量 → 资源组）。
-    fn build_items(&self) -> Vec<ReadItem> {
+    fn build_items(&self, spec: LiveSampleSpec) -> Vec<ReadItem> {
         let target_index = self.target.as_ref().map(|port| port.if_index);
         // 端口状态 2×N + 采集端口 2（64 位计数器）+ uptime + 资源组
         let mut items = Vec::with_capacity(12 + self.profile.ports.len() * 2);
@@ -273,15 +284,17 @@ impl LiveCollector {
         });
         for port in &self.profile.ports {
             let idx = port.if_index;
-            items.push(ReadItem {
-                oid: oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 7).child(idx),
-                kind: ReadKind::Admin(idx),
-            });
-            items.push(ReadItem {
-                oid: oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 8).child(idx),
-                kind: ReadKind::Oper(idx),
-            });
-            if Some(idx) != target_index {
+            if spec.ports {
+                items.push(ReadItem {
+                    oid: oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 7).child(idx),
+                    kind: ReadKind::Admin(idx),
+                });
+                items.push(ReadItem {
+                    oid: oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 8).child(idx),
+                    kind: ReadKind::Oper(idx),
+                });
+            }
+            if !spec.traffic || Some(idx) != target_index {
                 continue;
             }
             if self.profile.use_hc {

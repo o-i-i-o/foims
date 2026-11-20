@@ -195,6 +195,44 @@ pub struct DeviceProfile {
     pub use_hc: bool,
 }
 
+/// 单轮采样范围：由调用方按「当前是否被观察」动态选择，避免为无人查看的
+/// 设备持续下发全端口状态与流量 OID。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveSampleSpec {
+    /// 是否读取全端口 admin/oper 状态（2×N 个 OID，成本随端口数线性增长）
+    pub ports: bool,
+    /// 是否读取采集端口计数器（2 个 OID）
+    pub traffic: bool,
+}
+
+impl LiveSampleSpec {
+    /// 无人观察的基线轮次：只更新 CPU/内存/温度/uptime 等资源组。
+    pub const BASELINE: Self = Self {
+        ports: false,
+        traffic: false,
+    };
+    /// 主机列表观察：列表只展示资源组，不读端口状态与流量。
+    pub const WATCH: Self = Self {
+        ports: false,
+        traffic: false,
+    };
+    /// 仪表盘卡片：需要流量 Top，但不展示端口明细。
+    pub const OVERVIEW: Self = Self {
+        ports: false,
+        traffic: true,
+    };
+    /// 选中设备详情：资源组 + 流量 + 全端口状态。
+    pub const DETAIL: Self = Self {
+        ports: true,
+        traffic: true,
+    };
+
+    /// 本轮是否包含端口状态 OID。
+    pub fn includes_ports(self) -> bool {
+        self.ports
+    }
+}
+
 /// 单端口实时快照。
 #[derive(Debug, Clone, Serialize)]
 pub struct LivePortSnapshot {

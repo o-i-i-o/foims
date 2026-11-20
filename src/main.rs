@@ -506,6 +506,19 @@ async fn main() -> std::io::Result<()> {
     // 实时列表与 SSE 端点
     let live_registry = Arc::new(foims_agent_service::LiveRegistry::new());
     let live_config = config.snmp.live.clone().filter(|live| live.enabled);
+    // 观察订阅表：前端 SSE 按 scope 登记「当前在看哪些设备」，采集 worker
+    // 据此在基线/仪表盘/列表/详情档位之间切换。TTL 由配置控制，连接断开
+    // 或心跳停止后自动回落基线。
+    let live_interest = Arc::new(foims_agent_service::LiveInterest::new(
+        std::time::Duration::from_secs(
+            config
+                .snmp
+                .live
+                .as_ref()
+                .map(|live| live.interest_ttl_secs)
+                .unwrap_or(15),
+        ),
+    ));
 
     // IPMI 实时采集：与 SNMP 双路径同构（内存快照，不落库）；秒级读数供实时
     // 展示与 Top 榜，趋势仍由 5 分钟带外轮询落库。注册表按 device_id 与
@@ -553,6 +566,7 @@ async fn main() -> std::io::Result<()> {
             live_registry.clone(),
             runtime,
             metrics_aggregator.clone(),
+            live_interest.clone(),
             shutdown.subscribe(),
         );
     }
@@ -791,6 +805,7 @@ async fn main() -> std::io::Result<()> {
             ipmi_live_registry,
             agent_live_registry.clone(),
             alert_runtime.clone(),
+            live_interest,
             shutdown.clone(),
             rate_limiter.clone(),
         )

@@ -41,6 +41,7 @@ pub mod cert;
 pub mod ingest;
 pub mod ipmi_poll;
 pub mod live_api;
+pub mod live_interest;
 pub mod live_poll;
 pub mod metrics_aggregator;
 pub mod packaging;
@@ -52,6 +53,7 @@ pub mod trap;
 
 pub use alert_episode::{AlertProvider, AlertRuntime, HostRef};
 pub use live_api::LiveProvider;
+pub use live_interest::{InterestLease, InterestScope, LiveDemand, LiveInterest};
 pub use live_poll::{
     AgentLiveDeviceSnapshot, AgentLiveRegistry, AgentLiveSnapshot, IpmiLiveDeviceSnapshot,
     IpmiLiveRegistry, LiveDeviceSnapshot, LiveRegistry, start_ipmi_live_poller, start_live_poller,
