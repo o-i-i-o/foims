@@ -441,7 +441,7 @@ system:
   shutdown_step_server: "2. Waiting for server task to finish..."
   snmp_live_devices_load_failed: "Failed to load SNMP live collection device list: {{error}}"
   snmp_live_host_id_failed: "Failed to load monitored host id for SNMP live collection: device={{device_id}}, error: {{error}}"
-  snmp_live_started: "SNMP live collection started: {{devices}} devices, sampling interval {{interval}}s"
+  snmp_live_started: "SNMP live collection started: {{devices}} devices, baseline sampling interval {{interval}}s"
   snmp_live_stopped: "SNMP live collection stopped"
   snmp_trap_bind_failed: "Failed to bind SNMP trap listener ({{addr}}): {{error}}"
   snmp_trap_notification_created: "SNMP trap notification stored: source {{source}}, {{recipients}} recipients"

@@ -120,7 +120,8 @@ cooldown_secs = 30
 # 总开关（关闭时不启动任何实时采集任务）
 enabled = true
 # 无人观察时的基线采样间隔（秒）：只采集 CPU/内存/温度/uptime
-interval_secs = 30
+# 旧键 interval_secs（全量 1s/5s 时代）已废弃不再读取，缺省 30
+baseline_interval_secs = 30
 # 主机列表观察档位（秒）：只采集列表展示的资源组
 watch_interval_secs = 1
 # 仪表盘观察档位（秒）：资源组 + 采集端口流量

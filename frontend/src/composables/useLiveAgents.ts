@@ -3,12 +3,13 @@
  *
  * 同源 EventSource 自动携带 HttpOnly Cookie（后端 /api/agents 组经
  * agent_admin_guard 鉴权），断线由浏览器按 retry 自动重连；引用计数归零时
- * 关闭连接。服务端只在注册表有写入时推送，`summary` 为全量摘要，
- * 带 device_id 订阅时另推该设备的 `device` 事件（端口明细）。
+ * 关闭连接。服务端只在注册表有写入时推送；带 device_id 订阅时另推该设备的
+ * `device` 事件（端口明细）。
  *
- * 观察范围 `scope` 会驱动后端采样档位：
+ * 观察范围 `scope` 会驱动后端采样档位与摘要裁剪：
  * - `dashboard`：全设备 5s 汇总（卡片需要全量数据，但无需秒级）；
- * - `agents`：只把当前页设备升级为 1s（只采资源组），其余设备保持基线。
+ * - `agents`：只有 deviceIds 中的设备升级为 1s（只采资源组），摘要也只含
+ *   这些设备；其余设备保持基线且不再随该连接下发。
  */
 import { isRef, onUnmounted, ref, watch, type Ref } from "vue";
 import type { LiveDeviceDetail } from "../types/api/generated/LiveDeviceDetail";

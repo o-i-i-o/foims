@@ -441,7 +441,7 @@ system:
   shutdown_step_server: "2. 等待服务器任务结束..."
   snmp_live_devices_load_failed: "SNMP 实时采集设备清单加载失败: {{error}}"
   snmp_live_host_id_failed: "SNMP 实时采集监控主机行 ID 加载失败: 设备={{device_id}}, 错误: {{error}}"
-  snmp_live_started: "SNMP 实时采集已启动: 设备 {{devices}} 台, 采样间隔 {{interval}}s"
+  snmp_live_started: "SNMP 实时采集已启动: 设备 {{devices}} 台, 基线采样间隔 {{interval}}s"
   snmp_live_stopped: "SNMP 实时采集已停止"
   snmp_trap_bind_failed: "SNMP Trap 监听绑定失败 ({{addr}}): {{error}}"
   snmp_trap_notification_created: "SNMP Trap 站内通知已写入: 来源 {{source}}, 收件人 {{recipients}} 名"

@@ -223,7 +223,7 @@ async fn run_supervisor(
                     foims_common::log_info!(
                         "system.snmp_live_started",
                         devices = workers.len(),
-                        interval = config.interval_secs
+                        interval = config.baseline_interval_secs
                     );
                 }
             }
@@ -324,7 +324,7 @@ async fn reconcile(
             alerts: deps.alerts.clone(),
             metrics: deps.metrics.clone(),
             semaphore: deps.semaphore.clone(),
-            initial_delay: stagger_delay(config.interval_secs.clamp(1, 5), index, total),
+            initial_delay: stagger_delay(config.baseline_interval_secs.clamp(1, 5), index, total),
             interest: deps.interest.clone(),
         };
         workers.insert(
@@ -367,13 +367,13 @@ fn stagger_delay(interval_secs: u64, index: usize, total: usize) -> Duration {
 async fn run_device_worker(context: WorkerContext) {
     tokio::time::sleep(context.initial_delay).await;
 
-    let baseline = Duration::from_secs(context.config.interval_secs.max(1));
+    let baseline = Duration::from_secs(context.config.baseline_interval_secs.max(1));
     let timeout = Duration::from_secs(context.config.timeout_secs.max(1));
     let probe_interval = Duration::from_secs(
         context
             .config
             .inventory_refresh_secs
-            .max(context.config.interval_secs.max(1)),
+            .max(context.config.baseline_interval_secs.max(1)),
     );
     let max_backoff = Duration::from_secs(context.config.max_backoff_secs.max(baseline.as_secs()));
 
@@ -433,7 +433,7 @@ async fn run_device_worker(context: WorkerContext) {
 /// 档位 → 采样间隔。
 fn live_interval(config: &SnmpLiveConfig, demand: LiveDemand) -> Duration {
     let secs = match demand {
-        LiveDemand::Baseline => config.interval_secs,
+        LiveDemand::Baseline => config.baseline_interval_secs,
         LiveDemand::Overview => config.overview_interval_secs,
         LiveDemand::Watch => config.watch_interval_secs,
         LiveDemand::Detail => config.detail_interval_secs,

@@ -272,6 +272,13 @@ const liveNetwork = computed(() => {
   return snmpDetail.value?.summary ?? null;
 });
 
+/** 链路 up/总数：非 Detail 档未采端口状态时 ports_up 为空，显示 "-" */
+const livePortLinks = computed(() => {
+  const up = liveNetwork.value?.ports_up;
+  const total = liveNetwork.value?.ports_total;
+  return up == null || total == null ? "-" : `${up} / ${total}`;
+});
+
 // 采集时间推进 = 新快照到手；离线设备保留的陈旧快照不会推进，自然过期
 watch(
   () => live.value?.collected_at,
@@ -724,7 +731,7 @@ function formatUnit(unit: string): (value: number) => string {
               <dt>{{ t("agents.monitor_port_active") }}</dt>
               <dd>{{ liveNetwork?.monitor_if || "-" }}</dd>
               <dt>{{ t("agents.monitor_port_links") }}</dt>
-              <dd>{{ liveNetwork ? `${liveNetwork.ports_up} / ${liveNetwork.ports_total}` : "-" }}</dd>
+              <dd>{{ livePortLinks }}</dd>
               <dt>{{ t("agents.live_updated_at") }}</dt>
               <dd>{{ liveCollectedAt ? formatDateTime(liveCollectedAt) : "-" }}</dd>
             </dl>

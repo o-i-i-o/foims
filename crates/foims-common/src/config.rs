@@ -348,9 +348,13 @@ pub struct SnmpLiveConfig {
     #[serde(default = "default_live_enabled")]
     pub enabled: bool,
     /// 无人观察时的基线采样间隔（秒，下限 1）：只采集资源组，
-    /// 用于告警与趋势兜底；有观察者时自动切换到下方档位
-    #[serde(default = "default_live_interval")]
-    pub interval_secs: u64,
+    /// 用于告警与趋势兜底；有观察者时自动切换到下方档位。
+    ///
+    /// 旧键 `interval_secs`（v0.87 及以前的全量采样间隔）已废弃且不再读取：
+    /// 升级时若沿用旧配置中的 1s/5s，会让无人观察的设备继续全速采集，
+    /// 分级采样整体失效，故此处独立命名并忽略旧键。
+    #[serde(default = "default_live_baseline_interval")]
+    pub baseline_interval_secs: u64,
     /// 主机列表观察档位间隔（秒）：只采集资源组
     #[serde(default = "default_live_watch_interval")]
     pub watch_interval_secs: u64,
@@ -381,7 +385,7 @@ const fn default_live_enabled() -> bool {
     true
 }
 
-const fn default_live_interval() -> u64 {
+const fn default_live_baseline_interval() -> u64 {
     30
 }
 
@@ -421,7 +425,7 @@ impl Default for SnmpLiveConfig {
     fn default() -> Self {
         Self {
             enabled: default_live_enabled(),
-            interval_secs: default_live_interval(),
+            baseline_interval_secs: default_live_baseline_interval(),
             watch_interval_secs: default_live_watch_interval(),
             overview_interval_secs: default_live_overview_interval(),
             detail_interval_secs: default_live_detail_interval(),

@@ -7,6 +7,7 @@
 //! 鉴权沿用 `/api/agents` nest 内的 `agent_admin_guard`（admin/secadmin）；
 //! 浏览器 EventSource 同源请求自动携带 HttpOnly Cookie，无需令牌参数。
 
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -102,8 +103,11 @@ pub struct LiveSummaryRow {
     /// 采集端口入/出向速率（bit/s），不再全设备求和
     pub rx_bps: Option<f64>,
     pub tx_bps: Option<f64>,
-    pub ports_up: u32,
-    pub ports_total: u32,
+    /// 端口 up 数：仅本轮采样了全端口状态（Detail 档）时有值；
+    /// 基线/列表/仪表盘档不采端口状态，为 None（不可误读为 0）
+    pub ports_up: Option<u32>,
+    /// 端口总数：来自厂商 profile（与是否采样状态无关）；IPMI/Agent 无端口语义，为 None
+    pub ports_total: Option<u32>,
     pub partial: bool,
     /// IPMI 系统电源是否开启（Get Chassis Status；SNMP 行为 None）
     pub power_on: Option<bool>,
@@ -153,12 +157,19 @@ fn summary_row(device: &LiveDeviceSnapshot) -> LiveSummaryRow {
         monitor_if: snapshot.monitor_if.clone(),
         rx_bps: snapshot.rx_bps,
         tx_bps: snapshot.tx_bps,
+        // 非 Detail 档快照里的端口状态全为 None：此时 up 数未知，置 None
         ports_up: snapshot
             .ports
             .iter()
-            .filter(|port| port.oper_up == Some(true))
-            .count() as u32,
-        ports_total: snapshot.ports.len() as u32,
+            .any(|port| port.admin_up.is_some() || port.oper_up.is_some())
+            .then(|| {
+                snapshot
+                    .ports
+                    .iter()
+                    .filter(|port| port.oper_up == Some(true))
+                    .count() as u32
+            }),
+        ports_total: Some(snapshot.ports.len() as u32),
         partial: snapshot.partial,
         power_on: None,
         fans: Vec::new(),
@@ -192,8 +203,8 @@ fn ipmi_summary_row(device: &IpmiLiveDeviceSnapshot) -> LiveSummaryRow {
         monitor_if: None,
         rx_bps: None,
         tx_bps: None,
-        ports_up: 0,
-        ports_total: 0,
+        ports_up: None,
+        ports_total: None,
         partial: false,
         power_on: Some(snapshot.power_on),
         fans: snapshot.fans.iter().map(map_sensor).collect(),
@@ -222,8 +233,8 @@ fn agent_summary_row(host: &AgentLiveDeviceSnapshot) -> LiveSummaryRow {
         monitor_if: None,
         rx_bps: snapshot.rx_bps,
         tx_bps: snapshot.tx_bps,
-        ports_up: 0,
-        ports_total: 0,
+        ports_up: None,
+        ports_total: None,
         partial: false,
         power_on: None,
         fans: Vec::new(),
@@ -231,18 +242,37 @@ fn agent_summary_row(host: &AgentLiveDeviceSnapshot) -> LiveSummaryRow {
     }
 }
 
-/// 全量摘要（SNMP + IPMI + Agent）：按设备名/IP 排序，保证 SSE 与列表输出稳定可比。
+/// 摘要（SNMP + IPMI + Agent）：按设备名/IP 排序，保证 SSE 与列表输出稳定可比。
+///
+/// `keep = None` 输出全量（仪表盘与列表接口）；`Some(set)` 只保留指定
+/// `device_id`（列表页按当前页、详情按单设备），避免 1s 连接反复序列化全量。
+/// SNMP 用 devices.id、IPMI 用 devices.id、Agent 用 monitored_hosts.id，
+/// 前端登记集合时按来源取对应 id。
 fn summary_rows(
     live: &LiveRegistry,
     ipmi: &IpmiLiveRegistry,
     agent: &AgentLiveRegistry,
+    keep: Option<&HashSet<Uuid>>,
 ) -> Vec<LiveSummaryRow> {
+    let wanted = |id: Uuid| keep.is_none_or(|set| set.contains(&id));
     let mut rows: Vec<LiveSummaryRow> = live
         .all()
         .iter()
+        .filter(|d| wanted(d.device_id))
         .map(|d| summary_row(d))
-        .chain(ipmi.all().iter().map(|d| ipmi_summary_row(d)))
-        .chain(agent.all().iter().map(|d| agent_summary_row(d)))
+        .chain(
+            ipmi.all()
+                .iter()
+                .filter(|d| wanted(d.device_id))
+                .map(|d| ipmi_summary_row(d)),
+        )
+        .chain(
+            agent
+                .all()
+                .iter()
+                .filter(|d| wanted(d.host_id))
+                .map(|d| agent_summary_row(d)),
+        )
         .collect();
     rows.sort_by(|a, b| {
         a.device_name
@@ -280,7 +310,7 @@ pub async fn list_live<S: LiveProvider>(
     let live = state.live_registry();
     let ipmi = state.ipmi_live_registry();
     let agent = state.agent_live_registry();
-    let rows = summary_rows(&live, &ipmi, &agent);
+    let rows = summary_rows(&live, &ipmi, &agent, None);
     Ok(foims_common::ok_json(
         rows,
         msg("server.agent.list_retrieved"),
@@ -314,7 +344,8 @@ fn parse_device_ids(raw: Option<&str>) -> Vec<Uuid> {
 
 /// GET /api/agents/live/stream：SSE 变更推送。
 ///
-/// - `summary`：按观察范围节流下发全量设备摘要（仪表盘 5s，列表/详情 1s）；
+/// - `summary`：按观察范围节流下发摘要（仪表盘 5s 全量；列表/详情 1s，
+///   且只含登记设备，避免 1s 连接反复序列化数百条无关设备）；
 /// - `device`：仅当请求带 `device_id` 且该设备快照更新时下发端口明细。
 ///
 /// 同时按 `scope`/`device_ids` 登记观察租约，驱动后端切换采样档位。
@@ -343,6 +374,14 @@ pub async fn live_stream<S: LiveProvider>(
         ),
     };
     let devices = parse_device_ids(query.device_ids.as_deref());
+    // 摘要裁剪范围：仪表盘全量；列表按下发设备集合；详情只该设备。
+    // 列表集合同时含 SNMP/IPMI 的 devices.id 与 Agent 的 monitored_hosts.id，
+    // 采集侧只会命中 SNMP worker，注册进来不影响档位。
+    let summary_keep: Option<HashSet<Uuid>> = match &scope {
+        InterestScope::Dashboard => None,
+        InterestScope::Devices => Some(devices.iter().copied().collect()),
+        InterestScope::Detail(id) => Some(HashSet::from([*id])),
+    };
     let lease = state.live_interest().lease(scope, devices);
     let tick = IntervalStream::new(tokio::time::interval(Duration::from_secs(SSE_TICK_SECS)));
     let stream_state = StreamState {
@@ -363,7 +402,8 @@ pub async fn live_stream<S: LiveProvider>(
                 Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {}
                 _ => return std::future::ready(None),
             }
-            // 心跳续期：浏览器断连后租约自动过期，设备回落基线
+            // 活连接每个节拍续期，保证观察档位不因 TTL 过期而降级；
+            // 真正断连时由流对象 Drop 立即注销，TTL 只是兜底
             stream_state.lease.touch();
             let mut events: Vec<Result<Event, Infallible>> = Vec::new();
             let revision = registry.revision();
@@ -381,9 +421,12 @@ pub async fn live_stream<S: LiveProvider>(
                 stream_state.ipmi_revision = ipmi_revision;
                 stream_state.agent_revision = agent_revision;
                 stream_state.last_emit = Some(Instant::now());
-                if let Ok(data) =
-                    serde_json::to_string(&summary_rows(&registry, &ipmi_registry, &agent_registry))
-                {
+                if let Ok(data) = serde_json::to_string(&summary_rows(
+                    &registry,
+                    &ipmi_registry,
+                    &agent_registry,
+                    summary_keep.as_ref(),
+                )) {
                     events.push(Ok(Event::default().event("summary").data(data)));
                 }
             }
@@ -429,6 +472,7 @@ mod tests {
     use chrono::Utc;
     use foims_ipmi::IpmiLiveSnapshot;
     use foims_snmp::live::{LivePortSnapshot, LiveSnapshot, VendorKind};
+    use std::collections::HashSet;
     use uuid::Uuid;
 
     fn sample_snapshot(name: &str) -> LiveDeviceSnapshot {
@@ -519,11 +563,47 @@ mod tests {
         assert_eq!(row.source, "snmp");
         assert_eq!(row.device_name, "sw-1");
         assert_eq!(row.vendor, "cisco");
-        assert_eq!(row.ports_total, 2);
-        assert_eq!(row.ports_up, 1);
+        assert_eq!(row.ports_total, Some(2));
+        assert_eq!(row.ports_up, Some(1));
         assert_eq!(row.cpu_usage_pct, Some(12.5));
         // RFC 3339 秒精度 + Z 后缀
         assert!(row.collected_at.ends_with('Z'));
+    }
+
+    #[test]
+    fn 摘要_未采端口状态时up数未知() {
+        // 基线/列表/仪表盘档不下发 admin/oper，快照端口状态全为 None
+        let mut device = sample_snapshot("sw-2");
+        for port in &mut device.snapshot.ports {
+            port.admin_up = None;
+            port.oper_up = None;
+        }
+        let row = summary_row(&device);
+        assert_eq!(row.ports_up, None);
+        // 总数来自 profile，与是否采样状态无关
+        assert_eq!(row.ports_total, Some(2));
+    }
+
+    #[test]
+    fn 摘要_按设备集合裁剪() {
+        let live = LiveRegistry::new();
+        let ipmi = IpmiLiveRegistry::new();
+        let agent = AgentLiveRegistry::new();
+        let snmp_a = sample_snapshot("sw-a");
+        let snmp_b = sample_snapshot("sw-b");
+        let id_a = snmp_a.device_id;
+        live.upsert(snmp_a);
+        live.upsert(snmp_b);
+        ipmi.upsert(sample_ipmi_snapshot("bmc-1"));
+        agent.upsert(sample_agent_snapshot("host-1"));
+
+        let all = summary_rows(&live, &ipmi, &agent, None);
+        assert_eq!(all.len(), 4);
+
+        let keep = HashSet::from([id_a]);
+        let filtered = summary_rows(&live, &ipmi, &agent, Some(&keep));
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].device_id, id_a);
     }
 
     #[test]
@@ -549,7 +629,7 @@ mod tests {
         assert_eq!(row.power_on, Some(true));
         // IPMI 无 CPU/内存/端口语义
         assert_eq!(row.cpu_usage_pct, None);
-        assert_eq!(row.ports_total, 0);
+        assert_eq!(row.ports_total, None);
     }
 
     #[test]
@@ -565,7 +645,7 @@ mod tests {
         assert_eq!(row.temperature_c, Some(47.5));
         assert_eq!(row.rx_bps, Some(300.0));
         // Agent 无端口/电源语义
-        assert_eq!(row.ports_total, 0);
+        assert_eq!(row.ports_total, None);
         assert_eq!(row.power_on, None);
     }
 
@@ -578,7 +658,7 @@ mod tests {
         ipmi.upsert(sample_ipmi_snapshot("bmc-m"));
         let agent = AgentLiveRegistry::new();
         agent.upsert(sample_agent_snapshot("web-01"));
-        let names: Vec<String> = summary_rows(&registry, &ipmi, &agent)
+        let names: Vec<String> = summary_rows(&registry, &ipmi, &agent, None)
             .into_iter()
             .map(|row| row.device_name)
             .collect();
@@ -588,7 +668,7 @@ mod tests {
     #[test]
     fn 设备明细_携带端口列表() {
         let detail = device_detail(&sample_snapshot("sw-1"));
-        assert_eq!(detail.summary.ports_total, 2);
+        assert_eq!(detail.summary.ports_total, Some(2));
         assert_eq!(detail.ports.len(), 2);
         assert_eq!(detail.ports[0].if_index, 1);
         assert_eq!(detail.ports[0].oper_up, Some(true));
