@@ -21,7 +21,16 @@ monitor_if: string | null,
 /**
  * 采集端口入/出向速率（bit/s），不再全设备求和
  */
-rx_bps: number | null, tx_bps: number | null, ports_up: number, ports_total: number, partial: boolean, 
+rx_bps: number | null, tx_bps: number | null, 
+/**
+ * 端口 up 数：仅本轮采样了全端口状态（Detail 档）时有值；
+ * 基线/列表/仪表盘档不采端口状态，为 None（不可误读为 0）
+ */
+ports_up: number | null, 
+/**
+ * 端口总数：来自厂商 profile（与是否采样状态无关）；IPMI/Agent 无端口语义，为 None
+ */
+ports_total: number | null, partial: boolean, 
 /**
  * IPMI 系统电源是否开启（Get Chassis Status；SNMP 行为 None）
  */

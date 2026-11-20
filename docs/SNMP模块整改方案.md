@@ -80,7 +80,7 @@
 - 端口状态改为按列 GETBULK（`max-repetitions` 10~25，按厂商可调），标量资源组继续使用精确 GET；保留 20 OID/包的 MTU 安全线。
 - 只对 `snmp_enabled + monitored` 设备建 worker；虚拟接口在探测期过滤，避免「先全量 walk 再截断」。
 
-> **落地状态（v0.88.0）**：已实现订阅驱动分级采样——`LiveDemand` 四档（Baseline 30s 仅资源组 / Overview 5s 资源组+采集端口流量 / Watch 1s 仅资源组 / Detail 1s 全端口），SSE 带 `scope=dashboard|agents` 或 `device_id` 登记租约（TTL 15s），断连后自动回落基线；采集侧按 `LiveSampleSpec` 裁剪每轮 OID。尚未落地：端口状态 GETBULK、worker 集合按设备 SNMP 启用/监控状态过滤（当前 `load_snmp_devices` 仅按凭据+IP 选取）、实时设备数硬上限（当前仅限制单条订阅登记 500 台）。
+> **落地状态（v0.88.0）**：已实现订阅驱动分级采样——`LiveDemand` 四档（Baseline 30s 仅资源组 / Overview 5s 资源组+采集端口流量 / Watch 1s 仅资源组 / Detail 1s 全端口），SSE 带 `scope=dashboard|agents` 或 `device_id` 登记租约（TTL 15s），断连后自动回落基线；采集侧按 `LiveSampleSpec` 裁剪每轮 OID，SSE 摘要按 scope 裁剪（仪表盘全量 / 列表当前页集合 / 详情单设备），未采样端口状态的档位 `ports_up` 返回 null；基线间隔使用独立键 `baseline_interval_secs`（旧 `interval_secs` 不再读取）。尚未落地：端口状态 GETBULK、worker 集合按设备 SNMP 启用/监控状态过滤（当前 `load_snmp_devices` 仅按凭据+IP 选取）、实时设备数硬上限（当前仅限制单条订阅登记 500 台）。
 
 ### P3：重活改造（手动同步与写入）
 
@@ -105,12 +105,13 @@ retries = 2
 max_repetitions = 25          # 厂商有兼容问题时按设备/厂商下调到 10
 
 [snmp.live]
-interval_secs = 5             # 默认
-realtime_interval_secs = 1    # 仅订阅/排障设备
-realtime_max_devices = 32
-only_when_subscribed = true
+baseline_interval_secs = 30   # 无人观察（只采资源组）；旧键 interval_secs 已废弃
+overview_interval_secs = 5    # 仪表盘（资源组 + 采集端口流量）
+watch_interval_secs = 1       # 主机列表当前页（只采资源组）
+detail_interval_secs = 1      # 选中设备/端口弹窗（全端口）
+interest_ttl_secs = 15        # 观察租约 TTL（SSE 每拍续期）
 timeout_secs = 2
-max_concurrency = 32
+max_concurrency = 64
 
 [snmp.poll]
 interval_secs = 300
