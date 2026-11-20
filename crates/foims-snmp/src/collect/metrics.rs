@@ -475,45 +475,35 @@ async fn collect_cpu(
     prev: Option<CpuCounters>,
 ) -> (Option<CpuCounters>, Option<f64>) {
     let oids = cpu_raw_oids();
-    let counters = match client.get_many(&oids).await {
-        Ok(resp) => {
-            // 响应与请求等长且有序（FixedCardinality）；异常值
-            //（No Such Instance 等）归为缺失
-            let vals: Vec<Option<u64>> = resp
-                .varbinds
+    // SNMPv1 设备可能只实现部分 ssCpuRaw 计数器：批量失败时逐 OID 回退，
+    // 缺失项按 None 处理，避免一个计数器缺失导致整轮 CPU 指标丢失。
+    let varbinds = crate::live::get_many_tolerant(client, &oids).await;
+    if varbinds.is_empty() {
+        tracing::debug!("ssCpuRaw 计数器无有效响应（本轮无 CPU 指标）");
+    }
+    let vals: Vec<Option<u64>> = oids
+        .iter()
+        .map(|oid| {
+            varbinds
                 .iter()
-                .map(|vb| {
-                    if vb.value.is_exception() {
-                        None
-                    } else {
-                        vb.value.as_u64()
-                    }
-                })
-                .collect();
-            if vals.len() != oids.len() {
-                None
-            } else {
-                let idle = vals.get(CPU_RAW_IDLE_IDX).copied().flatten();
-                let wait = vals
-                    .get(CPU_RAW_WAIT_IDX)
-                    .copied()
-                    .flatten()
-                    .unwrap_or_default();
-                let total: u64 = CPU_RAW_TOTAL_IDXS
-                    .iter()
-                    .filter_map(|i| vals.get(*i).copied().flatten())
-                    .sum();
-                idle.map(|idle| CpuCounters {
-                    total,
-                    idle: idle + wait,
-                })
-            }
-        }
-        Err(e) => {
-            tracing::debug!("ssCpuRaw 计数器读取失败（本轮无 CPU 指标）: {e}");
-            None
-        }
-    };
+                .find(|vb| &vb.oid == oid)
+                .and_then(|vb| vb.value.as_u64())
+        })
+        .collect();
+    let idle = vals.get(CPU_RAW_IDLE_IDX).copied().flatten();
+    let wait = vals
+        .get(CPU_RAW_WAIT_IDX)
+        .copied()
+        .flatten()
+        .unwrap_or_default();
+    let total: u64 = CPU_RAW_TOTAL_IDXS
+        .iter()
+        .filter_map(|i| vals.get(*i).copied().flatten())
+        .sum();
+    let counters = idle.map(|idle| CpuCounters {
+        total,
+        idle: idle + wait,
+    });
     let usage = match (prev, counters) {
         (Some(prev), Some(cur)) => cpu_usage_pct(prev, cur),
         _ => None,

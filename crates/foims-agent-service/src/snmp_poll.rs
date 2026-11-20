@@ -11,10 +11,9 @@
 //! （CPU/内存/磁盘/温度/流量/负载，见 [`foims_snmp::collect::metrics`]）。
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_snmp::transport::UdpHandle;
-use async_snmp::{Client, Retry, oid};
+use async_snmp::{Client, oid};
 use chrono::Utc;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -22,7 +21,7 @@ use tokio::sync::Semaphore;
 
 use foims_snmp::collect::metrics as snmp_metrics;
 use foims_snmp::core::{
-    DeviceForSnmp, SNMP_TIMEOUT_SECS, build_auth, format_snmp_error, snmp_target,
+    DeviceForSnmp, build_auth, format_snmp_error, snmp_target, snmp_tuning,
     truncate_to_column_width,
 };
 use foims_snmp::events::record_events;
@@ -419,20 +418,19 @@ async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics
     row.flatten().and_then(|v| serde_json::from_value(v).ok())
 }
 
-/// 建立设备 SNMP 会话（周期轮询关闭内建重试：默认 Retry（3 次 × 5s +
-/// 1s 退避）会把单个 OID 拖到 23s，足以挤占下一轮调度窗口）。
+/// 建立设备 SNMP 会话。
 ///
-/// 超时口径：轮询路径以本常量 [`SNMP_TIMEOUT_SECS`] 为唯一来源构造会话；
-/// 指标采集函数则读取 `params.timeout_secs`（上游 to_snmp_params_async 统一
-/// 置为同值 5s），两处数值同源一致，改常量时需同步上游赋值。
+/// 超时/重试统一取进程级 [`snmp_tuning`]（与 `[snmp]` 配置段同源），
+/// 重传固定间隔等于单次请求超时；`retries = 0` 时只发一次。
 async fn connect_snmp(params: &foims_snmp::SnmpParamsLegacy) -> Result<Client<UdpHandle>, String> {
     let addr = snmp_target(&params.ip, params.port);
-    let timeout = Duration::from_secs(SNMP_TIMEOUT_SECS);
+    let tuning = snmp_tuning();
+    let timeout = tuning.timeout();
     let auth = build_auth(params).map_err(|m| m.log_string())?;
     Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
-        .retry(Retry::none())
+        .retry(tuning.retry())
         .connect()
         .await
         .map_err(|e| format!("创建SNMP会话失败: {}", format_snmp_error(e).log_string()))

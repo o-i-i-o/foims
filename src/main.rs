@@ -409,6 +409,11 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
+    // SNMP 超时/重试在启动早期注入进程级参数：周期轮询任务在 AppState
+    // 构造前即可能启动，必须在此之前完成初始化；配置热更新经
+    // `AppState::store_config` 同步刷新
+    foims_snmp::core::set_snmp_tuning(foims_snmp::core::SnmpTuning::from_config(&config.snmp));
+
     // 日志系统初始化含同步文件 IO（目录创建/文件打开），与其他同步
     // 文件操作同口径移出 async 上下文
     let log_files = tokio::task::block_in_place(|| foims::log::setup_logging(config.i18n.as_ref()));

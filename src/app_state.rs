@@ -96,6 +96,15 @@ impl AppState {
         self.config.load_full()
     }
 
+    /// 刷新共享配置槽，并同步进程级 SNMP 超时/重试参数。
+    ///
+    /// 所有写盘端点在落盘成功后必须经本方法更新内存配置，否则
+    /// `[snmp].timeout_secs/retries` 的修改要到重启后才生效。
+    pub fn store_config(&self, config: Arc<Config>) {
+        foims_snmp::core::set_snmp_tuning(foims_snmp::core::SnmpTuning::from_config(&config.snmp));
+        self.config.store(config);
+    }
+
     /// 借用连接池；仅初始化模式不建池（见 main.rs），此时转为统一错误。
     pub fn pool(&self) -> Result<&DbPool, AppError> {
         self.pool

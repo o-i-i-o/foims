@@ -11,7 +11,7 @@ use regex::Regex;
 
 use super::platform::PlatformCaps;
 use super::{Confidence, ProbeOp, SnmpIdentity, registry};
-use crate::live::{MAX_OIDS_PER_REQUEST, SnmpReader};
+use crate::live::{MAX_OIDS_PER_REQUEST, SnmpReader, get_many_tolerant};
 
 /// 全部探测检查的解析缓存（与 registry() 迭代顺序对齐，命中时按索引取回
 /// 规则）：OID 解析 + op=Regex 的值正则编译，非法项直接丢弃该检查。
@@ -88,7 +88,8 @@ fn check_hit(check: &CompiledCheck, v: &Value) -> bool {
 /// 主动探测识别：GET 全部探测 OID（去重、分块 ≤[`MAX_OIDS_PER_REQUEST`]），
 /// 逐规则比对全部检查（AND），首个全命中规则合成识别结果（置信度 Low：
 /// 探测 op 多为宽松子串匹配，不足以驱动自动绑定）。
-/// 请求失败静默放弃（设备可达性已由系统组 GET 证明，此处不再重试）。
+/// 单块失败只影响该块缺失的 OID，不再整轮放弃（SNMPv1 对任一不存在 OID
+/// 返回整包错误，逐 OID 回退后其余检查仍可参与比对）。
 pub async fn identify_by_probes<R: SnmpReader>(reader: &R) -> Option<SnmpIdentity> {
     let probes = &*PROBES;
     // 全部探测 OID 去重收集（Vec 线性查重，规模百级足够）
@@ -102,7 +103,7 @@ pub async fn identify_by_probes<R: SnmpReader>(reader: &R) -> Option<SnmpIdentit
     }
     let mut values: Vec<(Oid, Value)> = Vec::new();
     for chunk in oids.chunks(MAX_OIDS_PER_REQUEST) {
-        let resp = reader.get_many(chunk).await.ok()?;
+        let resp = get_many_tolerant(reader, chunk).await;
         values.extend(resp.into_iter().map(|vb| (vb.oid, vb.value)));
     }
     for (idx, checks) in probes {

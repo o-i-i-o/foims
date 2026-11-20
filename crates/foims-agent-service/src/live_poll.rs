@@ -26,8 +26,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use async_snmp::Client;
 use async_snmp::transport::UdpHandle;
-use async_snmp::{Client, Retry};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use sqlx::PgPool;
@@ -39,7 +39,7 @@ use uuid::Uuid;
 use foims_common::config::IpmiLiveConfig;
 use foims_common::config::SnmpLiveConfig;
 use foims_ipmi::{IpmiLiveSnapshot, IpmiParams};
-use foims_snmp::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use foims_snmp::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target, snmp_tuning};
 use foims_snmp::live::{LiveCollector, LiveSampleSpec, LiveSnapshot, MAX_OIDS_PER_REQUEST, probe};
 
 use crate::alert_episode::{AlertRuntime, HostRef};
@@ -587,7 +587,8 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState, spec: LiveS
     true
 }
 
-/// 建立实时采集会话：关闭内建重试，超时取实时配置（默认 2s），
+/// 建立实时采集会话：超时取实时配置（默认 2s），重传次数与间隔沿用
+/// `[snmp].retries`（间隔等于本路径超时，避免拖慢采样周期），
 /// 单请求 OID 上限与采集器分块口径一致（IPv6 载荷安全）。
 async fn connect_live(
     endpoint: &str,
@@ -598,7 +599,7 @@ async fn connect_live(
     Client::builder(endpoint, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
-        .retry(Retry::none())
+        .retry(snmp_tuning().retry_with_timeout(timeout))
         .max_oids_per_request(MAX_OIDS_PER_REQUEST)
         .connect()
         .await

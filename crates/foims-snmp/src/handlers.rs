@@ -17,7 +17,9 @@ use foims_models::SnmpTestRequest;
 
 use crate::collect::ports::get_device_ports_via_snmp;
 use crate::collect::sysinfo::get_device_info_via_snmp;
-use crate::core::{DecryptedSnmpCredentials, SnmpParamsLegacy, get_device_snmp_config, test_snmp};
+use crate::core::{
+    DecryptedSnmpCredentials, SnmpParamsLegacy, get_device_snmp_config, snmp_tuning, test_snmp,
+};
 
 /// POST /api/resources/devices/{id}/test-snmp：按设备库已存配置发起连通性
 /// 探测；路径 `id` 覆盖请求体的 `device_id`，其余口径同
@@ -105,8 +107,10 @@ pub async fn test_snmp_connection<P: DbProvider>(
         auth_pass: auth_pass.clone(),
         priv_proto: priv_proto.clone(),
         priv_pass: priv_pass.clone(),
-        // 连通性探测固定短超时，不沿用设备侧周期采集的超时配置
+        // 连通性探测固定短超时，不沿用设备侧周期采集的超时配置；
+        // 重传次数仍与全局 [snmp].retries 一致
         timeout_secs: 5,
+        retries: snmp_tuning().retries,
     };
 
     // 凭据属敏感物料，日志只记是否设置、不落明文

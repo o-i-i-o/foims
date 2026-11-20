@@ -38,18 +38,21 @@ pub async fn get_device_info_via_snmp(
     let client = Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
+        .retry(params.retry())
         .connect()
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     let sys_descr_oid = oid!(1, 3, 6, 1, 2, 1, 1, 1, 0);
     let sys_object_id_oid = oid!(1, 3, 6, 1, 2, 1, 1, 2, 0);
-    let response = client
-        .get_many(&[sys_descr_oid.clone(), sys_object_id_oid.clone()])
-        .await
-        .map_err(|e| wrap_snmp_error("server.snmp.error.request_failed", e))?;
+    // SNMPv1 对任一不存在 OID 返回整包错误：逐 OID 回退，避免 sysObjectID
+    // 缺失连带丢掉 sysDescr。
+    let response = crate::live::get_many_tolerant(
+        &client,
+        &[sys_descr_oid.clone(), sys_object_id_oid.clone()],
+    )
+    .await;
     let sys_descr = response
-        .varbinds
         .iter()
         .find(|vb| vb.oid == sys_descr_oid)
         .filter(|vb| !vb.value.is_exception())
@@ -58,7 +61,6 @@ pub async fn get_device_info_via_snmp(
         .ok_or_else(|| SnmpError::Message(msg("server.snmp.error.response_malformed")))?;
     // sysObjectID：少数设备不实现，缺失时单证据（sysDescr）仍可识别
     let object_id: Option<Oid> = response
-        .varbinds
         .iter()
         .find(|vb| vb.oid == sys_object_id_oid)
         .filter(|vb| !vb.value.is_exception())

@@ -7,6 +7,7 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 use uuid::Uuid;
 
+use foims_common::ConfigProvider;
 use foims_common::DbProvider;
 use foims_common::log_error;
 use foims_common::{AppError, msg};
@@ -25,9 +26,13 @@ const NEIGHBOR_ID_MAX_CHARS: usize = 100;
 const NEIGHBOR_TEXT_MAX_CHARS: usize = 255;
 
 /// 获取设备的 LLDP 邻居（先校验设备/IP/SNMP 配置，再走 SNMP 采集）。
+///
+/// `timeout_secs` 取 `[snmp].lldp_timeout_secs`：LLDP 表通常比系统组大，
+/// 需要独立的更长超时。
 pub async fn get_lldp_neighbors(
     pool: &sqlx::PgPool,
     device_id: &Uuid,
+    timeout_secs: u64,
 ) -> Result<Vec<LldpNeighbor>, AppError> {
     let switch = sqlx::query_as::<_, DeviceForSnmp>(
         r"SELECT
@@ -63,7 +68,8 @@ pub async fn get_lldp_neighbors(
         )));
     }
 
-    let params = switch.to_snmp_params_async(&ip_address).await?;
+    let mut params = switch.to_snmp_params_async(&ip_address).await?;
+    params.timeout_secs = timeout_secs;
     get_lldp_neighbors_via_snmp(&params).await.map_err(|e| {
         AppError::Snmp(
             msg("server.device.snmp.lldp_fetch_failed").with("error", e.message().log_string()),
@@ -101,14 +107,15 @@ pub async fn get_device_lldp_neighbors<P: DbProvider>(
 /// POST /api/resources/devices/{id}/lldp/sync：经 SNMP 采集邻居并在同一事务内
 /// upsert 全部邻居、清理消失项；设备/IP/SNMP 配置问题与采集失败均 400；
 /// 空采集视为采集异常，跳过清理保留存量。
-pub async fn sync_lldp_from_snmp<P: DbProvider>(
+pub async fn sync_lldp_from_snmp<P: ConfigProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
+    let lldp_timeout_secs = state.config().snmp.lldp_timeout_secs;
 
     // 邻居采集失败（含设备/IP/SNMP 配置问题）已带语义化错误，直接透传
-    let neighbors = get_lldp_neighbors(&conn, &device_id).await?;
+    let neighbors = get_lldp_neighbors(&conn, &device_id, lldp_timeout_secs).await?;
 
     let now = chrono::Utc::now();
     let mut synced_count = 0usize;

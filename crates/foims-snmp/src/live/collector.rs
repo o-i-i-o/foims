@@ -16,7 +16,7 @@ use futures_util::future::join_all;
 use super::profile::apply_temp_unit;
 use super::{
     DeviceProfile, EntityMem, LiveCounters, LivePortSnapshot, LiveSampleSpec, LiveSnapshot,
-    MAX_OIDS_PER_REQUEST, MemPlan, PortCounters, PortMeta,
+    MAX_OIDS_PER_REQUEST, MemPlan, PortCounters, PortMeta, cpu_pct_value,
 };
 use crate::collect::metrics::iface_rate_bps;
 
@@ -35,10 +35,13 @@ enum ReadKind {
     HcOut(u32),
     In32(u32),
     Out32(u32),
-    Cpu,
+    Cpu(usize),
     MemEntityUsage(usize),
     MemPoolUsed,
     MemPoolFree,
+    MemTotal,
+    MemUsed,
+    MemFree,
     MemHrSize,
     MemHrUsed,
     MemUcdTotal,
@@ -89,6 +92,9 @@ impl LiveCollector {
         let mut mem_entity_usage: BTreeMap<usize, f64> = BTreeMap::new();
         let mut mem_pool_used = None;
         let mut mem_pool_free = None;
+        let mut mem_total_raw = None;
+        let mut mem_used_raw = None;
+        let mut mem_free_raw = None;
         let mut mem_hr_size = None;
         let mut mem_hr_used = None;
         let mut mem_ucd_total = None;
@@ -124,9 +130,14 @@ impl LiveCollector {
                         port_out.insert(idx, v);
                     }
                 }
-                ReadKind::Cpu => {
-                    if let Some(pct) = value.as_u32().filter(|p| *p <= 100) {
-                        cpu_values.push(f64::from(pct));
+                ReadKind::Cpu(i) => {
+                    if let Some(pct) = self
+                        .profile
+                        .cpu
+                        .get(i)
+                        .and_then(|source| cpu_pct_value(value, source.precision))
+                    {
+                        cpu_values.push(pct);
                     }
                 }
                 ReadKind::MemEntityUsage(i) => {
@@ -136,6 +147,9 @@ impl LiveCollector {
                 }
                 ReadKind::MemPoolUsed => mem_pool_used = value.as_u64(),
                 ReadKind::MemPoolFree => mem_pool_free = value.as_u64(),
+                ReadKind::MemTotal => mem_total_raw = value.as_u64(),
+                ReadKind::MemUsed => mem_used_raw = value.as_u64(),
+                ReadKind::MemFree => mem_free_raw = value.as_u64(),
                 ReadKind::MemHrSize => mem_hr_size = value.as_u64(),
                 ReadKind::MemHrUsed => mem_hr_used = value.as_u64(),
                 ReadKind::MemUcdTotal => mem_ucd_total = value.as_u64(),
@@ -225,14 +239,33 @@ impl LiveCollector {
             .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m: f64| m.max(v))));
         let (mem_total, mem_used, mem_usage_pct) = match &self.profile.mem {
             MemPlan::None => (None, None, None),
-            MemPlan::Pool { .. } => match (mem_pool_used, mem_pool_free) {
+            MemPlan::Pool { scale, .. } => match (mem_pool_used, mem_pool_free) {
                 (Some(used), Some(free)) => {
+                    let used = used.saturating_mul(*scale);
+                    let free = free.saturating_mul(*scale);
                     let total = used.saturating_add(free);
                     (Some(total), Some(used), usage_pct(total, used))
                 }
                 _ => (None, None, None),
             },
             MemPlan::EntityPercent { entities } => entity_mem_totals(entities, &mem_entity_usage),
+            MemPlan::TotalFree { scale, .. } => match (mem_total_raw, mem_free_raw) {
+                (Some(total), Some(free)) => {
+                    let total = total.saturating_mul(*scale);
+                    let free = free.saturating_mul(*scale);
+                    let used = total.saturating_sub(free);
+                    (Some(total), Some(used), usage_pct(total, used))
+                }
+                _ => (None, None, None),
+            },
+            MemPlan::UsedTotal { scale, .. } => match (mem_total_raw, mem_used_raw) {
+                (Some(total), Some(used)) => {
+                    let total = total.saturating_mul(*scale);
+                    let used = used.saturating_mul(*scale);
+                    (Some(total), Some(used), usage_pct(total, used))
+                }
+                _ => (None, None, None),
+            },
             MemPlan::HrStorage { units, .. } => match (mem_hr_size, mem_hr_used) {
                 (Some(size), Some(used)) => {
                     let total = size.saturating_mul(*units);
@@ -317,14 +350,14 @@ impl LiveCollector {
                 });
             }
         }
-        for source in &self.profile.cpu {
+        for (i, source) in self.profile.cpu.iter().enumerate() {
             items.push(ReadItem {
-                oid: source.oid(),
-                kind: ReadKind::Cpu,
+                oid: source.source.oid(),
+                kind: ReadKind::Cpu(i),
             });
         }
         match &self.profile.mem {
-            MemPlan::Pool { used, free } => {
+            MemPlan::Pool { used, free, .. } => {
                 items.push(ReadItem {
                     oid: used.oid(),
                     kind: ReadKind::MemPoolUsed,
@@ -332,6 +365,26 @@ impl LiveCollector {
                 items.push(ReadItem {
                     oid: free.oid(),
                     kind: ReadKind::MemPoolFree,
+                });
+            }
+            MemPlan::TotalFree { total, free, .. } => {
+                items.push(ReadItem {
+                    oid: total.oid(),
+                    kind: ReadKind::MemTotal,
+                });
+                items.push(ReadItem {
+                    oid: free.oid(),
+                    kind: ReadKind::MemFree,
+                });
+            }
+            MemPlan::UsedTotal { total, used, .. } => {
+                items.push(ReadItem {
+                    oid: total.oid(),
+                    kind: ReadKind::MemTotal,
+                });
+                items.push(ReadItem {
+                    oid: used.oid(),
+                    kind: ReadKind::MemUsed,
                 });
             }
             MemPlan::EntityPercent { entities } => {
@@ -484,7 +537,7 @@ fn normalize_port_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::live::{PortMeta, RawSource, TempSource, TempUnit, VendorKind};
+    use crate::live::{CpuSource, PortMeta, RawSource, TempSource, TempUnit, VendorKind};
 
     fn source(arc: u32, index: u32) -> RawSource {
         RawSource::indexed(
@@ -496,7 +549,7 @@ mod tests {
     fn profile(mem: MemPlan, temp: Vec<TempSource>) -> DeviceProfile {
         DeviceProfile {
             vendor: VendorKind::Cisco,
-            cpu: vec![source(1, 1)],
+            cpu: vec![CpuSource::plain(source(1, 1))],
             mem,
             temp,
             ports: vec![PortMeta {
@@ -586,8 +639,29 @@ mod tests {
     }
 
     #[test]
+    fn cpu精度换算_正负precision() {
+        // precision=100：上游上报百分比 ×100
+        assert_eq!(cpu_pct_value(&Value::Integer(1500), 100), Some(15.0));
+        // precision=-1：上游上报空闲率，100 - raw
+        assert_eq!(cpu_pct_value(&Value::Integer(20), -1), Some(80.0));
+        // 过滤越界值，避免把负载/计数当成 CPU
+        assert_eq!(cpu_pct_value(&Value::Integer(120), 1), None);
+        assert_eq!(cpu_pct_value(&Value::Integer(0), 0), Some(0.0));
+    }
+
+    #[test]
     fn 温度换算_毫与实体单位() {
         assert_eq!(apply_temp_unit(45000.0, TempUnit::MilliCelsius), Some(45.0));
+        assert_eq!(
+            apply_temp_unit(
+                45000.0,
+                TempUnit::Scaled {
+                    divisor: 1000,
+                    multiplier: 1
+                }
+            ),
+            Some(45.0)
+        );
         let src = TempSource {
             source: source(3, 1),
             unit: TempUnit::EntitySensor {

@@ -9,6 +9,7 @@ use axum::response::Response;
 use chrono::Utc;
 use uuid::Uuid;
 
+use foims_common::ConfigProvider;
 use foims_common::DbProvider;
 use foims_common::log_error;
 use foims_common::{AppError, msg};
@@ -24,18 +25,21 @@ const INTERFACE_MAX_CHARS: usize = 50;
 /// POST /api/resources/devices/{id}/macs/sync：经 SNMP 采集设备 ARP 表并落库
 /// （逐行 SAVEPOINT 容错单行失败，采集成功即整体清理陈旧行）；未配 IP 与采集
 /// 失败均 400；观测事件落库为尽力而为旁路，不影响台账写入结果。
-pub async fn get_device_mac_table<P: DbProvider>(
+pub async fn get_device_mac_table<P: ConfigProvider>(
     State(state): State<Arc<P>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Response, AppError> {
     let conn = state.pool()?.get_conn();
+    let mac_scan_timeout_secs = state.config().snmp.mac_scan_timeout_secs;
 
     let (switch, ip_address) = get_device_snmp_config(&conn, &device_id).await?;
 
     let ip_address =
         ip_address.ok_or_else(|| AppError::Validation(msg("server.device.no_ip_configured")))?;
 
-    let snmp_params = switch.to_snmp_params_async(&ip_address).await?;
+    let mut snmp_params = switch.to_snmp_params_async(&ip_address).await?;
+    // ARP/MAC 表规模大且设备响应慢，使用独立的扫描超时
+    snmp_params.timeout_secs = mac_scan_timeout_secs;
 
     let entries = get_arp_table_via_snmp(&snmp_params)
         .await

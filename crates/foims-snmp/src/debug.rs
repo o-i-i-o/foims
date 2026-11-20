@@ -17,7 +17,7 @@ use foims_common::net::resolve_probe_ip;
 use foims_common::{AppError, AppJson, msg, ok_json};
 use foims_models::{MibEntry, MibQueryRequest, SnmpDebugRequest, SnmpDebugRow};
 
-use crate::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target};
+use crate::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target, snmp_tuning};
 
 /// GET 单次最大 OID 数：防御异常输入放大请求规模。
 const MAX_GET_OIDS: usize = 60;
@@ -56,6 +56,7 @@ pub async fn debug_snmp(AppJson(req): AppJson<SnmpDebugRequest>) -> Result<Respo
         priv_proto: req.snmp_priv_protocol.clone(),
         priv_pass: req.snmp_priv_password.clone(),
         timeout_secs: DEBUG_TIMEOUT_SECS,
+        retries: snmp_tuning().retries,
     };
 
     foims_common::log_info!(
@@ -73,6 +74,7 @@ pub async fn debug_snmp(AppJson(req): AppJson<SnmpDebugRequest>) -> Result<Respo
     let client = Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
+        .retry(params.retry())
         .connect()
         .await
         .map_err(|e| {

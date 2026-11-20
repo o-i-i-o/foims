@@ -59,6 +59,32 @@ impl SnmpReader for Client<UdpHandle> {
     }
 }
 
+/// 容忍缺失 OID 的批量 GET：先按批请求，失败（典型为 SNMPv1 任一 OID
+/// 不存在导致整包 `noSuchName`）或响应长度不符时，退化为逐 OID GET，
+/// 只保留成功且非异常的 varbind。
+///
+/// 识别/系统组等「多字段但可部分缺失」的场景必须使用本函数；纯批量性能
+/// 路径（实时采样分块）仍直连 `get_many`，由调用方按块统计失败。
+pub async fn get_many_tolerant<R: SnmpReader>(reader: &R, oids: &[Oid]) -> Vec<VarBind> {
+    if let Ok(varbinds) = reader.get_many(oids).await
+        && varbinds.len() == oids.len()
+    {
+        return varbinds;
+    }
+
+    tracing::debug!("SNMP 批量 GET 失败，回退逐 OID（{} 个）", oids.len());
+    let mut out = Vec::with_capacity(oids.len());
+    for oid in oids {
+        if let Ok(mut varbinds) = reader.get_many(std::slice::from_ref(oid)).await
+            && let Some(varbind) = varbinds.pop()
+            && !varbind.value.is_exception()
+        {
+            out.push(varbind);
+        }
+    }
+    out
+}
+
 /// 单请求 OID 上限：20 个 OID × 约 30B + v3 authPriv 头约 150B ≈ 750B，
 /// 低于 IPv6 最小 MTU 1280 对应的 UDP 安全载荷 1232B。
 pub const MAX_OIDS_PER_REQUEST: usize = 20;
@@ -121,18 +147,63 @@ impl RawSource {
     }
 }
 
+/// CPU 使用率来源：原始百分比列 + LibreNMS `processor_precision` 语义。
+///
+/// 厂商品牌库与 hrProcessorLoad 用 `precision = 1`；os_discovery 规则可能
+/// 上报 1/100 或空闲率（负 precision），换算在采集轮执行。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CpuSource {
+    pub source: RawSource,
+    pub precision: i32,
+}
+
+impl CpuSource {
+    pub fn plain(source: RawSource) -> Self {
+        Self {
+            source,
+            precision: 1,
+        }
+    }
+}
+
+/// LibreNMS `processor_precision`：正值表示 `raw / precision`，负值表示
+/// 上游上报空闲率 `100 + raw / precision`。结果必须落在 0–100。
+pub(crate) fn cpu_pct_value(value: &async_snmp::Value, precision: i32) -> Option<f64> {
+    let raw = value.as_u64()? as f64;
+    let precision = if precision == 0 { 1 } else { precision };
+    let pct = if precision < 0 {
+        100.0 + raw / precision as f64
+    } else {
+        raw / precision as f64
+    };
+    (0.0..=100.0).contains(&pct).then_some(pct)
+}
+
 /// 内存采集方案（探测期已确定索引/单位，采集期只 GET 需要的列）。
 #[derive(Debug, Clone)]
 pub enum MemPlan {
     None,
-    /// CISCO-MEMORY-POOL-MIB：used/free 两列（字节），total = used + free。
+    /// used/free 两列（单位 × scale = 字节），total = used + free。
     Pool {
         used: RawSource,
         free: RawSource,
+        scale: u64,
     },
     /// 华为/华三实体表：usage 百分比 + 探测期缓存的实体内存总量（字节）。
     EntityPercent {
         entities: Vec<EntityMem>,
+    },
+    /// total/free 两列（单位 × scale = 字节），used = total - free。
+    TotalFree {
+        total: RawSource,
+        free: RawSource,
+        scale: u64,
+    },
+    /// total/used 两列（单位 × scale = 字节），free = total - used。
+    UsedTotal {
+        total: RawSource,
+        used: RawSource,
+        scale: u64,
     },
     /// HOST-RESOURCES-MIB：Ram 行 size/used（单位块 × units）。
     HrStorage {
@@ -165,6 +236,8 @@ pub enum TempUnit {
     MilliCelsius,
     /// ENTITY-SENSOR-MIB：value × 10^(scale-9) / 10^precision。
     EntitySensor { scale: i32, precision: i32 },
+    /// LibreNMS os_discovery：value × multiplier / divisor（摄氏度）。
+    Scaled { divisor: u64, multiplier: u64 },
 }
 
 /// 单个温度传感器来源。
@@ -187,7 +260,7 @@ pub struct PortMeta {
 pub struct DeviceProfile {
     pub vendor: VendorKind,
     /// CPU 使用率来源（整数百分比，多个实体取最大值）。
-    pub cpu: Vec<RawSource>,
+    pub cpu: Vec<CpuSource>,
     pub mem: MemPlan,
     pub temp: Vec<TempSource>,
     pub ports: Vec<PortMeta>,

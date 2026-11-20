@@ -16,8 +16,10 @@
 //! 运行时零 MIB 依赖：采集是数字 OID 定向 GET，MIB 文件仅开发期查证用。
 
 mod community;
+mod discovery;
 pub mod identify;
 mod mibs;
+mod os_discovery;
 pub mod platform;
 pub mod probe;
 
@@ -28,6 +30,9 @@ use crate::live::VendorKind;
 // 识别纯函数在 vendor 根重导出：调用方（profile/sysinfo）统一走
 // `vendor::identify(...)`，无需感知子模块结构
 pub use identify::identify;
+// LibreNMS os_discovery 采集规则（CPU/内存/温度）按识别出的 OS id 查表；
+// 调用方与品牌级 OID 集按「OS 级规则 → 品牌库 → 公共链」顺序回退
+pub use discovery::{CpuRule, DiscoveryProfile, MemRule, OidColumn, TempRule, discovery_profile};
 
 /// 识别置信度：High = 双证据一致（企业号 + sysDescr 同厂商且未命中排除词），
 /// 可驱动 detected 自动绑定；Low = 单证据/冲突/排除词命中，仅作建议（§6.1）。

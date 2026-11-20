@@ -66,6 +66,7 @@ pub async fn get_entities_via_snmp(
     let client = Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
+        .retry(params.retry())
         .connect()
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
@@ -183,6 +184,7 @@ pub async fn get_sensors_via_snmp(
     let client = Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
+        .retry(params.retry())
         .connect()
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;

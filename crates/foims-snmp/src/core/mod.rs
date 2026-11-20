@@ -2,10 +2,11 @@
 
 pub mod config;
 
+use std::sync::RwLock;
 use std::time::Duration;
 
 use async_snmp::{
-    Auth, Client, Error, UsmConfig, oid,
+    Auth, Client, Error, MAX_RETRIES, Retry, UsmConfig, oid,
     v3::{AuthProtocol, PrivProtocol},
 };
 use thiserror::Error;
@@ -20,9 +21,98 @@ use foims_common::msg;
 
 pub use config::{SwitchConfigError, get_device_ip_address, get_device_snmp_config};
 
-/// SNMP 请求超时单一口径（秒）：设备参数构造（[`DeviceForSnmp::to_snmp_params_async`]）
-/// 与轮询会话（agent-service 的 connect_snmp）共用，C9：消除 10s/5s 双源。
-pub const SNMP_TIMEOUT_SECS: u64 = 5;
+/// SNMP 运行期可调参数，与 `[snmp]` 配置段同源。
+///
+/// 进程启动时从配置初始化、配置落盘成功后同步刷新（见
+/// [`set_snmp_tuning`]），使设备参数构造、采集会话与实时轮询共用同一份
+/// 超时/重试口径，避免各调用点各写一份常量。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnmpTuning {
+    /// 单次请求超时（秒）
+    pub timeout_secs: u64,
+    /// 最大重传次数（0 = 只发一次）
+    pub retries: u32,
+    /// LLDP 邻居采集超时（秒）
+    pub lldp_timeout_secs: u64,
+    /// MAC/ARP 表采集超时（秒）
+    pub mac_scan_timeout_secs: u64,
+}
+
+impl SnmpTuning {
+    /// 缺省值，与 [`foims_common::config::SnmpConfig`] 的默认值保持一致。
+    pub const DEFAULT: Self = Self {
+        timeout_secs: 5,
+        retries: 3,
+        lldp_timeout_secs: 30,
+        mac_scan_timeout_secs: 10,
+    };
+
+    /// 从配置段构造：超时下限 1 秒（0 秒会让请求必然超时），重传次数
+    /// 上限按 async-snmp 的 [`MAX_RETRIES`] 收敛。
+    #[must_use]
+    pub fn from_config(config: &foims_common::config::SnmpConfig) -> Self {
+        Self {
+            timeout_secs: config.timeout_secs.max(1),
+            retries: config.retries.min(MAX_RETRIES),
+            lldp_timeout_secs: config.lldp_timeout_secs.max(1),
+            mac_scan_timeout_secs: config.mac_scan_timeout_secs.max(1),
+        }
+    }
+
+    /// 常规请求超时。
+    #[must_use]
+    pub fn timeout(&self) -> Duration {
+        Duration::from_secs(self.timeout_secs)
+    }
+
+    /// 常规请求的重试策略：固定间隔等于单次请求超时（经典 SNMP 重传节奏）。
+    #[must_use]
+    pub fn retry(&self) -> Retry {
+        build_retry(self.retries, self.timeout())
+    }
+
+    /// 自定义超时场景的重试策略（如实时采集的短超时）。
+    #[must_use]
+    pub fn retry_with_timeout(&self, timeout: Duration) -> Retry {
+        build_retry(self.retries, timeout)
+    }
+}
+
+/// 进程级 SNMP 参数：启动时初始化，配置热更新后由 [`set_snmp_tuning`] 刷新。
+static SNMP_TUNING: RwLock<SnmpTuning> = RwLock::new(SnmpTuning::DEFAULT);
+
+/// 刷新进程级 SNMP 参数（启动与配置落盘后调用）。
+pub fn set_snmp_tuning(tuning: SnmpTuning) {
+    match SNMP_TUNING.write() {
+        Ok(mut guard) => *guard = tuning,
+        // 写锁中毒说明此前持锁线程 panic：沿用内部值继续刷新，避免配置失效
+        Err(poisoned) => *poisoned.into_inner() = tuning,
+    }
+}
+
+/// 读取当前进程级 SNMP 参数。
+#[must_use]
+pub fn snmp_tuning() -> SnmpTuning {
+    match SNMP_TUNING.read() {
+        Ok(guard) => *guard,
+        Err(poisoned) => *poisoned.into_inner(),
+    }
+}
+
+/// 按「最大重传次数 + 固定重传间隔」构造重试策略。
+///
+/// 次数为 0 时显式关闭重传；间隔至少 1ms，避免零延迟循环占用 worker。
+#[must_use]
+pub fn build_retry(retries: u32, delay: Duration) -> Retry {
+    if retries == 0 {
+        return Retry::none();
+    }
+    Retry::fixed(
+        retries.min(MAX_RETRIES),
+        delay.max(Duration::from_millis(1)),
+    )
+    .unwrap_or_else(|_error| Retry::none())
+}
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DeviceForSnmp {
@@ -47,6 +137,8 @@ impl DeviceForSnmp {
         ip_address: &str,
     ) -> Result<SnmpParamsLegacy, AppError> {
         let creds = DecryptedSnmpCredentials::from_device_snmp_async(self).await?;
+        // 超时/重试统一取进程级配置，设备侧不再各写常量
+        let tuning = snmp_tuning();
         Ok(SnmpParamsLegacy {
             ip: ip_address.to_string(),
             port: self.snmp_port.unwrap_or(161),
@@ -60,7 +152,8 @@ impl DeviceForSnmp {
             auth_pass: creds.auth_password,
             priv_proto: self.snmp_priv_protocol.clone(),
             priv_pass: creds.priv_password,
-            timeout_secs: SNMP_TIMEOUT_SECS,
+            timeout_secs: tuning.timeout_secs,
+            retries: tuning.retries,
         })
     }
 }
@@ -143,6 +236,16 @@ pub struct SnmpParamsLegacy {
     pub priv_proto: Option<String>,
     pub priv_pass: Option<String>,
     pub timeout_secs: u64,
+    /// 最大重传次数（0 = 只发一次）；由 [`SnmpTuning`] 注入
+    pub retries: u32,
+}
+
+impl SnmpParamsLegacy {
+    /// 本参数的会话重试策略：固定间隔与单次请求超时一致。
+    #[must_use]
+    pub fn retry(&self) -> Retry {
+        build_retry(self.retries, Duration::from_secs(self.timeout_secs))
+    }
 }
 
 /// 解析 SNMPv3 认证协议（复用库内 FromStr 别名表，错误为 i18n key）。
@@ -356,6 +459,7 @@ pub async fn test_snmp(params: &SnmpParamsLegacy) -> Result<String, SnmpError> {
     let client = Client::builder(&addr, auth)
         .construction_timeout(timeout)
         .request_timeout(timeout)
+        .retry(params.retry())
         .connect()
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
@@ -428,6 +532,7 @@ mod tests {
             priv_proto: None,
             priv_pass: None,
             timeout_secs: 1,
+            retries: 0,
         }
     }
 
@@ -449,6 +554,7 @@ mod tests {
             priv_proto: priv_proto.map(str::to_string),
             priv_pass: priv_proto.map(|_| "priv-pass".to_string()),
             timeout_secs: 1,
+            retries: 0,
         }
     }
 

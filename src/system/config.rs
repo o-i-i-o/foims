@@ -388,7 +388,7 @@ pub async fn update_system_config(
     })?;
     log_info!("log.config.saved", path = config_path);
 
-    state.config.store(Arc::new(new_config.clone()));
+    state.store_config(Arc::new(new_config.clone()));
 
     // JwtUtils/RateLimiter 在启动时构造一次，密钥轮换与限流调整需重启生效
     if jwt_updated || rate_limit_updated {
@@ -442,7 +442,7 @@ pub async fn disable_init_mode(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    state.config.store(Arc::new(new_config));
+    state.store_config(Arc::new(new_config));
 
     log_info!("log.system.init_disabled_restarting");
 
@@ -540,7 +540,7 @@ pub async fn restore_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    state.config.store(Arc::new(new_config));
+    state.store_config(Arc::new(new_config));
 
     Ok(foims_common::ok_json((), "server.system.config_restored"))
 }
@@ -599,7 +599,7 @@ pub async fn regenerate_enrollment_token(
         AppError::Internal(msg("server.system.config_save_failed").with("error", e))
     })?;
 
-    state.config.store(Arc::new(new_config.clone()));
+    state.store_config(Arc::new(new_config.clone()));
 
     log_info!("log.system.enrollment_token_regenerated");
 
@@ -680,7 +680,7 @@ pub async fn update_session_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    state.config.store(Arc::new(current_config));
+    state.store_config(Arc::new(current_config));
 
     Ok(foims_common::ok_json(
         (),
@@ -765,7 +765,7 @@ pub async fn update_language_setting(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    state.config.store(Arc::new(current_config));
+    state.store_config(Arc::new(current_config));
 
     Ok(foims_common::ok_json((), "server.system.language_updated"))
 }
@@ -820,7 +820,7 @@ pub async fn update_page_timeout_config(
             AppError::Internal(msg("server.system.config_write_failed").with("error", e))
         })?;
 
-    state.config.store(Arc::new(current_config));
+    state.store_config(Arc::new(current_config));
 
     Ok(foims_common::ok_json(
         (),
