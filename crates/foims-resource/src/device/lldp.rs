@@ -64,9 +64,11 @@ pub async fn get_lldp_neighbors(
     }
 
     let params = switch.to_snmp_params_async(&ip_address).await?;
-    get_lldp_neighbors_via_snmp(&params)
-        .await
-        .map_err(|e| AppError::Snmp(msg("server.device.snmp.lldp_fetch_failed").with("error", e)))
+    get_lldp_neighbors_via_snmp(&params).await.map_err(|e| {
+        AppError::Snmp(
+            msg("server.device.snmp.lldp_fetch_failed").with("error", e.message().log_string()),
+        )
+    })
 }
 
 /// GET /api/resources/devices/{id}/lldp-neighbors：读库返回已落库的 LLDP 邻居

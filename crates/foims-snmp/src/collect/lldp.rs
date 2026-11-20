@@ -4,29 +4,96 @@
 
 use std::collections::HashMap;
 
-use async_snmp::{Client, VarBind, oid};
-use tracing::debug;
+use async_snmp::{Client, VarBind, WalkMethod, WalkOptions, oid};
+use tracing::{debug, warn};
 
 use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
+/// LLDP 表 GETBULK 单次重复数，与 net-snmp snmpwalk 默认值一致。
+///
+/// 部分设备（实测华为 VRP）在 lldpRemTable 长文本列上对大重复数的 GETBULK
+/// 直接丢包（既无响应也无 tooBig），客户端按 5s×4 次重传后以 walk_failed
+/// 结束；而 10 重复的单响应体量可正常返回。
+const LLDP_WALK_MAX_REPETITIONS: u32 = 10;
+
 /// walk 单个 OID 并对每个变量调用 `process`：遇 `EndOfMibView` 正常终止，
 /// 其余异常值跳过，迭代错误冒泡。
 async fn snmp_walk<F>(
     client: &Client,
-    oid: async_snmp::Oid,
+    target: async_snmp::Oid,
     mut process: F,
 ) -> Result<(), SnmpError>
 where
     F: FnMut(&VarBind) -> Result<(), SnmpError>,
 {
-    let mut walk = client
-        .walk(oid)
-        .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
+    for vb in collect_varbinds(client, &target).await? {
+        process(&vb)?;
+    }
+
+    Ok(())
+}
+
+/// 收齐单表全部变量：先按 [`LLDP_WALK_MAX_REPETITIONS`] 做 GETBULK；失败时
+/// 对「可能由单响应过大/设备 bulk 实现异常导致」的错误降级为 GETNEXT 逐条
+/// 遍历并告警，认证/配置类错误直接冒泡（重试无意义且会翻倍失败时延）。
+///
+/// 每张表都先整体收齐再交给调用方处理，降级重试不会留下半张表的中间结果。
+async fn collect_varbinds(
+    client: &Client,
+    target: &async_snmp::Oid,
+) -> Result<Vec<VarBind>, SnmpError> {
+    let bulk = WalkOptions {
+        max_repetitions: LLDP_WALK_MAX_REPETITIONS,
+        ..WalkOptions::default()
+    };
+
+    match walk_collect(client, target, bulk).await {
+        Ok(varbinds) => Ok(varbinds),
+        Err(err) if is_bulk_retryable(&err) => {
+            warn!(
+                "LLDP walk 失败，降级 GETNEXT 重试: oid={}, error={:?}",
+                target, err
+            );
+            walk_collect(
+                client,
+                target,
+                WalkOptions {
+                    method: WalkMethod::GetNext,
+                    ..WalkOptions::default()
+                },
+            )
+            .await
+            .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))
+        }
+        Err(err) => Err(wrap_snmp_error("server.snmp.error.walk_failed", err)),
+    }
+}
+
+/// 是否值得改用 GETNEXT 重试：超时、协议错误、walk 中断与畸形响应都可能
+/// 源于设备对大重复数 GETBULK 的实现缺陷；认证/配置/网络错误不在此列。
+fn is_bulk_retryable(err: &async_snmp::Error) -> bool {
+    matches!(
+        err,
+        async_snmp::Error::Timeout { .. }
+            | async_snmp::Error::Snmp { .. }
+            | async_snmp::Error::WalkAborted { .. }
+            | async_snmp::Error::MalformedResponse { .. }
+    )
+}
+
+async fn walk_collect(
+    client: &Client,
+    target: &async_snmp::Oid,
+    options: WalkOptions,
+) -> Result<Vec<VarBind>, Box<async_snmp::Error>> {
+    let mut walk = client.walk_with(target.clone(), options)?;
+
+    let mut varbinds = Vec::new();
 
     while let Some(result) = walk.next().await {
-        let vb = result.map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))?;
+        let vb = result?;
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -35,10 +102,10 @@ where
             continue;
         }
 
-        process(&vb)?;
+        varbinds.push(vb);
     }
 
-    Ok(())
+    Ok(varbinds)
 }
 
 /// 采集 LLDP 邻居：逐表 walk ifName、lldpLocPort 与 lldpRemTable，按
