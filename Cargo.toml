@@ -1,6 +1,6 @@
 [package]
 name = "foims"
-version = "0.33.33"
+version = "0.33.34"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -86,7 +86,9 @@ hmac = "0.13.0"
 # JWT / 外部认证 / 邮件 / 2FA（主程序与 foims-auth 共享）
 jsonwebtoken = { version = "12.0.0", features = ["rust_crypto"] }
 ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
-lettre = { version = "0.11.24", features = ["tokio1", "tokio1-native-tls"] }
+# SMTP 走 rustls（ring provider + webpki-roots），与全仓 rustls 栈统一；
+# default-features = false 以剔除默认集中的 native-tls（否则 OpenSSL 仍会混入）
+lettre = { version = "0.11.24", default-features = false, features = ["smtp-transport", "pool", "hostname", "builder", "tokio1-rustls-tls"] }
 openidconnect = { version = "4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 rand = "0.10.4"
 

@@ -528,3 +528,7 @@ v0.89.6
 v0.89.7
 2026112123200001
 运行日志表头压薄（仅前端 UI 调整，z 段 +1）：v0.89.6 表格化后表头沿用 .data-table 默认纵向内边距（0.3rem）与 0.875rem 字号，日志表行密度高时头部占屏比例偏大；runtime-logs-table thead th 上下内边距收紧至 0.15rem、字号降至 0.75rem，sticky 吸附行为不变。验证：biome check、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
+
+v0.90.0
+2026112123445501
+lettre TLS 后端切换 rustls（后端依赖功能优化，y 段 +1）：依赖审计发现 lettre 经 tokio1-native-tls 把 native-tls→OpenSSL 整栈混入（与全仓 rustls/ring 栈并存，双 TLS 后端双信任源）；workspace.dependencies 的 lettre 改 default-features=false 并以 tokio1-rustls-tls（tokio1+rustls+ring+webpki-roots）显式补齐 smtp-transport/pool/hostname/builder，剔除默认集中的 native-tls。cargo tree 证明 openssl/native-tls/tokio-native-tls/openssl-sys 已全部退出依赖图（openssl-probe 残留为 rustls-native-certs 的纯 Rust 证书路径探测辅助，不链接 OpenSSL）；lettre rustls provider 解析优先取进程已安装的默认 CryptoProvider，与 main.rs 启动时显式安装的 ring 一致。foims-notify 源码零改动（smtp.rs 仅用 relay/builder_dangerous，不涉自定义 TLS connector）。验证：cargo check --workspace --all-targets、cargo clippy --release --workspace --all-targets -D warnings 通过。y 段 +1，Cargo.toml 0.33.33→0.33.34 联动，frontend/package.json 不联动；foims-notify 源码与 crate 版本均未变更
