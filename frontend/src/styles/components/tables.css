@@ -405,6 +405,7 @@
   #ip-table,
   #operation-logs-table,
   #login-logs-table,
+  #runtime-logs-table,
   #notifications-table,
   #users-table,
   #scheduled-tasks-table {
@@ -669,6 +670,23 @@
   }
   #login-logs-table th:nth-child(7) {
     width: 27%;
+  }
+
+  /* 运行日志表：序号/时间/级别/目标/消息（时间列不折行，消息列吃满剩余宽度） */
+  #runtime-logs-table th:nth-child(1) {
+    width: 6%;
+  }
+  #runtime-logs-table th:nth-child(2) {
+    width: 14%;
+  }
+  #runtime-logs-table th:nth-child(3) {
+    width: 8%;
+  }
+  #runtime-logs-table th:nth-child(4) {
+    width: 20%;
+  }
+  #runtime-logs-table th:nth-child(5) {
+    width: 52%;
   }
 
   /* 通知表：序号/时间/标题/内容/状态/操作 */

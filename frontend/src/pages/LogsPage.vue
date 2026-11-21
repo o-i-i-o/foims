@@ -490,29 +490,37 @@ const detailsLog = ref<OperationLog | null>(null);
         </div>
       </div>
       <div class="live-wrap">
-        <div ref="livePane" class="live-pane" @scroll="onLiveScroll">
-          <div v-if="liveLogs.length === 0" class="live-empty">
-            <p class="live-empty-title">{{ t("logs.live_empty") }}</p>
-            <p v-if="liveConnected && !livePaused" class="live-empty-hint">{{ t("logs.live_empty_hint") }}</p>
-          </div>
-          <p v-else-if="visibleLogs.length === 0" class="live-filter-empty">{{ t("logs.live_filter_empty") }}</p>
-          <template v-else>
-            <p
-              v-for="(line, index) in visibleLogs"
-              :key="index"
-              class="live-line"
-              :class="line.level ? `live-${line.level.toLowerCase()}` : undefined"
-            >
-              <span v-if="line.time" class="live-time">{{ formatLogTime(line.time) }}</span>
-              <span
-                v-if="line.level"
-                class="live-level-badge"
-                :class="`badge-${line.level.toLowerCase()}`"
-              >{{ line.level }}</span>
-              <span v-if="line.target" class="live-target">{{ line.target }}</span>
-              <span class="live-message">{{ line.message }}</span>
-            </p>
-          </template>
+        <div ref="livePane" class="table-container live-scroll" @scroll="onLiveScroll">
+          <table id="runtime-logs-table" class="data-table" :aria-label="t('logs.runtime_logs')">
+            <thead>
+              <tr>
+                <th class="index-column">{{ t("common.index") }}</th>
+                <th class="col-center">{{ t("logs.live_col_time") }}</th>
+                <th class="col-center">{{ t("logs.live_col_level") }}</th>
+                <th>{{ t("logs.live_col_target") }}</th>
+                <th>{{ t("logs.live_col_message") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="liveLogs.length === 0" class="empty-row">
+                <td colspan="5" class="text-center">
+                  {{ t("logs.live_empty") }}
+                  <span v-if="liveConnected && !livePaused" class="live-empty-hint">{{ t("logs.live_empty_hint") }}</span>
+                </td>
+              </tr>
+              <tr v-else-if="visibleLogs.length === 0" class="empty-row">
+                <td colspan="5" class="text-center">{{ t("logs.live_filter_empty") }}</td>
+              </tr>
+              <!-- 不符合解析格式的续行（time/level/target 为空）按原文渲染在消息列 -->
+              <tr v-for="(line, index) in visibleLogs" v-else :key="index">
+                <td class="index-column">{{ index + 1 }}</td>
+                <td class="col-center col-live-time">{{ line.time ? formatLogTime(line.time) : "" }}</td>
+                <td class="col-center" :class="line.level ? `live-lvl-${line.level.toLowerCase()}` : undefined">{{ line.level }}</td>
+                <td class="col-live-target">{{ line.target }}</td>
+                <td class="col-live-message">{{ line.message }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <button v-if="!livePinned" type="button" class="live-jump" @click="jumpToLatest">
           {{ t("logs.live_follow") }}
@@ -638,7 +646,8 @@ const detailsLog = ref<OperationLog | null>(null);
   flex-wrap: wrap;
 }
 
-/* 运行日志：工具栏（状态/级别筛选/过滤/操作）+ 终端风格滚动窗（结构化行渲染） */
+/* 运行日志：工具栏（状态/级别筛选/过滤/操作）+ 与其他页签同款
+   data-table 表格滚动窗（结构化行渲染，级别列彩色文字） */
 .live-toolbar {
   display: flex;
   align-items: center;
@@ -800,120 +809,72 @@ const detailsLog = ref<OperationLog | null>(null);
   flex-direction: column;
 }
 
-.live-pane {
+/* 运行日志滚动窗：与其他页签同款 .table-container 包裹，但在一屏布局内
+   纵向自滚（横向沿用 table-container 的 overflow-x），滚动只发生在窗格内部 */
+.live-scroll {
   flex: 1;
-  min-height: 360px;
-  overflow: auto;
-  padding: 10px 14px;
-  background: var(--log-term-bg);
-  border-radius: var(--radius-md);
+  min-height: 240px;
+  overflow-y: auto;
+}
+
+/* 表头随窗格滚动吸附：collapse 边框在 sticky 表头上会随滚动消失，
+   改用 separate + 单元格自身边框（.data-table 的上下边框仍然生效） */
+#runtime-logs-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* 日志表行密度高，表头同步压薄（收紧上下内边距与字号）避免头部占屏过高 */
+#runtime-logs-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+  font-size: 0.75rem;
+}
+
+/* 级别列着色文字（与 fftp-http 程序日志同款语义：错误红/警告黄/信息绿/调试灰） */
+.live-lvl-error {
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
+
+.live-lvl-warn {
+  color: var(--color-warning-text);
+  font-weight: 600;
+}
+
+.live-lvl-info {
+  color: var(--color-success-text);
+}
+
+.live-lvl-debug,
+.live-lvl-trace {
+  color: var(--color-text-muted);
+}
+
+/* 时间列不折行（等宽字体对齐时刻），目标列弱化显示 */
+.col-live-time {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
-  line-height: 1.8;
-}
-
-.live-pane .live-empty {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  text-align: center;
-}
-
-.live-empty-title {
-  margin: 0;
-  color: var(--log-term-muted);
-}
-
-.live-empty-hint {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-.live-pane .live-filter-empty {
-  margin: 16px 0;
-  color: var(--log-term-muted);
-  text-align: center;
-}
-
-.live-line {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 0;
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  color: var(--log-term-text);
-}
-
-.live-line:hover {
-  background: var(--log-term-hover);
-}
-
-.live-time {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-}
-
-.live-level-badge {
-  flex-shrink: 0;
-  align-self: center;
-  padding: 1px 7px;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  line-height: 1.5;
-}
-
-.badge-error {
-  color: var(--log-term-error-text);
-  background: var(--log-term-error-badge-bg);
-}
-
-.badge-warn {
-  color: var(--log-term-warn-text);
-  background: var(--log-term-warn-badge-bg);
-}
-
-.badge-info {
-  color: var(--log-term-info-text);
-  background: var(--log-term-info-badge-bg);
-}
-
-.badge-debug,
-.badge-trace {
-  color: var(--log-term-muted);
-  background: var(--log-term-muted-badge-bg);
-}
-
-.live-target {
-  flex-shrink: 0;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--log-term-faint);
+  color: var(--color-text-muted);
 }
 
-.live-message {
+.col-live-target {
+  word-break: break-all;
+  color: var(--color-text-muted);
+}
+
+.col-live-message {
   word-break: break-all;
   white-space: pre-wrap;
 }
 
-.live-line.live-warn .live-message {
-  color: var(--log-term-warn-text);
-}
-
-.live-line.live-error .live-message {
-  color: var(--log-term-error-soft);
-}
-
-.live-line.live-debug .live-message,
-.live-line.live-trace .live-message {
+.live-empty-hint {
+  display: block;
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
 
@@ -923,10 +884,10 @@ const detailsLog = ref<OperationLog | null>(null);
   right: 16px;
   bottom: 16px;
   padding: 6px 14px;
-  border: 1px solid var(--log-term-border);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: var(--log-term-btn-bg);
-  color: var(--log-term-text);
+  background: var(--color-bg-white);
+  color: var(--color-text);
   font-size: var(--font-size-xs);
   cursor: pointer;
   box-shadow: var(--shadow-md);
@@ -934,11 +895,11 @@ const detailsLog = ref<OperationLog | null>(null);
 }
 
 .live-jump:hover {
-  background: var(--log-term-border);
+  background: var(--color-bg-hover);
 }
 
 @media (width <= 768px) {
-  .live-target {
+  .col-live-target {
     display: none;
   }
 

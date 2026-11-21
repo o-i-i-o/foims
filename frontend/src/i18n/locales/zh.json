@@ -1310,6 +1310,10 @@
     "live_filter_placeholder": "过滤日志...",
     "live_filter_empty": "没有符合筛选条件的日志",
     "live_follow": "回到最新",
+    "live_col_time": "时间",
+    "live_col_level": "级别",
+    "live_col_target": "目标",
+    "live_col_message": "消息",
     "operation_types": {
       "create": "创建",
       "update": "更新",

@@ -1310,6 +1310,10 @@
     "live_filter_placeholder": "Filter logs...",
     "live_filter_empty": "No logs match the current filter",
     "live_follow": "Jump to latest",
+    "live_col_time": "Time",
+    "live_col_level": "Level",
+    "live_col_target": "Target",
+    "live_col_message": "Message",
     "operation_types": {
       "create": "Create",
       "update": "Update",

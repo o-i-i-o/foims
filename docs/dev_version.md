@@ -520,3 +520,11 @@ v0.89.4
 v0.89.5
 2026112122555001
 crates 死代码清理（无行为变化，仅 dev_version z+1）：全量 pub 项引用计数扫描（222 项）+ clippy 交叉验证后删除 foims-agent-service 三类死代码——alert_episode.rs 删除零引用的 AlertRuntime::episodes_snapshot（doc 称供 API/测试观察但均未调用）、live_interest.rs 删除零引用的 LiveInterest::has_subscribers；live_poll.rs 删除 3 个仅 #[cfg(test)] 调用的 pub age_secs 方法（LiveDeviceSnapshot/IpmiLiveDeviceSnapshot/AgentLiveDeviceSnapshot，消费方实际以 snapshot.collected_at 判新鲜度），模块头文档同步移除 age_secs 引用、测试改内联计算年龄断言；foims-ipmi Cargo.toml 移除 clippy 报告的未使用依赖 foims-auth（源码无 foims_auth 引用）。验证：cargo fmt、cargo clippy --workspace --all-targets -- -D warnings、foims-agent-service 102 项单测全部通过；仅 dev_version z+1，Cargo.toml 与 frontend/package.json 不联动
+
+v0.89.6
+2026112123080001
+日志-运行日志页样式改为表格布局（仅前端 UI 调整，z 段 +1）：参考 fftp-http 管理端程序日志 SSE 页签的表格化日志样式（时间/级别/来源/消息列、级别列彩色文字、消息列 break-all 折行、滚动窗 sticky 表头），LogsPage 运行日志由终端深色窗格（live-pane 等宽字体行渲染 + 级别徽章）改为与其他日志页签同款 data-table 表格（序号/时间/级别/目标/消息五列，级别列按 ERROR 红/WARN 黄/INFO 绿/DEBUG 灰着色），表格在 runtime-fill 一屏布局内纵向自滚、sticky 表头（border-collapse 改 separate 使吸附边框不随滚动消失）；保留工具栏全部能力（连接状态/级别 chips 计数/关键字过滤/暂停/清空/回到底部跟随），解析失败续行仍按原文渲染在消息列；tables.css 新增 runtime-logs-table 固定布局列宽，variables.css 删除随之失效的 log-term 终端色板 16 变量，i18n zh/en 新增 live_col_time/level/target/message 四列头键。SSE 数据链路（useLiveLogs）零改动。验证：npm run typecheck、npm run build、biome check 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
+
+v0.89.7
+2026112123200001
+运行日志表头压薄（仅前端 UI 调整，z 段 +1）：v0.89.6 表格化后表头沿用 .data-table 默认纵向内边距（0.3rem）与 0.875rem 字号，日志表行密度高时头部占屏比例偏大；runtime-logs-table thead th 上下内边距收紧至 0.15rem、字号降至 0.75rem，sticky 吸附行为不变。验证：biome check、npm run build 通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
