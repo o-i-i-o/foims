@@ -60,6 +60,8 @@ const url = ref(props.target?.url ?? "");
 const secret = ref("");
 const language = ref<NotifyLang>(props.target?.language ?? "zh");
 const template = ref(props.target?.template ?? "");
+// 模板占位示例为 JSON 代码语法，不经 vue-i18n 翻译（花括号会触发消息编译器插值解析）
+const TEMPLATE_PLACEHOLDER = '{"title":"{{title}}","message":"{{message}}"}';
 const ipChange = ref(props.target?.ipChange ?? true);
 const agentAlert = ref(props.target?.agentAlert ?? true);
 const snmpEvent = ref(props.target?.snmpEvent ?? true);
@@ -137,7 +139,7 @@ function handleConfirm(): void {
             v-model="template"
             rows="4"
             maxlength="4096"
-            :placeholder="t('webhook.template_placeholder')"
+            :placeholder="TEMPLATE_PLACEHOLDER"
             :aria-label="t('webhook.template')"
           ></textarea>
           <div class="form-hint">{{ t("webhook.template_hint") }}</div>
