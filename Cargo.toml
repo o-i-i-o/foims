@@ -1,6 +1,6 @@
 [package]
 name = "foims"
-version = "0.33.34"
+version = "0.33.35"
 edition.workspace = true
 authors = ["oi-io <boss@oi-io.cc>"]
 description = "FOIMS - Organization Infrastructure Management System based on Rust Axum and PostgreSQL"
@@ -92,12 +92,13 @@ lettre = { version = "0.11.24", default-features = false, features = ["smtp-tran
 openidconnect = { version = "4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 rand = "0.10.4"
 
-# Webhook 通知推送（钉钉/企业微信/通用）
-# reqwest 0.13 的 rustls feature 硬绑 aws-lc-rs（无 ring 对应项），经弱依赖
-# quinn?/rustls-aws-lc-rs 会把 aws-lc-rs 混入共享 quinn/rustls，与 ring 并存
-# 后 rustls 自动判定 CryptoProvider 直接 panic；rustls-no-provider 不注入任何
-# 提供者，由进程启动时显式安装 ring（见 src/main.rs）
-reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls-no-provider"] }
+# Webhook 通知推送（钉钉/企业微信/通用）与 SSO OIDC 出站
+# 与 oauth2/openidconnect 传递依赖的 reqwest 0.12 归并为单一版本（避免双 HTTP
+# 栈与双 hyper 连接池）；rustls-tls-native-roots 经 __rustls-ring 为
+# hyper-rustls/tokio-rustls/rustls 全链注入 ring（不引入 aws-lc-rs），信任源沿用
+# 系统 CA（rustls-native-certs），与此前 0.13 rustls-platform-verifier 的系统信任
+# 语义一致；ring 提供者仍由进程启动时显式安装（见 src/main.rs）
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 
 # Serialization
 serde = { version = "1.0.229", features = ["derive"] }
