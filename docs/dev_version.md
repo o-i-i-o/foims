@@ -504,3 +504,11 @@ v0.89.0
 v0.89.1
 2026112121135901
 发布检查 oxlint 报错修复（仅前端，z 段 +1）：release_check.sh 前端段 oxlint 报 unicorn(no-array-sort) 1 项错误——useLiveAgents.ts normalizeDeviceIds 对 Array.from(new Set(...)) 结果调用会突变更组的 Array#sort()，按规则改为返回新数组的 Array#toSorted()（语义等价：源数组本为新建副本，无行为变化）。验证：oxlint（351 文件 0 警告 0 错误）、npm run typecheck、npm run build、biome check 均通过。仅 dev_version z+1，Cargo.toml 与 frontend/package.json 不联动
+
+v0.89.2
+2026112121190101
+SNMP 图标更换（仅前端 UI 调整，z 段 +1）：icons.ts 的 snmp 图标由 activity 脉搏线（语义偏监测波形，与 SNMP 网络管理协议关联弱）更换为 lucide network 三节点拓扑图标（上节点两路引线下接左右两节点，语义为网络管理/设备互联），覆盖资源管理-设备行内 SNMP 汇聚入口与系统-通知配置 SNMP Trap 卡片两处引用，形状仍由 NavIcon 统一渲染。验证：npm run typecheck、npm run build、oxlint（0 警告 0 错误）、biome check 均通过；仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
+
+v0.89.3
+2026112121302601
+设备 SNMP 汇聚弹窗页脚修复（仅前端 UI 修复，z 段 +1）：弹窗把标签条与内嵌子弹窗（含其 footer 插槽页脚）整体放进外层可滚动的 .modal-body，内容一长页脚随内容沉到滚动区底部（实测 90vh 内对话框底边 252px 而页脚在 362px，操作按钮不可见）。修复：DeviceSnmpModal 外层 .modal-body（scoped :deep(.modal-xl > .modal-body) 锚定 xl 档，内嵌弹窗再开的子弹窗均非 xl 不误伤）改纵向 flex，标签条 flex-shrink:0 常驻顶部；modals.css 内联模式段 .modal-embedded 补 flex:1/min-height:0 占满剩余高度，.modal-embedded-body 改纵向 flex 并新增 > :first-child 规则（flex:1/min-height:0/max-height:none/overflow-y:auto）——内容首元素（.modal-body-scroll/.port-groups-container）取消固定上限、独立滚动，子弹窗页脚钉在弹窗底部常驻；MAC/观测事件等无 footer 页签内容区占满，行为不变。验证：npm run typecheck、npm run build 通过；Vite dev server 浏览器实测端口页签 footer bottom=240 与对话框底边 252-12px 内边距对齐、外层 body scrollHeight=clientHeight 不再滚动，MAC 表页签 .modal-body-scroll 内部独立滚动（318/58）；biome check 通过。仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动

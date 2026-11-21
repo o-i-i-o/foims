@@ -207,7 +207,8 @@
       "col_fw": "FW Rev",
       "col_sw": "SW Rev",
       "col_fru": "FRU",
-      "col_parent": "Parent",
+      "group_root": "Root entities (no parent)",
+      "group_parent": "Parent index",
       "fru_yes": "Yes",
       "fru_no": "No"
     },

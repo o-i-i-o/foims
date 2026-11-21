@@ -251,16 +251,30 @@
 
   /* ==================== 内联模式（ModalShell embedded） ==================== */
   /* 供汇聚弹窗（设备 SNMP 标签弹窗）把子弹窗作为标签页内容内嵌渲染：
-     无遮罩/页头/动画，仅保留 body/footer 的间距与页脚分隔线（.modal-footer
-     复用上方页脚规则，按钮变体由 buttons.css 提供）。内联体不设固定高度，
-     滚动由子弹窗自身的 .modal-body-scroll 承接。 */
+     无遮罩/页头/动画。外层 body 为纵向 flex 时本块占满剩余高度，
+     内容首元素独立滚动、footer 插槽钉在弹窗底部（不再随内容滚出可视区）。 */
   .modal-embedded {
     background: var(--color-bg-white);
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
   }
 
   .modal-embedded-body {
     padding: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 内容首元素（.modal-body-scroll/.port-groups-container 等）填满剩余高度：
+     max-height:none 取消各自固定上限，滚动由本元素弹性承接 */
+  .modal-embedded-body > :first-child {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
   }
 }

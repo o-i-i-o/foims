@@ -207,7 +207,8 @@
       "col_fw": "固件版本",
       "col_sw": "软件版本",
       "col_fru": "FRU",
-      "col_parent": "父索引",
+      "group_root": "根实体（无父索引）",
+      "group_parent": "父索引",
       "fru_yes": "是",
       "fru_no": "否"
     },

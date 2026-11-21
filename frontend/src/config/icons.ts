@@ -207,8 +207,14 @@ export const ICONS: Record<string, IconShape[]> = {
   ),
   // 自动分配 IP（闪电）
   zap: icon({ tag: "polygon", points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2" }),
-  // 设备 SNMP 汇聚入口（activity 脉搏线，语义为轮询/监测）
-  snmp: icon({ tag: "polyline", points: "22 12 18 12 15 21 9 3 6 12 2 12" }),
+  // 设备 SNMP 汇聚入口（network 三节点拓扑，语义为网络管理协议）
+  snmp: icon(
+    { tag: "rect", x: "16", y: "16", width: "6", height: "6", rx: "2" },
+    { tag: "rect", x: "2", y: "16", width: "6", height: "6", rx: "2" },
+    { tag: "rect", x: "9", y: "2", width: "6", height: "6", rx: "2" },
+    { tag: "path", d: "M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" },
+    { tag: "path", d: "M12 12V8" }
+  ),
   // 邮件（SMTP 服务器设置）
   mail: icon(
     { tag: "rect", x: "2", y: "4", width: "20", height: "16", rx: "2" },

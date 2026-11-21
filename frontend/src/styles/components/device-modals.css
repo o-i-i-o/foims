@@ -264,6 +264,21 @@
     color: var(--color-text-secondary);
   }
 
+  /* 实体清单按父索引分组的标题行（视觉与 MAC 表分组标题一致：组底色 + 左色条，
+     td 自带背景覆盖 zebra 隔行色） */
+  .lldp-table td.entity-group-cell {
+    background: var(--color-bg-hover);
+    font-weight: 700;
+    border-left: 3px solid var(--color-success);
+  }
+
+  /* 分组标题右侧条目计数：弱化展示 */
+  .lldp-table td .entity-group-count {
+    color: var(--color-text-muted);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+
   /* MAC/LLDP 模态框内的加载/失败/同步提示文本 */
   .mac-lldp-text-error {
     color: var(--color-danger);

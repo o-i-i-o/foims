@@ -83,13 +83,23 @@ const activeTab = ref<TabId>("ports");
 </template>
 
 <style scoped>
-/* 9 个标签在窄弹窗内换行排布，覆盖全局 .tabs 的 flex:1 等分（避免每个标签过窄） */
+/* 9 个标签在窄弹窗内换行排布，覆盖全局 .tabs 的 flex:1 等分（避免每个标签过窄）；
+   标签条本身在 flex 容器中固定不收缩 */
 .snmp-hub-tabs {
   flex-wrap: wrap;
   margin-bottom: 0.625rem;
+  flex-shrink: 0;
 }
 
 .snmp-hub-tabs .tab-btn {
   flex: 0 0 auto;
+}
+
+/* 外层 body 改纵向 flex：标签条常驻顶部，内嵌子弹窗（.modal-embedded）占满
+   剩余高度并独立滚动，子弹窗页脚钉在弹窗底部（锚定 .modal-xl 排除
+   内嵌弹窗再开的子弹窗，它们均无 xl 档） */
+:deep(.modal-xl > .modal-body) {
+  display: flex;
+  flex-direction: column;
 }
 </style>

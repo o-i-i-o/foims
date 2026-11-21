@@ -1,13 +1,14 @@
 <script setup lang="ts">
 /**
  * 硬件实体清单弹窗（ENTITY-MIB / ENTITY-SENSOR-MIB）：
- * - 页签「实体」：GET /devices/{id}/entities，表格列：索引/类别/名称/描述/型号/
- *   序列号/制造商/硬件版本/固件版本/软件版本/FRU/父索引；
+ * - 页签「实体」：GET /devices/{id}/entities，按父索引分组展示（组标题行含父实体
+ *   名称），表格列：索引/类别/名称/描述/型号/序列号/制造商/硬件版本/固件版本/
+ *   软件版本/FRU；
  * - 页签「传感器」：GET /devices/{id}/sensors，表格列：实体索引/类型/量纲/精度/
  *   读数/状态/名称；
  * - 同步：POST /devices/{id}/entities/sync（一次写实体 + 传感器）后重新加载。
  */
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet, apiPost } from "../../api/client";
 import ModalShell from "../ModalShell.vue";
@@ -69,6 +70,29 @@ function orDash(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === "" ? "-" : String(value);
 }
 
+// 实体表按父索引分组展示：根实体（parent_index 空/0）键为 0 排最前，
+// 其余组按父索引升序、组内按 ent_index 升序；组标题行附带父实体名称便于对照，
+// 行内父索引列随之省去（信息已由分组标题承载）
+const groupedEntities = computed(() => {
+  const groups = new Map<number, DeviceEntity[]>();
+  for (const e of entities.value) {
+    const key = e.parent_index ?? 0;
+    const list = groups.get(key);
+    if (list) list.push(e);
+    else groups.set(key, [e]);
+  }
+  return Array.from(groups.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([parent, list]) => ({
+      parent,
+      parentEntity:
+        parent === 0
+          ? null
+          : (entities.value.find((x) => x.ent_index === parent) ?? null),
+      items: [...list].sort((a, b) => a.ent_index - b.ent_index)
+    }));
+});
+
 loadData();
 </script>
 
@@ -122,26 +146,34 @@ loadData();
               <th>{{ t("device.entity.col_fw") }}</th>
               <th>{{ t("device.entity.col_sw") }}</th>
               <th>{{ t("device.entity.col_fru") }}</th>
-              <th class="lldp-col-index">{{ t("device.entity.col_parent") }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="e in entities" :key="e.ent_index">
-              <td class="lldp-index">{{ e.ent_index }}</td>
-              <td>
-                <span class="status-badge status-reserved">{{ orDash(e.ent_class) }}</span>
-              </td>
-              <td class="lldp-port">{{ orDash(e.name) }}</td>
-              <td class="lldp-desc" :title="e.descr || ''">{{ orDash(e.descr) }}</td>
-              <td>{{ orDash(e.model_name) }}</td>
-              <td>{{ orDash(e.serial_num) }}</td>
-              <td>{{ orDash(e.mfg_name) }}</td>
-              <td>{{ orDash(e.hw_rev) }}</td>
-              <td>{{ orDash(e.fw_rev) }}</td>
-              <td>{{ orDash(e.sw_rev) }}</td>
-              <td>{{ e.is_fru === null ? "-" : (e.is_fru ? t("device.entity.fru_yes") : t("device.entity.fru_no")) }}</td>
-              <td class="lldp-index">{{ orDash(e.parent_index) }}</td>
-            </tr>
+            <template v-for="group in groupedEntities" :key="group.parent">
+              <tr class="entity-group-row">
+                <td colspan="11" class="entity-group-cell">
+                  <template v-if="group.parent === 0">{{ t("device.entity.group_root") }}</template>
+                  <template v-else>{{ t("device.entity.group_parent") }} {{ group.parent }}</template>
+                  <template v-if="group.parentEntity"> · {{ group.parentEntity.name || group.parentEntity.descr }}</template>
+                  <span class="entity-group-count">({{ group.items.length }})</span>
+                </td>
+              </tr>
+              <tr v-for="e in group.items" :key="e.ent_index">
+                <td class="lldp-index">{{ e.ent_index }}</td>
+                <td>
+                  <span class="status-badge status-reserved">{{ orDash(e.ent_class) }}</span>
+                </td>
+                <td class="lldp-port">{{ orDash(e.name) }}</td>
+                <td class="lldp-desc" :title="e.descr || ''">{{ orDash(e.descr) }}</td>
+                <td>{{ orDash(e.model_name) }}</td>
+                <td>{{ orDash(e.serial_num) }}</td>
+                <td>{{ orDash(e.mfg_name) }}</td>
+                <td>{{ orDash(e.hw_rev) }}</td>
+                <td>{{ orDash(e.fw_rev) }}</td>
+                <td>{{ orDash(e.sw_rev) }}</td>
+                <td>{{ e.is_fru === null ? "-" : (e.is_fru ? t("device.entity.fru_yes") : t("device.entity.fru_no")) }}</td>
+              </tr>
+            </template>
           </tbody>
         </table>
 
