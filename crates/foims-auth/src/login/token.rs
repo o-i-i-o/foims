@@ -22,7 +22,7 @@ use foims_common::msg;
 use foims_models::User;
 
 /// POST /api/auth/logout：登出（撤销 access/refresh 令牌并清除 Cookie；
-/// 重复登出幂等；refresh 撤销或 Cookie 写入失败时登出失败，确保客户端
+/// 重复登出幂等；任一令牌撤销或 Cookie 写入失败时登出失败，确保客户端
 /// 感知会话未收尾）。
 pub async fn logout<P: AuthProvider>(
     State(state): State<Arc<P>>,
@@ -45,7 +45,12 @@ pub async fn logout<P: AuthProvider>(
                 .as_database_error()
                 .is_some_and(sqlx::error::DatabaseError::is_unique_violation);
             if !already_revoked {
-                foims_common::log_warn!("log.auth.revoke_access_token_failed", error = e);
+                // 与 refresh 撤销同口径：撤销失败必须让客户端感知登出未完成，
+                // 否则响应成功而 access 令牌在有效期内仍可用的半登出状态
+                foims_common::log_error!("log.auth.revoke_access_token_failed", error = e);
+                return Err(AppError::Database(
+                    msg("server.db.operation_failed").with("error", e),
+                ));
             }
         }
     }

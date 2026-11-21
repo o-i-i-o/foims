@@ -11,7 +11,8 @@ use foims_common::log_warn;
 use foims_models::ArpEntry;
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    wrap_snmp_error,
 };
 use crate::events::ObsEvent;
 
@@ -32,9 +33,16 @@ async fn walk_if_name_map(client: &Client) -> HashMap<u32, String> {
     let if_name_oid = oid!(1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1);
     let mut map = HashMap::new();
 
-    let Ok(mut walk) = client.walk(if_name_oid) else {
-        log_warn!("log.device.snmp.if_name_walk_failed");
-        return map;
+    let mut walk = match client.walk(if_name_oid) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：区分"设备无接口名称表"与"采集失败"
+            log_warn!(
+                "log.device.snmp.if_name_walk_failed",
+                error = format_snmp_error(e).log_string()
+            );
+            return map;
+        }
     };
 
     while let Some(result) = walk.next().await {
@@ -64,9 +72,16 @@ async fn walk_vlan_map(client: &Client) -> HashMap<String, i32> {
     let dot1q_tp_fdb_port_oid = oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 2, 2, 1, 2);
     let mut map = HashMap::new();
 
-    let Ok(mut walk) = client.walk(dot1q_tp_fdb_port_oid) else {
-        log_warn!("log.device.snmp.vlan_walk_failed");
-        return map;
+    let mut walk = match client.walk(dot1q_tp_fdb_port_oid) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：区分"设备无 VLAN 表"与"采集失败"
+            log_warn!(
+                "log.device.snmp.vlan_walk_failed",
+                error = format_snmp_error(e).log_string()
+            );
+            return map;
+        }
     };
 
     while let Some(result) = walk.next().await {

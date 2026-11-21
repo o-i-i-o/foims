@@ -1,5 +1,19 @@
 -- FOIMS 0.32.x → 0.33.x 数据库升级脚本（0.33 中版本唯一一份）
 -- 执行前置：停止 foims 服务、完成数据库备份。
+--
+-- 回滚口径（破坏性操作不可逆，务必在升级前确认备份可用）：
+--   本脚本含两处数据删除——第 9 节 devices.location 删列（存量值丢弃）与
+--   第 10 节 host_metrics_history 原始秒级层整层 DELETE（5min 桶层保留，
+--   趋势曲线不受影响）。删除的数据无法用 SQL 级 downgrade 找回，回滚的
+--   唯一完整路径 = 恢复升级前备份：
+--     1. 备份命令（升级前执行）：pg_dump -Fc -d <库名> -f foims_backup.dump
+--     2. 回滚步骤：停止 0.33 服务 → dropdb 并重建空库（或恢复同名库）→
+--        pg_restore -d <库名> foims_backup.dump → 重新部署 0.32.x 安装包。
+--   禁止"只回滚部分 schema"（如仅重加 location 列、放宽 granularity CHECK）：
+--   0.33 应用代码按新 schema 编译（建表/查询均不含 location、仅写 5/60 层），
+--   半回滚会得到与代码不匹配的库结构，故障面更大。
+--   备份验证建议：升级前用 pg_restore --list 确认 dump 可读，并记录备份
+--   文件大小与行数基线（SELECT count(*) FROM host_metrics_history 等关键表）。
 -- 变更概览（IPMI 带外采集集成主机监控）：
 --   1. devices 新增 4 个 IPMI 凭据列：username/password 均非空即视为「已配置」，
 --      不设独立开关列；password 以密文落库（AES-GCM + base64），列宽 160 容纳

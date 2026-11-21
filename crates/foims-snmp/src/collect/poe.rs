@@ -18,7 +18,8 @@ use foims_models::{DevicePoePort, PoeRecord, SNMP_EVENT_POE_OFF, SNMP_SEVERITY_W
 
 use super::ports::value_as_i32;
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    wrap_snmp_error,
 };
 use crate::events::ObsEvent;
 
@@ -40,9 +41,16 @@ async fn walk_poe_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value
         }
     };
     let mut map = HashMap::new();
-    let Ok(mut walk) = client.walk(base) else {
-        log_warn!("log.device.snmp.poe_walk_failed");
-        return map;
+    let mut walk = match client.walk(base) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：区分"设备无 PoE 表"与"采集失败"
+            log_warn!(
+                "log.device.snmp.poe_walk_failed",
+                error = format_snmp_error(e).log_string()
+            );
+            return map;
+        }
     };
     while let Some(result) = walk.next().await {
         let Ok(vb) = result else { continue };
@@ -72,9 +80,16 @@ fn i32_at(map: &HashMap<(u32, u32), Value>, key: &(u32, u32)) -> Option<i32> {
 /// 非 Cisco 设备不实现该表，walk 失败只记告警并返回空映射（实测功率落 NULL）。
 async fn walk_poe_power_consumption(client: &Client) -> HashMap<(u32, u32), f64> {
     let mut map = HashMap::new();
-    let Ok(mut walk) = client.walk(oid!(1, 3, 6, 1, 4, 1, 9, 9, 402, 1, 2, 1, 9)) else {
-        log_warn!("log.device.snmp.poe_walk_failed");
-        return map;
+    let mut walk = match client.walk(oid!(1, 3, 6, 1, 4, 1, 9, 9, 402, 1, 2, 1, 9)) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：区分"非 Cisco 无功率表"与"采集失败"
+            log_warn!(
+                "log.device.snmp.poe_walk_failed",
+                error = format_snmp_error(e).log_string()
+            );
+            return map;
+        }
     };
     while let Some(result) = walk.next().await {
         let Ok(vb) = result else { continue };

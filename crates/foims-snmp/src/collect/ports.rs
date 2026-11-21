@@ -10,7 +10,8 @@ use foims_common::log_warn;
 use foims_models::SnmpPort;
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    wrap_snmp_error,
 };
 
 /// walk 单弧索引标量表：返回（实例尾弧 → 值）映射。
@@ -25,9 +26,13 @@ pub(crate) async fn walk_index_value_map(
 ) -> HashMap<u32, Value> {
     let mut map = HashMap::new();
 
-    let Ok(mut walk) = client.walk(base) else {
-        log_warn!(warn_key);
-        return map;
+    let mut walk = match client.walk(base) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：调用方需区分"设备无此表"与"采集失败"
+            log_warn!(warn_key, error = format_snmp_error(e).log_string());
+            return map;
+        }
     };
 
     while let Some(result) = walk.next().await {

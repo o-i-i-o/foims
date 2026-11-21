@@ -14,8 +14,8 @@ use foims_common::log_warn;
 use foims_models::{CdpRecord, DeviceCdp, SNMP_EVENT_CDP_ADDED, SNMP_EVENT_CDP_REMOVED};
 
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, is_exception_literal, snmp_target,
-    wrap_snmp_error,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error,
+    is_exception_literal, snmp_target, wrap_snmp_error,
 };
 use crate::events::ObsEvent;
 
@@ -33,9 +33,16 @@ async fn walk_cdp_column(client: &Client, col: u32) -> HashMap<(u32, u32), Value
         }
     };
     let mut map = HashMap::new();
-    let Ok(mut walk) = client.walk(base) else {
-        log_warn!("log.device.snmp.cdp_walk_failed");
-        return map;
+    let mut walk = match client.walk(base) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：区分"设备无 CDP 表"与"采集失败"
+            log_warn!(
+                "log.device.snmp.cdp_walk_failed",
+                error = format_snmp_error(e).log_string()
+            );
+            return map;
+        }
     };
     while let Some(result) = walk.next().await {
         let Ok(vb) = result else { continue };

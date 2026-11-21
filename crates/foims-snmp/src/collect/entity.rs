@@ -16,7 +16,8 @@ use foims_models::{EntityRecord, SensorRecord};
 
 use super::ports::{value_as_i32, walk_index_value_map};
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
+    wrap_snmp_error,
 };
 
 /// entPhysicalClass 数值 → 可读类别名（未知值回退 `class<N>`）。
@@ -246,9 +247,16 @@ async fn walk_sensor_columns(client: &Client, col: u32) -> HashMap<u32, async_sn
         }
     };
     let mut map = HashMap::new();
-    let Ok(mut walk) = client.walk(base) else {
-        foims_common::log_warn!("log.device.snmp.sensor_walk_failed");
-        return map;
+    let mut walk = match client.walk(base) {
+        Ok(walk) => walk,
+        Err(e) => {
+            // 留痕底层错误详情：区分"设备无传感器表"与"采集失败"
+            foims_common::log_warn!(
+                "log.device.snmp.sensor_walk_failed",
+                error = format_snmp_error(e).log_string()
+            );
+            return map;
+        }
     };
     while let Some(result) = walk.next().await {
         let Ok(vb) = result else { continue };
