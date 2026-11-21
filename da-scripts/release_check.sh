@@ -15,6 +15,9 @@
 #   - cargo test 已知环境性失败降级为警告不阻断：/etc/foims/encryption.key
 #     为 root 0600，非 root 用户下 crypto::tests 固定权限拒绝（CI 无此文件，
 #     与代码无关），判定标准见 is_known_env_failure
+#   - 注入式开发环境（AI agent 沙箱）会向 LD_LIBRARY_PATH 塞入自带 libstdc++，
+#     与系统 node 所需版本不匹配（GLIBCXX not found）；node/npm 与
+#     cargo/rustc 均已验证不依赖注入库，入口处统一清空（见 main）
 
 ERROR_COUNT=0
 TOTAL_CHECKS=0
@@ -156,6 +159,10 @@ main() {
     # 切换到项目根（脚本位于 test-scripts/）
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     cd "$SCRIPT_DIR/.." || exit 1
+
+    # 清空注入式 LD_LIBRARY_PATH（见文件头差异注释第 3 条）；LD_PRELOAD 为
+    # 沙箱自身机制，不在清理范围
+    unset LD_LIBRARY_PATH
 
     echo "========================================"
     echo "   FOIMS 发布前检查（流程对齐 CI 工作流）"
