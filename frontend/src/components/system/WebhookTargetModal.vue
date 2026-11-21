@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Webhook 目标新增/编辑弹窗：名称（可选）+ 渠道类型 + 推送地址（必填，
- * 原生表单校验）+ 钉钉加签密钥（仅钉钉渠道展示，留空保留已存密钥）+
+ * 原生表单校验）+ 通用渠道自定义推送模板（仅 generic 渠道展示）+
+ * 钉钉加签密钥（仅钉钉渠道展示，留空保留已存密钥）+
  * 通知语言（推送文案按目标设置的语言取值）+ 接收内容订阅范围。
  * 确认仅回写页面草稿，统一落库由通知页"保存"承担。
  */
@@ -24,6 +25,8 @@ export interface WebhookTargetDraft {
   saved: boolean;
   /** 通知语言（推送文案按目标设置的语言取值） */
   language: NotifyLang;
+  /** 通用渠道自定义推送 JSON 模板（{{title}}/{{message}} 占位符；空 = 默认格式） */
+  template: string;
   ipChange: boolean;
   agentAlert: boolean;
   snmpEvent: boolean;
@@ -36,6 +39,7 @@ export interface WebhookTargetFormResult {
   url: string;
   secret: string;
   language: NotifyLang;
+  template: string;
   ipChange: boolean;
   agentAlert: boolean;
   snmpEvent: boolean;
@@ -55,6 +59,7 @@ const channel = ref<WebhookChannel>(props.target?.channel ?? "generic");
 const url = ref(props.target?.url ?? "");
 const secret = ref("");
 const language = ref<NotifyLang>(props.target?.language ?? "zh");
+const template = ref(props.target?.template ?? "");
 const ipChange = ref(props.target?.ipChange ?? true);
 const agentAlert = ref(props.target?.agentAlert ?? true);
 const snmpEvent = ref(props.target?.snmpEvent ?? true);
@@ -72,6 +77,7 @@ function handleConfirm(): void {
     url: url.value,
     secret: secret.value,
     language: language.value,
+    template: template.value,
     ipChange: ipChange.value,
     agentAlert: agentAlert.value,
     snmpEvent: snmpEvent.value
@@ -121,6 +127,20 @@ function handleConfirm(): void {
             :placeholder="t(channel === 'wecom' ? 'webhook.url_placeholder_wecom' : 'webhook.url_placeholder_generic')"
             :aria-label="t('webhook.url')"
           >
+        </div>
+      </div>
+      <div v-if="channel === 'generic'" class="form-row">
+        <div class="form-group">
+          <label for="webhook-target-template">{{ t("webhook.template") }}</label>
+          <textarea
+            id="webhook-target-template"
+            v-model="template"
+            rows="4"
+            maxlength="4096"
+            :placeholder="t('webhook.template_placeholder')"
+            :aria-label="t('webhook.template')"
+          ></textarea>
+          <div class="form-hint">{{ t("webhook.template_hint") }}</div>
         </div>
       </div>
       <div v-if="channel === 'dingtalk'" class="form-row">

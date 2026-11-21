@@ -15,6 +15,11 @@ secret: string,
  */
 language: NotifyLang, 
 /**
+ * 通用渠道自定义推送 JSON 模板（`{{title}}`/`{{message}}` 占位符；
+ * 空 = 默认格式；非 generic 渠道忽略，落库统一置空）
+ */
+template: string, 
+/**
  * 订阅 IP 地址变更通知（含工位设备更换；缺省按启用处理）
  */
 ip_change: boolean, 

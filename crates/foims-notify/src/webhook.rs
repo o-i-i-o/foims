@@ -14,7 +14,8 @@
 //! - 钉钉：POST markdown 消息到机器人地址，配置加签密钥时追加
 //!   `timestamp` 与 HMAC-SHA256 签名（`"{timestamp}\n{secret}"` 后 Base64）
 //! - 企业微信：POST text 消息到群机器人完整 Webhook 地址
-//! - 通用：POST JSON `{"title", "message"}` 到自定义 URL
+//! - 通用：按目标的 `template` 渲染 JSON 推送（占位符 `{{title}}`/`{{message}}`，
+//!   模板为空时默认 `{"title", "message"}`）
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -59,6 +60,10 @@ pub struct WebhookTarget {
     /// 通知语言（存量 JSON 无该字段按中文处理）
     #[serde(default)]
     pub language: NotifyLang,
+    /// 通用渠道自定义推送 JSON 模板（`{{title}}`/`{{message}}` 占位符；
+    /// 空 = 默认 `{"title","message"}` 格式；仅 generic 渠道有效）
+    #[serde(default)]
+    pub template: String,
     /// 订阅范围（flatten 平铺存储，与邮件收件人同构）
     #[serde(flatten)]
     pub scope: NotifyScope,
@@ -96,6 +101,7 @@ pub struct WebhookTargetUpsert {
     pub url: String,
     pub secret: Option<String>,
     pub language: NotifyLang,
+    pub template: String,
     pub scope: NotifyScope,
 }
 
@@ -176,6 +182,7 @@ pub async fn save_webhook_targets(
             url: upsert.url.trim().to_string(),
             secret,
             language: upsert.language,
+            template: upsert.template.clone(),
             scope: upsert.scope,
         });
     }
@@ -248,10 +255,45 @@ async fn post_json(url: &str, payload: &serde_json::Value) -> Result<(), AppErro
     Ok(())
 }
 
-/// 发送通用 Webhook：POST JSON `{"title", "message"}`。
-async fn send_generic(url: &str, title: &str, body: &str) -> Result<(), AppError> {
-    let payload = serde_json::json!({ "title": title, "message": body });
+/// 发送通用 Webhook：模板为空按默认 `{"title","message"}`，否则按自定义
+/// JSON 模板渲染（渲染失败视为配置错误，错误向上传播留痕）。
+async fn send_generic(url: &str, template: &str, title: &str, body: &str) -> Result<(), AppError> {
+    let payload = render_generic_payload(template, title, body)?;
     post_json(url, &payload).await
+}
+
+/// JSON 字符串转义内容（不含两端引号）：供模板占位符替换使用，保证替换
+/// 后的模板仍可被解析为 JSON。`&str` 序列化恒为带引号字符串且不会失败，
+/// `unwrap_or_default` 仅为类型兜底。
+fn json_escape_body(raw: &str) -> String {
+    let encoded = serde_json::to_string(raw).unwrap_or_default();
+    encoded[1..encoded.len().saturating_sub(1)].to_string()
+}
+
+/// 渲染通用渠道推送载荷：模板为空返回默认 `{"title","message"}`；否则把
+/// `{{title}}`/`{{message}}` 占位符替换为 JSON 转义后的文案，渲染结果必须
+/// 是合法 JSON（非法模板视为配置错误）。
+fn render_generic_payload(
+    template: &str,
+    title: &str,
+    body: &str,
+) -> Result<serde_json::Value, AppError> {
+    let template = template.trim();
+    let rendered = if template.is_empty() {
+        serde_json::json!({ "title": title, "message": body }).to_string()
+    } else {
+        template
+            .replace("{{title}}", &json_escape_body(title))
+            .replace("{{message}}", &json_escape_body(body))
+    };
+    serde_json::from_str(&rendered)
+        .map_err(|e| AppError::Validation(msg("server.webhook.template_invalid").with("error", e)))
+}
+
+/// 校验通用渠道推送模板：以样例文案渲染后必须可解析为 JSON，
+/// 供保存端点在落库前拦截非法模板。
+pub fn validate_generic_template(template: &str) -> Result<(), AppError> {
+    render_generic_payload(template, "FOIMS", "notification").map(|_| ())
 }
 
 /// 发送钉钉机器人消息（markdown）；配置了加签密钥时按官方口径追加
@@ -334,7 +376,9 @@ pub async fn send_notification_webhook(
         let title_text = title.pick(target.language);
         let body_text = body.pick(target.language);
         let outcome = match target.channel {
-            WebhookChannel::Generic => send_generic(&target.url, title_text, body_text).await,
+            WebhookChannel::Generic => {
+                send_generic(&target.url, &target.template, title_text, body_text).await
+            }
             WebhookChannel::DingTalk => {
                 send_dingtalk(&target.url, &target.secret, title_text, body_text).await
             }
@@ -365,7 +409,7 @@ pub async fn test_webhook_target(pool: &PgPool, target_id: &str) -> Result<(), A
     let title = message.pick(target.language);
     let body = detail.pick(target.language);
     match target.channel {
-        WebhookChannel::Generic => send_generic(&target.url, title, body).await,
+        WebhookChannel::Generic => send_generic(&target.url, &target.template, title, body).await,
         WebhookChannel::DingTalk => send_dingtalk(&target.url, &target.secret, title, body).await,
         WebhookChannel::Wecom => send_wecom(&target.url, title, body).await,
     }
@@ -418,5 +462,42 @@ mod tests {
         assert_eq!(WebhookChannel::Generic.label(), "generic");
         assert_eq!(WebhookChannel::DingTalk.label(), "dingtalk");
         assert_eq!(WebhookChannel::Wecom.label(), "wecom");
+    }
+
+    #[test]
+    fn 通用模板缺省渲染默认载荷() {
+        let payload = render_generic_payload("", "标题", "内容")
+            .unwrap_or_else(|e| panic!("空模板应渲染成功: {e}"));
+        assert_eq!(
+            payload,
+            serde_json::json!({ "title": "标题", "message": "内容" })
+        );
+    }
+
+    #[test]
+    fn 通用自定义模板按占位符渲染() {
+        let template = r#"{"msgtype":"text","content":"{{title}}: {{message}}"}"#;
+        let payload = render_generic_payload(template, "标题", "内容")
+            .unwrap_or_else(|e| panic!("合法模板应渲染成功: {e}"));
+        assert_eq!(
+            payload,
+            serde_json::json!({ "msgtype": "text", "content": "标题: 内容" })
+        );
+    }
+
+    #[test]
+    fn 通用模板文案特殊字符转义后仍为合法_json() {
+        // 文案含引号/反斜杠/换行时替换不得破坏 JSON 结构
+        let payload = render_generic_payload(r#"{"text":"{{message}}"}"#, "t", "a\"b\\c\nend")
+            .unwrap_or_else(|e| panic!("转义渲染应成功: {e}"));
+        assert_eq!(payload["text"], "a\"b\\c\nend");
+    }
+
+    #[test]
+    fn 通用非法模板渲染报错() {
+        // 未闭合 JSON 渲染后仍不可解析，应返回校验错误而非静默推送
+        assert!(render_generic_payload("{\"title\":\"{{title}}\"", "t", "b").is_err());
+        assert!(validate_generic_template("not-json-{{title}}").is_err());
+        assert!(validate_generic_template("{\"ok\":true}").is_ok());
     }
 }

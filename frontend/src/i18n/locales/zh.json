@@ -1022,6 +1022,9 @@
     "url_placeholder_generic": "接收端完整 URL",
     "url_placeholder_wecom": "群机器人完整 Webhook 地址",
     "url_hint": "通用渠道以 POST JSON（title/message 字段）推送；企业微信粘贴群机器人 Webhook 地址",
+    "template": "推送模板",
+    "template_placeholder": "{\"title\":\"{{title}}\",\"message\":\"{{message}}\"}",
+    "template_hint": "仅通用渠道生效：自定义 POST JSON 模板，支持 {{title}}（标题）与 {{message}}（正文）占位符，渲染结果须为合法 JSON，留空按默认 title/message 格式推送",
     "dingtalk_secret": "钉钉加签密钥",
     "dingtalk_secret_configured": "已配置（留空保持不变）",
     "dingtalk_secret_input": "机器人安全设置的加签密钥（SEC 开头）",
@@ -2784,6 +2787,7 @@
       "request_failed": "Webhook请求发送失败: {{error}}",
       "secret_encrypt_failed": "钉钉加签密钥加密失败",
       "target_not_found": "Webhook 目标不存在或已删除",
+      "template_invalid": "通用 Webhook 推送模板渲染结果不是合法 JSON: {{error}}",
       "test_success": "Webhook测试消息发送成功",
       "url_required": "Webhook URL 未设置",
       "validation": {
@@ -2791,6 +2795,7 @@
         "name_length": "目标名称长度不能超过100个字符",
         "secret_length": "钉钉加签密钥长度不能超过256个字符",
         "targets_length": "Webhook 目标数量不能超过20条",
+        "template_length": "推送模板长度不能超过4096个字符",
         "url_length": "Webhook URL 长度不能超过2048个字符"
       }
     },

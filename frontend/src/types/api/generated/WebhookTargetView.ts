@@ -13,4 +13,8 @@ has_secret: boolean,
 /**
  * 通知语言（存量配置无该字段按中文处理）
  */
-language: NotifyLang, ip_change: boolean, agent_alert: boolean, snmp_event: boolean, };
+language: NotifyLang, 
+/**
+ * 通用渠道自定义推送 JSON 模板（空 = 默认 title/message 格式）
+ */
+template: string, ip_change: boolean, agent_alert: boolean, snmp_event: boolean, };

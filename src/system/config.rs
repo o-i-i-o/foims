@@ -1050,6 +1050,8 @@ pub struct WebhookTargetView {
     pub has_secret: bool,
     /// 通知语言（存量配置无该字段按中文处理）
     pub language: foims_notify::NotifyLang,
+    /// 通用渠道自定义推送 JSON 模板（空 = 默认 title/message 格式）
+    pub template: String,
     pub ip_change: bool,
     pub agent_alert: bool,
     pub snmp_event: bool,
@@ -1086,6 +1088,7 @@ pub async fn get_webhook_config(
                     url: t.url,
                     has_secret: !t.secret.is_empty(),
                     language: t.language,
+                    template: t.template,
                     ip_change: t.scope.ip_change,
                     agent_alert: t.scope.agent_alert,
                     snmp_event: t.scope.snmp_event,
@@ -1113,6 +1116,11 @@ pub struct WebhookTargetPayload {
     /// 通知语言（缺省按中文处理）
     #[serde(default)]
     pub language: foims_notify::NotifyLang,
+    /// 通用渠道自定义推送 JSON 模板（`{{title}}`/`{{message}}` 占位符；
+    /// 空 = 默认格式；非 generic 渠道忽略，落库统一置空）
+    #[serde(default)]
+    #[validate(length(max = 4096, message = "server.webhook.validation.template_length"))]
+    pub template: String,
     /// 订阅 IP 地址变更通知（含工位设备更换；缺省按启用处理）
     #[serde(default = "notify_scope_default")]
     pub ip_change: bool,
@@ -1164,6 +1172,11 @@ pub async fn update_webhook_config(
             ));
         }
         validate_webhook_url("url", &target.url)?;
+        // 通用渠道自定义模板落库前校验：渲染样例文案后必须可解析为 JSON
+        if target.channel == webhook::WebhookChannel::Generic && !target.template.trim().is_empty()
+        {
+            webhook::validate_generic_template(&target.template)?;
+        }
     }
 
     let upserts = req
@@ -1181,6 +1194,12 @@ pub async fn update_webhook_config(
                 Some(t.secret.clone())
             },
             language: t.language,
+            // 模板仅通用渠道有效，其余渠道统一置空避免无效数据
+            template: if t.channel == webhook::WebhookChannel::Generic {
+                t.template.clone()
+            } else {
+                String::new()
+            },
             scope: foims_notify::NotifyScope {
                 ip_change: t.ip_change,
                 agent_alert: t.agent_alert,

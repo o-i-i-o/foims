@@ -163,6 +163,7 @@ watch(
       hasSecret: Boolean(target.has_secret),
       saved: true,
       language: target.language,
+      template: target.template ?? "",
       ipChange: target.ip_change !== false,
       agentAlert: target.agent_alert !== false,
       snmpEvent: target.snmp_event !== false
@@ -210,6 +211,7 @@ function handleTargetConfirm(result: WebhookTargetFormResult): void {
     secret: result.secret !== "" ? result.secret : draft.secret,
     hasSecret: draft.hasSecret || result.secret !== "",
     language: result.language,
+    template: result.template,
     ipChange: result.ipChange,
     agentAlert: result.agentAlert,
     snmpEvent: result.snmpEvent
@@ -252,6 +254,7 @@ async function saveWebhookConfig(): Promise<void> {
         // 加签密钥留空表示保留已存密钥（与 SMTP 密码同口径）
         secret: target.secret,
         language: target.language,
+        template: target.template,
         ip_change: target.ipChange,
         agent_alert: target.agentAlert,
         snmp_event: target.snmpEvent
