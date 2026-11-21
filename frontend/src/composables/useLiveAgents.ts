@@ -53,7 +53,7 @@ function normalizeDeviceIds(ids: readonly string[] | undefined): string {
   if (!ids || ids.length === 0) {
     return "";
   }
-  return Array.from(new Set(ids.filter(Boolean))).sort().join(",");
+  return Array.from(new Set(ids.filter(Boolean))).toSorted().join(",");
 }
 
 function buildSummaryUrl(scope: LiveScope, signature: string): string {
