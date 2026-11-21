@@ -523,14 +523,6 @@ impl AlertRuntime {
         self.policy_stale.store(true, Ordering::Relaxed);
     }
 
-    /// 当前内存中的 episode 快照（按主机/指标无序；供 API 与测试观察）。
-    pub fn episodes_snapshot(&self) -> Vec<Episode> {
-        self.episodes
-            .iter()
-            .map(|entry| entry.value().clone())
-            .collect()
-    }
-
     /// 启动时恢复既有 episode（进程重启不重复告警）。失败仅记日志：
     /// 内存态为空时最坏结果是一次重复通知，不影响采集与展示主流程。
     pub async fn hydrate(&self) {

@@ -516,3 +516,7 @@ v0.89.3
 v0.89.4
 2026112121415001
 硬件清单实体表按父索引分组展示（仅前端 UI 优化，z 段 +1）：EntityModal.vue 实体页签原为平铺 534 行长表，父子层级（机框→板卡→端口/传感器）只能靠行内父索引列对照。新增 groupedEntities computed：按 parent_index（空/0 归键 0）Map 分组，组按父索引升序、组内按 ent_index 升序；表体改为「分组标题行（colspan=11，根组显示 group_root、其余显示 父索引 N · 父实体 name/descr + 条目计数）+ 组内明细行」，行内父索引列删除（信息由组标题承载，表收窄一列），i18n zh/en 删 device.entity.col_parent、增 group_root/group_parent；device-modals.css 新增 .entity-group-cell（bg-hover + 左侧 success 色条，与 MAC 表分组标题视觉一致，td 自带背景覆盖 zebra 隔行色）与 .entity-group-count（弱化计数）。验证：npm run typecheck、npm run build、oxlint（0 警告 0 错误，sort 改 toSorted）通过；Vite dev server 浏览器实测华为 CE12812 真实数据 91 组正确渲染（根实体(2)、父索引 16777216 · CE12812 frame1(51)、各 LPU 板卡及子端口等），父索引列表头已移除；biome check 通过。仅 dev_version z+1，frontend/package.json 与 Cargo.toml 不联动
+
+v0.89.5
+2026112122555001
+crates 死代码清理（无行为变化，仅 dev_version z+1）：全量 pub 项引用计数扫描（222 项）+ clippy 交叉验证后删除 foims-agent-service 三类死代码——alert_episode.rs 删除零引用的 AlertRuntime::episodes_snapshot（doc 称供 API/测试观察但均未调用）、live_interest.rs 删除零引用的 LiveInterest::has_subscribers；live_poll.rs 删除 3 个仅 #[cfg(test)] 调用的 pub age_secs 方法（LiveDeviceSnapshot/IpmiLiveDeviceSnapshot/AgentLiveDeviceSnapshot，消费方实际以 snapshot.collected_at 判新鲜度），模块头文档同步移除 age_secs 引用、测试改内联计算年龄断言；foims-ipmi Cargo.toml 移除 clippy 报告的未使用依赖 foims-auth（源码无 foims_auth 引用）。验证：cargo fmt、cargo clippy --workspace --all-targets -- -D warnings、foims-agent-service 102 项单测全部通过；仅 dev_version z+1，Cargo.toml 与 frontend/package.json 不联动

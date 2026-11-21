@@ -39,7 +39,6 @@ thiserror = { workspace = true }
 # 本 crate 不依赖二者）
 foims-common = { path = "../foims-common" }
 foims-models = { path = "../foims-models" }
-foims-auth = { path = "../foims-auth" }
 
 [lints]
 workspace = true

@@ -14,8 +14,7 @@
 //! 变更通过重起对应 worker 生效。
 //!
 //! 快照语义：只在设备有响应时覆盖注册表；不可达期间保留最后一份成功快照，
-//! 消费方以 `snapshot.collected_at` 判断新鲜度（见
-//! [`LiveDeviceSnapshot::age_secs`]），不要仅凭条目存在判定在线。
+//! 消费方以 `snapshot.collected_at` 判断新鲜度，不要仅凭条目存在判定在线。
 //!
 //! 文件末尾另承载 Agent 上报来源的实时注册表（[`AgentLiveRegistry`]）：
 //! 无采集 worker，写入方为 [`crate::ingest`]（合法上报入库成功即覆盖），
@@ -64,13 +63,6 @@ pub struct LiveDeviceSnapshot {
     pub device_name: String,
     pub ip: String,
     pub snapshot: LiveSnapshot,
-}
-
-impl LiveDeviceSnapshot {
-    /// 快照年龄（秒，负值归零）：消费方据此过滤陈旧数据。
-    pub fn age_secs(&self, now: DateTime<Utc>) -> i64 {
-        (now - self.snapshot.collected_at).num_seconds().max(0)
-    }
 }
 
 /// 实时快照注册表：设备 ID → 最近一次成功快照。
@@ -626,13 +618,6 @@ pub struct IpmiLiveDeviceSnapshot {
     pub snapshot: IpmiLiveSnapshot,
 }
 
-impl IpmiLiveDeviceSnapshot {
-    /// 快照年龄（秒，负值归零）：消费方据此过滤陈旧数据。
-    pub fn age_secs(&self, now: DateTime<Utc>) -> i64 {
-        (now - self.snapshot.collected_at).num_seconds().max(0)
-    }
-}
-
 /// IPMI 实时快照注册表：设备 ID → 最近一次成功快照（结构对齐 [`LiveRegistry`]）。
 #[derive(Debug, Default)]
 pub struct IpmiLiveRegistry {
@@ -1006,13 +991,6 @@ pub struct AgentLiveDeviceSnapshot {
     pub snapshot: AgentLiveSnapshot,
 }
 
-impl AgentLiveDeviceSnapshot {
-    /// 快照年龄（秒，负值归零）：消费方据此过滤陈旧数据。
-    pub fn age_secs(&self, now: DateTime<Utc>) -> i64 {
-        (now - self.snapshot.collected_at).num_seconds().max(0)
-    }
-}
-
 /// Agent 实时快照注册表：machine_id → 最近一次成功上报的快照
 /// （结构对齐 [`LiveRegistry`]；主机删除后 agent 停报的残留条目由消费方
 /// 按 `collected_at` 新鲜度过滤，进程重启自然清空）。
@@ -1132,7 +1110,12 @@ mod tests {
         assert_eq!(registry.len(), 1);
         let entry = registry.get(id).expect("刚写入的快照应可读");
         assert_eq!(entry.device_name, "sw-test");
-        assert_eq!(entry.age_secs(Utc::now()), 0);
+        assert_eq!(
+            (Utc::now() - entry.snapshot.collected_at)
+                .num_seconds()
+                .max(0),
+            0
+        );
         assert_eq!(registry.all().len(), 1);
         registry.remove(id);
         assert!(registry.is_empty());

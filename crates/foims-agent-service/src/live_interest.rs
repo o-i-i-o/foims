@@ -113,15 +113,6 @@ impl LiveInterest {
         demand
     }
 
-    /// 当前是否存在任何有效订阅（用于日志/调试）。
-    pub fn has_subscribers(&self) -> bool {
-        let now = Instant::now();
-        self.lock()
-            .entries
-            .values()
-            .any(|entry| entry.expires > now)
-    }
-
     fn touch(&self, id: u64) {
         let mut inner = self.lock();
         if let Some(entry) = inner.entries.get_mut(&id) {
