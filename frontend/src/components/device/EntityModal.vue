@@ -82,14 +82,14 @@ const groupedEntities = computed(() => {
     else groups.set(key, [e]);
   }
   return Array.from(groups.entries())
-    .sort((a, b) => a[0] - b[0])
+    .toSorted((a, b) => a[0] - b[0])
     .map(([parent, list]) => ({
       parent,
       parentEntity:
         parent === 0
           ? null
           : (entities.value.find((x) => x.ent_index === parent) ?? null),
-      items: [...list].sort((a, b) => a.ent_index - b.ent_index)
+      items: list.toSorted((a, b) => a.ent_index - b.ent_index)
     }));
 });
 
