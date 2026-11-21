@@ -124,8 +124,9 @@ pub async fn load_webhook_targets_raw(pool: &PgPool) -> Result<Vec<WebhookTarget
     }
 }
 
-/// 读取目标列表（加签密钥已解密为明文）；查询失败或密钥解密失败时按
-/// 无目标降级并留痕（通知缺失的代价远小于阻塞业务，与 SMTP 读取降级口径一致）。
+/// 读取目标列表（加签密钥已解密为明文）；查询失败按无目标降级并留痕
+/// （通知缺失的代价远小于阻塞业务，与 SMTP 读取降级口径一致）。单目标
+/// 密钥解密失败仅跳过该目标并留痕，不影响其余目标的通知投递。
 pub async fn load_webhook_targets(pool: &PgPool) -> Vec<WebhookTarget> {
     let raw = match load_webhook_targets_raw(pool).await {
         Ok(raw) => raw,
@@ -140,8 +141,14 @@ pub async fn load_webhook_targets(pool: &PgPool) -> Vec<WebhookTarget> {
             match decrypt_password_async(std::mem::take(&mut target.secret)).await {
                 Ok(plain) => target.secret = plain,
                 Err(e) => {
-                    log_error!("log.webhook.config_query_failed", error = e);
-                    return Vec::new();
+                    // 单目标密钥损坏（如主密钥轮换后未更新该目标）只影响自身，
+                    // 不得连带丢弃其余目标的告警
+                    log_error!(
+                        "log.webhook.target_decrypt_failed",
+                        id = target.id.clone(),
+                        error = e
+                    );
+                    continue;
                 }
             }
         }

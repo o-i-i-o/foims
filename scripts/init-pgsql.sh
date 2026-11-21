@@ -114,11 +114,14 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "更新配置文件: $CONFIG_FILE"
     echo "Updating config file: $CONFIG_FILE"
     
-    sed -i "s/^username = .*/username = \"$PG_USER\"/" "$CONFIG_FILE"
-    sed -i "s/^password = .*/password = \"$PG_PASSWORD\"/" "$CONFIG_FILE"
-    sed -i "s/^database = .*/database = \"$PG_DATABASE\"/" "$CONFIG_FILE"
-    sed -i "s/^host = .*/host = \"$PG_HOST\"/" "$CONFIG_FILE"
-    sed -i "s/^port = .*/port = $PG_PORT/" "$CONFIG_FILE"
+    # 仅替换 [database] 段内的连接项：config.toml 中 [server].host（公共 URL
+    # 兼容字段）与其他段落的 port（如 SNMP trap 162）同名，不加段限定会被
+    # 全文误改（GNU sed 范围：从 [database] 行起、至下一个段头止）
+    sed -i '/^\[database\]/,/^\[/ s/^username = .*/username = "$PG_USER"/' "$CONFIG_FILE"
+    sed -i '/^\[database\]/,/^\[/ s/^password = .*/password = "$PG_PASSWORD"/' "$CONFIG_FILE"
+    sed -i '/^\[database\]/,/^\[/ s/^database = .*/database = "$PG_DATABASE"/' "$CONFIG_FILE"
+    sed -i '/^\[database\]/,/^\[/ s/^host = .*/host = "$PG_HOST"/' "$CONFIG_FILE"
+    sed -i '/^\[database\]/,/^\[/ s/^port = .*/port = $PG_PORT/' "$CONFIG_FILE"
     
     echo "配置文件已更新"
     echo "Config file updated"

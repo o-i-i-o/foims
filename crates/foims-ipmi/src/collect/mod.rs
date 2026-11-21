@@ -7,7 +7,7 @@
 use ruipmi::{IpmiClient, SdrRecord, calc_sensor_reading, parse_sdr_header, parse_sdr_record};
 use serde::Serialize;
 
-use foims_common::msg;
+use foims_common::{log_warn, msg};
 
 use crate::core::{DeviceIdInfo, IpmiErrorExt, read_device_id, take_response};
 
@@ -87,7 +87,18 @@ pub fn max_of_temps(temps: &[SensorValue]) -> Option<f64> {
 /// 会话建立/关闭由调用方管理（agent-service 侧的实时 worker 复用会话）。
 pub async fn collect(client: &mut IpmiClient) -> Result<IpmiReading, IpmiErrorExt> {
     let device = read_device_id(client).await?;
-    let power_on = read_power_status(client).await.unwrap_or(false);
+    // 电源状态读取失败按"关机"降级并留痕（IpmiReading 无"未知"态，改模型影响
+    // 面过大）：留痕后运维可区分"确实关机"与"读取失败"，温度/风扇采集不因此中断
+    let power_on = match read_power_status(client).await {
+        Ok(value) => value,
+        Err(e) => {
+            log_warn!(
+                "log.device.ipmi.power_status_read_failed",
+                error = e.message().log_string()
+            );
+            false
+        }
+    };
     let (temps, fans, volts) = read_sensors(client).await?;
     let max_temp = max_of_temps(&temps);
     Ok(IpmiReading {

@@ -175,6 +175,7 @@ log:
       vlan_walk_failed: "SNMP walk VLAN映射失败"
     ipmi:
       loopback_ip_allowed: "目标IP {{ip}} 为回环地址，允许连接"
+      power_status_read_failed: "IPMI 电源状态读取失败，已按关机处理: {{error}}"
       private_ip_allowed: "目标IP {{ip}} 为私有地址，允许连接"
       test_connecting: "开始连接 BMC: {{ip}} (认证算法: {{auth_algo}})"
       test_params: "测试参数: ip={{ip}}, auth_algo={{auth_algo}}"
@@ -322,6 +323,7 @@ log:
     config_query_failed: "查询Webhook配置失败，已按全部未配置处理: {{error}}"
     send_failed: "Webhook通知发送失败 (channel: {{channel}}): {{error}}"
     sent: "Webhook通知发送成功 (channel: {{channel}})"
+    target_decrypt_failed: "Webhook目标 {{id}} 密钥解密失败，已跳过该目标: {{error}}"
   system:
     db_check_failed: "数据库连接检查失败: {{error}}"
     disable_init_requested: "收到关闭初始化模式请求"

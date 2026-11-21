@@ -175,6 +175,7 @@ log:
       vlan_walk_failed: "SNMP walk for VLAN map failed"
     ipmi:
       loopback_ip_allowed: "Target IP {{ip}} is loopback, connection allowed"
+      power_status_read_failed: "Failed to read IPMI power status, treated as powered off: {{error}}"
       private_ip_allowed: "Target IP {{ip}} is private, connection allowed"
       test_connecting: "Connecting to BMC: {{ip}} (auth algorithm: {{auth_algo}})"
       test_params: "Test params: ip={{ip}}, auth_algo={{auth_algo}}"
@@ -322,6 +323,7 @@ log:
     config_query_failed: "Failed to query webhook configuration, treated as unconfigured: {{error}}"
     send_failed: "Webhook notification failed (channel: {{channel}}): {{error}}"
     sent: "Webhook notification sent (channel: {{channel}})"
+    target_decrypt_failed: "Failed to decrypt secret for webhook target {{id}}, target skipped: {{error}}"
   system:
     db_check_failed: "Database connection check failed: {{error}}"
     disable_init_requested: "Disable init mode request received"

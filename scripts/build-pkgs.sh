@@ -898,7 +898,7 @@ fi
 /var/log/foims
 %dir /etc/foims
 %config(noreplace) /etc/foims/config.toml
-/etc/nginx/conf.d/foims.conf
+%config(noreplace) /etc/nginx/conf.d/foims.conf
 /usr/lib/systemd/system/foims.service
 /usr/share/foims/deploy
 /usr/share/foims/scripts
