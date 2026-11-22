@@ -102,9 +102,8 @@ jobs:
   #
   # matrix 双架构（x86_64 / aarch64）：aarch64 用 GitHub 原生 ARM runner，
 	# 不走 zig 交叉——build-pkgs.sh 以 dpkg --print-architecture 取架构，
-	# ARM runner 上原生直接出 arm64 的 deb/rpm/zip 三格式包，脚本零改动
-	# （全仓 TLS 统一 rustls，无 libssl 交叉链接问题）。检查门
-	# （fmt/clippy/test/TS 漂移）
+	# ARM runner 上原生直接出 arm64 的 deb/rpm/zip 三格式包，脚本零改动。
+	# 检查门（fmt/clippy/test/TS 漂移）
   # 与架构无关，只在 x86_64 leg 执行一次；aarch64 leg 仅编译打包，
   # 不重复检查门
   build:
@@ -131,9 +130,7 @@ jobs:
       # build-essential/pkg-config 为主程序构建依赖；rpm/zip 供
       # build-pkgs.sh 打包，lintian 为 DEB 包检查。GitHub 镜像虽预装部分
       # 工具，但各架构镜像清单并不保证一致，显式声明避免 aarch64 leg 在
-      # 打包阶段才失败（全仓 TLS 统一 rustls，Cargo.lock 无 openssl-sys，
-      # 不需要 libssl-dev；sqlx postgres 为纯 Rust 协议实现，Cargo.lock
-      # 无 pq-sys，不需要 libpq-dev）
+      # 打包阶段才失败
       - name: 安装系统依赖
         run: |
           sudo apt-get update

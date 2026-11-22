@@ -584,3 +584,7 @@ CI 系统依赖移除 libssl-dev（ci.yml 与 release.yml 安装步骤，z 段 +
 v0.93.7
 2026112216004201
 CI 系统依赖移除 libpq-dev（ci.yml 与 release.yml 安装步骤，z 段 +1）：前置验证 Cargo.lock 全文件不区分大小写无「pq」命中（无 pq-sys/libpq-sys），sqlx postgres feature 为 sqlx-postgres 纯 Rust 协议实现，两工作流无 psql/postgres service 使用，libpq-dev 提供的开发头文件与 pg_config 无消费者，对 CI 构建无作用；apt-get 列表删除 libpq-dev，注释主程序构建依赖收敛为 build-essential/pkg-config 并补记不需要 libpq-dev 的原因。至此 CI 系统依赖为 build-essential/pkg-config/lintian/rpm/zip。验证：全仓 grep libpq-dev 在构建命令中归零（仅注释说明与版本记录保留），YAML 结构未动。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.8
+2026112216145201
+清理依赖移除后的过度注释（ci.yml 与 release.yml，z 段 +1）：按「移除依赖即全局清理相关文本，注释不再强调不用某依赖」原则，删除 4 处括注性冗余说明——ci.yml/release.yml 安装依赖注释中「全仓 TLS 统一 rustls，Cargo.lock 无 openssl-sys 不需要 libssl-dev；sqlx postgres 纯 Rust 实现不需要 libpq-dev」与 ARM runner 注释中「全仓 TLS 统一 rustls，无 libssl 交叉链接问题」，注释回归「依赖清单 + 为何显式声明」本职；Cargo.toml lettre 的 default-features=false 说明保留（该 flag 缺省即静默带回 native-tls，属易混淆例外）。验证：工作流注释无「不需要 libssl-dev/不需要 libpq-dev/无 libssl」表述残留。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
