@@ -297,16 +297,16 @@ cd frontend && npm run build
 
 # CSS 结构与格式 lint（根 biome.json；CSS 归 Biome，无 stylelint）
 # 规范命令（与 CI 完全一致，版本固定）：
-npx --yes @biomejs/biome@2.6.3 check frontend
+npx --yes @biomejs/biome@2.6.8 check frontend
 # 本机已装同版本 devDependency 时可直接：npx biome check frontend
 
 # JS 质量 lint（根 .oxlintrc.json；frontend/dist/ 已忽略）
-npx oxlint@1.89.0
+npx oxlint@1.94.0
 
-# lint 工具链版本升级：一次改写全部引用点（ci.yml / package.json /
+# lint 工具链版本升级：一次改写全部引用点（ci.yml / release.yml / package.json /
 # biome.json 的 $schema / 本文），再安装本机二进制 + 探针验证 + 全量检查
 bash da-scripts/upgrade-lint-tools.sh           # 升到 npm latest
-bash da-scripts/upgrade-lint-tools.sh --check   # 只校验四处一致性与本机版本
+bash da-scripts/upgrade-lint-tools.sh --check   # 只校验五处一致性与本机版本
 
 # 可视化纯函数自检（geometry 与 viewmodel 两个可执行脚本）
 cd frontend && npm run selfcheck:viz

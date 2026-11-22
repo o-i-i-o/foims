@@ -84,10 +84,10 @@ jobs:
       # $schema（文档命令示例同步）；升级统一走
       # da-scripts/upgrade-lint-tools.sh，自动改全部引用点并附探针验证
       - name: Biome（CSS + 格式检查）
-        run: npx --yes @biomejs/biome@2.6.3 check frontend
+        run: npx --yes @biomejs/biome@2.6.8 check frontend
 
       - name: Oxlint（JS 质量检查）
-        run: npx --yes oxlint@1.89.0
+        run: npx --yes oxlint@1.94.0
 
       # 可视化纯函数自检（geometry/viewmodel，纯逻辑无浏览器依赖），
       # 与后端单测同源把关视图模型计算，防止纯函数层回归无人拦截

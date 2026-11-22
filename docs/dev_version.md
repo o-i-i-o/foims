@@ -564,3 +564,11 @@ v0.93.1
 v0.93.2
 2026112212184601
 清理 web-archive（旧原生 JS 前端存档）删除后的文档残留（仅文档/注释/配置，z 段 +1）：AGENTS.md、README.md、README_EN.md、docs/code-style.md（4 处）、docs/CSS-style.md、docs/dev_version.md 头部规则、scripts/build-pkgs.sh、.github/workflows/ci.yml 与 release.yml 注释删除 web-archive/旧原生 JS 存档描述；.gitignore 删除 web-archive/.trae/ 与 .lighthouseci/ 条目，.oxlintrc.json ignorePatterns 与 biome.json files.includes 移除 web-archive 排除项；连带去除 dev_version.md 头部「旧 bump_static_version.sh/?v=/MODULE_VERSION 机制已废弃」历史说明与 code-style.md「词条占位符维持旧版」表述（改为「统一 `{{name}}` 写法」）；docs/dev_version_achived_20261030.md 为历史归档原样保留，build-pkgs.sh 中 /opt/foims 清理逻辑为在途升级功能保留。验证：biome check frontend、oxlint 通过，bash -n build-pkgs.sh 语法检查通过，全仓 grep（除归档文档）web-archive/原生 JS/legacyBridge 引用归零。仅 dev_version z+1，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.3
+2026112212450001
+da-scripts/snmp_test.sh 实现头部声明的 -3/-2 用法并新增 -h 主机、-o OID 选项（仅开发测试脚本，z 段 +1）：原脚本无参数处理，固定依次执行 v3 与 v2c 两条 snmpget；改为 getopts 解析 -3/-2/-h/-o（选项串 32h:o:，-3/-2 为无值开关，任意顺序可组合），HOST/OID 缺省 localhost 与 1.3.6.1.2.1.1.1.0（sysDescr），命中 -3/-2 后 exec 对应 snmpget 透传退出码；无 -3/-2 或非法选项输出用法到 stderr 退出码 1；参数引用加双引号防分词。验证：sh -n 语法通过，-2/-3 各自带与不带 -h/-o 共 4 组调用均以正确参数执行 snmpget（本机无 snmpd 返回 Timeout 属预期），无参与 -x 均输出用法退出 1。无业务代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.4
+2026112212522101
+lint 工具链升级 biome 2.6.3→2.6.8、oxlint 1.89.0→1.94.0（仅开发工具链，z 段 +1）：走 da-scripts/upgrade-lint-tools.sh 升到 npm latest，四处引用点（ci.yml / 根 package.json devDependencies / biome.json $schema / code-style.md 命令示例）自动改写，探针验证 + biome check frontend（23 文件）+ oxlint（351 文件 0 告警，规则数 131→133 全过）全绿，新版无配置迁移提示未跑 migrate；升级过程中发现 release.yml 发布流水线 lint 门仍钉旧版本且不在升级脚本改写清单内（与「自动改全部引用点」承诺不符）——将 release.yml 纳入脚本第五引用点（header 清单 / rel_biome-rel_oxlint 提取 / check_consistency 五处一致性校验 / rewrite_pins 改写 / pins_all_equal / final_summary），release.yml 钉版同步 2.6.8/1.94.0，code-style.md 升级命令说明补 release.yml（四处→五处）。根 package.json 与其 lock 在 .gitignore /package* 范围内为本机工具链不入库，CI 用 frontend 工程 lockfile 不受影响。验证：bash -n 语法通过、--check 五处一致、biome/oxlint 全绿。无业务代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动

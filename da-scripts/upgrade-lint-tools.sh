@@ -7,10 +7,11 @@
 # 在多处、手工升级容易漏改，因此用本脚本一次改全并验证。
 #
 # 引用点（升级会全部改写，--check 会全部校验）：
-#   1. .github/workflows/ci.yml   npx --yes <包>@<版本>（版本权威来源）
-#   2. package.json               devDependencies 精确版本（本机二进制）
-#   3. biome.json                 $schema 版本
-#   4. docs/code-style.md         文档命令示例
+#   1. .github/workflows/ci.yml      npx --yes <包>@<版本>（版本权威来源）
+#   2. .github/workflows/release.yml npx --yes <包>@<版本>（发布流水线 lint 门）
+#   3. package.json                  devDependencies 精确版本（本机二进制）
+#   4. biome.json                    $schema 版本
+#   5. docs/code-style.md            文档命令示例
 #
 # 用法：
 #   bash da-scripts/upgrade-lint-tools.sh           # 升到 npm latest 并验证
@@ -19,6 +20,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CI_FILE=".github/workflows/ci.yml"
+REL_FILE=".github/workflows/release.yml"
 DOC_FILE="docs/code-style.md"
 BIOME_JSON="biome.json"
 PKG_JSON="package.json"
@@ -51,6 +53,10 @@ schema_biome() { grep -o 'schemas/[0-9][0-9.]*/schema.json' "$BIOME_JSON" | head
 doc_biome() { grep -o '@biomejs/biome@[0-9][0-9.]*' "$DOC_FILE" | head -n1 | sed 's/.*@//'; }
 doc_oxlint() { grep -o 'oxlint@[0-9][0-9.]*' "$DOC_FILE" | head -n1 | sed 's/.*@//'; }
 
+# 发布流水线里的版本
+rel_biome() { grep -o '@biomejs/biome@[0-9][0-9.]*' "$REL_FILE" | head -n1 | sed 's/.*@//'; }
+rel_oxlint() { grep -o 'oxlint@[0-9][0-9.]*' "$REL_FILE" | head -n1 | sed 's/.*@//'; }
+
 # 本机已安装二进制版本（未安装返回空串）
 local_version() {
     local bin="./node_modules/.bin/$1"
@@ -74,20 +80,22 @@ biome_cli_pkg() {
 # ---- 一致性校验 ----
 
 check_consistency() {
-    local a b c d e f ok=0
+    local a b c d e f g h ok=0
     a="$(ci_biome)"
     b="$(ci_oxlint)"
     c="$(pkg_biome)"
     d="$(pkg_oxlint)"
     e="$(schema_biome)"
     f="$(doc_oxlint)"
-    info "引用点版本：ci.yml biome@${a} oxlint@${b}；package.json biome@${c} oxlint@${d}；biome.json schema@${e}；docs biome@$(doc_biome) oxlint@${f}"
-    [ "$a" = "$c" ] && [ "$a" = "$e" ] && [ "$a" = "$(doc_biome)" ] || ok=1
-    [ "$b" = "$d" ] && [ "$b" = "$f" ] || ok=1
+    g="$(rel_biome)"
+    h="$(rel_oxlint)"
+    info "引用点版本：ci.yml biome@${a} oxlint@${b}；release.yml biome@${g} oxlint@${h}；package.json biome@${c} oxlint@${d}；biome.json schema@${e}；docs biome@$(doc_biome) oxlint@${f}"
+    [ "$a" = "$c" ] && [ "$a" = "$e" ] && [ "$a" = "$(doc_biome)" ] && [ "$a" = "$g" ] || ok=1
+    [ "$b" = "$d" ] && [ "$b" = "$f" ] && [ "$b" = "$h" ] || ok=1
     if [ "$ok" -ne 0 ]; then
-        fail "四处引用点版本不一致，请跑 bash da-scripts/upgrade-lint-tools.sh 统一"
+        fail "五处引用点版本不一致，请跑 bash da-scripts/upgrade-lint-tools.sh 统一"
     fi
-    info "四处引用点版本一致"
+    info "五处引用点版本一致"
 }
 
 report_local() {
@@ -115,11 +123,12 @@ report_latest() {
 
 # ---- 升级 ----
 
-# 四处引用点是否已全部等于给定版本（含“已升到 latest 但某处漏改”的情况）
+# 五处引用点是否已全部等于给定版本（含“已升到 latest 但某处漏改”的情况）
 pins_all_equal() {
     local b="$1" o="$2"
     [ "$(pkg_biome)" = "$b" ] && [ "$(schema_biome)" = "$b" ] && [ "$(doc_biome)" = "$b" ] \
-        && [ "$(pkg_oxlint)" = "$o" ] && [ "$(doc_oxlint)" = "$o" ]
+        && [ "$(rel_biome)" = "$b" ] \
+        && [ "$(pkg_oxlint)" = "$o" ] && [ "$(doc_oxlint)" = "$o" ] && [ "$(rel_oxlint)" = "$o" ]
 }
 
 rewrite_pins() {
@@ -128,6 +137,7 @@ rewrite_pins() {
     # 也能一键收敛
     sed -i -E "s|schemas/[0-9][0-9.]*/schema.json|schemas/${new_biome}/schema.json|" "$BIOME_JSON"
     sed -i -E "s|@biomejs/biome@[0-9][0-9.]*|@biomejs/biome@${new_biome}|g; s|oxlint@[0-9][0-9.]*|oxlint@${new_oxlint}|g" "$CI_FILE"
+    sed -i -E "s|@biomejs/biome@[0-9][0-9.]*|@biomejs/biome@${new_biome}|g; s|oxlint@[0-9][0-9.]*|oxlint@${new_oxlint}|g" "$REL_FILE"
     sed -i -E "s|@biomejs/biome@[0-9][0-9.]*|@biomejs/biome@${new_biome}|g; s|oxlint@[0-9][0-9.]*|oxlint@${new_oxlint}|g" "$DOC_FILE"
     npm pkg set "devDependencies.@biomejs/biome=${new_biome}" "devDependencies.oxlint=${new_oxlint}"
 }
@@ -148,9 +158,9 @@ verify_tools() {
 final_summary() {
     echo
     echo "完成："
-    echo "  biome      $(ci_biome)  （ci.yml / package.json / biome.json schema / docs）"
-    echo "  oxlint     $(ci_oxlint) （ci.yml / package.json / docs）"
-    echo "  校验       四处一致 + 探针验证 + biome check + oxlint 全绿"
+    echo "  biome      $(ci_biome)  （ci.yml / release.yml / package.json / biome.json schema / docs）"
+    echo "  oxlint     $(ci_oxlint) （ci.yml / release.yml / package.json / docs）"
+    echo "  校验       五处一致 + 探针验证 + biome check + oxlint 全绿"
     echo "  提醒       若新版本调整了配置项，按新版提示跑"
     echo "             npx @biomejs/biome@$(ci_biome) migrate --write"
     echo "             并保持 biome.json 的 files.includes 多行风格"
