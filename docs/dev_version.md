@@ -556,3 +556,7 @@ v0.92.3
 v0.93.0
 2026112201431401
 da-scripts/release_check.sh 环境净化修复（y+1）：注入式开发环境（AI agent 沙箱）向 LD_LIBRARY_PATH 注入自带 libstdc++，与系统 node 所需版本不匹配（GLIBCXX not found），导致发布检查 9 项中 4 项失败（vite build / Biome / Oxlint / build-pkgs 打包均依赖 node）。修复：main 入口统一 unset LD_LIBRARY_PATH（cargo/rustc/node 均已实测不依赖注入库；LD_PRELOAD 为沙箱自身机制不在清理范围），并在文件头差异注释记录第 3 条。连带处理：根 node_modules 修复重建（biome 2.6.3 / oxlint 1.89.0 与 ci.yml 钉版一致，fe_biome/fe_oxlint 恢复受控版本路径）。验证：release_check.sh 9/9 全过（前端依赖安装/构建/Biome/Oxlint、cargo fmt --check/clippy/test/build、deb/rpm/zip 打包），退出码 0。CI 侧无影响（无 LD_LIBRARY_PATH 注入）。
+
+v0.93.1
+2026112212083801
+数据库版本升级策略改为大版本基准制（仅规则文档，z 段 +1）：AGENTS.md 中「自 0.24.0 起按中版本生成迁移 SQL」的旧规则重写为新策略——自 1.0.0 起，每个大版本初始版本（N.0.0）发布后其数据库状态固化为该大版本的迁移基准，该大版本周期内所有 N.x.y 版本的迁移 SQL 均基于 N.0.0 基准库累计生成，每个中版本 y 仍仅保留一份最新累计脚本，产物放 upgrade/N.0/（如 upgrade/1.0/）；特例：1.0.0 的基准数据库即当前 0.33.36 库结构，0.x 升级链终结于 upgrade/0.23/ ~ upgrade/0.33/（存量 0.x 部署先按旧链升到 0.33.36 再走 upgrade/1.0/），现有 0.x 目录保留为历史链不再新增；大版本边界：下一个大版本 (N+1).0.0 是最后一个基于 N.0.0 基准的版本（其自身迁移置于 upgrade/N.0/ 链尾），发布后其数据库固化为新基准，此后 (N+1).x.y 与 (N+2).0.0 的迁移都基于 (N+1).0.0，例：1.9.9 → 2.0.0 时 2.0.0 是最后一个基于 1.0.0 数据库的版本，后续 2.x.x 与 3.0.0 都基于 2.0.0；每次数据库修改仍需同步 foims-init 建表代码与 check.rs 校验清单的要求不变。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
