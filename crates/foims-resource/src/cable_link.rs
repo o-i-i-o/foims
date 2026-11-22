@@ -215,8 +215,7 @@ async fn ensure_interfaces_on_different_devices(
     Ok(())
 }
 
-/// 端点 (类型, id) 存在性预检：端点资源缺失时返回 400，
-/// 不再依赖 cable_links 防删触发器的 P0001 自定义异常（→ 500）。
+/// 端点 (类型, id) 存在性预检：端点资源缺失时返回 400。
 /// 表名来自类型白名单映射（非用户输入直拼），id 经参数绑定。
 async fn ensure_endpoint_exists(
     tx: &mut sqlx::PgConnection,
@@ -317,7 +316,7 @@ pub async fn create_cable_link<P: DbProvider>(
         ensure_interfaces_on_different_devices(&mut tx, a_id, b_id).await?;
     }
 
-    // 端点资源存在性预检：缺失时 400，而非触发器 P0001 的 500
+    // 端点资源存在性预检：缺失时返回 400
     ensure_endpoint_exists(&mut tx, &a_type, a_id).await?;
     ensure_endpoint_exists(&mut tx, &b_type, b_id).await?;
 

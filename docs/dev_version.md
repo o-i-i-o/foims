@@ -588,3 +588,7 @@ CI 系统依赖移除 libpq-dev（ci.yml 与 release.yml 安装步骤，z 段 +1
 v0.93.8
 2026112216145201
 清理依赖移除后的过度注释（ci.yml 与 release.yml，z 段 +1）：按「移除依赖即全局清理相关文本，注释不再强调不用某依赖」原则，删除 4 处括注性冗余说明——ci.yml/release.yml 安装依赖注释中「全仓 TLS 统一 rustls，Cargo.lock 无 openssl-sys 不需要 libssl-dev；sqlx postgres 纯 Rust 实现不需要 libpq-dev」与 ARM runner 注释中「全仓 TLS 统一 rustls，无 libssl 交叉链接问题」，注释回归「依赖清单 + 为何显式声明」本职；Cargo.toml lettre 的 default-features=false 说明保留（该 flag 缺省即静默带回 native-tls，属易混淆例外）。验证：工作流注释无「不需要 libssl-dev/不需要 libpq-dev/无 libssl」表述残留。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.9
+2026112216195601
+全局清理「已移除/不再依赖」式历史叙事注释（前后端 5 文件，z 段 +1）：①根 Cargo.toml 删除 rustls-pemfile「停止维护请勿使用」残留备注（该依赖早已不在依赖树，rustls-pki-types 已在用，防混淆例外不成立）；②foims-agent-service/Cargo.toml SNMP 域注释删除「域拆分后本 crate 不再依赖 foims-resource」历史叙事（依赖图在文件内自明）；③foims-resource/cable_link.rs 两处「不再依赖防删触发器 P0001（→500）」叙事简化为当前语义「缺失时返回 400」（触发器为在用机制，守护删除方向，与创建预检无关，原表述反而误导）；④foims-models/lib.rs 头注释删除「保持原 models 模块布局、serde 校验路径无需调整」重构叙事；⑤frontend system.css「卡片容器已移除」叙事改为当前语义「组间距由分组头部上边距承担」。甄别保留：兼容在途代码注释（config.rs interval_secs 旧键、pagination.rs data 旧键、备份/旧版数据格式处理、build-pkgs.sh /opt/foims 升级清理、config.toml 旧键指引）为活逻辑说明；lettre/reqwest default-features=false 理由属易混淆例外保留。验证：cargo fmt --check 通过、biome check frontend（23 文件）通过、cable_link.rs 无「不再」叙事残留。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动

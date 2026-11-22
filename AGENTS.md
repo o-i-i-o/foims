@@ -13,6 +13,7 @@
 - 本项目基于 **Rust 2024 Edition**，风格由 rustfmt + clippy 强制落地
   （`[workspace.lints]` 已启用 unwrap/expect/print/allow 等 clippy 护栏，
   并设 `unsafe_code = "forbid"`）。
+- rustls-pemfile已经停止维护很久了，请勿使用，需要时检查是否可用rustls-pki-types替代（rustls依赖）
 - 符合 rust、axum、api、http、pgsql 最佳实践；不考虑老旧基础设施兼容性。
 - 本项目 IPv6 支持友好。
 - 不使用数据库迁移代码：修改结构时直接执行 SQL，然后同步完善 foims-init 的

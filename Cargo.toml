@@ -137,7 +137,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 rpm = { version = "0.30.2", default-features = false, features = ["payload", "gzip-compression"] }
 
 # HTTP/3 / QUIC（foims-agent mTLS 上报）
-# rustls-pemfile已经停止维护很久了，请勿使用，检查是否可用rustls-pki-types替代（rustls依赖）
 bytes = "1.12.2"
 h3 = "0.0.8"
 h3-quinn = "0.0.10"

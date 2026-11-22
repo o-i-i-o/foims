@@ -42,7 +42,7 @@ foims-auth = { path = "../foims-auth" }
 foims-common = { path = "../foims-common" }
 # 告警通知的站内通知原语与邮件/Webhook 渠道外发
 foims-notify = { path = "../foims-notify" }
-# SNMP 域（协议层/性能指标采集/事件通知）；域拆分后本 crate 不再依赖 foims-resource
+# SNMP 域（协议层/性能指标采集/事件通知）
 foims-snmp = { path = "../foims-snmp" }
 # IPMI 域（BMC RMCP+ 会话/SDR 传感器采集/实时快照）
 foims-ipmi = { path = "../foims-ipmi" }
