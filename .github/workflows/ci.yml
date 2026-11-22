@@ -2,12 +2,10 @@ name: CI
 
 on:
   push:
-    # 全分支触发：避免开发分支（如 vue3-test）更名或新增后落入 fmt/clippy/test/ts-rs
-    # 漂移校验的漏检窗口；保留 tag 触发以覆盖正式版发布
-    branches: [ "**" ]
+    branches: [ "master", "main" ]
     tags: [ "v*" ]
   pull_request:
-    branches: [ "main", "master", "Dev" ]
+    branches: [ "main", "master", "Dev-*" ]
 
 env:
   CARGO_TERM_COLOR: always
