@@ -2,8 +2,6 @@ target/
 node_modules
 .trae/
 /package*
-web-archive/.trae/
-web-archive/.lighthouseci/
 config.toml
 .zcode/
 chrome-headless-shell-linux64/

@@ -83,9 +83,8 @@ frontend/src/styles/
 - **@layer 层序全局固定**（`variables.css` 头部声明，Biome
   `useLayeredStyles` 强制）：
   `variables → reset → components → modals → layouts → pages → responsive`；
-  全局文件按归属包进对应 layer（如 `@layer components { … }`）。旧版
-  utilities 层已废除（Vue 重构后零使用，同名片段均就地并入所属层或
-  组件 scoped）。
+  全局文件按归属包进对应 layer（如 `@layer components { … }`），不设
+  utilities 层（同名片段均就地并入所属层或组件 scoped）。
 - 组件特有样式写 SFC `<style scoped>`（unlayered，优先级高于所有 layer，
   语义等同"pages 层之上的本组件覆盖"，范本：`pages/DashboardPage.vue`）；
   跨组件复用的样式禁止写进 scoped 块。

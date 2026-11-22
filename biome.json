@@ -3,9 +3,8 @@
 	"root": true,
 	"files": {
 		"includes": [
-			"frontend/src/styles/**",
-			"!web-archive"
-		]
+				"frontend/src/styles/**"
+			]
 	},
 	"linter": {
 		"enabled": true,

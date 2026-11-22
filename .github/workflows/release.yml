@@ -67,8 +67,7 @@ jobs:
         with:
           node-version: 24
 
-      # 依赖安装：与 package-lock.json 严格一致（Vue 3 + Vite 工程；
-      # 旧版原生 JS 的 eslint/stylelint/jest 等工具链已随 web-archive/ 存档退役）
+      # 依赖安装：与 package-lock.json 严格一致（Vue 3 + Vite 工程）
       - name: 安装依赖
         working-directory: frontend
         run: npm ci --no-audit --no-fund
@@ -79,8 +78,8 @@ jobs:
         run: npm run build
 
       # 阻断级：lint 栈（Biome 管 CSS 与格式、Oxlint 管 JS 质量，均为独立
-      # 二进制脱离 Node 环境运行，配置见根 biome.json 与 .oxlintrc.json；
-      # 存档目录 web-archive/ 已排除）。版本有意固定（不用 @latest：阻断门需
+      # 二进制脱离 Node 环境运行，配置见根 biome.json 与 .oxlintrc.json）。
+      # 版本有意固定（不用 @latest：阻断门需
       # 可复现），三处联动：本文件 npx 版本、根 devDependencies、biome.json 的
       # $schema（文档命令示例同步）；升级统一走
       # da-scripts/upgrade-lint-tools.sh，自动改全部引用点并附探针验证

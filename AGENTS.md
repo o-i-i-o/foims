@@ -33,8 +33,7 @@
     校验清单以确保全新部署的代码的干净。
 - 前后端分离，nginx 托管静态资源、代理 API。前端为 Vue 3 + Vite 工程
   （仓库根 `frontend/`，MPA 三入口 index/init_index/main），产物经
-  `vite build` 部署到 `/usr/share/foims/web`（dist/ 内容直接铺开）；旧版原生 JS 前端已存档于
-  `web-archive/`（只读参考，不再维护，禁止在其上继续开发）。
+  `vite build` 部署到 `/usr/share/foims/web`（dist/ 内容直接铺开）。
 
 ## 硬性规则
 

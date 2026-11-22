@@ -16,7 +16,7 @@
 # 示例：本文件 v0.0.13→v0.0.14（仅 z+1）时 Cargo.toml 保持 0.21.36 不动；本文件 v0.1.0（y+1）时 Cargo.toml 才 0.21.36→0.21.37
 # 目的：z 段作为高频修改审计计数，避免智能体高频次修改推高 Cargo.toml 版本号
 # crate版本各自递增，某crate版本变更主Cargo.toml的版本都要关联变更（本次修改只涉及crate a则修改crate a 和lib的版本号，crate b版本号不变）
-# 前端自切换 Vue 3 + Vite 工程起由 frontend/package.json 的 version 字段承载版本号，复用本文件同一套 x/y/z 判级与联动机制、与 Cargo.toml 相互独立：仅前端修改联动 package.json（z 段不动 / y 段 c+1 / x 段 b+1 且 c 归零，a 段手动），不再 bump 根 Cargo.toml；仅后端修改照旧只联动 Cargo.toml；前后端混合修改按各自维度分别联动。版本计数自 0.1.0（Vue 3 工程确立）起独立递增；旧 bump_static_version.sh/?v=/MODULE_VERSION 机制已废弃，Vite 内容指纹（assets/ 哈希文件名）仅承担构建产物缓存命名
+# 前端自切换 Vue 3 + Vite 工程起由 frontend/package.json 的 version 字段承载版本号，复用本文件同一套 x/y/z 判级与联动机制、与 Cargo.toml 相互独立：仅前端修改联动 package.json（z 段不动 / y 段 c+1 / x 段 b+1 且 c 归零，a 段手动），不再 bump 根 Cargo.toml；仅后端修改照旧只联动 Cargo.toml；前后端混合修改按各自维度分别联动。版本计数自 0.1.0（Vue 3 工程确立）起独立递增；Vite 内容指纹（assets/ 哈希文件名）仅承担构建产物缓存命名
 
 
 # v0.0.1
@@ -560,3 +560,7 @@ da-scripts/release_check.sh 环境净化修复（y+1）：注入式开发环境�
 v0.93.1
 2026112212083801
 数据库版本升级策略改为大版本基准制（仅规则文档，z 段 +1）：AGENTS.md 中「自 0.24.0 起按中版本生成迁移 SQL」的旧规则重写为新策略——自 1.0.0 起，每个大版本初始版本（N.0.0）发布后其数据库状态固化为该大版本的迁移基准，该大版本周期内所有 N.x.y 版本的迁移 SQL 均基于 N.0.0 基准库累计生成，每个中版本 y 仍仅保留一份最新累计脚本，产物放 upgrade/N.0/（如 upgrade/1.0/）；特例：1.0.0 的基准数据库即当前 0.33.36 库结构，0.x 升级链终结于 upgrade/0.23/ ~ upgrade/0.33/（存量 0.x 部署先按旧链升到 0.33.36 再走 upgrade/1.0/），现有 0.x 目录保留为历史链不再新增；大版本边界：下一个大版本 (N+1).0.0 是最后一个基于 N.0.0 基准的版本（其自身迁移置于 upgrade/N.0/ 链尾），发布后其数据库固化为新基准，此后 (N+1).x.y 与 (N+2).0.0 的迁移都基于 (N+1).0.0，例：1.9.9 → 2.0.0 时 2.0.0 是最后一个基于 1.0.0 数据库的版本，后续 2.x.x 与 3.0.0 都基于 2.0.0；每次数据库修改仍需同步 foims-init 建表代码与 check.rs 校验清单的要求不变。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.2
+2026112212184601
+清理 web-archive（旧原生 JS 前端存档）删除后的文档残留（仅文档/注释/配置，z 段 +1）：AGENTS.md、README.md、README_EN.md、docs/code-style.md（4 处）、docs/CSS-style.md、docs/dev_version.md 头部规则、scripts/build-pkgs.sh、.github/workflows/ci.yml 与 release.yml 注释删除 web-archive/旧原生 JS 存档描述；.gitignore 删除 web-archive/.trae/ 与 .lighthouseci/ 条目，.oxlintrc.json ignorePatterns 与 biome.json files.includes 移除 web-archive 排除项；连带去除 dev_version.md 头部「旧 bump_static_version.sh/?v=/MODULE_VERSION 机制已废弃」历史说明与 code-style.md「词条占位符维持旧版」表述（改为「统一 `{{name}}` 写法」）；docs/dev_version_achived_20261030.md 为历史归档原样保留，build-pkgs.sh 中 /opt/foims 清理逻辑为在途升级功能保留。验证：biome check frontend、oxlint 通过，bash -n build-pkgs.sh 语法检查通过，全仓 grep（除归档文档）web-archive/原生 JS/legacyBridge 引用归零。仅 dev_version z+1，Cargo.toml 与 frontend/package.json 不联动

@@ -44,8 +44,7 @@ F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技
 
 - 后端以 h2c 监听 UDS（默认 `/run/foims/api.sock`），不直接暴露 TCP 端口。
 - 前端为 Vue 3 + Vite 工程（仓库根 `frontend/`，MPA 三入口：登录/初始化向导/
-  主应用），`vite build` 产物部署到 nginx 静态目录（`/usr/share/foims/web`）；
-  旧版原生 JS 前端已存档于 `web-archive/`（只读参考）。
+  主应用），`vite build` 产物部署到 nginx 静态目录（`/usr/share/foims/web`）。
 - 两个例外为进程内 UDP 监听（不经 nginx，防火墙需放行）：Agent 指标上报（默认 UDP 9100，HTTP/3）与 SNMP Trap 接收（默认 UDP 162，可配）。
 - TLS 证书、安全响应头、静态资源缓存均在 nginx 层完成，样例见 [deploy/nginx/](deploy/nginx/)。
 

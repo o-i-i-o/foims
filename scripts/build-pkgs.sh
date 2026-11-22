@@ -17,8 +17,7 @@
 #   - systemd 单元唯一来源为 deploy/services/foims.service，本脚本不再内嵌副本
 #   - 前端为 Vue 3 + Vite 工程（frontend/），打包前现场构建（npm ci +
 #     vite build），产物 dist/ 内容直接铺开到 /usr/share/foims/web（入口页与
-#     assets/、icons/、favicon.ico 同级，无 static/ 中间层）；
-#     旧版原生 JS 前端已存档于 web-archive/，不进包
+#     assets/、icons/、favicon.ico 同级，无 static/ 中间层）
 #   - 配置文件以 config.toml.example 副本为基础打包（去除 .example 后缀）：
 #     仓库/开发机的本地 config.toml 可能含真实数据库连接信息，不进包；
 #     数据库连接要素由安装后的初始化向导在页面填写并回写配置文件；

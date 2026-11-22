@@ -178,9 +178,8 @@ Ok(ok_json(paged_response(items, total, &pagination), "common.fetch_success"))
 
 ## 3. 前端（Vue 3 + Vite）
 
-前端为仓库根 `frontend/` 的 Vue 3 + Vite 工程（MPA 三入口）。旧版原生 JS
-前端整体存档于 `web-archive/`（只读参考，禁止在其上继续开发）；本文档
-前端规范只针对 `frontend/`。
+前端为仓库根 `frontend/` 的 Vue 3 + Vite 工程（MPA 三入口），本节前端
+规范仅针对该工程。
 
 ### 3.1 工程结构与构建
 
@@ -212,7 +211,6 @@ frontend/
 - dev：`cd frontend && npm run dev`（5173）；构建：`npm run build`，产物
   `dist/` 部署到 `/usr/share/foims/web`（内容直接铺开，无 `static/` 中间层）。
 - 缓存与版本：Vite 内容指纹（`assets/` 哈希文件名）承担静态资源长缓存，
-  旧原生前端的 `?v=`/MODULE_VERSION 独立版本号机制已随框架切换废弃；
   nginx 对 `/assets/` 长缓存、入口页 `no-cache`（见 `deploy/nginx/foims.conf`）。
   前端版本由 `frontend/package.json` 的 `version` 承载，按 `docs/dev_version.md`
   的 x/y/z 判级独立联动（与 Cargo.toml 同机制、独立计数）。
@@ -274,7 +272,7 @@ frontend/
 
 - 词条在 `frontend/src/i18n/locales/{zh,en}.json` 双语维护，en/zh 必须
   双向对齐（校验命令见 3.5）。
-- 词条占位符维持旧版 `{{name}}` 写法，导入时自动归一化为 vue-i18n 的
+- 词条占位符统一 `{{name}}` 写法，导入时自动归一化为 vue-i18n 的
   `{name}` 语法（`@`/`|`/`$` 特殊字符由 `i18n/index.js` 统一转义，
   词条文件无需关心）；组件内 `t("device.conflict_summary", { count: 3 })`。
 - 切换语言统一 `changeLanguage`（`i18n/index.js`：持久化 localStorage 并
@@ -302,7 +300,7 @@ cd frontend && npm run build
 npx --yes @biomejs/biome@2.6.3 check frontend
 # 本机已装同版本 devDependency 时可直接：npx biome check frontend
 
-# JS 质量 lint（根 .oxlintrc.json；web-archive/ 与 frontend/dist/ 已忽略）
+# JS 质量 lint（根 .oxlintrc.json；frontend/dist/ 已忽略）
 npx oxlint@1.89.0
 
 # lint 工具链版本升级：一次改写全部引用点（ci.yml / package.json /
@@ -375,9 +373,7 @@ console.log('en缺失', [...z].filter(k=>!e.has(k)), 'zh缺失', [...e].filter(k
 
 ### 3.6 可视化画布（工位 / 机柜 / 拓扑）
 
-可视化分区已全量 Vue + TS 化（旧 `modules/visualization/` 命令式 JS 生态与
-`templates/modals/`、桥接层 `legacyBridge/legacyModalLoader/legacyResources`
-均已删除，不得重建）。职责分层：
+可视化分区已全量 Vue + TS 化，禁止重建命令式 JS 画布生态。职责分层：
 
 - `pages/VisualizationPage.vue`：唯一状态持有者——页签、组织/房间下拉、三套
   数据编排（加载/自动排布/保存）、弹窗开关与确认流；
