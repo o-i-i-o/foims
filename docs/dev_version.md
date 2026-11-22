@@ -572,3 +572,15 @@ da-scripts/snmp_test.sh 实现头部声明的 -3/-2 用法并新增 -h 主机、
 v0.93.4
 2026112212522101
 lint 工具链升级 biome 2.6.3→2.6.8、oxlint 1.89.0→1.94.0（仅开发工具链，z 段 +1）：走 da-scripts/upgrade-lint-tools.sh 升到 npm latest，四处引用点（ci.yml / 根 package.json devDependencies / biome.json $schema / code-style.md 命令示例）自动改写，探针验证 + biome check frontend（23 文件）+ oxlint（351 文件 0 告警，规则数 131→133 全过）全绿，新版无配置迁移提示未跑 migrate；升级过程中发现 release.yml 发布流水线 lint 门仍钉旧版本且不在升级脚本改写清单内（与「自动改全部引用点」承诺不符）——将 release.yml 纳入脚本第五引用点（header 清单 / rel_biome-rel_oxlint 提取 / check_consistency 五处一致性校验 / rewrite_pins 改写 / pins_all_equal / final_summary），release.yml 钉版同步 2.6.8/1.94.0，code-style.md 升级命令说明补 release.yml（四处→五处）。根 package.json 与其 lock 在 .gitignore /package* 范围内为本机工具链不入库，CI 用 frontend 工程 lockfile 不受影响。验证：bash -n 语法通过、--check 五处一致、biome/oxlint 全绿。无业务代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.5
+2026112215562901
+清理 OpenSSL 开发库过时描述（仅文档/注释，z 段 +1）：全仓 TLS 栈已统一 rustls（Cargo.lock 无 openssl/openssl-sys/native-tls，lettre 经 default-features=false + tokio1-rustls-tls 剔除 native-tls），README.md 与 README_EN.md 前置要求删除「OpenSSL 开发库 libssl-dev（邮件组件 native-tls 依赖）」条目（lock 内残留的 openssl-probe 为 rustls-native-certs 传递依赖，纯逻辑探测 CA 路径，不依赖 libssl）；ci.yml 与 release.yml 中 aarch64 原生 ARM runner 的注释理由同步修正——原「lettre 引入 native-tls/openssl-sys、交叉编译拿不到目标架构 libssl」已不成立，改为 build-pkgs.sh 按 dpkg --print-architecture 取架构、原生编译产物架构天然正确（全仓 TLS 统一 rustls 无 libssl 交叉链接问题），runner 安排本身不变。运行时 openssl 命令行工具依赖（build-pkgs.sh 安装时自签 nginx 证书、rpm Requires: openssl、config.toml.example openssl rand）非 libssl-dev 开发库，保持不变。验证：全仓 grep 确认文档与 CI 注释中 libssl-dev/native-tls 过时表述归零（仅 Cargo.toml 剔除说明与归档文档保留）。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.6
+2026112215575701
+CI 系统依赖移除 libssl-dev（ci.yml 与 release.yml 安装步骤，z 段 +1）：两工作流「安装系统依赖」apt-get 列表删除 libssl-dev——前置确认 Cargo.lock 无 openssl-sys/native-tls/aws-lc-rs（TLS 全链 rustls/ring，openssl-probe 为纯逻辑传递依赖不链接 libssl），libssl-dev 对主程序构建已无作用；注释同步修正为「build-essential/pkg-config/libpq-dev 为主程序构建依赖」并补记不需要 libssl-dev 的原因。验证：全仓 grep libssl-dev 归零，YAML 结构未动仅步骤内注释与命令行修改。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动
+
+v0.93.7
+2026112216004201
+CI 系统依赖移除 libpq-dev（ci.yml 与 release.yml 安装步骤，z 段 +1）：前置验证 Cargo.lock 全文件不区分大小写无「pq」命中（无 pq-sys/libpq-sys），sqlx postgres feature 为 sqlx-postgres 纯 Rust 协议实现，两工作流无 psql/postgres service 使用，libpq-dev 提供的开发头文件与 pg_config 无消费者，对 CI 构建无作用；apt-get 列表删除 libpq-dev，注释主程序构建依赖收敛为 build-essential/pkg-config 并补记不需要 libpq-dev 的原因。至此 CI 系统依赖为 build-essential/pkg-config/lintian/rpm/zip。验证：全仓 grep libpq-dev 在构建命令中归零（仅注释说明与版本记录保留），YAML 结构未动。无代码/依赖变更，Cargo.toml 与 frontend/package.json 不联动

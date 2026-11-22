@@ -57,10 +57,10 @@ jobs:
   # clone 于主仓根并经 .gitignore 排除）自建 CI 构建发布，与本工作流解耦。
   #
   # matrix 双架构（x86_64 / aarch64，与 release.yml 同构）：aarch64 用
-  # GitHub 原生 ARM runner，不走交叉编译——lettre 引入 native-tls/openssl-sys
-  # （链接系统 libssl），交叉编译拿不到目标架构的 libssl；放在 ARM runner
-  # 上原生编译后，build-pkgs.sh 以 dpkg --print-architecture 自动得到
-  # arm64/aarch64，deb/rpm/zip 三种产物架构天然正确。
+	# GitHub 原生 ARM runner，不走交叉编译——build-pkgs.sh 以
+	# dpkg --print-architecture 自动得到 arm64/aarch64，放在 ARM runner
+	# 上原生编译后，deb/rpm/zip 三种产物架构天然正确（全仓 TLS 统一
+	# rustls，无 libssl 交叉链接问题）。
   # 检查门（fmt/clippy/test/TS 漂移）与架构无关，只在 x86_64 leg 执行一次，
   # aarch64 leg 仅编译打包，避免重复耗时。
   build:
@@ -83,14 +83,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # build-essential/pkg-config/libssl-dev/libpq-dev 为主程序构建依赖；
-      # rpm/zip 供 build-pkgs.sh 打包，lintian 为 DEB 包检查。GitHub 镜像
-      # 虽预装部分工具，但各架构镜像清单并不保证一致，显式声明避免
-      # aarch64 leg 在打包阶段才失败
+      # build-essential/pkg-config 为主程序构建依赖；rpm/zip 供
+      # build-pkgs.sh 打包，lintian 为 DEB 包检查。GitHub 镜像虽预装部分
+      # 工具，但各架构镜像清单并不保证一致，显式声明避免 aarch64 leg 在
+      # 打包阶段才失败（全仓 TLS 统一 rustls，Cargo.lock 无 openssl-sys，
+      # 不需要 libssl-dev；sqlx postgres 为纯 Rust 协议实现，Cargo.lock
+      # 无 pq-sys，不需要 libpq-dev）
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libpq-dev lintian rpm zip
+          sudo apt-get install -y build-essential pkg-config lintian rpm zip
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable

@@ -53,7 +53,6 @@ F-OIMS (Organization Infrastructure Management System) is a high-performance org
 - **Rust**: 1.87 or higher (recommended to install via the official rustup command)
 - **Node.js**: 22 or higher (to build the Vue 3 frontend under `frontend/`; required for packaging and development)
 - **PostgreSQL**: version 16 or higher
-- **OpenSSL**: development libraries (libssl-dev, required by the native-tls mail component)
 - **nginx**: version ≥ 1.28.1 (h2c upstream proxy; QUIC support must be compiled in for HTTP/3)
 - **OS**: Linux, amd64/arm64 (Debian 11+ or Ubuntu 24.04+ recommended)
 

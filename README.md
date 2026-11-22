@@ -54,7 +54,6 @@ F-OIMS（组织基础设施管理系统）是一个基于 Rust 和现代 Web 技
 - **Rust**: 1.87 或更高（推荐通过 rustup 官方命令安装）
 - **Node.js**: 22 或更高（构建 Vue 3 前端 `frontend/`，打包与开发需要）
 - **PostgreSQL**: 版本 16 或更高
-- **OpenSSL**: 开发库 (libssl-dev，邮件组件 native-tls 依赖)
 - **nginx**: 版本 ≥ 1.28.1（h2c 上游代理；如需 HTTP/3 还需编译 QUIC 支持）
 - **系统**: Linux（amd64/arm64，推荐 Debian 11+ 或 Ubuntu 24.04+）
 
