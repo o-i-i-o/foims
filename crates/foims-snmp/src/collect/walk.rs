@@ -21,6 +21,13 @@ use crate::core::{SnmpError, format_snmp_error, wrap_snmp_error};
 /// walk_failed 结束；而 10 重复的单响应体量可正常返回。
 pub(crate) const WALK_MAX_REPETITIONS: u32 = 10;
 
+/// GETBULK 降级重试的单次重复数：首批（[`WALK_MAX_REPETITIONS`]）被设备
+/// 静默丢包时先行小重复数重试。实测华为 CE12800 对 Q-BRIDGE 位图列
+///（dot1qVlanStaticEgressPorts/UntaggedPorts，每行约 72 字节位图）与
+/// lldpRemTable 在 10 重复下整包无响应、2 重复秒回，且小重复数 GETBULK
+/// 仍显著快于 GETNEXT 逐条遍历（252 行 LLDP 约 2s）。
+pub(crate) const WALK_DEGRADED_REPETITIONS: u32 = 2;
+
 /// 单列 walk 总体耗时上限（覆盖 GETBULK 含重试约 35s 最坏 + GETNEXT 降级
 /// 全程）。健康设备 walk 数秒内完成，预算仅约束故障设备（如对两种遍历
 /// 方式均不响应的机型），避免同步采集接口被无界耗时拖到网关超时墙之外
@@ -47,7 +54,7 @@ impl WalkError {
     }
 
     /// 告警日志用的底层错误详情串。
-    fn log_detail(self) -> String {
+    pub(crate) fn log_detail(self) -> String {
         match self {
             WalkError::Snmp(e) => format_snmp_error(e).log_string(),
             WalkError::BudgetExceeded => msg("server.snmp.error.timeout")
@@ -58,8 +65,9 @@ impl WalkError {
 }
 
 /// walk 单个 OID：先按 [`WALK_MAX_REPETITIONS`] 做 GETBULK；失败时对
-/// 「可能由单响应过大/设备 bulk 实现异常导致」的错误降级为 GETNEXT 逐条
-/// 遍历并告警，认证/配置类错误直接冒泡（重试无意义且会翻倍失败时延）。
+/// 「可能由单响应过大/设备 bulk 实现异常导致」的错误先降重复数重试
+/// GETBULK（见 [`WALK_DEGRADED_REPETITIONS`]），仍失败再降级 GETNEXT
+/// 逐条遍历并告警，认证/配置类错误直接冒泡（重试无意义且会翻倍失败时延）。
 ///
 /// 全程受 [`WALK_BUDGET_SECS`] 总预算约束，超预算终止并返回
 /// [`WalkError::BudgetExceeded`]；降级重试不会留下半张表的中间结果
@@ -78,18 +86,39 @@ pub(crate) async fn walk_varbinds(
             Ok(varbinds) => Ok(varbinds),
             Err(err) if is_bulk_retryable(&err) => {
                 warn!(
-                    "SNMP walk 失败，降级 GETNEXT 重试: oid={}, error={:?}",
+                    "SNMP walk 失败，降重复数重试: oid={}, error={:?}",
                     target, err
                 );
-                walk_collect(
+                match walk_collect(
                     client,
                     target,
                     WalkOptions {
-                        method: WalkMethod::GetNext,
+                        max_repetitions: WALK_DEGRADED_REPETITIONS,
                         ..WalkOptions::default()
                     },
                 )
                 .await
+                {
+                    Ok(varbinds) => Ok(varbinds),
+                    // 小重复数仍失败：设备 bulk 实现异常或单条响应即超限，
+                    // 降级 GETNEXT 逐条遍历
+                    Err(err) if is_bulk_retryable(&err) => {
+                        warn!(
+                            "SNMP walk 小重复数重试仍失败，降级 GETNEXT: oid={}, error={:?}",
+                            target, err
+                        );
+                        walk_collect(
+                            client,
+                            target,
+                            WalkOptions {
+                                method: WalkMethod::GetNext,
+                                ..WalkOptions::default()
+                            },
+                        )
+                        .await
+                    }
+                    Err(err) => Err(err),
+                }
             }
             Err(err) => Err(err),
         }
@@ -222,5 +251,6 @@ mod tests {
     #[test]
     fn walk_repetitions_与net_snmp默认一致() {
         assert_eq!(WALK_MAX_REPETITIONS, 10);
+        assert_eq!(WALK_DEGRADED_REPETITIONS, 2);
     }
 }

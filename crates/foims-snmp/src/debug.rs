@@ -17,14 +17,13 @@ use foims_common::net::resolve_probe_ip;
 use foims_common::{AppError, AppJson, msg, ok_json};
 use foims_models::{MibEntry, MibQueryRequest, SnmpDebugRequest, SnmpDebugRow};
 
+use crate::collect::walk::walk_varbinds;
 use crate::core::{SnmpParamsLegacy, build_auth, format_snmp_error, snmp_target, snmp_tuning};
 
 /// GET 单次最大 OID 数：防御异常输入放大请求规模。
 const MAX_GET_OIDS: usize = 60;
 /// WALK 单次最大返回行数：有界遍历，避免超大表把响应撑爆。
 const MAX_WALK_ROWS: usize = 500;
-/// bulk walk 每请求最大重复数。
-const WALK_MAX_REPETITIONS: u32 = 20;
 /// 调试探测固定短超时（秒），与 test-snmp 口径一致，不读设备侧周期采集超时。
 const DEBUG_TIMEOUT_SECS: u64 = 5;
 
@@ -132,30 +131,21 @@ async fn run_get(
     Ok(resp.varbinds.iter().map(row_of).collect())
 }
 
-/// 有界 bulk walk：从基 OID 遍历，收满 `MAX_WALK_ROWS` 即停；单条错误中断保留已收。
+/// 有界 bulk walk：从基 OID 遍历，收满 `MAX_WALK_ROWS` 即停。复用采集侧
+/// [`walk_varbinds`] 的降级链（大重复数 → 小重复数 → GETNEXT）与总预算，
+/// 设备对大重复数 GETBULK 静默丢包时排障结果不再整段缺失。
 async fn run_walk(
     client: &Client<async_snmp::transport::UdpHandle>,
     base: async_snmp::Oid,
 ) -> Result<Vec<SnmpDebugRow>, AppError> {
-    let mut stream = client.bulk_walk(base, WALK_MAX_REPETITIONS).map_err(|e| {
-        AppError::Snmp(
-            msg("server.debug.snmp.failed").with("error", format_snmp_error(e).log_string()),
-        )
+    let varbinds = walk_varbinds(client, &base).await.map_err(|e| {
+        AppError::Snmp(msg("server.debug.snmp.failed").with("error", e.log_detail()))
     })?;
-    let mut rows = Vec::new();
-    while let Some(item) = stream.next().await {
-        match item {
-            Ok(vb) => {
-                rows.push(row_of(&vb));
-                if rows.len() >= MAX_WALK_ROWS {
-                    break;
-                }
-            }
-            // 遍历到底或中途异常：保留已收，视为成功（排障场景部分结果仍有用）
-            Err(_) => break,
-        }
-    }
-    Ok(rows)
+    Ok(varbinds
+        .into_iter()
+        .take(MAX_WALK_ROWS)
+        .map(|vb| row_of(&vb))
+        .collect())
 }
 
 /// 变量绑定 → 调试行：OID 点分文本、命中 MIB 表的符号名、SNMP 类型与可读值。
