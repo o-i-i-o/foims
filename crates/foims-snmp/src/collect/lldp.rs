@@ -4,108 +4,35 @@
 
 use std::collections::HashMap;
 
-use async_snmp::{Client, VarBind, WalkMethod, WalkOptions, oid};
-use tracing::{debug, warn};
+use async_snmp::{Client, VarBind, oid};
+use tracing::debug;
 
+use crate::collect::walk::{WalkError, walk_varbinds};
 use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
-/// LLDP 表 GETBULK 单次重复数，与 net-snmp snmpwalk 默认值一致。
-///
-/// 部分设备（实测华为 VRP）在 lldpRemTable 长文本列上对大重复数的 GETBULK
-/// 直接丢包（既无响应也无 tooBig），客户端按 5s×4 次重传后以 walk_failed
-/// 结束；而 10 重复的单响应体量可正常返回。
-const LLDP_WALK_MAX_REPETITIONS: u32 = 10;
-
-/// walk 单个 OID 并对每个变量调用 `process`：遇 `EndOfMibView` 正常终止，
-/// 其余异常值跳过，迭代错误冒泡。
-async fn snmp_walk<F>(
-    client: &Client,
-    target: async_snmp::Oid,
-    mut process: F,
-) -> Result<(), SnmpError>
-where
-    F: FnMut(&VarBind) -> Result<(), SnmpError>,
-{
-    for vb in collect_varbinds(client, &target).await? {
-        process(&vb)?;
-    }
-
-    Ok(())
-}
-
-/// 收齐单表全部变量：先按 [`LLDP_WALK_MAX_REPETITIONS`] 做 GETBULK；失败时
-/// 对「可能由单响应过大/设备 bulk 实现异常导致」的错误降级为 GETNEXT 逐条
-/// 遍历并告警，认证/配置类错误直接冒泡（重试无意义且会翻倍失败时延）。
-///
-/// 每张表都先整体收齐再交给调用方处理，降级重试不会留下半张表的中间结果。
+/// 收齐单表全部变量：GETBULK 失败降级 GETNEXT 与总预算约束的统一口径见
+/// [`crate::collect::walk`]，此处仅归一错误类型。
 async fn collect_varbinds(
     client: &Client,
     target: &async_snmp::Oid,
 ) -> Result<Vec<VarBind>, SnmpError> {
-    let bulk = WalkOptions {
-        max_repetitions: LLDP_WALK_MAX_REPETITIONS,
-        ..WalkOptions::default()
-    };
-
-    match walk_collect(client, target, bulk).await {
-        Ok(varbinds) => Ok(varbinds),
-        Err(err) if is_bulk_retryable(&err) => {
-            warn!(
-                "LLDP walk 失败，降级 GETNEXT 重试: oid={}, error={:?}",
-                target, err
-            );
-            walk_collect(
-                client,
-                target,
-                WalkOptions {
-                    method: WalkMethod::GetNext,
-                    ..WalkOptions::default()
-                },
-            )
-            .await
-            .map_err(|e| wrap_snmp_error("server.snmp.error.walk_failed", e))
-        }
-        Err(err) => Err(wrap_snmp_error("server.snmp.error.walk_failed", err)),
-    }
+    walk_varbinds(client, target)
+        .await
+        .map_err(WalkError::into_snmp_error)
 }
 
-/// 是否值得改用 GETNEXT 重试：超时、协议错误、walk 中断与畸形响应都可能
-/// 源于设备对大重复数 GETBULK 的实现缺陷；认证/配置/网络错误不在此列。
-fn is_bulk_retryable(err: &async_snmp::Error) -> bool {
-    matches!(
-        err,
-        async_snmp::Error::Timeout { .. }
-            | async_snmp::Error::Snmp { .. }
-            | async_snmp::Error::WalkAborted { .. }
-            | async_snmp::Error::MalformedResponse { .. }
-    )
-}
-
-async fn walk_collect(
-    client: &Client,
-    target: &async_snmp::Oid,
-    options: WalkOptions,
-) -> Result<Vec<VarBind>, Box<async_snmp::Error>> {
-    let mut walk = client.walk_with(target.clone(), options)?;
-
-    let mut varbinds = Vec::new();
-
-    while let Some(result) = walk.next().await {
-        let vb = result?;
-
-        if vb.value.is_exception() {
-            if matches!(vb.value, async_snmp::Value::EndOfMibView) {
-                break;
-            }
-            continue;
-        }
-
-        varbinds.push(vb);
+/// 对收齐的表变量逐条执行 `process`：迭代错误冒泡。
+fn for_each(
+    varbinds: &[VarBind],
+    mut process: impl FnMut(&VarBind) -> Result<(), SnmpError>,
+) -> Result<(), SnmpError> {
+    for vb in varbinds {
+        process(vb)?;
     }
 
-    Ok(varbinds)
+    Ok(())
 }
 
 /// 采集 LLDP 邻居：逐表 walk ifName、lldpLocPort 与 lldpRemTable，按
@@ -130,10 +57,28 @@ pub async fn get_lldp_neighbors_via_snmp(
 
     debug!("开始获取LLDP邻居信息");
 
+    // 五张表互不依赖，同会话并发收齐；处理仍按依赖顺序执行
     let if_name_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2);
+    let loc_sub_oid = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 2);
+    let loc_id_oid = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 3);
+    let loc_desc_oid = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 4);
+    let rem_table_oid = oid!(1, 0, 8802, 1, 1, 2, 1, 4, 1, 1);
+    let (if_name_vbs, loc_sub_vbs, loc_id_vbs, loc_desc_vbs, rem_vbs) = tokio::join!(
+        collect_varbinds(&client, &if_name_oid),
+        collect_varbinds(&client, &loc_sub_oid),
+        collect_varbinds(&client, &loc_id_oid),
+        collect_varbinds(&client, &loc_desc_oid),
+        collect_varbinds(&client, &rem_table_oid),
+    );
+    let if_name_vbs = if_name_vbs?;
+    let loc_sub_vbs = loc_sub_vbs?;
+    let loc_id_vbs = loc_id_vbs?;
+    let loc_desc_vbs = loc_desc_vbs?;
+    let rem_vbs = rem_vbs?;
+
     let mut if_name_map: HashMap<String, String> = HashMap::new();
 
-    snmp_walk(&client, if_name_oid, |vb| {
+    for_each(&if_name_vbs, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 11 {
             let if_index = oid_parts[10].to_string();
@@ -147,13 +92,11 @@ pub async fn get_lldp_neighbors_via_snmp(
             }
         }
         Ok(())
-    })
-    .await?;
+    })?;
 
-    let lldp_loc_port_subtype = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 2);
     let mut loc_port_subtype_map: HashMap<String, u8> = HashMap::new();
 
-    snmp_walk(&client, lldp_loc_port_subtype, |vb| {
+    for_each(&loc_sub_vbs, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 12 {
             let port_num = oid_parts[11].to_string();
@@ -167,13 +110,11 @@ pub async fn get_lldp_neighbors_via_snmp(
             loc_port_subtype_map.insert(port_num, subtype);
         }
         Ok(())
-    })
-    .await?;
+    })?;
 
-    let lldp_loc_port_id = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 3);
     let mut port_id_map: HashMap<String, String> = HashMap::new();
 
-    snmp_walk(&client, lldp_loc_port_id, |vb| {
+    for_each(&loc_id_vbs, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 12 {
             let port_num = oid_parts[11].to_string();
@@ -184,13 +125,11 @@ pub async fn get_lldp_neighbors_via_snmp(
             }
         }
         Ok(())
-    })
-    .await?;
+    })?;
 
-    let lldp_loc_port_desc = oid!(1, 0, 8802, 1, 1, 2, 1, 3, 7, 1, 4);
     let mut port_desc_map: HashMap<String, String> = HashMap::new();
 
-    snmp_walk(&client, lldp_loc_port_desc, |vb| {
+    for_each(&loc_desc_vbs, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 12 {
             let port_num = oid_parts[11].to_string();
@@ -207,15 +146,13 @@ pub async fn get_lldp_neighbors_via_snmp(
             }
         }
         Ok(())
-    })
-    .await?;
+    })?;
 
-    let lldp_rem_table = oid!(1, 0, 8802, 1, 1, 2, 1, 4, 1, 1);
     let mut neighbor_data: HashMap<(String, String), foims_models::LldpNeighbor> = HashMap::new();
     let mut chassis_subtype_map: HashMap<(String, String), u8> = HashMap::new();
     let mut port_subtype_map: HashMap<(String, String), u8> = HashMap::new();
 
-    snmp_walk(&client, lldp_rem_table, |vb| {
+    for_each(&rem_vbs, |vb| {
         let oid_parts = vb.oid.arcs();
         if oid_parts.len() >= 14 {
             let field_type = oid_parts[10];
@@ -315,8 +252,7 @@ pub async fn get_lldp_neighbors_via_snmp(
             }
         }
         Ok(())
-    })
-    .await?;
+    })?;
 
     let neighbors: Vec<foims_models::LldpNeighbor> = neighbor_data
         .into_values()

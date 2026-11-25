@@ -11,14 +11,16 @@ use tracing::debug;
 
 use foims_models::VlanRecord;
 
-use super::ports::{port_list_members, value_as_i32, walk_index_value_map};
+use super::ports::{port_list_members, value_as_i32};
+use super::walk::{walk_index_value_map, walk_index_value_map_checked};
 use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
 
 /// 采集 VLAN 台账（VLAN id / 名称 / 成员与 untagged 端口 ifIndex 列表）。
 ///
-/// 错误仅来自鉴权构造与会话建立；无 Q-BRIDGE-MIB 的设备返回空集。
+/// 错误仅来自鉴权构造与会话建立、以及 Q-BRIDGE 三列 walk 最终失败；
+/// 无 Q-BRIDGE-MIB 的设备三列 walk 以 EndOfMibView 正常终止，返回空集。
 /// VLAN id 只保留 1..=4094。
 pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRecord>, SnmpError> {
     let addr = snmp_target(&params.ip, params.port);
@@ -32,6 +34,8 @@ pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRec
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
+    // BRIDGE-MIB 桥端口 → ifIndex：非交换设备无此表，容错降级为空映射；
+    // 交换设备该列为成员位图解析的前提，缺失时成员/untagged 为空集
     let bp_if_raw = walk_index_value_map(
         &client,
         oid!(1, 3, 6, 1, 2, 1, 17, 1, 4, 1, 2),
@@ -46,24 +50,19 @@ pub async fn get_vlans_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<VlanRec
         })
         .collect();
 
-    let names = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 1),
-        "log.device.snmp.vlan_walk_failed",
-    )
-    .await;
-    let egress = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 2),
-        "log.device.snmp.vlan_walk_failed",
-    )
-    .await;
-    let untagged = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 4),
-        "log.device.snmp.vlan_walk_failed",
-    )
-    .await;
+    // 名称/成员/非标记三列为台账主体：walk 最终失败显式报错（400），
+    // 避免"采集失败"被静默落库成空台账（与"设备无此表"区分）
+    let names_oid = oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 1);
+    let egress_oid = oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 2);
+    let untagged_oid = oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 4);
+    let (names, egress, untagged) = tokio::join!(
+        walk_index_value_map_checked(&client, names_oid),
+        walk_index_value_map_checked(&client, egress_oid),
+        walk_index_value_map_checked(&client, untagged_oid)
+    );
+    let names = names?;
+    let egress = egress?;
+    let untagged = untagged?;
 
     let to_ifindexes = |value: Option<&Value>| -> Vec<u32> {
         value

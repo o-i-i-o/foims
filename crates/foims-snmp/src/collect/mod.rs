@@ -10,3 +10,4 @@ pub mod poe;
 pub mod ports;
 pub mod sysinfo;
 pub mod vlan;
+pub mod walk;

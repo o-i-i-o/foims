@@ -6,52 +6,12 @@ use std::time::Duration;
 use async_snmp::{Client, Value, oid};
 use tracing::debug;
 
-use foims_common::log_warn;
 use foims_models::SnmpPort;
 
+use crate::collect::walk::walk_index_value_map;
 use crate::core::{
-    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, format_snmp_error, snmp_target,
-    wrap_snmp_error,
+    SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
-
-/// walk 单弧索引标量表：返回（实例尾弧 → 值）映射。
-///
-/// 适用于 ifTable（ifIndex）、BRIDGE-MIB（dot1dBasePort）、
-/// Q-BRIDGE-MIB 静态 VLAN 表（dot1qVlanIndex）等单弧索引表；
-/// walk 建立失败时记告警并返回空映射（字段降级为 NULL，不阻断同步）。
-pub(crate) async fn walk_index_value_map(
-    client: &Client,
-    base: async_snmp::Oid,
-    warn_key: &'static str,
-) -> HashMap<u32, Value> {
-    let mut map = HashMap::new();
-
-    let mut walk = match client.walk(base) {
-        Ok(walk) => walk,
-        Err(e) => {
-            // 留痕底层错误详情：调用方需区分"设备无此表"与"采集失败"
-            log_warn!(warn_key, error = format_snmp_error(e).log_string());
-            return map;
-        }
-    };
-
-    while let Some(result) = walk.next().await {
-        let Ok(vb) = result else {
-            continue;
-        };
-        if vb.value.is_exception() {
-            if matches!(vb.value, Value::EndOfMibView) {
-                break;
-            }
-            continue;
-        }
-        if let Some(&index) = vb.oid.arcs().last() {
-            map.insert(index, vb.value);
-        }
-    }
-
-    map
-}
 
 /// SNMP Integer/Gauge32 值统一取 i32（其余类型返回 None）
 pub(crate) fn value_as_i32(value: Option<&Value>) -> Option<i32> {
@@ -120,17 +80,10 @@ pub(crate) fn port_list_members(bytes: &[u8]) -> Vec<u32> {
 
 /// 汇总 VLAN 成员位图：dot1qVlanStaticEgressPorts 按 VLAN 展开位图，
 /// 借助 桥端口→ifIndex 映射 聚合出各 ifIndex 所属 VLAN 集合。
-async fn collect_vlan_members(
-    client: &Client,
+fn aggregate_vlan_members(
+    egress: HashMap<u32, Value>,
     bp_to_if: &HashMap<u32, u32>,
 ) -> HashMap<u32, HashSet<i32>> {
-    let egress = walk_index_value_map(
-        client,
-        oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 2),
-        "log.device.snmp.vlan_walk_failed",
-    )
-    .await;
-
     let mut members: HashMap<u32, HashSet<i32>> = HashMap::new();
     for (vlan, value) in egress {
         // dot1qVlanStaticTable 以 dot1qVlanIndex（即 VLAN ID）为实例索引
@@ -149,9 +102,10 @@ async fn collect_vlan_members(
 }
 
 /// 采集设备端口表：ifDescr/ifAdminStatus/ifOperStatus/ifHighSpeed/ifSpeed
-/// 逐列 walk 后按 ifIndex 组装，另以 BRIDGE/Q-BRIDGE 表补 VLAN 与端口类型。
+/// 与 BRIDGE/Q-BRIDGE 各列并发 walk 后按 ifIndex 组装，补 VLAN 与端口类型。
 ///
-/// 错误仅来自鉴权构造与会话建立；MIB 缺失的字段一律降级为 NULL。
+/// 错误仅来自鉴权构造与会话建立；MIB 缺失的字段一律降级为 NULL
+///（walk 失败在 [`walk_index_value_map`] 内降级为空映射，不阻断同步）。
 pub async fn get_device_ports_via_snmp(
     params: &SnmpParamsLegacy,
 ) -> Result<Vec<SnmpPort>, SnmpError> {
@@ -168,46 +122,37 @@ pub async fn get_device_ports_via_snmp(
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
-    // IF-MIB 基础表：名称/管理态/运营态/高速率/速率
-    let if_descr = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
-    let if_admin = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 7),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
-    let if_oper = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 8),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
-    let if_high_speed = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 15),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
-    let if_speed = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 5),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
+    // IF-MIB 基础表：名称/管理态/运营态/高速率/速率 + BRIDGE/Q-BRIDGE
+    // VLAN 判定各列，同会话并发下发（列间互不依赖）
+    let if_descr_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2);
+    let if_admin_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 7);
+    let if_oper_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 8);
+    let if_high_speed_oid = oid!(1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 15);
+    let if_speed_oid = oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 5);
+    let bp_if_oid = oid!(1, 3, 6, 1, 2, 1, 17, 1, 4, 1, 2);
+    let pvid_oid = oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 5, 1, 1);
+    let vlan_egress_oid = oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 3, 1, 2);
+    let (if_descr, if_admin, if_oper, if_high_speed, if_speed, bp_if_raw, pvid, vlan_egress) = tokio::join!(
+        walk_index_value_map(&client, if_descr_oid, "log.device.snmp.ports_walk_failed"),
+        walk_index_value_map(&client, if_admin_oid, "log.device.snmp.ports_walk_failed"),
+        walk_index_value_map(&client, if_oper_oid, "log.device.snmp.ports_walk_failed"),
+        walk_index_value_map(
+            &client,
+            if_high_speed_oid,
+            "log.device.snmp.ports_walk_failed"
+        ),
+        walk_index_value_map(&client, if_speed_oid, "log.device.snmp.ports_walk_failed"),
+        walk_index_value_map(&client, bp_if_oid, "log.device.snmp.ports_walk_failed"),
+        walk_index_value_map(&client, pvid_oid, "log.device.snmp.ports_walk_failed"),
+        walk_index_value_map(
+            &client,
+            vlan_egress_oid,
+            "log.device.snmp.ports_walk_failed"
+        )
+    );
 
     // BRIDGE-MIB 桥端口 → ifIndex（VLAN 采集的映射前提，
     // 非交换设备无桥 MIB，相关字段保持 NULL）
-    let bp_if_raw = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 17, 1, 4, 1, 2),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
     let bp_to_if: HashMap<u32, u32> = bp_if_raw
         .into_iter()
         .filter_map(|(bp, value)| {
@@ -217,12 +162,6 @@ pub async fn get_device_ports_via_snmp(
         .collect();
 
     // Q-BRIDGE-MIB dot1qPvid：桥端口 → 接入 VLAN（PVID）
-    let pvid = walk_index_value_map(
-        &client,
-        oid!(1, 3, 6, 1, 2, 1, 17, 7, 1, 4, 5, 1, 1),
-        "log.device.snmp.ports_walk_failed",
-    )
-    .await;
     let mut pvid_by_if: HashMap<u32, i32> = HashMap::new();
     for (bp, value) in pvid {
         if let (Some(&if_index), Some(vlan)) = (bp_to_if.get(&bp), value_as_i32(Some(&value)))
@@ -232,7 +171,7 @@ pub async fn get_device_ports_via_snmp(
         }
     }
 
-    let vlan_members = collect_vlan_members(&client, &bp_to_if).await;
+    let vlan_members = aggregate_vlan_members(vlan_egress, &bp_to_if);
 
     let mut ports = Vec::new();
     for (if_index, value) in if_descr {

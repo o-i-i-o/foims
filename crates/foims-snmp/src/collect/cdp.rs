@@ -98,7 +98,7 @@ pub async fn get_cdp_neighbors_via_snmp(
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
     // 本地端口名（ifDescr：1.3.6.1.2.1.2.2.1.2，单弧索引 ifIndex）
-    let if_descr = super::ports::walk_index_value_map(
+    let if_descr = super::walk::walk_index_value_map(
         &client,
         oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2),
         "log.device.snmp.cdp_walk_failed",

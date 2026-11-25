@@ -130,7 +130,7 @@ pub async fn get_poe_ports_via_snmp(
         .await
         .map_err(|e| wrap_snmp_error("server.snmp.error.session_create_failed", e))?;
 
-    let if_descr = super::ports::walk_index_value_map(
+    let if_descr = super::walk::walk_index_value_map(
         &client,
         oid!(1, 3, 6, 1, 2, 1, 2, 2, 1, 2),
         "log.device.snmp.poe_walk_failed",

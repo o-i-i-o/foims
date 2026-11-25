@@ -14,7 +14,8 @@ use tracing::debug;
 
 use foims_models::LagRecord;
 
-use super::ports::{value_as_i32, walk_index_value_map};
+use super::ports::value_as_i32;
+use super::walk::walk_index_value_map;
 use crate::core::{
     SnmpError, SnmpParamsLegacy, build_auth, clean_snmp_text, snmp_target, wrap_snmp_error,
 };
