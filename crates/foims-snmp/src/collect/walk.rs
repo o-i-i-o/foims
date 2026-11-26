@@ -34,6 +34,18 @@ pub(crate) const WALK_DEGRADED_REPETITIONS: u32 = 2;
 ///（nginx /api/ 通用读超时 60s，采集类端点单独放宽到 5m）。
 pub(crate) const WALK_BUDGET_SECS: u64 = 120;
 
+/// 降级链单个 GETBULK 阶段的耗时上限。
+///
+/// 单次请求的重传链最坏约 35s（5s 超时 × 4 次 + 3 次固定间隔）；但多表
+/// 并发采集时实测部分设备（华为 CE12800）对大重复数请求「慢而不死」——
+/// 每个请求都要 1-2 次重试才回包，阶段既不报错也走不完，120s 总预算会在
+/// Cr10 阶段直接耗尽，降级链永远推进不到小重复数级（lldp 五表并发实测
+/// 复现：无任何降级告警即 budget 超时）。阶段级上限保证过慢/无响应的
+/// GETBULK 阶段被及时放弃并推进到下一级。取值须大于单请求重传链最坏值
+///（默认 5s/3 次配置为 35s）；总预算扣除两级阶段预算后仍给 GETNEXT
+/// 兜底留出约 30s。
+const WALK_STAGE_BUDGET_SECS: u64 = 45;
+
 /// [`walk_varbinds`] 失败类型：底层 SNMP 错误或超出总预算。
 #[derive(Debug)]
 pub(crate) enum WalkError {
@@ -64,10 +76,10 @@ impl WalkError {
     }
 }
 
-/// walk 单个 OID：先按 [`WALK_MAX_REPETITIONS`] 做 GETBULK；失败时对
-/// 「可能由单响应过大/设备 bulk 实现异常导致」的错误先降重复数重试
-/// GETBULK（见 [`WALK_DEGRADED_REPETITIONS`]），仍失败再降级 GETNEXT
-/// 逐条遍历并告警，认证/配置类错误直接冒泡（重试无意义且会翻倍失败时延）。
+/// walk 单个 OID：降级链为「GETBULK-10 → GETBULK-2 → GETNEXT」，前两级
+/// GETBULK 各受 [`WALK_STAGE_BUDGET_SECS`] 阶段预算约束，阶段超时/失败
+/// 先降重复数重试，仍失败降级 GETNEXT 逐条遍历并告警；认证/配置类错误
+/// 直接冒泡（重试无意义且会翻倍失败时延）。
 ///
 /// 全程受 [`WALK_BUDGET_SECS`] 总预算约束，超预算终止并返回
 /// [`WalkError::BudgetExceeded`]；降级重试不会留下半张表的中间结果
@@ -77,35 +89,21 @@ pub(crate) async fn walk_varbinds(
     target: &async_snmp::Oid,
 ) -> Result<Vec<VarBind>, WalkError> {
     let walk = async {
-        let bulk = WalkOptions {
-            max_repetitions: WALK_MAX_REPETITIONS,
-            ..WalkOptions::default()
-        };
-
-        match walk_collect(client, target, bulk).await {
-            Ok(varbinds) => Ok(varbinds),
-            Err(err) if is_bulk_retryable(&err) => {
+        match walk_bulk_stage(client, target, WALK_MAX_REPETITIONS).await {
+            BulkStage::Done(varbinds) => Ok(varbinds),
+            BulkStage::Retry(detail) => {
                 warn!(
-                    "SNMP walk 失败，降重复数重试: oid={}, error={:?}",
-                    target, err
+                    "SNMP walk GETBULK 失败，降重复数重试: oid={}, error={}",
+                    target, detail
                 );
-                match walk_collect(
-                    client,
-                    target,
-                    WalkOptions {
-                        max_repetitions: WALK_DEGRADED_REPETITIONS,
-                        ..WalkOptions::default()
-                    },
-                )
-                .await
-                {
-                    Ok(varbinds) => Ok(varbinds),
+                match walk_bulk_stage(client, target, WALK_DEGRADED_REPETITIONS).await {
+                    BulkStage::Done(varbinds) => Ok(varbinds),
                     // 小重复数仍失败：设备 bulk 实现异常或单条响应即超限，
                     // 降级 GETNEXT 逐条遍历
-                    Err(err) if is_bulk_retryable(&err) => {
+                    BulkStage::Retry(detail) => {
                         warn!(
-                            "SNMP walk 小重复数重试仍失败，降级 GETNEXT: oid={}, error={:?}",
-                            target, err
+                            "SNMP walk 小重复数重试仍失败，降级 GETNEXT: oid={}, error={}",
+                            target, detail
                         );
                         walk_collect(
                             client,
@@ -116,17 +114,62 @@ pub(crate) async fn walk_varbinds(
                             },
                         )
                         .await
+                        .map_err(|e| *e)
                     }
-                    Err(err) => Err(err),
+                    BulkStage::Fatal(err) => Err(*err),
                 }
             }
-            Err(err) => Err(err),
+            BulkStage::Fatal(err) => Err(*err),
         }
     };
 
     match tokio::time::timeout(Duration::from_secs(WALK_BUDGET_SECS), walk).await {
-        Ok(result) => result.map_err(WalkError::Snmp),
+        Ok(result) => result.map_err(|e| WalkError::Snmp(Box::new(e))),
         Err(_) => Err(WalkError::BudgetExceeded),
+    }
+}
+
+/// 单个 GETBULK 阶段的产出。
+enum BulkStage {
+    /// 阶段内收齐全表
+    Done(Vec<VarBind>),
+    /// 阶段超时或可重试错误，附告警日志详情，应推进到下一级
+    Retry(String),
+    /// 不可重试错误（认证/配置类），直接冒泡
+    Fatal(Box<async_snmp::Error>),
+}
+
+/// 带阶段预算的单次 GETBULK 收集：阶段内每请求仍按客户端重试策略重传，
+/// 阶段整体超 [`WALK_STAGE_BUDGET_SECS`] 未完成即放弃（返回可重试），
+/// 避免设备「慢而不死」时把总预算耗在单级上。
+async fn walk_bulk_stage(
+    client: &Client,
+    target: &async_snmp::Oid,
+    max_repetitions: u32,
+) -> BulkStage {
+    let options = WalkOptions {
+        max_repetitions,
+        ..WalkOptions::default()
+    };
+    match tokio::time::timeout(
+        Duration::from_secs(WALK_STAGE_BUDGET_SECS),
+        walk_collect(client, target, options),
+    )
+    .await
+    {
+        Ok(Ok(varbinds)) => BulkStage::Done(varbinds),
+        Ok(Err(err)) if is_bulk_retryable(&err) => {
+            BulkStage::Retry(format_snmp_error(err).log_string())
+        }
+        Ok(Err(err)) => BulkStage::Fatal(err),
+        Err(_) => BulkStage::Retry(
+            msg("server.snmp.error.timeout")
+                .with(
+                    "detail",
+                    format!("GETBULK-{max_repetitions} 阶段超过 {WALK_STAGE_BUDGET_SECS}s 未完成"),
+                )
+                .log_string(),
+        ),
     }
 }
 
