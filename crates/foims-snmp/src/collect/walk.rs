@@ -4,9 +4,10 @@
 //! 避免各表各自实现重复的降级与异常值过滤逻辑。
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::sync::{LazyLock, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
-use async_snmp::{Client, Value, VarBind, WalkMethod, WalkOptions};
+use async_snmp::{Client, Value, VarBind, Version, WalkMethod, WalkOptions};
 use tracing::warn;
 
 use foims_common::log_warn;
@@ -36,15 +37,29 @@ pub(crate) const WALK_BUDGET_SECS: u64 = 120;
 
 /// 降级链单个 GETBULK 阶段的耗时上限。
 ///
-/// 单次请求的重传链最坏约 35s（5s 超时 × 4 次 + 3 次固定间隔）；但多表
-/// 并发采集时实测部分设备（华为 CE12800）对大重复数请求「慢而不死」——
-/// 每个请求都要 1-2 次重试才回包，阶段既不报错也走不完，120s 总预算会在
-/// Cr10 阶段直接耗尽，降级链永远推进不到小重复数级（lldp 五表并发实测
-/// 复现：无任何降级告警即 budget 超时）。阶段级上限保证过慢/无响应的
-/// GETBULK 阶段被及时放弃并推进到下一级。取值须大于单请求重传链最坏值
-///（默认 5s/3 次配置为 35s）；总预算扣除两级阶段预算后仍给 GETNEXT
-/// 兜底留出约 30s。
-const WALK_STAGE_BUDGET_SECS: u64 = 45;
+/// 部分设备（实测华为 CE12800）对大重复数请求「慢而不死」——探针单请求
+/// 能回包，整段 walk 却每请求重试 1-2 次才推进（lldp 五表并发实测复现），
+/// 阶段既不报错也走不完。阶段级上限保证此类阶段被及时放弃并推进到下一级；
+/// 阶段被提前放弃只损失 Cr10 档的效率，数据正确性由下一级保证。取值需
+/// 覆盖健康大表在轻度丢包下的耗时（几十个请求 + 少量重传），20s 实测
+/// 足够；总预算扣除两级阶段预算后仍给 GETNEXT 兜底留出充足时间。
+const WALK_STAGE_BUDGET_SECS: u64 = 20;
+
+/// 降级记忆 TTL：某 OID 在小重复数档采集成功后记忆该观测，TTL 内同设备
+/// 同 OID 的采集直接从小重复数档开始（跳过探针与必然失败的整段 walk）。
+/// 过期后回到完整探针链（设备可能已恢复或为瞬时拥塞）。
+const WALK_MEMORY_TTL_SECS: u64 = 1800;
+
+/// 降级记忆表：键为「设备地址|OID」（见 [`walk_memory_key`]），值为最近
+/// 一次小重复数档采集成功的时刻。仅存于进程内，重启后冷采一次重新观测。
+static WALK_DEGRADED_MEMORY: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// GETBULK 能力探针超时：整段 walk 前先用单请求 GETBULK 探测设备对大重复
+/// 数的响应能力，探针超过此上限即判定该重复数不可用，直接进入下一级，
+/// 避免整段 walk 白等重传链（约 35s，实测主机命令秒回而采集 30s+ 的主因）。
+/// 取值须略大于单请求超时（默认 5s）、小于重传链首个重试间隔结束点。
+const WALK_PROBE_TIMEOUT_SECS: u64 = 6;
 
 /// [`walk_varbinds`] 失败类型：底层 SNMP 错误或超出总预算。
 #[derive(Debug)]
@@ -76,10 +91,14 @@ impl WalkError {
     }
 }
 
-/// walk 单个 OID：降级链为「GETBULK-10 → GETBULK-2 → GETNEXT」，前两级
-/// GETBULK 各受 [`WALK_STAGE_BUDGET_SECS`] 阶段预算约束，阶段超时/失败
-/// 先降重复数重试，仍失败降级 GETNEXT 逐条遍历并告警；认证/配置类错误
-/// 直接冒泡（重试无意义且会翻倍失败时延）。
+/// walk 单个 OID：若降级记忆命中（[`WALK_DEGRADED_MEMORY`]，TTL 内该列
+/// 已确认 Cr10 档不可用）直接从小重复数档采集；否则先发单请求 GETBULK
+/// 探针（[`WALK_PROBE_TIMEOUT_SECS`]）探测设备对 [`WALK_MAX_REPETITIONS`]
+/// 的响应能力——探针通过才执行整段 walk（受 [`WALK_STAGE_BUDGET_SECS`]
+/// 阶段预算约束），探针无响应直接降 [`WALK_DEGRADED_REPETITIONS`] 采集，
+/// 不再白等必然失败的整段重传链。小重复数成功写入降级记忆，仍失败降级
+/// GETNEXT 逐条遍历并告警；认证/配置类错误直接冒泡（重试无意义且会翻倍
+/// 失败时延）。v1 无 GETBULK（WalkOptions 默认即 GETNEXT），跳过探针。
 ///
 /// 全程受 [`WALK_BUDGET_SECS`] 总预算约束，超预算终止并返回
 /// [`WalkError::BudgetExceeded`]；降级重试不会留下半张表的中间结果
@@ -88,44 +107,187 @@ pub(crate) async fn walk_varbinds(
     client: &Client,
     target: &async_snmp::Oid,
 ) -> Result<Vec<VarBind>, WalkError> {
+    let memory_key = walk_memory_key(client, target);
     let walk = async {
-        match walk_bulk_stage(client, target, WALK_MAX_REPETITIONS).await {
-            BulkStage::Done(varbinds) => Ok(varbinds),
-            BulkStage::Retry(detail) => {
-                warn!(
-                    "SNMP walk GETBULK 失败，降重复数重试: oid={}, error={}",
-                    target, detail
-                );
-                match walk_bulk_stage(client, target, WALK_DEGRADED_REPETITIONS).await {
-                    BulkStage::Done(varbinds) => Ok(varbinds),
-                    // 小重复数仍失败：设备 bulk 实现异常或单条响应即超限，
-                    // 降级 GETNEXT 逐条遍历
+        // 降级记忆命中：该 OID 近期已确认 Cr10 档不可用，直接小重复数采集，
+        // 跳过探针与必然失败的整段 walk（冷采实测 20s+，命中后秒级）
+        if walk_memory_hit(&memory_key) {
+            return match walk_bulk_stage(client, target, WALK_DEGRADED_REPETITIONS).await {
+                BulkStage::Done(varbinds) => {
+                    walk_memory_confirm(&memory_key);
+                    Ok(varbinds)
+                }
+                BulkStage::Retry(detail) => {
+                    warn!(
+                        "SNMP walk 小重复数采集仍失败，降级 GETNEXT: oid={}, error={}",
+                        target, detail
+                    );
+                    walk_memory_evict(&memory_key);
+                    walk_getnext(client, target).await
+                }
+                BulkStage::Fatal(err) => Err(*err),
+            };
+        }
+        let probe = if client.version() == Version::V1 {
+            BulkProbe::Ok
+        } else {
+            probe_bulk(client, target, WALK_MAX_REPETITIONS).await
+        };
+        match probe {
+            BulkProbe::Ok => {
+                match walk_bulk_stage(client, target, WALK_MAX_REPETITIONS).await {
+                    BulkStage::Done(varbinds) => {
+                        // Cr10 档采集成功：清除该 OID 的降级记忆（若设备曾
+                        // 拥塞现已恢复）
+                        walk_memory_evict(&memory_key);
+                        Ok(varbinds)
+                    }
+                    // 探针通过但整段 walk 中途失败/过慢（如部分行后设备
+                    // 磨蹭）：降重复数重试
                     BulkStage::Retry(detail) => {
                         warn!(
-                            "SNMP walk 小重复数重试仍失败，降级 GETNEXT: oid={}, error={}",
+                            "SNMP walk GETBULK 失败，降重复数重试: oid={}, error={}",
                             target, detail
                         );
-                        walk_collect(
-                            client,
-                            target,
-                            WalkOptions {
-                                method: WalkMethod::GetNext,
-                                ..WalkOptions::default()
-                            },
-                        )
-                        .await
-                        .map_err(|e| *e)
+                        walk_degraded(&memory_key, client, target).await
                     }
                     BulkStage::Fatal(err) => Err(*err),
                 }
             }
-            BulkStage::Fatal(err) => Err(*err),
+            // 探针无响应：设备静默丢大重复数包，直接小重复数采集
+            BulkProbe::Retry(detail) => {
+                warn!(
+                    "SNMP GETBULK-{WALK_MAX_REPETITIONS} 探针无响应，直接降重复数采集: oid={}, error={}",
+                    target, detail
+                );
+                walk_degraded(&memory_key, client, target).await
+            }
+            BulkProbe::Fatal(err) => Err(*err),
         }
     };
 
     match tokio::time::timeout(Duration::from_secs(WALK_BUDGET_SECS), walk).await {
         Ok(result) => result.map_err(|e| WalkError::Snmp(Box::new(e))),
         Err(_) => Err(WalkError::BudgetExceeded),
+    }
+}
+
+/// 降级记忆键：设备地址 + OID 唯一标识一个「设备对该列的 bulk 能力」观测。
+fn walk_memory_key(client: &Client, target: &async_snmp::Oid) -> String {
+    format!("{}|{target}", client.peer_addr())
+}
+
+/// 记忆命中判定：TTL 内有确认记录即命中（惰性清理过期项）。
+fn walk_memory_hit(key: &str) -> bool {
+    let mut map = WALK_DEGRADED_MEMORY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    match map.get(key) {
+        Some(confirmed_at)
+            if confirmed_at.elapsed() <= Duration::from_secs(WALK_MEMORY_TTL_SECS) =>
+        {
+            true
+        }
+        Some(_) => {
+            map.remove(key);
+            false
+        }
+        None => false,
+    }
+}
+
+/// 记录/刷新降级记忆。
+fn walk_memory_confirm(key: &str) {
+    WALK_DEGRADED_MEMORY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(key.to_string(), Instant::now());
+}
+
+/// 清除降级记忆（Cr10 档恢复或该档位彻底不可用需重走探针链）。
+fn walk_memory_evict(key: &str) {
+    WALK_DEGRADED_MEMORY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(key);
+}
+
+/// 小重复数 GETBULK 采集：成功即写入降级记忆，仍失败降级 GETNEXT 兜底
+///（受总预算约束）并清除记忆（下次重走完整探针链）。
+async fn walk_degraded(
+    memory_key: &str,
+    client: &Client,
+    target: &async_snmp::Oid,
+) -> Result<Vec<VarBind>, async_snmp::Error> {
+    match walk_bulk_stage(client, target, WALK_DEGRADED_REPETITIONS).await {
+        BulkStage::Done(varbinds) => {
+            walk_memory_confirm(memory_key);
+            Ok(varbinds)
+        }
+        // 小重复数仍失败：设备 bulk 实现异常或单条响应即超限，
+        // 降级 GETNEXT 逐条遍历
+        BulkStage::Retry(detail) => {
+            warn!(
+                "SNMP walk 小重复数重试仍失败，降级 GETNEXT: oid={}, error={}",
+                target, detail
+            );
+            walk_memory_evict(memory_key);
+            walk_getnext(client, target).await
+        }
+        BulkStage::Fatal(err) => Err(*err),
+    }
+}
+
+/// GETNEXT 逐条遍历兜底（受总预算约束）。
+async fn walk_getnext(
+    client: &Client,
+    target: &async_snmp::Oid,
+) -> Result<Vec<VarBind>, async_snmp::Error> {
+    walk_collect(
+        client,
+        target,
+        WalkOptions {
+            method: WalkMethod::GetNext,
+            ..WalkOptions::default()
+        },
+    )
+    .await
+    .map_err(|e| *e)
+}
+
+/// GETBULK 能力探针结果。
+enum BulkProbe {
+    /// 探针有响应：设备可处理该重复数，可执行整段 walk
+    Ok,
+    /// 探针无响应或协议层失败（应降重复数），附告警详情
+    Retry(String),
+    /// 不可重试错误（认证/配置类），直接冒泡
+    Fatal(Box<async_snmp::Error>),
+}
+
+/// 单请求 GETBULK 探测：与整段 walk 的首个请求完全同参（同列同重复数），
+/// 响应体量一致，可准确预测设备是否会静默丢包。探针被中途取消仅废弃在途
+/// 请求（async-snmp 请求注册随取消清理），不影响后续请求。
+async fn probe_bulk(client: &Client, target: &async_snmp::Oid, max_repetitions: u32) -> BulkProbe {
+    match tokio::time::timeout(
+        Duration::from_secs(WALK_PROBE_TIMEOUT_SECS),
+        client.get_bulk(std::slice::from_ref(target), 0, max_repetitions),
+    )
+    .await
+    {
+        Ok(Ok(_)) => BulkProbe::Ok,
+        Ok(Err(err)) if is_bulk_retryable(&err) => {
+            BulkProbe::Retry(format_snmp_error(err).log_string())
+        }
+        Ok(Err(err)) => BulkProbe::Fatal(err),
+        Err(_) => BulkProbe::Retry(
+            msg("server.snmp.error.timeout")
+                .with(
+                    "detail",
+                    format!("GETBULK-{max_repetitions} 探针 {WALK_PROBE_TIMEOUT_SECS}s 内无响应"),
+                )
+                .log_string(),
+        ),
     }
 }
 
@@ -295,5 +457,8 @@ mod tests {
     fn walk_repetitions_与net_snmp默认一致() {
         assert_eq!(WALK_MAX_REPETITIONS, 10);
         assert_eq!(WALK_DEGRADED_REPETITIONS, 2);
+        assert_eq!(WALK_PROBE_TIMEOUT_SECS, 6);
+        assert_eq!(WALK_STAGE_BUDGET_SECS, 20);
+        assert_eq!(WALK_MEMORY_TTL_SECS, 1800);
     }
 }

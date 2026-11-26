@@ -932,8 +932,9 @@ onMounted(async () => {
             <div class="form-group">
               <label for="device-snmp-version">{{ t("device.snmp_version") }}</label>
               <select id="device-snmp-version" v-model="form.snmpVersion">
-                <option value="v2c">SNMPv1/v2c</option>
-                <option value="v3">SNMPv3</option>
+                <option value="v1">v1</option>
+                <option value="v2c">v2c</option>
+                <option value="v3">v3</option>
               </select>
             </div>
             <div class="form-group">
