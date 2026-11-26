@@ -11,6 +11,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet, apiPost } from "../../api/client";
+import { useSyncTimer } from "../../composables/useSyncTimer";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import LocateModal from "./LocateModal.vue";
@@ -30,6 +31,9 @@ const phase = ref<LoadPhase>("loading");
 const errorMsg = ref("");
 const deviceName = ref("");
 const entries = ref<SnmpMac[]>([]);
+
+// SNMP 同步计时反馈：同步按钮为图标态（同步中随视图切走），等待页文案带已耗时秒数
+const { run, label } = useSyncTimer();
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
@@ -201,7 +205,7 @@ loadData();
       <div v-if="phase === 'loading' || phase === 'syncing'" class="modal-loading" role="status" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text">
-          {{ phase === "syncing" ? t("device.syncing_mac") : t("device.loading_mac_table") }}
+          {{ label(t("device.loading_mac_table"), t("device.syncing_mac")) }}
         </p>
       </div>
       <div v-else-if="phase === 'error'" class="modal-loading">
@@ -209,7 +213,7 @@ loadData();
       </div>
       <div v-else-if="phase === 'empty'" class="modal-loading">
         <p class="mac-lldp-text-muted">{{ t("device.no_mac_data") }}</p>
-        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="syncMacData">
+        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="run(syncMacData)">
           <NavIcon name="refresh" />
         </button>
       </div>
@@ -242,7 +246,7 @@ loadData();
             class="icon-btn btn-primary"
             :data-tooltip="t('device.sync_from_snmp')"
             :aria-label="t('device.sync_from_snmp')"
-            @click="syncMacData"
+            @click="run(syncMacData)"
           >
             <NavIcon name="refresh" />
           </button>

@@ -39,6 +39,7 @@
     "success": "成功",
     "failed": "失败",
     "loading": "加载中...",
+    "syncing": "同步中...",
     "actions": "操作",
     "created_at": "创建时间",
     "description": "描述",

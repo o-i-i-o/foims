@@ -11,6 +11,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet, apiPost } from "../../api/client";
+import { useSyncTimer } from "../../composables/useSyncTimer";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import type { DeviceEntity } from "../../types/api/generated/DeviceEntity";
@@ -32,6 +33,9 @@ const deviceName = ref("");
 const entities = ref<DeviceEntity[]>([]);
 const sensors = ref<DeviceSensor[]>([]);
 const tab = ref<"entities" | "sensors">("entities");
+
+// SNMP 同步计时反馈：页脚按钮显示「同步中... Ns」，等待页文案同样带已耗时秒数
+const { syncing, run, label } = useSyncTimer();
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
@@ -108,7 +112,7 @@ loadData();
       <div v-if="phase === 'loading' || phase === 'syncing'" class="modal-loading" role="status" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text">
-          {{ phase === "syncing" ? t("device.entity.syncing") : t("device.entity.loading") }}
+          {{ label(t("device.entity.loading"), t("device.entity.syncing")) }}
         </p>
       </div>
       <div v-else-if="phase === 'error'" class="modal-loading">
@@ -116,7 +120,7 @@ loadData();
       </div>
       <div v-else-if="phase === 'empty'" class="modal-loading">
         <p class="mac-lldp-text-muted">{{ t("device.entity.empty") }}</p>
-        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="syncData">
+        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="run(syncData)">
           <NavIcon name="refresh" />
         </button>
       </div>
@@ -207,8 +211,8 @@ loadData();
       </div>
     </div>
     <template #footer>
-      <button type="button" class="btn-primary" :disabled="phase === 'syncing'" @click="syncData">
-        {{ t("device.sync_from_snmp") }}
+      <button type="button" class="btn-primary" :disabled="syncing" @click="run(syncData)">
+        {{ label(t("device.sync_from_snmp"), t("common.syncing")) }}
       </button>
     </template>
   </ModalShell>

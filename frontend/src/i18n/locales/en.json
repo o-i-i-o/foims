@@ -39,6 +39,7 @@
     "success": "Success",
     "failed": "Failed",
     "loading": "Loading...",
+    "syncing": "Syncing...",
     "actions": "Actions",
     "created_at": "Created At",
     "description": "Description",

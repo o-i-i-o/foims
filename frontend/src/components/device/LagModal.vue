@@ -9,6 +9,7 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet, apiPost } from "../../api/client";
 import ModalShell from "../ModalShell.vue";
+import { useSyncTimer } from "../../composables/useSyncTimer";
 import NavIcon from "../NavIcon.vue";
 import type { DeviceLag } from "../../types/api/generated/DeviceLag";
 import type { DeviceWithDetails } from "../../types/api/generated/DeviceWithDetails";
@@ -25,6 +26,9 @@ const phase = ref<LoadPhase>("loading");
 const errorMsg = ref("");
 const deviceName = ref("");
 const lags = ref<DeviceLag[]>([]);
+
+// SNMP 同步计时反馈：页脚按钮显示「同步中... Ns」，等待页文案同样带已耗时秒数
+const { syncing, run, label } = useSyncTimer();
 
 // 成员端口名（JSONB string[] 优先，退回 ifIndex 数字数组）；
 // 先将 JsonValue 列赋给 unknown 变量再判断，避免递归类型参与推断（仿 SnmpEventsModal detailText）
@@ -89,7 +93,7 @@ loadData();
       <div v-if="phase === 'loading' || phase === 'syncing'" class="modal-loading" role="status" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text">
-          {{ phase === "syncing" ? t("device.lag.syncing") : t("device.lag.loading") }}
+          {{ label(t("device.lag.loading"), t("device.lag.syncing")) }}
         </p>
       </div>
       <div v-else-if="phase === 'error'" class="modal-loading">
@@ -97,7 +101,7 @@ loadData();
       </div>
       <div v-else-if="phase === 'empty'" class="modal-loading">
         <p class="mac-lldp-text-muted">{{ t("device.lag.empty") }}</p>
-        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="syncData">
+        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="run(syncData)">
           <NavIcon name="refresh" />
         </button>
       </div>
@@ -122,8 +126,8 @@ loadData();
       </table>
     </div>
     <template #footer>
-      <button type="button" class="btn-primary" :disabled="phase === 'syncing'" @click="syncData">
-        {{ t("device.sync_from_snmp") }}
+      <button type="button" class="btn-primary" :disabled="syncing" @click="run(syncData)">
+        {{ label(t("device.sync_from_snmp"), t("common.syncing")) }}
       </button>
     </template>
   </ModalShell>

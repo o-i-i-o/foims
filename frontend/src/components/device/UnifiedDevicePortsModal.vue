@@ -19,6 +19,7 @@ import { useLiveDevicePorts } from "../../composables/useLiveAgents";
 import { formatBps } from "../../utils/formatter";
 import { invalidateDeviceWrite, queryKeys } from "../../utils/queryKeys";
 import { useAuthStore } from "../../stores/auth";
+import { useSyncTimer } from "../../composables/useSyncTimer";
 import ModalShell from "../ModalShell.vue";
 import PortConflictModal from "./PortConflictModal.vue";
 import PortDetailModal from "./PortDetailModal.vue";
@@ -205,7 +206,8 @@ function onPortSaved(): void {
   invalidateDeviceWrite(queryClient, props.deviceId);
 }
 
-const syncing = ref(false);
+// SNMP 同步计时反馈：页脚按钮显示「获取中... Ns」，冲突决策后的逐端口提交阶段同样计时
+const { syncing, run, label } = useSyncTimer();
 
 /** 冲突轮次状态：确认后整体清空 */
 interface ConflictRound {
@@ -218,10 +220,6 @@ interface ConflictRound {
 const conflictRound = ref<ConflictRound | null>(null);
 
 async function startSnmpSync(): Promise<void> {
-  if (syncing.value) {
-    return;
-  }
-  syncing.value = true;
   try {
     const snmpResult = await apiGet<SnmpPort[]>(
       `/api/resources/devices/${props.deviceId}/snmp-ports`
@@ -265,8 +263,6 @@ async function startSnmpSync(): Promise<void> {
     // 与原实现一致：非 Error 抛出值与空 message 均回退到通用失败文案
     const message = error instanceof Error ? error.message : "";
     showToast(message || t("device.port_sync_failed"), "error");
-  } finally {
-    syncing.value = false;
   }
 }
 
@@ -281,7 +277,7 @@ function onConflictConfirm(decisions: Record<string, "skip" | "overwrite">): voi
     .map((c) => c.snmpPort);
   const skippedCount = round.conflicts.length - toOverwrite.length;
   conflictRound.value = null;
-  applySnmpResults(round.toAdd, toOverwrite, skippedCount, round.existingMap);
+  run(() => applySnmpResults(round.toAdd, toOverwrite, skippedCount, round.existingMap));
 }
 
 /** 覆盖同步载荷：仅运行属性与描述。DeviceInterfaceUpdate 的双层 Option 语义为
@@ -443,8 +439,8 @@ async function applySnmpResults(
       <button type="button" class="btn-primary" @click="openPortDetail(null)">
         {{ t("device.add_device_port") }}
       </button>
-      <button type="button" class="btn-secondary" :disabled="syncing" @click="startSnmpSync">
-        {{ syncing ? t("device.fetching_snmp") : t("device.sync_snmp_ports") }}
+      <button type="button" class="btn-secondary" :disabled="syncing" @click="run(startSnmpSync)">
+        {{ label(t("device.sync_snmp_ports"), t("device.fetching_snmp")) }}
       </button>
     </template>
 

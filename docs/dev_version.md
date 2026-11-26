@@ -620,3 +620,7 @@ v0.93.15
 v0.93.16
 2026112609371801
 设备页 SNMP 版本选项文案精简（frontend，z 段 +1）：用户要求下拉选项去掉「SNMP」前缀，DeviceModal.vue 版本下拉选项由 SNMPv1/SNMPv2c/SNMPv3 改为 v1/v2c/v3（option value 不变，纯展示文案）。验证：npm run build 通过，产物部署 /usr/share/foims/web。仅 dev_version z+1，Cargo.toml 与 frontend/package.json 不联动
+
+v0.94.0
+2026112609561901
+SNMP 汇聚弹窗采集反馈与加载圈动画修复（frontend，y 段 +1）：用户反馈两点——①端口子页页脚「从SNMP获取端口」有「获取中...」状态反馈，其余采集按钮没有，要求补齐并加计时；②硬件清单/LLDP 等等待页的加载圈不动。修复：①根因为主入口（main.ts）从未定义 @keyframes spin，device-modals.css 的 .spinner 引用的 spin 关键帧仅存在于 init.css（独立 init 入口），主应用加载圈静止——关键帧改独立命名 device-spinner-spin 定义进 device-modals.css（同时覆盖 CableLinkModal/LocateModal 复用 .spinner 的场景）；②新建 composables/useSyncTimer.ts（syncing + elapsed 秒级计时 + label(idle,running)/run(task) 包装，防重入 + onBeforeUnmount 清理），接入 SNMP 汇聚弹窗 8 个子页：UnifiedDevicePortsModal 页脚按钮显示「获取中... Ns」且冲突决策后的逐端口提交阶段同样计时（此前该阶段无任何禁用/反馈），Entity/Lldp/Vlan/Cdp/Lag/Poe 页脚「从SNMP同步」按钮统一显示「同步中... Ns」+禁用（Lldp 此前连禁用都没有），空态图标按钮一并走 run() 防重入，ArpModal（无页脚）与各页等待页文案追加已耗时秒数；i18n zh/en 新增 common.syncing。验证：npm run typecheck、npm run build、npx oxlint（348 文件 0 警告）通过（沙箱无 biome 二进制）。y 段 +1，frontend/package.json 0.1.94→0.1.95 联动，Cargo.toml 不动

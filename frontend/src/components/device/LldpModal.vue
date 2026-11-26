@@ -11,6 +11,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiGet, apiPost } from "../../api/client";
+import { useSyncTimer } from "../../composables/useSyncTimer";
 import ModalShell from "../ModalShell.vue";
 import NavIcon from "../NavIcon.vue";
 import type { DeviceLldp } from "../../types/api/generated/DeviceLldp";
@@ -29,6 +30,9 @@ const phase = ref<LoadPhase>("loading");
 const errorMsg = ref("");
 const deviceName = ref("");
 const neighbors = ref<DeviceLldp[]>([]);
+
+// SNMP 同步计时反馈：页脚按钮显示「同步中... Ns」，等待页文案同样带已耗时秒数
+const { syncing, run, label } = useSyncTimer();
 
 async function loadData(): Promise<void> {
   phase.value = "loading";
@@ -102,7 +106,7 @@ loadData();
       <div v-if="phase === 'loading' || phase === 'syncing'" class="modal-loading" role="status" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text">
-          {{ phase === "syncing" ? t("device.syncing_lldp") : t("device.loading_lldp") }}
+          {{ label(t("device.loading_lldp"), t("device.syncing_lldp")) }}
         </p>
       </div>
       <div v-else-if="phase === 'error'" class="modal-loading">
@@ -110,7 +114,7 @@ loadData();
       </div>
       <div v-else-if="phase === 'empty'" class="modal-loading">
         <p class="mac-lldp-text-muted">{{ t("device.no_lldp_data") }}</p>
-        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="syncLldpData">
+        <button type="button" class="icon-btn btn-primary" :title="t('device.sync_from_snmp')" @click="run(syncLldpData)">
           <NavIcon name="refresh" />
         </button>
       </div>
@@ -138,8 +142,8 @@ loadData();
       </table>
     </div>
     <template #footer>
-      <button type="button" class="btn-primary" @click="syncLldpData">
-        {{ t("device.sync_from_snmp") }}
+      <button type="button" class="btn-primary" :disabled="syncing" @click="run(syncLldpData)">
+        {{ label(t("device.sync_from_snmp"), t("common.syncing")) }}
       </button>
     </template>
   </ModalShell>
