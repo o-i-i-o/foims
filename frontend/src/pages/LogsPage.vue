@@ -205,8 +205,13 @@ async function jumpToLatest(): Promise<void> {
   await scrollLiveToBottom();
 }
 
-// 新日志到达、筛选变化或回到底部时，处于跟随态即滚到底
-watch([visibleLogs, livePinned], async () => {
+// 新日志到达、筛选变化或回到底部时，处于跟随态即滚到底；
+// 日志清空/筛选后无内容时恢复跟随态，避免空窗格上残留「回到最新」悬浮按钮
+watch([visibleLogs, livePinned], async ([logs]) => {
+  if (logs.length === 0) {
+    livePinned.value = true;
+    return;
+  }
   if (!livePinned.value || livePaused.value) {
     return;
   }
@@ -491,7 +496,9 @@ const detailsLog = ref<OperationLog | null>(null);
       </div>
       <div class="live-wrap">
         <div ref="livePane" class="table-container live-scroll" @scroll="onLiveScroll">
-          <table id="runtime-logs-table" class="data-table" :aria-label="t('logs.runtime_logs')">
+          <!-- 有日志：表格渲染；空态（无日志或筛选无结果）：居中占位卡片替代拉伸空行
+           （表格随窗格拉伸时空行位置依赖浏览器行高分配，无法稳定居中，故空态不渲染表格） -->
+          <table v-if="visibleLogs.length > 0" id="runtime-logs-table" class="data-table" :aria-label="t('logs.runtime_logs')">
             <thead>
               <tr>
                 <th class="index-column">{{ t("common.index") }}</th>
@@ -502,17 +509,8 @@ const detailsLog = ref<OperationLog | null>(null);
               </tr>
             </thead>
             <tbody>
-              <tr v-if="liveLogs.length === 0" class="empty-row">
-                <td colspan="5" class="text-center">
-                  {{ t("logs.live_empty") }}
-                  <span v-if="liveConnected && !livePaused" class="live-empty-hint">{{ t("logs.live_empty_hint") }}</span>
-                </td>
-              </tr>
-              <tr v-else-if="visibleLogs.length === 0" class="empty-row">
-                <td colspan="5" class="text-center">{{ t("logs.live_filter_empty") }}</td>
-              </tr>
               <!-- 不符合解析格式的续行（time/level/target 为空）按原文渲染在消息列 -->
-              <tr v-for="(line, index) in visibleLogs" v-else :key="index">
+              <tr v-for="(line, index) in visibleLogs" :key="index">
                 <td class="index-column">{{ index + 1 }}</td>
                 <td class="col-center col-live-time">{{ line.time ? formatLogTime(line.time) : "" }}</td>
                 <td class="col-center" :class="line.level ? `live-lvl-${line.level.toLowerCase()}` : undefined">{{ line.level }}</td>
@@ -521,6 +519,10 @@ const detailsLog = ref<OperationLog | null>(null);
               </tr>
             </tbody>
           </table>
+          <div v-else class="live-empty">
+            <p class="live-empty-title">{{ liveLogs.length === 0 ? t("logs.live_empty") : t("logs.live_filter_empty") }}</p>
+            <p v-if="liveLogs.length === 0 && liveConnected && !livePaused" class="live-empty-hint">{{ t("logs.live_empty_hint") }}</p>
+          </div>
         </div>
         <button v-if="!livePinned" type="button" class="live-jump" @click="jumpToLatest">
           {{ t("logs.live_follow") }}
@@ -817,9 +819,12 @@ const detailsLog = ref<OperationLog | null>(null);
   overflow-y: auto;
 }
 
-/* 表头随窗格滚动吸附：collapse 边框在 sticky 表头上会随滚动消失，
+/* 表格不跟随窗格拉伸（覆盖 tables.css 的 .table-container > .data-table flex: 1）：
+   拉伸会把剩余高度摊到行上导致行高虚胖，与全站分页表格「数据尾部留白」同一原则；
+   表头随窗格滚动吸附：collapse 边框在 sticky 表头上会随滚动消失，
    改用 separate + 单元格自身边框（.data-table 的上下边框仍然生效） */
 #runtime-logs-table {
+  flex: 0 0 auto;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -872,8 +877,28 @@ const detailsLog = ref<OperationLog | null>(null);
   white-space: pre-wrap;
 }
 
+/* 空态（无日志/筛选无结果）：占满窗格剩余高度并居中，外观与其他页签表格卡片一致 */
+.live-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--color-bg-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  text-align: center;
+}
+
+.live-empty-title,
+.live-empty .live-empty-hint {
+  margin: 0;
+}
+
 .live-empty-hint {
-  display: block;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
