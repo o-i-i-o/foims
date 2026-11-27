@@ -30,8 +30,8 @@ use super::{
     TempSource, TempUnit, cpu_pct_value,
 };
 use crate::collect::metrics::temp_from_milli;
-use crate::vendor::platform::PlatformCaps;
 use crate::vendor::profiles::{ProfileMem, VendorProfile};
+use crate::vendor::platform::PlatformCaps;
 use crate::vendor::{self, DiscoveryProfile, MemRule, OidColumn, TempRule};
 
 /// 探测失败：系统组（sysObjectID/sysDescr）无响应，设备不可达。
@@ -781,10 +781,7 @@ async fn discover_temp<R: SnmpReader>(
 
 /// profile 温度列逐列探测，首个有值列生效；单位语义随列
 ///（celsius 直接摄氏度；milli 毫摄氏度）。
-async fn profile_temp_sources<R: SnmpReader>(
-    reader: &R,
-    profile: &VendorProfile,
-) -> Vec<TempSource> {
+async fn profile_temp_sources<R: SnmpReader>(reader: &R, profile: &VendorProfile) -> Vec<TempSource> {
     for column in &profile.temp_columns {
         let sources = match column.unit {
             TempUnit::MilliCelsius => walk_column(reader, column.oid.clone())

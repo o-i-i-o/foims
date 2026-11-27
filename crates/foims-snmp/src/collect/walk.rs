@@ -328,12 +328,7 @@ async fn walk_bulk_stage(
     };
     match tokio::time::timeout(
         Duration::from_secs(WALK_STAGE_BUDGET_SECS),
-        walk_collect(
-            client,
-            target,
-            options,
-            Some(Duration::from_secs(WALK_STALL_SECS)),
-        ),
+        walk_collect(client, target, options, Some(Duration::from_secs(WALK_STALL_SECS))),
     )
     .await
     {

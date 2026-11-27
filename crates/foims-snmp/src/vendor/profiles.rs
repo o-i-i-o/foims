@@ -89,9 +89,7 @@ impl VendorProfileRegistry {
     fn load() -> Self {
         // 内置默认为编译期不变量：解析失败仅记错误并置空（三家回退公共链）
         let builtin = parse_profiles(DEFAULT_PROFILES).unwrap_or_else(|e| {
-            tracing::error!(
-                "SNMP 内置厂商 profile 解析失败（不变量破坏，请检查 profiles_default.toml）: {e}"
-            );
+            tracing::error!("SNMP 内置厂商 profile 解析失败（不变量破坏，请检查 profiles_default.toml）: {e}");
             Vec::new()
         });
         // 配置文件：首个可读候选生效；缺失静默（未部署即全内置默认），
@@ -101,10 +99,7 @@ impl VendorProfileRegistry {
             .find_map(|path| fs::read_to_string(path).ok().map(|text| (*path, text)))
             .map_or_else(Vec::new, |(path, text)| match parse_profiles(&text) {
                 Ok(profiles) if !profiles.is_empty() => {
-                    tracing::info!(
-                        "SNMP 厂商 profile 配置加载: {} 条（{path}）",
-                        profiles.len()
-                    );
+                    tracing::info!("SNMP 厂商 profile 配置加载: {} 条（{path}）", profiles.len());
                     profiles
                 }
                 Ok(_) => {
@@ -246,7 +241,10 @@ fn build_profile(entry: ProfileEntry) -> Option<VendorProfile> {
         temp_columns,
     };
     // 空条目（识别/匹配得了但没有可采集项）无意义，跳过
-    if profile.cpu_columns.is_empty() && profile.mem.is_none() && profile.temp_columns.is_empty() {
+    if profile.cpu_columns.is_empty()
+        && profile.mem.is_none()
+        && profile.temp_columns.is_empty()
+    {
         tracing::warn!("SNMP 厂商 profile {} 无任何有效采集项，已跳过", profile.id);
         return None;
     }
@@ -326,7 +324,10 @@ mod tests {
         assert_eq!(cisco.cpu_columns.len(), 2);
         assert!(matches!(
             cisco.mem,
-            Some(ProfileMem::Pool { name: Some(_), .. })
+            Some(ProfileMem::Pool {
+                name: Some(_),
+                ..
+            })
         ));
         assert_eq!(cisco.temp_columns.len(), 1);
         assert_eq!(cisco.temp_columns[0].unit, TempUnit::Celsius);
@@ -343,10 +344,7 @@ mod tests {
         let h3c = profiles.iter().find(|p| p.id == "h3c").expect("h3c");
         assert!(matches!(
             &h3c.mem,
-            Some(ProfileMem::EntityPercent {
-                size_mega: None,
-                ..
-            })
+            Some(ProfileMem::EntityPercent { size_mega: None, .. })
         ));
     }
 
@@ -389,9 +387,7 @@ oid = "1.3.6.1.4.1.40000.2.1.0"
         assert_eq!(registry.custom.len(), 3);
         // OS id 精确匹配
         assert_eq!(
-            registry
-                .match_custom(None, Some("juniper"))
-                .map(|p| p.id.as_str()),
+            registry.match_custom(None, Some("juniper")).map(|p| p.id.as_str()),
             Some("juniper")
         );
         // sysObjectID 前缀匹配（识别未命中 OS id 时兜底）
@@ -418,9 +414,7 @@ oid = "1.3.6.1.4.1.40000.2.1.0"
             Some("vendor-a")
         );
         // milli 单位落表
-        let juniper = registry
-            .match_custom(None, Some("juniper"))
-            .expect("juniper");
+        let juniper = registry.match_custom(None, Some("juniper")).expect("juniper");
         assert_eq!(juniper.temp_columns[0].unit, TempUnit::MilliCelsius);
     }
 
@@ -440,7 +434,10 @@ oid = "1.3.6.1.4.1.99999.1.0"
             .match_custom(None, Some("huawei"))
             .expect("文件条目应命中");
         assert_eq!(matched.cpu_columns.len(), 1);
-        assert_eq!(matched.cpu_columns[0].to_string(), "1.3.6.1.4.1.99999.1.0");
+        assert_eq!(
+            matched.cpu_columns[0].to_string(),
+            "1.3.6.1.4.1.99999.1.0"
+        );
         // 未命中文件的 id 仍回落内置默认
         assert_eq!(
             registry.builtin(Some("cisco")).map(|p| p.id.as_str()),
