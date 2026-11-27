@@ -30,9 +30,12 @@ use crate::metrics_aggregator::MetricsAggregator;
 
 /// 单轮轮询的最大并发设备数：避免大量离线设备同时超时拖垮运行时
 const POLL_CONCURRENCY: usize = 8;
-/// hostname/os 入库截断宽度（与 ingest 文本校验上限对齐）
+/// hostname 入库截断宽度（与 ingest 文本校验上限对齐）。os 不对齐 ingest：
+/// monitored_hosts 的 hostname/os 均为 TEXT 列无列宽约束，ingest 的 128 是
+/// 上报路径的业务校验口径（超限拒绝），SNMP 路径 sysDescr 典型可达 200+
+/// 字符（如华为 VRP 描述串），入库上限仅作异常超长文本的兜底
 const MAX_HOSTNAME_LEN: usize = 255;
-const MAX_OS_LEN: usize = 128;
+const MAX_OS_LEN: usize = 512;
 
 /// SNMP 采集设备行：SNMP 配置（复用 foims-resource 的 DeviceForSnmp）+ 管理地址。
 #[derive(Debug, sqlx::FromRow)]
@@ -274,12 +277,14 @@ async fn poll_and_upsert(
     // sysName 缺失/为空时回落设备名，保证列表可读
     let hostname = info.hostname.unwrap_or_else(|| device_name.to_string());
     let hostname = truncate_to_column_width(&hostname, MAX_HOSTNAME_LEN);
-    let os = info.os.map(|s| truncate_to_column_width(&s, MAX_OS_LEN));
-    // Linux 描述串（uname 风格）补齐内核/架构，非 Linux 设备为 None（列留空）
-    let (kernel, arch) = os
+    // Linux 描述串（uname 风格）补齐内核/架构，非 Linux 设备为 None（列留空）；
+    // 解析必须先于 os 截断执行：arch 取自末尾 token，提前截断会丢架构标记
+    let (kernel, arch) = info
+        .os
         .as_deref()
         .and_then(snmp_metrics::parse_linux_sysdescr)
         .map_or((None, None), |(k, a)| (Some(k), Some(a)));
+    let os = info.os.map(|s| truncate_to_column_width(&s, MAX_OS_LEN));
 
     // 性能指标（二期）：差值依赖上一轮 raw_metrics._snmp_state
     let now = Utc::now();

@@ -22,6 +22,14 @@
     padding: 0;
   }
 
+  /* 锁一屏页面（运行日志 runtime-fill）：主容器解除最小高度。
+   body 仍带 UA 默认 8px 外边距（reset 未清除，兼作全站留白），
+   min-height: 100vh 会把锁屏区块整体顶出视口 16px，
+   产生页面级滚动条并裁掉侧栏底部；锁屏页由区块自管视口高度 */
+  .main-content:has(> .content-section.active.runtime-fill) {
+    min-height: 0;
+  }
+
   /* ===== 分页页脚贴底 =====
    含分页的区块拉伸为至少满视口的弹性列：表格较短时分页仍贴住屏幕底部，
    长表格滚动场景由 .pagination-container 的 sticky 吸附兜底。

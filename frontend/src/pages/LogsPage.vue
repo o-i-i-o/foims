@@ -779,12 +779,14 @@ const detailsLog = ref<OperationLog | null>(null);
 /* 运行日志页签激活：区块锁定一屏高并自带弹性列布局（与可视化页同一套路，
    不依赖 main-content.css 的 :has 分页规则；其他页签仍保持整页滚动），
    标签栏与工具栏占固定高度，日志窗格吃满剩余空间，
-   滚动只发生在窗格内部而不是整页 */
+   滚动只发生在窗格内部而不是整页。
+   高度扣 16px：body 仍带 UA 默认 8px 外边距（reset 未清除，兼作全站四周留白），
+   100dvh 整块会连同 body 下边距一起被顶出视口，出现页面级滚动条并裁掉侧栏底部 */
 #logs.runtime-fill {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh - 16px);
+  height: calc(100dvh - 16px);
   min-height: 0;
 }
 

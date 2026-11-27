@@ -25,9 +25,11 @@ use crate::metrics_aggregator::MetricsAggregator;
 
 /// 单轮轮询的最大并发设备数：BMC 会话资源有限，与实时路径同取 8。
 const POLL_CONCURRENCY: usize = 8;
-/// hostname/os 入库截断宽度（与 snmp_poll 列宽口径一致）
+/// hostname 入库截断宽度（与 snmp_poll 口径一致）。os 不对齐 ingest 的业务
+/// 校验上限：monitored_hosts 的 hostname/os 均为 TEXT 列无列宽约束，
+/// os 上限仅作异常超长文本的入库兜底（与 snmp_poll 的 MAX_OS_LEN 同值）
 const MAX_HOSTNAME_LEN: usize = 255;
-const MAX_OS_LEN: usize = 128;
+const MAX_OS_LEN: usize = 512;
 
 /// IPMI 采集设备行：IPMI 配置（复用 foims-ipmi 的 DeviceForIpmi）+ 管理地址。
 #[derive(Debug, sqlx::FromRow)]
