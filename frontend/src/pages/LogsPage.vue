@@ -84,6 +84,7 @@ const login = usePagedList<LoginLog>({
 const {
   logs: liveLogs,
   connected: liveConnected,
+  connecting: liveConnecting,
   paused: livePaused,
   clear: clearLiveLogs
 } = useLiveLogs(computed(() => activeTab.value === "runtime"));
@@ -447,9 +448,9 @@ const detailsLog = ref<OperationLog | null>(null);
 
     <div id="runtime-tab" v-show="activeTab === 'runtime'" class="tab-content" :class="{ active: activeTab === 'runtime' }" role="tabpanel">
       <div class="live-toolbar">
-        <span class="live-status" :class="{ connected: liveConnected }">
+        <span class="live-status" :class="{ connected: liveConnected, connecting: liveConnecting }">
           <span class="live-dot" aria-hidden="true"></span>
-          {{ liveConnected ? t("logs.live_connected") : t("logs.live_disconnected") }}
+          {{ liveConnected ? t("logs.live_connected") : liveConnecting ? t("logs.live_connecting") : t("logs.live_disconnected") }}
         </span>
         <span v-if="livePaused" class="live-paused-hint">{{ t("logs.live_paused_hint") }}</span>
         <div class="live-levels" role="group" :aria-label="t('logs.live_levels')">
@@ -678,9 +679,15 @@ const detailsLog = ref<OperationLog | null>(null);
   background: var(--color-success);
 }
 
+/* 建连过渡期：琥珀色呼吸点，刷新页面时先行示出，避免误读为「未连接」故障态 */
+.live-status.connecting .live-dot {
+  background: var(--color-warning);
+}
+
 /* 连接正常时状态点呼吸闪烁；用户偏好减少动效时不启用 */
 @media (prefers-reduced-motion: no-preference) {
-  .live-status.connected .live-dot {
+  .live-status.connected .live-dot,
+  .live-status.connecting .live-dot {
     animation: live-pulse 2s ease-in-out infinite;
   }
 }

@@ -39,6 +39,7 @@ export function parseJson(raw: unknown): unknown {
 
 /** 摘要流的 scope 级共享通道：连接、数据、引用计数同生命周期 */
 interface SummaryChannel {
+  scope: LiveScope;
   devices: Ref<LiveSummaryRow[]>;
   connected: Ref<boolean>;
   source: EventSource | null;
@@ -55,6 +56,19 @@ function normalizeDeviceIds(ids: readonly string[] | undefined): string {
   }
   return Array.from(new Set(ids.filter(Boolean))).toSorted().join(",");
 }
+
+// 会话恢复（401 → refresh 成功）后立即重建所有未连接的摘要通道：
+// EventSource 不走 fetch 拦截器，401 后只能等浏览器默认约 3s 的自动重连节奏，
+// 这里毫秒级重连，刷新页面（会话已过期）时连接状态不必迟到数秒
+function handleSessionRestored(): void {
+  for (const channel of summaryChannels.values()) {
+    if (channel.source && !channel.connected.value) {
+      channel.source.close();
+      channel.source = openSummarySource(channel, channel.scope, channel.signature);
+    }
+  }
+}
+window.addEventListener("foims:session-restored", handleSessionRestored);
 
 function buildSummaryUrl(scope: LiveScope, signature: string): string {
   const params = new URLSearchParams({ scope });
@@ -105,6 +119,7 @@ function acquireSummaryChannel(scope: LiveScope, signature: string): SummaryChan
     return existing;
   }
   const channel: SummaryChannel = {
+    scope,
     devices: ref<LiveSummaryRow[]>([]),
     connected: ref(false),
     source: null,
@@ -197,6 +212,23 @@ export function useLiveDevicePorts(
     source = null;
   }
 
+  function openFor(id: string): void {
+    const current = new EventSource(
+      `${LIVE_STREAM_URL}?device_id=${encodeURIComponent(id)}`
+    );
+    current.addEventListener("device", (event: MessageEvent) => {
+      // 只有当前连接能写回：切换设备后旧连接的迟到事件直接丢弃
+      if (source !== current) {
+        return;
+      }
+      const parsed = parseJson(event.data);
+      if (parsed && typeof parsed === "object") {
+        detail.value = parsed as LiveDeviceDetail;
+      }
+    });
+    source = current;
+  }
+
   watch(
     [idRef, enabledRef],
     ([id, on]) => {
@@ -205,24 +237,22 @@ export function useLiveDevicePorts(
       if (!on || !id) {
         return;
       }
-      const current = new EventSource(
-        `${LIVE_STREAM_URL}?device_id=${encodeURIComponent(id)}`
-      );
-      current.addEventListener("device", (event: MessageEvent) => {
-        // 只有当前连接能写回：切换设备后旧连接的迟到事件直接丢弃
-        if (source !== current) {
-          return;
-        }
-        const parsed = parseJson(event.data);
-        if (parsed && typeof parsed === "object") {
-          detail.value = parsed as LiveDeviceDetail;
-        }
-      });
-      source = current;
+      openFor(id);
     },
     { immediate: true }
   );
-  onUnmounted(close);
+  // 会话恢复后立即重连（保留上一帧明细，重连期间弹窗数据不闪空）
+  function handleSessionRestored(): void {
+    if (source && enabledRef.value && idRef.value) {
+      close();
+      openFor(idRef.value);
+    }
+  }
+  window.addEventListener("foims:session-restored", handleSessionRestored);
+  onUnmounted(() => {
+    window.removeEventListener("foims:session-restored", handleSessionRestored);
+    close();
+  });
 
   return { detail };
 }

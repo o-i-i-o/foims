@@ -1297,6 +1297,7 @@
     "clear_days_confirm_count": "Are you sure you want to delete logs older than {{days}} days? {{count}} records will be removed. This action cannot be undone.",
     "clear_failed": "Failed to clear logs",
     "live_connected": "Connected",
+    "live_connecting": "Connecting…",
     "live_disconnected": "Disconnected",
     "live_pause": "Pause",
     "live_resume": "Resume",

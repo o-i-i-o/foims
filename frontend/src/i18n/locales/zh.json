@@ -1297,6 +1297,7 @@
     "clear_days_confirm_count": "确定要清理 {{days}} 天前的日志吗？将删除 {{count}} 条记录，此操作不可撤销。",
     "clear_failed": "清理日志失败",
     "live_connected": "已连接",
+    "live_connecting": "连接中…",
     "live_disconnected": "未连接",
     "live_pause": "暂停",
     "live_resume": "继续",

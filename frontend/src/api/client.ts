@@ -86,7 +86,13 @@ export async function refreshToken(): Promise<boolean> {
         return false;
       }
       const result: unknown = await response.json();
-      return (result as { success?: unknown }).success === true;
+      if ((result as { success?: unknown }).success === true) {
+        // 会话恢复后广播信号：EventSource 等 SSE 通道不走 fetch 拦截器，
+        // 401 后只能等浏览器默认约 3s 的自动重连节奏；监听此信号可立即重建连接
+        window.dispatchEvent(new CustomEvent("foims:session-restored"));
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error("令牌刷新失败:", error);
       return false;
