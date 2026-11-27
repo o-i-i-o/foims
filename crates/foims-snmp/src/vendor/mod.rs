@@ -15,16 +15,13 @@ pub mod registry;
 
 pub mod identify;
 
-pub use identify::{identify, Identity, NET_SNMP_ENTERPRISE, PlatformCaps};
+pub use identify::{Identity, NET_SNMP_ENTERPRISE, PlatformCaps, identify};
 pub use model::{
-    Candidate, CandidateKind, CapsKey, CollectMode, CollectPlan, Column, EntityFields,
-    Family, FamilyPlan, ALL_FAMILIES, Limits, Matcher, OsProfile, PercentFields, Pick,
-    PoolFields, Probe, ProbeOp, ProfileKind, SensorKind, SkipField, SkipOp, SkipRule,
-    StorageType, Unit,
+    ALL_FAMILIES, Candidate, CandidateKind, CapsKey, CollectMode, CollectPlan, Column,
+    EntityFields, Family, FamilyPlan, Limits, Matcher, OsProfile, PercentFields, Pick, PoolFields,
+    Probe, ProbeOp, ProfileKind, SensorKind, SkipField, SkipOp, SkipRule, StorageType, Unit,
 };
-pub use registry::{
-    registry, CUSTOM_FUNCTIONS, Registry, ResolvedCollectPlan, ResolvedFamily,
-};
+pub use registry::{CUSTOM_FUNCTIONS, Registry, ResolvedCollectPlan, ResolvedFamily, registry};
 
 #[cfg(test)]
 mod tests {
@@ -35,14 +32,20 @@ mod tests {
         let reg = registry();
         // 品牌族与品牌级规则同源（导入自 community/）
         assert_eq!(reg.get("cisco").map(|p| p.kind), Some(ProfileKind::Group));
-        assert_eq!(reg.get("cisco-brand").map(|p| p.brand.as_str()), Some("Cisco"));
+        assert_eq!(
+            reg.get("cisco-brand").map(|p| p.brand.as_str()),
+            Some("Cisco")
+        );
         assert_eq!(reg.get("huawei").map(|p| p.brand.as_str()), Some("Huawei"));
         assert_eq!(reg.get("h3c").map(|p| p.brand.as_str()), Some("H3C"));
-        // 识别-only 品牌：kind=os 无 group，采集走 generic 公共链
+        // 识别-only 品牌：kind=os 无 group，三级解析贯穿到 generic 公共链
         let juniper = reg.get("juniper").unwrap();
         assert_eq!(juniper.group, None);
         let plan = reg.plan("juniper").unwrap();
-        assert!(plan.family(Family::Cpu).candidates.is_empty(), "juniper 无自有 CPU 候选");
+        assert!(
+            !plan.family(Family::Cpu).candidates.is_empty(),
+            "juniper 采集贯穿到 generic 公共链兜底"
+        );
     }
 
     #[test]

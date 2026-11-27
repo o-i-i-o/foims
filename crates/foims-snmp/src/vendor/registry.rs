@@ -162,7 +162,9 @@ impl Registry {
         let generic_index = profiles
             .iter()
             .position(|p| p.id == GENERIC_ID)
-            .unwrap_or_else(|| panic!("SNMP profile 注册表缺少 generic 兜底 profile（不变量破坏）"));
+            .unwrap_or_else(|| {
+                panic!("SNMP profile 注册表缺少 generic 兜底 profile（不变量破坏）")
+            });
         let probe_oids = collect_probe_oids(&profiles);
         tracing::info!(
             "SNMP profile 注册表加载完成: {} 条 profile（generic 兜底）",
@@ -223,18 +225,30 @@ fn validate_and_resolve(profiles: &Vec<OsProfile>) -> HashMap<String, ResolvedCo
     for profile in profiles.iter() {
         match (&profile.group, profile.kind) {
             (Some(_), ProfileKind::Group) => {
-                panic!("SNMP profile 配置错误: {}（kind=group 声明了 group 字段，group 不嵌套）", profile.id);
+                panic!(
+                    "SNMP profile 配置错误: {}（kind=group 声明了 group 字段，group 不嵌套）",
+                    profile.id
+                );
             }
             (Some(group_id), ProfileKind::Os) => {
                 if group_id == GENERIC_ID {
-                    panic!("SNMP profile 配置错误: {}（group 不得指向 generic 保留层）", profile.id);
+                    panic!(
+                        "SNMP profile 配置错误: {}（group 不得指向 generic 保留层）",
+                        profile.id
+                    );
                 }
                 if !groups.contains_key(group_id.as_str()) {
-                    panic!("SNMP profile 配置错误: {}（group {group_id} 不存在或非 group 类别）", profile.id);
+                    panic!(
+                        "SNMP profile 配置错误: {}（group {group_id} 不存在或非 group 类别）",
+                        profile.id
+                    );
                 }
             }
             (None, ProfileKind::Os) if profile.brand.is_empty() => {
-                panic!("SNMP profile 配置错误: {}（kind=os 必须声明 group 或 brand）", profile.id);
+                panic!(
+                    "SNMP profile 配置错误: {}（kind=os 必须声明 group 或 brand）",
+                    profile.id
+                );
             }
             _ => {}
         }
@@ -254,11 +268,16 @@ fn validate_and_resolve(profiles: &Vec<OsProfile>) -> HashMap<String, ResolvedCo
                 if let super::model::CandidateKind::Custom(name) = &candidate.kind
                     && !CUSTOM_FUNCTIONS.contains(&name.as_str())
                 {
-                    panic!("SNMP profile 配置错误: {}（custom 函数 {name} 未注册）", profile.id);
+                    panic!(
+                        "SNMP profile 配置错误: {}（custom 函数 {name} 未注册）",
+                        profile.id
+                    );
                 }
             }
         }
-        // sysobjectid 前缀：完全重复 = 错误；包含关系 = 信息（层级匹配常态）
+        // sysobjectid 前缀：完全重复 = 告警（一次性导入的 LibreNMS 数据存在
+        // 29 组重复，属上游常态；裁决由 identify 的注册表顺序兜底，行为确定）；
+        // 包含关系 = 信息（层级匹配常态）
         let mut prefixes: Vec<(Vec<u32>, &str)> = Vec::new();
         for profile in profiles.iter() {
             let Some(matcher) = &profile.matcher else {
@@ -266,14 +285,14 @@ fn validate_and_resolve(profiles: &Vec<OsProfile>) -> HashMap<String, ResolvedCo
             };
             for prefix in &matcher.sysobjectid {
                 if let Some((_, owner)) = prefixes.iter().find(|(p, _)| p == prefix) {
-                    panic!(
-                        "SNMP profile 配置错误: {}（sysobjectid 前缀与 {owner} 完全重复）",
+                    tracing::warn!(
+                        "SNMP profile 前缀重复: {} 与 {owner} 完全重复（注册表序在前者胜出，请人工确认）",
                         profile.id
                     );
                 }
                 for (other, other_owner) in &prefixes {
-                    let contained =
-                        prefix.starts_with(other.as_slice()) || other.starts_with(prefix.as_slice());
+                    let contained = prefix.starts_with(other.as_slice())
+                        || other.starts_with(prefix.as_slice());
                     if contained {
                         tracing::info!(
                             "SNMP profile 前缀层级: {} 与 {other_owner} 存在包含关系（正常层级匹配）",
@@ -311,10 +330,7 @@ fn validate_and_resolve(profiles: &Vec<OsProfile>) -> HashMap<String, ResolvedCo
 }
 
 /// 单 profile 三级解析。generic 自身不再向自己回退（防环）。
-fn resolve_profile(
-    profile: &OsProfile,
-    groups: &HashMap<&str, &OsProfile>,
-) -> ResolvedCollectPlan {
+fn resolve_profile(profile: &OsProfile, groups: &HashMap<&str, &OsProfile>) -> ResolvedCollectPlan {
     let is_generic = profile.id == GENERIC_ID;
     let parent = profile
         .group
@@ -361,9 +377,7 @@ fn resolve_profile(
             }
         };
         // generic 公共链始终是最后兜底（disable 已提前返回；generic 自身除外）
-        if !is_generic
-            && let Some(g) = generic_plan
-        {
+        if !is_generic && let Some(g) = generic_plan {
             candidates.extend(g.candidates.iter().cloned());
         }
         out.families[idx] = ResolvedFamily {
@@ -404,11 +418,13 @@ mod tests {
                 profiles.push(model::build_profile(file, toml_profile).unwrap());
             }
         }
-        let mut generic_toml: ProfilesFile = toml::from_str(super::super::profiles::FILES
-            .iter()
-            .find(|(f, _)| *f == "generic.toml")
-            .map(|(_, t)| *t)
-            .unwrap())
+        let mut generic_toml: ProfilesFile = toml::from_str(
+            super::super::profiles::FILES
+                .iter()
+                .find(|(f, _)| *f == "generic.toml")
+                .map(|(_, t)| *t)
+                .unwrap(),
+        )
         .unwrap();
         for p in generic_toml.profile.drain(..) {
             profiles.push(model::build_profile("generic.toml", p).unwrap());
@@ -464,19 +480,23 @@ indexed = false
         let cpu = plan.family(Family::Cpu);
         assert!(!cpu.candidates.is_empty());
         assert!(
-            cpu.candidates.iter().any(|c| matches!(c.kind, super::super::model::CandidateKind::Columns(_))),
+            cpu.candidates
+                .iter()
+                .any(|c| matches!(c.kind, super::super::model::CandidateKind::Columns(_))),
             "本层候选在前"
         );
         assert!(
             cpu.candidates
                 .iter()
-                .any(|c| matches!(c.kind, super::super::model::CandidateKind::EntitySensors)),
-            "generic 温度链兜底…（cpu 为 UCD/hrProcessor）"
+                .any(|c| matches!(c.kind, super::super::model::CandidateKind::UcdCpuCounters)),
+            "generic 公共链兜底（UCD 计数器 + hrProcessor）"
         );
         // 本层未声明 mem → 父族 pool → generic
         let mem = plan.family(Family::Mem);
         assert!(
-            mem.candidates.iter().any(|c| matches!(c.kind, super::super::model::CandidateKind::Pool(_)))
+            mem.candidates
+                .iter()
+                .any(|c| matches!(c.kind, super::super::model::CandidateKind::Pool(_)))
         );
     }
 
@@ -495,20 +515,21 @@ mode = "replace"
 oid = "1.3.6.1.4.1.99999.9.0"
 indexed = false
 value = "percent"
-[[profile.collect.temp]]
+[profile.collect.temp]
 mode = "disable"
 "#;
         let reg = load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", replace_os)]);
         let plan = reg.plan("repl").unwrap();
         let cpu = plan.family(Family::Cpu);
         assert_eq!(cpu.mode, CollectMode::Replace);
-        // replace：仅本层候选 + generic 公共链最后兜底（不继承父族）
-        let own_count = cpu
-            .candidates
-            .iter()
-            .filter(|c| matches!(c.kind, super::model::CandidateKind::Columns(_)))
-            .count();
-        assert_eq!(own_count, 1, "本层候选恰 1 条");
+        // replace：本层候选在前 + generic 公共链最后兜底（不继承父族）
+        assert!(
+            matches!(
+                &cpu.candidates[0].kind,
+                super::model::CandidateKind::Columns(c) if c.oid.to_string() == "1.3.6.1.4.1.99999.9.0"
+            ),
+            "本层候选在前"
+        );
         assert!(cpu.candidates.len() > 1, "generic 公共链仍兜底");
         assert_eq!(plan.family(Family::Temp).mode, CollectMode::Disable);
         assert!(plan.family(Family::Temp).candidates.is_empty());
@@ -523,7 +544,9 @@ kind = "group"
 brand = "T"
 group = "testgrp"
 "#;
-        let result = std::panic::catch_unwind(|| load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", bad)]));
+        let result = std::panic::catch_unwind(|| {
+            load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", bad)])
+        });
         assert!(result.is_err());
     }
 
@@ -551,13 +574,17 @@ brand = "T"
 [profile.collect.cpu]
 mode = "replace"
 "#;
-        let result = std::panic::catch_unwind(|| load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", bad)]));
+        let result = std::panic::catch_unwind(|| {
+            load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", bad)])
+        });
         assert!(result.is_err());
     }
 
     #[test]
-    fn 校验_前缀完全重复拒绝() {
-        let bad = r#"
+    fn 校验_前缀完全重复告警不拒绝() {
+        // 一次性导入的 LibreNMS 数据存在重复前缀（上游常态）：不拒绝加载，
+        // 仅启动告警；裁决由 identify 注册表顺序兜底（先声明者优先）
+        let dup = r#"
 [[profile]]
 id = "dupos"
 kind = "os"
@@ -566,8 +593,14 @@ brand = "T"
 [profile.match]
 sysobjectid = ["1.3.6.1.4.1.99999"]
 "#;
-        let result = std::panic::catch_unwind(|| load_from(&[("test.toml", OS_TEMPLATE), ("test.toml", bad)]));
-        assert!(result.is_err());
+        let result = std::panic::catch_unwind(|| {
+            load_from(&[
+                ("test.toml", GROUP_TEMPLATE),
+                ("test.toml", OS_TEMPLATE),
+                ("test.toml", dup),
+            ])
+        });
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -581,7 +614,9 @@ brand = "T"
 [[profile.collect.cpu.candidate]]
 custom = "not_registered_fn"
 "#;
-        let result = std::panic::catch_unwind(|| load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", bad)]));
+        let result = std::panic::catch_unwind(|| {
+            load_from(&[("test.toml", GROUP_TEMPLATE), ("test.toml", bad)])
+        });
         assert!(result.is_err());
     }
 
@@ -599,14 +634,32 @@ custom = "not_registered_fn"
         // 内置三家采集计划就位
         for id in ["cisco", "huawei", "h3c"] {
             let plan = reg.plan(id).unwrap_or_else(|| panic!("{id} 采集计划缺失"));
-            assert!(!plan.family(Family::Cpu).candidates.is_empty(), "{id} cpu 链");
-            assert!(!plan.family(Family::Mem).candidates.is_empty(), "{id} mem 链");
-            assert!(!plan.family(Family::Temp).candidates.is_empty(), "{id} temp 链");
+            assert!(
+                !plan.family(Family::Cpu).candidates.is_empty(),
+                "{id} cpu 链"
+            );
+            assert!(
+                !plan.family(Family::Mem).candidates.is_empty(),
+                "{id} mem 链"
+            );
+            assert!(
+                !plan.family(Family::Temp).candidates.is_empty(),
+                "{id} temp 链"
+            );
         }
         // generic 公共链：cpu/mem/temp/storage/sensors 均有候选
         let g = reg.plan(GENERIC_ID).unwrap();
-        for family in [Family::Cpu, Family::Mem, Family::Temp, Family::Storage, Family::Sensors] {
-            assert!(!g.family(family).candidates.is_empty(), "generic {family:?} 链缺失");
+        for family in [
+            Family::Cpu,
+            Family::Mem,
+            Family::Temp,
+            Family::Storage,
+            Family::Sensors,
+        ] {
+            assert!(
+                !g.family(family).candidates.is_empty(),
+                "generic {family:?} 链缺失"
+            );
         }
     }
 

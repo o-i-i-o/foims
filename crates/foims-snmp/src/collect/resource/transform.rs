@@ -4,7 +4,7 @@
 
 use async_snmp::Value;
 
-use crate::vendor::model as model;
+use crate::vendor::model;
 use model::{SkipField, SkipOp, SkipRule, Unit};
 
 /// LibreNMS `processor_precision` 语义（正值 = raw/precision；负值 = 上游
@@ -30,12 +30,7 @@ pub fn to_bytes(raw: u64, unit: Option<Unit>, precision: Option<i32>) -> u64 {
 
 /// 温度列换算：raw × multiplier / divisor → 单位 → 摄氏度。
 /// 有效业务区间 (0, 200]℃（0 常为占位、越界为哨兵值）。
-pub fn to_celsius(
-    raw: f64,
-    unit: Option<Unit>,
-    divisor: u64,
-    multiplier: u64,
-) -> Option<f64> {
+pub fn to_celsius(raw: f64, unit: Option<Unit>, divisor: u64, multiplier: u64) -> Option<f64> {
     if divisor == 0 {
         return None;
     }
@@ -65,9 +60,7 @@ pub fn sensor_value(raw: f64, unit: Option<Unit>) -> Option<f64> {
 /// 枚举按 3 的步长递增：units(9)=10^0、milli(8)=10^-3、kilo(10)=10^3。
 pub fn entity_scale_factor(scale: i32) -> Option<f64> {
     let exponent = 3 * (scale - 9);
-    (-24..=24)
-        .contains(&exponent)
-        .then(|| 10f64.powi(exponent))
+    (-24..=24).contains(&exponent).then(|| 10f64.powi(exponent))
 }
 
 /// 行过滤（skip 原语）：name/value 文本比对。
@@ -90,10 +83,7 @@ pub fn skip_hit(rules: &[SkipRule], name: Option<&str>, raw_text: Option<&str>) 
 
 /// 状态映射（states 原语）：数值 → 语义文本；未命中返回原值十进制串。
 pub fn map_state(states: &std::collections::BTreeMap<i64, String>, raw: i64) -> String {
-    states
-        .get(&raw)
-        .cloned()
-        .unwrap_or_else(|| raw.to_string())
+    states.get(&raw).cloned().unwrap_or_else(|| raw.to_string())
 }
 
 /// 数值提取：i32（温度可能为负）优先，其次 u64。
@@ -134,7 +124,10 @@ mod tests {
         // 0 与越界视为无效（哨兵值过滤）
         assert_eq!(to_celsius(0.0, None, 1, 1), None);
         assert_eq!(to_celsius(500.0, None, 1, 1), None);
-        assert_eq!(to_celsius(80.0, Some(Unit::Fahrenheit), 1, 1), Some(26.666666666666668));
+        assert_eq!(
+            to_celsius(80.0, Some(Unit::Fahrenheit), 1, 1),
+            Some(26.666666666666668)
+        );
         assert_eq!(to_celsius(45.0, None, 0, 1), None);
     }
 

@@ -348,15 +348,22 @@ pub fn identify(
     // —— 描述通道：注册表顺序首个命中（词元关键词或正则）——
     let descr_match = descr.and_then(descr_profile);
 
-    // —— 聚合：双通道一致 → 该 profile；冲突 → 描述词胜出
-    //   （OEM 设备 sysObjectID 不可信，沿用 11 + comware → H3C 语义）——
+    // —— 聚合：双通道一致 → 该 profile；
+    //   同品牌（前缀命中父族/品牌级、描述词命中其 OS 级细分或反之）
+    //   视为包含关系而非冲突，前缀更具体者胜出（华为深前缀 + Huawei 描述词
+    //   → 云山细分，不被品牌级描述词截胡）；
+    //   跨品牌才是真冲突 → 描述词胜出（OEM 设备 sysObjectID 不可信，
+    //   沿用 11 + comware → H3C 语义）——
     let matched = match (prefix_match, descr_match) {
         (Some((a, _)), Some(b)) if a.id == b.id => Some(a),
+        (Some((a, _)), Some(b)) if a.brand == b.brand => Some(a),
         (Some((a, _)), Some(b)) => {
             tracing::info!(
-                "SNMP 识别冲突: 前缀指向 {}，描述词指向 {}，描述词胜出",
+                "SNMP 识别冲突: 前缀指向 {}（{}），描述词指向 {}（{}），描述词胜出",
                 a.id,
-                b.id
+                a.brand,
+                b.id,
+                b.brand
             );
             Some(b)
         }
@@ -405,8 +412,8 @@ fn enterprise_of(object_id: &Oid) -> Option<u32> {
 }
 
 /// 前缀通道：全部 kind=os profile 中找 sysobjectid 前缀命中者。
-/// 最长前缀胜出；同长并列 → descr_keywords 命中词数多者 → id 字典序
-///（确定性，§5.4）。
+/// 最长前缀胜出；同长并列 → descr_keywords 命中词数多者 → 注册表顺序
+///（先声明者优先，见 tie_break）。
 fn prefix_profile(
     object_id: &Oid,
     descr: Option<&str>,
@@ -446,8 +453,10 @@ fn prefix_profile(
     best.map(|(profile, prefix, _)| (profile, prefix))
 }
 
-/// 同长并列裁决：关键词命中数多者 → 有正则命中者（此处仅按关键词数与 id 序，
-/// 正则通道在 registry 冻结数据上不可静态判定，退化为 id 字典序保确定性）。
+/// 同长并列裁决：关键词命中数多者 → 注册表顺序先声明者优先。
+/// 注册表顺序与旧 identify() 遍历序一致（内置品牌文件在前、社区文件按名序），
+/// 精确吸收旧「同长时先遍历者保留」语义（一次性导入数据存在 29 组重复前缀，
+/// 旧代码中同长死规则不生效，此处保持同一裁决）。
 fn tie_break(
     current: (&'static OsProfile, &'static [u32], usize),
     candidate: (&'static OsProfile, &'static [u32], usize),
@@ -458,13 +467,8 @@ fn tie_break(
         std::cmp::Ordering::Equal => match current.2.cmp(&candidate.2) {
             std::cmp::Ordering::Greater => current,
             std::cmp::Ordering::Less => candidate,
-            std::cmp::Ordering::Equal => {
-                if current.0.id <= candidate.0.id {
-                    current
-                } else {
-                    candidate
-                }
-            }
+            // 并列保持先声明者（注册表顺序确定性，替代旧内置优先语义）
+            std::cmp::Ordering::Equal => current,
         },
     }
 }
@@ -507,9 +511,16 @@ fn probe_profile(
         if matcher.probes.is_empty() {
             continue;
         }
-        let hit = matcher.probes.iter().all(|probe| probe_hit(probe, get_value));
+        let hit = matcher
+            .probes
+            .iter()
+            .all(|probe| probe_hit(probe, get_value));
         if hit {
-            tracing::debug!("SNMP 识别探测通道命中 {}（{} 项检查）", profile.id, matcher.probes.len());
+            tracing::debug!(
+                "SNMP 识别探测通道命中 {}（{} 项检查）",
+                profile.id,
+                matcher.probes.len()
+            );
             return Some(profile);
         }
     }
@@ -561,14 +572,17 @@ mod tests {
         Oid::parse(s).unwrap()
     }
 
-    fn vendor_of(descr: &str) -> &'static str {
-        identify(None, Some(descr), None).profile.id
+    fn vendor_of(descr: &str) -> String {
+        identify(None, Some(descr), None).profile.id.clone()
     }
 
     #[test]
     fn 识别_品牌级规则() {
         assert_eq!(vendor_of("Cisco IOS Software"), "cisco-brand");
-        assert_eq!(vendor_of("Huawei Versatile Routing Platform"), "huawei-brand");
+        assert_eq!(
+            vendor_of("Huawei Versatile Routing Platform"),
+            "huawei-brand"
+        );
         assert_eq!(vendor_of("H3C Comware Software"), "comware");
         assert_eq!(vendor_of("3Com SuperStack Switch"), "h3c-brand");
         assert_eq!(vendor_of("Juniper Networks Junos"), "juniper");
@@ -635,7 +649,11 @@ mod tests {
         );
         assert_eq!(id.profile.id, "aruba");
         // 11 + HP → 双证据一致
-        let id = identify(Some(&oid("1.3.6.1.4.1.11.2.3.7")), Some("HP LaserJet"), None);
+        let id = identify(
+            Some(&oid("1.3.6.1.4.1.11.2.3.7")),
+            Some("HP LaserJet"),
+            None,
+        );
         assert_eq!(id.profile.id, "hp");
     }
 
@@ -704,7 +722,11 @@ mod tests {
         assert_eq!(id.platform, Some("freebsd"));
         assert!(id.caps.ucd_mem && id.caps.lm_sensors && id.caps.hr_storage);
         // bsnmpd（12325）：保守仅 hrStorage
-        let id = identify(Some(&oid("1.3.6.1.4.1.12325.1.1")), Some("FreeBSD gw 13.2-RELEASE"), None);
+        let id = identify(
+            Some(&oid("1.3.6.1.4.1.12325.1.1")),
+            Some("FreeBSD gw 13.2-RELEASE"),
+            None,
+        );
         assert_eq!(id.platform, Some("freebsd"));
         assert!(!id.caps.ucd_mem && id.caps.hr_storage);
     }

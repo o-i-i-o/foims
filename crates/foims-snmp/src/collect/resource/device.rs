@@ -1,8 +1,8 @@
 //! 设备信息执行器：model/serial/version 角色列（按序 GET，首个非空生效）。
 
+use super::{CandidateFailure, ExecArgs, ExecOutput, get_one, varbind_text};
+use crate::vendor::model;
 use model::{CandidateKind, Column};
-use crate::vendor::model as model;
-use super::{get_one, varbind_text, CandidateFailure, ExecArgs, ExecOutput};
 
 pub(super) async fn exec<R: crate::core::SnmpReader>(
     args: ExecArgs<'_, '_, R>,

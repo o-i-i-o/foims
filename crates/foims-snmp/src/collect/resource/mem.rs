@@ -2,16 +2,16 @@
 //! total−free / total−used）、实体表（usage×size）、百分比（+total 缓存）、
 //! hrStorage Ram 行兜底。
 
+use crate::vendor::model;
 use std::collections::BTreeMap;
-use crate::vendor::model as model;
 
 use async_snmp::Value;
 
-use model::{CandidateKind, Column, PoolFields, StorageType};
 use super::{
-    get_one, get_rows, numeric_u64, varbind_text, walk_single_arc, CandidateFailure, ExecArgs,
-    ExecOutput, RowMeta, SelectionRows, transform,
+    CandidateFailure, ExecArgs, ExecOutput, RowMeta, SelectionRows, get_one, get_rows, numeric_u64,
+    transform, varbind_text, walk_single_arc,
 };
+use model::{CandidateKind, Column, PoolFields, StorageType};
 
 pub(super) async fn exec<R: crate::core::SnmpReader>(
     args: ExecArgs<'_, '_, R>,
@@ -92,7 +92,10 @@ async fn exec_pool<R: crate::core::SnmpReader>(
     let mut maps: Vec<(&str, BTreeMap<u32, Value>)> = Vec::new();
     let mut scalars: Vec<(&str, Value)> = Vec::new();
     let mut any_indexed = false;
-    for (role, col) in roles.iter().filter_map(|(r, c)| c.as_ref().map(|col| (*r, col))) {
+    for (role, col) in roles
+        .iter()
+        .filter_map(|(r, c)| c.as_ref().map(|col| (*r, col)))
+    {
         if col.indexed {
             let rows = walk_single_arc(args.reader, &col.oid).await;
             any_indexed = any_indexed || !rows.is_empty();
@@ -116,7 +119,10 @@ async fn exec_pool<R: crate::core::SnmpReader>(
     for index in indexes {
         let mut values: Vec<Option<Value>> = Vec::new();
         let mut name: Option<String> = None;
-        for (role, col) in roles.iter().filter_map(|(r, c)| c.as_ref().map(|col| (*r, col))) {
+        for (role, col) in roles
+            .iter()
+            .filter_map(|(r, c)| c.as_ref().map(|col| (*r, col)))
+        {
             let value = if col.indexed {
                 maps.iter()
                     .find(|(r, _)| *r == role)
@@ -129,9 +135,9 @@ async fn exec_pool<R: crate::core::SnmpReader>(
                     .map(|(_, v)| v.clone())
             };
             if role == "name" {
-                name = value
-                    .as_ref()
-                    .and_then(|v| varbind_text(&async_snmp::VarBind::new(col.oid.clone(), v.clone())));
+                name = value.as_ref().and_then(|v| {
+                    varbind_text(&async_snmp::VarBind::new(col.oid.clone(), v.clone()))
+                });
             }
             values.push(value);
         }
@@ -218,8 +224,12 @@ async fn exec_entity<R: crate::core::SnmpReader>(
     };
     // 定向采样：usage 列 + 缓存 total
     if let Some(selection) = args.selection {
-        let values =
-            get_rows(args.reader, &[fields.usage.oid.clone()], selection.rows.keys().copied()).await?;
+        let values = get_rows(
+            args.reader,
+            &[fields.usage.oid.clone()],
+            selection.rows.keys().copied(),
+        )
+        .await?;
         let mut total = 0u64;
         let mut used = 0u64;
         for ((_, index), value) in values {
@@ -293,8 +303,12 @@ async fn exec_percent<R: crate::core::SnmpReader>(
     };
     // 定向采样
     if let Some(selection) = args.selection {
-        let values =
-            get_rows(args.reader, &[fields.percent.oid.clone()], selection.rows.keys().copied()).await?;
+        let values = get_rows(
+            args.reader,
+            &[fields.percent.oid.clone()],
+            selection.rows.keys().copied(),
+        )
+        .await?;
         let mut total = 0u64;
         let mut used = 0u64;
         for ((_, index), value) in values {

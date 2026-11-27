@@ -17,8 +17,8 @@ use serde::Serialize;
 
 use crate::collect::resource::IndexCache;
 
-pub use collector::LiveCollector;
 pub use crate::core::{SnmpReader, get_many_tolerant};
+pub use collector::LiveCollector;
 pub use profile::{ProbeError, probe};
 
 /// 单请求 OID 上限：20 个 OID × 约 30B + v3 authPriv 头约 150B ≈ 750B，

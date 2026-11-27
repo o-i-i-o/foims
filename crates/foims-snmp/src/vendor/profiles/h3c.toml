@@ -33,7 +33,9 @@ display_name = "H3C"
 
 [profile.match]
 sysobjectid = ["1.3.6.1.4.1.25506"]
-descr_keywords = ["3com", "comware", "h3c"]
+# Comware/H3C 描述词归 comware OS 级 profile（描述通道先命中者裁决），
+# h3c-brand 仅保留 3com 旧品牌词
+descr_keywords = ["3com"]
 
 [[profile]]
 id = "comware"
@@ -44,6 +46,7 @@ display_name = "HPE Comware"
 
 [profile.match]
 sysobjectid = ["1.3.6.1.4.1.25506"]
+descr_keywords = ["comware", "h3c"]
 
 [profile.collect.cpu]
 pick = "max"

@@ -1,15 +1,15 @@
 //! 传感器族执行器：ENTITY-SENSOR-MIB 标准表（内建吸收）与值列候选。
 
+use crate::vendor::model;
 use std::collections::BTreeMap;
-use crate::vendor::model as model;
 
 use async_snmp::{Oid, Value};
 
-use model::{CandidateKind, Column, SensorKind};
 use super::{
-    get_one, get_rows, numeric, varbind_text, walk_single_arc, CandidateFailure, ExecArgs,
-    ExecOutput, RowMeta, SelectionRows, transform,
+    CandidateFailure, ExecArgs, ExecOutput, RowMeta, SelectionRows, get_one, get_rows, numeric,
+    transform, varbind_text, walk_single_arc,
 };
+use model::{CandidateKind, Column, SensorKind};
 
 /// entPhySensorTable 列基 OID（1.3.6.1.2.1.99.7.1.1.1.x）：
 /// Type(1)/Scale(2)/Precision(3)/Value(4)/OperStatus(5)/UnitsDisplay(6)。
@@ -63,16 +63,25 @@ pub(super) async fn exec_entity_sensors<R: crate::core::SnmpReader>(
 ) -> ExecOutput<super::SensorReading> {
     // 定向采样：缓存行（scale/precision 元数据）→ GET value
     if let Some(selection) = args.selection {
-        let values =
-            get_rows(args.reader, &[col_oid(COL_VALUE)], selection.rows.keys().copied()).await?;
+        let values = get_rows(
+            args.reader,
+            &[col_oid(COL_VALUE)],
+            selection.rows.keys().copied(),
+        )
+        .await?;
         let mut readings = Vec::new();
         for ((_, index), value) in values {
             let Some(RowMeta::Sensor { scale, precision }) = selection.rows.get(&index) else {
                 continue;
             };
-            if let Some(reading) =
-                sensor_reading(index, None, SensorKind::Temperature, &value, *scale, *precision)
-            {
+            if let Some(reading) = sensor_reading(
+                index,
+                None,
+                SensorKind::Temperature,
+                &value,
+                *scale,
+                *precision,
+            ) {
                 readings.push(reading);
             }
         }
@@ -116,9 +125,7 @@ pub(super) async fn exec_entity_sensors<R: crate::core::SnmpReader>(
         let scale = scales.get(&index).and_then(|v| v.as_i32()).unwrap_or(9);
         let precision = precisions.get(&index).and_then(|v| v.as_i32()).unwrap_or(0);
         cached.insert(index, RowMeta::Sensor { scale, precision });
-        if let Some(reading) =
-            sensor_reading(index, None, kind, value, scale, precision)
-        {
+        if let Some(reading) = sensor_reading(index, None, kind, value, scale, precision) {
             readings.push(reading);
         }
     }
@@ -170,10 +177,9 @@ async fn exec_column<R: crate::core::SnmpReader>(
             // 状态类：states 数值映射（未命中回退原值十进制）
             let raw = numeric(&value)?;
             let text = match value {
-                Value::OctetString(_) => varbind_text(&async_snmp::VarBind::new(
-                    col.oid.clone(),
-                    value.clone(),
-                ))?,
+                Value::OctetString(_) => {
+                    varbind_text(&async_snmp::VarBind::new(col.oid.clone(), value.clone()))?
+                }
                 _ => transform::map_state(&args.candidate.states, raw as i64),
             };
             let value = text.parse::<f64>().unwrap_or(0.0);
@@ -185,10 +191,8 @@ async fn exec_column<R: crate::core::SnmpReader>(
             });
         }
         let raw = numeric(&value)?;
-        let value = transform::sensor_value(
-            raw * col.multiplier as f64 / col.divisor as f64,
-            col.unit,
-        )?;
+        let value =
+            transform::sensor_value(raw * col.multiplier as f64 / col.divisor as f64, col.unit)?;
         Some(super::SensorReading {
             index: index.to_string(),
             kind,
@@ -198,7 +202,12 @@ async fn exec_column<R: crate::core::SnmpReader>(
     };
 
     if let Some(selection) = args.selection {
-        let values = get_rows(args.reader, &[col.oid.clone()], selection.rows.keys().copied()).await?;
+        let values = get_rows(
+            args.reader,
+            &[col.oid.clone()],
+            selection.rows.keys().copied(),
+        )
+        .await?;
         let readings: Vec<_> = values
             .into_iter()
             .filter_map(|((_, index), value)| to_reading(index, value))

@@ -146,7 +146,7 @@ fn summary_row(device: &LiveDeviceSnapshot) -> LiveSummaryRow {
         ip: device.ip.clone(),
         collected_at: rfc3339(snapshot.collected_at),
         source: "snmp".to_string(),
-        vendor: snapshot.vendor.as_str().to_string(),
+        vendor: snapshot.brand.clone(),
         cpu_usage_pct: snapshot.cpu_usage_pct,
         mem_usage_pct: snapshot.mem_usage_pct,
         mem_used: snapshot.mem_used,
@@ -471,7 +471,7 @@ mod tests {
     };
     use chrono::Utc;
     use foims_ipmi::IpmiLiveSnapshot;
-    use foims_snmp::live::{LivePortSnapshot, LiveSnapshot, VendorKind};
+    use foims_snmp::live::{LivePortSnapshot, LiveSnapshot};
     use std::collections::HashSet;
     use uuid::Uuid;
 
@@ -482,7 +482,7 @@ mod tests {
             ip: "192.0.2.10".to_string(),
             snapshot: LiveSnapshot {
                 collected_at: Utc::now(),
-                vendor: VendorKind::Cisco,
+                brand: "cisco".to_string(),
                 cpu_usage_pct: Some(12.5),
                 mem_total: Some(1024),
                 mem_used: Some(256),

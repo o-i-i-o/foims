@@ -475,13 +475,11 @@ async fn run_cycle(context: &WorkerContext, state: &mut WorkerState, spec: LiveS
         match probe(client).await {
             Ok(profile) => {
                 tracing::debug!(
-                    "SNMP 实时 profile 探测完成: 设备 {}（{}）: 厂商 {}, 端口 {}, 内存 {:?}, 温度源 {}, HC={}",
+                    "SNMP 实时 profile 探测完成: 设备 {}（{}）: 品牌 {}, 端口 {}, HC={}",
                     context.device_name,
                     context.device_id,
-                    profile.vendor.as_str(),
+                    profile.identity.profile.brand,
                     profile.ports.len(),
-                    profile.mem,
-                    profile.temp.len(),
                     profile.use_hc
                 );
                 state.collector = Some(LiveCollector::new(profile, context.monitor_if.as_deref()));
@@ -1067,7 +1065,6 @@ impl AgentLiveRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foims_snmp::live::VendorKind;
 
     fn snapshot(device_id: Uuid) -> LiveDeviceSnapshot {
         LiveDeviceSnapshot {
@@ -1076,7 +1073,7 @@ mod tests {
             ip: "192.0.2.1".to_string(),
             snapshot: LiveSnapshot {
                 collected_at: Utc::now(),
-                vendor: VendorKind::Generic,
+                brand: "generic".to_string(),
                 cpu_usage_pct: None,
                 mem_total: None,
                 mem_used: None,

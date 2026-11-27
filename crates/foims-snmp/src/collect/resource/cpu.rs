@@ -4,16 +4,16 @@
 //! 执行器返回「读数 + 可选行缓存元数据」；FamilySelection（含候选下标）
 //! 由驱动层组装，执行器不感知自身下标。
 
+use crate::vendor::model;
 use async_snmp::{Oid, Value};
-use crate::vendor::model as model;
 
-use super::transform;
-use model::{CandidateKind, Column};
-use super::{
-    get_one, get_rows, numeric_u64, walk_single_arc, CandidateFailure, ExecArgs,
-    RowMeta, SelectionRows,
-};
 use super::ExecOutput;
+use super::transform;
+use super::{
+    CandidateFailure, ExecArgs, RowMeta, SelectionRows, get_one, get_rows, numeric_u64,
+    walk_single_arc,
+};
+use model::{CandidateKind, Column};
 
 /// UCD-SNMP-MIB ssCpuRaw 计数器（1.3.6.1.4.1.2021.11），标量带 .0 实例后缀；
 /// 编号：User(50)/Nice(51)/System(52)/Idle(53)/Wait(54)/Interrupt(56)。
@@ -77,7 +77,12 @@ async fn exec_column<R: crate::core::SnmpReader>(
 
     // 定向采样：缓存行索引 GET
     if let Some(selection) = args.selection {
-        let values = get_rows(args.reader, &[col.oid.clone()], selection.rows.keys().copied()).await?;
+        let values = get_rows(
+            args.reader,
+            &[col.oid.clone()],
+            selection.rows.keys().copied(),
+        )
+        .await?;
         let readings: Vec<_> = values
             .into_iter()
             .filter_map(|((_, index), value)| to_pct(index, value))

@@ -13,8 +13,8 @@ use chrono::{DateTime, Utc};
 use futures_util::future::join_all;
 
 use super::{
-    DeviceProfile, LiveCounters, LivePortSnapshot, LiveSampleSpec, LiveSnapshot, PortCounters,
-    PortMeta, MAX_OIDS_PER_REQUEST,
+    DeviceProfile, LiveCounters, LivePortSnapshot, LiveSampleSpec, LiveSnapshot,
+    MAX_OIDS_PER_REQUEST, PortCounters, PortMeta,
 };
 use crate::collect::metrics::iface_rate_bps;
 use crate::collect::resource::ResourceReader;

@@ -2,16 +2,16 @@
 //! 表列 walk 一次（type/descr/units/size/used），按类型过滤行；units 列
 //! 缓存后每轮仅 GET size/used。
 
+use crate::vendor::model;
 use std::collections::BTreeMap;
-use crate::vendor::model as model;
 
 use async_snmp::{Oid, Value};
 
-use model::{CandidateKind, StorageType};
 use super::{
-    get_rows, numeric_u64, varbind_text, walk_single_arc, CandidateFailure, ExecArgs, ExecOutput,
-    RowMeta, SelectionRows,
+    CandidateFailure, ExecArgs, ExecOutput, RowMeta, SelectionRows, get_rows, numeric_u64,
+    varbind_text, walk_single_arc,
 };
+use model::{CandidateKind, StorageType};
 
 /// hrStorageTable 列基 OID（1.3.6.1.2.1.25.2.3.1.x）：
 /// Index(1)/Type(2)/Descr(3)/AllocationUnits(4)/Size(5)/Used(6)。

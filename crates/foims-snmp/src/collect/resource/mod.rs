@@ -17,9 +17,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use async_snmp::{Oid, Value, VarBind};
 
 use crate::core::SnmpReader;
+use crate::vendor::PlatformCaps;
 use crate::vendor::model::{Candidate, Family, Pick, SensorKind};
 use crate::vendor::registry::ResolvedCollectPlan;
-use crate::vendor::PlatformCaps;
 
 pub mod cpu;
 pub mod device;
@@ -352,7 +352,13 @@ impl<'a, R: SnmpReader> ResourceReader<'a, R> {
     /// 空选择入缓存会让下轮误走定向路径）。
     fn store(&self, family: Family, idx: usize, rows: Option<SelectionRows>) {
         if let Some(rows) = rows {
-            self.cache.put(family, FamilySelection { candidate: idx, rows });
+            self.cache.put(
+                family,
+                FamilySelection {
+                    candidate: idx,
+                    rows,
+                },
+            );
         }
     }
 
@@ -478,10 +484,7 @@ pub(super) fn numeric_u64(value: &Value) -> Option<u64> {
 // ───────────────────────── 共享 IO 原语 ─────────────────────────
 
 /// 单弧索引 walk：base 为列基 OID，返回「索引 → 响应值」。
-pub(super) async fn walk_single_arc<R: SnmpReader>(
-    reader: &R,
-    base: &Oid,
-) -> BTreeMap<u32, Value> {
+pub(super) async fn walk_single_arc<R: SnmpReader>(reader: &R, base: &Oid) -> BTreeMap<u32, Value> {
     let mut rows = BTreeMap::new();
     for vb in reader.walk(base).await {
         let Some(value) = varbind_value(&vb) else {

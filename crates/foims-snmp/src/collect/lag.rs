@@ -135,11 +135,8 @@ pub async fn get_lags_via_snmp(params: &SnmpParamsLegacy) -> Result<Vec<LagRecor
         )
         .await
     } else {
-        match walk_index_value_map_checked(
-            &client,
-            oid!(1, 2, 840, 10006, 300, 43, 1, 1, 1, 1, 13),
-        )
-        .await
+        match walk_index_value_map_checked(&client, oid!(1, 2, 840, 10006, 300, 43, 1, 1, 1, 1, 13))
+            .await
         {
             Ok(map) if !map.is_empty() => {
                 standard_empty_evict(&memory_key);

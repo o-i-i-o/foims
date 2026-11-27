@@ -1,15 +1,15 @@
 //! 温度族执行器（docs/SNMP模块重构方案.md §5.6）：值列（divisor/multiplier/
 //! unit 换算）与 ENTITY-SENSOR-MIB 标准表（内建吸收）。
 
-use std::collections::BTreeMap;
+use crate::vendor::model;
 use async_snmp::Value;
-use crate::vendor::model as model;
+use std::collections::BTreeMap;
 
-use model::{CandidateKind, Column};
 use super::{
-    get_one, get_rows, numeric, walk_single_arc, CandidateFailure, ExecArgs,
-    ExecOutput, RowMeta, SelectionRows, transform,
+    CandidateFailure, ExecArgs, ExecOutput, RowMeta, SelectionRows, get_one, get_rows, numeric,
+    transform, walk_single_arc,
 };
+use model::{CandidateKind, Column};
 
 pub(super) async fn exec<R: crate::core::SnmpReader>(
     args: ExecArgs<'_, '_, R>,
@@ -17,11 +17,9 @@ pub(super) async fn exec<R: crate::core::SnmpReader>(
     match &args.candidate.kind {
         CandidateKind::Columns(col) => exec_column(args, col).await,
         CandidateKind::EntitySensors => {
-            let readings = super::sensors::exec_entity_sensors(
-                args,
-                Some(model::SensorKind::Temperature),
-            )
-            .await?;
+            let readings =
+                super::sensors::exec_entity_sensors(args, Some(model::SensorKind::Temperature))
+                    .await?;
             // 传感器行 → 温度行（entity_sensors 的 temperature 行即温度读数）
             let temps = readings
                 .0
@@ -55,7 +53,12 @@ async fn exec_column<R: crate::core::SnmpReader>(
 
     // 定向采样：缓存行索引 GET（列缓存元数据 Plain；行名不重采）
     if let Some(selection) = args.selection {
-        let values = get_rows(args.reader, &[col.oid.clone()], selection.rows.keys().copied()).await?;
+        let values = get_rows(
+            args.reader,
+            &[col.oid.clone()],
+            selection.rows.keys().copied(),
+        )
+        .await?;
         let readings: Vec<_> = values
             .into_iter()
             .filter_map(|((_, index), value)| to_c(index, value, None))

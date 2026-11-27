@@ -263,8 +263,7 @@ pub struct Limits {
 }
 
 /// 单个采集候选：门控 + 行过滤 + 变换 + 形态。
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Candidate {
     /// 平台能力门控（全部满足才尝试；未声明不受限）。
     pub require_caps: Vec<CapsKey>,
@@ -281,8 +280,7 @@ pub struct Candidate {
 
 /// 候选形态。标准 MIB 表（hrStorage / ENTITY-SENSOR / UCD 计数器）为
 /// 吸收型内建候选（§4.3），其余走声明式列/角色。
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum CandidateKind {
     /// 值列（CPU 百分比 / 温度 / 传感器值），逐列一条候选由 TOML 拆分，
     /// 本枚举恒持单列。
@@ -308,8 +306,7 @@ pub enum CandidateKind {
 }
 
 /// 设备信息角色列。
-#[derive(Debug, Default)]
-#[derive(Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct DeviceFields {
     pub model: Vec<Column>,
     pub serial: Vec<Column>,
@@ -317,8 +314,7 @@ pub struct DeviceFields {
 }
 
 /// 值列定义。
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Column {
     pub oid: Oid,
     /// true = 表列（walk 单弧索引行）；false = 标量（OID 含完整实例）。
@@ -335,8 +331,7 @@ pub struct Column {
 }
 
 /// 池角色列。
-#[derive(Debug, Default)]
-#[derive(Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct PoolFields {
     pub name: Option<Column>,
     pub used: Option<Column>,
@@ -345,8 +340,7 @@ pub struct PoolFields {
 }
 
 /// 实体表内存列。
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct EntityFields {
     pub usage: Column,
     pub size_mega: Option<Column>,
@@ -354,8 +348,7 @@ pub struct EntityFields {
 }
 
 /// 百分比列（+可选总量列缓存）。
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PercentFields {
     pub percent: Column,
     pub total: Option<Column>,
@@ -636,6 +629,7 @@ pub(super) struct FieldToml {
 // ───────────────────────── schema → model 转换 ─────────────────────────
 
 /// 转换错误：携带字段路径，启动失败时输出。
+#[derive(Debug)]
 pub(super) struct BuildError(pub String);
 
 impl BuildError {
@@ -672,7 +666,11 @@ fn parse_probe(context: &str, path: &str, p: ProbeToml) -> BuildResult<Probe> {
     };
     let value = p.value.unwrap_or_default();
     if op != ProbeOp::Exists && value.is_empty() {
-        return Err(BuildError::new(context, &format!("{path}.value"), "该 op 需要 value"));
+        return Err(BuildError::new(
+            context,
+            &format!("{path}.value"),
+            "该 op 需要 value",
+        ));
     }
     Ok(Probe {
         oid: p.oid,
@@ -684,12 +682,20 @@ fn parse_probe(context: &str, path: &str, p: ProbeToml) -> BuildResult<Probe> {
 pub(super) fn build_matcher(context: &str, m: MatchToml) -> BuildResult<Matcher> {
     let mut sysobjectid = Vec::new();
     for (i, s) in m.sysobjectid.iter().enumerate() {
-        sysobjectid.push(parse_oid(context, &format!("match.sysobjectid[{i}]"), s)?.arcs().to_vec());
+        sysobjectid.push(
+            parse_oid(context, &format!("match.sysobjectid[{i}]"), s)?
+                .arcs()
+                .to_vec(),
+        );
     }
     let mut descr_regex = Vec::new();
     for (i, s) in m.descr_regex.iter().enumerate() {
         descr_regex.push(Regex::new(s).map_err(|e| {
-            BuildError::new(context, &format!("match.descr_regex[{i}]"), format!("正则编译失败: {e}"))
+            BuildError::new(
+                context,
+                &format!("match.descr_regex[{i}]"),
+                format!("正则编译失败: {e}"),
+            )
         })?);
     }
     let mut probes = Vec::new();
@@ -722,30 +728,51 @@ fn build_column(context: &str, path: &str, c: ColumnToml) -> BuildResult<Column>
     })
 }
 
-fn build_fields(context: &str, path: &str, fields: Vec<FieldToml>) -> BuildResult<Vec<(String, Column)>> {
+fn build_fields(
+    context: &str,
+    path: &str,
+    fields: Vec<FieldToml>,
+) -> BuildResult<Vec<(String, Column)>> {
     fields
         .into_iter()
         .enumerate()
         .map(|(i, f)| {
             let path = format!("{path}.field[{i}]({})", f.role);
-            Ok((f.role, build_column(context, &path, ColumnToml {
-                oid: f.oid,
-                indexed: f.indexed,
-                value: None,
-                unit: f.unit,
-                precision: f.precision,
-                divisor: f.divisor,
-                multiplier: f.multiplier,
-            })?))
+            Ok((
+                f.role,
+                build_column(
+                    context,
+                    &path,
+                    ColumnToml {
+                        oid: f.oid,
+                        indexed: f.indexed,
+                        value: None,
+                        unit: f.unit,
+                        precision: f.precision,
+                        divisor: f.divisor,
+                        multiplier: f.multiplier,
+                    },
+                )?,
+            ))
         })
         .collect()
 }
 
-fn take_role(context: &str, fields: &mut Vec<(String, Column)>, role: &str, path: &str, required: bool) -> BuildResult<Option<Column>> {
+fn take_role(
+    context: &str,
+    fields: &mut Vec<(String, Column)>,
+    role: &str,
+    path: &str,
+    required: bool,
+) -> BuildResult<Option<Column>> {
     let idx = fields.iter().position(|(r, _)| r == role);
     match idx {
         Some(i) => Ok(Some(fields.remove(i).1)),
-        None if required => Err(BuildError::new(context, path, format!("缺少 role={role} 列"))),
+        None if required => Err(BuildError::new(
+            context,
+            path,
+            format!("缺少 role={role} 列"),
+        )),
         None => Ok(None),
     }
 }
@@ -759,16 +786,28 @@ pub(super) fn build_candidate(
     let mut require_caps = Vec::new();
     for (i, s) in c.require_caps.iter().enumerate() {
         require_caps.push(CapsKey::parse(s).ok_or_else(|| {
-            BuildError::new(context, &format!("{path}.require_caps[{i}]"), format!("未知能力: {s}"))
+            BuildError::new(
+                context,
+                &format!("{path}.require_caps[{i}]"),
+                format!("未知能力: {s}"),
+            )
         })?);
     }
     let mut skip = Vec::new();
     for (i, s) in c.skip.into_iter().enumerate() {
         let field = SkipField::parse(&s.field).ok_or_else(|| {
-            BuildError::new(context, &format!("{path}.skip[{i}].field"), format!("未知字段: {}", s.field))
+            BuildError::new(
+                context,
+                &format!("{path}.skip[{i}].field"),
+                format!("未知字段: {}", s.field),
+            )
         })?;
         let op = SkipOp::parse(&s.op).ok_or_else(|| {
-            BuildError::new(context, &format!("{path}.skip[{i}].op"), format!("未知比较符: {}", s.op))
+            BuildError::new(
+                context,
+                &format!("{path}.skip[{i}].op"),
+                format!("未知比较符: {}", s.op),
+            )
         })?;
         skip.push(SkipRule {
             field,
@@ -812,11 +851,7 @@ pub(super) fn build_candidate(
                         col,
                     )?)),
                     None => {
-                        return Err(BuildError::new(
-                            context,
-                            &path,
-                            "值列候选缺少 column",
-                        ));
+                        return Err(BuildError::new(context, &path, "值列候选缺少 column"));
                     }
                 }
             }
@@ -847,26 +882,32 @@ pub(super) fn build_candidate(
                 })
             }
             Some("storage") => CandidateKind::HrStorage {
-                storage_type: StorageType::parse(c.hr_type.as_deref().unwrap_or("ram")).ok_or_else(
-                    || BuildError::new(context, &format!("{path}.hr_type"), "行类型须为 ram|fixed_disk"),
-                )?,
+                storage_type: StorageType::parse(c.hr_type.as_deref().unwrap_or("ram"))
+                    .ok_or_else(|| {
+                        BuildError::new(
+                            context,
+                            &format!("{path}.hr_type"),
+                            "行类型须为 ram|fixed_disk",
+                        )
+                    })?,
             },
             Some("entity_sensors") => CandidateKind::EntitySensors,
             Some("counters") => CandidateKind::UcdCpuCounters,
             Some("device") => {
                 let mut fields = build_fields(context, &path, c.field)?;
-                let mut take_vec = |role: &str, fields: &mut Vec<(String, Column)>| -> Vec<Column> {
-                    let mut out = Vec::new();
-                    let mut i = 0;
-                    while i < fields.len() {
-                        if fields[i].0 == role {
-                            out.push(fields.remove(i).1);
-                        } else {
-                            i += 1;
+                let mut take_vec =
+                    |role: &str, fields: &mut Vec<(String, Column)>| -> Vec<Column> {
+                        let mut out = Vec::new();
+                        let mut i = 0;
+                        while i < fields.len() {
+                            if fields[i].0 == role {
+                                out.push(fields.remove(i).1);
+                            } else {
+                                i += 1;
+                            }
                         }
-                    }
-                    out
-                };
+                        out
+                    };
                 let model = take_vec("model", &mut fields);
                 let serial = take_vec("serial", &mut fields);
                 let version = take_vec("version", &mut fields);
@@ -884,18 +925,30 @@ pub(super) fn build_candidate(
                 })
             }
             Some(other) => {
-                return Err(BuildError::new(context, &format!("{path}.kind"), format!("未知候选形态: {other}")));
+                return Err(BuildError::new(
+                    context,
+                    &format!("{path}.kind"),
+                    format!("未知候选形态: {other}"),
+                ));
             }
         }
     };
     let sensor = match c.sensor.as_deref() {
         None => None,
         Some(s) => Some(SensorKind::parse(s).ok_or_else(|| {
-            BuildError::new(context, &format!("{path}.sensor"), format!("未知传感器类型: {s}"))
+            BuildError::new(
+                context,
+                &format!("{path}.sensor"),
+                format!("未知传感器类型: {s}"),
+            )
         })?),
     };
     if matches!(kind, CandidateKind::Columns(_)) && family == Family::Sensors && sensor.is_none() {
-        return Err(BuildError::new(context, &format!("{path}.sensor"), "传感器列候选必须声明 sensor 类型"));
+        return Err(BuildError::new(
+            context,
+            &format!("{path}.sensor"),
+            "传感器列候选必须声明 sensor 类型",
+        ));
     }
 
     Ok(Candidate {
@@ -923,7 +976,11 @@ fn placeholder_column() -> Column {
     }
 }
 
-pub(super) fn build_family(context: &str, family: Family, f: FamilyToml) -> BuildResult<FamilyPlan> {
+pub(super) fn build_family(
+    context: &str,
+    family: Family,
+    f: FamilyToml,
+) -> BuildResult<FamilyPlan> {
     let mode = match f.mode.as_deref() {
         None => CollectMode::Inherit,
         Some("inherit") => CollectMode::Inherit,
@@ -985,7 +1042,11 @@ pub(super) fn build_profile(context: &str, p: ProfileToml) -> BuildResult<OsProf
         "group" => ProfileKind::Group,
         "os" => ProfileKind::Os,
         other => {
-            return Err(BuildError::new(context, "kind", format!("未知类别: {other}")));
+            return Err(BuildError::new(
+                context,
+                "kind",
+                format!("未知类别: {other}"),
+            ));
         }
     };
     let matcher = match p.match_ {
@@ -1052,7 +1113,11 @@ oid = "1.x.3"
 "#;
         let file: ProfilesFile = toml::from_str(text).unwrap();
         let err = build_profile("test", file.profile.into_iter().next().unwrap()).unwrap_err();
-        assert!(err.0.contains("collect.cpu.candidate.column[0].oid"), "{}", err.0);
+        assert!(
+            err.0.contains("collect.cpu.candidate.column[0].oid"),
+            "{}",
+            err.0
+        );
     }
 
     #[test]
@@ -1063,7 +1128,7 @@ id = "t"
 kind = "os"
 brand = "T"
 [profile.match]
-descr_regex = ["(?<name>x)"]
+descr_regex = ["([a"]
 "#;
         let file: ProfilesFile = toml::from_str(text).unwrap();
         let err = build_profile("test", file.profile.into_iter().next().unwrap()).unwrap_err();
