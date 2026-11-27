@@ -1,0 +1,27 @@
+[[profile]]
+id = "netgear"
+kind = "os"
+brand = "Netgear"
+display_name = "Netgear"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.89.1.1.1.3.6.1.4.1.4526.100.4", "1.3.6.1.4.1.4526"]
+descr_keywords = ["netgear", "prosafe"]
+
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.4413.1.1.1.1.4.2.0"
+indexed = false
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.4413.1.1.1.1.4.1.0"
+indexed = false
+unit = "kb"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.4526.10.43.1.8.1.5"

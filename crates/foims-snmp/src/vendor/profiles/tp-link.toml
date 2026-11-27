@@ -1,0 +1,8 @@
+[[profile]]
+id = "tp-link"
+kind = "os"
+brand = "TP-Link"
+display_name = "TP-Link"
+
+[profile.match]
+descr_keywords = ["tp-link", "tplink"]

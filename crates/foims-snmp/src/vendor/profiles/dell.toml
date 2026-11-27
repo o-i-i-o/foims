@@ -1,0 +1,9 @@
+[[profile]]
+id = "dell"
+kind = "os"
+brand = "Dell"
+display_name = "Dell"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.674"]
+descr_keywords = ["dell"]

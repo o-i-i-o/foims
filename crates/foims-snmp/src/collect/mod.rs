@@ -8,6 +8,7 @@ pub mod lldp;
 pub mod metrics;
 pub mod poe;
 pub mod ports;
+pub mod resource;
 pub mod sysinfo;
 pub mod vlan;
 pub mod walk;

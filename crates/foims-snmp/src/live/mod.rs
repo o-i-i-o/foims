@@ -1,251 +1,31 @@
-//! SNMP 实时采集层：厂商 profile 探测 + 定向 OID GET，输出内存快照。
+//! 实时采集调度层：探测（profile::probe）→ 单设备采集器（LiveCollector）
+//! → 快照（LiveSnapshot）。
 //!
-//! 与 [`crate::collect::metrics`] 的全量 walk（5 分钟、落库）互补：本模块
-//! 只做「按设备已探测的索引精确 GET」，单轮请求量为
-//! `2×端口数（运行状态）+ 2（采集端口计数器）+ 资源组 + 1（uptime）`，
-//! 不随 ifTable/存储表规模膨胀；结果仅供实时展示、
-//! Top 榜与告警实时评估，不写数据库（趋势仍由全量轮询落库）。
-//!
-//! 关键约束：
-//! - IPv6 管理地址：单个 GET 的 OID 数上限 [`MAX_OIDS_PER_REQUEST`]，
-//!   使 UDP 载荷（含 v3 头）留在 1232 字节安全线内，避免分片丢包；
-//! - 会话复用由上层（agent-service）负责，本模块经 [`SnmpReader`] 抽象
-//!   接收客户端，探测链路全量可 mock；
-//! - 厂商识别集中在 [`crate::vendor::identify`]（双证据纯函数），厂商差异
-//!   落在 [`profile::probe`]：私有 OID 集来自 vendor 注册表，公共 MIB 回退
-//!   链按平台能力声明（caps）裁剪，探测一次缓存，采集循环不再 walk；
-//! - 温度回退顺序：厂商 MIB → ENTITY-SENSOR-MIB → LM-SENSORS，任一命中
-//!   即止（交换机优先厂商 MIB，Linux 主机回退 LM-SENSORS）。
+//! 按 docs/SNMP模块重构方案.md §5.1，本层只剩调度与快照，不含 OID 知识：
+//! 资源组（CPU/内存/温度）解释 [`crate::collect::resource::ResourceReader`]，
+//! 候选选择与行索引缓存在探测期建立的 [`crate::collect::resource::IndexCache`]
+//! 中跨轮复用。SNMP 读操作抽象（[`SnmpReader`]）由 core 提供，
+//! 生产实现为 async_snmp UDP 客户端，测试实现为内存 OID 快照。
 
 pub mod collector;
 pub mod profile;
 
 use std::collections::BTreeMap;
-use std::future::Future;
 
-use async_snmp::{Client, Oid, VarBind, transport::UdpHandle};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::core::format_snmp_error;
+use crate::collect::resource::IndexCache;
 
 pub use collector::LiveCollector;
+pub use crate::core::{SnmpReader, get_many_tolerant};
 pub use profile::{ProbeError, probe};
-
-/// SNMP 读操作抽象：探测（profile::probe）链路的唯一 IO 出口。
-///
-/// 生产实现为 async_snmp UDP 客户端；测试实现为内存 OID 快照
-/// （见 profile::tests），探测全链路可离线验证，无需真实设备。
-///
-/// 方法用 RPITIT 而非 `async fn` 声明：显式 `+ Send` 保证返回的 Future
-/// 可跨线程（agent-service 采集任务在多线程 runtime 上调度）。
-pub trait SnmpReader {
-    /// 多 OID 精确 GET：请求/响应等长有序，任一 OID 失败即整体 Err。
-    fn get_many(&self, oids: &[Oid]) -> impl Future<Output = Result<Vec<VarBind>, String>> + Send;
-    /// walk 子树：返回 base 子树内全部 varbind，空子树返回空集。
-    fn walk(&self, base: &Oid) -> impl Future<Output = Vec<VarBind>> + Send;
-}
-
-impl SnmpReader for Client<UdpHandle> {
-    async fn get_many(&self, oids: &[Oid]) -> Result<Vec<VarBind>, String> {
-        Client::get_many(self, oids)
-            .await
-            .map(|resp| resp.varbinds)
-            .map_err(|e| format_snmp_error(e).log_string())
-    }
-
-    async fn walk(&self, base: &Oid) -> Vec<VarBind> {
-        crate::collect::metrics::walk_all(self, base.clone()).await
-    }
-}
-
-/// 容忍缺失 OID 的批量 GET：先按批请求，失败（典型为 SNMPv1 任一 OID
-/// 不存在导致整包 `noSuchName`）或响应长度不符时，退化为逐 OID GET，
-/// 只保留成功且非异常的 varbind。
-///
-/// 识别/系统组等「多字段但可部分缺失」的场景必须使用本函数；纯批量性能
-/// 路径（实时采样分块）仍直连 `get_many`，由调用方按块统计失败。
-pub async fn get_many_tolerant<R: SnmpReader>(reader: &R, oids: &[Oid]) -> Vec<VarBind> {
-    if let Ok(varbinds) = reader.get_many(oids).await
-        && varbinds.len() == oids.len()
-    {
-        return varbinds;
-    }
-
-    tracing::debug!("SNMP 批量 GET 失败，回退逐 OID（{} 个）", oids.len());
-    let mut out = Vec::with_capacity(oids.len());
-    for oid in oids {
-        if let Ok(mut varbinds) = reader.get_many(std::slice::from_ref(oid)).await
-            && let Some(varbind) = varbinds.pop()
-            && !varbind.value.is_exception()
-        {
-            out.push(varbind);
-        }
-    }
-    out
-}
 
 /// 单请求 OID 上限：20 个 OID × 约 30B + v3 authPriv 头约 150B ≈ 750B，
 /// 低于 IPv6 最小 MTU 1280 对应的 UDP 安全载荷 1232B。
 pub const MAX_OIDS_PER_REQUEST: usize = 20;
 /// 实时采集端口上限：异常设备（大量虚拟接口）下限制单设备 OID 规模。
 pub const MAX_LIVE_PORTS: usize = 128;
-
-/// 厂商类别（决定资源组 OID 与温度回退顺序）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum VendorKind {
-    Cisco,
-    Huawei,
-    H3c,
-    Generic,
-}
-
-impl VendorKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            VendorKind::Cisco => "cisco",
-            VendorKind::Huawei => "huawei",
-            VendorKind::H3c => "h3c",
-            VendorKind::Generic => "generic",
-        }
-    }
-}
-
-/// 带实例后缀的 OID 来源（列 OID + 实例弧）。
-///
-/// `instance` 恒为空（OID 标量，如 UCD 内存总量）或单弧（表列实例）：
-/// 所涉及的表均为单弧索引（RFC 3433 实体传感器表亦然），单弧用
-/// [`RawSource::indexed`] 便捷构造。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RawSource {
-    pub base: Oid,
-    pub instance: Vec<u32>,
-}
-
-impl RawSource {
-    pub fn new(base: Oid, instance: Vec<u32>) -> Self {
-        Self { base, instance }
-    }
-
-    /// 单弧实例便捷构造（IF-MIB / 实体 CPU/内存/温度表）。
-    pub fn indexed(base: Oid, index: u32) -> Self {
-        Self {
-            base,
-            instance: vec![index],
-        }
-    }
-
-    pub fn oid(&self) -> Oid {
-        Oid::new(
-            self.base
-                .arcs()
-                .iter()
-                .copied()
-                .chain(self.instance.iter().copied()),
-        )
-    }
-}
-
-/// CPU 使用率来源：原始百分比列 + LibreNMS `processor_precision` 语义。
-///
-/// 厂商品牌库与 hrProcessorLoad 用 `precision = 1`；os_discovery 规则可能
-/// 上报 1/100 或空闲率（负 precision），换算在采集轮执行。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CpuSource {
-    pub source: RawSource,
-    pub precision: i32,
-}
-
-impl CpuSource {
-    pub fn plain(source: RawSource) -> Self {
-        Self {
-            source,
-            precision: 1,
-        }
-    }
-}
-
-/// LibreNMS `processor_precision`：正值表示 `raw / precision`，负值表示
-/// 上游上报空闲率 `100 + raw / precision`。结果必须落在 0–100。
-pub(crate) fn cpu_pct_value(value: &async_snmp::Value, precision: i32) -> Option<f64> {
-    let raw = value.as_u64()? as f64;
-    let precision = if precision == 0 { 1 } else { precision };
-    let pct = if precision < 0 {
-        100.0 + raw / precision as f64
-    } else {
-        raw / precision as f64
-    };
-    (0.0..=100.0).contains(&pct).then_some(pct)
-}
-
-/// 内存采集方案（探测期已确定索引/单位，采集期只 GET 需要的列）。
-#[derive(Debug, Clone)]
-pub enum MemPlan {
-    None,
-    /// used/free 两列（单位 × scale = 字节），total = used + free。
-    Pool {
-        used: RawSource,
-        free: RawSource,
-        scale: u64,
-    },
-    /// 华为/华三实体表：usage 百分比 + 探测期缓存的实体内存总量（字节）。
-    EntityPercent {
-        entities: Vec<EntityMem>,
-    },
-    /// total/free 两列（单位 × scale = 字节），used = total - free。
-    TotalFree {
-        total: RawSource,
-        free: RawSource,
-        scale: u64,
-    },
-    /// total/used 两列（单位 × scale = 字节），free = total - used。
-    UsedTotal {
-        total: RawSource,
-        used: RawSource,
-        scale: u64,
-    },
-    /// HOST-RESOURCES-MIB：Ram 行 size/used（单位块 × units）。
-    HrStorage {
-        size: RawSource,
-        used: RawSource,
-        units: u64,
-    },
-    /// UCD-SNMP-MIB：KB 标量（net-snmp 主机优先口径）：
-    /// used = (total − avail) × 1024，avail 优先 memSysAvail(4.27，
-    /// MemAvailable 口径)、回落 memAvailReal(4.6)。
-    Ucd {
-        total_kb: RawSource,
-        avail_kb: RawSource,
-    },
-}
-
-/// 单个实体的内存使用率来源与总量缓存。
-#[derive(Debug, Clone)]
-pub struct EntityMem {
-    pub usage: RawSource,
-    pub total_bytes: Option<u64>,
-}
-
-/// 温度值单位/换算方式。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TempUnit {
-    /// 厂商 MIB 直接摄氏度（Cisco ENVMON / 华为 / 华三）。
-    Celsius,
-    /// LM-SENSORS：毫摄氏度。
-    MilliCelsius,
-    /// ENTITY-SENSOR-MIB：value × 10^(scale-9) / 10^precision。
-    EntitySensor { scale: i32, precision: i32 },
-    /// LibreNMS os_discovery：value × multiplier / divisor（摄氏度）。
-    Scaled { divisor: u64, multiplier: u64 },
-}
-
-/// 单个温度传感器来源。
-#[derive(Debug, Clone)]
-pub struct TempSource {
-    pub source: RawSource,
-    pub unit: TempUnit,
-}
 
 /// 端口静态元数据（探测期缓存，采集期按 ifIndex 定向 GET）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,14 +35,13 @@ pub struct PortMeta {
     pub speed_bps: Option<u64>,
 }
 
-/// 设备厂商 profile：探测一次、采集循环反复使用。
-#[derive(Debug, Clone)]
+/// 设备实时画像：识别结果（profile/brand/caps + 解析后采集计划）、
+/// 行索引缓存、端口清单。探测一次、采集循环反复使用。
+#[derive(Debug)]
 pub struct DeviceProfile {
-    pub vendor: VendorKind,
-    /// CPU 使用率来源（整数百分比，多个实体取最大值）。
-    pub cpu: Vec<CpuSource>,
-    pub mem: MemPlan,
-    pub temp: Vec<TempSource>,
+    pub identity: crate::vendor::Identity,
+    /// 探测期初始化的候选/索引缓存（资源组解释器跨轮复用）。
+    pub cache: IndexCache,
     pub ports: Vec<PortMeta>,
     /// 设备是否支持 ifXTable 64 位计数器（探测期单点验证）。
     pub use_hc: bool,
@@ -323,7 +102,8 @@ pub struct LivePortSnapshot {
 #[derive(Debug, Clone, Serialize)]
 pub struct LiveSnapshot {
     pub collected_at: DateTime<Utc>,
-    pub vendor: VendorKind,
+    /// 识别品牌（profile.brand 展示口径，generic 为兜底）。
+    pub brand: String,
     pub cpu_usage_pct: Option<f64>,
     pub mem_total: Option<u64>,
     pub mem_used: Option<u64>,

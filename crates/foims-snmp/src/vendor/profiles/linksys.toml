@@ -1,0 +1,8 @@
+[[profile]]
+id = "linksys"
+kind = "os"
+brand = "Linksys"
+display_name = "Linksys"
+
+[profile.match]
+descr_keywords = ["linksys"]

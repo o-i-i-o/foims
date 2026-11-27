@@ -1,10 +1,9 @@
-//! 定向 GET 采集器：按探测期缓存的索引逐轮拉取状态/流量/资源组，
-//! 仅在内存中做差值，输出 [`LiveSnapshot`]。
+//! 定向 GET 采集器：按探测期缓存的索引逐轮拉取状态/流量，资源组经
+//! [`ResourceReader`] 解释 profile 采集计划，输出 [`LiveSnapshot`]。
 //!
-//! 单轮请求按 [`MAX_OIDS_PER_REQUEST`] 分块后并发发送（单轮耗时取最慢分块，
-//! 不随分块数叠加）；任一分块失败只丢该块数据（`partial`），全部分块失败才把
-//! `responded` 置 false 交给上层判定离线/退避。端口索引漂移（全部端口状态缺失）
-//! 由上层触发重新探测。
+//! 端口/uptime 组单请求按 [`MAX_OIDS_PER_REQUEST`] 分块后并发发送；任一分块
+//! 失败只丢该块数据（`partial`），全部分块失败才把 `responded` 置 false 交给
+//! 上层判定离线/退避。端口索引漂移（全部端口状态缺失）由上层触发重新探测。
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -13,12 +12,12 @@ use async_snmp::{Client, Oid, Value, oid};
 use chrono::{DateTime, Utc};
 use futures_util::future::join_all;
 
-use super::profile::apply_temp_unit;
 use super::{
-    DeviceProfile, EntityMem, LiveCounters, LivePortSnapshot, LiveSampleSpec, LiveSnapshot,
-    MAX_OIDS_PER_REQUEST, MemPlan, PortCounters, PortMeta, cpu_pct_value,
+    DeviceProfile, LiveCounters, LivePortSnapshot, LiveSampleSpec, LiveSnapshot, PortCounters,
+    PortMeta, MAX_OIDS_PER_REQUEST,
 };
 use crate::collect::metrics::iface_rate_bps;
+use crate::collect::resource::ResourceReader;
 
 /// 一次采集的读取项：OID 与语义标签一一对应。
 struct ReadItem {
@@ -35,21 +34,9 @@ enum ReadKind {
     HcOut(u32),
     In32(u32),
     Out32(u32),
-    Cpu(usize),
-    MemEntityUsage(usize),
-    MemPoolUsed,
-    MemPoolFree,
-    MemTotal,
-    MemUsed,
-    MemFree,
-    MemHrSize,
-    MemHrUsed,
-    MemUcdTotal,
-    MemUcdAvail,
-    Temp(usize),
 }
 
-/// 单设备实时采集器：持有厂商 profile、采集端口与上一轮计数器状态。
+/// 单设备实时采集器：持有设备画像、采集端口与上一轮计数器状态。
 pub struct LiveCollector {
     profile: DeviceProfile,
     /// 流量采集端口：配置端口未命中时回落探测结果首端口
@@ -72,7 +59,7 @@ impl LiveCollector {
     }
 
     /// 采集一轮：按 `spec` 选择端口状态/流量，资源组（CPU/内存/温度）
-    /// 始终同轮 GET，保证快照各指标时间戳一致。
+    /// 经 ResourceReader 解释（候选/索引缓存跨轮复用），保证快照完整。
     pub async fn sample(
         &mut self,
         client: &Client<UdpHandle>,
@@ -88,18 +75,6 @@ impl LiveCollector {
         let mut port_oper: BTreeMap<u32, bool> = BTreeMap::new();
         let mut port_in: BTreeMap<u32, u64> = BTreeMap::new();
         let mut port_out: BTreeMap<u32, u64> = BTreeMap::new();
-        let mut cpu_values: Vec<f64> = Vec::new();
-        let mut mem_entity_usage: BTreeMap<usize, f64> = BTreeMap::new();
-        let mut mem_pool_used = None;
-        let mut mem_pool_free = None;
-        let mut mem_total_raw = None;
-        let mut mem_used_raw = None;
-        let mut mem_free_raw = None;
-        let mut mem_hr_size = None;
-        let mut mem_hr_used = None;
-        let mut mem_ucd_total = None;
-        let mut mem_ucd_avail = None;
-        let mut temps: Vec<f64> = Vec::new();
         let mut uptime_secs = None;
 
         for item in &items {
@@ -128,43 +103,6 @@ impl LiveCollector {
                 ReadKind::HcOut(idx) | ReadKind::Out32(idx) => {
                     if let Some(v) = value.as_u64() {
                         port_out.insert(idx, v);
-                    }
-                }
-                ReadKind::Cpu(i) => {
-                    if let Some(pct) = self
-                        .profile
-                        .cpu
-                        .get(i)
-                        .and_then(|source| cpu_pct_value(value, source.precision))
-                    {
-                        cpu_values.push(pct);
-                    }
-                }
-                ReadKind::MemEntityUsage(i) => {
-                    if let Some(pct) = value.as_u32().filter(|p| *p <= 100) {
-                        mem_entity_usage.insert(i, f64::from(pct));
-                    }
-                }
-                ReadKind::MemPoolUsed => mem_pool_used = value.as_u64(),
-                ReadKind::MemPoolFree => mem_pool_free = value.as_u64(),
-                ReadKind::MemTotal => mem_total_raw = value.as_u64(),
-                ReadKind::MemUsed => mem_used_raw = value.as_u64(),
-                ReadKind::MemFree => mem_free_raw = value.as_u64(),
-                ReadKind::MemHrSize => mem_hr_size = value.as_u64(),
-                ReadKind::MemHrUsed => mem_hr_used = value.as_u64(),
-                ReadKind::MemUcdTotal => mem_ucd_total = value.as_u64(),
-                ReadKind::MemUcdAvail => mem_ucd_avail = value.as_u64(),
-                ReadKind::Temp(i) => {
-                    if let Some(celsius) = raw_temp(value)
-                        .and_then(|raw| {
-                            self.profile
-                                .temp
-                                .get(i)
-                                .and_then(|t| apply_temp_unit(raw, t.unit))
-                        })
-                        .filter(|c| 0.0 < *c && *c <= 200.0)
-                    {
-                        temps.push(celsius);
                     }
                 }
             }
@@ -234,63 +172,37 @@ impl LiveCollector {
             self.prev = None;
         }
 
-        let cpu_usage_pct = cpu_values
+        // 资源组：解释器消费 profile 采集计划（候选缓存跨轮复用，首轮 walk、
+        // 后续轮定向 GET）。实时路径不传上一轮 CPU 计数器，require_prev
+        // 候选自动跳过。
+        let identity = &self.profile.identity;
+        let reader = ResourceReader::new(
+            client,
+            identity.plan,
+            identity.caps,
+            None,
+            &self.profile.cache,
+        );
+        let cpu_usage_pct = reader
+            .cpu()
+            .await
             .into_iter()
+            .map(|r| r.usage_pct)
             .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m: f64| m.max(v))));
-        let (mem_total, mem_used, mem_usage_pct) = match &self.profile.mem {
-            MemPlan::None => (None, None, None),
-            MemPlan::Pool { scale, .. } => match (mem_pool_used, mem_pool_free) {
-                (Some(used), Some(free)) => {
-                    let used = used.saturating_mul(*scale);
-                    let free = free.saturating_mul(*scale);
-                    let total = used.saturating_add(free);
-                    (Some(total), Some(used), usage_pct(total, used))
-                }
-                _ => (None, None, None),
-            },
-            MemPlan::EntityPercent { entities } => entity_mem_totals(entities, &mem_entity_usage),
-            MemPlan::TotalFree { scale, .. } => match (mem_total_raw, mem_free_raw) {
-                (Some(total), Some(free)) => {
-                    let total = total.saturating_mul(*scale);
-                    let free = free.saturating_mul(*scale);
-                    let used = total.saturating_sub(free);
-                    (Some(total), Some(used), usage_pct(total, used))
-                }
-                _ => (None, None, None),
-            },
-            MemPlan::UsedTotal { scale, .. } => match (mem_total_raw, mem_used_raw) {
-                (Some(total), Some(used)) => {
-                    let total = total.saturating_mul(*scale);
-                    let used = used.saturating_mul(*scale);
-                    (Some(total), Some(used), usage_pct(total, used))
-                }
-                _ => (None, None, None),
-            },
-            MemPlan::HrStorage { units, .. } => match (mem_hr_size, mem_hr_used) {
-                (Some(size), Some(used)) => {
-                    let total = size.saturating_mul(*units);
-                    let used = used.saturating_mul(*units);
-                    (Some(total), Some(used), usage_pct(total, used))
-                }
-                _ => (None, None, None),
-            },
-            MemPlan::Ucd { .. } => match (mem_ucd_total, mem_ucd_avail) {
-                (Some(total_kb), Some(avail_kb)) => {
-                    let total = total_kb.saturating_mul(1024);
-                    let used = total_kb.saturating_sub(avail_kb).saturating_mul(1024);
-                    (Some(total), Some(used), usage_pct(total, used))
-                }
-                _ => (None, None, None),
-            },
+        let (mem_total, mem_used, mem_usage_pct) = match reader.mem().await {
+            Some(mem) => (mem.total, mem.used, mem.usage_percent),
+            None => (None, None, None),
         };
-
-        let temperature_c = temps
+        let temperature_c = reader
+            .temp()
+            .await
             .into_iter()
+            .map(|t| t.celsius)
             .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m: f64| m.max(v))));
 
         LiveSnapshot {
             collected_at: now,
-            vendor: self.profile.vendor,
+            brand: identity.brand.to_string(),
             cpu_usage_pct,
             mem_total,
             mem_used,
@@ -306,11 +218,12 @@ impl LiveCollector {
         }
     }
 
-    /// 构造本轮读取项清单（顺序固定：uptime → 端口状态 → 采集端口流量 → 资源组）。
+    /// 构造本轮读取项清单（顺序固定：uptime → 端口状态 → 采集端口流量）。
+    /// 资源组 OID 不在此清单——候选选择由解释器在采集轮内完成。
     fn build_items(&self, spec: LiveSampleSpec) -> Vec<ReadItem> {
         let target_index = self.target.as_ref().map(|port| port.if_index);
-        // 端口状态 2×N + 采集端口 2（64 位计数器）+ uptime + 资源组
-        let mut items = Vec::with_capacity(12 + self.profile.ports.len() * 2);
+        // 端口状态 2×N + 采集端口 2（64 位计数器）+ uptime
+        let mut items = Vec::with_capacity(4 + self.profile.ports.len() * 2);
         items.push(ReadItem {
             oid: oid!(1, 3, 6, 1, 2, 1, 1, 3, 0),
             kind: ReadKind::Uptime,
@@ -349,79 +262,6 @@ impl LiveCollector {
                     kind: ReadKind::Out32(idx),
                 });
             }
-        }
-        for (i, source) in self.profile.cpu.iter().enumerate() {
-            items.push(ReadItem {
-                oid: source.source.oid(),
-                kind: ReadKind::Cpu(i),
-            });
-        }
-        match &self.profile.mem {
-            MemPlan::Pool { used, free, .. } => {
-                items.push(ReadItem {
-                    oid: used.oid(),
-                    kind: ReadKind::MemPoolUsed,
-                });
-                items.push(ReadItem {
-                    oid: free.oid(),
-                    kind: ReadKind::MemPoolFree,
-                });
-            }
-            MemPlan::TotalFree { total, free, .. } => {
-                items.push(ReadItem {
-                    oid: total.oid(),
-                    kind: ReadKind::MemTotal,
-                });
-                items.push(ReadItem {
-                    oid: free.oid(),
-                    kind: ReadKind::MemFree,
-                });
-            }
-            MemPlan::UsedTotal { total, used, .. } => {
-                items.push(ReadItem {
-                    oid: total.oid(),
-                    kind: ReadKind::MemTotal,
-                });
-                items.push(ReadItem {
-                    oid: used.oid(),
-                    kind: ReadKind::MemUsed,
-                });
-            }
-            MemPlan::EntityPercent { entities } => {
-                for (i, entity) in entities.iter().enumerate() {
-                    items.push(ReadItem {
-                        oid: entity.usage.oid(),
-                        kind: ReadKind::MemEntityUsage(i),
-                    });
-                }
-            }
-            MemPlan::HrStorage { size, used, .. } => {
-                items.push(ReadItem {
-                    oid: size.oid(),
-                    kind: ReadKind::MemHrSize,
-                });
-                items.push(ReadItem {
-                    oid: used.oid(),
-                    kind: ReadKind::MemHrUsed,
-                });
-            }
-            MemPlan::Ucd { total_kb, avail_kb } => {
-                items.push(ReadItem {
-                    oid: total_kb.oid(),
-                    kind: ReadKind::MemUcdTotal,
-                });
-                items.push(ReadItem {
-                    oid: avail_kb.oid(),
-                    kind: ReadKind::MemUcdAvail,
-                });
-            }
-            MemPlan::None => {}
-        }
-        for (i, temp) in self.profile.temp.iter().enumerate() {
-            items.push(ReadItem {
-                oid: temp.source.oid(),
-                kind: ReadKind::Temp(i),
-            });
         }
         items
     }
@@ -469,38 +309,6 @@ async fn fetch(
     (values, responded, failed)
 }
 
-fn raw_temp(value: &Value) -> Option<f64> {
-    value
-        .as_i32()
-        .map(f64::from)
-        .or_else(|| value.as_u64().map(|v| v as f64))
-}
-
-fn usage_pct(total: u64, used: u64) -> Option<f64> {
-    (total > 0).then(|| (used as f64 / total as f64 * 100.0).clamp(0.0, 100.0))
-}
-
-/// 实体表内存聚合：在「有使用率」的实体中选缓存总量最大者（主控板），
-/// 用总量 × 百分比换算已用字节；全部实体都无总量时只报最大使用率。
-fn entity_mem_totals(
-    entities: &[EntityMem],
-    usage: &BTreeMap<usize, f64>,
-) -> (Option<u64>, Option<u64>, Option<f64>) {
-    let chosen = entities
-        .iter()
-        .enumerate()
-        .filter_map(|(i, entity)| usage.get(&i).map(|pct| (entity.total_bytes, *pct)))
-        .max_by_key(|(total, _)| total.unwrap_or(0));
-    match chosen {
-        Some((Some(total), pct)) => {
-            let used = (total as f64 * pct / 100.0).round() as u64;
-            (Some(total), Some(used), Some(pct))
-        }
-        Some((None, pct)) => (None, None, Some(pct)),
-        None => (None, None, None),
-    }
-}
-
 /// 解析采集端口：精确名 → 忽略大小写 → 去分隔符归一；均未命中回落首端口。
 fn resolve_target(ports: &[PortMeta], monitor_if: Option<&str>) -> Option<PortMeta> {
     let Some(name) = monitor_if.map(str::trim).filter(|name| !name.is_empty()) else {
@@ -537,29 +345,6 @@ fn normalize_port_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::live::{CpuSource, PortMeta, RawSource, TempSource, TempUnit, VendorKind};
-
-    fn source(arc: u32, index: u32) -> RawSource {
-        RawSource::indexed(
-            Oid::parse(&format!("1.3.6.1.4.1.9.9.999.{arc}")).unwrap(),
-            index,
-        )
-    }
-
-    fn profile(mem: MemPlan, temp: Vec<TempSource>) -> DeviceProfile {
-        DeviceProfile {
-            vendor: VendorKind::Cisco,
-            cpu: vec![CpuSource::plain(source(1, 1))],
-            mem,
-            temp,
-            ports: vec![PortMeta {
-                if_index: 1,
-                name: "Gi0/1".to_string(),
-                speed_bps: Some(1_000_000_000),
-            }],
-            use_hc: true,
-        }
-    }
 
     #[test]
     fn 采集端口_配置命中与回落() {
@@ -590,86 +375,5 @@ mod tests {
             Some(1)
         );
         assert!(resolve_target(&[], Some("Gi0/1")).is_none());
-    }
-
-    #[test]
-    fn 内存方案_实体百分比选择主控并换算字节() {
-        let entities = vec![
-            EntityMem {
-                usage: source(2, 1),
-                total_bytes: Some(1_000_000_000),
-            },
-            EntityMem {
-                usage: source(2, 2),
-                total_bytes: Some(2_000_000),
-            },
-        ];
-        let mut usage = BTreeMap::new();
-        usage.insert(0, 20.0);
-        usage.insert(1, 90.0);
-        assert_eq!(
-            entity_mem_totals(&entities, &usage),
-            (Some(1_000_000_000), Some(200_000_000), Some(20.0))
-        );
-    }
-
-    #[test]
-    fn 内存方案_实体无总量时只报使用率() {
-        let entities = vec![EntityMem {
-            usage: source(2, 1),
-            total_bytes: None,
-        }];
-        let mut usage = BTreeMap::new();
-        usage.insert(0, 42.0);
-        assert_eq!(
-            entity_mem_totals(&entities, &usage),
-            (None, None, Some(42.0))
-        );
-        assert_eq!(
-            entity_mem_totals(&entities, &BTreeMap::new()),
-            (None, None, None)
-        );
-    }
-
-    #[test]
-    fn 内存使用率_钳制与零总量() {
-        assert_eq!(usage_pct(100, 50), Some(50.0));
-        assert_eq!(usage_pct(0, 0), None);
-        assert_eq!(usage_pct(100, 200), Some(100.0));
-    }
-
-    #[test]
-    fn cpu精度换算_正负precision() {
-        // precision=100：上游上报百分比 ×100
-        assert_eq!(cpu_pct_value(&Value::Integer(1500), 100), Some(15.0));
-        // precision=-1：上游上报空闲率，100 - raw
-        assert_eq!(cpu_pct_value(&Value::Integer(20), -1), Some(80.0));
-        // 过滤越界值，避免把负载/计数当成 CPU
-        assert_eq!(cpu_pct_value(&Value::Integer(120), 1), None);
-        assert_eq!(cpu_pct_value(&Value::Integer(0), 0), Some(0.0));
-    }
-
-    #[test]
-    fn 温度换算_毫与实体单位() {
-        assert_eq!(apply_temp_unit(45000.0, TempUnit::MilliCelsius), Some(45.0));
-        assert_eq!(
-            apply_temp_unit(
-                45000.0,
-                TempUnit::Scaled {
-                    divisor: 1000,
-                    multiplier: 1
-                }
-            ),
-            Some(45.0)
-        );
-        let src = TempSource {
-            source: source(3, 1),
-            unit: TempUnit::EntitySensor {
-                scale: 8,
-                precision: 0,
-            },
-        };
-        let collector = LiveCollector::new(profile(MemPlan::None, vec![src]), None);
-        assert_eq!(collector.profile().temp.len(), 1);
     }
 }

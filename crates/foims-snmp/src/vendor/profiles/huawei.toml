@@ -1,0 +1,93 @@
+[[profile]]
+id = "huawei"
+kind = "group"
+brand = "Huawei"
+display_name = "Huawei"
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "entity"
+[[profile.collect.mem.candidate.field]]
+role = "usage"
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+[[profile.collect.mem.candidate.field]]
+role = "size_mega"
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+[[profile.collect.mem.candidate.field]]
+role = "size_bytes"
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"
+
+[[profile]]
+id = "huawei-brand"
+kind = "os"
+group = "huawei"
+brand = "Huawei"
+display_name = "Huawei"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2011"]
+descr_keywords = ["huawei", "versatile routing platform"]
+
+[[profile]]
+id = "vrp"
+kind = "os"
+group = "huawei"
+brand = "Huawei"
+display_name = "Huawei VRP"
+
+[profile.match]
+descr_keywords = ["software version vrp", "versatile routing platform software", "vrp (r) software", "vrp software version"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+value = "percent"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.5"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.8.1.6"
+
+[[profile]]
+id = "yunshan"
+kind = "os"
+group = "huawei"
+brand = "Huawei"
+display_name = "Huawei YunShan OS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2011.2.23"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+value = "percent"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.5"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.8.1.6"

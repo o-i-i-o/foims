@@ -1,0 +1,8 @@
+[[profile]]
+id = "buffalo"
+kind = "os"
+brand = "Buffalo"
+display_name = "Buffalo"
+
+[profile.match]
+descr_regex = ["^BUFFALO"]

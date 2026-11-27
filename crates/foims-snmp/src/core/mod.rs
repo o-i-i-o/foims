@@ -1,6 +1,9 @@
 //! SNMP 协议参数层：设备凭据解密、参数构造、鉴权组装、目标地址与错误文案。
 
 pub mod config;
+pub mod reader;
+
+pub use reader::{SnmpReader, get_many_tolerant};
 
 use std::sync::RwLock;
 use std::time::Duration;
