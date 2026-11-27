@@ -55,6 +55,17 @@ const WALK_MEMORY_TTL_SECS: u64 = 1800;
 static WALK_DEGRADED_MEMORY: LazyLock<Mutex<HashMap<String, Instant>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// 单个 GETBULK 阶段内单请求无响应的中止阈值。
+///
+/// 实测华为 CE12800 在 lldpRemTable 上对 Cr10「慢而不死」——每请求重传 1-2 次
+/// 才推进，阶段既不报错也走不完，整段 walk 磨满阶段预算（20s）才降级，冷采
+/// LLDP 达 23s。而小重复数档「秒回」：单请求超过此阈值仍无任何响应（含重传
+/// 等待），设备大概率处于该档不可用状态，立即中止阶段并降级，不再白等剩余
+/// 预算。取值同 [`WALK_PROBE_TIMEOUT_SECS`] 口径：略大于单请求超时（默认 5s，
+/// 丢一个包后响应落在重传间隔内仍能等到），小于重传链首个重试间隔结束点。
+/// 误中止无正确性风险：降级 Cr2 档数据等价，仅损失 Cr10 档效率。
+const WALK_STALL_SECS: u64 = 6;
+
 /// GETBULK 能力探针超时：整段 walk 前先用单请求 GETBULK 探测设备对大重复
 /// 数的响应能力，探针超过此上限即判定该重复数不可用，直接进入下一级，
 /// 避免整段 walk 白等重传链（约 35s，实测主机命令秒回而采集 30s+ 的主因）。
@@ -95,10 +106,11 @@ impl WalkError {
 /// 已确认 Cr10 档不可用）直接从小重复数档采集；否则先发单请求 GETBULK
 /// 探针（[`WALK_PROBE_TIMEOUT_SECS`]）探测设备对 [`WALK_MAX_REPETITIONS`]
 /// 的响应能力——探针通过才执行整段 walk（受 [`WALK_STAGE_BUDGET_SECS`]
-/// 阶段预算约束），探针无响应直接降 [`WALK_DEGRADED_REPETITIONS`] 采集，
-/// 不再白等必然失败的整段重传链。小重复数成功写入降级记忆，仍失败降级
-/// GETNEXT 逐条遍历并告警；认证/配置类错误直接冒泡（重试无意义且会翻倍
-/// 失败时延）。v1 无 GETBULK（WalkOptions 默认即 GETNEXT），跳过探针。
+/// 阶段预算与 [`WALK_STALL_SECS`] 单请求 stall 中止约束），探针无响应直接降
+/// [`WALK_DEGRADED_REPETITIONS`] 采集，不再白等必然失败的整段重传链。小重复
+/// 数成功写入降级记忆，仍失败降级 GETNEXT 逐条遍历并告警；认证/配置类错误
+/// 直接冒泡（重试无意义且会翻倍失败时延）。v1 无 GETBULK（WalkOptions 默认
+/// 即 GETNEXT），跳过探针。
 ///
 /// 全程受 [`WALK_BUDGET_SECS`] 总预算约束，超预算终止并返回
 /// [`WalkError::BudgetExceeded`]；降级重试不会留下半张表的中间结果
@@ -238,7 +250,7 @@ async fn walk_degraded(
     }
 }
 
-/// GETNEXT 逐条遍历兜底（受总预算约束）。
+/// GETNEXT 逐条遍历兜底（受总预算约束；不启用单请求 stall 中止）。
 async fn walk_getnext(
     client: &Client,
     target: &async_snmp::Oid,
@@ -250,6 +262,7 @@ async fn walk_getnext(
             method: WalkMethod::GetNext,
             ..WalkOptions::default()
         },
+        None,
     )
     .await
     .map_err(|e| *e)
@@ -302,8 +315,8 @@ enum BulkStage {
 }
 
 /// 带阶段预算的单次 GETBULK 收集：阶段内每请求仍按客户端重试策略重传，
-/// 阶段整体超 [`WALK_STAGE_BUDGET_SECS`] 未完成即放弃（返回可重试），
-/// 避免设备「慢而不死」时把总预算耗在单级上。
+/// 阶段整体超 [`WALK_STAGE_BUDGET_SECS`] 未完成或单请求超 [`WALK_STALL_SECS`]
+/// 无响应即放弃（返回可重试），避免设备「慢而不死」时把总预算耗在单级上。
 async fn walk_bulk_stage(
     client: &Client,
     target: &async_snmp::Oid,
@@ -315,7 +328,7 @@ async fn walk_bulk_stage(
     };
     match tokio::time::timeout(
         Duration::from_secs(WALK_STAGE_BUDGET_SECS),
-        walk_collect(client, target, options),
+        walk_collect(client, target, options, Some(Duration::from_secs(WALK_STALL_SECS))),
     )
     .await
     {
@@ -351,13 +364,37 @@ async fn walk_collect(
     client: &Client,
     target: &async_snmp::Oid,
     options: WalkOptions,
+    stall: Option<Duration>,
 ) -> Result<Vec<VarBind>, Box<async_snmp::Error>> {
     let mut walk = client.walk_with(target.clone(), options)?;
 
     let mut varbinds = Vec::new();
 
-    while let Some(result) = walk.next().await {
-        let vb = result?;
+    loop {
+        // 单请求 stall 中止：GETBULK 阶段内某请求超过阈值仍无响应（含重传
+        // 等待）即合成超时错误返回，调用方降级小重复数档；合成 Timeout 属
+        // [`is_bulk_retryable`] 可降级错误。取消请求仅废弃在途报文（async-snmp
+        // 请求注册随 Future 取消清理）。GETNEXT 兜底不启用（None）——兜底档
+        // 必须允许慢响应推进到底，否则降级链尽头变成必然失败。
+        let next = if let Some(limit) = stall {
+            match tokio::time::timeout(limit, walk.next()).await {
+                Ok(outcome) => outcome,
+                Err(_) => {
+                    return Err(Box::new(async_snmp::Error::Timeout {
+                        target: client.peer_addr(),
+                        elapsed: limit,
+                        retries: 0,
+                    }));
+                }
+            }
+        } else {
+            walk.next().await
+        };
+
+        let vb = match next {
+            Some(item) => item?,
+            None => break,
+        };
 
         if vb.value.is_exception() {
             if matches!(vb.value, async_snmp::Value::EndOfMibView) {
@@ -458,6 +495,7 @@ mod tests {
         assert_eq!(WALK_MAX_REPETITIONS, 10);
         assert_eq!(WALK_DEGRADED_REPETITIONS, 2);
         assert_eq!(WALK_PROBE_TIMEOUT_SECS, 6);
+        assert_eq!(WALK_STALL_SECS, 6);
         assert_eq!(WALK_STAGE_BUDGET_SECS, 20);
         assert_eq!(WALK_MEMORY_TTL_SECS, 1800);
     }
