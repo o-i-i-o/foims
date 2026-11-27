@@ -1,12 +1,15 @@
 //! 厂商 profile 探测：一次探测确定厂商类别、资源组索引与端口清单，
 //! 采集循环只对缓存索引做定向 GET。
 //!
-//! 厂商识别走 [`crate::vendor::identify`]（双证据纯函数），私有 OID 集来自
-//! [`crate::vendor`] 注册表；公共 MIB 回退链按平台能力声明（caps）裁剪：
+//! 厂商识别走 [`crate::vendor::identify`]（双证据纯函数），私有采集 OID
+//! 来自 [`crate::vendor::profiles`] 注册表（内置默认 + /etc 配置文件，
+//! 数据驱动）：配置文件条目最先尝试（OS id → sysObjectID 最长前缀），
+//! 其后依次 LibreNMS os_discovery 规则、内置默认条目，公共 MIB 回退链
+//! 按平台能力声明（caps）裁剪：
 //! Windows 等已知缺失的 MIB 族直接跳过，不再空走（§3.2）。
 //! - Cisco：CISCO-PROCESS-MIB / CISCO-MEMORY-POOL-MIB / CISCO-ENVMON-MIB；
-//! - 华为：HUAWEI-ENTITY-EXTENT-MIB（详见 vendor/huawei.rs）；
-//! - 华三：HH3C-ENTITY-EXT-MIB（详见 vendor/h3c.rs）；
+//! - 华为：HUAWEI-ENTITY-EXTENT-MIB（详见 vendor/profiles_default.toml）；
+//! - 华三：HH3C-ENTITY-EXT-MIB（同上）；
 //! - 通用回退：UCD 内存标量（net-snmp 主机，total−available 口径）、
 //!   HOST-RESOURCES-MIB（hrProcessorLoad、hrStorage Ram）、
 //!   ENTITY-SENSOR-MIB、LM-SENSORS-MIB。
@@ -28,9 +31,8 @@ use super::{
 };
 use crate::collect::metrics::temp_from_milli;
 use crate::vendor::platform::PlatformCaps;
-use crate::vendor::{
-    self, DiscoveryProfile, MemRule, OidColumn, TempRule, VendorMemOids, VendorOidSet,
-};
+use crate::vendor::profiles::{ProfileMem, VendorProfile};
+use crate::vendor::{self, DiscoveryProfile, MemRule, OidColumn, TempRule};
 
 /// 探测失败：系统组（sysObjectID/sysDescr）无响应，设备不可达。
 #[derive(Debug, Error)]
@@ -137,7 +139,14 @@ pub async fn probe<R: SnmpReader>(reader: &R) -> Result<DeviceProfile, ProbeErro
         identity = probed;
     }
     let vendor = vendor::vendor_kind(identity.vendor_guess);
-    let oid_set = vendor::oid_set(identity.vendor_guess);
+    // 采集库 profile 化：配置文件条目最先尝试（OS id / sysObjectID 前缀），
+    // 内置默认三家按 OS id 绑定（探测期位于 os_discovery 之后）
+    let profiles = vendor::profiles::registry();
+    let custom = profiles.match_custom(object_id.as_ref(), identity.vendor_guess);
+    if let Some(profile) = custom {
+        tracing::debug!("SNMP 自定义厂商 profile 命中: id={}", profile.id);
+    }
+    let builtin = profiles.builtin(identity.vendor_guess);
     let discovery = vendor::discovery_profile(identity.vendor_guess);
 
     let ports = discover_ports(reader).await;
@@ -149,9 +158,9 @@ pub async fn probe<R: SnmpReader>(reader: &R) -> Result<DeviceProfile, ProbeErro
         None => false,
     };
 
-    let cpu = discover_cpu(reader, discovery, oid_set, identity.caps).await;
-    let mem = discover_mem(reader, discovery, oid_set, identity.caps).await;
-    let temp = discover_temp(reader, discovery, oid_set, identity.caps).await;
+    let cpu = discover_cpu(reader, custom, discovery, builtin, identity.caps).await;
+    let mem = discover_mem(reader, custom, discovery, builtin, identity.caps).await;
+    let temp = discover_temp(reader, custom, discovery, builtin, identity.caps).await;
 
     tracing::debug!(
         "SNMP 实时 profile 探测完成: vendor={}, platform={}, os_version={}, ports={}, cpu={}, temp={}, mem={}",
@@ -235,14 +244,22 @@ async fn discover_ports<R: SnmpReader>(reader: &R) -> Vec<PortMeta> {
 
 // CPU
 
-/// CPU 来源探测：OS 级 LibreNMS 规则 → 品牌私有列 → hrProcessorLoad
-/// （caps 裁剪已知缺失平台，如 Windows 未实现 hrProcessorTable，§3.2）。
+/// CPU 来源探测：配置文件条目 → OS 级 LibreNMS 规则 → 内置默认条目 →
+/// hrProcessorLoad（caps 裁剪已知缺失平台，如 Windows 未实现
+/// hrProcessorTable，§3.2）。profile 条目探测为空不阻断，继续后续层。
 async fn discover_cpu<R: SnmpReader>(
     reader: &R,
+    custom: Option<&VendorProfile>,
     discovery: Option<&DiscoveryProfile>,
-    oid_set: Option<&VendorOidSet>,
+    builtin: Option<&VendorProfile>,
     caps: PlatformCaps,
 ) -> Vec<CpuSource> {
+    if let Some(profile) = custom {
+        let sources = profile_cpu_sources(reader, profile).await;
+        if !sources.is_empty() {
+            return sources;
+        }
+    }
     if let Some(profile) = discovery {
         for rule in profile.cpu {
             let sources = discovery_cpu_sources(reader, rule).await;
@@ -251,16 +268,10 @@ async fn discover_cpu<R: SnmpReader>(
             }
         }
     }
-    if let Some(set) = oid_set {
-        for column in set.cpu_columns {
-            let sources: Vec<CpuSource> = percent_sources(reader, &column())
-                .await
-                .into_iter()
-                .map(CpuSource::plain)
-                .collect();
-            if !sources.is_empty() {
-                return sources;
-            }
+    if let Some(profile) = builtin {
+        let sources = profile_cpu_sources(reader, profile).await;
+        if !sources.is_empty() {
+            return sources;
         }
     }
     if !caps.hr_processor {
@@ -272,6 +283,21 @@ async fn discover_cpu<R: SnmpReader>(
         .into_iter()
         .map(CpuSource::plain)
         .collect()
+}
+
+/// profile CPU 列逐列探测（整数百分比，walk 取行），首个有值列生效。
+async fn profile_cpu_sources<R: SnmpReader>(reader: &R, profile: &VendorProfile) -> Vec<CpuSource> {
+    for column in &profile.cpu_columns {
+        let sources: Vec<CpuSource> = percent_sources(reader, column)
+            .await
+            .into_iter()
+            .map(CpuSource::plain)
+            .collect();
+        if !sources.is_empty() {
+            return sources;
+        }
+    }
+    Vec::new()
 }
 
 /// LibreNMS os_discovery CPU 列：`indexed` 表列 walk，标量定向 GET。
@@ -314,14 +340,21 @@ async fn percent_sources<R: SnmpReader>(reader: &R, column: &Oid) -> Vec<RawSour
 
 // 内存
 
-/// 内存方案探测：厂商私有方案优先，公共链按 caps 裁剪
-///（Windows 无 UCD，仅 hrStorage；未知平台全链 best-effort，现状等价）。
+/// 内存方案探测：配置文件条目 → OS 级 LibreNMS 规则 → 内置默认条目 →
+/// 公共链按 caps 裁剪（Windows 无 UCD，仅 hrStorage；未知平台全链
+/// best-effort，现状等价）。
 async fn discover_mem<R: SnmpReader>(
     reader: &R,
+    custom: Option<&VendorProfile>,
     discovery: Option<&DiscoveryProfile>,
-    oid_set: Option<&VendorOidSet>,
+    builtin: Option<&VendorProfile>,
     caps: PlatformCaps,
 ) -> MemPlan {
+    if let Some(profile) = custom
+        && let Some(plan) = discover_profile_mem(reader, profile.mem.as_ref()).await
+    {
+        return plan;
+    }
     if let Some(profile) = discovery {
         for rule in profile.mem {
             if let Some(plan) = discover_discovery_mem(reader, rule).await {
@@ -329,25 +362,10 @@ async fn discover_mem<R: SnmpReader>(
             }
         }
     }
-    if let Some(set) = oid_set {
-        let plan = match &set.mem {
-            VendorMemOids::Pool { name, used, free } => {
-                discover_pool_mem(reader, name(), used(), free()).await
-            }
-            VendorMemOids::EntityPercent {
-                usage,
-                size_mega,
-                size_bytes,
-            } => {
-                let mega = size_mega.map(|(column, factor)| (column(), factor));
-                let bytes = size_bytes.map(|column| column());
-                let mega_ref = mega.as_ref().map(|(oid, factor)| (oid, *factor));
-                discover_entity_mem(reader, &usage(), mega_ref, bytes.as_ref()).await
-            }
-        };
-        if let Some(plan) = plan {
-            return plan;
-        }
+    if let Some(profile) = builtin
+        && let Some(plan) = discover_profile_mem(reader, profile.mem.as_ref()).await
+    {
+        return plan;
     }
     // net-snmp 主机优先 UCD 标量：used = total − available，与 free 命令/
     // agent/5 分钟轮询口径一致；hrStorage Ram 行的 used 是 total − free 口径
@@ -576,15 +594,38 @@ async fn probe_ucd_pair<R: SnmpReader>(
     })
 }
 
+/// profile 内存方案：pool/entity 形态复用厂商内存探测实现。
+async fn discover_profile_mem<R: SnmpReader>(
+    reader: &R,
+    mem: Option<&ProfileMem>,
+) -> Option<MemPlan> {
+    match mem? {
+        ProfileMem::Pool { name, used, free } => {
+            discover_pool_mem(reader, name.as_ref(), used, free).await
+        }
+        ProfileMem::EntityPercent {
+            usage,
+            size_mega,
+            size_bytes,
+        } => {
+            let mega = size_mega.as_ref().map(|oid| (oid, 1_048_576));
+            discover_entity_mem(reader, usage, mega, size_bytes.as_ref()).await
+        }
+    }
+}
+
 /// CISCO-MEMORY-POOL-MIB 内存池：name 定位 Processor 行（缺失取首行；
-/// 名称列整列缺失时以 used 列存在行为准）。
+/// name 列未配置或整列缺失时以 used 列存在行为准）。
 async fn discover_pool_mem<R: SnmpReader>(
     reader: &R,
-    name_col: Oid,
-    used_col: Oid,
-    free_col: Oid,
+    name_col: Option<&Oid>,
+    used_col: &Oid,
+    free_col: &Oid,
 ) -> Option<MemPlan> {
-    let names = walk_column(reader, name_col).await;
+    let names = match name_col {
+        Some(column) => walk_column(reader, column.clone()).await,
+        None => BTreeMap::new(),
+    };
     let index = match names
         .iter()
         .find(|(_, v)| {
@@ -602,8 +643,8 @@ async fn discover_pool_mem<R: SnmpReader>(
             .copied()?,
     };
     Some(MemPlan::Pool {
-        used: RawSource::indexed(used_col, index),
-        free: RawSource::indexed(free_col, index),
+        used: RawSource::indexed(used_col.clone(), index),
+        free: RawSource::indexed(free_col.clone(), index),
         scale: 1,
     })
 }
@@ -693,17 +734,25 @@ async fn discover_hr_mem<R: SnmpReader>(reader: &R) -> Option<MemPlan> {
 
 // 温度
 
-/// 温度来源探测：厂商私有列 → ENTITY-SENSOR-MIB → LM-SENSORS-MIB，
-/// 按 caps 裁剪已知缺失族（任一命中即止）。
+/// 温度来源探测：配置文件条目 → OS 级 LibreNMS 规则 → 内置默认条目 →
+/// ENTITY-SENSOR-MIB → LM-SENSORS-MIB，按 caps 裁剪已知缺失族
+///（任一命中即止）。profile 条目探测为空不阻断，继续后续层。
 async fn discover_temp<R: SnmpReader>(
     reader: &R,
+    custom: Option<&VendorProfile>,
     discovery: Option<&DiscoveryProfile>,
-    oid_set: Option<&VendorOidSet>,
+    builtin: Option<&VendorProfile>,
     caps: PlatformCaps,
 ) -> Vec<TempSource> {
+    if let Some(profile) = custom {
+        let sources = profile_temp_sources(reader, profile).await;
+        if !sources.is_empty() {
+            return sources;
+        }
+    }
     if let Some(profile) = discovery {
         // 单 OS 可能声明几十条传感器（含光模块/电源等），逐条 walk 成本高；
-        // 取前若干条，命中即止。未命中的设备仍由品牌库/公共链兜底。
+        // 取前若干条，命中即止。未命中的设备仍由内置默认/公共链兜底。
         for rule in profile.temp.iter().take(MAX_DISCOVERY_TEMP_RULES) {
             let sources = discovery_temp_sources(reader, rule).await;
             if !sources.is_empty() {
@@ -711,12 +760,10 @@ async fn discover_temp<R: SnmpReader>(
             }
         }
     }
-    if let Some(set) = oid_set {
-        for column in set.temp_columns {
-            let sources = celsius_sources(reader, &column()).await;
-            if !sources.is_empty() {
-                return sources;
-            }
+    if let Some(profile) = builtin {
+        let sources = profile_temp_sources(reader, profile).await;
+        if !sources.is_empty() {
+            return sources;
         }
     }
     if caps.entity_sensors {
@@ -730,6 +777,32 @@ async fn discover_temp<R: SnmpReader>(
     } else {
         Vec::new()
     }
+}
+
+/// profile 温度列逐列探测，首个有值列生效；单位语义随列
+///（celsius 直接摄氏度；milli 毫摄氏度）。
+async fn profile_temp_sources<R: SnmpReader>(
+    reader: &R,
+    profile: &VendorProfile,
+) -> Vec<TempSource> {
+    for column in &profile.temp_columns {
+        let sources = match column.unit {
+            TempUnit::MilliCelsius => walk_column(reader, column.oid.clone())
+                .await
+                .into_iter()
+                .filter(|(_, v)| v.as_u64().and_then(temp_from_milli).is_some())
+                .map(|(idx, _)| TempSource {
+                    source: RawSource::indexed(column.oid.clone(), idx),
+                    unit: column.unit,
+                })
+                .collect(),
+            _ => celsius_sources(reader, &column.oid).await,
+        };
+        if !sources.is_empty() {
+            return sources;
+        }
+    }
+    Vec::new()
 }
 
 /// 单 OS 温度规则最多尝试条数（避免光模块类设备探测期 walk 次数过多）。

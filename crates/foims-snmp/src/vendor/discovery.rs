@@ -3,7 +3,7 @@
 //! 数据由 `da-scripts/gen_vendor_discovery.py` 生成到
 //! [`super::os_discovery`]，本文件只放运行时结构与查表入口。与识别域
 //!（community/）分层：识别得到 OS id 后，用该 id 查本表；查不到或某族
-//! 规则探测为空时，回退到品牌级 [`super::VendorOidSet`] 与公共 MIB 链。
+//! 规则探测为空时，回退到品牌级采集 profile（[`super::profiles`]）与公共 MIB 链。
 //!
 //! 运行时仍然零 MIB 依赖：生成期已把 `num_oid` / `snmptranslate` 结果
 //! 固化为数字 OID 弧，采集只做数字 OID 的定向 GET。

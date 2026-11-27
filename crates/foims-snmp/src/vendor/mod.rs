@@ -4,8 +4,10 @@
 //! - 本域只放「规则与 OID 数据 + 识别纯函数」，采集逻辑（probe/discover_*）
 //!   留在 [`crate::live::profile`]；
 //! - 识别规则数据**全部出自生成脚本**（community/ 目录：内置品牌级 16 条 +
-//!   社区 OS 级，勿手改）；采集 OID 库独立分层（mibs.rs，仅三家绑定直连，
-//!   人工核实无结构化上游），识别与采集经 vendor_kind() 关联（§5.2）；
+//!   社区 OS 级，勿手改）；采集 OID 库独立分层（profiles.rs，TOML 数据
+//!   驱动：内置默认 profiles_default.toml + /etc/foims/vendor_profiles.toml
+//!   运行时覆盖/扩展，人工核实无结构化上游），识别与采集经 vendor_kind()
+//!   与 profiles 按 OS id 关联（§5.2）；
 //! - 识别证据：sysObjectID 前缀最长匹配（LibreNMS 语义）+ sysDescr
 //!   关键词/正则 + 主动探测（probe.rs）；平台（Linux/Windows/BSD…）与
 //!   硬件厂商严格分层：平台 agent 企业号（8072/311/12325/30155 等）不作
@@ -18,12 +20,10 @@
 mod community;
 mod discovery;
 pub mod identify;
-mod mibs;
 mod os_discovery;
 pub mod platform;
 pub mod probe;
-
-use async_snmp::Oid;
+pub mod profiles;
 
 use crate::live::VendorKind;
 
@@ -95,41 +95,13 @@ pub enum ProbeOp {
     Regex,
 }
 
-/// 厂商内存采集 OID 方案参数（探测期据此确定 MemPlan 形态与索引）。
-pub enum VendorMemOids {
-    /// CISCO-MEMORY-POOL-MIB：name 定位 pool 行，used/free 两列（字节），
-    /// total = used + free。
-    Pool {
-        name: fn() -> Oid,
-        used: fn() -> Oid,
-        free: fn() -> Oid,
-    },
-    /// 华为/华三实体表：usage 百分比列 + size 列缓存总量
-    ///（优先 MB 口径，字节兜底，单位换算因子随字段）。
-    EntityPercent {
-        usage: fn() -> Oid,
-        size_mega: Option<(fn() -> Oid, u64)>,
-        size_bytes: Option<fn() -> Oid>,
-    },
-}
-
-/// 厂商私有采集 OID 集（仅 CPU/内存/温度三族；端口走公共 IF-MIB）。
-pub struct VendorOidSet {
-    /// CPU 使用率列（整数百分比，按序尝试，首个非空列生效）
-    pub cpu_columns: &'static [fn() -> Oid],
-    pub mem: VendorMemOids,
-    /// 温度列（直接摄氏度）
-    pub temp_columns: &'static [fn() -> Oid],
-}
-
-/// 厂商库条目：识别规则引用 + 可选私有采集 OID 集。
-/// `oid_set = None` 表示识别-only（识别得出但不提供绑定，§5.3.3）。
+/// 厂商库条目：识别规则引用（识别-only 品牌无采集库，§5.3.3）。
 /// 规则以 `&'static` 引用存放：识别规则数据全部在 community/ 生成目录
-///（内置品牌级 builtin.rs + 社区 OS 级 os_*.rs），采集 OID 集在 mibs.rs，
-/// 注册表不复制规则数据。
+///（内置品牌级 builtin.rs + 社区 OS 级 os_*.rs）。私有采集 OID 库已
+/// profile 化（[`profiles`]：内置默认 + /etc 配置文件），与识别规则解耦，
+/// 经 [`profiles::registry`] 按 OS id 关联。
 pub struct VendorMib {
     pub rule: &'static VendorRule,
-    pub oid_set: Option<&'static VendorOidSet>,
 }
 
 /// 识别结果（read-only，每次探测可产出）。
@@ -179,12 +151,6 @@ pub fn vendor_kind(id: Option<&str>) -> VendorKind {
         .map_or(VendorKind::Generic, |(_, kind)| *kind)
 }
 
-/// 规则 id → 私有采集 OID 集（识别-only 品牌与未知 id → None）。
-pub fn oid_set(id: Option<&str>) -> Option<&'static VendorOidSet> {
-    id.and_then(|id| registry().find(|m| m.rule.id == id))
-        .and_then(|m| m.oid_set)
-}
-
 /// 规则 id → 展示名（snmp-info brand 口径，未知 → "Unknown"，
 /// 兼容原 sysinfo.rs 历史取值如 "HP/HPE"）。
 pub fn display_name(id: Option<&str>) -> &'static str {
@@ -219,9 +185,12 @@ mod tests {
         // 识别-only 品牌与未知 id：展示归展示，采集走 Generic
         assert_eq!(vendor_kind(Some("juniper")), VendorKind::Generic);
         assert_eq!(vendor_kind(None), VendorKind::Generic);
-        assert!(oid_set(Some("cisco")).is_some());
-        assert!(oid_set(Some("juniper")).is_none());
-        assert!(oid_set(None).is_none());
+        // 采集库 profile 化：内置三家经 profiles 注册表按 OS id 绑定
+        assert!(profiles::registry().builtin(Some("cisco")).is_some());
+        assert!(profiles::registry().builtin(Some("huawei")).is_some());
+        assert!(profiles::registry().builtin(Some("h3c")).is_some());
+        assert!(profiles::registry().builtin(Some("juniper")).is_none());
+        assert!(profiles::registry().builtin(None).is_none());
         assert_eq!(display_name(Some("hp")), "HP/HPE");
         assert_eq!(display_name(Some("unknown-brand")), "Unknown");
         assert_eq!(display_name(None), "Unknown");

@@ -13,12 +13,9 @@
 
 use super::{VendorMib, VendorRule};
 
-/// 识别-only 品牌条目（无采集库）。
+/// 识别-only 品牌条目（无采集库；采集库见 vendor/profiles）。
 pub(super) const fn only(rule: &'static VendorRule) -> VendorMib {
-    VendorMib {
-        rule,
-        oid_set: None,
-    }
+    VendorMib { rule }
 }
 
 /// 全部规则分桶：内置品牌级在前（词表更精、sysDescr 判定优先），

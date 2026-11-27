@@ -1,0 +1,79 @@
+# 厂商私有采集 profile 内置默认值（编译期 include_str! 嵌入，运行时兜底）。
+#
+# 覆盖/扩展方式：把本文件复制为 /etc/foims/vendor_profiles.toml（开发环境
+# 放当前目录 vendor_profiles.toml）后修改或新增 [[profile]] 条目，重启
+# foims 生效（零编译）。文件条目整体优先于本默认与 LibreNMS os_discovery
+# 规则；文件缺失或解析失败仅告警并回退本默认。
+#
+# schema 说明：
+# - [[profile]] id 必填：识别规则 OS id（与 vendor/community 规则同源，
+#   如 cisco/huawei/h3c/vrp/juniper…），自定义条目可另配
+#   sysobjectid_prefixes（点分 sysObjectID 前缀，识别未命中品牌时按
+#   最长前缀兜底匹配）；
+# - [[profile.cpu]]：CPU 使用率列（整数百分比 OID，表列或标量），按序
+#   探测，首个有值列生效；
+# - [profile.mem]：内存方案，kind = "pool"（name/used/free，used+free 求和）
+#   或 "entity"（usage 百分比 + 可选 size_mega(MB)/size_bytes(字节) 缓存
+#   总量）；
+# - [[profile.temp]]：温度列，unit = "celsius"（默认）| "milli"（毫摄氏度）。
+# OID 均为数字点分形式（运行时零 MIB 依赖）。
+schema = 1
+
+# —— Cisco（IANA 企业号 9）——
+[[profile]]
+id = "cisco"
+
+# CISCO-PROCESS-MIB cpmCPUTotalTable：1min/5min 百分比列
+[[profile.cpu]]
+oid = "1.3.6.1.4.1.9.9.109.1.1.1.1.7"
+[[profile.cpu]]
+oid = "1.3.6.1.4.1.9.9.109.1.1.1.1.8"
+
+# CISCO-MEMORY-POOL-MIB ciscoMemoryPoolTable：name/used/free 列
+[profile.mem]
+kind = "pool"
+name = "1.3.6.1.4.1.9.9.48.1.1.1.2"
+used = "1.3.6.1.4.1.9.9.48.1.1.1.5"
+free = "1.3.6.1.4.1.9.9.48.1.1.1.6"
+
+# CISCO-ENVMON-MIB ciscoEnvMonTemperatureStatusValue（摄氏度）
+[[profile.temp]]
+oid = "1.3.6.1.4.1.9.9.13.1.3.1.3"
+
+# —— Huawei（IANA 企业号 2011）——
+[[profile]]
+id = "huawei"
+
+# HUAWEI-ENTITY-EXTENT-MIB hwEntityStateTable 各列
+[[profile.cpu]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+
+# hwEntityMemUsage(.7)/hwEntityMemSizeMega(.19，MB)/hwEntityMemSize(.9，
+# 字节)：注意 MB 与字节两列并存，探测期优先 MB 口径（大内存设备字节列
+# 会 32 位回绕）
+[profile.mem]
+kind = "entity"
+usage = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+size_mega = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+size_bytes = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+
+# hwEntityTemperature（摄氏度）
+[[profile.temp]]
+oid = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"
+
+# —— H3C（IANA 企业号 25506，原 3Com 归并）——
+[[profile]]
+id = "h3c"
+
+# HH3C-ENTITY-EXT-MIB hh3cEntityExtTable 各列；部分 Comware 7 设备沿用
+# 惠普企业号 11，企业号 11 与描述词冲突时描述词胜出
+[[profile.cpu]]
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.6"
+
+[profile.mem]
+kind = "entity"
+usage = "1.3.6.1.4.1.25506.2.6.1.1.1.1.8"
+size_bytes = "1.3.6.1.4.1.25506.2.6.1.1.1.1.10"
+
+[[profile.temp]]
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.12"

@@ -15,7 +15,8 @@ sysObjectID 前缀最长匹配（LibreNMS 语义）。**全部识别规则数据
 - vendor_kind() 的 OS→采集库映射（KIND_BY_OS）由脚本按上游 group 生成，
   不再人工同步。
 
-输出（识别/采集分层，采集库 mibs.rs 为手工核实文件，不在本脚本范围）：
+输出（识别/采集分层，采集库 profiles.rs + profiles_default.toml 为手工
+核实文件，不在本脚本范围）：
     vendor/community/mod.rs        聚合 + only() + KIND_BY_OS + 头注释
     vendor/community/builtin.rs    16 条内置品牌规则（三家关联采集库）
     vendor/community/os_*.rs       社区 OS 规则（按 id 首字母四桶）
@@ -66,50 +67,52 @@ BUCKETS = ("a_g", "h_n", "o_t", "u_z")  # OS 规则按 id 首字母四桶
 
 # —— 内置品牌级规则（原 vendor/mod.rs BUILTIN 手工词表迁入，数据不变）——
 # (id, display_name, aliases, 前缀弧组, 关键词, 采集库, 来源注释)
+# 内置品牌级规则：私有采集 OID 库已 profile 化（vendor/profiles.rs +
+# profiles_default.toml），与识别规则解耦，不再生成 oid_set 字段。
 BUILTIN_BRANDS = [
-    ("cisco", "Cisco", ["cisco"], [[1, 3, 6, 1, 4, 1, 9]], ["cisco"], "CISCO",
+    ("cisco", "Cisco", ["cisco"], [[1, 3, 6, 1, 4, 1, 9]], ["cisco"],
      "IANA enterprise-numbers：9 = Cisco Systems"),
     ("huawei", "Huawei", ["huawei"], [[1, 3, 6, 1, 4, 1, 2011]],
-     ["huawei", "versatile routing platform"], "HUAWEI",
+     ["huawei", "versatile routing platform"],
      "IANA enterprise-numbers：2011 = Huawei Technologies；"
      "「versatile routing platform」为华为 VRP 系统多词关键词"),
     ("h3c", "H3C", ["h3c", "3com"], [[1, 3, 6, 1, 4, 1, 25506]],
-     ["h3c", "comware", "3com"], "H3C",
+     ["h3c", "comware", "3com"],
      "IANA enterprise-numbers：25506 = H3C（原 3Com 归并）"),
     ("juniper", "Juniper", ["juniper"], [[1, 3, 6, 1, 4, 1, 2636]],
-     ["juniper", "junos"], None, "识别-only（无采集库）"),
-    ("dell", "Dell", ["dell"], [[1, 3, 6, 1, 4, 1, 674]], ["dell"], None,
+     ["juniper", "junos"], "识别-only（无采集库）"),
+    ("dell", "Dell", ["dell"], [[1, 3, 6, 1, 4, 1, 674]], ["dell"],
      "识别-only"),
     ("hp", "HP/HPE",
      ["hp", "hpe", "procurve", "hewlett packard", "hewlett-packard"],
      [[1, 3, 6, 1, 4, 1, 11]],
-     ["hp", "hpe", "procurve", "hewlett packard"], None,
+     ["hp", "hpe", "procurve", "hewlett packard"],
      "企业号 11 同时覆盖 Comware（→h3c 冲突，描述词胜出）与"
      " ProVision/Aruba（本条），冲突组合一律 Low + 人工确认（§6.1）"),
     ("aruba", "Aruba", ["aruba"], [[1, 3, 6, 1, 4, 1, 14823]],
-     ["aruba", "arubaos"], None, "识别-only"),
+     ["aruba", "arubaos"], "识别-only"),
     ("netgear", "Netgear", ["netgear"], [[1, 3, 6, 1, 4, 1, 4526]],
-     ["netgear", "prosafe"], None, "识别-only"),
+     ["netgear", "prosafe"], "识别-only"),
     ("tp-link", "TP-Link", ["tp-link", "tplink", "tp link"], [],
-     ["tp-link", "tplink"], None,
+     ["tp-link", "tplink"],
      "企业号未核实，留空不虚构（§5.3.1）；识别-only"),
-    ("linksys", "Linksys", ["linksys"], [], ["linksys"], None,
+    ("linksys", "Linksys", ["linksys"], [], ["linksys"],
      "企业号未核实，留空不虚构；识别-only"),
     ("ubiquiti", "Ubiquiti", ["ubiquiti", "ubnt", "unifi"],
      [[1, 3, 6, 1, 4, 1, 4413], [1, 3, 6, 1, 4, 1, 10002],
       [1, 3, 6, 1, 4, 1, 41112]],
-     ["ubiquiti", "ubnt", "unifi"], None, "识别-only"),
+     ["ubiquiti", "ubnt", "unifi"], "识别-only"),
     ("mikrotik", "MikroTik", ["mikrotik", "routeros"],
-     [[1, 3, 6, 1, 4, 1, 14988]], ["mikrotik", "routeros"], None, "识别-only"),
+     [[1, 3, 6, 1, 4, 1, 14988]], ["mikrotik", "routeros"], "识别-only"),
     ("extreme", "Extreme Networks",
      ["extreme", "extremenetworks", "extreme networks"],
-     [[1, 3, 6, 1, 4, 1, 1916]], ["extreme", "extremexos"], None, "识别-only"),
+     [[1, 3, 6, 1, 4, 1, 1916]], ["extreme", "extremexos"], "识别-only"),
     ("alcatel", "Alcatel", ["alcatel", "alcatel-lucent"],
-     [[1, 3, 6, 1, 4, 1, 6486]], ["alcatel"], None, "识别-only"),
-    ("zyxel", "ZyXEL", ["zyxel"], [], ["zyxel"], None,
+     [[1, 3, 6, 1, 4, 1, 6486]], ["alcatel"], "识别-only"),
+    ("zyxel", "ZyXEL", ["zyxel"], [], ["zyxel"],
      "企业号未核实，留空不虚构；识别-only"),
     ("d-link", "D-Link", ["d-link", "dlink"], [[1, 3, 6, 1, 4, 1, 171]],
-     ["d-link", "dlink"], None, "识别-only"),
+     ["d-link", "dlink"], "识别-only"),
 ]
 BUILTIN_IDS = {b[0] for b in BUILTIN_BRANDS}
 
@@ -346,7 +349,7 @@ def main() -> None:
         "",
         "/// 识别-only 品牌条目（无采集库）。",
         "pub(super) const fn only(rule: &'static VendorRule) -> VendorMib {",
-        "    VendorMib { rule, oid_set: None }",
+        "    VendorMib { rule }",
         "}",
         "",
         "/// 全部规则分桶：内置品牌级在前（词表更精、sysDescr 判定优先），",
@@ -383,10 +386,9 @@ def main() -> None:
         "",
         "pub(super) static BUILTIN: &[VendorMib] = &[",
     ]
-    for os_id, display, aliases, prefixes, keywords, mib, note in BUILTIN_BRANDS:
+    for os_id, display, aliases, prefixes, keywords, note in BUILTIN_BRANDS:
         e = entries[os_id]
         pres = ", ".join("&[" + ", ".join(map(str, p)) + "]" for p in sorted(e["prefixes"]))
-        oid_set = f"Some(&super::super::mibs::{mib})" if mib else "None"
         if note:
             builtin_rs.append(f"    // {note}")
         builtin_rs.append("    VendorMib {")
@@ -397,7 +399,6 @@ def main() -> None:
         for kw in sorted(e["keywords"]):
             builtin_rs.append(f"            {rust_str(kw)},")
         builtin_rs.append("        ], descr_keywords_except: &[], descr_regexes: &[], probe_checks: &[], },")
-        builtin_rs.append(f"        oid_set: {oid_set},")
         builtin_rs.append("    },")
     builtin_rs.append("];")
     (OUT_DIR / "builtin.rs").write_text("\n".join(builtin_rs) + "\n", encoding="utf-8")

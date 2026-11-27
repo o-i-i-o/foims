@@ -40,6 +40,9 @@ thiserror = { workspace = true }
 # 日志
 tracing = { workspace = true }
 
+# 厂商采集 profile 配置文件解析（vendor/profiles.rs，vendor_profiles.toml）
+toml = { workspace = true }
+
 # Workspace crates（依赖方向：foims-resource / foims-agent-service → 本 crate，本 crate 不依赖二者）
 foims-common = { path = "../foims-common" }
 foims-models = { path = "../foims-models" }

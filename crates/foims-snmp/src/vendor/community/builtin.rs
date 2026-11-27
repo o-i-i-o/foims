@@ -26,7 +26,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: Some(&super::super::mibs::CISCO),
     },
     // IANA enterprise-numbers：2011 = Huawei Technologies；「versatile routing platform」为华为 VRP 系统多词关键词
     VendorMib {
@@ -40,7 +39,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: Some(&super::super::mibs::HUAWEI),
     },
     // IANA enterprise-numbers：25506 = H3C（原 3Com 归并）
     VendorMib {
@@ -54,7 +52,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: Some(&super::super::mibs::H3C),
     },
     // 识别-only（无采集库）
     VendorMib {
@@ -68,7 +65,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -82,7 +78,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 企业号 11 同时覆盖 Comware（→h3c 冲突，描述词胜出）与 ProVision/Aruba（本条），冲突组合一律 Low + 人工确认（§6.1）
     VendorMib {
@@ -102,7 +97,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -116,7 +110,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -133,7 +126,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 企业号未核实，留空不虚构（§5.3.1）；识别-only
     VendorMib {
@@ -147,7 +139,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 企业号未核实，留空不虚构；识别-only
     VendorMib {
@@ -161,7 +152,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -179,7 +169,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -193,7 +182,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -207,7 +195,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -221,7 +208,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 企业号未核实，留空不虚构；识别-only
     VendorMib {
@@ -235,7 +221,6 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
     // 识别-only
     VendorMib {
@@ -249,6 +234,5 @@ pub(super) static BUILTIN: &[VendorMib] = &[
             descr_regexes: &[],
             probe_checks: &[],
         },
-        oid_set: None,
     },
 ];
