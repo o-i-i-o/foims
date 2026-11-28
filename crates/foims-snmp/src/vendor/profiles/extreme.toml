@@ -1,0 +1,9 @@
+[[profile]]
+id = "extreme"
+kind = "os"
+brand = "Extreme Networks"
+display_name = "Extreme Networks"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1916"]
+descr_keywords = ["extreme", "extremexos"]

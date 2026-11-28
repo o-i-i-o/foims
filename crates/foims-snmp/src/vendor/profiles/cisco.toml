@@ -1,0 +1,327 @@
+[[profile]]
+id = "cisco"
+kind = "group"
+brand = "Cisco"
+display_name = "Cisco"
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.109.1.1.1.1.7"
+value = "percent"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.109.1.1.1.1.8"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "name"
+oid = "1.3.6.1.4.1.9.9.48.1.1.1.2"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.9.9.48.1.1.1.5"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.9.9.48.1.1.1.6"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.13.1.3.1.3"
+
+[[profile]]
+id = "cisco-brand"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9"]
+descr_keywords = ["cisco"]
+
+[[profile]]
+id = "acs"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco ACS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.1117"]
+descr_keywords = ["cisco secure access control system"]
+
+[[profile]]
+id = "acsw"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco ACE"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.1291"]
+descr_keywords = ["application control engine", "cisco application control software"]
+
+[[profile]]
+id = "apic"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco APIC"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.2238"]
+
+[[profile]]
+id = "asa"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco ASA"
+
+[profile.match]
+descr_regex = ["^Cisco (Adaptive|Industrial) Security Appliance"]
+
+[[profile]]
+id = "cat1900"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco Catalyst 1900"
+
+[profile.match]
+descr_keywords = ["cisco systems catalyst 1900"]
+
+[[profile]]
+id = "catos"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco CatOS"
+
+[profile.match]
+descr_keywords = ["cisco catalyst operating system software"]
+
+[[profile]]
+id = "cimc"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco Integrated Management Controller"
+
+[profile.match]
+descr_keywords = ["cisco integrated management controller"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.9.44.1.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.9.44.1.13"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.9.44.1.17"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.9.44.1.8"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.9.44.1.21"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.30.12.1.6"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9.9.719.1.41.2.1.10"
+
+[[profile]]
+id = "ciscoepc"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco EPC"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1429.3940"]
+
+[[profile]]
+id = "ciscome1200"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco ME1200"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.1899"]
+descr_keywords = ["me1200"]
+
+[[profile]]
+id = "ciscosce"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco SCE"
+
+[profile.match]
+descr_keywords = ["cisco service control"]
+
+[[profile]]
+id = "ciscospa"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco Voice Gateway"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.6.1.23.1.1.1"]
+
+[[profile]]
+id = "ciscosrp"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco Services Ready Platform"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.1157"]
+
+[[profile]]
+id = "ftd"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco FTD"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.1902", "1.3.6.1.4.1.9.1.2294", "1.3.6.1.4.1.9.1.2295", "1.3.6.1.4.1.9.1.2313", "1.3.6.1.4.1.9.1.2315", "1.3.6.1.4.1.9.1.2319", "1.3.6.1.4.1.9.1.2404", "1.3.6.1.4.1.9.1.2405", "1.3.6.1.4.1.9.1.2406", "1.3.6.1.4.1.9.1.2407", "1.3.6.1.4.1.9.1.2409", "1.3.6.1.4.1.9.1.2483", "1.3.6.1.4.1.9.1.2662", "1.3.6.1.4.1.9.1.2663", "1.3.6.1.4.1.9.1.2774", "1.3.6.1.4.1.9.1.2775", "1.3.6.1.4.1.9.1.2778", "1.3.6.1.4.1.9.1.2870", "1.3.6.1.4.1.9.1.2991", "1.3.6.1.4.1.9.1.3041", "1.3.6.1.4.1.9.1.3043", "1.3.6.1.4.1.9.1.3053", "1.3.6.1.4.1.9.1.3054", "1.3.6.1.4.1.9.1.3055", "1.3.6.1.4.1.9.1.3056", "1.3.6.1.4.1.9.1.3057", "1.3.6.1.4.1.9.1.3166", "1.3.6.1.4.1.9.1.3257", "1.3.6.1.4.1.9.1.3305", "1.3.6.1.4.1.9.1.3422"]
+
+[[profile]]
+id = "fxos"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco FX-OS"
+
+[profile.match]
+descr_keywords = ["cisco fx-os"]
+
+[[profile]]
+id = "ios"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco IOS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.2330", "1.3.6.1.4.1.9.1.2331", "1.3.6.1.4.1.9.1.2332", "1.3.6.1.4.1.9.1.2333"]
+descr_keywords = ["cisco internetwork operating system software", "cisco ios software", "global site selector", "ios (tm)"]
+
+[[profile]]
+id = "iosxe"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco IOS-XE"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.2683", "1.3.6.1.4.1.9.1.2684", "1.3.6.1.4.1.9.1.2685", "1.3.6.1.4.1.9.1.2686", "1.3.6.1.4.1.9.1.2687"]
+descr_keywords = ["cat3k_caa", "ios-xe", "iosxe", "linux_iosd"]
+
+[[profile]]
+id = "iosxr"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco IOS-XR"
+
+[profile.match]
+descr_keywords = ["ios xr"]
+
+[[profile]]
+id = "nxos"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco NX-OS"
+
+[profile.match]
+descr_keywords = ["cisco nx-os", "nx-os(tm)"]
+
+[[profile]]
+id = "ons"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco ONS"
+
+[profile.match]
+descr_keywords = ["cisco ons"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3607.2.80.20.1.30"
+
+[[profile]]
+id = "pixos"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco PIX-OS"
+
+[profile.match]
+descr_keywords = ["cisco firewall services module", "cisco pix"]
+
+[[profile]]
+id = "sanos"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco SAN-OS"
+
+[profile.match]
+descr_keywords = ["san-os"]
+
+[[profile]]
+id = "viptela"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Viptela"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.41916"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.41916.11.1.16"
+value = "percent"
+precision = -1
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.41916.11.1.18.0"
+indexed = false
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.41916.11.1.19.0"
+indexed = false
+unit = "kb"
+
+[[profile]]
+id = "waas"
+kind = "os"
+group = "cisco"
+brand = "Cisco"
+display_name = "Cisco WAAS"
+
+[profile.match]
+descr_regex = ["^Cisco Wide Area Application Services"]

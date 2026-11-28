@@ -1,0 +1,9 @@
+[[profile]]
+id = "alcatel"
+kind = "os"
+brand = "Alcatel"
+display_name = "Alcatel"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.6486"]
+descr_keywords = ["alcatel"]

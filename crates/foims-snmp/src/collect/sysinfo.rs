@@ -67,7 +67,9 @@ pub async fn get_device_info_via_snmp(
         .and_then(|vb| vb.value.as_oid())
         .cloned();
 
-    let identity = vendor::identify(object_id.as_ref(), Some(&sys_descr));
+    // 静态识别（台账路径不做主动探测 GET：仅 brand/展示需要，
+    // 探测通道由实时探测路径负责）
+    let identity = vendor::identify(object_id.as_ref(), Some(&sys_descr), None);
 
     // sysName（1.3.6.1.2.1.1.5.0）：部分设备不实现，异常响应时容忍为 None
     let hostname = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 5, 0)).await {
@@ -80,7 +82,7 @@ pub async fn get_device_info_via_snmp(
     };
 
     Ok(DeviceSnmpInfo {
-        brand: vendor::display_name(identity.vendor_guess).to_string(),
+        brand: identity.brand.to_string(),
         model: extract_model(&sys_descr),
         hostname,
     })

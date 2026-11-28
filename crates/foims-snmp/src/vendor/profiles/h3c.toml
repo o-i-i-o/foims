@@ -1,0 +1,53 @@
+[[profile]]
+id = "h3c"
+kind = "group"
+brand = "H3C"
+display_name = "H3C"
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.6"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "entity"
+[[profile.collect.mem.candidate.field]]
+role = "usage"
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.8"
+[[profile.collect.mem.candidate.field]]
+role = "size_bytes"
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.10"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.12"
+
+[[profile]]
+id = "h3c-brand"
+kind = "os"
+group = "h3c"
+brand = "H3C"
+display_name = "H3C"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.25506"]
+descr_keywords = ["3com", "comware", "h3c"]
+
+[[profile]]
+id = "comware"
+kind = "os"
+group = "h3c"
+brand = "H3C"
+display_name = "HPE Comware"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.25506"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.25506.2.6.1.1.1.1.6"
+value = "percent"

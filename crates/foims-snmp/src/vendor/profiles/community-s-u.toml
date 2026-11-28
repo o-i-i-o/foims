@@ -1,0 +1,1806 @@
+[[profile]]
+id = "saf"
+kind = "os"
+brand = "SAF Tehnika"
+display_name = "SAF Tehnika"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7571.100.1.1.5", "1.3.6.1.4.1.7571.100.1.1.12"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.5.1.1.1.5.0"
+indexed = false
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.12.3.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.12.2.2.1.10"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.12.2.2.1.11"
+
+[[profile]]
+id = "saf-cfm"
+kind = "os"
+brand = "SAF CFM"
+display_name = "SAF CFM"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7571.100.1.1.2.22"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.2.22.1.28"
+value = "percent"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.2.22.1.6"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.2.22.3.15"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.2.22.4.15"
+
+[[profile]]
+id = "saf-integra-b"
+kind = "os"
+brand = "SAF Integra B"
+display_name = "SAF Integra B"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7571.100.1.1.7.1"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.1.4.10"
+value = "percent"
+precision = -10
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.1.4.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.1.4.8"
+
+[[profile]]
+id = "saf-integra-e"
+kind = "os"
+brand = "SAF Integra E"
+display_name = "SAF Integra E"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7571.100.1.1.7.9"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.9.4.10"
+value = "percent"
+precision = -10
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.9.4.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.9.4.8"
+
+[[profile]]
+id = "saf-integra-w"
+kind = "os"
+brand = "SAF Integra W"
+display_name = "SAF Integra W"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7571.100.1.1.7.2"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.2.4.10"
+value = "percent"
+precision = -10
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.2.4.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.2.4.8"
+
+[[profile]]
+id = "saf-integra-x"
+kind = "os"
+brand = "SAF Integra X"
+display_name = "SAF Integra X"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7571.100.1.1.7.10"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.10.4.10"
+value = "percent"
+precision = -10
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.10.4.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.7571.100.1.1.7.10.4.8"
+
+[[profile]]
+id = "samlex"
+kind = "os"
+brand = "Samlex Inverter"
+display_name = "Samlex Inverter"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.49075"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.49075.1.3.3.8"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.49075.1.3.3.9"
+
+[[profile]]
+id = "samsungprinter"
+kind = "os"
+brand = "Samsung Printer"
+display_name = "Samsung Printer"
+
+[profile.match]
+descr_keywords = ["samsung c", "samsung m4080fx", "samsung ml", "samsung s", "samsung x"]
+
+[[profile]]
+id = "savin"
+kind = "os"
+brand = "Savin Printer"
+display_name = "Savin Printer"
+
+[profile.match]
+descr_keywords = ["savin"]
+
+[[profile]]
+id = "scalance"
+kind = "os"
+brand = "Siemens SCALANCE"
+display_name = "Siemens SCALANCE"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.4329.6.1.2.1", "1.3.6.1.4.1.4329.6.1.2.3"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.4329.20.1.1.1.1.79.3.1.13"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "percent"
+[[profile.collect.mem.candidate.field]]
+role = "percent"
+oid = "1.3.6.1.4.1.4329.20.1.1.1.1.79.3.1.13"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.4329.20.1.1.1.1.79.7.1.16"
+
+[[profile]]
+id = "schleifenbauer"
+kind = "os"
+brand = "Schleifenbauer SPDM"
+display_name = "Schleifenbauer SPDM"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.31034.11.1", "1.3.6.1.4.1.31034.11.3"]
+
+[[profile]]
+id = "schleifenbauer-pdu5"
+kind = "os"
+brand = "Schleifenbauer PDU5"
+display_name = "Schleifenbauer PDU5"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.44568.1"]
+
+[[profile]]
+id = "scopia"
+kind = "os"
+brand = "Avaya Scopia"
+display_name = "Avaya Scopia"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.903.31"]
+
+[[profile]]
+id = "screenos"
+kind = "os"
+brand = "Juniper ScreenOS"
+display_name = "Juniper ScreenOS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3224"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.3224.16.1.3"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.3224.16.2.1.0"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.3224.16.2.2.0"
+indexed = false
+
+[[profile]]
+id = "scs-ks"
+kind = "os"
+brand = "SCS KS"
+display_name = "SCS KS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9839"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9839.1.2.15"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9839.1.2.16"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9839.1.2.17"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.9839.1.2.18"
+divisor = 10
+
+[[profile]]
+id = "seh-uds"
+kind = "os"
+brand = "SEH"
+display_name = "SEH"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1229"]
+
+[[profile]]
+id = "sensatronics-em1"
+kind = "os"
+brand = "Sensatronics EM1"
+display_name = "Sensatronics EM1"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.16174.1.1.3"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.3.3.1.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.3.3.2.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.3.3.3.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.3.3.4.3"
+
+[[profile]]
+id = "sensatronics-ittm"
+kind = "os"
+brand = "Sensatronics ITTM"
+display_name = "Sensatronics ITTM"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.16174.1.1.1"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.1.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.2.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.3.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.4.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.5.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.6.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.7.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.8.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.9.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.10.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.11.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.12.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.13.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.14.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.15.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.16174.1.1.1.3.16.2"
+
+[[profile]]
+id = "sentry3"
+kind = "os"
+brand = "ServerTech Sentry3"
+display_name = "ServerTech Sentry3"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1718.3"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.1718.3.2.5.1.6"
+divisor = 10
+
+[[profile]]
+id = "sentry4"
+kind = "os"
+brand = "ServerTech Sentry4"
+display_name = "ServerTech Sentry4"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1718.4"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.1718.4.1.9.3.1.1"
+divisor = 10
+
+[[profile]]
+id = "seos"
+kind = "os"
+brand = "Redback Networks SmartEdge"
+display_name = "Redback Networks SmartEdge"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2352.1"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2352.2.6.1.1"
+value = "percent"
+
+[[profile]]
+id = "serveriron"
+kind = "os"
+brand = "Brocade ServerIron"
+display_name = "Brocade ServerIron"
+
+[profile.match]
+descr_keywords = ["serveriron"]
+
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.1991.1.1.2.1.54.0"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.1991.1.1.2.1.55.0"
+indexed = false
+
+[[profile]]
+id = "serverscheck"
+kind = "os"
+brand = "ServersCheck"
+display_name = "ServersCheck"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.17095"]
+
+[[profile]]
+id = "sgos"
+kind = "os"
+brand = "BlueCoat ProxySG"
+display_name = "BlueCoat ProxySG"
+
+[profile.match]
+descr_keywords = ["sgos"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.3417.2.11.2.4.1.8"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.3417.2.11.2.3.3.0"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.3417.2.11.2.3.1.0"
+indexed = false
+
+[[profile]]
+id = "sharp"
+kind = "os"
+brand = "Sharp Printer"
+display_name = "Sharp Printer"
+
+[profile.match]
+descr_regex = ["SHARP (BP|MX)-"]
+
+[[profile]]
+id = "siklu"
+kind = "os"
+brand = "Siklu Wireless"
+display_name = "Siklu Wireless"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.31926"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.31926.1.2"
+
+[[profile]]
+id = "siklu-mhtg"
+kind = "os"
+brand = "Siklu MultiHaul Terragraph"
+display_name = "Siklu MultiHaul Terragraph"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.31926.35"]
+
+[[profile]]
+id = "sinetica"
+kind = "os"
+brand = "Sinetica UPS"
+display_name = "Sinetica UPS"
+
+[profile.match]
+descr_regex = ["^Sinetica UPSController."]
+
+[[profile]]
+id = "siteboss"
+kind = "os"
+brand = "Asentria SiteBoss"
+display_name = "Asentria SiteBoss"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3052.12"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3052.12.1.1.1.1.7"
+
+[[profile]]
+id = "siteboss360"
+kind = "os"
+brand = "Asentria SiteBoss"
+display_name = "Asentria SiteBoss"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3052.23.3.2"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3052.23.1.1.1.1.7"
+
+[[profile]]
+id = "siteboss550"
+kind = "os"
+brand = "Asentria SiteBoss"
+display_name = "Asentria SiteBoss"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3052.10"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3052.10.1.1.1.1.7"
+
+[[profile]]
+id = "siteboss571"
+kind = "os"
+brand = "Asentria SiteBoss"
+display_name = "Asentria SiteBoss"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3052.14"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3052.14.1.1.1.1.7"
+
+[[profile]]
+id = "siteboss572"
+kind = "os"
+brand = "Asentria SiteBoss"
+display_name = "Asentria SiteBoss"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3052.20"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3052.20.1.1.1.1.7"
+
+[[profile]]
+id = "sitemonitor"
+kind = "os"
+brand = "Packetflux SiteMonitor"
+display_name = "Packetflux SiteMonitor"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.32050"]
+
+[[profile]]
+id = "sitemonitor3"
+kind = "os"
+brand = "Packetflux SiteMonitor Base 3"
+display_name = "Packetflux SiteMonitor Base 3"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.32050.1.4"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.32050.3.2.3.1.4"
+divisor = 100
+
+[[profile]]
+id = "sixnet"
+kind = "os"
+brand = "Red Lion Sixnet"
+display_name = "Red Lion Sixnet"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.20540.2"]
+
+[[profile]]
+id = "skyhighwebprotect"
+kind = "os"
+brand = "Skyhigh Secure Web Gateway"
+display_name = "Skyhigh Secure Web Gateway"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1230.2.7.1.1", "1.3.6.1.4.1.59732.2.7.1.1"]
+
+[[profile.match.probes]]
+oid = "1.3.6.1.4.1.59732.2.7.1.1.0"
+op = "starts"
+value = "Skyhigh Secure Web Gateway"
+
+[[profile]]
+id = "slms"
+kind = "os"
+brand = "Zhone MXK"
+display_name = "Zhone MXK"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.5504.1.7", "1.3.6.1.4.1.5504.1.8"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.5504.3.3.3.1.5"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.5504.3.3.3.1.3"
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.5504.3.3.3.1.2"
+unit = "kb"
+
+[[profile]]
+id = "slxos"
+kind = "os"
+brand = "Extreme SLX-OS"
+display_name = "Extreme SLX-OS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1588.3.3.1", "1.3.6.1.4.1.1916.2"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.1588.2.1.1.1.26.1"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.1588.3.1.13.1.1.1.2.0"
+indexed = false
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.1588.3.1.13.1.1.1.3.0"
+indexed = false
+unit = "kb"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.1588.2.1.1.1.1.22.1.4"
+
+[[profile]]
+id = "sm-os"
+kind = "os"
+brand = "SM-OS"
+display_name = "SM-OS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3373.1103"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3373.1103.74.7.1.6"
+divisor = 10
+
+[[profile]]
+id = "smartax"
+kind = "os"
+brand = "Huawei SmartAX"
+display_name = "Huawei SmartAX"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2011.2.80.8", "1.3.6.1.4.1.2011.2.115", "1.3.6.1.4.1.2011.2.123", "1.3.6.1.4.1.2011.2.133", "1.3.6.1.4.1.2011.2.248"]
+descr_keywords = ["huawei integrated access software"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2011.2.6.7.1.1.2.1.5"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "percent"
+[[profile.collect.mem.candidate.field]]
+role = "percent"
+oid = "1.3.6.1.4.1.2011.2.6.7.1.1.2.1.6.0"
+indexed = false
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2011.6.128.1.1.2.23.1.1"
+
+[[profile]]
+id = "smartax-mdu"
+kind = "os"
+brand = "Huawei SmartAX MDU"
+display_name = "Huawei SmartAX MDU"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2011.2.185"]
+
+[[profile]]
+id = "smartbyte"
+kind = "os"
+brand = "SmartByte"
+display_name = "SmartByte"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.56166"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.56166.1.2.4.1.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.56166.1.8.2.1.10"
+
+[[profile]]
+id = "smartos"
+kind = "os"
+brand = "SmartOptics M-Series"
+display_name = "SmartOptics M-Series"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.30826.1"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.30826.1.4.1.1.1.3"
+
+[[profile]]
+id = "smartos-dcp-m"
+kind = "os"
+brand = "SmartOptics DCP-M Series"
+display_name = "SmartOptics DCP-M Series"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.30826.2"]
+
+[[profile]]
+id = "smartos-t"
+kind = "os"
+brand = "SmartOptics T-Series"
+display_name = "SmartOptics T-Series"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.4515.100.1.1000"]
+
+[[profile]]
+id = "snr"
+kind = "os"
+brand = "snr"
+display_name = "snr"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.40418.7", "1.3.6.1.4.1.40418.8.67"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.40418.7.100.1.8.1.11"
+value = "percent"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.40418.7.100.1.11.10"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.40418.7.100.1.8.1.7.0"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.40418.7.100.1.8.1.8.0"
+indexed = false
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.40418.7.100.1.11.6.0"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.40418.7.100.1.11.7.0"
+indexed = false
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.40418.7.100.1.8.1.10"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.40418.7.100.1.11.9"
+
+[[profile]]
+id = "snr-erd"
+kind = "os"
+brand = "snr-erd"
+display_name = "snr-erd"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.40418.2.6"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.40418.2.6.1.30.1.1.3"
+
+[[profile]]
+id = "snr-olt"
+kind = "os"
+brand = "SNR OLT"
+display_name = "SNR OLT"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.65268.1.3.34"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.65268.1.14.2.1.3.1"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.65268.1.2.1.1.2.12.0"
+indexed = false
+unit = "mb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.65268.1.2.1.1.2.13.0"
+indexed = false
+unit = "mb"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.65268.1.14.4.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.65268.1.14.2.1.3.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.65268.1.14.2.1.3.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.65268.1.14.2.3.3.1.12"
+
+[[profile]]
+id = "socomec"
+kind = "os"
+brand = "Socomec PDU"
+display_name = "Socomec PDU"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.4555.2.30"]
+
+[[profile]]
+id = "socomec-ups"
+kind = "os"
+brand = "Socomec UPS"
+display_name = "Socomec UPS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.4555.1.1.7"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.4555.1.1.7.1.2.6"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.4555.1.1.7.1.2.7"
+divisor = 10
+
+[[profile]]
+id = "solidserver"
+kind = "os"
+brand = "EfficientIP SOLIDserver"
+display_name = "EfficientIP SOLIDserver"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2440"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2440.1.14.3.6"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2440.1.14.3.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2440.1.14.3.1"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2440.1.14.3.5"
+
+[[profile]]
+id = "sonicwall"
+kind = "os"
+brand = "SonicWALL"
+display_name = "SonicWALL"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.8741"]
+
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "percent"
+[[profile.collect.mem.candidate.field]]
+role = "percent"
+oid = "1.3.6.1.4.1.8741.6.2.1.5.0"
+indexed = false
+[[profile.collect.mem.candidate]]
+kind = "percent"
+[[profile.collect.mem.candidate.field]]
+role = "percent"
+oid = "1.3.6.1.4.1.8741.1.3.1.4.0"
+indexed = false
+
+[[profile]]
+id = "sonus-gsx"
+kind = "os"
+brand = "Ribbon GSX"
+display_name = "Ribbon GSX"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2879.1.1.2"]
+
+[[profile]]
+id = "sonus-sbc"
+kind = "os"
+brand = "Ribbon SBC"
+display_name = "Ribbon SBC"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.177.15.1.1", "1.3.6.1.4.1.2879.1.9"]
+
+[[profile]]
+id = "sophos-xg"
+kind = "os"
+brand = "Sophos XG"
+display_name = "Sophos XG"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2604.5"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2604.5.1.9.1.0.0"
+indexed = false
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.2604.5.1.9.2.0.0"
+indexed = false
+divisor = 10
+
+[[profile]]
+id = "speedtouch"
+kind = "os"
+brand = "Thomson Speedtouch"
+display_name = "Thomson Speedtouch"
+
+[profile.match]
+descr_keywords = ["speedtouch ", "tg585v7"]
+descr_regex = ["^ST"]
+
+[[profile]]
+id = "srlinux"
+kind = "os"
+brand = "Nokia SR Linux"
+display_name = "Nokia SR Linux"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.6527.1.20"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.1.1.1"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.6527.3.1.2.1.1.9.0"
+indexed = false
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.6527.3.1.2.1.1.10.0"
+indexed = false
+unit = "kb"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.1.8.1.18"
+
+[[profile]]
+id = "sslvis"
+kind = "os"
+brand = "Blue Coat SSL Visibility"
+display_name = "Blue Coat SSL Visibility"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3417.1.5"]
+
+[[profile]]
+id = "ssu2000"
+kind = "os"
+brand = "Microsemi Synchronization Supply Unit"
+display_name = "Microsemi Synchronization Supply Unit"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.601.3.1"]
+
+[[profile]]
+id = "stellar"
+kind = "os"
+brand = "Alcatel-Lucent Enterprise Stellar Wireless OS (AWOS)"
+display_name = "Alcatel-Lucent Enterprise Stellar Wireless OS (AWOS)"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.6486.802"]
+
+[[profile]]
+id = "stoneos"
+kind = "os"
+brand = "Hillstone StoneOs"
+display_name = "Hillstone StoneOs"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.28557.1"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.28557.2.2.1.3"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.28557.2.2.1.4.0"
+indexed = false
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.28557.2.2.1.5.0"
+indexed = false
+unit = "kb"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.28557.2.28.1.2.1.3"
+
+[[profile]]
+id = "stulz"
+kind = "os"
+brand = "Stulz GMBH Klimatechnik"
+display_name = "Stulz GMBH Klimatechnik"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.29462"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.1.1.1.1.1170"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.1.1.1.1.1193"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.1.1.1.1.1192"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.1.1.1.1.1196"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.2.1.1.1191"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.1.1.1.1.1175"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.2.1.1.1202"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.2.1.1.1206"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.29462.10.2.1.1.1.2.1.1.1207"
+divisor = 10
+
+[[profile]]
+id = "sub10"
+kind = "os"
+brand = "Sub10 Systems"
+display_name = "Sub10 Systems"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.39003"]
+
+[[profile]]
+id = "supermicro-switch"
+kind = "os"
+brand = "Supermicro Switch"
+display_name = "Supermicro Switch"
+
+[profile.match]
+descr_regex = ["^SBM-", "^SSE-", "^SuperSwitch", "^Supermicro Switch"]
+
+[[profile]]
+id = "svos"
+kind = "os"
+brand = "Hitachi Storage Virtualization Operating System (SVOS)"
+display_name = "Hitachi Storage Virtualization Operating System (SVOS)"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.116.3"]
+
+[[profile]]
+id = "swos"
+kind = "os"
+brand = "Mikrotik SwOS"
+display_name = "Mikrotik SwOS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.14988.2"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.19.1.1.6"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.3.5"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.3.6"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.3.7"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.3.10"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.3.11"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.14988.1.1.3.100.1.3"
+
+[[profile]]
+id = "symbol"
+kind = "os"
+brand = "Symbol AP"
+display_name = "Symbol AP"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.388"]
+
+[[profile]]
+id = "tachyon"
+kind = "os"
+brand = "Tachyon"
+display_name = "Tachyon"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.57344"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.57344.1.3.6"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "percent"
+[[profile.collect.mem.candidate.field]]
+role = "percent"
+oid = "1.3.6.1.4.1.57344.1.3.7.0"
+indexed = false
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.57344.1.3.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.57344.1.2.2.1.11"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.57344.1.2.2.1.10"
+
+[[profile]]
+id = "tailyn"
+kind = "os"
+brand = "Tailyn"
+display_name = "Tailyn"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.5833.2017"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.5833.2017.3.15.1"
+value = "percent"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.5833.2017.4.12.2.1.9"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.5833.2017.4.11.1"
+
+[[profile]]
+id = "tait-infra93"
+kind = "os"
+brand = "Tait Infra93 Series"
+display_name = "Tait Infra93 Series"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3570.2.2"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.3570.2.2.2.1.2.2.6.1"
+
+[[profile]]
+id = "tait-tnadmin"
+kind = "os"
+brand = "Tait TN Admin OS"
+display_name = "Tait TN Admin OS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.3570.3.15"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.3570.3.15.2.1.1.1.6"
+value = "percent"
+
+[[profile]]
+id = "teldat"
+kind = "os"
+brand = "Teldat"
+display_name = "Teldat"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2007"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2007.4.1.2.1.2.1.1.1"
+value = "percent"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2007.4.1.2.1.2.1.1.2"
+value = "percent"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.2007.4.1.2.1.2.1.1.3"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.2007.4.1.2.1.1.29.1"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.2007.4.1.2.1.1.30.1"
+indexed = false
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.2007.4.1.2.1.1.27.2"
+indexed = false
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.2007.4.1.2.1.1.28.2"
+indexed = false
+
+[[profile]]
+id = "televes-fs"
+kind = "os"
+brand = "Fourth Series [TRedess]"
+display_name = "Fourth Series [TRedess]"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.23180.2.1.1"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.23180.2.1.1.2.2.4.8"
+
+[[profile]]
+id = "teracom"
+kind = "os"
+brand = "TeraCom"
+display_name = "TeraCom"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.38783"]
+
+[[profile]]
+id = "teradici-pcoip"
+kind = "os"
+brand = "Teradici PCoIP"
+display_name = "Teradici PCoIP"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.25071.1"]
+
+[[profile]]
+id = "terra-receivers"
+kind = "os"
+brand = "Terra"
+display_name = "Terra"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.30631.1.8", "1.3.6.1.4.1.30631.1.17", "1.3.6.1.4.1.30631.1.18"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.8.1.1.3"
+value = "percent"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.18.1.326.3"
+value = "percent"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.17.1.586.3"
+value = "percent"
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.8.1.1.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.18.1.326.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.17.1.586.4"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.30631.1.17.1.586.5"
+
+[[profile]]
+id = "tgos"
+kind = "os"
+brand = "technicolor TG MediaAcces"
+display_name = "technicolor TG MediaAcces"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2863.405.1"]
+
+[[profile]]
+id = "thomson-cm"
+kind = "os"
+brand = "Thomson DOCSIS Cable Modem"
+display_name = "Thomson DOCSIS Cable Modem"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.2863.205.43014.420.4.0.82.4.5"]
+
+[[profile]]
+id = "timos"
+kind = "os"
+brand = "Nokia SR OS (TiMOS)"
+display_name = "Nokia SR OS (TiMOS)"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.6527"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.1.1.1"
+value = "percent"
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "used"
+oid = "1.3.6.1.4.1.6527.3.1.2.1.1.11.0"
+indexed = false
+precision = 1000
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.6527.3.1.2.1.1.10.0"
+indexed = false
+precision = 1000
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.1.8.1.18"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.4.31.1.1"
+divisor = 256
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.6.1.2.2.7.1.6.1.12"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.4.66.1.2"
+divisor = 256
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.3.74.1.24"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.3.74.1.25"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.3.74.1.35"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.3.74.1.36"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.3.74.1.17"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.6527.3.1.2.2.3.74.1.18"
+
+[[profile]]
+id = "tomato"
+kind = "os"
+brand = "Tomato"
+display_name = "Tomato"
+
+[profile.match]
+
+[[profile.match.probes]]
+oid = "1.3.6.1.4.1.2021.7890.1.101.1"
+op = "starts"
+value = "Tomato"
+
+[[profile]]
+id = "topvision"
+kind = "os"
+brand = "TopVision"
+display_name = "TopVision"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.32285.11"]
+
+[[profile]]
+id = "toshiba-tec"
+kind = "os"
+brand = "Toshiba Printer"
+display_name = "Toshiba Printer"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1129.1.2"]
+descr_keywords = ["toshiba e-studio"]
+
+[[profile]]
+id = "tpconductor"
+kind = "os"
+brand = "TelePresence Conductor"
+display_name = "TelePresence Conductor"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.5596.180.6.4.1"]
+
+[[profile]]
+id = "tpdin"
+kind = "os"
+brand = "Tycon Systems TPDIN"
+display_name = "Tycon Systems TPDIN"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.45621.2"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.45621.2.2.13"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.45621.2.2.14"
+divisor = 10
+
+[[profile]]
+id = "tpdin3"
+kind = "os"
+brand = "Tycon Systems TPDIN"
+display_name = "Tycon Systems TPDIN"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.45621.3"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.45621.3.3.23"
+divisor = 10
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.45621.3.3.24"
+divisor = 10
+
+[[profile]]
+id = "tplink"
+kind = "os"
+brand = "TP-Link Switch"
+display_name = "TP-Link Switch"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.11863", "1.3.6.1.4.1.16972"]
+
+[[profile]]
+id = "transition"
+kind = "os"
+brand = "Transition"
+display_name = "Transition"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.868"]
+
+[[profile]]
+id = "tranzeo"
+kind = "os"
+brand = "Tranzeo"
+display_name = "Tranzeo"
+
+[profile.match]
+descr_regex = ["^Tranzeo"]
+
+[[profile]]
+id = "trendnet"
+kind = "os"
+brand = "TRENDnet Switch"
+display_name = "TRENDnet Switch"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.28866.2.34", "1.3.6.1.4.1.28866.2.46", "1.3.6.1.4.1.28866.2.48", "1.3.6.1.4.1.28866.2.49", "1.3.6.1.4.1.28866.2.51", "1.3.6.1.4.1.28866.2.64"]
+
+[[profile]]
+id = "trippliteconsole"
+kind = "os"
+brand = "TrippLite console server"
+display_name = "TrippLite console server"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.850.1.5", "1.3.6.1.4.1.850.1.7"]
+
+[[profile]]
+id = "truenas"
+kind = "os"
+brand = "TrueNAS"
+display_name = "TrueNAS"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.50536.3"]
+
+[[profile]]
+id = "truenas-scale"
+kind = "os"
+brand = "TrueNAS-SCALE"
+display_name = "TrueNAS-SCALE"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.50536.3"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.50536.3.1.3"
+divisor = 1000
+
+[[profile]]
+id = "ts-bspdu"
+kind = "os"
+brand = "BladeShelter PDU by PowerTek"
+display_name = "BladeShelter PDU by PowerTek"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.42610.1.4.4"]
+
+[[profile]]
+id = "tsc"
+kind = "os"
+brand = "TSC Printer"
+display_name = "TSC Printer"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.51966"]
+
+[[profile]]
+id = "ubiquoss-pon"
+kind = "os"
+brand = "Ubiquoss PON"
+display_name = "Ubiquoss PON"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.7800.1"]
+
+[[profile]]
+id = "ucopia"
+kind = "os"
+brand = "Ucopia"
+display_name = "Ucopia"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.31218"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.31218.3.3"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.31218.3.4"
+
+[[profile]]
+id = "ucos"
+kind = "os"
+brand = "Cisco Unified Communications Manager"
+display_name = "Cisco Unified Communications Manager"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.9.1.1348", "1.3.6.1.4.1.9.12.3.1.3.1062"]
+descr_keywords = ["cisco nx-os(tm) ucs", "software:ucos"]
+
+[[profile]]
+id = "uhp"
+kind = "os"
+brand = "UHP Networks VSAT Terminal"
+display_name = "UHP Networks VSAT Terminal"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.8000"]
+
+[profile.collect.cpu]
+pick = "max"
+[[profile.collect.cpu.candidate]]
+[[profile.collect.cpu.candidate.column]]
+oid = "1.3.6.1.4.1.8000.22.8.2"
+value = "percent"
+
+[[profile]]
+id = "ulaf"
+kind = "os"
+brand = "ULAF+"
+display_name = "ULAF+"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1887.1.1.1.2.1.1"]
+
+[[profile]]
+id = "unifi"
+kind = "os"
+brand = "Ubiquiti UniFi"
+display_name = "Ubiquiti UniFi"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.10002.1", "1.3.6.1.4.1.41112"]
+
+[profile.collect.mem]
+[[profile.collect.mem.candidate]]
+kind = "pool"
+[[profile.collect.mem.candidate.field]]
+role = "total"
+oid = "1.3.6.1.4.1.10002.1.1.1.1.1.0"
+indexed = false
+unit = "kb"
+[[profile.collect.mem.candidate.field]]
+role = "free"
+oid = "1.3.6.1.4.1.10002.1.1.1.1.2.0"
+indexed = false
+unit = "kb"
+
+[[profile]]
+id = "uniping"
+kind = "os"
+brand = "UniPing"
+display_name = "UniPing"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.25728"]
+
+[profile.collect.temp]
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.25728.8800.1.1.2"
+[[profile.collect.temp.candidate]]
+[[profile.collect.temp.candidate.column]]
+oid = "1.3.6.1.4.1.25728.8400.1.1.4"
+
+[[profile]]
+id = "univerge"
+kind = "os"
+brand = "NEC Univerge"
+display_name = "NEC Univerge"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.119.1"]
+
+[[profile]]
+id = "utax"
+kind = "os"
+brand = "UTAX Printer"
+display_name = "UTAX Printer"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.1347.41"]
+descr_keywords = ["ta_utax printing system"]

@@ -1,0 +1,8 @@
+[[profile]]
+id = "zyxel"
+kind = "os"
+brand = "ZyXEL"
+display_name = "ZyXEL"
+
+[profile.match]
+descr_keywords = ["zyxel"]

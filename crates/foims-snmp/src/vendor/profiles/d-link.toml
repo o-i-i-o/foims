@@ -1,0 +1,9 @@
+[[profile]]
+id = "d-link"
+kind = "os"
+brand = "D-Link"
+display_name = "D-Link"
+
+[profile.match]
+sysobjectid = ["1.3.6.1.4.1.171"]
+descr_keywords = ["d-link", "dlink"]
