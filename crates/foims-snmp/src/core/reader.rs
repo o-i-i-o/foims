@@ -4,11 +4,13 @@
 //! 探测与资源解释全链路可离线验证。置于 core 使 collect 与 live 两个
 //! 方向都能引用，避免 collect 依赖 live。
 
+use std::collections::HashMap;
 use std::future::Future;
 
-use async_snmp::{Client, Oid, VarBind, transport::UdpHandle};
+use async_snmp::{Client, Oid, Value, VarBind, transport::UdpHandle};
 
 use crate::core::format_snmp_error;
+use crate::live::MAX_OIDS_PER_REQUEST;
 
 /// SNMP 读操作抽象。
 ///
@@ -55,6 +57,31 @@ pub async fn get_many_tolerant<R: SnmpReader>(reader: &R, oids: &[Oid]) -> Vec<V
             && !varbind.value.is_exception()
         {
             out.push(varbind);
+        }
+    }
+    out
+}
+
+/// 预取识别探测 OID 值（分块容忍 GET，响应文本化 → OID 串键表）。
+///
+/// 探测通道（§5.4）的 GET 执行在采集层完成：静态证据全未命中时由调用方
+/// 取 [`crate::vendor::registry().probe_oids()`] 预取后注入 `identify()`。
+/// 实时探测（live/profile.rs）与趋势轮询共用本函数。
+pub async fn probe_oid_values<R: SnmpReader>(reader: &R, oids: &[Oid]) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for chunk in oids.chunks(MAX_OIDS_PER_REQUEST) {
+        for vb in get_many_tolerant(reader, chunk).await {
+            if vb.value.is_exception() {
+                continue;
+            }
+            let text = match &vb.value {
+                Value::OctetString(s) => String::from_utf8_lossy(s).trim().to_string(),
+                Value::Integer(i) => i.to_string(),
+                Value::Counter32(v) | Value::Gauge32(v) | Value::UInteger32(v) => v.to_string(),
+                Value::Counter64(v) => v.to_string(),
+                _ => continue,
+            };
+            out.insert(vb.oid.to_string(), text);
         }
     }
     out

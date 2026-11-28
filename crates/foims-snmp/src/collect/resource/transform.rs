@@ -77,6 +77,7 @@ pub fn skip_hit(rules: &[SkipRule], name: Option<&str>, raw_text: Option<&str>) 
             SkipOp::Eq => text == rule.value,
             SkipOp::Ne => text != rule.value,
             SkipOp::Has => text.contains(&rule.value),
+            SkipOp::Prefix => text == rule.value || text.starts_with(&format!("{}/", rule.value)),
         }
     })
 }
@@ -147,6 +148,16 @@ mod tests {
             value: "ok".to_string(),
         }];
         assert!(skip_hit(&has, None, Some("status: ok")));
+        // prefix 整词前缀：子树与目录本身命中，非整词路径不误伤
+        let prefix = vec![SkipRule {
+            field: SkipField::Name,
+            op: SkipOp::Prefix,
+            value: "/run".to_string(),
+        }];
+        assert!(skip_hit(&prefix, Some("/run"), None), "目录本身命中");
+        assert!(skip_hit(&prefix, Some("/run/user/1000"), None), "子树命中");
+        assert!(!skip_hit(&prefix, Some("/data/run"), None), "非整词不命中");
+        assert!(!skip_hit(&prefix, Some("/runtime"), None), "长名不命中");
     }
 
     #[test]

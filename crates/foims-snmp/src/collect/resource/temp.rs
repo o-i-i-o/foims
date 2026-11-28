@@ -3,7 +3,6 @@
 
 use crate::vendor::model;
 use async_snmp::Value;
-use std::collections::BTreeMap;
 
 use super::{
     CandidateFailure, ExecArgs, ExecOutput, RowMeta, SelectionRows, get_one, get_rows, numeric,
@@ -55,7 +54,7 @@ async fn exec_column<R: crate::core::SnmpReader>(
     if let Some(selection) = args.selection {
         let values = get_rows(
             args.reader,
-            &[col.oid.clone()],
+            std::slice::from_ref(&col.oid),
             selection.rows.keys().copied(),
         )
         .await?;

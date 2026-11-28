@@ -12,7 +12,7 @@
 //! - [`alert_episode`]：告警 episode 运行时（持续超标状态机 + 落库 + 站内通知）；
 //! - [`agents_api`]：Agent 列表/详情/历史/管理的 Web API；
 //! - [`snmp_poll`]：SNMP 设备轮询采集（纳入主机监控页，source='snmp'），
-//!   性能指标采集本体在 foims-snmp::collect::metrics；
+//!   资源组采集走 foims-snmp::collect::resource 解释器（趋势路径），
 //! - [`live_poll`]：SNMP/IPMI 实时采集（秒级定向 GET/带外采样 + 内存快照
 //!   注册表，不落库，供实时展示与 Top 榜；趋势仍由 5 分钟轮询落库），
 //!   末尾承载 Agent 上报来源的实时注册表（写入方为 [`ingest`]）；

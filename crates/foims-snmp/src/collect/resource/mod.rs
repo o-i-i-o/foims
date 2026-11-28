@@ -504,12 +504,6 @@ pub(super) async fn get_one<R: SnmpReader>(reader: &R, oid: &Oid) -> Option<Valu
     binds.first().and_then(varbind_value)
 }
 
-/// 标量 GET 的文本值。
-pub(super) async fn get_one_text<R: SnmpReader>(reader: &R, oid: &Oid) -> Option<String> {
-    let binds = reader.get_many(std::slice::from_ref(oid)).await.ok()?;
-    binds.first().and_then(varbind_text)
-}
-
 /// base + 索引 → 实例 OID。
 pub(super) fn child_oid(base: &Oid, index: u32) -> Oid {
     let mut arcs = base.arcs().to_vec();

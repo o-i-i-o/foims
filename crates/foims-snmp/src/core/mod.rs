@@ -3,7 +3,7 @@
 pub mod config;
 pub mod reader;
 
-pub use reader::{SnmpReader, get_many_tolerant};
+pub use reader::{SnmpReader, get_many_tolerant, probe_oid_values};
 
 use std::sync::RwLock;
 use std::time::Duration;

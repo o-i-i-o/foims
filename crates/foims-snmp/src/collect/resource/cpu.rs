@@ -174,3 +174,49 @@ async fn exec_counters<R: crate::core::SnmpReader>(
         None,
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counter32差值_正常与回绕() {
+        assert_eq!(delta32(100, 250), 150, "正常递增");
+        assert_eq!(delta32(0, 0), 0, "无变化");
+        // 回绕：prev=2^32−101 处回绕到 50，实际步进 = 100(到 MAX) + 1(归零) + 50
+        assert_eq!(delta32(u64::from(u32::MAX) - 100, 50), 151);
+    }
+
+    #[test]
+    fn cpu使用率_差值计算与边界() {
+        let prev = CpuCounters {
+            total: 10_000,
+            idle: 8_000,
+        };
+        let cur = CpuCounters {
+            total: 20_000,
+            idle: 17_000,
+        };
+        // Δtotal=10000 Δidle=9000 → 10%（浮点容差比较）
+        let usage = cpu_usage_pct(prev, cur).unwrap();
+        assert!((usage - 10.0).abs() < 1e-9);
+        assert_eq!(cpu_usage_pct(cur, cur), None, "同值差值应判 None");
+        // idle 零增长 → 100%
+        let busy = CpuCounters {
+            total: 30_000,
+            idle: 17_000,
+        };
+        assert_eq!(cpu_usage_pct(cur, busy), Some(100.0));
+        // 回绕场景：total/idle 同步回绕，使用率不变
+        // Δtotal = 999+2^32−MAX = 1000；Δidle = 759+2^32−(MAX−120) = 880 → 12%
+        let wrap_prev = CpuCounters {
+            total: u64::from(u32::MAX),
+            idle: u64::from(u32::MAX) - 120,
+        };
+        let wrap_cur = CpuCounters {
+            total: 999,
+            idle: 759,
+        };
+        assert_eq!(cpu_usage_pct(wrap_prev, wrap_cur), Some(12.0));
+    }
+}

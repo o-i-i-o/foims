@@ -1,19 +1,17 @@
-//! SNMP 性能指标采集（设计 docs/agent-design.md §5.2.1「二期：性能指标与流量曲线」）。
+//! SNMP 趋势指标采集（5 分钟路径，设计 docs/agent-design.md §5.2.1
+//! 「二期：性能指标与流量曲线」）。
 //!
-//! 在一期系统组（sysName/sysDescr/sysUpTime）之上扩展 CPU/内存/磁盘/温度/
-//! 流量/负载采集，全部基于 net-snmp 约定 OID：
-//! - CPU：UCD-SNMP-MIB ssCpuRaw* 计数器（11 个 Counter32）差值算使用率
-//!   （net-snmp 5.9 已移除 ssCpu 百分比标量，无法直接 GET）；
-//! - 内存/磁盘：HOST-RESOURCES-MIB hrStorageTable（Ram 行 + "Available
-//!   memory" 行 / FixedDisk 行），内存两行不全时回落 UCD memTotalReal/memAvailReal；
-//! - 温度：LM-SENSORS-MIB lmTempSensorsTable（毫度 ℃，/1000 归一）；
+//! 资源组（CPU/内存/磁盘/温度/传感器）由调用方经 [`ResourceReader`] 解释
+//! profile 采集计划产出（[`read_resources`] 负责读数映射），本模块保留
+//! 计划外部分：
 //! - 流量：IF-MIB ifTable + ifXTable（64 位 HC 计数器优先，回落 32 位），
 //!   Counter32 回绕校正后按 Δbytes×8/elapsed 算速率；
-//! - 负载：UCD laLoad.1/2/3（字符串形式浮点）。
-//!
-//! 计数器差值依赖上一轮状态：调用方自 monitored_hosts.raw_metrics 私有键
-//! `_snmp_state` 读取 [`SnmpState`]，采集完成后新状态随 raw_metrics 写回
-//! （差值算不出时状态仍更新，保证下一轮可用）。
+//! - 负载/交换分区/逻辑核数：UCD-MIB（未入采集计划，暂留本模块）；
+//! - 差值状态 [`SnmpState`]：调用方自 monitored_hosts.raw_metrics 私有键
+//!   `_snmp_state` 读取，采集完成后新状态随 raw_metrics 写回
+//!   （差值算不出时状态仍更新，保证下一轮可用）；
+//! - 观测事件纯函数：链路翻动/重启检测；
+//! - 上报 JSON 合成（与 AgentReport 同形，前端契约）。
 //!
 //! 单轮失败容忍：任一指标类采集/解析失败仅该类为空，不影响其他类；
 //! monitored_hosts 热列由 upsert 的 COALESCE 保留上一轮旧值。
@@ -26,7 +24,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::collect::resource::cpu::delta32;
+use crate::collect::resource::{IndexCache, ResourceReader};
+use crate::core::SnmpReader;
 use crate::events::ObsEvent;
+use crate::vendor::model::SensorKind;
 use foims_models::{
     SNMP_EVENT_DEVICE_REBOOT, SNMP_EVENT_LINK_FLIP, SNMP_SEVERITY_CRITICAL, SNMP_SEVERITY_INFO,
     SNMP_SEVERITY_WARNING,
@@ -46,59 +48,12 @@ const MAX_NET_IFACES: usize = 24;
 /// 报文聚合请求的 max-repetitions（bulk walk 单次批量大小）
 const WALK_MAX_REPETITIONS: u32 = 20;
 
-// OID 构造（oid! 宏展开为运行期 from_slice，非常量）：UCD-SNMP-MIB
-// CPU 计数器 ssCpuRaw*（SNMP 标量必须带 .0 实例后缀，缺失会返回
-// No Such Instance 导致使用率永远为空）。编号以 net-snmp 官方 MIB/代理
-// 注册为准：User(50)/Nice(51)/System(52)/Idle(53)/Wait(54)/Interrupt(56)；
-// 注意 57~60 是 ssIORawSent/ssIORawReceived/ssRawInterrupts/ssRawContexts
-//（块 I/O 与中断/上下文切换计数，非 CPU 时间），SoftIRQ(61)/Steal(64)/
-// Guest(65)/GuestNice(66) 不参与求和口径（子集/重叠/客态），均不采集。
-fn cpu_raw_oids() -> [async_snmp::Oid; 6] {
-    [
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 50, 0), // User
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 51, 0), // Nice
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 52, 0), // System
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 53, 0), // Idle
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 54, 0), // Wait
-        oid!(1, 3, 6, 1, 4, 1, 2021, 11, 56, 0), // Interrupt
-    ]
-}
-
-/// CPU Raw 计数器中 Idle 的下标（使用率公式的扣减项）
-const CPU_RAW_IDLE_IDX: usize = 3;
-
-/// Wait（iowait）下标：计入 total 但归入非 busy 侧（B5：与 top 口径一致，
-/// I/O 等待不算 CPU 使用率）
-const CPU_RAW_WAIT_IDX: usize = 4;
-
-/// total 计入口径下标：User/Nice/System/Idle/Wait/Interrupt 全部六列
-///（与 top 的 user+nice+system+iowait+irq 口径一致；softirq/steal/guest
-/// 不计入，通常合计 <5%，使用率略高估，属可接受误差）。
-const CPU_RAW_TOTAL_IDXS: [usize; 6] = [0, 1, 2, 3, 4, 5];
-
-/// hrStorageType 取值：Ram（物理内存行）
-fn storage_type_ram() -> async_snmp::Oid {
-    oid!(1, 3, 6, 1, 2, 1, 25, 2, 1, 2)
-}
-
-/// hrStorageType 取值：FixedDisk（本地固定磁盘行）
-fn storage_type_fixed_disk() -> async_snmp::Oid {
-    oid!(1, 3, 6, 1, 2, 1, 25, 2, 1, 4)
-}
-/// net-snmp hrStorageTable 中"物理内存"行的描述串（类型匹配失败时兜底）
-const STORAGE_DESCR_PHYS_MEM: &str = "Physical memory";
-/// net-snmp hrStorageTable 中"可用内存"行的描述串（精确匹配）
-const STORAGE_DESCR_AVAIL_MEM: &str = "Available memory";
-
 // 上一轮状态（raw_metrics 私有键 _snmp_state）
 
-/// CPU 计数器快照：ssCpuRaw* 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和 +
-/// 非 busy（Idle+Wait）分量（差值算使用率）
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct CpuCounters {
-    pub total: u64,
-    pub idle: u64,
-}
+// UCD CPU 计数器快照（total/idle，序列化形状 {total, idle} 保持历史
+// raw_metrics 兼容）：解释器 UCD 计数器候选执行后写回缓存，趋势路径
+// 每轮 take 消费进 [`SnmpState`]。
+pub use crate::collect::resource::cpu::CpuCounters;
 
 /// 单网卡收发字节与错误/丢弃计数器快照（差值算速率与本轮错误增量）
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -171,9 +126,12 @@ pub struct DiskRow {
     pub used: u64,
 }
 
-/// 单温度传感器读数（℃，归一后业务区间内）
+/// 单传感器读数（报告 JSON sensors 键）
 pub struct SensorRow {
     pub label: String,
+    /// 传感器类型（报告契约词表：温度固定 "temp"，与 agent 上报口径一致，
+    /// ingest/前端按该值筛温度；其余取解释器类型键 voltage/current/…）
+    pub kind: String,
     pub value: f64,
 }
 
@@ -198,45 +156,125 @@ pub struct SnmpSnapshot {
 
 // 采集入口
 
-/// 采集单台设备全部性能指标并计算差值类指标（CPU 使用率/网卡速率）。
+/// 资源组读数（CPU/内存/磁盘/传感器）：由 [`read_resources`] 解释
+/// profile 采集计划产出，[`collect`] 与计划外的 nets/load/swap/cores 组装。
+pub struct TrendResources {
+    /// CPU 使用率（%，多行读数已按族 pick 聚合）
+    pub cpu_usage_pct: Option<f64>,
+    /// 内存（字节；used 缺失时由 free 推算）
+    pub mem_total: Option<u64>,
+    pub mem_used: Option<u64>,
+    /// 磁盘行
+    pub disks: Vec<DiskRow>,
+    /// 传感器行（含温度；max_temp 按 kind == "temp" 筛选）
+    pub sensors: Vec<SensorRow>,
+    /// 本轮 UCD CPU 计数器（解释器计数器候选执行后写回缓存；值列候选
+    /// （Cisco 等按列直读）为 None，写回状态供下一轮差值）
+    pub cpu_counters: Option<CpuCounters>,
+}
+
+/// 解释资源组采集计划（每轮全新 [`IndexCache`]，一遍走完；行级缓存仅
+/// 单轮内复用），并从缓存取回本轮 UCD CPU 计数器写回状态。
 ///
-/// `prev` 为上一轮状态（无历史时传 None，首轮差值指标为 None 但状态
-/// 照常写入）；`now` 为本轮采集时刻（状态时间戳与报告 collected_at 同源）。
+/// 实时路径（live/collector.rs）跨轮复用缓存；趋势路径 5 分钟一轮，
+/// 无跨轮缓存价值，候选回退语义由解释器保证。
+pub async fn read_resources<R: SnmpReader>(
+    reader: &ResourceReader<'_, R>,
+    cache: &IndexCache,
+) -> TrendResources {
+    let cpu_usage_pct = reader
+        .cpu()
+        .await
+        .into_iter()
+        .map(|r| r.usage_pct)
+        .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m: f64| m.max(v))));
+    let (mem_total, mem_used) = match reader.mem().await {
+        Some(m) => {
+            let used = m.used.or_else(|| {
+                m.total
+                    .zip(m.free)
+                    .map(|(total, free)| total.saturating_sub(free))
+            });
+            (m.total, used)
+        }
+        None => (None, None),
+    };
+    let disks = reader
+        .storage()
+        .await
+        .into_iter()
+        .map(|d| {
+            let name = d.name.clone().unwrap_or_else(|| d.index.clone());
+            DiskRow {
+                device: name.clone(),
+                mount: name,
+                total: d.total.unwrap_or(0),
+                used: d.used.unwrap_or(0),
+            }
+        })
+        .collect();
+    let sensors = reader
+        .sensors()
+        .await
+        .into_iter()
+        .map(|s| SensorRow {
+            label: s.name.clone().unwrap_or_else(|| s.index.clone()),
+            kind: sensor_kind_key(s.kind),
+            value: s.value,
+        })
+        .collect();
+    TrendResources {
+        cpu_usage_pct,
+        mem_total,
+        mem_used,
+        disks,
+        sensors,
+        cpu_counters: cache.take_cpu_counters(),
+    }
+}
+
+/// 传感器类型 → 报告契约词表：温度固定 "temp"（与 agent 上报一致，
+/// ingest/前端按该值筛温度），其余取解释器类型键。
+fn sensor_kind_key(kind: SensorKind) -> String {
+    if kind == SensorKind::Temperature {
+        "temp".to_string()
+    } else {
+        kind.key().to_string()
+    }
+}
+
+/// 采集单台设备计划外指标（流量/负载/交换分区/核数）并组装快照。
+///
+/// `resources` 为 [`read_resources`] 产出的资源组读数；`prev` 为上一轮
+/// 状态（无历史时传 None，首轮差值指标为 None 但状态照常写入）；
+/// `now` 为本轮采集时刻（状态时间戳与报告 collected_at 同源）。
 pub async fn collect(
     client: &Client<UdpHandle>,
+    resources: TrendResources,
     prev: Option<&SnmpState>,
     now: DateTime<Utc>,
 ) -> SnmpSnapshot {
     let now_unix = now.timestamp();
-    let (cpu_counters, cpu_usage_pct) = collect_cpu(client, prev.and_then(|p| p.cpu)).await;
-    // hrStorageTable walk 一次，内存与磁盘共用
-    let storage = walk_hr_storage(client).await;
-    let mut mem = memory_from_storage(&storage);
-    if mem.is_none() {
-        mem = ucd_memory(client).await;
-    }
-    let disks = disks_from_storage(&storage);
     let swap = ucd_swap(client).await;
-    let sensors = collect_sensors(client).await;
     let (nets, state_ifaces, state_if_status, state_if_admin) =
         collect_nets(client, prev, now_unix).await;
     let load = collect_load(client).await;
     let cores = collect_cores(client).await;
 
     SnmpSnapshot {
-        cpu_usage_pct,
+        cpu_usage_pct: resources.cpu_usage_pct,
         cores,
         load,
-        mem_total: mem.as_ref().map(|(t, _)| *t),
-        mem_used: mem.as_ref().map(|(_, u)| *u),
+        mem_total: resources.mem_total,
+        mem_used: resources.mem_used,
         swap_total: swap.0,
         swap_used: swap.1,
-        disks,
-        sensors,
+        disks: resources.disks,
+        sensors: resources.sensors,
         nets,
         state: SnmpState {
             ts: now_unix,
-            cpu: cpu_counters,
+            cpu: resources.cpu_counters,
             ifaces: state_ifaces,
             if_status: state_if_status,
             if_admin: state_if_admin,
@@ -248,26 +286,6 @@ pub async fn collect(
 }
 
 // 纯函数（差值/归一/聚合，单测覆盖）
-
-/// Counter32 差值（回绕校正：cur < prev 时按 2^32 计数空间回绕）
-fn delta32(prev: u64, cur: u64) -> u64 {
-    if cur >= prev {
-        cur - prev
-    } else {
-        cur + (1u64 << 32) - prev
-    }
-}
-
-/// CPU 使用率（%）：100×(1−Δidle/Δtotal)；Δtotal≤0（时段过短/计数器
-/// 回绕）时 None，结果钳制 [0, 100]。
-pub fn cpu_usage_pct(prev: CpuCounters, cur: CpuCounters) -> Option<f64> {
-    let total = delta32(prev.total, cur.total);
-    let idle = delta32(prev.idle, cur.idle);
-    if total == 0 {
-        return None;
-    }
-    Some((100.0 * (1.0 - idle as f64 / total as f64)).clamp(0.0, 100.0))
-}
 
 /// 网卡速率（bit/s）：Δbytes×8/elapsed，按计数器位宽分道回绕处理。
 ///
@@ -309,16 +327,6 @@ pub fn iface_rate_bps(
     Some(delta as f64 * 8.0 / elapsed_secs as f64)
 }
 
-/// LM-Sensors 毫度 ℃ 归一（Gauge32 毫度 → ℃）：0 无效；换算后超出
-/// [-100, 250]℃ 业务区间剔除（与 ingest 温度校验口径一致）。
-pub fn temp_from_milli(raw: u64) -> Option<f64> {
-    if raw == 0 {
-        return None;
-    }
-    let c = raw as f64 / 1000.0;
-    (-100.0..=250.0).contains(&c).then_some(c)
-}
-
 /// 内存使用率（%）：total 缺失/为 0 → None，结果钳制 [0, 100]。
 pub fn mem_usage_pct(mem: Option<(u64, u64)>) -> Option<f64> {
     let (total, used) = mem?;
@@ -337,10 +345,12 @@ pub fn disk_usage_pct(disks: &[DiskRow]) -> Option<f64> {
         .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m| m.max(v))))
 }
 
-/// 最高温度：无有效读数 → None。
+/// 最高温度：kind == "temp" 的传感器中取最大，无有效读数 → None
+///（电压/风扇等其他类型不参与温度口径）。
 pub fn max_temp(sensors: &[SensorRow]) -> Option<f64> {
     sensors
         .iter()
+        .filter(|s| s.kind == "temp")
         .map(|s| s.value)
         .filter(|v| v.is_finite())
         .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |m| m.max(v))))
@@ -465,197 +475,6 @@ pub fn parse_linux_sysdescr(descr: &str) -> Option<(String, String)> {
     None
 }
 
-// 采集实现
-
-/// CPU：GET ssCpuRaw* 六个计数器 → 按 [`CPU_RAW_TOTAL_IDXS`] 口径求和与
-/// 非 busy（Idle+Wait）分量 → 与上一轮差值算使用率。Idle 缺失时整体
-/// None（无法定义使用率），其余缺失按 0 计入。
-async fn collect_cpu(
-    client: &Client<UdpHandle>,
-    prev: Option<CpuCounters>,
-) -> (Option<CpuCounters>, Option<f64>) {
-    let oids = cpu_raw_oids();
-    // SNMPv1 设备可能只实现部分 ssCpuRaw 计数器：批量失败时逐 OID 回退，
-    // 缺失项按 None 处理，避免一个计数器缺失导致整轮 CPU 指标丢失。
-    let varbinds = crate::live::get_many_tolerant(client, &oids).await;
-    if varbinds.is_empty() {
-        tracing::debug!("ssCpuRaw 计数器无有效响应（本轮无 CPU 指标）");
-    }
-    let vals: Vec<Option<u64>> = oids
-        .iter()
-        .map(|oid| {
-            varbinds
-                .iter()
-                .find(|vb| &vb.oid == oid)
-                .and_then(|vb| vb.value.as_u64())
-        })
-        .collect();
-    let idle = vals.get(CPU_RAW_IDLE_IDX).copied().flatten();
-    let wait = vals
-        .get(CPU_RAW_WAIT_IDX)
-        .copied()
-        .flatten()
-        .unwrap_or_default();
-    let total: u64 = CPU_RAW_TOTAL_IDXS
-        .iter()
-        .filter_map(|i| vals.get(*i).copied().flatten())
-        .sum();
-    let counters = idle.map(|idle| CpuCounters {
-        total,
-        idle: idle + wait,
-    });
-    let usage = match (prev, counters) {
-        (Some(prev), Some(cur)) => cpu_usage_pct(prev, cur),
-        _ => None,
-    };
-    (counters, usage)
-}
-
-/// hrStorageTable 行解析结果
-struct StorageRow {
-    /// hrStorageType OID 值（Ram / FixedDisk 判定依据）
-    row_type: Option<async_snmp::Oid>,
-    descr: String,
-    units: i64,
-    size: i64,
-    used: i64,
-}
-
-/// walk hrStorageTable 并按行索引合并各列（一次 walk 供内存/磁盘共用）。
-/// 列：2 hrStorageType / 3 hrStorageDescr / 4 hrStorageAllocationUnits /
-/// 5 hrStorageSize / 6 hrStorageUsed。
-async fn walk_hr_storage(client: &Client<UdpHandle>) -> Vec<StorageRow> {
-    let base = oid!(1, 3, 6, 1, 2, 1, 25, 2, 3, 1);
-    let varbinds = walk_all(client, base).await;
-    let mut types: BTreeMap<u32, async_snmp::Oid> = BTreeMap::new();
-    let mut descrs: BTreeMap<u32, String> = BTreeMap::new();
-    let mut units: BTreeMap<u32, i64> = BTreeMap::new();
-    let mut sizes: BTreeMap<u32, i64> = BTreeMap::new();
-    let mut useds: BTreeMap<u32, i64> = BTreeMap::new();
-    for vb in &varbinds {
-        let Some((col, idx)) = table_parts(&vb.oid, 10) else {
-            continue;
-        };
-        match col {
-            2 => {
-                if let Some(o) = vb.value.as_oid() {
-                    types.insert(idx, o.clone());
-                }
-            }
-            3 => {
-                if let Some(s) = vb.value.as_str() {
-                    descrs.insert(idx, s.trim().to_string());
-                }
-            }
-            4 => {
-                if let Some(v) = int_value(&vb.value) {
-                    units.insert(idx, v);
-                }
-            }
-            5 => {
-                if let Some(v) = int_value(&vb.value) {
-                    sizes.insert(idx, v);
-                }
-            }
-            6 => {
-                if let Some(v) = int_value(&vb.value) {
-                    useds.insert(idx, v);
-                }
-            }
-            _ => {}
-        }
-    }
-    types
-        .keys()
-        .filter_map(|idx| {
-            let row_type = types.get(idx).cloned();
-            let descr = descrs.get(idx)?.clone();
-            Some(StorageRow {
-                row_type,
-                descr,
-                units: units.get(idx).copied().unwrap_or(0),
-                size: sizes.get(idx).copied().unwrap_or(0),
-                used: useds.get(idx).copied().unwrap_or(0),
-            })
-        })
-        .collect()
-}
-
-/// 内存（字节）：hrStorageTable Ram 行 total + "Available memory" 行
-/// avail → used = total − avail（饱和）；两行不全时由调用方回落 UCD。
-/// size ≤ 0（>8TB 32 位溢出为负）的行视为无效。
-fn memory_from_storage(rows: &[StorageRow]) -> Option<(u64, u64)> {
-    let ram = rows
-        .iter()
-        .find(|r| r.row_type.as_ref() == Some(&storage_type_ram()))
-        .or_else(|| {
-            rows.iter()
-                .find(|r| r.descr.eq_ignore_ascii_case(STORAGE_DESCR_PHYS_MEM))
-        })?;
-    let avail = rows
-        .iter()
-        .find(|r| r.descr.eq_ignore_ascii_case(STORAGE_DESCR_AVAIL_MEM))?;
-    if ram.units <= 0 || ram.size <= 0 || avail.units <= 0 || avail.size < 0 {
-        return None;
-    }
-    let total = (ram.size as u64).saturating_mul(ram.units as u64);
-    let avail_bytes = (avail.size as u64).saturating_mul(avail.units as u64);
-    let used = total.saturating_sub(avail_bytes);
-    (total > 0).then_some((total, used))
-}
-
-/// 磁盘挂载点排除：/dev、/proc、/sys、/run 四个子树为伪文件系统/内存盘
-/// 挂载（tmpfs、devtmpfs、cgroup 等），与 agent 侧挂载点排除口径一致，
-/// 避免 tmpfs 噪音行混入磁盘列表（目录本身或子树命中，/data/run 这类
-/// 非整词前缀不命中）。
-fn is_excluded_disk_mount(mount: &str) -> bool {
-    for prefix in ["/dev", "/proc", "/sys", "/run"] {
-        if let Some(rest) = mount.strip_prefix(prefix)
-            && (rest.is_empty() || rest.starts_with('/'))
-        {
-            return true;
-        }
-    }
-    false
-}
-
-/// 磁盘：hrStorageTable 中 FixedDisk 行（本地固定盘）；size ≤ 0 跳过
-/// （32 位容量溢出），device/mount 同取 hrStorageDescr（挂载点）。
-/// /dev、/run 等伪文件系统挂载点（net-snmp 会为 tmpfs 建 FixedDisk 行）排除。
-fn disks_from_storage(rows: &[StorageRow]) -> Vec<DiskRow> {
-    rows.iter()
-        .filter(|r| r.row_type.as_ref() == Some(&storage_type_fixed_disk()))
-        .filter(|r| r.units > 0 && r.size > 0 && !r.descr.is_empty())
-        .filter(|r| !is_excluded_disk_mount(&r.descr))
-        .map(|r| {
-            let total = (r.size as u64).saturating_mul(r.units as u64);
-            let used = (r.used.max(0) as u64)
-                .saturating_mul(r.units as u64)
-                .min(total);
-            DiskRow {
-                device: r.descr.clone(),
-                mount: r.descr.clone(),
-                total,
-                used,
-            }
-        })
-        .collect()
-}
-
-/// UCD 内存回落：memTotalReal(4.5) + 可用量优先 memSysAvail(4.27，
-/// MemAvailable 口径，net-snmp ≥5.8)，缺失回落 memAvailReal(4.6，
-/// MemFree 口径，老内核唯一可用，含缓冲缓存会高估使用率)；KB → 字节。
-/// 仅在 hrStorage 两行不全时调用。
-async fn ucd_memory(client: &Client<UdpHandle>) -> Option<(u64, u64)> {
-    let total_kb = get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 5, 0)).await?;
-    let avail_kb = match get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 27, 0)).await {
-        Some(sys_avail_kb) => sys_avail_kb,
-        None => get_nonneg_scalar(client, oid!(1, 3, 6, 1, 4, 1, 2021, 4, 6, 0)).await?,
-    };
-    let total = total_kb.saturating_mul(1024);
-    let used = total_kb.saturating_sub(avail_kb).saturating_mul(1024);
-    (total > 0).then_some((total, used))
-}
 
 /// UCD 交换分区：memTotalSwap(4.3)/memAvailSwap(4.4)，KB → 字节；
 /// 未配置（total=0）或不支持 → (None, None)。
@@ -674,45 +493,6 @@ async fn ucd_swap(client: &Client<UdpHandle>) -> (Option<u64>, Option<u64>) {
     let total = total_kb.saturating_mul(1024);
     let used = total_kb.saturating_sub(avail_kb).saturating_mul(1024);
     (Some(total), Some(used))
-}
-
-/// 温度：walk lmTempSensorsTable（列 2 device / 3 value 毫度），
-/// 按行索引配对后归一；无效读数剔除。
-async fn collect_sensors(client: &Client<UdpHandle>) -> Vec<SensorRow> {
-    let varbinds = walk_all(client, oid!(1, 3, 6, 1, 4, 1, 2021, 13, 16, 2, 1)).await;
-    let mut devices: BTreeMap<u32, String> = BTreeMap::new();
-    let mut values: BTreeMap<u32, u64> = BTreeMap::new();
-    for vb in &varbinds {
-        let Some((col, idx)) = table_parts(&vb.oid, 11) else {
-            continue;
-        };
-        match col {
-            2 => {
-                if let Some(s) = vb.value.as_str() {
-                    let s = s.trim();
-                    if !s.is_empty() {
-                        devices.insert(idx, s.to_string());
-                    }
-                }
-            }
-            3 => {
-                if let Some(v) = vb.value.as_u64() {
-                    values.insert(idx, v);
-                }
-            }
-            _ => {}
-        }
-    }
-    values
-        .into_iter()
-        .filter_map(|(idx, raw)| {
-            let label = devices.get(&idx)?;
-            temp_from_milli(raw).map(|value| SensorRow {
-                label: label.clone(),
-                value,
-            })
-        })
-        .collect()
 }
 
 /// 流量：bulk walk ifTable + ifXTable 按行索引合并 → 过滤 up 且非环回 →
@@ -1099,7 +879,7 @@ pub fn build_report_json(
         })).collect::<Vec<Value>>(),
         "sensors": snap.sensors.iter().map(|s| json!({
             "label": s.label,
-            "kind": "temp",
+            "kind": s.kind,
             "value": s.value,
         })).collect::<Vec<Value>>(),
         "_snmp_state": snap.state,
@@ -1109,47 +889,6 @@ pub fn build_report_json(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn counter32差值_正常与回绕() {
-        assert_eq!(delta32(100, 250), 150, "正常递增");
-        assert_eq!(delta32(0, 0), 0, "无变化");
-        // 回绕：prev=2^32−101 处回绕到 50，实际步进 = 100(到 MAX) + 1(归零) + 50
-        assert_eq!(delta32(u64::from(u32::MAX) - 100, 50), 151);
-    }
-
-    #[test]
-    fn cpu使用率_差值计算与边界() {
-        let prev = CpuCounters {
-            total: 10_000,
-            idle: 8_000,
-        };
-        let cur = CpuCounters {
-            total: 20_000,
-            idle: 17_000,
-        };
-        // Δtotal=10000 Δidle=9000 → 10%（浮点容差比较）
-        let usage = cpu_usage_pct(prev, cur).unwrap();
-        assert!((usage - 10.0).abs() < 1e-9);
-        assert_eq!(cpu_usage_pct(cur, cur), None, "同值差值应判 None");
-        // idle 零增长 → 100%
-        let busy = CpuCounters {
-            total: 30_000,
-            idle: 17_000,
-        };
-        assert_eq!(cpu_usage_pct(cur, busy), Some(100.0));
-        // 回绕场景：total/idle 同步回绕，使用率不变
-        // Δtotal = 999+2^32−MAX = 1000；Δidle = 759+2^32−(MAX−120) = 880 → 12%
-        let wrap_prev = CpuCounters {
-            total: u64::from(u32::MAX),
-            idle: u64::from(u32::MAX) - 120,
-        };
-        let wrap_cur = CpuCounters {
-            total: 999,
-            idle: 759,
-        };
-        assert_eq!(cpu_usage_pct(wrap_prev, wrap_cur), Some(12.0));
-    }
 
     #[test]
     fn 网卡速率_计算与合理性校验() {
@@ -1184,15 +923,6 @@ mod tests {
     }
 
     #[test]
-    fn 温度归一_毫度转摄氏与越界剔除() {
-        assert_eq!(temp_from_milli(54_000), Some(54.0));
-        assert_eq!(temp_from_milli(54_500), Some(54.5));
-        assert_eq!(temp_from_milli(0), None, "0 视为无效读数");
-        assert_eq!(temp_from_milli(250_001), None, "超上限剔除");
-        assert_eq!(temp_from_milli(300_000), None);
-    }
-
-    #[test]
     fn 使用率聚合_内存磁盘温度与流量求和() {
         assert_eq!(mem_usage_pct(None), None);
         assert_eq!(mem_usage_pct(Some((0, 100))), None, "total=0 应为 None");
@@ -1223,11 +953,19 @@ mod tests {
         let sensors = vec![
             SensorRow {
                 label: "a".into(),
+                kind: "temp".into(),
                 value: 45.0,
             },
             SensorRow {
                 label: "b".into(),
+                kind: "temp".into(),
                 value: 62.5,
+            },
+            // 非温度类型不参与 max_temp 温度口径
+            SensorRow {
+                label: "c".into(),
+                kind: "voltage".into(),
+                value: 120.0,
             },
         ];
         assert_eq!(max_temp(&sensors), Some(62.5));
@@ -1257,56 +995,6 @@ mod tests {
             ..Default::default()
         }];
         assert_eq!(net_sums(&empty), (None, None));
-    }
-
-    #[test]
-    fn 磁盘行_伪文件系统挂载点过滤() {
-        // 挂载点排除规则本身
-        assert!(is_excluded_disk_mount("/run"));
-        assert!(is_excluded_disk_mount("/run/user/1000"));
-        assert!(is_excluded_disk_mount("/dev/shm"));
-        assert!(is_excluded_disk_mount("/proc"));
-        assert!(is_excluded_disk_mount("/sys/fs/cgroup"));
-        assert!(!is_excluded_disk_mount("/"));
-        assert!(!is_excluded_disk_mount("/media/oi-io/data"));
-        assert!(!is_excluded_disk_mount("/data/run"), "非整词前缀不命中");
-
-        // hrStorageTable 过滤：FixedDisk 行保留真实盘，tmpfs 挂载点与
-        // 非 FixedDisk 行剔除
-        let rows = vec![
-            StorageRow {
-                row_type: Some(storage_type_fixed_disk()),
-                descr: "/".to_string(),
-                units: 4096,
-                size: 1000,
-                used: 100,
-            },
-            StorageRow {
-                row_type: Some(storage_type_fixed_disk()),
-                descr: "/run/user/1000".to_string(),
-                units: 1024,
-                size: 100,
-                used: 1,
-            },
-            StorageRow {
-                row_type: Some(storage_type_fixed_disk()),
-                descr: "/dev/shm".to_string(),
-                units: 1024,
-                size: 100,
-                used: 1,
-            },
-            StorageRow {
-                row_type: Some(storage_type_ram()),
-                descr: "/data".to_string(),
-                units: 4096,
-                size: 1000,
-                used: 1,
-            },
-        ];
-        let disks = disks_from_storage(&rows);
-        assert_eq!(disks.len(), 1, "tmpfs 挂载点与非 FixedDisk 行应被过滤");
-        assert_eq!(disks[0].mount, "/");
-        assert_eq!(disks[0].total, 1000 * 4096);
     }
 
     #[test]
@@ -1342,6 +1030,7 @@ mod tests {
             }],
             sensors: vec![SensorRow {
                 label: "coretemp".into(),
+                kind: "temp".into(),
                 value: 54.0,
             }],
             nets: vec![NetRate {

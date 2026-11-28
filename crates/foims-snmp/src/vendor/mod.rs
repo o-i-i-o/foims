@@ -15,13 +15,16 @@ pub mod registry;
 
 pub mod identify;
 
-pub use identify::{Identity, NET_SNMP_ENTERPRISE, PlatformCaps, identify};
+pub use identify::{identify, Identity, NET_SNMP_ENTERPRISE, PlatformCaps};
 pub use model::{
-    ALL_FAMILIES, Candidate, CandidateKind, CapsKey, CollectMode, CollectPlan, Column,
-    EntityFields, Family, FamilyPlan, Limits, Matcher, OsProfile, PercentFields, Pick, PoolFields,
-    Probe, ProbeOp, ProfileKind, SensorKind, SkipField, SkipOp, SkipRule, StorageType, Unit,
+    Candidate, CandidateKind, CapsKey, CollectMode, CollectPlan, Column, EntityFields,
+    Family, FamilyPlan, ALL_FAMILIES, Limits, Matcher, OsProfile, PercentFields, Pick,
+    PoolFields, Probe, ProbeOp, ProfileKind, SensorKind, SkipField, SkipOp, SkipRule,
+    StorageType, Unit,
 };
-pub use registry::{CUSTOM_FUNCTIONS, Registry, ResolvedCollectPlan, ResolvedFamily, registry};
+pub use registry::{
+    registry, CUSTOM_FUNCTIONS, Registry, ResolvedCollectPlan, ResolvedFamily,
+};
 
 #[cfg(test)]
 mod tests {
@@ -32,10 +35,7 @@ mod tests {
         let reg = registry();
         // 品牌族与品牌级规则同源（导入自 community/）
         assert_eq!(reg.get("cisco").map(|p| p.kind), Some(ProfileKind::Group));
-        assert_eq!(
-            reg.get("cisco-brand").map(|p| p.brand.as_str()),
-            Some("Cisco")
-        );
+        assert_eq!(reg.get("cisco-brand").map(|p| p.brand.as_str()), Some("Cisco"));
         assert_eq!(reg.get("huawei").map(|p| p.brand.as_str()), Some("Huawei"));
         assert_eq!(reg.get("h3c").map(|p| p.brand.as_str()), Some("H3C"));
         // 识别-only 品牌：kind=os 无 group，三级解析贯穿到 generic 公共链

@@ -3,7 +3,6 @@
 //! 缓存后每轮仅 GET size/used。
 
 use crate::vendor::model;
-use std::collections::BTreeMap;
 
 use async_snmp::{Oid, Value};
 
@@ -47,7 +46,7 @@ pub(super) async fn exec_hr_storage<R: crate::core::SnmpReader>(
     // 定向采样：缓存行索引（Units 元数据）→ GET size/used
     if let Some(selection) = args.selection {
         let cols = [col_oid(COL_SIZE), col_oid(COL_USED)];
-        let values = get_rows(args.reader, &cols.to_vec(), selection.rows.keys().copied()).await?;
+        let values = get_rows(args.reader, &cols, selection.rows.keys().copied()).await?;
         let mut readings = Vec::new();
         for (index, meta) in selection.rows.iter() {
             let RowMeta::Units(units) = meta else {

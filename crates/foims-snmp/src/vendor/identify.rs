@@ -317,7 +317,7 @@ static DESCR_REGEXES: LazyLock<Vec<Vec<Regex>>> = LazyLock::new(|| {
 pub fn identify(
     object_id: Option<&Oid>,
     descr: Option<&str>,
-    probe_values: Option<&dyn Fn(&str) -> Option<String>>,
+    probe_values: Option<ProbeValues<'_>>,
 ) -> Identity {
     let descr = descr.map(str::trim).filter(|s| !s.is_empty());
     let agent = object_id.and_then(enterprise_of);
@@ -498,11 +498,13 @@ fn descr_profile(descr: &str) -> Option<&'static OsProfile> {
     None
 }
 
+/// 探测取值闭包（oid → 响应值文本）：GET 执行在采集层完成，识别层只做
+/// 给定结果后的裁决（§5.1，vendor 无 IO）。
+type ProbeValues<'a> = &'a dyn Fn(&str) -> Option<String>;
+
 /// 探测通道：按注册表顺序逐条评估带探测规则的 profile（多条 AND），
 /// 首个全命中者生效。
-fn probe_profile(
-    probe_values: Option<&dyn Fn(&str) -> Option<String>>,
-) -> Option<&'static OsProfile> {
+fn probe_profile(probe_values: Option<ProbeValues<'_>>) -> Option<&'static OsProfile> {
     let get_value = probe_values?;
     for profile in registry().iter() {
         let Some(matcher) = &profile.matcher else {
@@ -529,7 +531,7 @@ fn probe_profile(
 
 /// 单条探测比对：Exists 只看有值，其余按值文本比对（响应值文本化由
 /// 采集层闭包完成）。
-fn probe_hit(probe: &Probe, get_value: &dyn Fn(&str) -> Option<String>) -> bool {
+fn probe_hit(probe: &Probe, get_value: ProbeValues<'_>) -> bool {
     let value = match get_value(&probe.oid) {
         Some(v) => v,
         None => return false,
@@ -563,6 +565,10 @@ fn keyword_hit(tokens: &[String], keyword: &str) -> bool {
         .filter(|k| !k.is_empty())
         .all(|k| tokens.iter().any(|t| t == k))
 }
+
+/// 测试常量：generic 兜底 id（避免硬编码漂移）。
+#[cfg(test)]
+const GENERIC_ID_TEST: &str = "generic";
 
 #[cfg(test)]
 mod tests {
@@ -784,6 +790,3 @@ mod tests {
     }
 }
 
-/// 测试常量：generic 兜底 id（避免硬编码漂移）。
-#[cfg(test)]
-const GENERIC_ID_TEST: &str = "generic";

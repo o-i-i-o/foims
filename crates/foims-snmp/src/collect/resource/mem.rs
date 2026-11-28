@@ -11,7 +11,7 @@ use super::{
     CandidateFailure, ExecArgs, ExecOutput, RowMeta, SelectionRows, get_one, get_rows, numeric_u64,
     transform, varbind_text, walk_single_arc,
 };
-use model::{CandidateKind, Column, PoolFields, StorageType};
+use model::{CandidateKind, Column, StorageType};
 
 pub(super) async fn exec<R: crate::core::SnmpReader>(
     args: ExecArgs<'_, '_, R>,
@@ -68,7 +68,7 @@ async fn exec_pool<R: crate::core::SnmpReader>(
             };
             values.push(get_one(args.reader, &oid).await);
         }
-        return match compute_pool(&roles, &value_cols, &values) {
+        return match compute_pool(&roles, &values) {
             Some(reading) => Ok((vec![reading], None)),
             None => Err(CandidateFailure::Empty),
         };
@@ -81,7 +81,7 @@ async fn exec_pool<R: crate::core::SnmpReader>(
         for col in &value_cols {
             values.push(get_one(args.reader, &col.oid).await);
         }
-        return match compute_pool(&roles, &value_cols, &values) {
+        return match compute_pool(&roles, &values) {
             Some(mut reading) => {
                 reading.index = "scalar".to_string();
                 Ok((vec![reading], None))
@@ -149,7 +149,7 @@ async fn exec_pool<R: crate::core::SnmpReader>(
         if transform::skip_hit(&args.candidate.skip, name.as_deref(), raw_text.as_deref()) {
             continue;
         }
-        let Some(mut reading) = compute_pool(&roles, &value_cols, &values) else {
+        let Some(mut reading) = compute_pool(&roles, &values) else {
             continue;
         };
         reading.name = name.clone();
@@ -176,10 +176,9 @@ async fn exec_pool<R: crate::core::SnmpReader>(
     }
 }
 
-/// 由角色值合成池读数（发现与定向采样共用）：值序与 `value_cols` 一致。
+/// 由角色值合成池读数（发现与定向采样共用）：值序与 `roles` 一致。
 fn compute_pool(
     roles: &[(&str, &Option<Column>); 4],
-    value_cols: &[&Column],
     values: &[Option<Value>],
 ) -> Option<super::MemReading> {
     let get = |role: &str| -> Option<u64> {
@@ -226,7 +225,7 @@ async fn exec_entity<R: crate::core::SnmpReader>(
     if let Some(selection) = args.selection {
         let values = get_rows(
             args.reader,
-            &[fields.usage.oid.clone()],
+            std::slice::from_ref(&fields.usage.oid),
             selection.rows.keys().copied(),
         )
         .await?;
@@ -305,7 +304,7 @@ async fn exec_percent<R: crate::core::SnmpReader>(
     if let Some(selection) = args.selection {
         let values = get_rows(
             args.reader,
-            &[fields.percent.oid.clone()],
+            std::slice::from_ref(&fields.percent.oid),
             selection.rows.keys().copied(),
         )
         .await?;

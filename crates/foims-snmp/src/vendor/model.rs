@@ -241,6 +241,9 @@ pub enum SkipOp {
     Eq,
     Ne,
     Has,
+    /// 前缀整词命中：值本身或值后跟 `/`（伪文件系统挂载点子树排除，
+    /// `/run` 命中 `/run` 与 `/run/user/1000`，不误伤 `/data/run`）
+    Prefix,
 }
 
 impl SkipOp {
@@ -249,6 +252,7 @@ impl SkipOp {
             "eq" => Self::Eq,
             "ne" => Self::Ne,
             "has" => Self::Has,
+            "prefix" => Self::Prefix,
             _ => return None,
         })
     }
@@ -895,7 +899,7 @@ pub(super) fn build_candidate(
             Some("counters") => CandidateKind::UcdCpuCounters,
             Some("device") => {
                 let mut fields = build_fields(context, &path, c.field)?;
-                let mut take_vec =
+                let take_vec =
                     |role: &str, fields: &mut Vec<(String, Column)>| -> Vec<Column> {
                         let mut out = Vec::new();
                         let mut i = 0;

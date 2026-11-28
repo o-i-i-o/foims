@@ -9,14 +9,14 @@
 //! 空读数，不影响设备纳入实时采集。IO 经 [`crate::core::SnmpReader`]
 //! 抽象：生产为 async_snmp UDP 客户端，测试为内存 OID 快照。
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use async_snmp::{Oid, Value, oid};
 use thiserror::Error;
 
-use super::{DeviceProfile, MAX_LIVE_PORTS, MAX_OIDS_PER_REQUEST, PortMeta};
+use super::{DeviceProfile, MAX_LIVE_PORTS, PortMeta};
 use crate::collect::resource::IndexCache;
-use crate::core::{SnmpReader, get_many_tolerant};
+use crate::core::{SnmpReader, probe_oid_values};
 use crate::vendor;
 
 /// 探测失败：系统组（sysObjectID/sysDescr）无响应，设备不可达。
@@ -91,8 +91,7 @@ pub async fn probe<R: SnmpReader>(reader: &R) -> Result<DeviceProfile, ProbeErro
                     Err(e) => panic!("SNMP 探测 OID 解析失败（注册表不变量破坏）: {s}: {e}"),
                 }
             }
-            let values = probe_oid_values(reader, &oids).await;
-            let lookup = |oid: &str| values.get(oid).cloned();
+            let values = probe_oid_values(reader, &oids).await;            let lookup = |oid: &str| values.get(oid).cloned();
             let probed = vendor::identify(object_id.as_ref(), descr, Some(&lookup));
             if probed.profile.id != "generic" {
                 tracing::debug!("SNMP 探测通道识别 profile: {}", probed.profile.id);
@@ -125,27 +124,6 @@ pub async fn probe<R: SnmpReader>(reader: &R) -> Result<DeviceProfile, ProbeErro
         ports,
         use_hc,
     })
-}
-
-/// 预取探测 OID 值（分块容忍 GET，文本化响应）。
-async fn probe_oid_values<R: SnmpReader>(reader: &R, oids: &[Oid]) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    for chunk in oids.chunks(MAX_OIDS_PER_REQUEST) {
-        for vb in get_many_tolerant(reader, chunk).await {
-            if vb.value.is_exception() {
-                continue;
-            }
-            let text = match &vb.value {
-                Value::OctetString(s) => String::from_utf8_lossy(s).trim().to_string(),
-                Value::Integer(i) => i.to_string(),
-                Value::Counter32(v) | Value::Gauge32(v) | Value::UInteger32(v) => v.to_string(),
-                Value::Counter64(v) => v.to_string(),
-                _ => continue,
-            };
-            out.insert(vb.oid.to_string(), text);
-        }
-    }
-    out
 }
 
 // 端口清单

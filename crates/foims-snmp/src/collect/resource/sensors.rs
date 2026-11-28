@@ -1,7 +1,6 @@
 //! 传感器族执行器：ENTITY-SENSOR-MIB 标准表（内建吸收）与值列候选。
 
 use crate::vendor::model;
-use std::collections::BTreeMap;
 
 use async_snmp::{Oid, Value};
 
@@ -204,7 +203,7 @@ async fn exec_column<R: crate::core::SnmpReader>(
     if let Some(selection) = args.selection {
         let values = get_rows(
             args.reader,
-            &[col.oid.clone()],
+            std::slice::from_ref(&col.oid),
             selection.rows.keys().copied(),
         )
         .await?;

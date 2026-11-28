@@ -74,10 +74,29 @@ oid  = "1.3.6.1.4.1.2021.13.16.2.1.3"  # lmTempSensorsValue（毫摄氏度）
 unit = "milli"
 
 # ── 存储：hrStorageTable FixedDisk 行（本地磁盘，5 分钟趋势消费）──
+#    伪文件系统/内存盘挂载点排除（tmpfs、devtmpfs、cgroup 等，与 agent
+#    侧挂载点排除口径一致）：/dev /proc /sys /run 四个子树（prefix 整词
+#    前缀，/data/run 这类非整词路径不误伤）。
 [[profile.collect.storage.candidate]]
 require_caps = ["hr_storage"]
 kind         = "storage"
 hr_type      = "fixed_disk"
+[[profile.collect.storage.candidate.skip]]
+field = "name"
+op    = "prefix"
+value = "/dev"
+[[profile.collect.storage.candidate.skip]]
+field = "name"
+op    = "prefix"
+value = "/proc"
+[[profile.collect.storage.candidate.skip]]
+field = "name"
+op    = "prefix"
+value = "/sys"
+[[profile.collect.storage.candidate.skip]]
+field = "name"
+op    = "prefix"
+value = "/run"
 
 # ── 传感器：ENTITY-SENSOR-MIB 全类型 → LM-SENSORS 温度 ──
 [[profile.collect.sensors.candidate]]

@@ -6,25 +6,29 @@
 //! - 无上报令牌：agent 上报路径凭共享注册令牌 + machine_id 查行，天然隔离；
 //! - 设备删除时 monitored_hosts 行经 device_id 外键级联清理。
 //!
-//! 采集范围：MIB-II 系统组（sysName/sysDescr）+ 主机开机时长
-//! （hrSystemUptime 优先，回落 sysUpTime）+ 性能指标
-//! （CPU/内存/磁盘/温度/流量/负载，见 [`foims_snmp::collect::metrics`]）。
+//! 采集范围：MIB-II 系统组（sysObjectID/sysName/sysDescr）+ 设备识别
+//! （[`foims_snmp::vendor::identify`]，profile 采集计划直接进解释器）+
+//! 主机开机时长（hrSystemUptime 优先，回落 sysUpTime）+ 性能指标：
+//! CPU/内存/磁盘/温度/传感器走 [`foims_snmp::collect::resource::ResourceReader`]，
+//! 流量/负载/交换分区留 [`foims_snmp::collect::metrics`]。
 
 use std::sync::Arc;
 
 use async_snmp::transport::UdpHandle;
-use async_snmp::{Client, oid};
+use async_snmp::{Client, Oid, oid};
 use chrono::Utc;
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use sqlx::PgPool;
 use tokio::sync::Semaphore;
 
 use foims_snmp::collect::metrics as snmp_metrics;
+use foims_snmp::collect::resource::IndexCache;
 use foims_snmp::core::{
-    DeviceForSnmp, build_auth, format_snmp_error, snmp_target, snmp_tuning,
+    DeviceForSnmp, build_auth, format_snmp_error, probe_oid_values, snmp_target, snmp_tuning,
     truncate_to_column_width,
 };
 use foims_snmp::events::record_events;
+use foims_snmp::vendor;
 
 use crate::metrics_aggregator::MetricsAggregator;
 
@@ -53,6 +57,8 @@ pub(crate) struct SnmpDeviceRow {
 
 /// 单台设备本轮 SNMP 采集结果（MIB-II 系统组）。
 struct SnmpSysInfo {
+    /// sysObjectID（识别入口）
+    object_id: Option<Oid>,
     /// sysName（trim 后为空时回落设备名，由调用方处理）
     hostname: Option<String>,
     /// sysDescr（设备描述串）
@@ -284,12 +290,30 @@ async fn poll_and_upsert(
         .as_deref()
         .and_then(snmp_metrics::parse_linux_sysdescr)
         .map_or((None, None), |(k, a)| (Some(k), Some(a)));
-    let os = info.os.map(|s| truncate_to_column_width(&s, MAX_OS_LEN));
+    let os = info
+        .os
+        .as_ref()
+        .map(|s| truncate_to_column_width(s, MAX_OS_LEN));
 
-    // 性能指标（二期）：差值依赖上一轮 raw_metrics._snmp_state
+    // 设备识别：profile 采集计划直接进解释器（识别失败回落 generic）
+    let identity = identify_device(&client, info.object_id.as_ref(), info.os.as_deref()).await;
+
+    // 性能指标：资源组（CPU/内存/磁盘/温度/传感器）经 ResourceReader 解释
+    // profile 采集计划（每轮全新缓存，一遍走完）；差值依赖上一轮
+    // raw_metrics._snmp_state（UCD 计数器候选 require_prev，首轮自动跳过）
     let now = Utc::now();
     let prev_state = load_snmp_state(pool, &machine_id).await;
-    let mut snap = snmp_metrics::collect(&client, prev_state.as_ref(), now).await;
+    let cache = IndexCache::new();
+    let prev_cpu = prev_state.as_ref().and_then(|p| p.cpu);
+    let reader = foims_snmp::collect::resource::ResourceReader::new(
+        &client,
+        identity.plan,
+        identity.caps,
+        prev_cpu.as_ref(),
+        &cache,
+    );
+    let resources = snmp_metrics::read_resources(&reader, &cache).await;
+    let mut snap = snmp_metrics::collect(&client, resources, prev_state.as_ref(), now).await;
     // 回填本轮 sysUpTime 到差值状态，供下一轮重启检测（uptime 回退即重启）
     snap.state.last_boot_uptime = info.uptime_secs;
 
@@ -413,7 +437,7 @@ async fn poll_and_upsert(
 /// 读取上一轮差值状态（raw_metrics 私有键 `_snmp_state`）；行不存在/
 /// 键缺失/结构不合法时返回 None（首轮不出差值指标，状态本轮重建）。
 async fn load_snmp_state(pool: &PgPool, machine_id: &str) -> Option<snmp_metrics::SnmpState> {
-    let row: Option<Option<Value>> = sqlx::query_scalar(
+    let row: Option<Option<JsonValue>> = sqlx::query_scalar(
         "SELECT raw_metrics -> '_snmp_state' FROM monitored_hosts WHERE machine_id = $1",
     )
     .bind(machine_id)
@@ -441,8 +465,25 @@ async fn connect_snmp(params: &foims_snmp::SnmpParamsLegacy) -> Result<Client<Ud
         .map_err(|e| format!("创建SNMP会话失败: {}", format_snmp_error(e).log_string()))
 }
 
-/// 读取系统组（sysName/sysDescr + 开机时长，同一会话顺序请求，缺失容忍）。
+/// 读取系统组（sysObjectID/sysName/sysDescr + 开机时长，同一会话顺序
+/// 请求，缺失容忍）。
 async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
+    // sysObjectID → 识别入口；设备不支持该 OID 时容忍缺失
+    let object_id = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 2, 0)).await {
+        Ok(v) => v
+            .varbinds
+            .first()
+            .filter(|vb| !vb.value.is_exception())
+            .and_then(|vb| vb.value.as_oid().cloned()),
+        Err(e) => {
+            tracing::debug!(
+                "sysObjectID 读取失败（容忍缺失）: {}",
+                format_snmp_error(e).log_string()
+            );
+            None
+        }
+    };
+
     // sysName → 主机名；设备不支持该 OID 时容忍缺失
     let hostname = match client.get(&oid!(1, 3, 6, 1, 2, 1, 1, 5, 0)).await {
         Ok(v) => v
@@ -488,10 +529,48 @@ async fn read_system_info(client: &Client<UdpHandle>) -> SnmpSysInfo {
         .map(|ticks| i64::from(ticks) / 100);
 
     SnmpSysInfo {
+        object_id,
         hostname,
         os,
         uptime_secs,
     }
+}
+
+/// 设备识别（§5.4）：静态双通道（前缀/描述词/正则）优先；全未命中且注册表
+/// 存在探测规则时预取探测 OID 值走探测通道（与实时探测 live::probe 同语义）。
+/// 识别失败回落 generic 兜底 profile。
+async fn identify_device(
+    client: &Client<UdpHandle>,
+    object_id: Option<&Oid>,
+    descr: Option<&str>,
+) -> vendor::Identity {
+    let mut identity = vendor::identify(object_id, descr, None);
+    if identity.profile.id == "generic" {
+        let probe_oids = vendor::registry().probe_oids();
+        if !probe_oids.is_empty() {
+            let mut oids = Vec::with_capacity(probe_oids.len());
+            for s in probe_oids {
+                match Oid::parse(s) {
+                    Ok(parsed) => oids.push(parsed),
+                    Err(e) => panic!("SNMP 探测 OID 解析失败（注册表不变量破坏）: {s}: {e}"),
+                }
+            }
+            let values = probe_oid_values(client, &oids).await;
+            let lookup = |oid: &str| values.get(oid).cloned();
+            let probed = vendor::identify(object_id, descr, Some(&lookup));
+            if probed.profile.id != "generic" {
+                tracing::debug!("SNMP 探测通道识别 profile: {}", probed.profile.id);
+                identity = probed;
+            }
+        }
+    }
+    tracing::debug!(
+        "SNMP 趋势识别: profile={}, brand={}, platform={}",
+        identity.profile.id,
+        identity.brand,
+        identity.platform.unwrap_or("unknown")
+    );
+    identity
 }
 
 /// 读开机时长 TimeTicks：hrSystemUptime（主机）优先，失败回落 sysUpTime

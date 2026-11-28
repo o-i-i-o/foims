@@ -13,8 +13,8 @@ use std::fs;
 use std::sync::LazyLock;
 
 use super::model::{
-    self, ALL_FAMILIES, BuildError, Candidate, CollectMode, CollectPlan, Family, FamilyPlan,
-    OsProfile, Pick, ProfileKind, ProfilesFile,
+    self, ALL_FAMILIES, BuildError, Candidate, CollectMode, Family, OsProfile, Pick, ProfileKind,
+    ProfilesFile,
 };
 use super::profiles::FILES;
 
@@ -196,10 +196,10 @@ fn load_site_files() -> Vec<(String, String)> {
     files.sort();
     files
         .into_iter()
-        .filter_map(|name| {
+        .map(|name| {
             let path = format!("{dir}/{name}");
             match fs::read_to_string(&path) {
-                Ok(text) => Some((path, text)),
+                Ok(text) => (path, text),
                 Err(e) => {
                     panic!("SNMP profile 现场配置读取失败（{path}）: {e}");
                 }
@@ -209,7 +209,7 @@ fn load_site_files() -> Vec<(String, String)> {
 }
 
 /// 语义校验（§6.4）+ 三级解析（§5.5）。校验失败 panic（配置错误 = 启动失败）。
-fn validate_and_resolve(profiles: &Vec<OsProfile>) -> HashMap<String, ResolvedCollectPlan> {
+fn validate_and_resolve(profiles: &[OsProfile]) -> HashMap<String, ResolvedCollectPlan> {
     // generic 保留 id 校验
     for profile in profiles.iter() {
         if profile.id == GENERIC_ID && profile.kind != ProfileKind::Group {
@@ -345,9 +345,8 @@ fn resolve_profile(profile: &OsProfile, groups: &HashMap<&str, &OsProfile>) -> R
     let mut out = ResolvedCollectPlan::default();
     for (idx, family) in ALL_FAMILIES.iter().enumerate() {
         let own = profile.collect.family(*family);
-        let parent_plan: Option<&super::model::FamilyPlan> = parent
-            .and_then(|p| p.collect.family(*family))
-            .and_then(Some);
+        let parent_plan: Option<&super::model::FamilyPlan> =
+            parent.and_then(|p| p.collect.family(*family));
         let generic_plan = generic.collect.family(*family);
 
         let (mode, pick, mut candidates) = match own {
